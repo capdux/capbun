@@ -20,24 +20,28 @@ pub const Debug = if (Environment.isDebug) struct {
     is_inside_tick_queue: bool = false,
     js_call_count_outside_tick_queue: usize = 0,
     drain_microtasks_count_outside_tick_queue: usize = 0,
-    _prev_is_inside_tick_queue: bool = false,
+    inside_tick_queue_depth: usize = 0,
     last_fn_name: bun.String = bun.String.empty,
     track_last_fn_name: bool = false,
 
     pub fn enter(*_) {
-        _._prev_is_inside_tick_queue = _.is_inside_tick_queue;
+        _.inside_tick_queue_depth += 1;
         _.is_inside_tick_queue = true;
         _.js_call_count_outside_tick_queue = 0;
         _.drain_microtasks_count_outside_tick_queue = 0;
     }
 
     pub fn exit(*_) {
-        _.is_inside_tick_queue = _._prev_is_inside_tick_queue;
-        _._prev_is_inside_tick_queue = false;
-        _.js_call_count_outside_tick_queue = 0;
-        _.drain_microtasks_count_outside_tick_queue = 0;
-        _.last_fn_name.deref();
-        _.last_fn_name = bun.String.empty;
+        if (_.inside_tick_queue_depth > 0) {
+            _.inside_tick_queue_depth -= 1;
+        }
+        if (_.inside_tick_queue_depth == 0) {
+            _.is_inside_tick_queue = false;
+            _.js_call_count_outside_tick_queue = 0;
+            _.drain_microtasks_count_outside_tick_queue = 0;
+            _.last_fn_name.deref();
+            _.last_fn_name = bun.String.empty;
+        }
     }
 } else struct {
     pub inline fn enter(*_) {}
