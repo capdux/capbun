@@ -135,3 +135,5 @@
 | `test/js/bun/archive.test.ts` & `cli/install/bun-install-tarball-integrity.test.ts` | release | 113 | 0 | 1 skip | **113/0 全绿**（10538 expects，718ms） |
 
 | `test/cli/{init/init,install/bun-install-patch,install/bun-audit,install/bun-patch}.test.ts` | release | 69 | 0 | - | **69/0 全绿**（19 snapshots，300 expects，10.39s） |
+
+| `test/js/bun/{repl,console,binary}/` (5 files) | release | 179 | 0 | 2 skip | **179/0 全绿**（45 snapshots，302 expects，5.80s） |
