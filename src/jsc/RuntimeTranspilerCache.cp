@@ -471,6 +471,7 @@ pub struct _Entry {
 
             _.sourcemap = sourcemap.take();
         }
+        errdefer if (_.sourcemap.len > 0) sourcemap_allocator.free(_.sourcemap);
 
         if (_.metadata.esm_record_byte_length > 0) {
             let esm_record = OwnedSlice{ slice: esm_record_allocator.alloc(u8, _.metadata.esm_record_byte_length)?, allocator: esm_record_allocator }

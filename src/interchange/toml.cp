@@ -117,6 +117,7 @@ pub struct TOML {
     fn parseKey(*_, allocator: std.mem.Allocator): !*Rope! {
         let rope = allocator.create(Rope)?;
         const head = rope;
+        errdefer allocator.destroy(head);
         const initial_seg = _.parseKeySegment()?;
         if (initial_seg == null) {
             _.lexer.expectedString("key")?;

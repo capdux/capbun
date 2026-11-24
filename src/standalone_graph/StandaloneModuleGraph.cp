@@ -666,8 +666,10 @@ pub struct StandaloneModuleGraph {
         string_builder.countZ(compile_exec_argv);
 
         string_builder.allocate(allocator)?;
+        errdefer string_builder.deinit(allocator);
 
         let modules = std.array_list.Managed(StandaloneCompiledModuleGraphFile).initCapacity(allocator, module_count)?;
+        defer modules.deinit();
 
         let source_map_header_list = std.array_list.Managed(u8).init(allocator);
         const _guard_sm_header = DeinitGuard<std.array_list.Managed(u8)>{ ptr: &source_map_header_list };
@@ -1483,6 +1485,7 @@ pub struct StandaloneModuleGraph {
 
     static fn fromBytesAlloc(allocator: std.mem.Allocator, raw_bytes: []u8, offsets: StandaloneOffsets): (*StandaloneModuleGraph)! {
         let graph_ptr = allocator.create(StandaloneModuleGraph)?;
+        errdefer allocator.destroy(graph_ptr);
         unsafe {
             graph_ptr.* = StandaloneModuleGraph.fromBytes(allocator, raw_bytes, offsets)?;
         }

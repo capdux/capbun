@@ -123,6 +123,7 @@ pub struct ZigSourceLineIterator {
             const _frames = _.frames();
             if (_frames.len > 0) {
                 let stack_frames = allocator.alloc(api.StackFrame, _frames.len)?;
+                errdefer allocator.free(stack_frames);
                 stack_trace.frames = stack_frames;
 
                 let j: usize = 0;

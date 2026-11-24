@@ -2313,3 +2313,5 @@
 - [Phase 2 第二十九批修复] 修改 `src/js/node/child_process.ts`（`ChildProcess.ref/unref` 同步 `ref/unref` stdio 流）及 `test/stats.md`。
 
 - [Phase 3 第一批内存安全加固] 修改 18 对 `.cp`/`.zig`（`AsyncHTTP`, `TextDecoder`, `spawn`, `FormData`, `FetchTasklet`, `Blob`, `IndexStringMap`, `Buffers`, `processDependencyList`, `FrameworkRouter`, `PackageManager`, `tsconfig_json`, `fs`, `css/selectors/parser`, `AnyTaskWithExtraContext`, `source_map_mode_jsc`, `expect`, `PostgresSQLQuery`，消除匿名 Guard 漏析构、热路径 `SingleHTTPChannel`/CSS `toCss`/`matcher_args` 泄漏及 `?` 路径 `errdefer` 遗漏，`zig:check` 5/5）。
+
+- [Phase 3 第二批内存安全加固] 修改 5 对 `.cp`/`.zig`（`napi`, `RuntimeTranspilerCache`, `ZigStackTrace`, `toml`, `StandaloneModuleGraph`，修复 `napi_create_string_utf16`、`sourcemap`、`stack_frames`、`parseKey` 及 `StandaloneModuleGraph` 错误路径泄漏，`zig:check` 5/5）。

@@ -598,7 +598,11 @@ pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): 
     const chars = str_pair[1];
     @memcpy(chars, slice);
 
-    result.set(env, str_val.transferToJS(env.toJS()) catch return env.setLastError(.generic_failure));
+    const js_str = str_val.transferToJS(env.toJS()) catch {
+        str_val.deref();
+        return env.setLastError(.generic_failure);
+    };
+    result.set(env, js_str);
     return env.ok();
 }
 
