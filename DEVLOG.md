@@ -1896,3 +1896,5 @@
 - Phase 3 第十七批要点：`resolve_path.cp:511` 补回 `separator == str.len - 1` 时递归去尾斜杠逻辑，修复 `bunshell > dirname > leading slash`。
 
 - Phase 3 第十八批安全性加固要点：`node_os.cp:526` `homedir()` 调用 `getpwuid_r` 遇 `E.RANGE` 扩容时，增加 `string_bytes.ptr != &stack_string_bytes` 判断，根除首轮对栈缓冲误调 `default_allocator.free` 引发的 Invalid Free 崩溃。
+
+- Phase 3 第十九批安全性加固要点：`generateChunksInParallel.cp:295` 新增 `DuplicatesMapGuard`，在作用域退出与 `error.DuplicateOutputPath` 早退路径统一遍历释放每个 `DuplicateEntry.sources` 及 `duplicates_map` 本体。

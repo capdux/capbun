@@ -52,6 +52,18 @@ struct StandaloneChunkContentsGuard {
     }
 }
 
+struct DuplicatesMapGuard {
+    map: *bun.StringArrayHashMapUnmanaged(DuplicateEntry)!,
+    ~init() {
+        unsafe {
+            for (*entry of _.map.values()) {
+                entry.sources.deinit(bun.default_allocator);
+            }
+            _.map.deinit(bun.default_allocator);
+        }
+    }
+}
+
 fn ReturnType(comptime is_dev_server: bool): type {
     return if (is_dev_server) void else std.array_list.Managed(options.OutputFile);
 }
@@ -280,6 +292,7 @@ pub fn generateChunksInParallel(
         const _guard_path_names = DeinitGuard<bun.StringHashMap(void)>{ ptr: &path_names_map };
 
         let duplicates_map: bun.StringArrayHashMapUnmanaged(DuplicateEntry) = {};
+        const _guard_duplicates = DuplicatesMapGuard{ map: &duplicates_map };
 
         let chunk_visit_map = AutoBitSet.initEmpty(c.allocator(), chunks.len)?;
         const _guard_visit_map = DeinitWithAllocGuard<AutoBitSet>{ ptr: &chunk_visit_map, allocator: c.allocator() };
