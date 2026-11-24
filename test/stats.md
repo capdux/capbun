@@ -117,3 +117,5 @@
 | `test/js/bun/test/` (75 files) & `test/js/bun/net/` (5 files) | release | 1118 | 4 | 18 skip / 460 todo | `bun/test/` **1098/2**（25050 expects，18.53s，`stack.test.ts:144` 与 `snapshot.test.ts:895` ANSI）；`bun/net/` **20/2**（`socket.test.ts` 缺 `bun:internal-for-testing` 与 `tcp-server:301` `3 <= 2`） |
 
 | `test/js/bun/net/{socket,tcp-server}.test.ts` (`bun-debug` 隔离) | debug (最新 `08df2206`) | 41 | 0 | 2 skip | `socket.test.ts` **33/0**（2 Windows skip）；`tcp-server.test.ts` **8/0**（3.37s，无 `Listener`/`TCPSocket` 泄漏） |
+
+| `test/js/third_party/{@fastify,hono,esbuild}` | release | 4 | 0 | - | **4/0 全绿**（`1.76s`） |
