@@ -15,6 +15,7 @@ pub fn ColonListType(comptime t: type, comptime value_resolver: auto): type {
 
         pub fn init(allocator: std.mem.Allocator, count: usize): Self! {
             const keys = allocator.alloc(string, count)?;
+            errdefer allocator.free(keys);
             const values = allocator.alloc(t, count)?;
 
             return Self{ keys: keys, values: values };

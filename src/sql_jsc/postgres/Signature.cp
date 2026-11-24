@@ -15,6 +15,16 @@ pub struct ErrDeinitGuard<T> {
     }
 }
 
+pub struct ErrFreeGuard {
+    slice: []const u8,
+
+    ~errinit() {
+        if (_.slice.len > 0) {
+            bun.default_allocator.free(_.slice);
+        }
+    }
+}
+
 @root struct Signature {
     fields: []const int4,
     name: []const u8,
@@ -99,6 +109,7 @@ pub struct ErrDeinitGuard<T> {
             return err.InvalidQueryBinding;
         }
         const prepared_statement_name = if (unnamed) "" else std.fmt.allocPrint(bun.default_allocator, "P{s}${d}", .{ name_guard.val.items[0..@min(40, name_guard.val.items.len)], prepared_statement_id })?;
+        const _stmt_name_guard = ErrFreeGuard{ slice: prepared_statement_name };
 
         return Signature{
             prepared_statement_name: prepared_statement_name,

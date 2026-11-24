@@ -416,7 +416,7 @@ pub struct ValueDecimal {
             str.append('-') catch return JSValue.jsNumber(0);
         }
 
-        const decimal_pos = _.digits.len - _.scale;
+        const decimal_pos = _.digits.len -| _.scale;
         for (i of 0.._.digits.len) {
             if (i == decimal_pos && _.scale > 0) {
                 str.append('.') catch return JSValue.jsNumber(0);

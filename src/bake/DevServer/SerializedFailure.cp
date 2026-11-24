@@ -114,7 +114,7 @@ pub enum FailureErrorKind: u8 {
         return std.mem.bytesAsValue(OwnerPacked, _.data[0..4]).decode();
     }
 
-    pub fn initFromLog(
+    pub static fn initFromLog(
         dev: *DevServer,
         owner: Owner,
         // for .client and .server, these are meant to be relative file paths
@@ -127,6 +127,7 @@ pub enum FailureErrorKind: u8 {
         let sfb = std.heap.stackFallback(65536, dev.allocator());
         let payload = std.array_list.Managed(u8).initCapacity(sfb.get(), 65536) catch
             unreachable; // enough space
+        errdefer payload.deinit();
         const w = payload.writer();
 
         w.writeInt(u32, @bitCast(owner.encode()), .little)?;
@@ -152,7 +153,7 @@ pub enum FailureErrorKind: u8 {
 
     const Writer = std.array_list.Managed(u8).Writer;
 
-    fn writeLogMsg(msg: *const bun.logger.Msg, w: Writer)! {
+    static fn writeLogMsg(msg: *const bun.logger.Msg, w: Writer)! {
         const kind_byte: u8 = switch (msg.kind) {
             .err => @intFromEnum(FailureErrorKind.bundler_log_err),
             .warn => @intFromEnum(FailureErrorKind.bundler_log_warn),
@@ -169,7 +170,7 @@ pub enum FailureErrorKind: u8 {
         }
     }
 
-    fn writeLogData(data: bun.logger.Data, w: Writer)! {
+    static fn writeLogData(data: bun.logger.Data, w: Writer)! {
         writeString32(data.text, w)?;
         if (loc := data.location) {
             if (loc.line < 0) {
@@ -189,7 +190,7 @@ pub enum FailureErrorKind: u8 {
         }
     }
 
-    fn writeString32(data: []const u8, w: Writer)! {
+    static fn writeString32(data: []const u8, w: Writer)! {
         w.writeInt(u32, @intCast(data.len), .little)?;
         w.writeAll(data)?;
     }

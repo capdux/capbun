@@ -33,6 +33,9 @@ struct DataGuard {
 
     pub fn deinit(*_)  {
         _.server_version.deinit();
+        if (_.auth_plugin_data_part_2.len > 0) {
+            bun.default_allocator.free(_.auth_plugin_data_part_2);
+        }
         _.auth_plugin_name.deinit();
     }
 

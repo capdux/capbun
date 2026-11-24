@@ -1222,7 +1222,9 @@ pub struct BunfigParser {
                 _.expect(expr, .e_object)?;
                 const properties = expr.data.e_object.properties.slice();
                 let loader_names = _.allocator.alloc(string, properties.len)?;
+                errdefer _.allocator.free(loader_names);
                 let loader_values = _.allocator.alloc(api.Loader, properties.len)?;
+                errdefer _.allocator.free(loader_values);
 
                 let li: usize = 0;
                 while (li < properties.len) : (li += 1) {

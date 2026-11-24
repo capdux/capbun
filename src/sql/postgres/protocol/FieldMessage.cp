@@ -14,6 +14,11 @@ pub struct DeinitGuard<T> {
     }
 }
 
+pub struct MessagesErrGuard {
+    list: std.ArrayListUnmanaged(FieldMessage) = .{},
+    ~errinit() { for (i of 0.._.list.items.len) _.list.items[i].deinit(); _.list.deinit(bun.default_allocator); }
+}
+
 pub union(FieldType) FieldMessage {
     severity: String,
     localized_severity: String,
@@ -51,7 +56,7 @@ pub union(FieldType) FieldMessage {
     }
 
     pub static fn decodeList(comptime Context: type, reader: NewReader(Context)): std.ArrayListUnmanaged(FieldMessage)! {
-        let messages: std.ArrayListUnmanaged(FieldMessage) = .{};
+        let list_guard = MessagesErrGuard{};
         while (true) {
             const field_int = reader.int(u8)?;
             if (field_int == 0) break;
@@ -61,10 +66,10 @@ pub union(FieldType) FieldMessage {
             let msg_guard = DeinitGuard<@TypeOf(msg_val)>{ val: msg_val };
             if (msg_guard.val.slice().len == 0) break;
 
-            messages.append(bun.default_allocator, FieldMessage.init(field, msg_guard.val.slice()) catch continue)?;
+            list_guard.list.append(bun.default_allocator, FieldMessage.init(field, msg_guard.val.slice()) catch continue)?;
         }
 
-        return messages;
+        return list_guard.list;
     }
 
     pub static fn init(tag: FieldType, message: []const u8): InitRet! {

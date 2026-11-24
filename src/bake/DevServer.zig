@@ -2583,7 +2583,11 @@ pub fn generateJavaScriptCodeForHTMLFile(dev: *DevServer, index: bun.ast.Index, 
             _ = try w.writeAll("  ");
         }
         _ = try w.writeAll("], [], [], () => {}, false],\n");
-        return (if ((array.items.ptr == (&sfa_state.buffer))) try dev.allocator().dupe(u8, array.items) else array.items);
+        if ((array.items.ptr == (&sfa_state.buffer))) {
+            return try dev.allocator().dupe(u8, array.items);
+        }
+        array_guard.active = false;
+        return array.items;
 }
 
 pub fn onJsRequestWithBundle(dev: *DevServer, bundle_index: RouteBundle.Index, resp: AnyResponse, method: bun.http.Method) void {

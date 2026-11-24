@@ -341,7 +341,9 @@ pub struct TrustCommand {
                         })?;
 
                         if (!skip) {
-                            package_names_to_add.put(ctx.allocator, ctx.allocator.dupe(u8, alias)?, @as(void, undefined))?;
+                            const duped_alias = ctx.allocator.dupe(u8, alias)?;
+                            errdefer ctx.allocator.free(duped_alias);
+                            package_names_to_add.put(ctx.allocator, duped_alias, @as(void, undefined))?;
                             scripts_count += scripts_list.total;
                         }
                     }

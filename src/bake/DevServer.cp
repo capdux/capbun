@@ -2091,10 +2091,11 @@ fn generateJavaScriptCodeForHTMLFile(
     w.writeAll("], [], [], () => {}, false],\n")?;
 
     // Avoid-recloning if it is was moved to the heap
-    return if (array.items.ptr == &sfa_state.buffer)
-        dev.allocator().dupe(u8, array.items)?
-    else
-        array.items;
+    if (array.items.ptr == &sfa_state.buffer) {
+        return dev.allocator().dupe(u8, array.items)?;
+    }
+    array_guard.active = false;
+    return array.items;
 }
 
 pub fn onJsRequestWithBundle(dev: *DevServer, bundle_index: RouteBundle.Index, resp: AnyResponse, method: bun.http.Method) {
