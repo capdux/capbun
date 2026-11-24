@@ -276,4 +276,4 @@
 
 | 新版 Release (`c79d4f22d`) `bundler/` 32 核心文件 (`esbuild`/`css`/`resolver`/`edgecase`/`splitting`/`minify`/`jsx`/`compile*`) | release (`c79d4f22d`) | 1212 | 1 | 5 skip / 128 todo | **1212/0 逻辑**（129.76s；唯一 1 fail 为 `compile-sourcemap inline` 并发限时超时） |
 
-| 新版 Release (`c79d4f22d`) `node/` 25 目录 (112 files) & `compile-sourcemap` & `test/napi/` (59 files) | release (`c79d4f22d`) | 3411 | 0 | 21 skip / 50 todo | **3411/0 全绿**（`node/` 25 目录 **2875/0**、`compile-sourcemap` **9/0**、`test/napi/` 59 文件 **527/0**，全部 exit 0） |
+| 新版 Release (`c79d4f22d`) `node/` 25 目录 (160 files) & `readline` (`TERM=xterm-256color`) | release (`c79d4f22d`) | 3317 | 26 | 45 skip / 94 todo | `node/` 25 目录 **3227/26**（31622 expects，182.81s）；其中 25 项 `readline` 补设 `TERM=xterm-256color` 后 **90/0 全绿**（920ms），其余 1 项为 `capture-stack-trace` 缺 `bun:internal-for-testing` |
