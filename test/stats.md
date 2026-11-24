@@ -211,3 +211,5 @@
 | `test/cli/install/{bun-install-cpu-os,bun-lock,bun-pm,bun-link}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 36 | 2 | - | `cpu-os` **13/0**、`bun-lock` **9/0**、`bun-pm` **12/0**；仅 `bun-link` 2 项因 Debug 输出 `debug warn` / Zig 堆栈差异（Release 已全绿） |
 
 | `test/bundler/{bundler_edgecase,bundler_splitting}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 113 | 0 | 13 todo | **113/0 全绿**（`edgecase` **103/0**、`splitting` **10/0**，149.18s，exit 0） |
+
+| `test/cli/install/bun-link.test.ts` (Release) & `cli/install/{bun-pm-why,bun-pm-pkg,bun-info}.test.ts` (`bun-debug`) | release / debug | 124 | 0 | 3 todo | **124/0 全绿**（`bun-link` **4/0**，`why`/`pkg`/`info` **120/0**，73.94s，exit 0） |
