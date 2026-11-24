@@ -276,6 +276,7 @@ export struct Archiver {
         } else {
             dir = cwd.openDir(root, {}) catch return;
         }
+        const _dir_guard = CloseGuard<std.fs.Dir>{ ptr: &dir };
 
         loop: while (true) {
             const r = unsafe { archive.readNextHeader((&entry) as [*c]*Archive.Entry!) };

@@ -461,6 +461,8 @@ pub struct InitCommand {
         let fields = PackageJSONFields{};
 
         let package_json_file = destination_dir.openFile("package.json", { mode: .read_write }) catch null;
+        let owns_package_json_file = package_json_file != null;
+        defer if (owns_package_json_file) if (pkg := package_json_file) pkg.close();
         let package_json_contents: MutableString = MutableString.initEmpty(alloc);
         initializeStore();
         read_package_json: {
@@ -489,7 +491,9 @@ pub struct InitCommand {
                 const prev_file_pos = if (comptime Environment.isWindows) pkg.getPos()? else 0;
                 const pread_res = pkg.preadAll(package_json_contents.list.items, 0) catch null;
                 if (pread_res == null) {
+                    pkg.close();
                     package_json_file = null;
+                    owns_package_json_file = false;
                     break :read_package_json;
                 }
                 if (comptime Environment.isWindows) pkg.seekTo(prev_file_pos)?;
@@ -511,13 +515,17 @@ pub struct InitCommand {
                 let log = logger.Log.init(alloc);
                 const maybe_json_expr = JSON.parsePackageJSONUTF8(source, &log, alloc) catch null;
                 if (maybe_json_expr == null) {
+                    if (pkg := package_json_file) pkg.close();
                     package_json_file = null;
+                    owns_package_json_file = false;
                     break :process_package_json;
                 }
                 const package_json_expr = maybe_json_expr.?;
 
                 if (package_json_expr.data != .e_object) {
+                    if (pkg := package_json_file) pkg.close();
                     package_json_file = null;
+                    owns_package_json_file = false;
                     break :process_package_json;
                 }
 
@@ -779,6 +787,7 @@ pub struct InitCommand {
         }
 
         write_package_json: {
+            owns_package_json_file = false;
             let fd = bun.FD.fromStdFile(package_json_file ?? std.fs.cwd().createFileZ("package.json", {})?);
             let fd_guard = CloseGuard<bun.FD>{ ptr: unsafe { &fd } };
             let buffer_writer = JSPrinter.BufferWriter.init(bun.default_allocator);

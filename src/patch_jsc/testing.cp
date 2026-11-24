@@ -148,7 +148,7 @@ pub struct TestingAPIs {
             };
         }
 
-        let patchfile_bunstr = patchfile_js.toBunString(globalThis) catch return .initErr(.js_undefined);
+        let patchfile_bunstr = patchfile_js.toBunString(globalThis) catch { if (bun.FD.cwd() != dir_fd) dir_fd.close(); return .initErr(.js_undefined); };
         const _g_patchfile_bunstr = DerefGuard<@TypeOf(patchfile_bunstr)>{ ptr: &patchfile_bunstr };
         const patchfile_src = patchfile_bunstr.toUTF8(bun.default_allocator);
 

@@ -2357,3 +2357,5 @@
 - Phase 3 第二十七批：加固 6 个 `.cp` 模块及其生成的 `.zig`（`src/http_jsc/{websocket_client,websocket_client/WebSocketUpgradeClient}.{cp,zig}`, `src/dotenv/env_loader.{cp,zig}`, `src/valkey/valkey_protocol.{cp,zig}`, `src/bun.js.{cp,zig}`, `src/standalone_graph/StandaloneModuleGraph.{cp,zig}`），完成全仓所有 `.cp` 目录的 Phase 3 内存安全专项审计。
 
 - Phase 3 第二十八批：加固 3 个 `.cp` 模块及其生成的 `.zig`（`src/options_types/CompileTarget.{cp,zig}`, `src/cli/upgrade_command.{cp,zig}`, `src/install/lockfile.{cp,zig}`）。
+
+- Phase 3 第二十九批：全仓 FD 泄漏专项扫雷修复 4 个 `.cp` 模块及其生成的 `.zig`（`src/libarchive/libarchive.{cp,zig}`, `src/patch_jsc/testing.{cp,zig}`, `src/cli/{init_command,create_command}.{cp,zig}`）。

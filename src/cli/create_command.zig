@@ -364,6 +364,12 @@ else => progress.start(try ProgressBuf.print("Loading {s}", .{ template }), 0),
             _ = &package_json_contents;
             var package_json_file: ?std.fs.File = null;
             _ = &package_json_file;
+            defer {
+            if (package_json_file) |pkg| {
+                _ = &pkg;
+                _ = pkg.close();
+            }
+            }
             if ((example_tag != .local_folder)) {
                 if (create_options.verbose) {
                     _ = Output.prettyErrorln("Downloading as {s}\n", .{ @tagName(example_tag) });
@@ -525,6 +531,7 @@ var template_parts: [1][]const u8 = .{ template };
                 _ = &stat_ok;
                 const stat = (blk_catch_14: { break :blk_catch_14 ((pkg.stat()) catch |e| { _ = &e; _ = node.end();
                 _ = progress.refresh();
+                _ = package_json_file.?.close();
                 package_json_file = null;
                 _ = Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e) });
                 stat_ok = false;
@@ -533,6 +540,7 @@ var template_parts: [1][]const u8 = .{ template };
                     break :read_package_json;
                 }
                 if (((stat.kind != .file) or (stat.size == 0))) {
+                    _ = package_json_file.?.close();
                     package_json_file = null;
                     _ = node.end();
                     _ = progress.refresh();
@@ -545,7 +553,8 @@ var template_parts: [1][]const u8 = .{ template };
                 const prev_file_pos = (if (comptime Environment.isWindows) try pkg.getPos() else 0);
                 var pread_ok = true;
                 _ = &pread_ok;
-                _ = (blk_catch_15: { break :blk_catch_15 ((pkg.preadAll(package_json_contents.list.items, 0)) catch |e| { _ = &e; package_json_file = null;
+                _ = (blk_catch_15: { break :blk_catch_15 ((pkg.preadAll(package_json_contents.list.items, 0)) catch |e| { _ = &e; _ = package_json_file.?.close();
+                package_json_file = null;
                 _ = node.end();
                 _ = progress.refresh();
                 _ = Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e) });
@@ -597,6 +606,10 @@ _ = unreachable;
             _ = &start_command;
             _ = process_package_json: {
             if (create_options.skip_package_json) {
+                if (package_json_file) |pkg| {
+                    _ = &pkg;
+                    _ = pkg.close();
+                }
                 package_json_file = null;
             }
             if ((package_json_file != null)) {
@@ -604,7 +617,8 @@ _ = unreachable;
                 const source = (&logger.Source.initPathString("package.json", package_json_contents.list.items));
                 var parse_ok = true;
                 _ = &parse_ok;
-                var package_json_expr = (blk_catch_21: { break :blk_catch_21 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |__ce_21| { _ = &__ce_21; package_json_file = null;
+                var package_json_expr = (blk_catch_21: { break :blk_catch_21 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |__ce_21| { _ = &__ce_21; _ = package_json_file.?.close();
+                package_json_file = null;
                 parse_ok = false;
                 break :blk_catch_21 undefined; }); });
                 _ = &package_json_expr;
@@ -612,6 +626,7 @@ _ = unreachable;
                     break :process_package_json;
                 }
                 if ((package_json_expr.data != .e_object)) {
+                    _ = package_json_file.?.close();
                     package_json_file = null;
                     break :process_package_json;
                 }
@@ -619,6 +634,7 @@ _ = unreachable;
                 _ = &properties_list;
                 if ((ctx.log.errors > 0)) {
                     _ = try ctx.log.print(Output.errorWriter());
+                    _ = package_json_file.?.close();
                     package_json_file = null;
                     break :process_package_json;
                 }
@@ -765,6 +781,7 @@ else => {
                 var write_ok = true;
                 _ = &write_ok;
                 _ = (blk_catch_22: { break :blk_catch_22 ((JSPrinter.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), package_json_expr, source, .{ .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                _ = package_json_file.?.close();
                 package_json_file = null;
                 write_ok = false;
                 break :blk_catch_22 (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)); }); });
@@ -774,6 +791,7 @@ else => {
                 const written = package_json_writer.ctx.getWritten();
                 const void_ok: void = undefined;
                 _ = (blk_catch_23: { break :blk_catch_23 ((bun.sys.File.writeAll(.{ .handle = file }, written).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                _ = package_json_file.?.close();
                 package_json_file = null;
                 write_ok = false;
                 break :blk_catch_23 void_ok; }); });
@@ -781,6 +799,7 @@ else => {
                     break :process_package_json;
                 }
                 _ = (blk_catch_24: { break :blk_catch_24 ((file.truncate((if (comptime @typeInfo(@TypeOf(written.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(written.len)) else cp_cast_int(i32, written.len))).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                _ = package_json_file.?.close();
                 package_json_file = null;
                 write_ok = false;
                 break :blk_catch_24 void_ok; }); });
@@ -1107,6 +1126,16 @@ pub fn fetchAllLocalAndRemote(ctx: Command.Context, node: ?*Progress.Node, env_l
             {
                 var folders: [3]std.fs.Dir = .{ bun.invalid_fd.stdDir(), bun.invalid_fd.stdDir(), bun.invalid_fd.stdDir() };
                 _ = &folders;
+                defer {
+                {
+                    for (cp_mut_slice(&folders)) |*folder| {
+                        _ = &folder;
+                        if (((folder.*).fd != bun.invalid_fd.cast())) {
+                            _ = (folder.*).close();
+                        }
+                    }
+                }
+                }
                 if (env_loader.map.get("BUN_CREATE_DIR")) |home_dir| {
                     _ = &home_dir;
                     var parts: [1][]const u8 = .{ home_dir };
@@ -1365,9 +1394,9 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
             if (Output.enable_ansi_colors_stdout) {
                 async_http.client.progress_node = progress_node;
             }
-            const response = (blk_catch_39: { break :blk_catch_39 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_39 (__sw_blk_11: { const __disc_11 = e; _ = &__disc_11; if ((!cp_has_ok_val(__disc_11) and !cp_is_null_val(__disc_11))) { const __err_v_11 = cp_unwrap_err_val(__disc_11); _ = &__err_v_11; if (cp_match_tag(__err_v_11, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
-            break :__sw_blk_11 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
-            break :__sw_blk_11 cp_val(Global.exit(1)); }  unreachable; }); }); });
+            const response = (blk_catch_39: { break :blk_catch_39 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_39 (__sw_blk_12: { const __disc_12 = e; _ = &__disc_12; if ((!cp_has_ok_val(__disc_12) and !cp_is_null_val(__disc_12))) { const __err_v_12 = cp_unwrap_err_val(__disc_12); _ = &__err_v_12; if (cp_match_tag(__err_v_12, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
+            break :__sw_blk_12 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
+            break :__sw_blk_12 cp_val(Global.exit(1)); }  unreachable; }); }); });
             if ((response.status_code != 200)) {
                 _ = Output.prettyErrorln("<r><red>{d}<r> fetching examples :( .{s}", .{ response.status_code, mutable.list.items });
                 _ = Global.exit(1);
@@ -1395,8 +1424,8 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_12 = props.len;
-                        while (i < __end_12) : (i += 1) {
+                        const __end_13 = props.len;
+                        while (i < __end_13) : (i += 1) {
                             const property = props[@as(usize, @intCast(i))];
                             const name = property.key.?.data.e_string.data;
                             var final_name = name;
@@ -1630,8 +1659,8 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_14 = argv.len;
-            while (i < __end_14) : (i += 1) {
+            const __end_15 = argv.len;
+            while (i < __end_15) : (i += 1) {
                 const arg = argv[@as(usize, @intCast(i))];
                 if ((i > (argv.len - 1))) {
                     _ = Output.print(" {s} ", .{ arg });

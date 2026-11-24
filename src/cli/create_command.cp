@@ -560,6 +560,7 @@ pub struct CreateCommand {
 
         let package_json_contents: MutableString = undefined;
         let package_json_file: std.fs.File? = null;
+        defer if (pkg := package_json_file) pkg.close();
 
         if (example_tag != .local_folder) {
             if (create_options.verbose) {
@@ -800,6 +801,7 @@ pub struct CreateCommand {
 
                                 progress.refresh();
 
+                                package_json_file.?.close();
                                 package_json_file = null;
                                 Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e)});
                                 stat_ok = false;
@@ -808,6 +810,7 @@ pub struct CreateCommand {
                             if (!stat_ok) break :read_package_json;
 
                             if (stat.kind != .file || stat.size == 0) {
+                                package_json_file.?.close();
                                 package_json_file = null;
                                 node.end();
 
@@ -824,6 +827,7 @@ pub struct CreateCommand {
                         const prev_file_pos = if (comptime Environment.isWindows) pkg.getPos()? else 0;
                         let pread_ok = true;
                         * = pkg.preadAll(package_json_contents.list.items, 0) catch e => {
+                            package_json_file.?.close();
                             package_json_file = null;
 
                             node.end();
@@ -881,7 +885,10 @@ pub struct CreateCommand {
         let start_command: string = "bun dev";
 
         process_package_json: {
-            if (create_options.skip_package_json) package_json_file = null;
+            if (create_options.skip_package_json) {
+                if (pkg := package_json_file) pkg.close();
+                package_json_file = null;
+            }
 
             if (package_json_file != null) {
                 initializeStore();
@@ -890,6 +897,7 @@ pub struct CreateCommand {
 
                 let parse_ok = true;
                 let package_json_expr = JSON.parseUTF8(source, ctx.log, ctx.allocator) catch {
+                    package_json_file.?.close();
                     package_json_file = null;
                     parse_ok = false;
                     undefined
@@ -897,6 +905,7 @@ pub struct CreateCommand {
                 if (!parse_ok) break :process_package_json;
 
                 if (package_json_expr.data != .e_object) {
+                    package_json_file.?.close();
                     package_json_file = null;
                     break :process_package_json;
                 }
@@ -906,6 +915,7 @@ pub struct CreateCommand {
                 if (ctx.log.errors > 0) {
                     ctx.log.print(Output.errorWriter())?;
 
+                    package_json_file.?.close();
                     package_json_file = null;
                     break :process_package_json;
                 }
@@ -1447,6 +1457,7 @@ pub struct CreateCommand {
                     { mangled_props: null },
                 ) catch e => {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
+                    package_json_file.?.close();
                     package_json_file = null;
                     write_ok = false;
                     @as(usize, 0)
@@ -1456,6 +1467,7 @@ pub struct CreateCommand {
                 const void_ok: void = undefined;
                 bun.sys.File.writeAll({ handle: file }, written).unwrap() catch e => {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
+                    package_json_file.?.close();
                     package_json_file = null;
                     write_ok = false;
                     void_ok
@@ -1463,6 +1475,7 @@ pub struct CreateCommand {
                 if (!write_ok) break :process_package_json;
                 file.truncate(i32(written.len)).unwrap() catch e => {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
+                    package_json_file.?.close();
                     package_json_file = null;
                     write_ok = false;
                     void_ok
@@ -1862,6 +1875,13 @@ pub struct Example {
                 bun.invalid_fd.stdDir(),
                 bun.invalid_fd.stdDir(),
             ];
+            defer {
+                for (*folder of folders) {
+                    if (folder.fd != bun.invalid_fd.cast()) {
+                        folder.close();
+                    }
+                }
+            }
             if (home_dir := env_loader.map.get("BUN_CREATE_DIR")) {
                 let parts: [1]string = [ home_dir ];
                 const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
