@@ -273,3 +273,5 @@
 | 新版 Release (`c79d4f22d`) `regression/issue/` 12 文件隔离 & `web/{streams,ws,timers,encoding,abort,events,crypto}` + `first_party` | release (`c79d4f22d`) | 2845 | 1 | 11 skip / 1 todo | `regression/issue/` 12 文件隔离 **58/0** 全绿；`web`+`first_party` 55 文件 **2787/1**（116743 expects，47.97s） |
 
 | 新版 Release (`c79d4f22d`) `cli/test/` + `cli/install/` 12 核心文件 (28 files) | release (`c79d4f22d`) | 440 | 81 | 9 todo | `cli/test/` 与 `info`/`cpu-os`/`workspaces`/`lock`/`link`/`pm`/`audit`/`patch`/`why`/`pkg` **440/0**；81 fail 均系 `lifecycle-scripts` 缺 `bun:internal-for-testing` |
+
+| 新版 Release (`c79d4f22d`) `bundler/` 32 核心文件 (`esbuild`/`css`/`resolver`/`edgecase`/`splitting`/`minify`/`jsx`/`compile*`) | release (`c79d4f22d`) | 1212 | 1 | 5 skip / 128 todo | **1212/0 逻辑**（129.76s；唯一 1 fail 为 `compile-sourcemap inline` 并发限时超时） |
