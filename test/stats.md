@@ -259,3 +259,5 @@
 | `test/js/bun/glob/` (5 文件除 `scan`) & `bun/plugin/` (2 files, `bun-debug`) | debug (`abb8c9b9`) | 64 | 1 | 1 todo | `plugin` **30/0**、`glob` **34/1**（`match`/`path-length`/`proto`/`stress` 全绿，仅 `leak > scan` 在 Debug 超 60s） |
 
 | 新版 Release (`c79d4f22d`) 定点复验 (`production`/`init`/`archive`/`s3-leak`/`os`/`dirname`/`NODE_EXTRA_CA_CERTS`/`hot-sourcemap`) | release (`c79d4f22d`) | 189 | 0 | 1 skip | **189/0 全绿**（`production` 8/0 289ms、`hot` 4/0、`NODE_EXTRA_CA_CERTS` 4/0、`archive` 100/0、`os` 51/0、`dirname` 10/0、`init` 10/0、`s3-leak` 1/0） |
+
+| 新版 Release (`c79d4f22d`) `sql/` + `http/proxy` + `websocket-server` (25 files) | release (`c79d4f22d`) | 597 | 0 | 2 skip / 3 todo | **597/0 全绿**（2650 expects，61.93s） |
