@@ -103,3 +103,5 @@
 | `test/bake/dev/production.test.ts` (`ssr.tsx` 修复后 `bun-debug`) | debug | 8 | 0 | - | **8/0 全绿**（61 expects，`works with sourcemaps` 从 60s 挂起恢复为 9.46s PASS） |
 
 | `test/js/node/http/node-http-uaf.test.ts` & `bun/websocket/websocket-server.test.ts` (隔离复验) | release | 94 | 0 | 3 todo | `node-http-uaf` **2/0**（3.58s）；`websocket-server` **92/0**（4.86s，单并发全绿） |
+
+| `test/cli/install/bunx.test.ts` & `test/js/third_party/prisma/` (隔离复验) | release | 36 | 3 | 6 skip | `bunx` **31/1**（唯一 fail 系外网 `@angular/cli@latest` 要求 `node >= 24.15.0` vs Bun `24.3.0`）；`prisma` SQLite CRUD/生成 **5/0**（2 fail 仅 `!isCI` 900 万次 `does not leak` 压测达 120s 限时） |
