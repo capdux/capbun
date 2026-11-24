@@ -107,3 +107,5 @@
 | `test/cli/install/bunx.test.ts` & `test/js/third_party/prisma/` (隔离复验) | release | 36 | 3 | 6 skip | `bunx` **31/1**（唯一 fail 系外网 `@angular/cli@latest` 要求 `node >= 24.15.0` vs Bun `24.3.0`）；`prisma` SQLite CRUD/生成 **5/0**（2 fail 仅 `!isCI` 900 万次 `does not leak` 压测达 120s 限时） |
 
 | `test/js/bun/util/fuzzy-wuzzy.test.ts` & `test/js/bun/http/` (43 文件隔离复验) | release | 945 | 3 | 3 skip / 4 todo | `fuzzy-wuzzy` **153/0** 全绿；`bun/http` 792/3（唯一 3 fail 为 2 项需 `INTERNAL_FOR_TESTING` 与 1 项 root 绑定 1003 端口） |
+
+| `test/js/node/os/os.test.js` & `bun/websocket/websocket-server.test.ts` & `http/{http-server-chunking,decodeURIComponentSIMD}` & `web/fetch/blob-oom` (`bun-debug`) | debug (最新 `08df2206`) | 393 | 2 | 3 todo | `os.test.js` **51/0**；`websocket-server` **91/0 逻辑**（仅 `(benchmark)` 30s 超时）；`decodeURIComponentSIMD`+`blob-oom`+`http-server-chunking` **250/0 逻辑**（仅 `tiny send buffer` 30s 超时） |
