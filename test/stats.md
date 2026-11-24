@@ -47,14 +47,29 @@
 | `test/cli/test/` (12 files) | release | 200 | 0 | 6 skip | `--timeout=5000` 全绿 |
 | `test/cli/{bunfig-test-options,bun,console-depth,user-agent}.test.ts` | release | 24 | 0 | 2 skip | `--timeout=5000` 全绿 |
 | `test/cli/inspect/` (4 files) | release | 34 | 0 | - | `--timeout=5000` 全绿 |
-| `test/js/bun/` 已测子目录 (`sqlite` 82/0, `crypto` 10248/0, `ini/yaml/jsonl` 829/1, `cookie` 147/0, `dns` 76/0, `md/transpiler/ffi` 1080/2, `websocket/udp/net` 326/2, `console/perf_hooks/sourcemap/ts` 185/1, `wasm/archive/symbols` 102/1, `stream` 269/0, `terminal` 120/1, `http` 部分 250/0, `shell` 20 files 540/4, `s3/globals` 93/0, `fetch/cron/perf/bun-object` 226/0, `binary/jsc` 85/0, `test/` 14 files 529/1) | release | 15187 | 13 | - | `--timeout=5000` 分批扫测；`secrets` 8 项需系统密钥环 |
+| `test/js/bun/` 已测子目录 (`sqlite` 82/0, `crypto` 10248/0, `ini/yaml/jsonl` 829/1, `cookie` 147/0, `dns` 76/0, `md/transpiler/ffi` 1080/2, `websocket/udp/net` 326/2, `console/perf_hooks/sourcemap/ts` 185/1, `wasm/archive/symbols` 102/1, `stream` 269/0, `terminal` 120/1, `http` 已测 266/0, `shell` 20 files 586/2, `s3/globals` 93/0, `fetch/cron/perf/bun-object` 226/0, `binary/jsc` 85/0, `test/` 14 files 529/1) | release | 15249 | 11 | - | `--timeout=5000` 分批扫测；补环境后 `shell/lex/parse` 全绿（仅余离线 `sharp` 与 `root` `EACCES`）；`ffi` 2 项为 `-fPIC`/`node_api.h` 环境差异 |
 | `test/js/web/` (138 files) | release | 5097+ | 6 | 3 timeout | 加 `BUN_GARBAGE_COLLECTOR_LEVEL=0 BUN_FEATURE_FLAG_INTERNAL_FOR_TESTING=1` 后 `text-decoder`+`FormData`+`uv-error` 等 **192/0** |
 | `test/js/node/` (248 files，不含 `zlib`/`readline`) | release | 4825+ | 14 | 4 timeout | 补齐 `internal-for-testing` 环境变量后 `v8`/`tls`/`fs` 补测 **65/0**；`tls peer cert`/`dlopen`/`http uaf` 经排查均非 `.cp` 缺陷 |
 | `test/js/first_party/` (5 files) & `deno/` (16) & `junit-reporter/` (1) & `workerd/` (3) & `valkey/` (14) | release | 363 | 0 | - | 全绿（`valkey` 外部服务用例 skip） |
-| `test/js/sql/` (23 files) | release | 464 | 2 | - | `unix://` 协议校验与 exotic SQL fuzz 各 1 处 |
+| `test/js/sql/` (23 files) | release | 466 | 0 | - | 清理残留 `/tmp/thisisacoolmysql.sock` 并 `--timeout=15000` 后全绿（`adapter`+`sqlite-sql` **269/0**） |
 | `test/js/third_party/` (120 files) | release | 1183 | 10 | 9 timeout | `--timeout=5000` 15s 限时扫测 |
 
-## 二、 正在收敛中
+| `test/bundler/css/` (8 files) & `esbuild/` (13 files) | release (新版) | 945 | 0 | - | `findImportedFilesInCSSOrder.cp` + `maybe.cp` 修复后 21 文件全绿 |
+| `test/bundler/bundler_{cjs2esm,html,css}.test.ts` | release (新版) | 37 | 0 | - | `computeChunks.cp` + `maybe.cp` 修复后全绿 |
+| `test/js/bun/css/css-fuzz.test.ts` | release (新版) | 5 | 0 | - | `css_parser.cp` 递归深度保护后 `deepNesting(300)` 无 SIGSEGV 全绿 |
+| `test/cli/hot/` (3 files) | release (新版) | 15 | 0 | - | `ModuleLoader.cp` 修复后全绿 |
+| `test/cli/install/bun-install-cpu-os.test.ts` & `bun-lock.test.ts` | release (新版) | 22 | 0 | - | `Tree.cp` 修复 + `internal-for-testing` 环境变量后全绿 |
+| `test/bake/dev/{bundle,plugins,vfile,request-cookies}.test.ts` | debug (`bun bd`) | 26 | 0 | - | `DevServer.cp` (`RouterTypeListGuard` + `JSValue.null`) 修复后全绿 |
+| `test/bake/dev/{esm,import-meta-inline,react-response}.test.ts` | release (新版) | 30 | 0 | - | 全绿（含 `DEV:esm-11`） |
+| `test/bake/` 顶层 (`deinitialization`, `framework-router`, `dev-and-prod`) | release | 13 | 1 | - | 仅 1 处非崩溃失败 |
 
-- **`test/bake/dev/`**（9 文件）：`DevServer.cp` `JSValue.null` 已修复，即将用 `bun bd test` 验证 `bundle`/`plugins`/`vfile`/`request-cookies`。
-- **`test/cli/install/` 12 个 `verdaccio` 依赖测试**：8/12 已绿，剩余 `bun-workspaces`/`npmrc`/`bun-lock` 待收敛。
+## 二、 剩余非阻塞环境/外网/长耗时差异汇总
+
+- **已排查确认非 `.cp` 迁移缺陷的失败**：
+  - `test/js/node/tls/` `peer certificate`：线上 `bun.sh:443` 证书轮换已不再携带 `OCSP - URI`。
+  - `test/js/node/process/` `dlopen`（5 项）：宿主机 `node v26.1.0`（ABI 147）与 Bun 1.3.14（ABI 137）不匹配。
+  - `test/js/node/http/node-http-uaf`：单次迭代 ~9.9s，在 `--timeout=5000` 下超时（直接运行 0 报错）。
+  - `test/js/web/fetch/` `locked blob body`：JS builtin `ReadableStreamInternals.ts:2178` `$disturbed` 既有行为，`.cp` 与 `_.zig` 一致。
+  - `test/js/bun/ffi/`（2 项）：宿主机 `cc -shared` 无 `-fPIC` 与缺少 `<node/node_api.h>`。
+  - `test/js/bun/secrets*`（8 项）：无系统 D-Bus keyring；`shell > sharp` 需外网安装。
+- **待后续按需收敛**：`test/bundler/bun-build-compile-wasm.test.ts`（1 fail）、`test/bake/dev/server-sourcemap.test.ts`（3 fail）、`test/cli/install/` 剩余依赖本地/外网 npm 的 `verdaccio` 用例及 `test/js/third_party/` 10 fail / 9 timeout。
