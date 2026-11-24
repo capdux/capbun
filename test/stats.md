@@ -213,3 +213,5 @@
 | `test/bundler/{bundler_edgecase,bundler_splitting}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 113 | 0 | 13 todo | **113/0 全绿**（`edgecase` **103/0**、`splitting` **10/0**，149.18s，exit 0） |
 
 | `test/cli/install/bun-link.test.ts` (Release) & `cli/install/{bun-pm-why,bun-pm-pkg,bun-info}.test.ts` (`bun-debug`) | release / debug | 124 | 0 | 3 todo | **124/0 全绿**（`bun-link` **4/0**，`why`/`pkg`/`info` **120/0**，73.94s，exit 0） |
+
+| `test/bundler/{bundler_string,bundler_minify,bundler_jsx}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 118 | 0 | 4 todo | **118/0 全绿**（13 snapshots，167 expects，102.87s，exit 0） |
