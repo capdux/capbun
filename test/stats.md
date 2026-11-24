@@ -263,3 +263,5 @@
 | 新版 Release (`c79d4f22d`) `sql/` + `http/proxy` + `websocket-server` (25 files) | release (`c79d4f22d`) | 597 | 0 | 2 skip / 3 todo | **597/0 全绿**（2650 expects，61.93s） |
 
 | 新版 Release (`c79d4f22d`) 全仓 `*leak*` 48 文件复验 | release (`c79d4f22d`) | 159 | 2 | 9 skip / 1 todo | **159/2**（70237 expects，314.25s；`streams-leak` RSS delta `-4.36MB` 零泄漏仅累计 RSS 348MB） |
+
+| 新版 Release (`c79d4f22d`) `bun/{cron,dns,udp,sqlite,md,json5,cookie,yaml}/` (26 files) | release (`c79d4f22d`) | 2646 | 0 | 35 skip / 44 todo | **2646/0 全绿**（88655 expects，254.97s，exit 0） |
