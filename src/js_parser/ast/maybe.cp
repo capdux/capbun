@@ -168,12 +168,6 @@ pub fn AstMaybe(
                                 }
 
                                 const props: []const G.Property = p.stmt_expr_value.e_binary.right.data.e_object.properties.slice();
-                                if (props.len == 0) {
-                                    // empty object de-opts because otherwise the statement becomes
-                                    // <empty space> = {};
-                                    p.deoptimizeCommonJSNamedExports();
-                                    return null;
-                                }
                                 for (prop of props) {
                                     // if it's not a trivial object literal, de-opt
                                     if (prop.kind != .normal ||
@@ -200,6 +194,12 @@ pub fn AstMaybe(
                                         p.deoptimizeCommonJSNamedExports();
                                         return null;
                                     }
+                                }
+                                // Match Zig `for (...) else` semantics when loop completes without `break`
+                                const deopt_after_loop: bool = true;
+                                if (deopt_after_loop) {
+                                    p.deoptimizeCommonJSNamedExports();
+                                    return null;
                                 }
 
                                 let stmts = std.array_list.Managed(Stmt).initCapacity(p.allocator, props.len * 2) catch unreachable;

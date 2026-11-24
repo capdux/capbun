@@ -185,10 +185,6 @@ if (p.options.bundle) {
                                     return null;
                                 }
                                 const props: []const G.Property = p.stmt_expr_value.e_binary.right.data.e_object.properties.slice();
-                                if ((props.len == 0)) {
-                                    _ = p.deoptimizeCommonJSNamedExports();
-                                    return null;
-                                }
                                 for (cp_iter_slice(props)) |prop| {
                                     _ = &prop;
                                     if (((((((((prop.kind != .normal) or (prop.key == null)) or (prop.key.?.data != .e_string)) or prop.flags.contains(Flags.Property.is_method)) or prop.flags.contains(Flags.Property.is_computed)) or prop.flags.contains(Flags.Property.is_spread)) or prop.flags.contains(Flags.Property.is_static)) or (switch ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.data) {
@@ -202,6 +198,11 @@ else => (!(if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else pro
                                         _ = p.deoptimizeCommonJSNamedExports();
                                         return null;
                                     }
+                                }
+                                const deopt_after_loop: bool = true;
+                                if (deopt_after_loop) {
+                                    _ = p.deoptimizeCommonJSNamedExports();
+                                    return null;
                                 }
                                 var stmts = ((std.array_list.Managed(Stmt).initCapacity(p.allocator, (props.len * 2))) catch unreachable);
                                 _ = &stmts;

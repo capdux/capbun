@@ -1845,3 +1845,5 @@
 - [Phase 2 第十九批修复] 修复 `src/bundler/linker_context/computeChunks.cp:368-376`：`for (k_idx of 0..sorted_css_keys.len)` 循环中先 `sorted_chunks.appendAssumeCapacity(...)` 后再读取 `sorted_chunks.len + k_idx` 导致 `sorted_index` 按 2 倍步长增长、引发 `html/*` 多入口 CSS chunk 重映射越界；将 `base_sorted_len` 提取至循环外后 `cpc_brief.py` 与 `zig:check` 5/5 通过。
 
 - [Phase 2 第二十批修复] 解决 `css-fuzz.test.ts` `memory.deepNesting(300)` 在 Release 模式下引发栈溢出 `SIGSEGV` 的问题：在 `src/css/css_parser.cp` `NestedRuleParser` 中增加 `depth: u16 = 0` 追踪递归深度，超过 64 层时返回 `ParserError.maximum_nesting_depth`（`zig:check` 5/5 通过）。
+
+- [Phase 2 第二十一批修复] 采纳 `dcebb8dc` 根因定位修复 `src/js_parser/ast/maybe.cp`：Zig 原版 `maybe_.zig:167-198` 的 `for (props) |prop| { ... } else { p.deoptimizeCommonJSNamedExports(); return null; }` 因循环体无 `break` 而总是执行 `else` 分支去优化为 `.cjs`；迁移时误改为 `if (props.len == 0)` 导致 `module.exports = { react: "react" }` 被优化为 ESM 缺失 `__toESM(`。还原后 `cpc_brief.py` 与 `zig:check` 5/5 通过。

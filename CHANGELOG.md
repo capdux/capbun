@@ -2291,3 +2291,5 @@
 - [Phase 2 第十九批修复] 修改 .cp/.zig：`src/bundler/linker_context/computeChunks.{cp,zig}`（`base_sorted_len` 预存修复 `remapped_css_indexes` 越界，`zig:check` 5/5）。
 
 - [Phase 2 第二十批修复] 修改 .cp/.zig：`src/css/css_parser.{cp,zig}`（`NestedRuleParser.parseNested` 增加 `depth >= 64` 递归深度保护，`zig:check` 5/5）。
+
+- [Phase 2 第二十一批修复] 修改 .cp/.zig：`src/js_parser/ast/maybe.{cp,zig}`（还原 `for ... else` 后置去优化语义，修复 `cjs2esm/UnwrappedModuleRequireAssigned`，`zig:check` 5/5）。

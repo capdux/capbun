@@ -42,9 +42,13 @@
 | `test/js/node/readline/` (`readline_never_unrefs` 1/0, `stdin-pause-pty` 1/0, `readline.node` 79/0) | release | 90 | 0 | - | `TERM=xterm-256color` 全绿 |
 | `test/napi/` (59 files) | release | 527 | 0 | 25 todo | 0 panic / 0 SIGSEGV |
 | `test/regression/issue/` (385 files) + 非 issue (2) | release | 1100+ | - | - | 0 panic / 0 SIGSEGV；`21907`/`26286`/`text-chunk` 已修复并全过 |
+| `test/cli/install/bun-install-cpu-os.test.ts` | debug | 13 | 0 | - | `Tree.cp` 修复后 `bun bd test` 全绿 |
+| `test/cli/run/` (31 files, 含 `require-cache` 6/0, `no-orphans` 18/0) | release | 1021 | 0 | 6 skip | `--timeout=5000` 分批全绿 |
+| `test/cli/test/` (12 files) | release | 200 | 0 | 6 skip | `--timeout=5000` 全绿 |
+| `test/cli/{bunfig-test-options,bun,console-depth,user-agent}.test.ts` | release | 24 | 0 | 2 skip | `--timeout=5000` 全绿 |
 
 ## 二、 正在收敛中
 
-- **`test/bundler/*.test.*`**（48 文件）：正在补全依赖后重跑中（`task-24419`）。
-- **`test/cli/install/` 12 个 `verdaccio` 依赖测试**：待 `task-24419` 或子智能体接力重跑。
-- **`css-fuzz.test.ts` SIGSEGV**（`0fe2cc47`）排查中；**`cli/install/` 6 个长超时文件**（`27046a0f`）重跑中。
+- **`test/bake/dev/`**（9 文件）：`DevServer.cp` + `maybe.cp` + `computeChunks.cp` + `css_parser.cp` 已修复提交，待 `bun bd` 链接完成后实测。
+- **`test/bundler/*.test.*`**：`computeChunks.cp`（`html/*`）与 `maybe.cp`（`cjs2esm`）已修复，待重测。
+- **`test/js/web/` & `test/cli/inspect/`**：子智能体 `d2d949e7` 正在分批扫测中。
