@@ -177,3 +177,5 @@
 | `test/js/node/{zlib,child_process,v8,vm}/` (25 files, `bun-debug`) | debug (最新 `08df2206`) | 733 | 10 | 4 skip / 71 todo | `child_process`/`v8`/`vm` **0 fail**；`zlib` 10 fail 为 `kMaxLength.global`(8)、`zstdCompress` Debug+ASan 14MB>10MB(1) 与 `brotli` 15s 超时(1) |
 
 | `test/js/node/zlib/leak.test.ts` & `zlib.kMaxLength.global.test.js` (隔离复验) | release | 8 | 8 | - | `zlib/leak.test.ts` **8/0 全绿**（26.38s，包含 `zstdCompress`）；`zlib.kMaxLength.global` 0/8 待排查 |
+
+| `test/cli/test/` (16 files, `bun-debug`) | debug (最新 `08df2206`) | 198 | 2 | 6 todo | **198/0 逻辑**（686 expects；仅 `parallel.test.ts` 2 项受 Debug 启动慢并发调度波动，Release 已 **200/0**） |
