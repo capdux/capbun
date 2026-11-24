@@ -121,3 +121,5 @@
 | `test/js/third_party/{@fastify,hono,esbuild}` | release | 4 | 0 | - | **4/0 全绿**（`1.76s`） |
 
 | `test/js/bun/test/{*expect*,*snapshot*}` (18 files, `bun-debug`) | debug (最新 `08df2206`) | 558 | 2 | 1 skip / 10 todo | **558/0 逻辑**（22931 expects；仅 `deepEquals Set/Map` Debug 30s 超时与 `snapshot.test.ts:895` ANSI） |
+
+| `test/js/bun/shell/commands/` (13 files, `bun-debug`) | debug (最新 `08df2206`) | 123 | 2 | 30 skip | **123/0 逻辑**（20.11s；唯一 2 fail 为 root 身份下 `ls.test.ts` `permission denied directory` 仍可读） |
