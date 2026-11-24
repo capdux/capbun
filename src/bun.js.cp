@@ -237,6 +237,7 @@ pub struct Run {
             const eval_entry_path = eval_path_buf[0 .. cwd_slice.len + trigger.len];
             // Heap-allocate the path so it outlives this stack frame
             const heap_entry_path = bun.default_allocator.dupe(u8, eval_entry_path)?;
+            errdefer bun.default_allocator.free(heap_entry_path);
             const script_source = bun.default_allocator.create(logger.Source)?;
             script_source.* = logger.Source.initPathString(heap_entry_path, cron_script);
             vm.module_loader.eval_source = script_source;
@@ -651,6 +652,7 @@ fn escapeForJSString(allocator: std.mem.Allocator, input: []const u8): []const u
     if (!needs_escape) return allocator.dupe(u8, input);
 
     let result = std.array_list.Managed(u8).initCapacity(allocator, input.len + 16)?;
+    errdefer result.deinit();
     for (c of input) {
         switch (c) {
             '\\' => result.appendSlice("\\\\")?,

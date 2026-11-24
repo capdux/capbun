@@ -1430,7 +1430,7 @@ pub fn getMaxDNSTimeToLiveSeconds() u32 {
                 return ttl;
             }
             const value = bun.env_var.BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS.get();
-            const ttl: u32 = @truncate(@as(u64, @intCast(value)));
+            const ttl: u32 = @intCast(std.math.clamp(value, 0, std.math.maxInt(u32)));
             __max_dns_time_to_live_seconds = ttl;
             return ttl;
     }

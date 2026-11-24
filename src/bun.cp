@@ -94,6 +94,7 @@ import tracy from "./perf/tracy.zig";
 import zstd from "./zstd/zstd.zig";
 import string_mod from "./string/string.zig";
 import Async from "async";
+comptime { * = Async; }
 import heap_breakdown from "./bun_alloc/heap_breakdown.zig";
 import io from "./io/io.zig";
 import brotli from "./brotli/brotli.zig";
@@ -1827,9 +1828,12 @@ pub struct StringSet {
 
     fn clone(): !StringSet {
         let new_map = Map.init(_.map.allocator);
+        errdefer new_map.deinit();
         new_map.ensureTotalCapacity(_.map.count())?;
         for (key of _.map.keys()) {
-            new_map.putAssumeCapacity(_.map.allocator.dupe(u8, key)?, {});
+            const duped_key = _.map.allocator.dupe(u8, key)?;
+            errdefer _.map.allocator.free(duped_key);
+            new_map.putAssumeCapacity(duped_key, {});
         }
         return StringSet{
             map: new_map,
@@ -2317,6 +2321,7 @@ pub fn initArgv()! {
 
         const argvu16 = argvu16_ptr[0..i32(length)];
         let out_argv = bun.default_allocator.alloc([:0]const u8, i32(length))?;
+        errdefer bun.default_allocator.free(out_argv);
         let string_builder = StringBuilder{};
 
         for (argraw of argvu16) {

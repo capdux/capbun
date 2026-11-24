@@ -78,8 +78,14 @@ pub struct DeinitGuard<T> {
             return buf[0..result.count :0];
         } else {
             let list = std.array_list.Managed(u8).init(fallback_allocator);
-            let out = bun.strings.toUTF8ListWithTypeBun(&list, slice, false) catch return null;
-            out.append(0) catch return null;
+            let out = bun.strings.toUTF8ListWithTypeBun(&list, slice, false) catch {
+                list.deinit();
+                return null;
+            };
+            out.append(0) catch {
+                out.deinit();
+                return null;
+            };
             return out.items[0 .. out.items.len - 1 :0];
         }
     }

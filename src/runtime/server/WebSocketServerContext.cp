@@ -216,7 +216,7 @@ export @root struct WebSocketServerContext {
                 if (!value.isAnyInt()) {
                     return globalObject.throwInvalidArguments("websocket expects maxPayloadLength to be an integer", .{});
                 }
-                server.maxPayloadLength = @truncate(@max(value.toInt64(), 0));
+                server.maxPayloadLength = @intCast(@min(@max(value.toInt64(), 0), std.math.maxInt(u32)));
             }
         }
 
@@ -226,10 +226,12 @@ export @root struct WebSocketServerContext {
                     return globalObject.throwInvalidArguments("websocket expects idleTimeout to be an integer", .{});
                 }
 
-                let idleTimeout: u16 = @truncate(@max(value.toInt64(), 0));
-                if (idleTimeout > 960) {
+                const raw_idle = value.toInt64();
+                if (raw_idle > 960) {
                     return globalObject.throwInvalidArguments("websocket expects idleTimeout to be 960 or less", .{});
-                } else if (idleTimeout > 0) {
+                }
+                let idleTimeout: u16 = @intCast(@max(raw_idle, 0));
+                if (idleTimeout > 0) {
                     // uws does not allow idleTimeout to be between (0, 8),
                     // since its timer is not that accurate, therefore round up.
                     idleTimeout = @max(idleTimeout, 8);
@@ -244,7 +246,7 @@ export @root struct WebSocketServerContext {
                     return globalObject.throwInvalidArguments("websocket expects backpressureLimit to be an integer", .{});
                 }
 
-                server.backpressureLimit = @truncate(@max(value.toInt64(), 0));
+                server.backpressureLimit = @intCast(@min(@max(value.toInt64(), 0), std.math.maxInt(u32)));
             }
         }
 

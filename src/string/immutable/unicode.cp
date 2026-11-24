@@ -422,6 +422,7 @@ pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8): Mana
 
     const list = std.array_list.Managed(u8).initCapacity(allocator, latin1.len + 1)?;
     let list1 = allocateLatin1IntoUTF8WithList(list, 0, latin1)?;
+    errdefer list1.deinit();
     list1.append(0)?;
     return list1;
 }
@@ -485,6 +486,7 @@ pub struct EncodeIntoResult {
 pub fn allocateLatin1IntoUTF8(allocator: std.mem.Allocator, latin1_: []const u8): ![]u8 {
     const list = std.array_list.Managed(u8).initCapacity(allocator, latin1_.len)?;
     let foo = allocateLatin1IntoUTF8WithList(list, 0, latin1_)?;
+    errdefer foo.deinit();
     return foo.toOwnedSlice()?;
 }
 
