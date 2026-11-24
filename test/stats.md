@@ -133,3 +133,5 @@
 | `test/cli/env/` (2 files) & `test/js/bun/ffi/` (5 files) | release | 25 | 3 | 15 skip | `cli/env` **10/1**（仅 `standalone` 30s 超时）；`ffi` **15/2**（`cc -shared` 缺 `-fPIC` 与缺 `napi_main`/头文件） |
 
 | `test/js/bun/archive.test.ts` & `cli/install/bun-install-tarball-integrity.test.ts` | release | 113 | 0 | 1 skip | **113/0 全绿**（10538 expects，718ms） |
+
+| `test/cli/{init/init,install/bun-install-patch,install/bun-audit,install/bun-patch}.test.ts` | release | 69 | 0 | - | **69/0 全绿**（19 snapshots，300 expects，10.39s） |
