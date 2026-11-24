@@ -183,3 +183,5 @@
 | `test/regression/issue/2*.test.ts` (185 files, `bun-debug`) | debug (最新 `08df2206`) | 503 | 0 | 16 skip / 1 todo | **503/0 全绿**（13 snapshots，8563 expects，exit 0） |
 
 | `test/js/node/zlib/zlib.kMaxLength.global.test.js` (独立) & `node/tls/` (22 files, `bun-debug`) | release / debug | 130 | 2 | 5 skip / 15 todo | `kMaxLength.global` **8/0**（77ms）；`node/tls` **122/0 逻辑**（708 expects，仅 `bun.sh:443` 轮换证书缺 `OCSP - URI` 2 项外网差异） |
+
+| `test/regression/issue/1*.test.ts` (58 files, `bun-debug`) | debug (最新 `08df2206`) | 124 | 39 | 5 skip / 1 todo | 38 项源于前置 `10132` 删除 `/tmp/issue-10132_T2S6Y1` 导致 `cwd` 失效，1 项为 `3000` 端口占用 |
