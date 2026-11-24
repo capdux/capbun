@@ -269,10 +269,14 @@ pub fn transpileSourceCode(
             let fd: FD? = null;
             let package_json: (*PackageJSON)? = null;
 
-            const indexOfFn = @TypeOf(jsc_vm.bun_watcher).indexOf;
-            if (index := indexOfFn(jsc_vm.bun_watcher, hash)) {
-                fd = jsc_vm.bun_watcher.watchlist().items(.fd)[index].unwrapValid();
-                package_json = jsc_vm.bun_watcher.watchlist().items(.package_json)[index];
+            {
+                jsc_vm.bun_watcher.lock();
+                defer jsc_vm.bun_watcher.unlock();
+                const indexOfFn = @TypeOf(jsc_vm.bun_watcher).indexOf;
+                if (index := indexOfFn(jsc_vm.bun_watcher, hash)) {
+                    fd = jsc_vm.bun_watcher.watchlist().items(.fd)[index].unwrapValid();
+                    package_json = jsc_vm.bun_watcher.watchlist().items(.package_json)[index];
+                }
             }
 
             let cache = jsc.RuntimeTranspilerCache{

@@ -46,6 +46,22 @@ pub union(enum) ImportWatcher {
         };
     }
 
+    fn lock(*_) {
+        if (_.* == .hot) {
+            _.hot.mutex.lock();
+        } else if (_.* == .watch) {
+            _.watch.mutex.lock();
+        }
+    }
+
+    fn unlock(*_) {
+        if (_.* == .hot) {
+            _.hot.mutex.unlock();
+        } else if (_.* == .watch) {
+            _.watch.mutex.unlock();
+        }
+    }
+
     inline fn indexOf(hash: Watcher.HashType): u32? {
         return switch (_) {
             .hot w => Watcher.indexOf(w, hash),
@@ -420,6 +436,8 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
             const hashes = slice.items(.hash);
             const parents = slice.items(.parent_hash);
             const file_descriptors = slice.items(.fd);
+            let current_task = Task.initEmpty(_);
+            const task_guard = EnqueueGuard<Task>{ ptr: &current_task };
             const ctx = _.getContext();
             const ctx_guard = FlushEvictionsGuard<Watcher>{ ptr: ctx };
             const output_guard = OutputFlushGuard{};
@@ -427,8 +445,6 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
             const fs: *Fs.FileSystem = &Fs.FileSystem.instance;
             const rfs: *Fs.FileSystem.RealFS = &fs.fs;
             let _on_file_update_path_buf: bun.PathBuffer = undefined;
-            let current_task = Task.initEmpty(_);
-            const task_guard = EnqueueGuard<Task>{ ptr: &current_task };
 
             for (event of events) {
                 // Stale udata: kevent.udata can outlive a swapRemove in flushEvictions.

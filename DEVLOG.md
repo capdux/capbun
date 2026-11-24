@@ -1891,3 +1891,4 @@
 - Phase 3 第十二批安全性加固要点：`s3/client.cp` `S3DownloadStreamWrapper.onStreamCancelled` 去掉错误的 `@c` (`callconv(.c)`) 并直接赋值给 `reader.cancel_handler`（`fn (*!?) void` `.auto` 约定），避免 `@ptrCast` 掩盖 ABI 错位导致的 `ReadableStream` 强引用泄漏。
 - Phase 3 第十三批安全性加固要点：`s3/client.cp:442,605` 去除 `onWritable` 的冗余 `@c` 与 `@ptrCast`，对齐 `MultiPartUpload.OnWritableFn` 的 Zig `.auto` 调用约定，完成全仓 `@ptrCast(&...)` ABI 错位清零。
 - Phase 3 第十四批要点：定位并修复 `cpc` 对 `struct` 内 `extern fn` 注入 `self` 首参导致 `ZigString` 16B 传参错位触发 `JSC::JSGlobalObject::vm()` `SEGV 0x63` 的回归，已同步向 `cp_agy` 提单 `task-bun-20261125-struct-extern-fn-self` 并完成全仓 488 处受影响声明定位。
+- Phase 3 第十五批安全性加固要点：`hot_reloader.cp` 调整 RAII 守卫逆序保证 `FlushEvictionsGuard` 先于 `EnqueueGuard` 析构，`ModuleLoader.cp` 读取 `bun_watcher.watchlist` 加 `bun_watcher.mutex` 互斥保护，根除热重载多线程 `EBADF` 竞态。
