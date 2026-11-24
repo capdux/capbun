@@ -282,7 +282,13 @@ pub fn deinit(self: *YarnLockEntry, allocator: Allocator) void {
     }
 
 pub fn getNameFromSpec(spec: []const u8) []const u8 {
-            const unquoted = (if (((spec[0] == 34) and (spec[@as(usize, @intCast((spec.len - 1)))] == 34))) spec[1..(spec.len - 1)] else spec);
+            if ((spec.len == 0)) {
+                return "";
+            }
+            const unquoted = (if ((((spec.len >= 2) and (spec[0] == 34)) and (spec[@as(usize, @intCast((spec.len - 1)))] == 34))) spec[1..(spec.len - 1)] else spec);
+            if ((unquoted.len == 0)) {
+                return "";
+            }
             if ((unquoted[0] == 64)) {
                 if (strings.indexOf(unquoted[1..], "@")) |second_at| {
                     _ = &second_at;
@@ -324,7 +330,13 @@ pub fn getNameFromSpec(spec: []const u8) []const u8 {
     }
 
 pub fn getVersionFromSpec(spec: []const u8) ?[]const u8 {
-            const unquoted = (if (((spec[0] == 34) and (spec[@as(usize, @intCast((spec.len - 1)))] == 34))) spec[1..(spec.len - 1)] else spec);
+            if ((spec.len == 0)) {
+                return null;
+            }
+            const unquoted = (if ((((spec.len >= 2) and (spec[0] == 34)) and (spec[@as(usize, @intCast((spec.len - 1)))] == 34))) spec[1..(spec.len - 1)] else spec);
+            if ((unquoted.len == 0)) {
+                return null;
+            }
             if ((unquoted[0] == 64)) {
                 if (strings.indexOfChar(unquoted[1..], 64)) |second_at_pos| {
                     _ = &second_at_pos;

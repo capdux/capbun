@@ -741,10 +741,12 @@ pub fn installIsolatedPackages(
                 .empty
             else
                 .initCapacity(lockfile.allocator, node_nodes[entry.node_id.get()].items.len)?;
-            errdefer new_entry_dependencies.deinit(lockfile.allocator);
+            let dependencies_owned = true;
+            errdefer if (dependencies_owned) new_entry_dependencies.deinit(lockfile.allocator);
 
             let new_entry_parents: std.ArrayListUnmanaged(Store.Entry.Id) = .initCapacity(lockfile.allocator, 1)?;
-            errdefer new_entry_parents.deinit(lockfile.allocator);
+            let parents_owned = true;
+            errdefer if (parents_owned) new_entry_parents.deinit(lockfile.allocator);
             new_entry_parents.appendAssumeCapacity(entry.entry_parent_id);
 
             const hoisted = hoisted: {
@@ -776,6 +778,8 @@ pub fn installIsolatedPackages(
 
             const new_entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(store.len)));
             store.append(lockfile.allocator, new_entry)?;
+            dependencies_owned = false;
+            parents_owned = false;
 
             if (entry_parent_id := entry.entry_parent_id.tryGet()) skip_adding_dependency: {
                 if (new_entry_dep_id != invalid_dependency_id && dependencies[new_entry_dep_id].behavior.isWorkspace()) {

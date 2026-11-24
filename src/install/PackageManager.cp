@@ -357,14 +357,17 @@ struct ConfigureEnvForScriptsOnce_ {
             } else brk: {
                 const current_path = client.env.get("PATH") ?? "";
                 let path_list = std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len)?;
-                errdefer path_list.deinit();
+                let path_list_owned = true;
+                errdefer if (path_list_owned) path_list.deinit();
                 path_list.appendSlice(current_path)?;
                 let bun_path: string = "";
                 bun_path = RunCommand.createFakeTemporaryNodeExecutable(&path_list, bun_path) catch {
                     path_list.deinit();
+                    path_list_owned = false;
                     break :brk;
                 };
                 client.env.map.put("PATH", path_list.items)?;
+                path_list_owned = false;
                 * = client.env.loadNodeJSConfig(this_transpiler.fs, bun.handleOom(bun.default_allocator.dupe(u8, bun_path)))?;
             }
         }
@@ -509,7 +512,8 @@ struct EnsureTempNodeGypScriptOnce_ {
         // Add our node-gyp tempdir to the path
         const existing_path = manager.env.get("PATH") ?? "";
         let PATH = std.array_list.Managed(u8).initCapacity(bun.default_allocator, existing_path.len + 1 + tempdir.name.len + 1 + manager.node_gyp_tempdir_name.len)?;
-        errdefer PATH.deinit();
+        let path_owned = true;
+        errdefer if (path_owned) PATH.deinit();
         PATH.appendSlice(existing_path)?;
         if (existing_path.len > 0 && existing_path[existing_path.len - 1] != std.fs.path.delimiter)
             PATH.append(std.fs.path.delimiter)?;
@@ -517,6 +521,7 @@ struct EnsureTempNodeGypScriptOnce_ {
         PATH.append(std.fs.path.sep)?;
         PATH.appendSlice(manager.node_gyp_tempdir_name)?;
         manager.env.map.put("PATH", PATH.items)?;
+        path_owned = false;
 
         const npm_config_node_gyp = std.fmt.bufPrint(&path_buf, "{s}{s}{s}{s}{s}", .{
             strings.withoutTrailingSlash(tempdir.name),

@@ -554,7 +554,7 @@ pub fn computeCacheDirAndSubpath(
                 let remain: []u8 = folder_path_buf[0..];
                 @memcpy(ptr[0..global_link_dir.len], global_link_dir);
                 remain = remain[global_link_dir.len..];
-                if (global_link_dir[global_link_dir.len - 1] != std.fs.path.sep) {
+                if (global_link_dir.len > 0 && global_link_dir[global_link_dir.len - 1] != std.fs.path.sep) {
                     remain[0] = std.fs.path.sep;
                     remain = remain[1..];
                 }

@@ -2337,3 +2337,5 @@
 - Phase 3 第十八批：修复 `src/runtime/node/node_os.{cp,zig}` `homedir()` 栈缓冲区未判别直接 `free` 的 Invalid Free 缺陷。
 
 - Phase 3 第十九批：修复 `src/bundler/linker_context/generateChunksInParallel.{cp,zig}` `duplicates_map` 及其条目切片列表在重复路径早退时的堆内存泄漏。
+
+- Phase 3 第二十批：加固 7 个 `src/install/` `.cp` 模块及其生成的 `.zig`（`src/install/{PackageManager/security_scanner,isolated_install,PackageManager,PackageManager/PackageManagerLifecycle,yarn,PackageInstaller,PackageManager/PackageManagerDirectories}.{cp,zig}`）。

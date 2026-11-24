@@ -97,3 +97,5 @@
 | `test/js/bun/http/proxy.test.ts` & `s3-stream-cancel-leak.test.ts` & `node/process/process.test.js` (单跑隔离) | release | 140 | 1 | 1 skip / 2 todo | `http/proxy` **39/0**（124 expects，30s 限时全绿）；`s3-stream-cancel-leak` **1/0**；`process.test.js` `:1152` 单跑稳定全绿（唯一 1 fail 为宿主机 `node@26.1.0` vs `v24.3.0`） |
 
 | `test/bundler/bun-build-compile-sourcemap.test.ts` (隔离复验) & `test/cli/{hot,watch,inspect}/` | release | 63 | 1 | 4 todo | `compile-sourcemap` **9/0**（6.23s 全绿，`inline` 842ms）；`cli/{hot,watch,inspect}` **54/1**（唯一 1 fail 为旧版 Release 上的 `hot.test.ts` `EBADF`，已在最新源码 `9c6dfc2ca98` 修复） |
+
+| `test/js/bun/shell/commands/dirname.test.ts` & `shell/leak.test.ts` & `bake/dev/server-sourcemap` & `bundler/compile-wasm` | debug (`dirname`/`leak`) / release | 56 | 7 | - | `dirname` **10/0**（`resolve_path.cp` 修复后全绿）；`shell/leak` Debug+ASan 下 **35/0 逻辑通过**（仅 7 项重循环达 100s 限时，此前 Release 已 42/0）；`server-sourcemap` **3/0**；`compile-wasm` **1/0** |

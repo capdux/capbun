@@ -546,16 +546,26 @@ pub fn processQueue(self: *PackageCollector) !void {
                 const pkg_id = mutable_item.pkg_id;
                 _ = mutable_item.dep_id;
                 const pkg_path_copy = try self.manager.allocator.alloc(PackageID, mutable_item.pkg_path.items.len);
+                var pkg_path_owned = true;
+                _ = &pkg_path_owned;
                 errdefer {
-                _ = self.manager.allocator.free(pkg_path_copy);
+                if (pkg_path_owned) {
+                    _ = self.manager.allocator.free(pkg_path_copy);
+                }
                 }
                 _ = @memcpy(pkg_path_copy, mutable_item.pkg_path.items);
                 const dep_path_copy = try self.manager.allocator.alloc(DependencyID, mutable_item.dep_path.items.len);
+                var dep_path_owned = true;
+                _ = &dep_path_owned;
                 errdefer {
-                _ = self.manager.allocator.free(dep_path_copy);
+                if (dep_path_owned) {
+                    _ = self.manager.allocator.free(dep_path_copy);
+                }
                 }
                 _ = @memcpy(dep_path_copy, mutable_item.dep_path.items);
                 _ = try self.package_paths.put(pkg_id, .{ .pkg_path = pkg_path_copy, .dep_path = dep_path_copy });
+                pkg_path_owned = false;
+                dep_path_owned = false;
                 const pkg_deps = pkg_dependencies[@as(usize, @intCast(pkg_id))];
                 var _next_dep_id: u32 = pkg_deps.begin();
                 _ = &_next_dep_id;
@@ -575,13 +585,29 @@ pub fn processQueue(self: *PackageCollector) !void {
                     }
                     var extended_pkg_path: std.ArrayList(PackageID) = .{};
                     _ = &extended_pkg_path;
+                    var extended_pkg_owned = true;
+                    _ = &extended_pkg_owned;
+                    errdefer {
+                    if (extended_pkg_owned) {
+                        _ = extended_pkg_path.deinit(self.manager.allocator);
+                    }
+                    }
                     _ = try extended_pkg_path.appendSlice(self.manager.allocator, mutable_item.pkg_path.items);
                     _ = try extended_pkg_path.append(self.manager.allocator, next_pkg_id);
                     var extended_dep_path: std.ArrayList(DependencyID) = .{};
                     _ = &extended_dep_path;
+                    var extended_dep_owned = true;
+                    _ = &extended_dep_owned;
+                    errdefer {
+                    if (extended_dep_owned) {
+                        _ = extended_dep_path.deinit(self.manager.allocator);
+                    }
+                    }
                     _ = try extended_dep_path.appendSlice(self.manager.allocator, mutable_item.dep_path.items);
                     _ = try extended_dep_path.append(self.manager.allocator, next_dep_id);
                     _ = try self.queue.writeItem(.{ .pkg_id = next_pkg_id, .dep_id = next_dep_id, .pkg_path = extended_pkg_path, .dep_path = extended_dep_path });
+                    extended_pkg_owned = false;
+                    extended_dep_owned = false;
                 }
             }
     }

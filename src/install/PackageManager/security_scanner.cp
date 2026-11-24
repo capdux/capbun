@@ -617,17 +617,21 @@ struct PackageCollector {
             * = mutable_item.dep_id; // Could be useful in the future for dependency-specific processing
 
             const pkg_path_copy = _.manager.allocator.alloc(PackageID, mutable_item.pkg_path.items.len)?;
-            errdefer _.manager.allocator.free(pkg_path_copy);
+            let pkg_path_owned = true;
+            errdefer if (pkg_path_owned) _.manager.allocator.free(pkg_path_copy);
             @memcpy(pkg_path_copy, mutable_item.pkg_path.items);
 
             const dep_path_copy = _.manager.allocator.alloc(DependencyID, mutable_item.dep_path.items.len)?;
-            errdefer _.manager.allocator.free(dep_path_copy);
+            let dep_path_owned = true;
+            errdefer if (dep_path_owned) _.manager.allocator.free(dep_path_copy);
             @memcpy(dep_path_copy, mutable_item.dep_path.items);
 
             _.package_paths.put(pkg_id, {
                 pkg_path: pkg_path_copy,
                 dep_path: dep_path_copy,
             })?;
+            pkg_path_owned = false;
+            dep_path_owned = false;
 
             const pkg_deps = pkg_dependencies[pkg_id];
             let _next_dep_id: u32 = pkg_deps.begin();
@@ -644,10 +648,14 @@ struct PackageCollector {
                 if (gop_4.found_existing) continue;
 
                 let extended_pkg_path: std.ArrayList(PackageID) = {};
+                let extended_pkg_owned = true;
+                errdefer if (extended_pkg_owned) extended_pkg_path.deinit(_.manager.allocator);
                 extended_pkg_path.appendSlice(_.manager.allocator, mutable_item.pkg_path.items)?;
                 extended_pkg_path.append(_.manager.allocator, next_pkg_id)?;
 
                 let extended_dep_path: std.ArrayList(DependencyID) = {};
+                let extended_dep_owned = true;
+                errdefer if (extended_dep_owned) extended_dep_path.deinit(_.manager.allocator);
                 extended_dep_path.appendSlice(_.manager.allocator, mutable_item.dep_path.items)?;
                 extended_dep_path.append(_.manager.allocator, next_dep_id)?;
 
@@ -657,6 +665,8 @@ struct PackageCollector {
                     pkg_path: extended_pkg_path,
                     dep_path: extended_dep_path,
                 })?;
+                extended_pkg_owned = false;
+                extended_dep_owned = false;
             }
         }
     }

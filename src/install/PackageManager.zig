@@ -384,15 +384,21 @@ pub fn run(client: *PackageManager, ctx: Command.Context, log_level: Options.Log
                     const current_path = ((client.env.get("PATH")) orelse (""));
                     var path_list = try std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len);
                     _ = &path_list;
+                    var path_list_owned = true;
+                    _ = &path_list_owned;
                     errdefer {
-                    _ = path_list.deinit();
+                    if (path_list_owned) {
+                        _ = path_list.deinit();
+                    }
                     }
                     _ = try path_list.appendSlice(current_path);
                     var bun_path: []const u8 = "";
                     _ = &bun_path;
                     bun_path = (blk_catch_2: { break :blk_catch_2 ((RunCommand.createFakeTemporaryNodeExecutable((&path_list), bun_path)) catch |__ce_2| { _ = &__ce_2; _ = path_list.deinit();
+                    path_list_owned = false;
                     break :brk; }); });
                     _ = try client.env.map.put("PATH", path_list.items);
+                    path_list_owned = false;
                     _ = try client.env.loadNodeJSConfig(this_transpiler.fs, bun.handleOom(bun.default_allocator.dupe(u8, bun_path)));
 };
                 }
@@ -467,8 +473,12 @@ else => ((if (Environment.isAndroid) "#!/system/bin/sh\n" else "#!/bin/sh\n") ++
             const existing_path = ((manager.env.get("PATH")) orelse (""));
             var PATH = try std.array_list.Managed(u8).initCapacity(bun.default_allocator, ((((existing_path.len + 1) + (if (@typeInfo(@TypeOf(tempdir)) == .@"enum" or @typeInfo(@TypeOf(tempdir)) == .@"union") @tagName(tempdir) else tempdir.name).len) + 1) + manager.node_gyp_tempdir_name.len));
             _ = &PATH;
+            var path_owned = true;
+            _ = &path_owned;
             errdefer {
-            _ = PATH.deinit();
+            if (path_owned) {
+                _ = PATH.deinit();
+            }
             }
             _ = try PATH.appendSlice(existing_path);
             if (((existing_path.len > 0) and (existing_path[@as(usize, @intCast((existing_path.len - 1)))] != std.fs.path.delimiter))) {
@@ -478,6 +488,7 @@ else => ((if (Environment.isAndroid) "#!/system/bin/sh\n" else "#!/bin/sh\n") ++
             _ = try PATH.append(std.fs.path.sep);
             _ = try PATH.appendSlice(manager.node_gyp_tempdir_name);
             _ = try manager.env.map.put("PATH", PATH.items);
+            path_owned = false;
             const npm_config_node_gyp = try std.fmt.bufPrint((&path_buf), "{s}{s}{s}{s}{s}", .{ strings.withoutTrailingSlash((if (@typeInfo(@TypeOf(tempdir)) == .@"enum" or @typeInfo(@TypeOf(tempdir)) == .@"union") @tagName(tempdir) else tempdir.name)), std.fs.path.sep_str, strings.withoutTrailingSlash(manager.node_gyp_tempdir_name), std.fs.path.sep_str, file_name });
             const node_gyp_abs_dir = (std.fs.path.dirname(npm_config_node_gyp)).?;
             _ = try manager.env.map.putAllocKeyAndValue(manager.allocator, "BUN_WHICH_IGNORE_CWD", node_gyp_abs_dir);

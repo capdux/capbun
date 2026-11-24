@@ -1898,3 +1898,5 @@
 - Phase 3 第十八批安全性加固要点：`node_os.cp:526` `homedir()` 调用 `getpwuid_r` 遇 `E.RANGE` 扩容时，增加 `string_bytes.ptr != &stack_string_bytes` 判断，根除首轮对栈缓冲误调 `default_allocator.free` 引发的 Invalid Free 崩溃。
 
 - Phase 3 第十九批安全性加固要点：`generateChunksInParallel.cp:295` 新增 `DuplicatesMapGuard`，在作用域退出与 `error.DuplicateOutputPath` 早退路径统一遍历释放每个 `DuplicateEntry.sources` 及 `duplicates_map` 本体。
+
+- Phase 3 第二十批安全性加固要点：`security_scanner.cp`、`isolated_install.cp`、`PackageManager.cp` 补齐所有权转移后 `errdefer` 解除标记消除 Double-Free；`PackageManagerLifecycle.cp:129` 补齐 `stackFallback` 堆回退释放；`yarn.cp`、`PackageInstaller.cp`、`PackageManagerDirectories.cp` 补齐空切片长度校验防止无符号下溢。

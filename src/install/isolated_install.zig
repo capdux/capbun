@@ -1220,13 +1220,21 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             const new_entry_is_workspace = ((!new_entry_is_root) and (dependencies[@as(usize, @intCast(new_entry_dep_id))].version.tag == .workspace));
             var new_entry_dependencies: Store.Entry.Dependencies = (if ((dedupe_entry.found_existing and new_entry_is_workspace)) .empty else try .initCapacity(lockfile.allocator, node_nodes[@as(usize, @intCast(entry.node_id.get()))].items.len));
             _ = &new_entry_dependencies;
+            var dependencies_owned = true;
+            _ = &dependencies_owned;
             errdefer {
-            _ = new_entry_dependencies.deinit(lockfile.allocator);
+            if (dependencies_owned) {
+                _ = new_entry_dependencies.deinit(lockfile.allocator);
+            }
             }
             var new_entry_parents: std.ArrayListUnmanaged(Store.Entry.Id) = try .initCapacity(lockfile.allocator, 1);
             _ = &new_entry_parents;
+            var parents_owned = true;
+            _ = &parents_owned;
             errdefer {
-            _ = new_entry_parents.deinit(lockfile.allocator);
+            if (parents_owned) {
+                _ = new_entry_parents.deinit(lockfile.allocator);
+            }
             }
             _ = new_entry_parents.appendAssumeCapacity(entry.entry_parent_id);
             const hoisted = hoisted: {
@@ -1249,6 +1257,8 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             const new_entry: Store.Entry = .{ .node_id = entry.node_id, .dependencies = new_entry_dependencies, .parents = new_entry_parents, .peer_hash = new_entry_peer_hash, .hoisted = hoisted };
             const new_entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(store.len)));
             _ = try store.append(lockfile.allocator, new_entry);
+            dependencies_owned = false;
+            parents_owned = false;
             if (entry.entry_parent_id.tryGet()) |entry_parent_id| {
                 _ = &entry_parent_id;
                 _ = skip_adding_dependency: {

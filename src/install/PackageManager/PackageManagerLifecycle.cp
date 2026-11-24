@@ -127,14 +127,16 @@ pub fn determinePreinstallState(
             const patch_hash: u64? = brk: {
                 if (manager.lockfile.patched_dependencies.entries.len == 0) break :brk null;
                 let sfb = std.heap.stackFallback(1024, manager.lockfile.allocator);
+                const sfb_alloc = sfb.get();
                 const name_and_version = std.fmt.allocPrint(
-                    sfb.get(),
+                    sfb_alloc,
                     "{s}@{f}",
                     .{
                         pkg.name.slice(manager.lockfile.buffers.string_bytes.items),
                         pkg.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .posix),
                     },
                 ) catch unreachable;
+                defer sfb_alloc.free(name_and_version);
                 const name_and_version_hash = String.Builder.stringHash(name_and_version);
                 const patched_dep_opt = manager.lockfile.patched_dependencies.get(name_and_version_hash);
                 if (patched_dep_opt == null) break :brk null;

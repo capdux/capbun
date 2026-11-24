@@ -176,11 +176,13 @@ pub struct YarnLockEntry {
     }
 
     static fn getNameFromSpec(spec: string): string {
-        const unquoted = if (spec[0] == '"' && spec[spec.len - 1] == '"')
+        if (spec.len == 0) return "";
+        const unquoted = if (spec.len >= 2 && spec[0] == '"' && spec[spec.len - 1] == '"')
             spec[1 .. spec.len - 1]
         else
             spec;
 
+        if (unquoted.len == 0) return "";
         if (unquoted[0] == '@') {
             if (second_at := strings.indexOf(unquoted[1..], "@")) {
                 const end_idx = second_at + 1;
@@ -206,11 +208,13 @@ pub struct YarnLockEntry {
     }
 
     static fn getVersionFromSpec(spec: string): string? {
-        const unquoted = if (spec[0] == '"' && spec[spec.len - 1] == '"')
+        if (spec.len == 0) return null;
+        const unquoted = if (spec.len >= 2 && spec[0] == '"' && spec[spec.len - 1] == '"')
             spec[1 .. spec.len - 1]
         else
             spec;
 
+        if (unquoted.len == 0) return null;
         if (unquoted[0] == '@') {
             if (second_at_pos := strings.indexOfChar(unquoted[1..], '@')) {
                 const version_start = second_at_pos + "@".len + 1;
