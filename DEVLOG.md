@@ -1861,3 +1861,5 @@
 - [Phase 2 第二十六批修复] 采纳 `1b6bff86` 根因定位修复两处高频安装故障：(1) `src/install/lockfile/Tree.cp:401-442` 补全 `parent_res`、`dep.behavior.isEnabled(dep_features)` 以及 `manager.subcommand != .install || parent_pkg_id != 0` 与 `!dep.behavior.isWorkspace()` 分支，使 `--omit=dev/peer/optional` 与 `--production` 生效；(2) `src/cli/package_manager_command.cp:155-157` 移除多余的 `args[0] == "pm"` 切片，使 `TrustCommand`/`UntrustedCommand` 收到完整 `["pm", "trust", ...]`；`cpc_brief.py` 与 `zig:check` 5/5 通过。
 
 - [Phase 2 第二十七批修复] 采纳 `71283ff4` 根因定位修复 `src/install/lockfile/bun.lock.cp:2024-2029`：迁移时将 `seen_deps.getOrPut` 提前到 `if (!dep.behavior.isWorkspace() && ...)` 之前，破坏短路求值并导致 workspace 条目污染 `seen_deps`、跳过 `mapDepToPkg` 致使 `from_dep.version.value.workspace` 未更新而重复写盘；收回条件分支内后 `cpc_brief.py` 与 `zig:check` 5/5 通过。
+
+- [Phase 2 第二十八批修复] 采纳 `5a749196` 根因定位修复 `src/runtime/api/bun/subprocess.cp:359-390`：`jsRef` 与 `jsUnref` 迁移时遗漏了 `_.process.enableKeepingEventLoopAlive()`/`disableKeepingEventLoopAlive()`、`hasCalledGetter` 守卫与 `_.updateHasPendingActivity()`，导致 `child.unref()` 后事件循环仍被子进程句柄保活无法退出（`esbuild-child_process.test.ts` 超时）；对齐 `subprocess_.zig` 后 `cpc_brief.py` 与 `zig:check` 5/5 通过。

@@ -357,36 +357,39 @@ pub struct TestingAPIs {
     }
 
     pub fn jsRef(*_) {
-        if (_.flags.is_sync) return;
+        _.process.enableKeepingEventLoopAlive();
 
-        if (_.flags.killed) return;
-        _.stdin.ref();
-        _.stdout.ref();
-        _.stderr.ref();
-
-        for (item of _.stdio_pipes.items) {
-            if (Environment.isWindows) {
-                if (item == .buffer) {
-                    item.buffer.ref();
-                }
-            }
+        if (!_.hasCalledGetter(.stdin)) {
+            _.stdin.ref();
         }
+
+        if (!_.hasCalledGetter(.stdout)) {
+            _.stdout.ref();
+        }
+
+        if (!_.hasCalledGetter(.stderr)) {
+            _.stderr.ref();
+        }
+
+        _.updateHasPendingActivity();
     }
 
     pub fn jsUnref(*_) {
-        if (_.flags.is_sync) return;
+        _.process.disableKeepingEventLoopAlive();
 
-        _.stdin.unref();
-        _.stdout.unref();
-        _.stderr.unref();
-
-        for (item of _.stdio_pipes.items) {
-            if (Environment.isWindows) {
-                if (item == .buffer) {
-                    item.buffer.unref();
-                }
-            }
+        if (!_.hasCalledGetter(.stdin)) {
+            _.stdin.unref();
         }
+
+        if (!_.hasCalledGetter(.stdout)) {
+            _.stdout.unref();
+        }
+
+        if (!_.hasCalledGetter(.stderr)) {
+            _.stderr.unref();
+        }
+
+        _.updateHasPendingActivity();
     }
 
     pub fn constructor(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*Subprocess {
