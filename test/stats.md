@@ -161,3 +161,5 @@
 | `test/js/node/{http2,https,net}/` (13 files) | release | 434 | 0 | 14 skip | **434/0 全绿**（12353 expects，16.86s，exit 0） |
 
 | `test/js/node/fs/` (20 files) | release | 389 | 4 | 22 skip | **389/0 逻辑**（16.88s，16/20 文件全绿；唯一 4 fail 为 `fs-leak`/`fs-oom`/`fs-stats-truncate`/`translate-uv-error-windows` 缺 `bun:internal-for-testing`） |
+
+| `test/js/node/fs/{fs-leak,fs-oom,fs-stats-truncate}` (`bun-debug`) | debug (最新 `08df2206`) | 18 | 0 | - | **18/0 全绿**（49 expects，14.23s，无 FD/OOM 泄漏） |
