@@ -1349,6 +1349,8 @@ pub fn get(self: *InternalGlobalCache, key: InternalRequest.Key, timestamp_to_st
                             _ = self.deleteEntryAt(len, i);
                             _ = entry.deinit();
                             len = self.len;
+                        } else {
+                            i = (i + 1);
                         }
                         continue;
                     }

@@ -105,10 +105,10 @@ pub fn isEquivalent(selectors: []const Selector, other: []const Selector): bool 
 pub fn downlevelSelectors(allocator: Allocator, selectors: []Selector, targets: css.targets.Targets): css.VendorPrefix {
     let necessary_prefixes = css.VendorPrefix{};
     let s_i: usize = 0;
-    while (s_i < selectors.len) {
+    while (s_i < selectors.len) : (s_i += 1) {
         const selector = &selectors[s_i];
         let c_i: usize = 0;
-        while (c_i < selector.components.items.len) {
+        while (c_i < selector.components.items.len) : (c_i += 1) {
             const component = &selector.components.items[c_i];
             bun.bits.insert(css.VendorPrefix, &necessary_prefixes, downlevelComponent(allocator, component, targets));
             c_i += 1;
@@ -283,9 +283,7 @@ pub fn getPrefix(selectors: *const SelectorList): css.VendorPrefix {
                     return css.VendorPrefix{};
                 }
             }
-            c_i += 1;
         }
-        s_i += 1;
     }
 
     return prefix;
@@ -294,10 +292,10 @@ pub fn getPrefix(selectors: *const SelectorList): css.VendorPrefix {
 pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Targets): bool {
     const F = css.compat.Feature;
     let s_i: usize = 0;
-    while (s_i < selectors.len) {
+    while (s_i < selectors.len) : (s_i += 1) {
         const selector = &selectors[s_i];
         let c_i: usize = 0;
-        while (c_i < selector.components.items.len) {
+        while (c_i < selector.components.items.len) : (c_i += 1) {
             const component = &selector.components.items[c_i];
             const feature = switch (component.*) {
                 .id, .class, .local_name => continue,
@@ -458,9 +456,7 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
             };
 
             if (!targets.isCompatible(feature)) return false;
-            c_i += 1;
         }
-        s_i += 1;
     }
 
     return true;

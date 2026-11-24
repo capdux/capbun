@@ -1827,3 +1827,5 @@
 - [Phase 2 第十批修复] 全仓 1,295 个 `.cp` 文件 RAII Guard 漏注入 `defer` 静态审计发现最后一处真实漏注：`src/interchange/json.cp` `DuplicateNodeGuard` 返回 `struct { ~init() }` 导致 `json.zig:480` 缺失 `defer __cp_deinit` 造成 `HashMapPool` 节点泄漏；改为 `defer releaseDuplicateNode` 后 `zig:check` 5/5 通过。
 
 - [Phase 2 第十一批修复] 修复 `test/js/bun/test/snapshot-tests/snapshots/snapshot.test.ts` 中 `inline snapshot update cases` 缩进少 1 空格缺陷：`src/test_runner/snapshot.cp:545` `appendSlice(" ")` 补全为 `appendSlice("  ")` 对齐 `snapshot_.zig:445`，`zig:check` 5/5 通过。
+
+- [Phase 2 第十二批修复] 定位 `21907.test.ts` 与 `doesnt_crash.test.ts`（`bootstrap-4.css`）死循环根因：`src/css/selectors/selector.cp` `isCompatible` 中 `while` 循环体内 `continue` 跳过了末尾的 `c_i += 1`，导致 `mergeStyleRules` 永久卡死；同步全仓 `rg`/脚本审计发现 `src/runtime/dns_jsc/dns.cp:1396` 同类隐患（过期缓存条目 `refcount != 0` 时 `continue` 跳过 `i += 1`），一并修复并通过 `zig:check` 5/5。

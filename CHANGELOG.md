@@ -2273,3 +2273,5 @@
 - [Phase 2 第十批修复] 修改 .cp/.zig：`src/interchange/json.{cp,zig}`（`DuplicateNodeGuard` 改为 `defer releaseDuplicateNode` 消除 `HashMapPool` 泄漏，`zig:check` 5/5）。
 
 - [Phase 2 第十一批修复] 修改 .cp/.zig：`src/test_runner/snapshot.{cp,zig}`（`needs_more_spaces` 缩进补全 2 空格，`zig:check` 5/5）。
+
+- [Phase 2 第十二批修复] 修改 .cp/.zig：`src/css/selectors/selector.{cp,zig}`、`src/runtime/dns_jsc/dns.{cp,zig}`（修复 `while + continue` 漏步进死循环，`zig:check` 5/5）。

@@ -1397,6 +1397,8 @@ pub struct InternalGlobalCache {
                         * = _.deleteEntryAt(len, i);
                         entry.deinit();
                         len = _.len;
+                    } else {
+                        i += 1;
                     }
                     continue;
                 }

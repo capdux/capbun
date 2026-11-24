@@ -1185,11 +1185,11 @@ pub fn downlevelSelectors(allocator: Allocator, selectors: []Selector, targets: 
         _ = &necessary_prefixes;
         var s_i: usize = 0;
         _ = &s_i;
-        while ((s_i < selectors.len)) {
+        while ((s_i < selectors.len)) : (s_i = (s_i + 1)) {
             const selector = (&selectors[@as(usize, @intCast(s_i))]);
             var c_i: usize = 0;
             _ = &c_i;
-            while ((c_i < selector.components.items.len)) {
+            while ((c_i < selector.components.items.len)) : (c_i = (c_i + 1)) {
                 const component = (&selector.components.items[@as(usize, @intCast(c_i))]);
                 _ = bun.bits.insert(css.VendorPrefix, (&necessary_prefixes), downlevelComponent(allocator, component, targets));
                 c_i = (c_i + 1);
@@ -1358,9 +1358,7 @@ else => css.VendorPrefix{  },
                         return css.VendorPrefix{  };
                     }
                 }
-                c_i = (c_i + 1);
             }
-            s_i = (s_i + 1);
         }
         return prefix;
 }
@@ -1369,11 +1367,11 @@ pub fn isCompatible(selectors: []const parser.Selector, targets: css.targets.Tar
         const F = css.compat.Feature;
         var s_i: usize = 0;
         _ = &s_i;
-        while ((s_i < selectors.len)) {
+        while ((s_i < selectors.len)) : (s_i = (s_i + 1)) {
             const selector = (&selectors[@as(usize, @intCast(s_i))]);
             var c_i: usize = 0;
             _ = &c_i;
-            while ((c_i < selector.components.items.len)) {
+            while ((c_i < selector.components.items.len)) : (c_i = (c_i + 1)) {
                 const component = (&selector.components.items[@as(usize, @intCast(c_i))]);
                 const feature = (switch (component.*) {
 .id, .class, .local_name => continue,
@@ -1571,9 +1569,7 @@ else => continue,
                 if ((!targets.isCompatible(feature))) {
                     return false;
                 }
-                c_i = (c_i + 1);
             }
-            s_i = (s_i + 1);
         }
         return true;
 }
