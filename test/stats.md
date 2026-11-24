@@ -205,3 +205,5 @@
 | `test/bake/dev/esm.test.ts` (Release 隔离) | release | 13 | 0 | - | **13/0 全绿**（36 expects，15.59s，exit 0） |
 
 | `test/bundler/{bun-build-compile,bundler_minify}.test.ts` | release | 43 | 0 | - | **43/0 全绿**（2 snapshots，115 expects，99.95s，exit 0） |
+
+| `load-same-js-file-a-lot.test.ts` (Release) & `cli/install/{bun-workspaces,lifecycle-scripts}` (`bun-debug`) | release / debug | 164 | 4 | - | `load-same-js-file-a-lot` **2/0**（70000 expects，3.75s）；`bun-workspaces` **0 fail**，`lifecycle-scripts` **162/4**（仅 Debug+ASan 耗时/CPU 阈值超时，Release 已 **103/0**） |
