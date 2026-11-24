@@ -129,3 +129,5 @@
 | `test/js/bun/http/proxy.test.ts` & `node/http/node-http-uaf.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 40 | 1 | - | `proxy.test.ts` **39/0** 全绿；`node-http-uaf` `fixture-2` 通过，`fixture-1` 在 Debug+ASan 下完成 6000 次请求无崩溃但达 60s 限时（Release 已 2/0） |
 
 | `test/js/{valkey,bun/yaml,bun/json5,bun/ini,bun/cookie,bun/cron}` & `cli/env/ci-info` (`bun-debug`) | debug (最新 `08df2206`) | 1324 | 1 | 1100 skip / 44 todo | **1324/0 逻辑**（3796 expects；`valkey`/`json5`/`ini`/`cookie`/`cron`/`ci-info` 全绿，唯一 1 fail 为 `YAML bombs` Debug 111ms > 100ms 限时） |
+
+| `test/cli/env/` (2 files) & `test/js/bun/ffi/` (5 files) | release | 25 | 3 | 15 skip | `cli/env` **10/1**（仅 `standalone` 30s 超时）；`ffi` **15/2**（`cc -shared` 缺 `-fPIC` 与缺 `napi_main`/头文件） |
