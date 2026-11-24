@@ -111,3 +111,5 @@
 | `test/js/node/os/os.test.js` & `bun/websocket/websocket-server.test.ts` & `http/{http-server-chunking,decodeURIComponentSIMD}` & `web/fetch/blob-oom` (`bun-debug`) | debug (最新 `08df2206`) | 393 | 2 | 3 todo | `os.test.js` **51/0**；`websocket-server` **91/0 逻辑**（仅 `(benchmark)` 30s 超时）；`decodeURIComponentSIMD`+`blob-oom`+`http-server-chunking` **250/0 逻辑**（仅 `tiny send buffer` 30s 超时） |
 
 | `test/js/sql/` (23 files, `bun-debug`) | debug (最新 `08df2206`) | 467 | 0 | 1 skip | **467/0 全绿**（2291 expects，96.81s，SQLite/Postgres/MySQL 全部通过；仅 `tls-sql` 缺 Docker 跳过） |
+
+| `test/js/bun/css/` (5 files) & `test/bundler/resolver/` (3 files) | release | 999 | 1 | - | `css` **983/0 逻辑**（唯一 1 fail 为 Release 缺 `bun:internal-for-testing`）；`bundler/resolver` **16/0** 全绿 |
