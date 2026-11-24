@@ -2329,3 +2329,4 @@
 - Phase 3 第十一批：加固 `src/runtime/dns_jsc/dns.{cp,zig}`、`src/bun.{cp,zig}`。
 - Phase 3 第十二批：修复 `src/runtime/webcore/s3/client.{cp,zig}` `onStreamCancelled` 调用约定错位导致的 `ReadableStream.Strong` 内存泄漏。
 - Phase 3 第十三批：修复 `src/runtime/webcore/s3/client.{cp,zig}` `S3UploadStreamWrapper.onWritable` 调用约定不匹配隐患。
+- Phase 3 第十四批：修复 `src/jsc/ZigString.{cp,zig}` 12 个 `extern fn` 移至顶层以消除 ABI `self` 注入导致的 `SEGV 0x63`。
