@@ -113,3 +113,5 @@
 | `test/js/sql/` (23 files, `bun-debug`) | debug (最新 `08df2206`) | 467 | 0 | 1 skip | **467/0 全绿**（2291 expects，96.81s，SQLite/Postgres/MySQL 全部通过；仅 `tls-sql` 缺 Docker 跳过） |
 
 | `test/js/bun/css/` (5 files) & `test/bundler/resolver/` (3 files) | release | 999 | 1 | - | `css` **983/0 逻辑**（唯一 1 fail 为 Release 缺 `bun:internal-for-testing`）；`bundler/resolver` **16/0** 全绿 |
+
+| `test/js/bun/test/` (75 files) & `test/js/bun/net/` (5 files) | release | 1118 | 4 | 18 skip / 460 todo | `bun/test/` **1098/2**（25050 expects，18.53s，`stack.test.ts:144` 与 `snapshot.test.ts:895` ANSI）；`bun/net/` **20/2**（`socket.test.ts` 缺 `bun:internal-for-testing` 与 `tcp-server:301` `3 <= 2`） |
