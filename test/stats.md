@@ -217,3 +217,5 @@
 | `test/bundler/{bundler_string,bundler_minify,bundler_jsx}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 118 | 0 | 4 todo | **118/0 全绿**（13 snapshots，167 expects，102.87s，exit 0） |
 
 | `test/js/web/{fetch,html}` 核心 9 文件 (`headers`/`response`/`body`/`FormData`/`URLSearchParams`, `bun-debug`) | debug (最新 `08df2206`) | 603 | 1 | 4 skip | **603/0 逻辑**（1368 expects，150.78s，8/9 文件全绿；仅 `FormData` 引用计数压测在 Debug 超时） |
+
+| `test/js/web/html/FormData.test.ts` & `web/fetch/fetch.test.ts` | release | 447 | 1 | 6 skip | **447/0 逻辑**（7827 expects，12.96s；唯一 1 fail 为 `FormData.from` 缺 `bun:internal-for-testing`） |
