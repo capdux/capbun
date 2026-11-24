@@ -237,3 +237,7 @@
 | `test/napi/` (全部 59 files, 串行) | release | 527 | 0 | 25 todo | **527/0 全绿**（1246 expects，113.00s，exit 0；消除 `--max-concurrency=2` 下 `node-gyp` 目录竞争） |
 
 | `test/js/third_party/{esbuild,rollup-v4,webpack}` | release | 2 | 0 | 2 skip | **2/0 全绿**（`2.74s`，exit 0） |
+
+| `fetch.tls.test.ts` (`NODE_EXTRA_CA_CERTS`) & `archive.test.ts` & `cli/init/init.test.ts` (`bun-debug`) | debug (最新 `abb8c9b9`) | 114 | 0 | 1 skip | **114/0 全绿**（`NODE_EXTRA_CA_CERTS` **4/0**、`archive`+`init` **110/0**，10559 expects，exit 0） |
+
+| `test/js/third_party/{astro,svelte,next-auth,http2-wrapper}` | release | 10 | 0 | - | **10/0 全绿**（`astro` 4/0、`svelte` 4/0、`next-auth` 1/0、`http2-wrapper` 1/0） |
