@@ -2359,3 +2359,5 @@
 - Phase 3 第二十八批：加固 3 个 `.cp` 模块及其生成的 `.zig`（`src/options_types/CompileTarget.{cp,zig}`, `src/cli/upgrade_command.{cp,zig}`, `src/install/lockfile.{cp,zig}`）。
 
 - Phase 3 第二十九批：全仓 FD 泄漏专项扫雷修复 4 个 `.cp` 模块及其生成的 `.zig`（`src/libarchive/libarchive.{cp,zig}`, `src/patch_jsc/testing.{cp,zig}`, `src/cli/{init_command,create_command}.{cp,zig}`）。
+
+- Phase 3 第三十批：修复 `src/uws/uws.{cp,zig}` `BUN__warn__extra_ca_load_failed` 警告未刷新输出问题。
