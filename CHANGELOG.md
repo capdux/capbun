@@ -2281,3 +2281,5 @@
 - [Phase 2 第十四批修复] 修改 .cp/.zig：`src/css/selectors/selector.{cp,zig}`（`getPrefix` 补全 `: (s_i += 1)` 与 `: (c_i += 1)` 消除死循环，`zig:check` 5/5）。
 
 - [Phase 2 第十五批修复] 修改 .cp/.zig：`src/css/generics.{cp,zig}`（`pub fn hash` `std.mem.asBytes(val)` 修复，`zig:check` 5/5）。
+
+- [Phase 2 第十六批修复] 修改 .cp/.zig：`src/css/selectors/selector.{cp,zig}`（`downlevelSelectors` 去除重复步进，`zig:check` 5/5）。

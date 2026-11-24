@@ -1192,9 +1192,7 @@ pub fn downlevelSelectors(allocator: Allocator, selectors: []Selector, targets: 
             while ((c_i < selector.components.items.len)) : (c_i = (c_i + 1)) {
                 const component = (&selector.components.items[@as(usize, @intCast(c_i))]);
                 _ = bun.bits.insert(css.VendorPrefix, (&necessary_prefixes), downlevelComponent(allocator, component, targets));
-                c_i = (c_i + 1);
             }
-            s_i = (s_i + 1);
         }
         return necessary_prefixes;
 }
