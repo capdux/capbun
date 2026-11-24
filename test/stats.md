@@ -203,3 +203,5 @@
 | `test/bake/dev/esm.test.ts` & `cli/install/{bun-install-patch,bun-audit,bun-patch}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 70 | 2 | - | `bun-install-patch` & `bun-patch` **全绿**；`bun-audit` **15/1**（`harness.ts` `gunzipJsonRequest`，Release 已 16/0）；`esm-11` 报错时序竞态 |
 
 | `test/bake/dev/esm.test.ts` (Release 隔离) | release | 13 | 0 | - | **13/0 全绿**（36 expects，15.59s，exit 0） |
+
+| `test/bundler/{bun-build-compile,bundler_minify}.test.ts` | release | 43 | 0 | - | **43/0 全绿**（2 snapshots，115 expects，99.95s，exit 0） |
