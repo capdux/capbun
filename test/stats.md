@@ -219,3 +219,5 @@
 | `test/js/web/{fetch,html}` 核心 9 文件 (`headers`/`response`/`body`/`FormData`/`URLSearchParams`, `bun-debug`) | debug (最新 `08df2206`) | 603 | 1 | 4 skip | **603/0 逻辑**（1368 expects，150.78s，8/9 文件全绿；仅 `FormData` 引用计数压测在 Debug 超时） |
 
 | `test/js/web/html/FormData.test.ts` & `web/fetch/fetch.test.ts` | release | 447 | 1 | 6 skip | **447/0 逻辑**（7827 expects，12.96s；唯一 1 fail 为 `FormData.from` 缺 `bun:internal-for-testing`） |
+
+| `test/js/web/**/*leak*.test.*` (16 files, 内存泄漏专项) | release | 60 | 0 | 2 skip | **60/0 全绿**（96 expects，99.89s，exit 0；`fetch`/`streams`/`FormData`/`Request`/`MessagePort` 零泄漏） |
