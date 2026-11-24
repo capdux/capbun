@@ -2503,12 +2503,12 @@ pub struct BlobExternalSharedDescriptor {
 
         if (path == .path) {
             if (strings.hasPrefixComptime(path.path.slice(), "s3://")) {
-                const _guard_path = DeinitUnprotectGuard<jsc.Node.PathOrFileDescriptor>{ ptr: &path };
                 return jsc.WebCore.S3File.constructInternalJS(globalObject, path.path, options);
             }
         }
+        const _guard_path = DeinitUnprotectGuard<jsc.Node.PathOrFileDescriptor>{ ptr: &path };
 
-        let blob = Blob.initWithStore(bun.handleOom(BlobStore.initFile(path, null, default_allocator)), globalObject);
+        let blob = Blob.findOrCreateFileFromPath(&path, globalObject, false);
 
         if (opts := options) {
             if (opts.isObject()) {

@@ -1855,3 +1855,5 @@
 - [Phase 2 第二十三批修复] 采纳 `63fd4368` 根因定位修复 `src/install/lockfile/Package/WorkspaceMap.cp`：补全 `for (i of 0..workspace_globs.val.items.len)` 索引与后续 `workspace_globs.val.items[idx + 1 ..]` 的 `bun.glob.match(...).negate_no_match` 否定模式过滤及根 `package.json` 跳过逻辑（并修正 `Path.joinAbsStringBufZ(cwd, ...)`）；`cpc_brief.py` 与 `zig:check` 5/5 通过。
 
 - [Phase 2 第二十四批修复] 采纳 `f25c9c5b` 定位修复两处问题：(1) `src/bake/DevServer/SourceMapStore.cp:61-115` `renderJSON` 将 `j.pushStatic(",")` 与 `source_map_strings` 混用且未加引号导致 `InvalidJSON`；对齐 `SourceMapStore_.zig` 后修复 `server-sourcemap.test.ts`。(2) `src/runtime/api/glob.cp:130-157` 补全 `cwd` 非字符串抛错校验、将 `absolute` 解析置于 `cwd` 之前并修正 `"throwErrorOnBrokenSymlink"` 拼写；`cpc_brief.py` 与 `zig:check` 5/5 通过。
+
+- [Phase 2 第二十五批修复] 采纳 `01352f38` 根因定位修复 `src/runtime/webcore/Blob.cp:2504-2511`：`constructBunFile` 迁移时直接调用 `BlobStore.initFile` 绕过了 `Blob.findOrCreateFileFromPath(&path, globalObject, false)`，导致 `Bun.file("/$bunfs/...")` 无法命中 `standalone_module_graph`；同时修正 `DeinitUnprotectGuard` 守卫位置后，`cpc_brief.py` 与 `zig:check` 5/5 通过。
