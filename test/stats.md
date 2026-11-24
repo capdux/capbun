@@ -77,3 +77,10 @@
   - `test/js/bun/ffi/`（2 项）：宿主机 `cc -shared` 无 `-fPIC` 与缺少 `<node/node_api.h>`。
   - `test/js/bun/secrets*`（8 项）：无系统 D-Bus keyring；`shell > sharp` 需外网安装。
 - **待后续按需收敛**：`test/bundler/bun-build-compile-wasm.test.ts`（1 fail）、`test/bake/dev/server-sourcemap.test.ts`（3 fail）、`test/cli/install/` 剩余依赖本地/外网 npm 的 `verdaccio` 用例及 `test/js/third_party/` 10 fail / 9 timeout。
+| `test/js/bun/{css,yaml}/` & `brotli-reset-leak` & `text-decoder` (`--timeout=15000/30000`) | debug | 2647 | 6 | 67 skip / 44 todo | 0 逻辑 fail（仅 5 CSS fuzz 与 1 YAML bomb 100ms 限时在 Debug 下超时）；`brotli-reset-leak` 2/0、`text-decoder` 77/0 |
+| `test/js/bun/net/` (`--timeout=30000`) | debug | 51 | 3 | 3 skip | 1 timeout + 2 GC 轮询波动（单跑 `tcp-server` 8/0、`socket-retention` 全过、无 socket 引用计数泄漏） |
+| `test/js/bun/shell/` & `test/js/bun/test/` | debug | 1849 | 32 | 47 skip / 547 todo | `shell` 753/28（`#11816` 已确认为同步 `gc()` 保守栈根非泄漏）；`test/` 1096/4（75 files） |
+| `test/js/bun/crypto/` & `test/js/bun/glob/` (`--timeout=15000`) | debug | 10446 | 7 | - | `crypto` **10248/0** 全绿；`glob` **198/7**（0 逻辑 fail，7 项均为 Debug 下递归扫描/压测超时） |
+| `test/js/bun/{dns,udp,websocket}/` (`--timeout=15000`) | debug | 337 | 45 | 3 todo | `dns` **76/0**、`udp` **209/0**、websocket 泄漏/GC 3 文件全绿；`websocket-server` 45 项超时排查中 |
+| `test/js/bun/websocket/websocket-server.test.ts` (`--max-concurrency=2`) & `stream/` | debug | 356 | 5 | 268 skip / 3 todo | `websocket-server` 升至 **87 pass / 0 逻辑 fail**（5 项硬编码超时）；`stream` **269/0** |
+| `test/js/bun/{sqlite,md,s3}/` (`--timeout=15000`) | debug | 1173 | 1 | 294 skip | `sqlite` **82/0**、`md` **1022/0**、`s3` **69/1**（`s3-stream-cancel-leak.test.ts:88` 收到 `30 <= 5` 排查中） |
