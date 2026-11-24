@@ -119,3 +119,5 @@
 | `test/js/bun/net/{socket,tcp-server}.test.ts` (`bun-debug` 隔离) | debug (最新 `08df2206`) | 41 | 0 | 2 skip | `socket.test.ts` **33/0**（2 Windows skip）；`tcp-server.test.ts` **8/0**（3.37s，无 `Listener`/`TCPSocket` 泄漏） |
 
 | `test/js/third_party/{@fastify,hono,esbuild}` | release | 4 | 0 | - | **4/0 全绿**（`1.76s`） |
+
+| `test/js/bun/test/{*expect*,*snapshot*}` (18 files, `bun-debug`) | debug (最新 `08df2206`) | 558 | 2 | 1 skip / 10 todo | **558/0 逻辑**（22931 expects；仅 `deepEquals Set/Map` Debug 30s 超时与 `snapshot.test.ts:895` ANSI） |
