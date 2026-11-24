@@ -523,7 +523,9 @@ pub fn homedir(global: *jsc.JSGlobalObject): !bun.String {
             // If the system call wants more memory, double it.
             if (ret == @intFromEnum(bun.sys.E.RANGE)) {
                 const len = string_bytes.len;
-                bun.default_allocator.free(string_bytes);
+                if (string_bytes.ptr != &stack_string_bytes) {
+                    bun.default_allocator.free(string_bytes);
+                }
                 string_bytes = [];
                 string_bytes = bun.default_allocator.alloc(u8, len * 2)?;
                 continue;

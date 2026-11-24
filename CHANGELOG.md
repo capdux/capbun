@@ -2333,3 +2333,5 @@
 - Phase 3 第十五批：修复 `src/jsc/hot_reloader.{cp,zig}` 与 `src/jsc/ModuleLoader.{cp,zig}` 跨线程 FD 驱逐/读取竞态 (`EBADF`)。
 - Phase 3 第十六批：使用修复后的 `cpc` 重编受 `struct` 内 `extern fn` 影响的 `src/bake/DevServer.{cp,zig}`、`src/sys/windows/windows.{cp,zig}`、`src/napi/napi.{cp,zig}`（488 处声明全部消除 `self` 误注入）。
 - Phase 3 第十七批：修复 `src/paths/resolve_path.{cp,zig}` `dirname(..., .posix)` 尾部斜杠剥离缺失。
+
+- Phase 3 第十八批：修复 `src/runtime/node/node_os.{cp,zig}` `homedir()` 栈缓冲区未判别直接 `free` 的 Invalid Free 缺陷。

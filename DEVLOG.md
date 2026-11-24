@@ -1894,3 +1894,5 @@
 - Phase 3 第十五批安全性加固要点：`hot_reloader.cp` 调整 RAII 守卫逆序保证 `FlushEvictionsGuard` 先于 `EnqueueGuard` 析构，`ModuleLoader.cp` 读取 `bun_watcher.watchlist` 加 `bun_watcher.mutex` 互斥保护，根除热重载多线程 `EBADF` 竞态。
 - Phase 3 第十六批要点：验收 `task-bun-20261125-struct-extern-fn-self` 后，立即重编 `DevServer.cp`、`windows.cp` 与 `napi.cp`（含 475 个 V8API 符号），通过 `cpc_brief.py` 与 `zig:check` 5/5 恢复全部 C ABI 签名。
 - Phase 3 第十七批要点：`resolve_path.cp:511` 补回 `separator == str.len - 1` 时递归去尾斜杠逻辑，修复 `bunshell > dirname > leading slash`。
+
+- Phase 3 第十八批安全性加固要点：`node_os.cp:526` `homedir()` 调用 `getpwuid_r` 遇 `E.RANGE` 扩容时，增加 `string_bytes.ptr != &stack_string_bytes` 判断，根除首轮对栈缓冲误调 `default_allocator.free` 引发的 Invalid Free 崩溃。
