@@ -193,3 +193,5 @@
 | `test/regression/issue/{08794,09041}.test.ts` (Release) & `bun/websocket/` 3 泄漏/重入文件 (`bun-debug`) | release / debug | 7 | 0 | - | **7/0 全绿**（`08794`/`09041` 547ms；`websocket` 3 个 GC/reload/reentrant 文件 **5/0**，9.43s） |
 
 | `test/regression/issue/[3-9]*.test.ts` (11 files, `bun-debug`) | debug (最新 `08df2206`) | 20 | 0 | - | **20/0 全绿**（3 snapshots，73 expects，67.24s，至此 `regression/issue/` 全目录 Debug/Release 双清 0 逻辑失败） |
+
+| `test/bundler/{resolver,css}/` (11 files, `bun-debug`) | debug (最新 `08df2206`) | 182 | 0 | - | **182/0 全绿**（6 snapshots，229 expects，44.98s，exit 0） |
