@@ -245,3 +245,5 @@
 | `test/js/third_party/{jsonwebtoken,undici-h2,wpt-h2,socket.io,pg,pg-gateway,es-module-lexer,http2-wrapper,postgres}` | release | 547 | 0 | 172 skip / 16 todo | **547/0 全绿**（`jsonwebtoken` **499/0**、`undici-h2` **11/0**、`wpt-h2` **20/0**、`socket.io` **13/0**、其余 **4/0**） |
 
 | 外部条件模拟复验 (`ls` 降权、`serve #7187` 降权、`ffi/addr32` `-fPIC` wrapper, `bun-debug`) | debug (`abb8c9b9`) | 28 | 1 | - | `ls` 权限拒绝 2 项 **PASS**、`serve #7187` **PASS**、`addr32.test.ts` **1/0 PASS**（验证全为外部权限/编译参数差异） |
+
+| `test/js/node/process:1152` & `node/module/` (6 files, `bun-debug`) | debug (`abb8c9b9`) | 61 | 0 | - | **61/0 全绿**（`process:1152` **1/0**、`node/module` **60/0**，21.91s，exit 0） |
