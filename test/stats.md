@@ -149,3 +149,5 @@
 | `test/js/node/{stream,events}/` (3 files, `bun-debug`) | debug (最新 `08df2206`) | 104 | 0 | 1 skip / 5 todo | **104/0 全绿**（208 expects，15.66s） |
 
 | `test/js/bun/{stream,io,transpiler,plugin}/` (10 files, `bun-debug`) | debug (最新 `08df2206`) | 377 | 1 | 268 skip / 1 todo | `stream`/`transpiler`/`plugin` 全绿；唯一 1 fail 为 `bun-write-leak` 在 Debug+ASan 下 RSS 350MB 超限 |
+
+| `test/js/bun/io/bun-write-leak.test.ts` & `spawn/spawn-unread-stdout-gc.test.ts` | release | 2 | 0 | 1 skip | **2/0 全绿**（955ms，无 GC/RSS 泄漏） |
