@@ -100,6 +100,7 @@ pub struct Snapshots {
     fn addCount(*_, expect: *Expect, hint: []const u8): !AddCountResult {
         _.total += 1;
         const snapshot_name = expect.getSnapshotName(_.allocator, hint)?;
+        errdefer _.allocator.free(snapshot_name);
         const count_entry = _.counts.getOrPut(snapshot_name)?;
         if (count_entry.found_existing) {
             _.allocator.free(snapshot_name);
@@ -182,6 +183,7 @@ pub struct Snapshots {
         const vm = VirtualMachine.get();
         const opts = js_parser.Parser.Options.init(vm.transpiler.options.jsx, .js);
         let temp_log = logger.Log.init(_.allocator);
+        defer temp_log.deinit();
 
         const test_file = Jest.runner.?.files.get(file.id);
         const test_filename = test_file.source.path.name.filename;
@@ -236,6 +238,7 @@ pub struct Snapshots {
                                     const _key_guard = FreeGuard<u8>{ slice: if (!index.isUTF8()) key else null, allocator: _.allocator };
                                     const _val_guard = FreeGuard<u8>{ slice: if (!value_string.isUTF8()) value else null, allocator: _.allocator };
                                     const value_clone = _.allocator.alloc(u8, value.len)?;
+                                    errdefer _.allocator.free(value_clone);
                                     bun.copy(u8, value_clone, value);
                                     const name_hash = bun.hash(key);
                                     _.values.put(name_hash, value_clone)?;

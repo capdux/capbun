@@ -2349,3 +2349,5 @@
 - Phase 3 第二十三批：修复 `src/bake/bun-framework-react/ssr.tsx` `renderToStaticHtml` 永不 settle 挂起缺陷，并加固 4 个 `.cp` 模块（`src/runtime/webcore/{Blob,fetch/FetchTasklet}.{cp,zig}`, `src/css/{printer,css_parser}.{cp,zig}`）。
 
 - Phase 3 第二十四批：加固 10 个 `.cp` 模块及其生成的 `.zig`（`src/sql/mysql/protocol/HandshakeV10.{cp,zig}`, `src/sql/postgres/protocol/{ParameterDescription,FieldMessage}.{cp,zig}`, `src/sql_jsc/{postgres/Signature,mysql/MySQLValue}.{cp,zig}`, `src/bake/{DevServer,DevServer/SerializedFailure}.{cp,zig}`, `src/cli/{colon_list_type,bunfig,pm_trusted_command}.{cp,zig}`）。
+
+- Phase 3 第二十五批：加固 4 个 `.cp` 模块及其生成的 `.zig`（`src/js_printer/js_printer.{cp,zig}`, `src/test_runner/{expect,snapshot,jest}.{cp,zig}`）。

@@ -1910,3 +1910,5 @@
 - Phase 3 第二十三批安全性加固要点：`ssr.tsx:100-119` `renderToStaticHtml` 补齐 `onError` 回调中止并销毁流，根除 RSC shell 报错时 `vm.waitForPromise` 死等超时；`Blob.cp` 补齐 3 处 `errdefer blob.deinit()` 并将 `ThresholdDeinitGuard` 替换为 `DeinitGuard` 根除首次超 1024B 堆泄漏；`FetchTasklet.cp:1158` 补齐 `.http` `errdefer`；`css/printer.cp:573` 修正无符号减法下溢；`css/css_parser.cp:3319,4167-4180` 补齐 `Result` tagged union `catch` 释放与空列表栈 UAF 修复。
 
 - Phase 3 第二十四批安全性加固要点：`HandshakeV10.cp` 补齐 `auth_plugin_data_part_2` 释放；`ParameterDescription.cp`/`FieldMessage.cp`/`Signature.cp` 补齐解码与 OOM 路径 `ErrFreeGuard`/`MessagesErrGuard`；`MySQLValue.cp:419` 改用饱和减法 `-|` 防下溢；`DevServer.cp:2093` 修复堆分支返回前未解除 `array_guard.active` 导致的 UAF；`SerializedFailure.cp`/`colon_list_type.cp`/`bunfig.cp`/`pm_trusted_command.cp` 补齐 `errdefer` 释放。
+
+- Phase 3 第二十五批安全性加固要点：`js_printer.cp:6079,6396` 补齐 `source_map.ctx.data` 错误分支释放并提前 `_renamer_guard`；`expect.cp:2024,2031` 补齐 `stackFallback` 超容 `args.deinit()` 与 `DerefGuard<bun.String>`；`snapshot.cp` 补齐 `snapshot_name`/`temp_log`/`value_clone` 释放；`jest.cp:96` `freeAndClear` 释放后置空防重复释放。

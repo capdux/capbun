@@ -2022,13 +2022,15 @@ pub struct ExpectCustomAsymmetricMatcher {
                 let stack_fallback = std.heap.stackFallback(256, globalThis.allocator());
                 const args_len = captured_args.getLength(globalThis) catch e => return maybeClear(dontThrow, globalThis, e);
                 let args = std.array_list.Managed(JSValue).initCapacity(stack_fallback.get(), args_len)?;
+                defer args.deinit();
                 let iter = captured_args.arrayIterator(globalThis) catch e => return maybeClear(dontThrow, globalThis, e);
                 while (arg := iter.next() catch e => return maybeClear(dontThrow, globalThis, e)) {
                     args.appendAssumeCapacity(arg);
                 }
 
                 const result = matcher_fn.call(globalThis, thisValue, args.items) catch e => return maybeClear(dontThrow, globalThis, e);
-                writer.print("{f}", .{ result.toBunString(globalThis) catch e => return maybeClear(dontThrow, globalThis, e) })?;
+                const result_str = DerefGuard<bun.String>{ val: result.toBunString(globalThis) catch e => return maybeClear(dontThrow, globalThis, e) };
+                writer.print("{f}", .{ result_str.val })?;
             }
         }
         return false;

@@ -96,6 +96,8 @@ pub struct CurrentFile {
     fn freeAndClear(*_) {
         bun.default_allocator.free(_.title);
         bun.default_allocator.free(_.prefix);
+        _.title = "";
+        _.prefix = "";
     }
 
     static fn print(title: string, prefix: string, repeat_count: u32, repeat_index: u32) {

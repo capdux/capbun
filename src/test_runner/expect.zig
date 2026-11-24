@@ -2079,13 +2079,20 @@ pub fn customPrint(self: *ExpectCustomAsymmetricMatcher, thisValue: JSValue, glo
                     const args_len = (blk_catch_11: { break :blk_catch_11 ((captured_args.getLength(globalThis)) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); });
                     var args = try std.array_list.Managed(JSValue).initCapacity(stack_fallback.get(), args_len);
                     _ = &args;
+                    defer {
+                    _ = args.deinit();
+                    }
                     var iter = (blk_catch_12: { break :blk_catch_12 ((captured_args.arrayIterator(globalThis)) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); });
                     _ = &iter;
                     while ((blk_catch_13: { break :blk_catch_13 ((iter.next()) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); })) |arg| {
                         _ = args.appendAssumeCapacity(arg);
                     }
                     const result = (blk_catch_14: { break :blk_catch_14 ((matcher_fn.call(globalThis, thisValue, args.items)) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); });
-                    _ = try writer.print("{f}", .{ (blk_catch_15: { break :blk_catch_15 ((result.toBunString(globalThis)) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); }) });
+                    var result_str = DerefGuard(bun.String){ .val = (blk_catch_15: { break :blk_catch_15 ((result.toBunString(globalThis)) catch |e| { _ = &e; return ExpectCustomAsymmetricMatcher.maybeClear(dontThrow, globalThis, e); }); }) };
+                    _ = &result_str;
+                    var __result_str_moved = false; _ = &__result_str_moved;
+                    defer if (!__result_str_moved) { __result_str_moved = true; const __T = @TypeOf(result_str); if (@typeInfo(__T) == .optional) { if (result_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { result_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = result_str; _drop_val.__cp_deinit(); } };
+                    _ = try writer.print("{f}", .{ result_str.val });
                 }
             }
             return false;

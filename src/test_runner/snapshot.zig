@@ -179,6 +179,9 @@ pub fn resetCounts(self: *Snapshots) void {
 pub fn addCount(self: *Snapshots, expect: *Expect, hint: []const u8) !AddCountResult {
             self.total = (self.total + 1);
             const snapshot_name = try expect.getSnapshotName(self.allocator, hint);
+            errdefer {
+            _ = self.allocator.free(snapshot_name);
+            }
             const count_entry = try self.counts.getOrPut(snapshot_name);
             if (count_entry.found_existing) {
                 _ = self.allocator.free(snapshot_name);
@@ -265,6 +268,9 @@ pub fn parseFile(self: *Snapshots, file: SnapshotFile) !void {
             const opts = js_parser.Parser.Options.init(vm.transpiler.options.jsx, .js);
             var temp_log = logger.Log.init(self.allocator);
             _ = &temp_log;
+            defer {
+            _ = temp_log.deinit();
+            }
             const test_file = Jest.runner.?.files.get(file.id);
             const test_filename = (if (@typeInfo(@TypeOf(test_file.source.path)) == .@"enum" or @typeInfo(@TypeOf(test_file.source.path)) == .@"union") @tagName(test_file.source.path) else test_file.source.path.name).filename;
             const dir_path = (if (@typeInfo(@TypeOf(test_file.source.path)) == .@"enum" or @typeInfo(@TypeOf(test_file.source.path)) == .@"union") @tagName(test_file.source.path) else test_file.source.path.name).dirWithTrailingSlash();
@@ -325,6 +331,9 @@ if ((((if (@typeInfo(@TypeOf(expr)) == .@"enum") @intFromEnum(expr) else expr.va
                                 var ___val_guard_moved = false; _ = &___val_guard_moved;
                                 defer if (!___val_guard_moved) { ___val_guard_moved = true; const __T = @TypeOf(_val_guard); if (@typeInfo(__T) == .optional) { if (_val_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _val_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _val_guard; _drop_val.__cp_deinit(); } };
                                 const value_clone = try self.allocator.alloc(u8, value.len);
+                                errdefer {
+                                _ = self.allocator.free(value_clone);
+                                }
                                 _ = bun.copy(u8, value_clone, value);
                                 const name_hash = bun.hash(key);
                                 _ = try self.values.put(name_hash, value_clone);

@@ -6077,17 +6077,22 @@ pub fn printAst(
 ): usize! {
     let symbols = symbols_;
     let renamer: rename.Renamer = undefined;
+    let _renamer_guard = OptDeinitWithAllocGuard<rename.Renamer>{ ptr: null, alloc: opts.allocator };
     let no_op_renamer: rename.NoOpRenamer = undefined;
     let module_scope = tree.module_scope;
     if (opts.minify_identifiers) {
         const allocator = opts.allocator;
         let reserved_names = rename.computeInitialReservedNames(allocator, opts.module_type)?;
+        let _reserved_guard = OptDeinitWithAllocGuard<bun.StringHashMapUnmanaged(u32)>{ ptr: unsafe { &reserved_names }, alloc: allocator };
         for (child of module_scope.children.slice()) {
             child.parent = &module_scope;
         }
 
         rename.computeReservedNamesForScope(&module_scope, &symbols, &reserved_names, allocator);
         let minify_renamer = rename.MinifyRenamer.init(allocator, symbols, tree.nested_scope_slot_counts, reserved_names)?;
+        _reserved_guard.ptr = null;
+        renamer = minify_renamer.toRenamer();
+        _renamer_guard.ptr = unsafe { &renamer };
 
         let top_level_symbols = rename.StableSymbolCount.Array.init(allocator);
         const _top_level_symbols_guard = DeinitGuard<rename.StableSymbolCount.Array>{ ptr: unsafe { &top_level_symbols } };
@@ -6138,13 +6143,10 @@ pub fn printAst(
         let minifier = tree.char_freq.?.compile(allocator);
         minify_renamer.assignNamesByFrequency(&minifier)?;
 
-        renamer = minify_renamer.toRenamer();
     } else {
         no_op_renamer = rename.NoOpRenamer.init(symbols, source);
         renamer = no_op_renamer.toRenamer();
     }
-
-    const _renamer_guard = OptDeinitWithAllocGuard<rename.Renamer>{ ptr: if (opts.minify_identifiers) unsafe { &renamer } else null, alloc: opts.allocator };
 
     const PrinterType = NewPrinter(
         ascii_only,
@@ -6396,9 +6398,11 @@ pub fn printWithWriterAndPlatform(
         for (part of parts) {
             for (stmt of part.stmts) {
                 printer.printStmt(stmt, PrinterType.TopLevel.init(.yes)) catch e => {
+                    printer.source_map_builder.source_map.ctx.data.deinit();
                     return { @"err": e };
                 };
                 printer.writer.getError() catch e => {
+                    printer.source_map_builder.source_map.ctx.data.deinit();
                     return { @"err": e };
                 };
                 printer.printSemicolonIfNeeded();
