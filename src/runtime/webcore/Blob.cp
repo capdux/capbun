@@ -2509,7 +2509,7 @@ pub struct BlobExternalSharedDescriptor {
         const _guard_path = DeinitUnprotectGuard<jsc.Node.PathOrFileDescriptor>{ ptr: &path };
 
         let blob = Blob.findOrCreateFileFromPath(&path, globalObject, false);
-        errdefer if (blob.content_type_allocated) default_allocator.free(blob.content_type);
+        errdefer blob.deinit();
 
         if (opts := options) {
             if (opts.isObject()) {
@@ -2687,6 +2687,7 @@ pub struct BlobExternalSharedDescriptor {
             },
             else => {
                 blob = Blob.get(globalThis, args[0], false, true)?;
+                errdefer blob.deinit();
 
                 if (args.len > 1) {
                     const options = args[1];
@@ -3821,9 +3822,8 @@ pub struct BlobExternalSharedDescriptor {
         let joiner = StringJoiner{ .allocator = stack_mem_all };
         let could_have_non_ascii = false;
 
-        const _guard_stack = ThresholdDeinitGuard<std.array_list.Managed(JSValue)>{
+        const _guard_stack = DeinitGuard<std.array_list.Managed(JSValue)>{
             ptr: &stack,
-            end_index: &stack_allocator.fixed_buffer_allocator.end_index,
         };
 
         while (true) {
@@ -4370,6 +4370,7 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
         const _guard_name = DerefGuard<String>{ ptr: &name_value_str };
 
         blob = Blob.get(globalThis, args[0], false, true)?;
+        errdefer blob.deinit();
         if (*store_ := blob.store) {
             switch (store_.data) {
                 .bytes => |*bytes| {

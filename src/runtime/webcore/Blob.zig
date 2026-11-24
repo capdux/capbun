@@ -1563,9 +1563,7 @@ pub fn constructBunFile(globalObject: *JSGlobalObject, callframe: *CallFrame) JS
         var blob = Blob.findOrCreateFileFromPath((&path), globalObject, false);
         _ = &blob;
         errdefer {
-        if (blob.content_type_allocated) {
-            _ = default_allocator.free(blob.content_type);
-        }
+        _ = blob.deinit();
         }
         if (options) |opts| {
             _ = &opts;
@@ -1743,6 +1741,9 @@ var empty: [0]u8 = undefined;
 },
 else => {
 blob = try Blob.get(globalThis, args[0], false, true);
+        errdefer {
+        _ = blob.deinit();
+        }
         if ((args.len > 1)) {
             const options = args[1];
             if (options.isObject()) {
@@ -2898,7 +2899,7 @@ else => {
         _ = &joiner;
         var could_have_non_ascii = false;
         _ = &could_have_non_ascii;
-        var _guard_stack = ThresholdDeinitGuard(std.array_list.Managed(JSValue)){ .ptr = (&stack), .end_index = (&stack_allocator.fixed_buffer_allocator.end_index) };
+        var _guard_stack = DeinitGuard(std.array_list.Managed(JSValue)){ .ptr = (&stack) };
         _ = &_guard_stack;
         var ___guard_stack_moved = false; _ = &___guard_stack_moved;
         defer if (!___guard_stack_moved) { ___guard_stack_moved = true; const __T = @TypeOf(_guard_stack); if (@typeInfo(__T) == .optional) { if (_guard_stack) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_stack.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_stack; _drop_val.__cp_deinit(); } };
@@ -4476,6 +4477,9 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
             var ___guard_name_moved = false; _ = &___guard_name_moved;
             defer if (!___guard_name_moved) { ___guard_name_moved = true; const __T = @TypeOf(_guard_name); if (@typeInfo(__T) == .optional) { if (_guard_name) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_name.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_name; _drop_val.__cp_deinit(); } };
             blob = try Blob.get(globalThis, args[0], false, true);
+            errdefer {
+            _ = blob.deinit();
+            }
             if (blob.store) |*store_| {
                 _ = &store_;
                 switch ((store_.*).data) {

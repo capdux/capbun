@@ -99,3 +99,5 @@
 | `test/bundler/bun-build-compile-sourcemap.test.ts` (隔离复验) & `test/cli/{hot,watch,inspect}/` | release | 63 | 1 | 4 todo | `compile-sourcemap` **9/0**（6.23s 全绿，`inline` 842ms）；`cli/{hot,watch,inspect}` **54/1**（唯一 1 fail 为旧版 Release 上的 `hot.test.ts` `EBADF`，已在最新源码 `9c6dfc2ca98` 修复） |
 
 | `test/js/bun/shell/commands/dirname.test.ts` & `shell/leak.test.ts` & `bake/dev/server-sourcemap` & `bundler/compile-wasm` | debug (`dirname`/`leak`) / release | 56 | 7 | - | `dirname` **10/0**（`resolve_path.cp` 修复后全绿）；`shell/leak` Debug+ASan 下 **35/0 逻辑通过**（仅 7 项重循环达 100s 限时，此前 Release 已 42/0）；`server-sourcemap` **3/0**；`compile-wasm` **1/0** |
+
+| `test/bake/dev/production.test.ts` (`ssr.tsx` 修复后 `bun-debug`) | debug | 8 | 0 | - | **8/0 全绿**（61 expects，`works with sourcemaps` 从 60s 挂起恢复为 9.46s PASS） |

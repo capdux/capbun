@@ -1156,6 +1156,7 @@ export class FetchTasklet {
             .reject_unauthorized = fetch_options.reject_unauthorized,
             .upgraded_connection = fetch_options.upgraded_connection,
         };
+        errdefer if (h := fetch_tasklet.http) allocator.destroy(h);
 
         fetch_tasklet.signals = fetch_tasklet.signal_store.to();
         fetch_tasklet.tracker.didSchedule(globalThis);

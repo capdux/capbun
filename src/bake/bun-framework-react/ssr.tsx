@@ -101,12 +101,21 @@ export function renderToStaticHtml(rscPayload: Readable, bootstrapModules: reado
   const stream = new StaticRscInjectionStream(rscPayload);
   const promise = createFromNodeStream(rscPayload, createFromNodeStreamOptions);
   const Root = () => React.use(promise);
-  const { pipe } = renderToPipeableStream(<Root />, {
+  let abort: () => void;
+  let errored = false;
+  const { pipe, abort: abortStream } = renderToPipeableStream(<Root />, {
     bootstrapModules,
     // Only begin flowing HTML once all of it is ready. This tells React
     // to not emit the flight chunks, just the entire HTML.
     onAllReady: () => pipe(stream),
+    onError(error) {
+      if (errored) return;
+      errored = true;
+      abort?.();
+      stream.destroy(error);
+    },
   });
+  abort = abortStream;
   return stream.result;
 }
 

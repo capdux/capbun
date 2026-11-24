@@ -1149,6 +1149,7 @@ _ = ((values.append(alloc, v)) catch unreachable);
 },
 .err => |e| {
 if ((!ignore_errors)) {
+                    _ = values.deinit(alloc);
                     return .{ .err = e };
                 }
 },
@@ -1157,6 +1158,9 @@ if ((!ignore_errors)) {
 .result => |v| v,
 .err => {
 {
+                    if ((values.items.len == 0)) {
+                        return .{ .result = .{} };
+                    }
                     const needs_clone = (values.items.len == 1);
                     if (needs_clone) {
                         return .{ .result = bun.handleOom(values.clone(self.allocator())) };
@@ -5855,13 +5859,11 @@ pub fn toCssWithWriter(self: @This(), allocator: Allocator, writer: *std.Io.Writ
             defer {
             _ = printer.indentation_buf.deinit();
             }
-            errdefer {
-            if (printer.dependencies) |*deps| {
+            const result = (blk_catch_1: { break :blk_catch_1 ((self.toCssWithWriterImpl(allocator, (&printer), options)) catch |__ce_1| { _ = &__ce_1; if (printer.dependencies) |*deps| {
                 _ = &deps;
                 _ = (deps.*).deinit(printer.allocator);
             }
-            }
-            const result = (blk_catch_1: { break :blk_catch_1 ((self.toCssWithWriterImpl(allocator, (&printer), options)) catch |__ce_1| { _ = &__ce_1; _ = bun.assert((printer.error_kind != null));
+            _ = bun.assert((printer.error_kind != null));
             return .{ .err = printer.error_kind.? }; }); });
             return .{ .result = result };
     }

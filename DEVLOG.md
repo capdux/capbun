@@ -1906,3 +1906,5 @@
 - Phase 3 第二十一批（续）安全性加固要点：`interpreter.cp:1112-1114` 将 `DeinitGuard<ShellArgs>` 提前至 `readFileAlloc` 调用前，防止文件读取失败时泄漏 `ArenaAllocator`。
 
 - Phase 3 第二十二批安全性加固要点：`BuildMessage.cp`、`ResolveMessage.cp`、`ZigException.cp` 补齐结构体/克隆消息/字符串分配后的 `errdefer` 释放路径；`array_buffer.cp:293` `toJSBufferFromMemfd` 将 `size == 0` 收窄为 `size <= 0` 防止负数 `@intCast` 越界。
+
+- Phase 3 第二十三批安全性加固要点：`ssr.tsx:100-119` `renderToStaticHtml` 补齐 `onError` 回调中止并销毁流，根除 RSC shell 报错时 `vm.waitForPromise` 死等超时；`Blob.cp` 补齐 3 处 `errdefer blob.deinit()` 并将 `ThresholdDeinitGuard` 替换为 `DeinitGuard` 根除首次超 1024B 堆泄漏；`FetchTasklet.cp:1158` 补齐 `.http` `errdefer`；`css/printer.cp:573` 修正无符号减法下溢；`css/css_parser.cp:3319,4167-4180` 补齐 `Result` tagged union `catch` 释放与空列表栈 UAF 修复。

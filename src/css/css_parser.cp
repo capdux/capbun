@@ -3316,8 +3316,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
             let printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
             defer printer.scratchbuf.deinit();
             defer printer.indentation_buf.deinit();
-            errdefer if (*deps := printer.dependencies) deps.deinit(printer.allocator);
             const result = _.toCssWithWriterImpl(allocator, &printer, options) catch {
+                if (*deps := printer.dependencies) deps.deinit(printer.allocator);
                 bun.assert(printer.error_kind != null);
                 return .{
                     .err = printer.error_kind.?,
@@ -4165,7 +4165,10 @@ pub struct Parser {
                     values.append(alloc, v) catch unreachable;
                 },
                 .err => |e| {
-                    if (!ignore_errors) return { err: e };
+                    if (!ignore_errors) {
+                        values.deinit(alloc);
+                        return { err: e };
+                    }
                 },
             }
 
@@ -4173,6 +4176,7 @@ pub struct Parser {
                 .result => |v| v,
                 .err => {
                     // need to clone off the stack
+                    if (values.items.len == 0) return { result: {} };
                     const needs_clone = values.items.len == 1;
                     if (needs_clone) return { result: bun.handleOom(values.clone(_.allocator())) };
                     return { result: values };

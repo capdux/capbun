@@ -1252,6 +1252,12 @@ pub fn get(allocator: Allocator, globalThis: *jsc.JSGlobalObject, fetch_options:
             _ = allocator.destroy(fetch_tasklet);
             }
             fetch_tasklet.* = .{ .mutex = .{}, .scheduled_response_buffer = .{ .allocator = default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }, .response_buffer = MutableString{ .allocator = default_allocator, .list = .{ .items = (&.{}), .capacity = 0 } }, .http = try allocator.create(HttpAsyncHTTP), .javascript_vm = jsc_vm, .request_body = fetch_options.body, .global_this = globalThis, .promise = promise, .request_headers = fetch_options.headers, .url_proxy_buffer = fetch_options.url_proxy_buffer, .signal = fetch_options.signal, .hostname = fetch_options.hostname, .tracker = jsc.Debugger.AsyncTaskTracker.init(jsc_vm), .check_server_identity = fetch_options.check_server_identity, .reject_unauthorized = fetch_options.reject_unauthorized, .upgraded_connection = fetch_options.upgraded_connection };
+            errdefer {
+            if (fetch_tasklet.http) |h| {
+                _ = &h;
+                _ = allocator.destroy(h);
+            }
+            }
             fetch_tasklet.signals = fetch_tasklet.signal_store.to();
             _ = fetch_tasklet.tracker.didSchedule(globalThis);
             if (fetch_tasklet.request_body.store()) |store| {

@@ -571,7 +571,7 @@ pub struct Printer {
             return INDENTS[i];
         }
         if (_.indentation_buf.items.len < idnt) {
-            _.indentation_buf.appendNTimes(' ', _.indentation_buf.items.len - idnt) catch unreachable;
+            _.indentation_buf.appendNTimes(' ', idnt - _.indentation_buf.items.len) catch unreachable;
         } else {
             _.indentation_buf.items = _.indentation_buf.items[0..idnt];
         }

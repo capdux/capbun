@@ -2345,3 +2345,5 @@
 - Phase 3 第二十一批（续）：修复 `src/shell/interpreter.{cp,zig}` `initAndRunFromFile` 在 `readFileAlloc` 失败路径泄漏 `ShellArgs` 的问题。
 
 - Phase 3 第二十二批：加固 4 个 `src/jsc/` `.cp` 模块及其生成的 `.zig`（`src/jsc/{BuildMessage,ResolveMessage,ZigException,array_buffer}.{cp,zig}`）。
+
+- Phase 3 第二十三批：修复 `src/bake/bun-framework-react/ssr.tsx` `renderToStaticHtml` 永不 settle 挂起缺陷，并加固 4 个 `.cp` 模块（`src/runtime/webcore/{Blob,fetch/FetchTasklet}.{cp,zig}`, `src/css/{printer,css_parser}.{cp,zig}`）。
