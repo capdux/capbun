@@ -263,3 +263,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - 批量扫测或回归命令强制包裹 `timeout <N>` 并配合 `--timeout=10000` + `2>&1 | rg "^\(fail\)| pass$| fail$|Ran [0-9]+ tests|panic|SIGSEGV"`，将单次输出压缩至 2~8 行，彻底杜绝 600s 后台挂起与长日志刷屏浪费 Token。
 3. **运行时缺陷全仓倍增排雷 + 编译器高频雷区追加**：
    - 每通过运行时测试定位 1 类共性 `.cp` 模式缺陷，立即用 1 条 `rg -n` 扫描全仓 1,295 个 `.cp` 文件一次性清零同类隐患（如：闭区间字符范围 `'0'..='9'` 防半开 `..` 漏掉 `'9'`；枚举字面量关键字转义 `.@"private"` 防 `cpc` 静默丢弃语句；`ArrayBitSet.iterator` 等返回 `&_.field` 的方法禁省略 `_: *const Self` 防按值传参悬垂栈指针；禁将局部函数返回 `struct { ~init() }` 绑定为 RAII 守卫，改用显式 `defer cleanup(...)`）。
+4. **`bun bd` 串行构建互斥 + 小批次 `--timeout=5000` 防阻塞**：
+   - 当 `bun bd` 正在后台链接 `build/debug/bun-debug` 时，严禁并发启动第二个 `bun bd`；等待期间用 `./build/release/bun test` 摸底独立测试目录，或做 `.cp` 静态排雷 + `cpc_brief.py` + `zig:check`。
+   - 摸底含外部网络/子进程挂起风险的集成与 CLI 测试时，强制传 `--timeout=5000` 并限制 `≤ 4` 个文件/批，确保单批在 `timeout 30` 内必然打印 `Ran X tests` 摘要。
