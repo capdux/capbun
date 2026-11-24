@@ -250,3 +250,16 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - 错误联合中返回枚举：`!EnumType` 函数体内严禁 `return .tag;`，否则 `cpc` 会降级为 `return error.tag;`，必须显式写 `return EnumType.tag;`；
    - 借用单例防 RAII 自动释放：严禁将带 `.release()`/`.deinit()` 的借用单例（如 `uws.Loop.get()`）绑定到局部 `const`/`let`，避免 `cpc` 自动注入 `defer release()`；
    - 表达式 `if (opt) |x|`：严禁在赋值/字段初始化中使用旧 Zig `= if (opt) |x|`（会被 `cpc` 静默丢弃），统一改写为语句级 `if (x := opt)`。
+
+
+---
+
+## 十二、 Phase 2 运行时测试与省 Token 提速固化铁律（2026-11-24 自优化合并）
+
+1. **Debug 优先与静默日志防刷屏**：
+   - 日常修复与回归验证统一使用 **`bun bd test`**（或当 `build/debug/bun-debug` 已最新时直接调用 `BUN_DEBUG_QUIET_LOGS=1 ./build/debug/bun-debug test` 跳过重复 `ninja` 检查），严禁在单点修复迭代中频繁触发耗时的 `build:release`（仅在阶段收官或 Release 专属验证时构建）。
+   - 执行 `bun-debug` 时优先附加 `BUN_DEBUG_QUIET_LOGS=1`，消除数千行 `[sys]`/`[fs]` 调试日志对上下文的污染。
+2. **测试输出极简过滤与防卡死熔断**：
+   - 批量扫测或回归命令强制包裹 `timeout <N>` 并配合 `--timeout=10000` + `2>&1 | rg "^\(fail\)| pass$| fail$|Ran [0-9]+ tests|panic|SIGSEGV"`，将单次输出压缩至 2~8 行，彻底杜绝 600s 后台挂起与长日志刷屏浪费 Token。
+3. **运行时缺陷全仓倍增排雷 + 编译器高频雷区追加**：
+   - 每通过运行时测试定位 1 类共性 `.cp` 模式缺陷，立即用 1 条 `rg -n` 扫描全仓 1,295 个 `.cp` 文件一次性清零同类隐患（如：闭区间字符范围 `'0'..='9'` 防半开 `..` 漏掉 `'9'`；枚举字面量关键字转义 `.@"private"` 防 `cpc` 静默丢弃语句；`ArrayBitSet.iterator` 等返回 `&_.field` 的方法禁省略 `_: *const Self` 防按值传参悬垂栈指针；禁将局部函数返回 `struct { ~init() }` 绑定为 RAII 守卫，改用显式 `defer cleanup(...)`）。
