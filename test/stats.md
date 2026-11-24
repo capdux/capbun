@@ -171,3 +171,5 @@
 | `test/js/node/readline/` (`TERM=xterm-256color`, `bun-debug`) | debug (最新 `08df2206`) | 88 | 2 | - | `readline.node.test.ts` **全绿**（`_ttyWriteDumb` 消除）；仅 `stdin-pause-pty` 与 `readline_never_unrefs`（1000ms Debug 启动限时） |
 
 | `test/js/first_party/` (5 files, `bun-debug`) | debug (最新 `08df2206`) | 45 | 30 | - | `undici`/`utf-8-validate`/`ws-proxy` **45/0**；唯一 30 fail 为 `ws.test.ts` 硬编码 `1000ms` 启动子进程在 Debug+ASan 下超时（Release 已全绿） |
+
+| `test/js/first_party/` (5 files) | release | 75 | 0 | - | **75/0 全绿**（203 expects，2.74s，exit 0） |
