@@ -2167,7 +2167,7 @@ fn NewLexer_(
                             switch (lexer.code_point) {
                                 'd', 'g', 'i', 'm', 's', 'u', 'y', 'v' => {
                                     if (!has_set_flags_start) {
-                                        lexer.regex_flags_start = @as(u16, @truncate(lexer.end - lexer.start));
+                                        lexer.regex_flags_start = @as(u16, @intCast(lexer.end - lexer.start));
                                         has_set_flags_start = true;
                                     }
                                     const flag = max_flag - @as(u8, i32(lexer.code_point));

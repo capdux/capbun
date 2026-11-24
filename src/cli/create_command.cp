@@ -743,7 +743,7 @@ pub struct CreateCommand {
                 };
 
                 std.fs.deleteTreeAbsolute(destination) catch {};
-                const destination_dir__ = std.fs.cwd().makeOpenPath(destination, .{}) catch e => {
+                let destination_dir__ = std.fs.cwd().makeOpenPath(destination, .{}) catch e => {
                     node.end();
 
                     progress.refresh();
@@ -751,6 +751,7 @@ pub struct CreateCommand {
                     Output.prettyErrorln("<r><red>{s}<r>: creating dir {s}", .{ @errorName(e), destination });
                     Global.exit(1);
                 };
+                defer destination_dir__.close();
 
                 let destination_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
                 const dst_without_trailing_slash: if (Environment.isWindows) string else void = if (comptime Environment.isWindows) strings.withoutTrailingSlash(destination) else @as(void, undefined);

@@ -2319,3 +2319,5 @@
 - [Phase 3 第三批内存安全加固] 修改 3 对 `.cp`/`.zig`（`dns`, `server`, `multipart`，修复 `.ref()` 后在 OOM/异常路径漏 `deref()`，`zig:check` 5/5）。
 
 - [Phase 3 第四批内存安全加固] 修改 5 对 `.cp`/`.zig`（`DirectoryWatchStore`, `linker`, `bundle_v2`, `json5`, `yaml`，修复 `graph_safety_lock` 锁作用域、FD 错误路径泄漏与解析容器 `errdefer`，`zig:check` 5/5）。
+
+- [Phase 3 第五/六批内存安全加固] 修改 8 对 `.cp`/`.zig`（`lexer`, `migration`, `tree_printer`, `Installer`, `publish_command`, `create_command`, `upgrade_command`, `SourceFileProjectGenerator`，消除 `@truncate` 静默截断、CLI 目录 FD 泄漏与 `default_allocator` 参数数组泄漏，`zig:check` 5/5）。

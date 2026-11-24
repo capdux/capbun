@@ -298,6 +298,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
 
     if (dependencies.len > 0) {
         let argv = std.array_list.Managed(string).init(default_allocator);
+        defer argv.deinit();
         argv.append("bun")?;
         argv.append("--only-missing")?;
         argv.append("install")?;
@@ -307,6 +308,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
 
     if (dev_dependencies.len > 0) {
         let argv = std.array_list.Managed(string).init(default_allocator);
+        defer argv.deinit();
         argv.append("bun")?;
         argv.append("--only-missing")?;
         argv.append("add")?;
@@ -322,6 +324,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
             if (shadcn.components.keys().len > 0) {
                 // Add shadcn components
                 let shadcn_argv = std.array_list.Managed(string).initCapacity(default_allocator, 10)?;
+                defer shadcn_argv.deinit();
                 shadcn_argv.append("bun")?;
                 shadcn_argv.append("x")?;
                 shadcn_argv.append("shadcn@canary")?;

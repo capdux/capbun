@@ -1873,3 +1873,5 @@
 - [Phase 3 第三批内存安全加固] 采纳 `938ae16e` 定位修复 `dns.cp`、`server.cp`、`multipart.cp` 共 6 处 `.ref()` 后在 `?` 路径缺失 `deref()` 的引用计数泄漏隐患，全部通过 `cpc_brief.py` 与 `zig:check` 5/5。
 
 - [Phase 3 第四批内存安全加固] 采纳 `7f0d477b` 与 `deb49709` 审计结果加固 5 个模块：(1) `DirectoryWatchStore.cp:108-120` 将 `UnlockGuard` 移至 `dev.graph_safety_lock.lock()` 紧后，彻底消除 `insertEmpty` OOM 早退导致永久死锁的风险；(2) `linker.cp:70-76` 与 `bundle_v2.cp:2163-2172` 补全 `fd` 异常/失败分支关闭；(3) `json5.cp:462` 与 `yaml.cp:3854,3959` 补全容器 `errdefer`；`cpc_brief.py` 与 `zig:check` 5/5 通过。
+
+- [Phase 3 第五/六批内存安全加固] 采纳 `fb1c19ad` 与 `ea8efdc4` 审计结果加固 8 个模块：(1) `lexer.cp:2170`、`migration.cp:385`、`tree_printer.cp:430` 将静默截断 `@truncate` 恢复为带溢出校验的 `@intCast`，`Installer.cp:1173` 移除多余 `unsafe` 裸指针索引；(2) `publish_command.cp`、`create_command.cp`、`upgrade_command.cp` 补全目录句柄关闭；(3) `SourceFileProjectGenerator.cp` 为 3 处 `default_allocator` `argv` 补全 `defer deinit()`；`cpc_brief.py` 与 `zig:check` 5/5 通过。

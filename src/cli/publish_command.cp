@@ -1295,7 +1295,10 @@ pub struct PublishCommand {
                 let dirs: std.ArrayListUnmanaged(struct { std.fs.Dir, string, bool }) = {};
                 const dirs_guard = DeinitWithAllocGuard<@TypeOf(dirs)>{ ptr: &dirs, alloc: allocator };
 
-                dirs.append(allocator, .{ bin_dir.stdDir(), normalized_bin_dir, false })?;
+                {
+                    errdefer bin_dir.close();
+                    dirs.append(allocator, .{ bin_dir.stdDir(), normalized_bin_dir, true })?;
+                }
 
                 while (dir_info := dirs.pop()) {
                     let dir = dir_info[0];

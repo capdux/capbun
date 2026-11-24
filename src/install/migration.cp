@@ -382,7 +382,7 @@ pub fn migrateNPMLockfile(
                 0 => return error.InvalidNPMLockfile,
                 1 => {},
                 else => {
-                    num_extern_strings += @as(u32, @truncate(bin.data.e_object.properties.len * 2));
+                    num_extern_strings += @as(u32, @intCast(bin.data.e_object.properties.len * 2));
                 },
             }
         }

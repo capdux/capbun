@@ -427,7 +427,7 @@ pub fn printImpl(
                     if (update.failed) return;
                     if (update.matches(dependency, string_buf)) {
                         if (dependency_id.* == invalid_package_id) {
-                            dependency_id.* = @as(DependencyID, @truncate(dep_id));
+                            dependency_id.* = @as(DependencyID, @intCast(dep_id));
                         }
 
                         continue :outer;

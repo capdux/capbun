@@ -750,6 +750,7 @@ pub struct UpgradeCommand {
                 Global.exit(1);
             };
             let target_dir = target_dir_it;
+            defer target_dir.close();
 
             if (use_canary) {
 

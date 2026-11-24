@@ -1170,7 +1170,7 @@ pub struct Installer {
     /// Called from main thread
     pub fn startTask(*_, entry_id: Store.Entry.Id) {
         const idx: usize = @intCast(entry_id.get());
-        const task: *Task = unsafe { &_.tasks.ptr[idx] };
+        const task: *Task = &_.tasks[idx];
         bun.debugAssert(switch (task.result) {
             // first time starting the task
             .none => true,
