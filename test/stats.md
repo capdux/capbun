@@ -197,3 +197,5 @@
 | `test/bundler/{resolver,css}/` (11 files, `bun-debug`) | debug (最新 `08df2206`) | 182 | 0 | - | **182/0 全绿**（6 snapshots，229 expects，44.98s，exit 0） |
 
 | `test/bake/dev/{bundle,plugins,vfile,request-cookies,server-sourcemap,esm}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 41 | 1 | - | `bundle`/`plugins`/`vfile`/`request-cookies`/`server-sourcemap` 全绿；唯一 1 fail 为 `esm.test.ts:304` 并发竞态 |
+
+| `test/js/bun/resolve/` (34 files, `bun-debug`) | debug (最新 `08df2206`) | 236 | 2 | 2 skip / 5 todo | **236/0 逻辑**（29870 expects，224.41s；唯一 2 fail 为 `load-same-js-file-a-lot` 10000 次加载压测在 Debug 超时） |
