@@ -165,3 +165,5 @@
 | `test/js/node/fs/{fs-leak,fs-oom,fs-stats-truncate}` (`bun-debug`) | debug (最新 `08df2206`) | 18 | 0 | - | **18/0 全绿**（49 expects，14.23s，无 FD/OOM 泄漏） |
 
 | `test/js/node/{assert,module,inspector,string_decoder}/` (15 files, `bun-debug`) | debug (最新 `08df2206`) | 279 | 0 | - | **279/0 全绿**（8 snapshots，3008 expects，38.69s，exit 0） |
+
+| `test/js/node/{console,dgram,perf_hooks}/` (`bun-debug`) | debug (最新 `08df2206`) | 12 | 0 | - | **12/0 全绿**（`console` 8/0、`dgram` 2/0、`perf_hooks` 2/0） |
