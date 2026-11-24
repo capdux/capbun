@@ -2263,3 +2263,5 @@
 - [Phase 2 第五批修复] 修改 .cp/.zig：`src/jsc/ModuleLoader.{cp,zig}`（`InputFdGuard.should_close: *bool` 修复 `--hot` `EISDIR` 报错，`zig:check` 5/5）。
 
 - [Phase 2 第六批修复] 修改 .cp/.zig：`src/runtime/api/html_rewriter.{cp,zig}`（`WrapperGuardType` 改为 `defer cleanupWrapper` 修复 `text-chunk-null-access` SEGV，`zig:check` 5/5）。
+
+- [Phase 2 第七批修复] 修改 .cp/.zig：`src/interchange/json5.zig`（重编恢复 `-n` 保留 `-0.0` 符号位）、`src/runtime/api/bun/Terminal.{cp,zig}`（`createPty` 补全 `O_NONBLOCK` 与 `FD_CLOEXEC`，`zig:check` 5/5）。

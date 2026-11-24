@@ -1817,3 +1817,5 @@
 - [Phase 2 第五批修复] 定位 `test/cli/hot` 5 个 `--hot` 用例报错 `EISDIR` 根因：`src/jsc/ModuleLoader.cp` `InputFdGuard` 按值拷贝 `should_close` 布尔值，导致 `bun_watcher.addFile` 接管 `input_file_fd` 并将 `should_close_input_file_fd` 置为 `false` 后，RAII 析构仍关闭已交由 watcher 持有的 fd，后续目录复用该 fd 引发热重载读取 `EISDIR`；改为 `should_close: *bool` 动态引用后 `zig:check` 5/5 通过。
 
 - [Phase 2 第六批修复] 修复 `test/regression/issue/text-chunk-null-access.test.ts` 在 `lol_html_text_chunk_is_removed` 触发的 ASan SEGV：`src/runtime/api/html_rewriter.cp` 通过 `WrapperGuardType(...)` 返回局部 `struct { ~init() }`，导致 `cpc` RAII 分析未能识别其析构方法而漏注 `defer __cp_deinit()`；改为显式 `defer cleanupWrapper(ZigType, field_name, wrapper)` 后 `zig:check` 5/5 通过。
+
+- [Phase 2 第七批修复] 解决 2 项运行时缺陷：(1) 用已修复一元负号的 `cpc` 重编 `src/interchange/json5.cp`，`json5.zig:512` 恢复 `(-n)` 保留 `-0.0` 符号位；(2) `src/runtime/api/bun/Terminal.cp` `createPty` 补回 `bun.sys.updateNonblocking(..., true)` 与 `bun.sys.setCloseOnExec(...)`，根除 `/dev/ptmx` 处于阻塞模式时 `PipeReader` 二次排空读在内核永久阻塞导致 `Bun.Terminal` / `26286.test.ts` 卡死问题；`zig:check` 5/5 通过。

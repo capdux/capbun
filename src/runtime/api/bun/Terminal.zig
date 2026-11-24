@@ -910,6 +910,12 @@ pub fn createPtyPosix(cols: u16, rows: u16) CreatePtyError!PtyResult {
         }
 },
 });
+        _ = bun.sys.updateNonblocking(master_fd_desc, true);
+        _ = bun.sys.updateNonblocking(read_fd, true);
+        _ = bun.sys.updateNonblocking(write_fd, true);
+        _ = bun.sys.setCloseOnExec(master_fd_desc);
+        _ = bun.sys.setCloseOnExec(read_fd);
+        _ = bun.sys.setCloseOnExec(write_fd);
         return PtyResult{ .master = master_fd_desc, .read_fd = read_fd, .write_fd = write_fd, .slave = slave_fd_desc, .hpcon = undefined };
 }
 

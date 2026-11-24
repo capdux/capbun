@@ -320,6 +320,18 @@ fn createPtyPosix(cols: u16, rows: u16): CreatePtyError!PtyResult {
         },
     };
 
+    // Set non-blocking on master side fds (for async I/O in the event loop)
+    * = bun.sys.updateNonblocking(master_fd_desc, true);
+    * = bun.sys.updateNonblocking(read_fd, true);
+    * = bun.sys.updateNonblocking(write_fd, true);
+    // Note: slave_fd stays blocking - child processes expect blocking I/O
+
+    // Set close-on-exec on master side fds only
+    // slave_fd should NOT have close-on-exec since child needs to inherit it
+    * = bun.sys.setCloseOnExec(master_fd_desc);
+    * = bun.sys.setCloseOnExec(read_fd);
+    * = bun.sys.setCloseOnExec(write_fd);
+
     return PtyResult{
         master: master_fd_desc,
         read_fd: read_fd,

@@ -509,19 +509,19 @@ pub fn scanSignedValue(self: *JSON5Parser, is_negative: bool) ParseError!f64 {
             switch (self.peek()) {
 48...57, '.' => {
 const n = try self.scanNumber();
-            return (if (is_negative) (0 - n) else n);
+            return (if (is_negative) (-n) else n);
 },
 'I' => {
 if (self.scanKeyword("Infinity")) {
                 const inf_val = std.math.inf(f64);
-                return (if (is_negative) (0 - inf_val) else inf_val);
+                return (if (is_negative) (-inf_val) else inf_val);
             }
             return error.UnexpectedCharacter;
 },
 'N' => {
 if (self.scanKeyword("NaN")) {
                 const nan = std.math.nan(f64);
-                return (if (is_negative) (0 - nan) else nan);
+                return (if (is_negative) (-nan) else nan);
             }
             return error.UnexpectedCharacter;
 },
