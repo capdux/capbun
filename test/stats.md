@@ -145,3 +145,5 @@
 | `test/js/bun/s3/` (10 files) | release | 70 | 0 | 294 skip | **70/0 全绿**（102 expects，1.15s，`s3-stream-cancel-leak` 等全部通过） |
 
 | `test/js/web/{streams,websocket}/` (29 files) | release | 234 | 0 | 10 skip | **234/0 全绿**（4 snapshots，453 expects，21.37s） |
+
+| `test/js/node/{stream,events}/` (3 files, `bun-debug`) | debug (最新 `08df2206`) | 104 | 0 | 1 skip / 5 todo | **104/0 全绿**（208 expects，15.66s） |
