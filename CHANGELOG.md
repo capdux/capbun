@@ -2321,3 +2321,5 @@
 - [Phase 3 第四批内存安全加固] 修改 5 对 `.cp`/`.zig`（`DirectoryWatchStore`, `linker`, `bundle_v2`, `json5`, `yaml`，修复 `graph_safety_lock` 锁作用域、FD 错误路径泄漏与解析容器 `errdefer`，`zig:check` 5/5）。
 
 - [Phase 3 第五/六批内存安全加固] 修改 8 对 `.cp`/`.zig`（`lexer`, `migration`, `tree_printer`, `Installer`, `publish_command`, `create_command`, `upgrade_command`, `SourceFileProjectGenerator`，消除 `@truncate` 静默截断、CLI 目录 FD 泄漏与 `default_allocator` 参数数组泄漏，`zig:check` 5/5）。
+
+- [Phase 3 第七批内存安全加固] 修改 5 对 `.cp`/`.zig`（`napi`, `pm_view_command`, `audit_command`, `lshpack`, `snapshot`，消除可空指针解引用、HPACK 空值 panic、`audit_command` `response_buf` 泄漏与 `snapshot` FD/缓冲泄漏，`zig:check` 5/5）。

@@ -250,10 +250,13 @@ pub struct Snapshots {
     fn writeSnapshotFile(*_): !void {
         if (_file := _._current_file) {
             let file = _file;
+            defer {
+                file.file.close();
+                _._current_file = null;
+            }
             file.file.writeAll(_.file_buf.items) catch {
                 return error.FailedToWriteSnapshotFile;
             };
-            file.file.close();
             _.file_buf.clearAndFree();
 
             let value_itr = _.values.valueIterator();
@@ -646,12 +649,12 @@ pub struct Snapshots {
                     _.file_buf.appendSlice(file_header)?;
                 } else {
                     const buf = _.allocator.alloc(u8, length)?;
+                    defer _.allocator.free(buf);
                     * = file.file.preadAll(buf, 0)?;
                     if (comptime bun.Environment.isWindows) {
                         file.file.seekTo(0)?;
                     }
                     _.file_buf.appendSlice(buf)?;
-                    _.allocator.free(buf);
                 }
             }
 

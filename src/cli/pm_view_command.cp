@@ -95,7 +95,7 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         .GET,
         url,
         headers.entries,
-        headers.content.ptr.?[0..headers.content.len],
+        if (p := headers.content.ptr) p[0..headers.content.len] else "",
         &response_buf_guard.val,
         "",
         manager.httpProxy(url),

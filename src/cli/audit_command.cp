@@ -486,12 +486,13 @@ fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body: []c
     const http_proxy = pm.env.getHttpProxyFor(url);
 
     let response_buf = MutableString.init(allocator, 1024)?;
+    defer response_buf.deinit();
     let req = http.AsyncHTTP.initSync(
         allocator,
         .POST,
         url,
         headers.entries,
-        headers.content.ptr.?[0..headers.content.len],
+        if (p := headers.content.ptr) p[0..headers.content.len] else "",
         &response_buf,
         final_compressed_body,
         http_proxy,

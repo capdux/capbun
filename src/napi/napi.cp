@@ -1528,13 +1528,14 @@ extern fn napi_internal_cleanup_env_cpp(env: napi_env) ;
 extern fn napi_internal_check_gc(env: napi_env) ;
 
 fn napiInternalCleanupCallback(data: *!?) {
+    if (data == null) return;
     unsafe {
         napi_internal_cleanup_env_cpp(@ptrCast(data));
     }
 }
 
 @export @c fn napi_internal_register_cleanup_zig(env_: napi_env) {
-    const env = env_.?;
+    const env = env_ ?? return;
     env.toJS().bunVM().rareData().pushCleanupHook(env.toJS(), env, napiInternalCleanupCallback);
 }
 
@@ -2754,8 +2755,9 @@ pub struct NapiFinalizerTask {
     }
 
     static fn runAsCleanupHook(opaque_this: *!?) {
+        const ptr = opaque_this ?? return;
         unsafe {
-            const self_task: *NapiFinalizerTask = @ptrCast(@alignCast(opaque_this.?));
+            const self_task: *NapiFinalizerTask = @ptrCast(@alignCast(ptr));
             self_task.runOnJSThread();
         }
     }

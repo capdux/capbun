@@ -902,8 +902,9 @@ pub fn runOnJSThread(self: *NapiFinalizerTask) void {
     }
 
 pub fn runAsCleanupHook(opaque_this: ?*anyopaque) void {
+            const ptr = ((opaque_this) orelse { return; });
             {
-                const self_task: *NapiFinalizerTask = @ptrCast(@alignCast(opaque_this.?));
+                const self_task: *NapiFinalizerTask = @ptrCast(@alignCast(ptr));
                 _ = self_task.runOnJSThread();
             }
     }
@@ -3038,13 +3039,16 @@ extern "c" fn napi_internal_cleanup_env_cpp(env: napi_env) callconv(.c) void;
 extern "c" fn napi_internal_check_gc(env: napi_env) callconv(.c) void;
 
 pub fn napiInternalCleanupCallback(data: ?*anyopaque) void {
+        if ((data == null)) {
+            return;
+        }
         {
             _ = napi_internal_cleanup_env_cpp(@ptrCast(data));
         }
 }
 
 pub export fn napi_internal_register_cleanup_zig(env_: napi_env) callconv(.c) void {
-        const env = env_.?;
+        const env = ((env_) orelse { return; });
         _ = env.toJS().bunVM().rareData().pushCleanupHook(env.toJS(), env, napiInternalCleanupCallback);
 }
 

@@ -48,7 +48,7 @@ export struct HPACK {
         if (header.name_len == 0) return error.EmptyHeaderName;
         return DecodeResult{
             name: header.name.?[0..header.name_len],
-            value: header.value.?[0..header.value_len],
+            value: if (v := header.value) v[0..header.value_len] else "",
             next: offset,
             never_index: header.never_index,
             well_know: header.hpack_index,
