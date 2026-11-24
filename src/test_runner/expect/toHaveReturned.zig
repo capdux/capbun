@@ -138,7 +138,7 @@ else => {
 .toHaveReturned => (if (not) "  " else "   "),
 .toHaveReturnedTimes => "   ",
 });
-        const msg: [:0]const u8 = (("\n\n\nExpected number of succesful returns: {s}<green>{d}<r>\n" ++ "Received number of succesful returns: {s}<red>{d}<r>\n") ++ "Received number of calls:             {s}<red>{d}<r>\n");
+        const msg: [:0]const u8 = (("\n\nExpected number of succesful returns: {s}<green>{d}<r>\n" ++ "Received number of succesful returns: {s}<red>{d}<r>\n") ++ "Received number of calls:             {s}<red>{d}<r>\n");
         if (not) {
             const signature = (comptime getSignature(@tagName(mode), "<green>expected<r>", true));
             return client.throw(globalThis, signature, msg, .{ str, expected_success_count, spc, actual_success_count, spc, total_call_count });

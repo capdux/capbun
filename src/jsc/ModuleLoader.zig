@@ -213,7 +213,7 @@ pub fn __cp_deinit(self: *ArenaReturnGuard) void {
 };
 
 pub const InputFdGuard = struct {
-    should_close: bool,
+    should_close: *bool,
     fd: *FD,
     __cp_dropped: bool = false,
 
@@ -221,7 +221,7 @@ pub fn __cp_deinit(self: *InputFdGuard) void {
         if (self.__cp_dropped) return;
         self.__cp_dropped = true;
             {
-                if ((self.should_close and (self.fd.* != bun.invalid_fd))) {
+                if ((self.should_close.* and (self.fd.* != bun.invalid_fd))) {
                     _ = self.fd.*.close();
                     self.fd.* = bun.invalid_fd;
                 }
@@ -449,7 +449,7 @@ else => .unknown,
         _ = &input_file_fd;
         var parse_options = Transpiler.ParseOptions{ .allocator = allocator, .path = path, .loader = loader, .dirname_fd = bun.invalid_fd, .file_descriptor = fd, .file_fd_ptr = (&input_file_fd), .file_hash = hash, .macro_remappings = macro_remappings, .jsx = jsc_vm.transpiler.options.jsx, .emit_decorator_metadata = jsc_vm.transpiler.options.emit_decorator_metadata, .experimental_decorators = jsc_vm.transpiler.options.experimental_decorators, .virtual_source = virtual_source, .dont_bundle_twice = true, .allow_commonjs = true, .module_type = module_type_only_for_wrappables, .inject_jest_globals = jsc_vm.transpiler.options.rewrite_jest_for_tests, .keep_json_and_toml_as_one_statement = true, .allow_bytecode_cache = true, .set_breakpoint_on_first_line = (((is_main and (jsc_vm.debugger != null)) and jsc_vm.debugger.?.set_breakpoint_on_first_line) and setBreakPointOnFirstLine()), .runtime_transpiler_cache = (if (((!disable_transpilying) and (!jsc.RuntimeTranspilerCache.is_disabled))) (&cache) else null), .remove_cjs_module_wrapper = (is_main and (jsc_vm.module_loader.eval_source != null)) };
         _ = &parse_options;
-        var _guard_input_fd = InputFdGuard{ .should_close = should_close_input_file_fd, .fd = (&input_file_fd) };
+        var _guard_input_fd = InputFdGuard{ .should_close = (&should_close_input_file_fd), .fd = (&input_file_fd) };
         _ = &_guard_input_fd;
         var ___guard_input_fd_moved = false; _ = &___guard_input_fd_moved;
         defer if (!___guard_input_fd_moved) { ___guard_input_fd_moved = true; const __T = @TypeOf(_guard_input_fd); if (@typeInfo(__T) == .optional) { if (_guard_input_fd) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_input_fd.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_input_fd; _drop_val.__cp_deinit(); } };

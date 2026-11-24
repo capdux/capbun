@@ -83,6 +83,7 @@ pub const EditOptions = struct {
 };
 
 const dependency_groups = (&.{ .{ "optionalDependencies", .{ .optional = true } }, .{ "devDependencies", .{ .dev = true } }, .{ "dependencies", .{ .prod = true } }, .{ "peerDependencies", .{ .peer = true } } });
+const UpdateRequestSlice = []UpdateRequest;
 const trusted_dependencies_string = "trustedDependencies";
 const Environment = bun.Environment;
 const Semver = bun.Semver;
@@ -380,9 +381,7 @@ pub fn editUpdateNoArgs(manager: *PackageManager, current_package_json: *Expr, o
         }
 }
 
-pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_package_json: *Expr, dependency_list: []const u8, options: EditOptions) !void {
-        var updates = updates_in;
-        _ = &updates;
+pub fn edit(manager: *PackageManager, updates: *UpdateRequestSlice, current_package_json: *Expr, dependency_list: []const u8, options: EditOptions) !void {
         _ = Expr.Disabler.disable();
         var _disabler_guard = ExprDisablerGuard{  };
         _ = &_disabler_guard;
@@ -390,7 +389,7 @@ pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_packa
         defer if (!___disabler_guard_moved) { ___disabler_guard_moved = true; const __T = @TypeOf(_disabler_guard); if (@typeInfo(__T) == .optional) { if (_disabler_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _disabler_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _disabler_guard; _drop_val.__cp_deinit(); } };
         _ = (&_disabler_guard);
         const allocator = manager.allocator;
-        var remaining = updates.len;
+        var remaining = updates.*.len;
         _ = &remaining;
         var replacing: usize = 0;
         _ = &replacing;
@@ -431,8 +430,8 @@ pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_packa
                 var i: usize = 0;
                 _ = &i;
                 const dep_lists: [4][]const u8 = .{ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" };
-                loop: while ((i < updates.len)) {
-                    var request = (&updates[@as(usize, @intCast(i))]);
+                loop: while ((i < updates.*.len)) {
+                    var request = (&updates.*[@as(usize, @intCast(i))]);
                     _ = &request;
                     inline for (dep_lists) |list| {
                         if (current_package_json.asProperty(list)) |query| {
@@ -481,10 +480,10 @@ pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_packa
                                                 request.e_string = value.expr.data.e_string;
                                                 remaining = (remaining - 1);
                                             } else {
-                                                if ((i < (updates.len - 1))) {
-                                                    updates[cp_cast_int(usize, i)] = updates[@as(usize, @intCast((updates.len - 1)))];
+                                                if ((i < (updates.*.len - 1))) {
+                                                    updates.*[cp_cast_int(usize, i)] = updates.*[@as(usize, @intCast((updates.*.len - 1)))];
                                                 }
-                                                updates.len = (updates.len - 1);
+                                                updates.*.len = (updates.*.len - 1);
                                                 remaining = (remaining - 1);
                                                 continue :loop;
                                             }
@@ -579,7 +578,7 @@ pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_packa
             }
             break :brk .fromOwnedSlice(deps);
 };
-            for (cp_mut_slice(&updates)) |*request| {
+            for (cp_mut_slice(&updates.*)) |*request| {
                 _ = &request;
                 if (((request.*).e_string != null)) {
                     continue;
@@ -675,7 +674,7 @@ pub fn edit(manager: *PackageManager, updates_in: []UpdateRequest, current_packa
             }
         }
         const resolutions = (if ((!options.before_install)) manager.lockfile.packages.items(.resolution) else &.{});
-        for (cp_mut_slice(&updates)) |*request| {
+        for (cp_mut_slice(&updates.*)) |*request| {
             _ = &request;
             if ((request.*).e_string) |e_string| {
                 _ = &e_string;

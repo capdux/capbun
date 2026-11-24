@@ -577,9 +577,9 @@ var starting_offset: usize = 0;
             self.word_idx = (self.word_idx + 1);
             starting_offset = 1;
         }
-        for (cp_iter_slice(cmp.atoms[(start_word_idx + starting_offset)..])) |simple_atom| {
+        for (cp_mut_slice(&cmp.atoms[(start_word_idx + starting_offset)..])) |*simple_atom| {
             _ = &simple_atom;
-            const is_cmd_subst = self.expandSimpleNoIO((&simple_atom), (&self.current_out), true);
+            const is_cmd_subst = self.expandSimpleNoIO((&(simple_atom.*)), (&self.current_out), true);
             if (is_cmd_subst) {
                 var io: IO = .{ .stdin = self.base.rootIO().stdin.ref(), .stdout = .pipe, .stderr = self.base.rootIO().stderr.ref() };
                 _ = &io;
@@ -593,9 +593,9 @@ var starting_offset: usize = 0;
                 }
 },
 });
-                var script = Script.init(self.base.interpreter, shell_state, (&simple_atom.cmd_subst.script), Script.ParentPtr.init(self), io);
+                var script = Script.init(self.base.interpreter, shell_state, (&(simple_atom.*).cmd_subst.script), Script.ParentPtr.init(self), io);
                 _ = &script;
-                self.child_state = .{ .cmd_subst = .{ .cmd = script, .quoted = simple_atom.cmd_subst.quoted } };
+                self.child_state = .{ .cmd_subst = .{ .cmd = script, .quoted = (simple_atom.*).cmd_subst.quoted } };
                 return script.start();
             } else {
                 self.word_idx = (self.word_idx + 1);

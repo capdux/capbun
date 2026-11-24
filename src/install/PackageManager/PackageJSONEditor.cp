@@ -368,14 +368,15 @@ pub fn editUpdateNoArgs(
 
 /// edits dependencies and trusted dependencies
 /// if options.add_trusted_dependencies is true, gets list from PackageManager.trusted_deps_to_add_to_package_json
+const UpdateRequestSlice = []UpdateRequest;
+
 pub fn edit(
     manager: *PackageManager,
-    updates_in: []UpdateRequest,
+    updates: *UpdateRequestSlice,
     current_package_json: *Expr,
     dependency_list: string,
     options: EditOptions,
 )! {
-    let updates = updates_in;
     // using data store is going to result in undefined memory issues as
     // the store is cleared in some workspace situations. the solution
     // is to always avoid the store
@@ -384,7 +385,7 @@ pub fn edit(
     * = &_disabler_guard;
 
     const allocator = manager.allocator;
-    let remaining = updates.len;
+    let remaining = updates.*.len;
     let replacing: usize = 0;
     const only_add_missing = manager.options.enable.only_missing;
 
@@ -425,8 +426,8 @@ pub fn edit(
         {
             let i: usize = 0;
             const dep_lists: [4]string = [ "dependencies", "devDependencies", "optionalDependencies", "peerDependencies" ];
-            loop: while (i < updates.len) {
-                let request = &updates[i];
+            loop: while (i < updates.*.len) {
+                let request = &updates.*[i];
                 inline for (list of dep_lists) {
                     if (query := current_package_json.asProperty(list)) {
                         if (query.expr.data == .e_object) {
@@ -470,11 +471,11 @@ pub fn edit(
                                             request.e_string = value.expr.data.e_string;
                                             remaining -= 1;
                                         } else {
-                                            if (i < updates.len - 1) {
-                                                updates[i] = updates[updates.len - 1];
+                                            if (i < updates.*.len - 1) {
+                                                updates.*[i] = updates.*[updates.*.len - 1];
                                             }
 
-                                            updates.len -= 1;
+                                            updates.*.len -= 1;
                                             remaining -= 1;
                                             continue :loop;
                                         }
@@ -564,7 +565,7 @@ pub fn edit(
             break :brk .fromOwnedSlice(deps);
         };
 
-        for (*request of updates) {
+        for (*request of updates.*) {
             if (request.e_string != null) continue;
             defer if (comptime Environment.allow_assert) bun.assert(request.e_string != null);
 
@@ -699,7 +700,7 @@ pub fn edit(
     }
 
     const resolutions = if (!options.before_install) manager.lockfile.packages.items(.resolution) else [];
-    for (*request of updates) {
+    for (*request of updates.*) {
         if (e_string := request.e_string) {
             if (request.package_id >= resolutions.len || resolutions[request.package_id].tag == .uninitialized) {
                 e_string.data = uninitialized: {

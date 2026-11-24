@@ -394,20 +394,21 @@ pub struct PackageManagerCommand {
                 if (first_directory.dependencies.len > 1) more_packages[0] = true;
                 printNodeModulesFolderStructure(&first_directory, null, 0, &directories_guard.val, lockfile, more_packages)?;
             } else {
-                let tree_iter = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
-                const first_directory = tree_iter.next(null) ?? Global.exit(0);
-
                 let cwd_buf: bun.PathBuffer = undefined;
                 const path = bun.getcwd(&cwd_buf) catch {
                     Output.prettyErrorln("<r><red>error<r>: Could not get current working directory", .{});
                     Global.exit(1);
                 };
-                Output.println("{s} node_modules", .{ path });
+                Output.println("{s} node_modules ({d})", .{ path, lockfile.buffers.hoisted_dependencies.items.len });
 
                 const dependencies = lockfile.buffers.dependencies.items;
-                const sorted_dependencies = ctx.allocator.alloc(DependencyID, first_directory.dependencies.len)?;
+                const root_deps = lockfile.packages.items(.dependencies)[0];
+                let sorted_dependencies = ctx.allocator.alloc(DependencyID, root_deps.len)?;
                 const _sorted_deps_guard = FreeGuard<DependencyID>{ allocator: ctx.allocator, slice: sorted_dependencies };
-                bun.copy(DependencyID, sorted_dependencies, first_directory.dependencies);
+                let dep_i: usize = 0;
+                while (dep_i < sorted_dependencies.len) : (dep_i += 1) {
+                    sorted_dependencies[dep_i] = @as(DependencyID, @truncate(root_deps.off + dep_i));
+                }
                 std.sort.pdq(DependencyID, sorted_dependencies, ByName{
                     dependencies: dependencies,
                     buf: string_bytes,

@@ -1157,7 +1157,8 @@ fn NewLexer_(
                             // "#foo"
                             lexer.step();
                             if (lexer.code_point == '\\') {
-                                lexer.identifier = (lexer.scanIdentifierWithEscapes(.private)?).contents;
+                                const scan_res = lexer.scanIdentifierWithEscapes(.@"private")?;
+                                lexer.identifier = scan_res.contents;
                             } else {
                                 if (!isIdentifierStart(lexer.code_point)) {
                                     lexer.syntaxError()?;
@@ -1168,7 +1169,8 @@ fn NewLexer_(
                                     lexer.step();
                                 }
                                 if (lexer.code_point == '\\') {
-                                    lexer.identifier = (lexer.scanIdentifierWithEscapes(.private)?).contents;
+                                    const scan_res = lexer.scanIdentifierWithEscapes(.@"private")?;
+                                    lexer.identifier = scan_res.contents;
                                 } else {
                                     lexer.identifier = lexer.raw();
                                 }

@@ -84,11 +84,11 @@ struct ArenaReturnGuard {
 }
 
 struct InputFdGuard {
-    should_close: bool,
+    should_close: *bool,
     fd: *FD!,
     ~init() {
         unsafe {
-            if (_.should_close && _.fd.* != bun.invalid_fd) {
+            if (_.should_close.* && _.fd.* != bun.invalid_fd) {
                 _.fd.*.close();
                 _.fd.* = bun.invalid_fd;
             }
@@ -349,7 +349,7 @@ pub fn transpileSourceCode(
                 remove_cjs_module_wrapper: is_main && jsc_vm.module_loader.eval_source != null,
             };
             const _guard_input_fd = InputFdGuard{
-                should_close: should_close_input_file_fd,
+                should_close: &should_close_input_file_fd,
                 fd: &input_file_fd,
             };
 

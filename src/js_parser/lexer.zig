@@ -1188,6 +1188,8 @@ else => {
                 } else {
                     _ = lexer.step();
                     if ((lexer.code_point == 92)) {
+                        const scan_res = try lexer.scanIdentifierWithEscapes(.@"private");
+                        lexer.identifier = scan_res.contents;
                     } else {
                         if ((!isIdentifierStart(lexer.code_point))) {
                             _ = try lexer.syntaxError();
@@ -1197,6 +1199,8 @@ else => {
                             _ = lexer.step();
                         }
                         if ((lexer.code_point == 92)) {
+                            const scan_res = try lexer.scanIdentifierWithEscapes(.@"private");
+                            lexer.identifier = scan_res.contents;
                         } else {
                             lexer.identifier = lexer.raw();
                         }

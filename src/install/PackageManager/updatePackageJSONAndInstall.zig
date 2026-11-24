@@ -232,7 +232,9 @@ pub fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(manage
         _ = try updatePackageJSONAndInstallWithManagerWithUpdates(manager, ctx, updates, manager.subcommand, original_cwd);
 }
 
-pub fn updatePackageJSONAndInstallWithManagerWithUpdates(manager: *PackageManager, ctx: Command.Context, updates: []UpdateRequest, subcommand: Subcommand, original_cwd: []const u8) !void {
+pub fn updatePackageJSONAndInstallWithManagerWithUpdates(manager: *PackageManager, ctx: Command.Context, updates_in: []UpdateRequest, subcommand: Subcommand, original_cwd: []const u8) !void {
+        var updates = updates_in;
+        _ = &updates;
         const log_level = manager.options.log_level;
         if ((manager.log.errors > 0)) {
             if ((log_level != .silent)) {
@@ -328,7 +330,8 @@ for (cp_iter_slice(updates)) |request| {
 },
 .link, .add, .update => {
 if ((updates.len != 0)) {
-            _ = try PackageJSONEditor.edit(manager, updates, (&current_package_json.root), dependency_list, .{ .exact_versions = manager.options.enable.exact_versions, .before_install = true });
+            const updates_ptr = (&updates);
+            _ = try PackageJSONEditor.edit(manager, updates_ptr, (&current_package_json.root), dependency_list, .{ .exact_versions = manager.options.enable.exact_versions, .before_install = true });
         } else {
             if ((subcommand == .update)) {
                 _ = try PackageJSONEditor.editUpdateNoArgs(manager, (&current_package_json.root), .{ .exact_versions = true, .before_install = true });
@@ -422,7 +425,8 @@ if ((manager.options.patch_features == .commit)) {
             if ((updates.len == 0)) {
                 _ = try PackageJSONEditor.editUpdateNoArgs(manager, (&new_package_json), .{ .exact_versions = manager.options.enable.exact_versions });
             } else {
-                _ = try PackageJSONEditor.edit(manager, updates, (&new_package_json), dependency_list, .{ .exact_versions = manager.options.enable.exact_versions, .add_trusted_dependencies = manager.options.do.trust_dependencies_from_args });
+                const updates_ptr = (&updates);
+                _ = try PackageJSONEditor.edit(manager, updates_ptr, (&new_package_json), dependency_list, .{ .exact_versions = manager.options.enable.exact_versions, .add_trusted_dependencies = manager.options.do.trust_dependencies_from_args });
             }
             var buffer_writer_two = JSPrinter.BufferWriter.init(manager.allocator);
             _ = &buffer_writer_two;

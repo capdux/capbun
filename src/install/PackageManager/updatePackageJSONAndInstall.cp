@@ -189,10 +189,11 @@ fn updatePackageJSONAndInstallWithManagerWithUpdatesAndUpdateRequests(
 fn updatePackageJSONAndInstallWithManagerWithUpdates(
     manager: *PackageManager,
     ctx: Command.Context,
-    updates: *[]UpdateRequest,
+    updates_in: []UpdateRequest,
     subcommand: Subcommand,
     original_cwd: string,
 )! {
+    let updates = updates_in;
     const log_level = manager.options.log_level;
     if (manager.log.errors > 0) {
         if (log_level != .silent) {
@@ -317,9 +318,10 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
             // update will not exceed the current dependency range if it exists
 
             if (updates.len != 0) {
+                const updates_ptr = &updates;
                 PackageJSONEditor.edit(
                     manager,
-                    updates,
+                    updates_ptr,
                     &current_package_json.root,
                     dependency_list,
                     {
@@ -496,9 +498,10 @@ fn updatePackageJSONAndInstallWithManagerWithUpdates(
                 },
             )?;
         } else {
+            const updates_ptr = &updates;
             PackageJSONEditor.edit(
                 manager,
-                updates,
+                updates_ptr,
                 &new_package_json,
                 dependency_list,
                 {

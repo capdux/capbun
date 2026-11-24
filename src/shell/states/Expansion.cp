@@ -552,7 +552,7 @@ pub struct ShellGlobTask {
                     _.word_idx += 1;
                     starting_offset = 1;
                 }
-                for (simple_atom of cmp.atoms[start_word_idx + starting_offset ..]) {
+                for (*simple_atom of cmp.atoms[start_word_idx + starting_offset ..]) {
                     const is_cmd_subst = _.expandSimpleNoIO(&simple_atom, &_.current_out, true);
                     if (is_cmd_subst) {
                         let io: IO = .{

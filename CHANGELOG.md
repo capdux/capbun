@@ -2255,3 +2255,9 @@
 - [Phase 2 第二批修复] 修改 .cp/.zig：`src/cli/pm_pkg_command.{cp,zig}`、`src/collections/bit_set.{cp,zig}`（`zig:check` 5/5）。
 
 - [跨 AGY 结单全仓重编] 修改 .zig：`src/bundler/entry_points.zig`、`src/cli/{cli,run_command,why_command}.zig`、`src/install/PackageManager/CommandLineArguments.zig`、`src/install/padding_checker.zig`、`src/runtime/api/cron.zig`、`src/sys/sys.zig`（`task-bun-20261124-multiline-string` 重编 + `zig:check` 5/5）。
+
+- [Phase 2 第三批修复] 修改 .cp/.zig：`src/semver/Version.{cp,zig}`、`src/install/PackageManager/{PackageJSONEditor,updatePackageJSONAndInstall}.{cp,zig}`、`src/cli/package_manager_command.{cp,zig}`、`src/shell/states/Expansion.{cp,zig}`、`src/test_runner/expect/toHaveReturned.{cp,zig}`（`zig:check` 5/5）。
+
+- [Phase 2 第四批修复] 修改 .cp/.zig：`src/js_parser/lexer.{cp,zig}`（`.@"private"` 枚举转义修复 `#\u0063onstructor` 词法解析，`zig:check` 5/5）。
+
+- [Phase 2 第五批修复] 修改 .cp/.zig：`src/jsc/ModuleLoader.{cp,zig}`（`InputFdGuard.should_close: *bool` 修复 `--hot` `EISDIR` 报错，`zig:check` 5/5）。

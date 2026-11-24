@@ -59,7 +59,7 @@ inline fn toHaveReturnedTimesFn(client: *Expect, globalThis: *JSGlobalObject, ca
         .toHaveReturnedTimes => "   ",
     };
 
-    const msg: [:0]const u8 = "\n\n\nExpected number of succesful returns: {s}<green>{d}<r>\n" ++
+    const msg: [:0]const u8 = "\n\nExpected number of succesful returns: {s}<green>{d}<r>\n" ++
         "Received number of succesful returns: {s}<red>{d}<r>\n" ++
         "Received number of calls:             {s}<red>{d}<r>\n";
 

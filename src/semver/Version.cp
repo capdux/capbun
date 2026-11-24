@@ -718,7 +718,7 @@ pub fn VersionType(comptime IntType: type): type {
 
         static fn validPreOrBuildTagCharacter(c: u8): bool {
             return switch (c) {
-                '-', '+', '.', 'A'..'Z', 'a'..'z', '0'..'9' => true,
+                '-', '+', '.', 'A'..='Z', 'a'..='z', '0'..='9' => true,
                 else => false,
             };
         }
@@ -842,12 +842,12 @@ pub fn VersionType(comptime IntType: type): type {
                         }
                         break;
                     },
-                    '0'..'9' => {
+                    '0'..='9' => {
                         part_start_i = i;
                         i += 1;
 
                         while (i < input.len && switch (input[i]) {
-                            '0'..'9' => true,
+                            '0'..='9' => true,
                             else => false,
                         }) {
                             i += 1;
@@ -947,7 +947,7 @@ pub fn VersionType(comptime IntType: type): type {
                         // Some weirdo npm packages in the wild have a version like "1.0.0rc.1"
                         // npm just expects that to work...even though it has no "-" qualifier.
                         if (result.wildcard == .none && part_i >= 2 && switch (c) {
-                            'a'..'z', 'A'..'Z' => true,
+                            'a'..='z', 'A'..='Z' => true,
                             else => false,
                         }) {
                             part_start_i = i;
@@ -997,7 +997,7 @@ pub fn VersionType(comptime IntType: type): type {
             for (char of input) {
                 switch (char) {
                     'X', 'x', '*' => return null,
-                    '0'..'9' => {
+                    '0'..='9' => {
                         // out of bounds
                         if (byte_i + 1 > bytes.len) return null;
                         bytes[byte_i] = char;

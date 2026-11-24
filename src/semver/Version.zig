@@ -692,7 +692,7 @@ return .major;
 
 pub fn validPreOrBuildTagCharacter(c: u8) bool {
             return (switch (c) {
-'-', '+', '.', 65...89, 97...121, 48...56 => true,
+'-', '+', '.', 65...90, 97...122, 48...57 => true,
 else => false,
 });
     }
@@ -811,11 +811,11 @@ is_done = true;
                 }
                 break;
 },
-48...56 => {
+48...57 => {
 part_start_i = i;
                 i = (i + 1);
                 while (((i < input.len) and (switch (input[@as(usize, @intCast(i))]) {
-48...56 => true,
+48...57 => true,
 else => false,
 }))) {
                     i = (i + 1);
@@ -906,7 +906,7 @@ else => {
 },
 else => |c| {
 if ((((result.wildcard == .none) and (part_i >= 2)) and (switch (c) {
-97...121, 65...89 => true,
+97...122, 65...90 => true,
 else => false,
 }))) {
                     part_start_i = i;
@@ -956,7 +956,7 @@ pub fn parseVersionNumber(input: []const u8) ?IntType {
 'X', 'x', '*' => {
 return null;
 },
-48...56 => {
+48...57 => {
 if (((byte_i + 1) > bytes.len)) {
                     return null;
                 }

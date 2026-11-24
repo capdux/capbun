@@ -419,21 +419,24 @@ pub fn exec(ctx: Command.Context) !void {
                                                                     }
                                                                     _ = try printNodeModulesFolderStructure((&first_directory), null, 0, (&directories_guard.val), lockfile, more_packages);
                                                                 } else {
-                                                                    var tree_iter = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
-                                                                    _ = &tree_iter;
-                                                                    const first_directory = ((tree_iter.next(null)) orelse (Global.exit(0)));
                                                                     var cwd_buf: bun.PathBuffer = undefined;
                                                                     _ = &cwd_buf;
                                                                     const path = (blk_catch_11: { break :blk_catch_11 ((bun.getcwd((&cwd_buf))) catch |__ce_11| { _ = &__ce_11; _ = Output.prettyErrorln("<r><red>error<r>: Could not get current working directory", .{});
                                                                     break :blk_catch_11 Global.exit(1); }); });
-                                                                    _ = Output.println("{s} node_modules", .{ path });
+                                                                    _ = Output.println("{s} node_modules ({d})", .{ path, lockfile.buffers.hoisted_dependencies.items.len });
                                                                     const dependencies = lockfile.buffers.dependencies.items;
-                                                                    const sorted_dependencies = try ctx.allocator.alloc(DependencyID, first_directory.dependencies.len);
+                                                                    const root_deps = lockfile.packages.items(.dependencies)[0];
+                                                                    var sorted_dependencies = try ctx.allocator.alloc(DependencyID, root_deps.len);
+                                                                    _ = &sorted_dependencies;
                                                                     var _sorted_deps_guard = FreeGuard(DependencyID){ .allocator = ctx.allocator, .slice = sorted_dependencies };
                                                                     _ = &_sorted_deps_guard;
                                                                     var ___sorted_deps_guard_moved = false; _ = &___sorted_deps_guard_moved;
                                                                     defer if (!___sorted_deps_guard_moved) { ___sorted_deps_guard_moved = true; const __T = @TypeOf(_sorted_deps_guard); if (@typeInfo(__T) == .optional) { if (_sorted_deps_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sorted_deps_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sorted_deps_guard; _drop_val.__cp_deinit(); } };
-                                                                    _ = bun.copy(DependencyID, sorted_dependencies, first_directory.dependencies);
+                                                                    var dep_i: usize = 0;
+                                                                    _ = &dep_i;
+                                                                    while ((dep_i < sorted_dependencies.len)) : (dep_i = (dep_i + 1)) {
+                                                                        sorted_dependencies[cp_cast_int(usize, dep_i)] = @as(DependencyID, @truncate((root_deps.off + dep_i)));
+                                                                    }
                                                                     _ = std.sort.pdq(DependencyID, sorted_dependencies, ByName{ .dependencies = dependencies, .buf = string_bytes }, ByName.isLessThan);
                                                                     var index: usize = 0;
                                                                     _ = &index;
