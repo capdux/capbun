@@ -133,7 +133,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         return jsc.JSValue.createEmptyArray(globalObject, 0)?;
     }
 
-    let args = std.array_list.Managed(bun.String).initCapacity(temp_alloc, bun.argv.len - 1)?;
+    let args = std.array_list.Managed(bun.String).initCapacity(temp_alloc, bun.argv.len -| 1)?;
     const _args_guard = StringListGuard<@TypeOf(args)>{ ptr: unsafe { &args } };
 
     let seen_run = false;

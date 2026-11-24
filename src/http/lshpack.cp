@@ -46,8 +46,9 @@ export struct HPACK {
         const offset = lshpack_wrapper_decode(_, src.ptr, src.len, &header);
         if (offset == 0) return error.UnableToDecode;
         if (header.name_len == 0) return error.EmptyHeaderName;
+        const name_ptr = header.name ?? return error.UnableToDecode;
         return DecodeResult{
-            name: header.name.?[0..header.name_len],
+            name: name_ptr[0..header.name_len],
             value: if (v := header.value) v[0..header.value_len] else "",
             next: offset,
             never_index: header.never_index,

@@ -344,9 +344,10 @@ pub struct Context {
         const level = validators.validateInt32(globalThis, arguments[1], "level", {}, null, null)?;
         const memLevel = validators.validateInt32(globalThis, arguments[2], "memLevel", {}, null, null)?;
         const strategy = validators.validateInt32(globalThis, arguments[3], "strategy", {}, null, null)?;
-        const writeResult = arguments[4].asArrayBuffer(globalThis).?.asU32().ptr;
+        const writeResultAb = arguments[4].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("writeResult", "TypedArray", arguments[4]);
+        const writeResult = writeResultAb.asU32().ptr;
         const writeCallback = validators.validateFunction(globalThis, "writeCallback", arguments[5])?;
-        const dictionary = if (arguments[6].isUndefined()) null else arguments[6].asArrayBuffer(globalThis).?.byteSlice();
+        const dictionary: ([]u8)? = if (arguments[6].isUndefined()) null else (arguments[6].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("dictionary", "TypedArray", arguments[6])).byteSlice();
 
         _.write_result = writeResult;
         js.writeCallbackSetCached(this_value, globalThis, writeCallback.withAsyncContextIfNeeded(globalThis));

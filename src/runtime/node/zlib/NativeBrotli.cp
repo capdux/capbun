@@ -119,15 +119,23 @@ pub struct Context {
             .BROTLI_ENCODE => {
                 let next_in = _.next_in;
                 _.last_result.e = unsafe { c.BrotliEncoderCompressStream(@ptrCast(_.state), _.flush, &_.avail_in, &next_in, &_.avail_out, &_.next_out, null) };
-                unsafe {
-                    _.next_in.? += @intFromPtr(next_in.?) - @intFromPtr(_.next_in.?);
+                if (base := _.next_in) {
+                    if (cur := next_in) {
+                        unsafe {
+                            _.next_in.? += @intFromPtr(cur) - @intFromPtr(base);
+                        }
+                    }
                 }
             },
             .BROTLI_DECODE => {
                 let next_in = _.next_in;
                 _.last_result.d = unsafe { c.BrotliDecoderDecompressStream(@ptrCast(_.state), &_.avail_in, &next_in, &_.avail_out, &_.next_out, null) };
-                unsafe {
-                    _.next_in.? += @intFromPtr(next_in.?) - @intFromPtr(_.next_in.?);
+                if (base := _.next_in) {
+                    if (cur := next_in) {
+                        unsafe {
+                            _.next_in.? += @intFromPtr(cur) - @intFromPtr(base);
+                        }
+                    }
                 }
                 if (_.last_result.d == .err) {
                     _.error_ = unsafe { c.BrotliDecoderGetErrorCode(@ptrCast(_.state)) };

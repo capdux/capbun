@@ -485,11 +485,13 @@ pub struct StatWatcher {
         js.gc.prevStat.set(js_this, globalThis, jsvalue);
 
         const cb_args: [2]jsc.JSValue = [ jsvalue, jsvalue ];
-        * = js.listenerGetCached(js_this).?.call(
-            globalThis,
-            .js_undefined,
-            unsafe { &cb_args },
-        ) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
+        if (listener := js.listenerGetCached(js_this)) {
+            * = listener.call(
+                globalThis,
+                .js_undefined,
+                unsafe { &cb_args },
+            ) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
+        }
 
         if (_.closed) {
             return;
@@ -558,11 +560,13 @@ pub struct StatWatcher {
         js.gc.prevStat.set(js_this, globalThis, current_jsvalue);
 
         const cb_args: [2]jsc.JSValue = [ current_jsvalue, prev_jsvalue ];
-        * = js.listenerGetCached(js_this).?.call(
-            globalThis,
-            .js_undefined,
-            unsafe { &cb_args },
-        ) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
+        if (listener := js.listenerGetCached(js_this)) {
+            * = listener.call(
+                globalThis,
+                .js_undefined,
+                unsafe { &cb_args },
+            ) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
+        }
     }
 
     static fn init(args: Arguments): !*StatWatcher {

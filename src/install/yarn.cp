@@ -789,7 +789,9 @@ pub fn migrateYarnLockfile(
                 if (version_slice.len == 0) continue;
 
                 const name = allocator.dupe(u8, name_slice)?;
+                errdefer allocator.free(name);
                 const version = allocator.dupe(u8, version_slice)?;
+                errdefer allocator.free(version);
                 root_dependencies.append(RootDepItem{
                     name: name,
                     version: version,

@@ -651,7 +651,7 @@ export class HTTPContext<const ssl: bool> {
                 request_cert: 1,
                 reject_unauthorized: 0,
             };
-            _.secure = opts.createSSLContext(&err).?;
+            _.secure = opts.createSSLContext(&err) orelse @panic("Failed to create HTTPContext SSL context");
             _.sslCtx().setup();
         }
     }
@@ -698,8 +698,9 @@ export class HTTPContext<const ssl: bool> {
 
                 pending.http_socket = socket;
                 pending.did_have_handshaking_error_while_reject_unauthorized_is_false = did_have_handshaking_error_while_reject_unauthorized_is_false;
+                bun.assert(hostname.len <= @min(pending.hostname_buf.len, std.math.maxInt(u8)));
                 @memcpy(pending.hostname_buf[0..hostname.len], hostname);
-                pending.hostname_len = @as(u8, @truncate(hostname.len));
+                pending.hostname_len = @as(u8, @intCast(hostname.len));
                 pending.port = port;
                 pending.owner = _;
                 pending.ssl_config = if (ssl_config != null) ssl_config.?.clone() else null;

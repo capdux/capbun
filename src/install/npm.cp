@@ -2162,14 +2162,21 @@ pub struct PackageManifest {
         }
 
         let versioned_packages = allocator.alloc(PackageVersion, release_versions_len + pre_versions_len)?;
+        errdefer allocator.free(versioned_packages);
         const all_semver_versions = allocator.alloc(Semver.Version, release_versions_len + pre_versions_len + dist_tags_count)?;
+        errdefer allocator.free(all_semver_versions);
         let all_extern_strings = allocator.alloc(ExternalString, extern_string_count + tarball_urls_count)?;
+        errdefer allocator.free(all_extern_strings);
         let version_extern_strings = allocator.alloc(ExternalString, dependency_sum)?;
+        errdefer allocator.free(version_extern_strings);
         let extern_strings_bin_entries = allocator.alloc(ExternalString, extern_string_count_bin)?;
+        errdefer allocator.free(extern_strings_bin_entries);
         let all_extern_strings_bin_entries = extern_strings_bin_entries;
         let all_tarball_url_strings = allocator.alloc(ExternalString, tarball_urls_count)?;
+        errdefer allocator.free(all_tarball_url_strings);
         let tarball_url_strings = all_tarball_url_strings;
         let bundled_deps_buf = allocator.alloc(PackageNameHash, bundled_deps_count)?;
+        errdefer allocator.free(bundled_deps_buf);
         let bundled_deps_offset: usize = 0;
 
         if (versioned_packages.len > 0) {

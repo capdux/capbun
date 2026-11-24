@@ -8,6 +8,8 @@ pub struct DeinitGuard<T> {
     }
 }
 
+extern fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue ;
+
 pub union(enum) ZigStringByteString {
     latin1: []const u8,
     utf16: []const u16,
@@ -221,6 +223,7 @@ pub struct ZigStringGithubActionFormatter {
         const fallback_allocator = fallback.get();
 
         const uppercase_buffer = _.toOwnedSlice(fallback_allocator) catch unreachable;
+        defer fallback_allocator.free(uppercase_buffer);
         const buffer = allocator.alloc(u8, uppercase_buffer.len) catch unreachable;
         const out = strings.copyLowercase(uppercase_buffer, buffer);
 
@@ -592,7 +595,6 @@ pub struct ZigStringGithubActionFormatter {
         }
     }
 
-    extern fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue ;
     static fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue {
         if (len > String.max_length()) {
             bun.default_allocator.free(unsafe { ptr[0..len] });

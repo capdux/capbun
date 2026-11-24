@@ -98,7 +98,9 @@ pub struct ZigSourceLineIterator {
 
             if (source_line_len > 0) {
                 let source_lines = allocator.alloc(api.SourceLine, @as(usize, @intCast(@max(source_lines_iter.i + 1, 0))))?;
+                errdefer allocator.free(source_lines);
                 let source_line_buf = allocator.alloc(u8, source_line_len)?;
+                errdefer allocator.free(source_line_buf);
                 source_lines_iter = _.sourceLineIterator();
                 let remain_buf = source_line_buf[0..];
                 let i: usize = 0;

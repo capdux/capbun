@@ -737,12 +737,14 @@ pub fn installIsolatedPackages(
             const new_entry_is_root = new_entry_dep_id == invalid_dependency_id;
             const new_entry_is_workspace = !new_entry_is_root && dependencies[new_entry_dep_id].version.tag == .workspace;
 
-            const new_entry_dependencies: Store.Entry.Dependencies = if (dedupe_entry.found_existing && new_entry_is_workspace)
+            let new_entry_dependencies: Store.Entry.Dependencies = if (dedupe_entry.found_existing && new_entry_is_workspace)
                 .empty
             else
                 .initCapacity(lockfile.allocator, node_nodes[entry.node_id.get()].items.len)?;
+            errdefer new_entry_dependencies.deinit(lockfile.allocator);
 
             let new_entry_parents: std.ArrayListUnmanaged(Store.Entry.Id) = .initCapacity(lockfile.allocator, 1)?;
+            errdefer new_entry_parents.deinit(lockfile.allocator);
             new_entry_parents.appendAssumeCapacity(entry.entry_parent_id);
 
             const hoisted = hoisted: {

@@ -1845,8 +1845,8 @@ pub struct Formatter {
             estimated_line_length: &_.estimated_line_length,
         };
         let slice: []const u8 = @as([]const u8, slice_);
-        let i: u32 = 0;
-        let len: u32 = @as(u32, @truncate(slice.len));
+        let i: usize = 0;
+        let len: usize = slice.len;
         let hit_percent = false;
         while (i < len) : (i += 1) {
             if (hit_percent) {
@@ -1877,7 +1877,7 @@ pub struct Formatter {
                             writer.writeAll(end);
                             // then skip the second % so we dont hit it again
                             slice = slice[@min(slice.len, i + 1)..];
-                            len = @truncate(slice.len);
+                            len = slice.len;
                             i = 0;
                             continue;
                         },
@@ -1890,7 +1890,7 @@ pub struct Formatter {
                     slice = slice[@min(slice.len, i + 1)..];
                     i = 0;
                     hit_percent = true;
-                    len = @truncate(slice.len);
+                    len = slice.len;
                     const next_value = _.remaining_values[0];
                     _.remaining_values = _.remaining_values[1..];
 

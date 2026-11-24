@@ -1030,21 +1030,34 @@ pub struct PackCommand {
                                     dir_subpath,
                                     dep_name,
                                 }, 0)?;
+                                let dep_subpath_owned = true;
+                                errdefer if (dep_subpath_owned) ctx.allocator.free(dep_subpath);
 
                                 // starting at `node_modules/is-even/node_modules/is-odd`
                                 let dep_dir_depth: usize = bundled_dir_info[2] + 2;
 
-                                const dep_dir_opt: std.fs.Dir? = root_dir.openDirZ(dep_subpath, { iterate: true }) catch @as(std.fs.Dir?, null);
-                                if (dep_dir := dep_dir_opt) {
+                                let dep_dir_opt: std.fs.Dir? = root_dir.openDirZ(dep_subpath, { iterate: true }) catch @as(std.fs.Dir?, null);
+                                if (*dep_dir := dep_dir_opt) {
+                                    let dep_dir_owned = true;
+                                    errdefer if (dep_dir_owned) dep_dir.close();
                                     const dedupe_entry = dedupe.getOrPut(dep_subpath)?;
-                                    if (dedupe_entry.found_existing) continue;
+                                    if (dedupe_entry.found_existing) {
+                                        dep_dir.close();
+                                        dep_dir_owned = false;
+                                        ctx.allocator.free(dep_subpath);
+                                        dep_subpath_owned = false;
+                                        continue;
+                                    }
 
                                     additional_bundled_deps.append(ctx.allocator, .{ dep_dir, dep_subpath, dep_dir_depth })?;
+                                    dep_dir_owned = false;
+                                    dep_subpath_owned = false;
                                 } else {
                                     // keep searching
 
                                     // slice off the `node_modules` from above
                                     let remain: []u8 = dep_subpath[0..dir_subpath.len];
+                                    let matched_parent = false;
 
                                     while (node_modules_start := strings.lastIndexOf(remain, "node_modules")) {
                                         dep_dir_depth -= 2;
@@ -1055,14 +1068,31 @@ pub struct PackCommand {
                                         const parent_dep_subpath = dep_subpath[0 .. node_modules_end + 1 + dep_name.len :0];
                                         remain = remain[0..node_modules_start];
 
-                                        const parent_dep_dir = root_dir.openDirZ(parent_dep_subpath, { iterate: true }) catch continue;
+                                        let parent_dep_dir = root_dir.openDirZ(parent_dep_subpath, { iterate: true }) catch continue;
+                                        let parent_dir_owned = true;
+                                        errdefer if (parent_dir_owned) parent_dep_dir.close();
 
                                         const dedupe_entry = dedupe.getOrPut(parent_dep_subpath)?;
-                                        if (dedupe_entry.found_existing) continue :next_dep;
+                                        if (dedupe_entry.found_existing) {
+                                            parent_dep_dir.close();
+                                            parent_dir_owned = false;
+                                            ctx.allocator.free(dep_subpath);
+                                            dep_subpath_owned = false;
+                                            matched_parent = true;
+                                            break;
+                                        }
 
                                         additional_bundled_deps.append(ctx.allocator, .{ parent_dep_dir, parent_dep_subpath, dep_dir_depth })?;
-                                        continue :next_dep;
+                                        parent_dir_owned = false;
+                                        dep_subpath_owned = false;
+                                        matched_parent = true;
+                                        break;
                                     }
+                                    if (!matched_parent) {
+                                        ctx.allocator.free(dep_subpath);
+                                        dep_subpath_owned = false;
+                                    }
+                                    if (matched_parent) continue :next_dep;
                                 }
                             }
                         }

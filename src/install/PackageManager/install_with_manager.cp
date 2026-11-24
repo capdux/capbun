@@ -347,6 +347,7 @@ pub fn installWithManager(
                         }
                         break :brk all_name_hashes;
                     };
+                    defer if (all_name_hashes.len > 0) bun.default_allocator.free(all_name_hashes);
 
                     manager.lockfile.overrides = lockfile.overrides.clone(manager, &lockfile, manager.lockfile, builder)?;
                     manager.lockfile.catalogs = lockfile.catalogs.clone(manager, &lockfile, manager.lockfile, builder)?;
@@ -1189,8 +1190,9 @@ fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool): *con
 
             mgr.drainDependencyList();
 
+            const _pkg_mgr_ptr_sample: *PackageManager = undefined;
             mgr.runTasks(
-                *PackageManager,
+                @TypeOf(_pkg_mgr_ptr_sample),
                 mgr,
                 {
                     onExtract: {},

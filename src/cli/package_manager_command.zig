@@ -396,9 +396,15 @@ pub fn exec(ctx: Command.Context) !void {
                                                                         const path_len = node_modules.relative_path.len;
                                                                         var path = try ctx.allocator.alloc(u8, (path_len + 1));
                                                                         _ = &path;
+                                                                        errdefer {
+                                                                        _ = ctx.allocator.free(path);
+                                                                        }
                                                                         _ = bun.copy(u8, path, node_modules.relative_path);
                                                                         path[cp_cast_int(usize, path_len)] = 0;
                                                                         const dependencies = try ctx.allocator.alloc(DependencyID, node_modules.dependencies.len);
+                                                                        errdefer {
+                                                                        _ = ctx.allocator.free(dependencies);
+                                                                        }
                                                                         _ = bun.copy(DependencyID, dependencies, node_modules.dependencies);
                                                                         if ((max_depth < (node_modules.depth + 1))) {
                                                                             max_depth = (node_modules.depth + 1);
@@ -411,6 +417,9 @@ pub fn exec(ctx: Command.Context) !void {
                                                                     const first_directory = directories_guard.val.orderedRemove(0);
                                                                     var more_packages = try ctx.allocator.alloc(bool, max_depth);
                                                                     _ = &more_packages;
+                                                                    defer {
+                                                                    _ = ctx.allocator.free(more_packages);
+                                                                    }
                                                                     _ = @memset(more_packages, false);
                                                                     if ((first_directory.dependencies.len > 1)) {
                                                                         more_packages[cp_cast_int(usize, 0)] = true;

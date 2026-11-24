@@ -85,7 +85,7 @@ export enum Decompressor {
             .zlib(reader) => {
                 bun.assert(reader.zlib.avail_in == 0);
                 reader.zlib.next_in = buffer.ptr;
-                reader.zlib.avail_in = @as(u32, @truncate(buffer.len));
+                reader.zlib.avail_in = @intCast(@min(buffer.len, std.math.maxInt(u32)));
 
                 const initial = body_out_str.list.items.len;
                 body_out_str.list.expandToCapacity();
@@ -95,8 +95,8 @@ export enum Decompressor {
                 }
                 reader.list = body_out_str.list;
                 reader.zlib.next_out = unsafe { @ptrCast(&body_out_str.list.items[initial]) };
-                reader.zlib.avail_out = @as(u32, @truncate(body_out_str.list.capacity - initial));
-                reader.zlib.total_out = @truncate(initial);
+                reader.zlib.avail_out = @intCast(@min(body_out_str.list.capacity - initial, std.math.maxInt(u32)));
+                reader.zlib.total_out = @intCast(@min(initial, std.math.maxInt(u32)));
             },
             .brotli(reader) => {
                 reader.input = buffer;
@@ -104,7 +104,7 @@ export enum Decompressor {
 
                 const initial = body_out_str.list.items.len;
                 reader.list = body_out_str.list;
-                reader.total_out = @truncate(initial);
+                reader.total_out = @intCast(@min(initial, std.math.maxInt(u32)));
             },
             .zstd(reader) => {
                 reader.input = buffer;
@@ -112,7 +112,7 @@ export enum Decompressor {
 
                 const initial = body_out_str.list.items.len;
                 reader.list = body_out_str.list;
-                reader.total_out = @truncate(initial);
+                reader.total_out = @intCast(@min(initial, std.math.maxInt(u32)));
             },
             else => @panic("Invalid encoding. This code should not be reachable"),
         }

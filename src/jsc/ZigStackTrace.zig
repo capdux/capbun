@@ -132,8 +132,14 @@ pub fn toAPI(self: ZigStackTrace, allocator: std.mem.Allocator, root_path: []con
                 if ((source_line_len > 0)) {
                     var source_lines = try allocator.alloc(api.SourceLine, @as(usize, @intCast(@max((source_lines_iter.i + 1), 0))));
                     _ = &source_lines;
+                    errdefer {
+                    _ = allocator.free(source_lines);
+                    }
                     var source_line_buf = try allocator.alloc(u8, source_line_len);
                     _ = &source_line_buf;
+                    errdefer {
+                    _ = allocator.free(source_line_buf);
+                    }
                     source_lines_iter = self.sourceLineIterator();
                     var remain_buf = source_line_buf[0..];
                     _ = &remain_buf;

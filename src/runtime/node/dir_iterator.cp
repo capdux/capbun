@@ -288,9 +288,11 @@ pub fn NewIterator(comptime use_windows_ospath: bool): type {
                         let filter_us: w.UNICODE_STRING = undefined;
                         let filter_ptr: (*w.UNICODE_STRING)? = null;
                         if (f := _.name_filter) {
+                            bun.assert(f.len <= std.math.maxInt(u16) / 2);
+                            const byte_len: u16 = @intCast(f.len * 2);
                             filter_us = .{
-                                Length: @as(u16, @truncate(f.len * 2)),
-                                MaximumLength: @as(u16, @truncate(f.len * 2)),
+                                Length: byte_len,
+                                MaximumLength: byte_len,
                                 Buffer: @constCast(f.ptr),
                             };
                             filter_ptr = &filter_us;

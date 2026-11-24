@@ -190,7 +190,7 @@ pub fn sendHelperPrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     log("sendHelperPrimary", .{});
 
     const arguments = callframe.arguments_old(4).ptr;
-    const subprocess = arguments[0].@"as"(bun.jsc.Subprocess).?;
+    const subprocess = arguments[0].@"as"(bun.jsc.Subprocess) ?? return globalThis.throwInvalidArgumentTypeValue("subprocess", "Subprocess", arguments[0]);
     const message = arguments[1];
     const handle = arguments[2];
     const callback = arguments[3];
@@ -224,7 +224,7 @@ pub fn sendHelperPrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
 
 pub fn onInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(3).ptr;
-    const subprocess = arguments[0].@"as"(bun.jsc.Subprocess).?;
+    const subprocess = arguments[0].@"as"(bun.jsc.Subprocess) ?? return globalThis.throwInvalidArgumentTypeValue("subprocess", "Subprocess", arguments[0]);
     const ipc_opt = subprocess.ipc();
     if (ipc_opt == null) return jsc.JSValue.js_undefined;
     const ipc_data = ipc_opt.?;

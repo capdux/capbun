@@ -365,10 +365,12 @@ pub struct PackageManagerCommand {
                 while (node_modules := iterator.next(null)) {
                     const path_len = node_modules.relative_path.len;
                     let path = ctx.allocator.alloc(u8, path_len + 1)?;
+                    errdefer ctx.allocator.free(path);
                     bun.copy(u8, path, node_modules.relative_path);
                     path[path_len] = 0;
 
                     const dependencies = ctx.allocator.alloc(DependencyID, node_modules.dependencies.len)?;
+                    errdefer ctx.allocator.free(dependencies);
                     bun.copy(DependencyID, dependencies, node_modules.dependencies);
 
                     if (max_depth < node_modules.depth + 1) max_depth = node_modules.depth + 1;
@@ -387,6 +389,7 @@ pub struct PackageManagerCommand {
 
                 const first_directory = directories_guard.val.orderedRemove(0);
                 let more_packages = ctx.allocator.alloc(bool, max_depth)?;
+                defer ctx.allocator.free(more_packages);
                 @memset(more_packages, false);
                 if (first_directory.dependencies.len > 1) more_packages[0] = true;
                 printNodeModulesFolderStructure(&first_directory, null, 0, &directories_guard.val, lockfile, more_packages)?;

@@ -1320,6 +1320,7 @@ pub fn cleanWithLogger(
     const root = root_opt.?;
 
     const package_id_mapping = old.allocator.alloc(PackageID, old.packages.len)?;
+    defer old.allocator.free(package_id_mapping);
     @memset(
         package_id_mapping,
         invalid_package_id,
@@ -1334,6 +1335,7 @@ pub fn cleanWithLogger(
         old_preinstall_state: old_preinstall_state,
         manager: manager,
     };
+    defer cloner.clone_queue.deinit();
 
     // try clone_queue.ensureUnusedCapacity(root.dependencies.len);
     * = root.clone(manager, old, new_lf, package_id_mapping, &cloner)?;

@@ -617,9 +617,11 @@ struct PackageCollector {
             * = mutable_item.dep_id; // Could be useful in the future for dependency-specific processing
 
             const pkg_path_copy = _.manager.allocator.alloc(PackageID, mutable_item.pkg_path.items.len)?;
+            errdefer _.manager.allocator.free(pkg_path_copy);
             @memcpy(pkg_path_copy, mutable_item.pkg_path.items);
 
             const dep_path_copy = _.manager.allocator.alloc(DependencyID, mutable_item.dep_path.items.len)?;
+            errdefer _.manager.allocator.free(dep_path_copy);
             @memcpy(dep_path_copy, mutable_item.dep_path.items);
 
             _.package_paths.put(pkg_id, {

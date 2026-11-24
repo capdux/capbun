@@ -40,7 +40,8 @@ pub fn decode(self: *HPACK, src: []const u8) !DecodeResult {
             if ((header.name_len == 0)) {
                 return error.EmptyHeaderName;
             }
-            return DecodeResult{ .name = header.name.?[0..header.name_len], .value = (if (header.value) |v| v[0..header.value_len] else ""), .next = offset, .never_index = header.never_index, .well_know = header.hpack_index };
+            const name_ptr = ((header.name) orelse { return error.UnableToDecode; });
+            return DecodeResult{ .name = name_ptr[0..header.name_len], .value = (if (header.value) |v| v[0..header.value_len] else ""), .next = offset, .never_index = header.never_index, .well_know = header.hpack_index };
     }
 
 pub fn encode(self: *HPACK, name: []const u8, value: []const u8, never_index: bool, dst_buffer: []u8, dst_buffer_offset: usize) !usize {

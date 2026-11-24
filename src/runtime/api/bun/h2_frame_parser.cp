@@ -4973,7 +4973,7 @@ pub struct H2FrameParser {
                 }
                 if (max_memory := settings_js.get(globalObject, "maxSessionMemory")?) {
                     if (max_memory.isNumber()) {
-                        parser.maxSessionMemory = @truncate(max_memory.to(u64));
+                        parser.maxSessionMemory = @intCast(@min(max_memory.to(u64), std.math.maxInt(u32)));
                         if (parser.maxSessionMemory < 1) {
                             parser.maxSessionMemory = 1;
                         }
@@ -4981,7 +4981,7 @@ pub struct H2FrameParser {
                 }
                 if (max_header_list_pairs := settings_js.get(globalObject, "maxHeaderListPairs")?) {
                     if (max_header_list_pairs.isNumber()) {
-                        parser.maxHeaderListPairs = @truncate(max_header_list_pairs.to(u64));
+                        parser.maxHeaderListPairs = @intCast(@min(max_header_list_pairs.to(u64), std.math.maxInt(u32)));
                         if (parser.maxHeaderListPairs < 4) {
                             parser.maxHeaderListPairs = 4;
                         }
@@ -4989,12 +4989,12 @@ pub struct H2FrameParser {
                 }
                 if (max_rejected_streams := settings_js.get(globalObject, "maxSessionRejectedStreams")?) {
                     if (max_rejected_streams.isNumber()) {
-                        parser.maxRejectedStreams = @truncate(max_rejected_streams.to(u64));
+                        parser.maxRejectedStreams = @intCast(@min(max_rejected_streams.to(u64), std.math.maxInt(u32)));
                     }
                 }
                 if (max_outstanding_settings := settings_js.get(globalObject, "maxOutstandingSettings")?) {
                     if (max_outstanding_settings.isNumber()) {
-                        parser.maxOutstandingSettings = @max(1, @as(u32, @truncate(max_outstanding_settings.to(u64))));
+                        parser.maxOutstandingSettings = @max(1, @as(u32, @intCast(@min(max_outstanding_settings.to(u64), std.math.maxInt(u32)))));
                     }
                 }
                 if (max_send_header_block_length := settings_js.get(globalObject, "maxSendHeaderBlockLength")?) {

@@ -100,7 +100,7 @@ pub struct TestReporterAgent {
 
     pub const Handle = TestReporterHandle;
 
-    @export pub fn Bun__TestReporterAgentEnable(agent: *Handle) {
+    @export pub static fn Bun__TestReporterAgentEnable(agent: *Handle) {
         if (*debugger := VirtualMachine.get().debugger) {
             debug("enable", .{});
             debugger.test_reporter_agent.handle = agent;
@@ -174,7 +174,7 @@ pub struct TestReporterAgent {
     }
 
     const bun_test = jsc.Jest.bun_test;
-    @export pub fn Bun__TestReporterAgentDisable(agent: *Handle) {
+    @export pub static fn Bun__TestReporterAgentDisable(agent: *Handle) {
         * = agent;
         if (*debugger := VirtualMachine.get().debugger) {
             debug("disable", .{});
@@ -184,17 +184,17 @@ pub struct TestReporterAgent {
 
     pub fn reportTestFound(callFrame: *jsc.CallFrame, test_id: i32, name: *bun.String, item_type: TestType, parentId: i32) {
         debug("reportTestFound", .{});
-        _.handle.?.reportTestFound(callFrame, test_id, name, item_type, parentId);
+        if (h := _.handle) h.reportTestFound(callFrame, test_id, name, item_type, parentId);
     }
 
     pub fn reportTestStart(test_id: i32) {
         debug("reportTestStart", .{});
-        _.handle.?.reportTestStart(test_id);
+        if (h := _.handle) h.reportTestStart(test_id);
     }
 
     pub fn reportTestEnd(test_id: i32, bunTestStatus: TestStatus, elapsed: f64) {
         debug("reportTestEnd", .{});
-        _.handle.?.reportTestEnd(test_id, bunTestStatus, elapsed);
+        if (h := _.handle) h.reportTestEnd(test_id, bunTestStatus, elapsed);
     }
 
     pub fn isEnabled(): bool {
@@ -228,14 +228,14 @@ pub struct LifecycleAgent {
 
     pub const Handle = LifecycleHandle;
 
-    @export pub fn Bun__LifecycleAgentEnable(agent: *Handle) {
+    @export pub static fn Bun__LifecycleAgentEnable(agent: *Handle) {
         if (*debugger := VirtualMachine.get().debugger) {
             debug("enable", .{});
             debugger.lifecycle_reporter_agent.handle = agent;
         }
     }
 
-    @export pub fn Bun__LifecycleAgentDisable(agent: *Handle) {
+    @export pub static fn Bun__LifecycleAgentDisable(agent: *Handle) {
         * = agent;
         if (*debugger := VirtualMachine.get().debugger) {
             debug("disable", .{});
@@ -325,10 +325,12 @@ fn onDebuggerTimerCall(handle: *uv.Timer) {
 
 @export pub fn Debugger__didConnect() {
     let vm = VirtualMachine.get();
-    if (vm.debugger.?.wait_for_connection != .off) {
-        vm.debugger.?.wait_for_connection = .off;
-        vm.debugger.?.poll_ref.unref(vm);
-        vm.eventLoop().wakeup();
+    if (*dbg := vm.debugger) {
+        if (dbg.wait_for_connection != .off) {
+            dbg.wait_for_connection = .off;
+            dbg.poll_ref.unref(vm);
+            vm.eventLoop().wakeup();
+        }
     }
 }
 
@@ -399,7 +401,7 @@ fn start(other_vm: *VirtualMachine) {
     http_server_agent: HTTPServerAgent = {},
     must_block_until_connected: bool = false,
 
-    pub fn waitForDebuggerIfNecessary(vm: *VirtualMachine) {
+    pub static fn waitForDebuggerIfNecessary(vm: *VirtualMachine) {
         const debugger = &(vm.debugger ?? return);
         bun.analytics.Features.debugger += 1;
         if (!debugger.must_block_until_connected) {
@@ -474,7 +476,7 @@ fn start(other_vm: *VirtualMachine) {
         }
     }
 
-    pub fn create(vm: *VirtualMachine, globalObject: *JSGlobalObject)! {
+    pub static fn create(vm: *VirtualMachine, globalObject: *JSGlobalObject)! {
         log("create", .{});
         jsc.markBinding(@src());
         if (!has_created_debugger) {
@@ -499,7 +501,7 @@ fn start(other_vm: *VirtualMachine) {
         }
     }
 
-    pub fn startJSDebuggerThread(other_vm: *VirtualMachine) {
+    pub static fn startJSDebuggerThread(other_vm: *VirtualMachine) {
         let arena_ = bun.MimallocArena.init();
         Output.Source.configureNamedThread("Debugger");
         log("startJSDebuggerThread", .{});
