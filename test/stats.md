@@ -267,3 +267,5 @@
 | 新版 Release (`c79d4f22d`) `bun/{cron,dns,udp,sqlite,md,json5,cookie,yaml}/` (26 files) | release (`c79d4f22d`) | 2646 | 0 | 35 skip / 44 todo | **2646/0 全绿**（88655 expects，254.97s，exit 0） |
 
 | 新版 Release (`c79d4f22d`) `bun/{crypto,glob,resolve,stream,io,transpiler,plugin}` (53 files) | release (`c79d4f22d`) | 11029 | 8 | 271 skip / 6 todo | **11029/8**（179010 expects，61.84s） |
+
+| 新版 Release (`c79d4f22d`) `server-response-stream-leak` & `streams-leak` (隔离) & `regression/issue/` | release (`c79d4f22d`) | 890 | 54 | 36 skip / 2 todo | `server-response-stream-leak` **1/0**、`streams-leak` **1/0**（`-1.85MB`）；`regression/issue/` 383 文件 **888/54**（38 项源自 `10132` 删 `cwd`） |
