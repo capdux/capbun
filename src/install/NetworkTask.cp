@@ -63,7 +63,10 @@ fn appendAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scope) 
         header_builder.appendFmt("Authorization", "Bearer {s}", [ scope.token ]);
     } else if (scope.auth.len > 0) {
         header_builder.appendFmt("Authorization", "Basic {s}", [ scope.auth ]);
+    } else {
+        return;
     }
+    header_builder.append("npm-auth-type", "legacy");
 }
 
 fn countAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scope) {

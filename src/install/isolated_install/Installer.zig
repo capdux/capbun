@@ -1177,8 +1177,11 @@ pub fn deinit(self: *Installer) void {
     }
 
 pub fn startTask(self: *Installer, entry_id: Store.Entry.Id) void {
-            var task = self.tasks[@as(usize, @intCast(entry_id.get()))];
-            _ = &task;
+            const idx: usize = @intCast(entry_id.get());
+            const task: *Task = (blk: {
+            break :blk (&self.tasks.ptr[@as(usize, @intCast(idx))]);
+
+});
             _ = bun.debugAssert((switch (task.result) {
 .none => true,
 .blocked => true,

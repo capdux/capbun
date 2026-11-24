@@ -332,7 +332,7 @@ pub const FlagsDebug = packed struct(u16) {
     has_written_status: bool = false,
     response_protected: bool = false,
     aborted: bool = false,
-    has_finalized: bun.DebugOnly(bool) = (if (Environment.isDebug) false else null),
+    has_finalized: bun.DebugOnly(bool) = (if (Environment.isDebug) false else @as(void, undefined)),
     is_error_promise_pending: bool = false,
     _padding: std.meta.Int(.unsigned, if (Environment.isDebug) 0 else 1) = 0,
 };
@@ -352,7 +352,7 @@ pub const FlagsRelease = packed struct(u16) {
     has_written_status: bool = false,
     response_protected: bool = false,
     aborted: bool = false,
-    has_finalized: bun.DebugOnly(bool) = (if (Environment.isDebug) false else null),
+    has_finalized: bun.DebugOnly(bool) = (if (Environment.isDebug) false else @as(void, undefined)),
     is_error_promise_pending: bool = false,
     _padding: std.meta.Int(.unsigned, if (Environment.isDebug) 1 else 2) = 0,
 };

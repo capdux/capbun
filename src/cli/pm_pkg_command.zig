@@ -533,14 +533,7 @@ var buffer_writer = JSPrinter.BufferWriter.init(allocator);
 
 pub fn getJsonValue(allocator: std.mem.Allocator, root: js_ast.Expr, key: []const u8, initial_indent: ?usize) ![]const u8 {
             const expr = try traverseKeyPath(root, key);
-            switch (expr.data) {
-.e_string => |str| {
-return allocator.dupe(u8, str.slice(allocator));
-},
-else => {
-return formatJson(allocator, expr, initial_indent);
-},
-}
+            return formatJson(allocator, expr, initial_indent);
     }
 
 pub fn traverseKeyPath(root: js_ast.Expr, key: []const u8) !js_ast.Expr {
