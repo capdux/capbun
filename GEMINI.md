@@ -269,3 +269,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 5. **Release 解锁 `bun:internal-for-testing` + 复用产物并发扫测**：
    - 使用 `./build/release/bun test` 并发扫测时，统一附加 `BUN_GARBAGE_COLLECTOR_LEVEL=0 BUN_FEATURE_FLAG_INTERNAL_FOR_TESTING=1`，无需依赖 Debug 构建即可启用 `bun:internal-for-testing`（避免 `ENOENT` 假失败）。
    - 不新开 `--build-dir` 冷构建，而是待一次 `bun bd`/`build:release` 完成后直接并发调用产物二进制运行多路只读扫测（过滤管道使用 `rg -a` 兼容含 `\0` 输出），仅在集中修复多处 `.cp` 后再串行重编一次。
+6. **并发测试降拥堵与严禁 `gdb` 挂死铁律（2026-11-25 Phase 3 自优化固化）**：
+   - 运行多子进程并发类测试（如 `websocket-server`/`http`）时，在 `bun-debug` 下统一附加 `--max-concurrency=2` 并使用绝对路径 `/data/dev/bun/build/debug/bun-debug`（避免 `cwd` 切换后找不到相对路径 `${BUN}`）。
+   - **严禁**在子智能体中对大型 Debug 二进制（`bun-debug`）启动 `gdb`/`lldb` 断点调试（极易因符号加载/断点停顿挂死 15+ 分钟），排查泄漏统一采用静态源码追踪 + 轻量 `-e` 复现探针 + `BUN_DEBUG_<scope>=1`；主智能体发现子智能体 `> 10` 分钟无进展或 `gdb` 驻留时立即回收重派。

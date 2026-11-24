@@ -747,7 +747,7 @@ export class S3DownloadStreamWrapper {
         destroy(_);
     }
 
-    @c static fn onStreamCancelled(ctx: *!?) {
+    static fn onStreamCancelled(ctx: *!?) {
         if (c := ctx) {
             let wrapper: *S3DownloadStreamWrapper = unsafe { @ptrCast(@alignCast(c)) };
             wrapper.readable_stream_ref.deinit();
@@ -786,7 +786,7 @@ pub fn readableStream(
         .global = globalThis,
     });
 
-    reader.cancel_handler = unsafe { @ptrCast(&S3DownloadStreamWrapper.onStreamCancelled) };
+    reader.cancel_handler = S3DownloadStreamWrapper.onStreamCancelled;
     reader.cancel_ctx = unsafe { @ptrCast(wrapper) };
 
     downloadStream(
