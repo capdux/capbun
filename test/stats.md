@@ -195,3 +195,5 @@
 | `test/regression/issue/[3-9]*.test.ts` (11 files, `bun-debug`) | debug (最新 `08df2206`) | 20 | 0 | - | **20/0 全绿**（3 snapshots，73 expects，67.24s，至此 `regression/issue/` 全目录 Debug/Release 双清 0 逻辑失败） |
 
 | `test/bundler/{resolver,css}/` (11 files, `bun-debug`) | debug (最新 `08df2206`) | 182 | 0 | - | **182/0 全绿**（6 snapshots，229 expects，44.98s，exit 0） |
+
+| `test/bake/dev/{bundle,plugins,vfile,request-cookies,server-sourcemap,esm}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 41 | 1 | - | `bundle`/`plugins`/`vfile`/`request-cookies`/`server-sourcemap` 全绿；唯一 1 fail 为 `esm.test.ts:304` 并发竞态 |
