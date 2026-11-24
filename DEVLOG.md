@@ -1889,3 +1889,4 @@
   2. `bun.js.cp`、`bun.cp`、`StringBuilder.cp`、`unicode.cp` 补全 `errdefer` / `catch` 分支释放，消除 OOM 提前返回路径上的切片与 `ArrayList` 泄漏；同时针对新版 `cpc` 剪枝吞掉纯重导出 `import Async from "async"` 的问题提单 `task-bun-20261125-unused-import-dropped`，暂以 `comptime { * = Async; }` 保持导出。
 - Phase 3 第十一批安全性加固要点：`dns.cp` 对 4 处 `CAresCacheConfig.name_len` 加装 `u9` 长度边界校验避免超长域名回绕；`bun.cp` `StringMap.insert` 先完成 `dupe(value)`/`dupe(key)` 再插入表，彻底消除 OOM 导致 `value_ptr.*` 未初始化 UB。
 - Phase 3 第十二批安全性加固要点：`s3/client.cp` `S3DownloadStreamWrapper.onStreamCancelled` 去掉错误的 `@c` (`callconv(.c)`) 并直接赋值给 `reader.cancel_handler`（`fn (*!?) void` `.auto` 约定），避免 `@ptrCast` 掩盖 ABI 错位导致的 `ReadableStream` 强引用泄漏。
+- Phase 3 第十三批安全性加固要点：`s3/client.cp:442,605` 去除 `onWritable` 的冗余 `@c` 与 `@ptrCast`，对齐 `MultiPartUpload.OnWritableFn` 的 Zig `.auto` 调用约定，完成全仓 `@ptrCast(&...)` ABI 错位清零。

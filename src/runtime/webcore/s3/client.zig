@@ -209,7 +209,7 @@ pub fn detachSink(self: *S3UploadStreamWrapper) void {
             }
     }
 
-pub fn onWritable(task: *MultiPartUpload, self_any: *anyopaque, flushed: u64) callconv(.c) void {
+pub fn onWritable(task: *MultiPartUpload, self_any: *anyopaque, flushed: u64) void {
             _ = &flushed;
             var wrapper: *S3UploadStreamWrapper = (blk: {
             break :blk @ptrCast(@alignCast(self_any));
@@ -673,10 +673,7 @@ else => {
         break :blk @ptrCast(ctx);
 
 });
-        task.onWritable = (blk: {
-        break :blk @ptrCast((&S3UploadStreamWrapper.onWritable));
-
-});
+        task.onWritable = S3UploadStreamWrapper.onWritable;
         _ = task.continueStream();
         return ctx.endPromise.value();
 }

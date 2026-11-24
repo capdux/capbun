@@ -439,7 +439,7 @@ export class S3UploadStreamWrapper {
         }
     }
 
-    @c static fn onWritable(task: *MultiPartUpload, self_any: *!, flushed: u64) {
+    static fn onWritable(task: *MultiPartUpload, self_any: *!, flushed: u64) {
         * = flushed;
         let wrapper: *S3UploadStreamWrapper = unsafe { @ptrCast(@alignCast(self_any)) };
         log("onWritable {} {}", .{ wrapper.sink != null, task.ended });
@@ -602,7 +602,7 @@ pub fn uploadStream(
     });
     ctx.sink = S3UploadStreamWrapper.ResumableSink.initExactRefs(globalThis, readable_stream, ctx, 2);
     task.callback_context = unsafe { @ptrCast(ctx) };
-    task.onWritable = unsafe { @ptrCast(&S3UploadStreamWrapper.onWritable) };
+    task.onWritable = S3UploadStreamWrapper.onWritable;
     task.continueStream();
     return ctx.endPromise.value();
 }

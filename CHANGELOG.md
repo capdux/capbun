@@ -2328,3 +2328,4 @@
 - Phase 3 第十批：加固 6 个 `.cp` 模块及其生成的 `.zig`（`src/runtime/server/WebSocketServerContext.{cp,zig}`, `src/runtime/dns_jsc/dns.{cp,zig}`, `src/bun.js.{cp,zig}`, `src/bun.{cp,zig}`, `src/string/StringBuilder.{cp,zig}`, `src/string/immutable/unicode.{cp,zig}`）。
 - Phase 3 第十一批：加固 `src/runtime/dns_jsc/dns.{cp,zig}`、`src/bun.{cp,zig}`。
 - Phase 3 第十二批：修复 `src/runtime/webcore/s3/client.{cp,zig}` `onStreamCancelled` 调用约定错位导致的 `ReadableStream.Strong` 内存泄漏。
+- Phase 3 第十三批：修复 `src/runtime/webcore/s3/client.{cp,zig}` `S3UploadStreamWrapper.onWritable` 调用约定不匹配隐患。
