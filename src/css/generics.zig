@@ -845,7 +845,7 @@ return val.hash(hasher);
 }
         }
         if (comptime bun.@"meta".isSimpleEqlType(T)) {
-            const bytes = std.mem.asBytes((&val));
+            const bytes = std.mem.asBytes(val);
             _ = hasher.update(bytes);
             return;
         }

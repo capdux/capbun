@@ -1833,3 +1833,5 @@
 - [Phase 2 第十三批修复] 定位 `css.test.ts` 中 `font > ui-sans-serif` 去重失效根因：`src/css/generics.cp:150` `implementHash` 接收 `val: *const T` 却对 `&val` 取字节，导致所有 `isSimpleEqlType`（含 `FontFamily` tag 等）哈希的是局部指针变量的栈地址而非值本身；`ArrayHashMapUnmanaged` 超过 8 项切换哈希索引后即失效。改为 `std.mem.asBytes(val)` 后 `zig:check` 5/5 通过。
 
 - [Phase 2 第十四批修复] 修复 `src/css/selectors/selector.cp:255,258` `getPrefix` 中两层 `while` 循环完全遗漏步进表达式导致 CSS `minify -> updatePrefix -> getPrefix` 死循环（`doesnt_crash.test.ts`、`small-list-grow.test.ts`、`21907.test.ts` 卡死）；全仓静态审计确认无其他遗漏步进的 `while` 循环，`zig:check` 5/5 通过。
+
+- [Phase 2 第十五批修复] 修复 `src/css/generics.cp:676` `pub fn hash` 中遗漏的另一处 `std.mem.asBytes(&val)` 为 `std.mem.asBytes(val)`，消除简单值类型哈希指针地址的隐患，`zig:check` 5/5 通过。

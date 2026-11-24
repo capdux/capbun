@@ -673,7 +673,7 @@ pub fn hash(comptime T: type, val: *const T, hasher: *std.hash.Wyhash) {
         }
     }
     if (comptime bun.@"meta".isSimpleEqlType(T)) {
-        const bytes = std.mem.asBytes(&val);
+        const bytes = std.mem.asBytes(val);
         hasher.update(bytes);
         return;
     }
