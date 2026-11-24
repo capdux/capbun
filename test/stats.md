@@ -207,3 +207,5 @@
 | `test/bundler/{bun-build-compile,bundler_minify}.test.ts` | release | 43 | 0 | - | **43/0 全绿**（2 snapshots，115 expects，99.95s，exit 0） |
 
 | `load-same-js-file-a-lot.test.ts` (Release) & `cli/install/{bun-workspaces,lifecycle-scripts}` (`bun-debug`) | release / debug | 164 | 4 | - | `load-same-js-file-a-lot` **2/0**（70000 expects，3.75s）；`bun-workspaces` **0 fail**，`lifecycle-scripts` **162/4**（仅 Debug+ASan 耗时/CPU 阈值超时，Release 已 **103/0**） |
+
+| `test/cli/install/{bun-install-cpu-os,bun-lock,bun-pm,bun-link}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 36 | 2 | - | `cpu-os` **13/0**、`bun-lock` **9/0**、`bun-pm` **12/0**；仅 `bun-link` 2 项因 Debug 输出 `debug warn` / Zig 堆栈差异（Release 已全绿） |
