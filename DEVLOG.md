@@ -1893,3 +1893,4 @@
 - Phase 3 第十四批要点：定位并修复 `cpc` 对 `struct` 内 `extern fn` 注入 `self` 首参导致 `ZigString` 16B 传参错位触发 `JSC::JSGlobalObject::vm()` `SEGV 0x63` 的回归，已同步向 `cp_agy` 提单 `task-bun-20261125-struct-extern-fn-self` 并完成全仓 488 处受影响声明定位。
 - Phase 3 第十五批安全性加固要点：`hot_reloader.cp` 调整 RAII 守卫逆序保证 `FlushEvictionsGuard` 先于 `EnqueueGuard` 析构，`ModuleLoader.cp` 读取 `bun_watcher.watchlist` 加 `bun_watcher.mutex` 互斥保护，根除热重载多线程 `EBADF` 竞态。
 - Phase 3 第十六批要点：验收 `task-bun-20261125-struct-extern-fn-self` 后，立即重编 `DevServer.cp`、`windows.cp` 与 `napi.cp`（含 475 个 V8API 符号），通过 `cpc_brief.py` 与 `zig:check` 5/5 恢复全部 C ABI 签名。
+- Phase 3 第十七批要点：`resolve_path.cp:511` 补回 `separator == str.len - 1` 时递归去尾斜杠逻辑，修复 `bunshell > dirname > leading slash`。

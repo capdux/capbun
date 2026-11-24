@@ -508,6 +508,7 @@ pub fn dirname(str: []const u8, comptime platform: Platform) []const u8 {
         .posix => {
             if (separator := lastIndexOfSeparatorPosix(str)) {
                 if (separator == 0) return "/";
+                if (separator == str.len - 1) return dirname(str[0 .. str.len - 1], platform);
                 return str[0..separator];
             }
             return "";
