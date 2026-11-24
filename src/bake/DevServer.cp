@@ -238,8 +238,9 @@ pub struct HeadersGuard {
 pub struct RouterTypeListGuard {
     list: std.ArrayListUnmanaged(FrameworkRouter.Type),
     alloc: Allocator,
+    active: bool = true,
     ~init() {
-        _.list.deinit(_.alloc);
+        if (_.active) _.list.deinit(_.alloc);
     }
 }
 
@@ -907,7 +908,9 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
             })?;
         }
 
-        break :router FrameworkRouter.initEmpty(dev.root, types.items, alloc)?;
+        const router_res = FrameworkRouter.initEmpty(dev.root, types.items, alloc)?;
+        types_guard.active = false;
+        break :router router_res;
     };
 
     // TODO: move scanning to be one tick after server startup. this way the

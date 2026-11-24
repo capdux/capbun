@@ -362,7 +362,20 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
                     // "bar.css" will still be wrapped by its conditions, so the layer
                     // names declared by "foo.css" won't affect it.
                     if (layers.inner().len == 0) {
-                        entry.conditions.len = 0;
+                        let i: u32 = entry.conditions.len;
+                        while (i != 0) {
+                            i -= 1;
+                            const condition = entry.conditions.at(i);
+                            if (condition.layer != null) {
+                                break;
+                            }
+                            entry.conditions.len = i;
+                        }
+                    }
+
+                    // Remove unnecessary entries entirely
+                    if (entry.conditions.len == 0 && layers.inner().len == 0) {
+                        continue;
                     }
                 },
                 .external_path, .source_index => {},

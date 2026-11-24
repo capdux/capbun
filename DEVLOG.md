@@ -1839,3 +1839,5 @@
 - [Phase 2 第十六批修复] 修复 `src/css/selectors/selector.cp:114-116` `downlevelSelectors` 中因同时存在 `: (s_i += 1)`/`: (c_i += 1)` 与循环末尾 `c_i += 1; s_i += 1;` 导致步进 +2 的问题（`css.test.ts` `border`/`margin`/`padding`/`selectors`/`transition` 42 处降级失效），删除末尾重复步进后 `zig:check` 5/5 通过。
 
 - [Phase 2 第十七批修复] 根据 `74e47d30` 排查结果修复 `bun-install-cpu-os.test.ts` 8 个失败用例：`src/install/lockfile/Tree.cp` `isFilteredDependencyOrWorkspace` 迁移时遗漏 `dep.behavior.isOptionalPeer()`、`pkg_metas[pkg_id].isDisabled(manager.options.cpu, manager.options.os)` 与 `dep.behavior.isBundled()` 过滤，导致已跳过的跨平台依赖仍进入安装阶段报 `ENOENT`；补全后 `zig:check` 5/5 通过。
+
+- [Phase 2 第十八批修复] 根治 3 项补全测试依赖后暴露的缺陷：(1) `findImportedFilesInCSSOrder.cp:364` 补全反向保留 `@layer` 条件逻辑与空条目 `continue`；(2) `maybe.cp:266` 将 `initWithBuffer(decls[0..1])`（`len=0`）修正为 `fromOwnedSlice(decls[0..1])`（`len=1`）；(3) `DevServer.cp` `RouterTypeListGuard` 增加 `active` 开关避免在 `FrameworkRouter.initEmpty` 移交所有权后仍误释放 `types` 内存触发 `test/bake/dev/` 9 文件 `0x23..0x32` 段错误；`zig:check` 5/5 通过。
