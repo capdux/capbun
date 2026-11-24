@@ -292,7 +292,9 @@ pub fn processNamesArray(
         let arena_alloc = DeinitGuard<std.heap.ArenaAllocator>{
             val: std.heap.ArenaAllocator.init(allocator),
         };
-        for (user_pattern of workspace_globs.val.items) {
+        for (i of 0..workspace_globs.val.items.len) {
+            const idx: usize = @intCast(i);
+            const user_pattern = workspace_globs.val.items[idx];
             let arena_reset = ArenaResetGuard{
                 arena: unsafe { &arena_alloc.val },
             };
@@ -365,8 +367,30 @@ pub fn processNamesArray(
                 }
 
                 const entry_dir: []const u8 = Path.dirname(matched_path, .auto);
+
+                // skip root package.json
+                if (strings.eqlComptime(matched_path, "package.json")) continue;
+
+                {
+                    const matched_path_without_package_json = strings.withoutTrailingSlash(strings.withoutSuffixComptime(matched_path, "package.json"));
+
+                    // check if it's negated by any remaining patterns
+                    for (next_pattern of workspace_globs.val.items[idx + 1 ..]) {
+                        switch (bun.glob.match(next_pattern, matched_path_without_package_json)) {
+                            .no_match,
+                            .match,
+                            .negate_match,
+                            => {},
+
+                            .negate_no_match => {
+                                continue :next_match;
+                            },
+                        }
+                    }
+                }
+
                 const abs_package_json_path: stringZ = Path.joinAbsStringBufZ(
-                    source.path.name.dir,
+                    cwd,
                     filepath_buf,
                     &[ entry_dir, "package.json" ],
                     .auto,

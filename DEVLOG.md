@@ -1851,3 +1851,5 @@
 - [Phase 2 第二十二批修复] 采纳 `61f6910f` 定位修复 `src/bake/DevServer.cp:2632`：`makeArrayForServerComponentsPatch` 在 `items.len == 0` 时误返回 `JSValue.zero` 而非 `JSValue.null`，导致 `server_register_update_callback.call(...)` 触发 `Bun__JSValue__call` `!JSValue::decode(arguments[i]).isEmpty()` 断言失败；改回 `JSValue.null` 后 `zig:check` 5/5 通过。
 
 - [Phase 2 全仓扫测与 Release 收官] 完成 `build:release`（`71902ec90`）重建并对所有本轮修复的 `.cp` 模块执行最终 Release/Debug 回归，全部通过；同时联合 2 路只读扫测与根因排查子智能体完成 `test/` 几乎全量目录的统计与非 `.cp` 差异归因（详见 `test/stats.md`）。
+
+- [Phase 2 第二十三批修复] 采纳 `63fd4368` 根因定位修复 `src/install/lockfile/Package/WorkspaceMap.cp`：补全 `for (i of 0..workspace_globs.val.items.len)` 索引与后续 `workspace_globs.val.items[idx + 1 ..]` 的 `bun.glob.match(...).negate_no_match` 否定模式过滤及根 `package.json` 跳过逻辑（并修正 `Path.joinAbsStringBufZ(cwd, ...)`）；`cpc_brief.py` 与 `zig:check` 5/5 通过。

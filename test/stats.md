@@ -56,12 +56,15 @@
 
 | `test/bundler/css/` (8 files) & `esbuild/` (13 files) | release (新版) | 945 | 0 | - | `findImportedFilesInCSSOrder.cp` + `maybe.cp` 修复后 21 文件全绿 |
 | `test/bundler/bundler_{cjs2esm,html,css}.test.ts` | release (新版) | 37 | 0 | - | `computeChunks.cp` + `maybe.cp` 修复后全绿 |
+| `test/bundler/` 其余 47 文件 (`3f8dcd1c` 并发扫测) | release (新版) | 793+ | 8 | 3 timeout | **43/47 文件 0 失败**（`standalone` 18/0, `env/feature_flag/drop/edgecase` 165/0 等）；仅余 `--compile` 相关 8 项失败 |
 | `test/js/bun/css/css-fuzz.test.ts` | release (新版) | 5 | 0 | - | `css_parser.cp` 递归深度保护后 `deepNesting(300)` 无 SIGSEGV 全绿 |
 | `test/cli/hot/` (3 files) | release (新版) | 15 | 0 | - | `ModuleLoader.cp` 修复后全绿 |
 | `test/cli/install/bun-install-cpu-os.test.ts` & `bun-lock.test.ts` | release (新版) | 22 | 0 | - | `Tree.cp` 修复 + `internal-for-testing` 环境变量后全绿 |
+| `test/cli/install/` 其余 51 文件 (加前序 10 文件共 61 文件) | release (新版) | 1291+ | 84 | 3 timeout | 40/51 文件 0 失败（`bun-run` 291/0, `npmrc` 24/0, `isolated-install` 46/0, `bun-pack` 70/0）；失败集中于 `bun-workspaces`(34)、`bun-pm-why`(13)、`registry`(11)、`lifecycle`(10)、`Git URL/GHSA/upgrade` 离线(15) |
 | `test/bake/dev/{bundle,plugins,vfile,request-cookies}.test.ts` | debug (`bun bd`) | 26 | 0 | - | `DevServer.cp` (`RouterTypeListGuard` + `JSValue.null`) 修复后全绿 |
 | `test/bake/dev/{esm,import-meta-inline,react-response}.test.ts` | release (新版) | 30 | 0 | - | 全绿（含 `DEV:esm-11`） |
 | `test/bake/` 顶层 (`deinitialization`, `framework-router`, `dev-and-prod`) | release | 13 | 1 | - | 仅 1 处非崩溃失败 |
+| `test/js/bun/http/` 其余 16 文件 + `spawn/` 24 文件 + `glob/` 3 文件 | release (新版) | 716 | 5 | - | `http` 403/3 (`proxy` #12007 超时)、`spawn` 120/0、`glob` 193/2 |
 
 ## 二、 剩余非阻塞环境/外网/长耗时差异汇总
 
