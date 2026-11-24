@@ -2331,3 +2331,4 @@
 - Phase 3 第十三批：修复 `src/runtime/webcore/s3/client.{cp,zig}` `S3UploadStreamWrapper.onWritable` 调用约定不匹配隐患。
 - Phase 3 第十四批：修复 `src/jsc/ZigString.{cp,zig}` 12 个 `extern fn` 移至顶层以消除 ABI `self` 注入导致的 `SEGV 0x63`。
 - Phase 3 第十五批：修复 `src/jsc/hot_reloader.{cp,zig}` 与 `src/jsc/ModuleLoader.{cp,zig}` 跨线程 FD 驱逐/读取竞态 (`EBADF`)。
+- Phase 3 第十六批：使用修复后的 `cpc` 重编受 `struct` 内 `extern fn` 影响的 `src/bake/DevServer.{cp,zig}`、`src/sys/windows/windows.{cp,zig}`、`src/napi/napi.{cp,zig}`（488 处声明全部消除 `self` 误注入）。

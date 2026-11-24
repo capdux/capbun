@@ -1209,7 +1209,7 @@ pub const HmrTopicBits = packed struct(u6) {
 
 pub const c = struct {
 
-pub extern "c" fn BakeGetDefaultExportFromModule(self: c, global: *jsc.JSGlobalObject, module: JSValue) callconv(.c) JSValue;
+pub extern "c" fn BakeGetDefaultExportFromModule(global: *jsc.JSGlobalObject, module: JSValue) callconv(.c) JSValue;
 
 pub fn BakeLoadServerHmrPatch(global: *jsc.JSGlobalObject, code: bun.String) bun.JSError!JSValue {
             const f = (@extern(*const fn (*jsc.JSGlobalObject, bun.String) callconv(.c) JSValue, .{ .name = "BakeLoadServerHmrPatch" })).*;
