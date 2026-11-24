@@ -101,3 +101,5 @@
 | `test/js/bun/shell/commands/dirname.test.ts` & `shell/leak.test.ts` & `bake/dev/server-sourcemap` & `bundler/compile-wasm` | debug (`dirname`/`leak`) / release | 56 | 7 | - | `dirname` **10/0**（`resolve_path.cp` 修复后全绿）；`shell/leak` Debug+ASan 下 **35/0 逻辑通过**（仅 7 项重循环达 100s 限时，此前 Release 已 42/0）；`server-sourcemap` **3/0**；`compile-wasm` **1/0** |
 
 | `test/bake/dev/production.test.ts` (`ssr.tsx` 修复后 `bun-debug`) | debug | 8 | 0 | - | **8/0 全绿**（61 expects，`works with sourcemaps` 从 60s 挂起恢复为 9.46s PASS） |
+
+| `test/js/node/http/node-http-uaf.test.ts` & `bun/websocket/websocket-server.test.ts` (隔离复验) | release | 94 | 0 | 3 todo | `node-http-uaf` **2/0**（3.58s）；`websocket-server` **92/0**（4.86s，单并发全绿） |

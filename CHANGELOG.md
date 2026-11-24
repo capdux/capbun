@@ -2351,3 +2351,5 @@
 - Phase 3 第二十四批：加固 10 个 `.cp` 模块及其生成的 `.zig`（`src/sql/mysql/protocol/HandshakeV10.{cp,zig}`, `src/sql/postgres/protocol/{ParameterDescription,FieldMessage}.{cp,zig}`, `src/sql_jsc/{postgres/Signature,mysql/MySQLValue}.{cp,zig}`, `src/bake/{DevServer,DevServer/SerializedFailure}.{cp,zig}`, `src/cli/{colon_list_type,bunfig,pm_trusted_command}.{cp,zig}`）。
 
 - Phase 3 第二十五批：加固 4 个 `.cp` 模块及其生成的 `.zig`（`src/js_printer/js_printer.{cp,zig}`, `src/test_runner/{expect,snapshot,jest}.{cp,zig}`）。
+
+- Phase 3 第二十六批：加固 9 个 `.cp` 模块及其生成的 `.zig`（`src/js_printer/renamer.{cp,zig}`, `src/js_parser/lexer.{cp,zig}`, `src/watcher/Watcher.{cp,zig}`, `src/sys/walker_skippable.{cp,zig}`, `src/string/{immutable/unicode,immutable}.{cp,zig}`, `src/bun_core/fmt.{cp,zig}`, `src/s3_signing/credentials.{cp,zig}`, `src/install_jsc/npm_jsc.{cp,zig}`）。

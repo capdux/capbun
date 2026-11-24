@@ -2080,6 +2080,7 @@ fn NewLexer_(
                 comments_to_preserve_before: std.array_list.Managed(js_ast.G.Comment).init(allocator),
                 all_comments: std.array_list.Managed(logger.Range).init(allocator),
             };
+            errdefer lex.deinit();
             lex.step();
             lex.next()?;
 
@@ -2100,6 +2101,7 @@ fn NewLexer_(
 
         pub fn init(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator): LexerType! {
             let lex = initWithoutReading(log, source, allocator);
+            errdefer lex.deinit();
             lex.step();
             lex.next()?;
 

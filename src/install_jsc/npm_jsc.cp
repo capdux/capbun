@@ -112,8 +112,9 @@ pub struct ManifestBindings {
         if (maybe_package_manifest == null) return global.throw("manifest is invalid ", {});
         const package_manifest: npm.PackageManifest = maybe_package_manifest.?;
 
-        let buf: std.ArrayListUnmanaged(u8) = {};
-        const writer = buf.writer(bun.default_allocator);
+        let buf = std.array_list.Managed(u8).init(bun.default_allocator);
+        const _buf_g = DeinitGuard<@TypeOf(buf)>{ ptr: &buf };
+        const writer = buf.writer();
 
         writer.print("{{\"name\":\"{s}\",\"versions\":[", [package_manifest.name()])?;
 

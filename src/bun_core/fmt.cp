@@ -1414,7 +1414,7 @@ pub fn formatIp(address: std.net.Address, into: []u8): []u8! {
         result = result[0..colon];
     }
     // Strip brackets
-    if (result[0] == '[' && result[result.len - 1] == ']') {
+    if (result.len >= 2 && result[0] == '[' && result[result.len - 1] == ']') {
         result = result[1 .. result.len - 1];
     }
     return result;

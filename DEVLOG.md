@@ -1912,3 +1912,5 @@
 - Phase 3 第二十四批安全性加固要点：`HandshakeV10.cp` 补齐 `auth_plugin_data_part_2` 释放；`ParameterDescription.cp`/`FieldMessage.cp`/`Signature.cp` 补齐解码与 OOM 路径 `ErrFreeGuard`/`MessagesErrGuard`；`MySQLValue.cp:419` 改用饱和减法 `-|` 防下溢；`DevServer.cp:2093` 修复堆分支返回前未解除 `array_guard.active` 导致的 UAF；`SerializedFailure.cp`/`colon_list_type.cp`/`bunfig.cp`/`pm_trusted_command.cp` 补齐 `errdefer` 释放。
 
 - Phase 3 第二十五批安全性加固要点：`js_printer.cp:6079,6396` 补齐 `source_map.ctx.data` 错误分支释放并提前 `_renamer_guard`；`expect.cp:2024,2031` 补齐 `stackFallback` 超容 `args.deinit()` 与 `DerefGuard<bun.String>`；`snapshot.cp` 补齐 `snapshot_name`/`temp_log`/`value_clone` 释放；`jest.cp:96` `freeAndClear` 释放后置空防重复释放。
+
+- Phase 3 第二十六批安全性加固要点：`renamer.cp:160` 补齐 `MinifyRenamer.init` 循环 OOM `errdefer`；`lexer.cp:2083,2104` 补齐 `errdefer lex.deinit()`；`Watcher.cp:213`、`walker_skippable.cp:176`、`unicode.cp`、`credentials.cp:371`、`npm_jsc.cp:115` 补齐 `errdefer`/`SliceFreeGuard`/`DeinitGuard` 释放；`immutable.cp:852` 与 `fmt.cp:1417` 补齐空切片长度守卫；同步向 `cp_agy` 提单 `task-bun-20261125-c-method-self` 修复 `struct` 内 `@c pub fn foo(*_)` 漏声明 `self` 缺陷。

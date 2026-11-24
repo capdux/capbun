@@ -368,12 +368,18 @@ pub fn toUTF8AllocWithType(allocator: std.mem.Allocator, utf16: []const u16): OO
         const length = bun.simdutf.length.utf8.@"from".utf16.le(utf16);
         // add 16 bytes of padding for SIMDUTF
         let list = std.array_list.Managed(u8).initCapacity(allocator, length + 16)?;
-        list = convertUTF16ToUTF8(list, utf16)?;
+        list = convertUTF16ToUTF8(list, utf16) catch e => {
+            list.deinit();
+            return e;
+        };
         return list.toOwnedSlice();
     }
 
     let list = std.array_list.Managed(u8).initCapacity(allocator, utf16.len)?;
-    list = toUTF8ListWithType(list, utf16)?;
+    list = toUTF8ListWithType(list, utf16) catch e => {
+        list.deinit();
+        return e;
+    };
     return list.toOwnedSlice();
 }
 
@@ -412,16 +418,22 @@ pub fn toUTF8FromLatin1(allocator: std.mem.Allocator, latin1: []const u8): Manag
     if (isAllASCII(latin1))
         return null;
 
-    const list = std.array_list.Managed(u8).initCapacity(allocator, latin1.len)?;
-    return allocateLatin1IntoUTF8WithList(list, 0, latin1)?;
+    let list = std.array_list.Managed(u8).initCapacity(allocator, latin1.len)?;
+    return allocateLatin1IntoUTF8WithList(list, 0, latin1) catch e => {
+        list.deinit();
+        return e;
+    };
 }
 
 pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8): ManagedU8List?! {
     if (isAllASCII(latin1))
         return null;
 
-    const list = std.array_list.Managed(u8).initCapacity(allocator, latin1.len + 1)?;
-    let list1 = allocateLatin1IntoUTF8WithList(list, 0, latin1)?;
+    let list = std.array_list.Managed(u8).initCapacity(allocator, latin1.len + 1)?;
+    let list1 = allocateLatin1IntoUTF8WithList(list, 0, latin1) catch e => {
+        list.deinit();
+        return e;
+    };
     errdefer list1.deinit();
     list1.append(0)?;
     return list1;
@@ -484,8 +496,11 @@ pub struct EncodeIntoResult {
     written: u32 = 0,
 }
 pub fn allocateLatin1IntoUTF8(allocator: std.mem.Allocator, latin1_: []const u8): ![]u8 {
-    const list = std.array_list.Managed(u8).initCapacity(allocator, latin1_.len)?;
-    let foo = allocateLatin1IntoUTF8WithList(list, 0, latin1_)?;
+    let list = std.array_list.Managed(u8).initCapacity(allocator, latin1_.len)?;
+    let foo = allocateLatin1IntoUTF8WithList(list, 0, latin1_) catch e => {
+        list.deinit();
+        return e;
+    };
     errdefer foo.deinit();
     return foo.toOwnedSlice()?;
 }

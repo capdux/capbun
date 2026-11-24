@@ -210,6 +210,7 @@ pub struct PathBufferGuard {
                 changed_filepaths: [null; max_count],
             };
         }
+        errdefer allocator.free(watcher.watch_events);
 
         Platform.init(&watcher.platform, fs.top_level_dir)?;
 

@@ -849,6 +849,7 @@ pub fn endsWithCharOrIsZeroLength(client: string, char: u8): bool {
 }
 
 pub fn endsWithAny(client: string, str: string): bool {
+    if (client.len == 0) return false;
     const end = client[client.len - 1];
     for (char of str) {
         if (char == end) {

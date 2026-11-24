@@ -569,12 +569,14 @@ pub fn toUTF8AllocWithType(allocator: std.mem.Allocator, utf16: []const u16) OOM
             const length = bun.simdutf.length.utf8.@"from".utf16.le(utf16);
             var list = try std.array_list.Managed(u8).initCapacity(allocator, (length + 16));
             _ = &list;
-            list = try convertUTF16ToUTF8(list, utf16);
+            list = (blk_catch_0: { break :blk_catch_0 ((convertUTF16ToUTF8(list, utf16)) catch |e| { _ = &e; _ = list.deinit();
+            return e; }); });
             return list.toOwnedSlice();
         }
         var list = try std.array_list.Managed(u8).initCapacity(allocator, utf16.len);
         _ = &list;
-        list = try toUTF8ListWithType(list, utf16);
+        list = (blk_catch_1: { break :blk_catch_1 ((toUTF8ListWithType(list, utf16)) catch |e| { _ = &e; _ = list.deinit();
+        return e; }); });
         return list.toOwnedSlice();
 }
 
@@ -603,16 +605,20 @@ pub fn toUTF8FromLatin1(allocator: std.mem.Allocator, latin1: []const u8) !?Mana
         if (isAllASCII(latin1)) {
             return null;
         }
-        const list = try std.array_list.Managed(u8).initCapacity(allocator, latin1.len);
-        return try allocateLatin1IntoUTF8WithList(list, 0, latin1);
+        var list = try std.array_list.Managed(u8).initCapacity(allocator, latin1.len);
+        _ = &list;
+        return (blk_catch_2: { break :blk_catch_2 ((allocateLatin1IntoUTF8WithList(list, 0, latin1)) catch |e| { _ = &e; _ = list.deinit();
+        return e; }); });
 }
 
 pub fn toUTF8FromLatin1Z(allocator: std.mem.Allocator, latin1: []const u8) !?ManagedU8List {
         if (isAllASCII(latin1)) {
             return null;
         }
-        const list = try std.array_list.Managed(u8).initCapacity(allocator, (latin1.len + 1));
-        var list1 = try allocateLatin1IntoUTF8WithList(list, 0, latin1);
+        var list = try std.array_list.Managed(u8).initCapacity(allocator, (latin1.len + 1));
+        _ = &list;
+        var list1 = (blk_catch_3: { break :blk_catch_3 ((allocateLatin1IntoUTF8WithList(list, 0, latin1)) catch |e| { _ = &e; _ = list.deinit();
+        return e; }); });
         _ = &list1;
         errdefer {
         _ = list1.deinit();
@@ -660,8 +666,10 @@ pub fn toUTF8ListWithTypeBun(list: *std.array_list.Managed(u8), utf16: []const u
 }
 
 pub fn allocateLatin1IntoUTF8(allocator: std.mem.Allocator, latin1_: []const u8) ![]u8 {
-        const list = try std.array_list.Managed(u8).initCapacity(allocator, latin1_.len);
-        var foo = try allocateLatin1IntoUTF8WithList(list, 0, latin1_);
+        var list = try std.array_list.Managed(u8).initCapacity(allocator, latin1_.len);
+        _ = &list;
+        var foo = (blk_catch_4: { break :blk_catch_4 ((allocateLatin1IntoUTF8WithList(list, 0, latin1_)) catch |e| { _ = &e; _ = list.deinit();
+        return e; }); });
         _ = &foo;
         errdefer {
         _ = foo.deinit();

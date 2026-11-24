@@ -1952,6 +1952,9 @@ pub fn range(self: *@This()) logger.Range {
 pub fn initJSON(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator) !LexerType {
             var lex = LexerType{ .log = log, .source = source.*, .temp_buffer_u16 = std.array_list.Managed(u16).init(allocator), .prev_error_loc = logger.Loc.Empty, .allocator = allocator, .comments_to_preserve_before = std.array_list.Managed(js_ast.G.Comment).init(allocator), .all_comments = std.array_list.Managed(logger.Range).init(allocator) };
             _ = &lex;
+            errdefer {
+            _ = lex.deinit();
+            }
             _ = lex.step();
             _ = try lex.next();
             return lex;
@@ -1964,6 +1967,9 @@ pub fn initWithoutReading(log: *logger.Log, source: *const logger.Source, alloca
 pub fn init(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator) !LexerType {
             var lex = initWithoutReading(log, source, allocator);
             _ = &lex;
+            errdefer {
+            _ = lex.deinit();
+            }
             _ = lex.step();
             _ = try lex.next();
             return lex;

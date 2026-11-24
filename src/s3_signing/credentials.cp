@@ -368,9 +368,11 @@ fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credent
     const content_hash = signOptions.content_hash;
     let content_md5 = signOptions.content_md5;
 
+    let content_md5_as_base64_guard = SliceFreeGuard{ slice: null, allocator: bun.default_allocator };
     if (content_md5_val := content_md5) {
         const len = bun.base64.encodeLen(content_md5_val);
         const content_md5_as_base64 = bun.handleOom(bun.default_allocator.alloc(u8, len));
+        content_md5_as_base64_guard.slice = content_md5_as_base64;
         content_md5 = content_md5_as_base64[0..bun.base64.encode(content_md5_as_base64, content_md5_val)];
     }
 

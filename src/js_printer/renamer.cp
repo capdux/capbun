@@ -158,9 +158,16 @@ pub struct MinifyRenamer {
         reserved_names: bun.StringHashMapUnmanaged(u32),
     ): !*MinifyRenamer! {
         const renamer = allocator.create(MinifyRenamer)?;
+        errdefer allocator.destroy(renamer);
         let slots = SymbolSlot.List.initUndefined();
 
         let ns: usize = 0;
+        errdefer {
+            let i: usize = 0;
+            while (i < ns) : (i += 1) {
+                slots.values[i].deinit();
+            }
+        }
         while (ns < first_top_level_slots.slots.values.len) : (ns += 1) {
             const count = first_top_level_slots.slots.values[ns];
             slots.values[ns] = std.array_list.Managed(SymbolSlot).initCapacity(allocator, count)?;

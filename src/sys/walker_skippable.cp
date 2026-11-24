@@ -173,6 +173,7 @@ struct StackItem {
         let stack_guard = DeinitGuard<std.array_list.Managed(StackItem)>{ val: std.array_list.Managed(StackItem).init(allocator) };
 
         let skip_names = allocator.alloc(u64, skip_filenames.len + skip_dirnames.len)?;
+        errdefer allocator.free(skip_names);
         const seed = skip_filenames.len + skip_dirnames.len;
         let skip_name_i: usize = 0;
 
