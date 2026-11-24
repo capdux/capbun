@@ -57,7 +57,8 @@ const ByteList = bun.ByteList;
 const SSLConfig = jsc.API.ServerConfig.SSLConfig;
 const ManagedByteList = std.array_list.Managed(u8);
 const U64IdentityContext = bun.IdentityContext(u64);
-const PreparedStatementsMap = std.HashMapUnmanaged(u64, *MySQLStatement, U64IdentityContext, 80);
+const _mysql_stmt_ptr_sample: *MySQLStatement = undefined;
+const PreparedStatementsMap = std.HashMapUnmanaged(u64, @TypeOf(_mysql_stmt_ptr_sample), U64IdentityContext, 80);
 pub const PreparedStatementsMapGetOrPutResult = PreparedStatementsMap.GetOrPutResult;
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const debug = bun.Output.scoped(.MySQLConnection, .visible);
@@ -121,7 +122,8 @@ export struct Reader {
 
     pub fn setOffsetFromStart(offset: usize)  {
         let conn = _.connection;
-        conn.@"#read_buffer".head = conn.@"#last_message_start" + @as(u32, @truncate(offset));
+        const clamped: u32 = @intCast(@min(offset, @as(usize, conn.@"#read_buffer".byte_list.len -| conn.@"#last_message_start")));
+        conn.@"#read_buffer".head = conn.@"#last_message_start" + clamped;
     }
 
     pub const ensureLength = ensureCapacity;
@@ -370,20 +372,22 @@ export struct Reader {
 
     pub fn upgradeToTLS(*_): FlushQueueError!void {
         if (_.@"#socket" == .SocketTCP) {
+            const secure = _.@"#secure" ?? return error.AuthenticationFailed;
             const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
             const tls_group = vm.rareData().mysqlGroup(vm, true);
+            const _js_mysql_conn_ptr_sample: *JSMySQLConnection = undefined;
             const new_socket_opt = _.@"#socket".SocketTCP.socket.connected.adoptTLS(
                 tls_group,
                 .mysql_tls,
-                _.@"#secure".?,
+                secure,
                 _.@"#tls_config".server_name,
-                @sizeOf(*JSMySQLConnection),
-                @sizeOf(*JSMySQLConnection),
+                @sizeOf(@TypeOf(_js_mysql_conn_ptr_sample)),
+                @sizeOf(@TypeOf(_js_mysql_conn_ptr_sample)),
             );
             if (new_socket_opt == null) return error.AuthenticationFailed;
             const new_socket = new_socket_opt.?;
             unsafe {
-                new_socket.ext(*JSMySQLConnection).* = _.getJSConnection();
+                new_socket.ext(@TypeOf(_js_mysql_conn_ptr_sample)).* = _.getJSConnection();
             }
             _.@"#socket" = Socket{ SocketTLS: { socket: { connected: new_socket } } };
             new_socket.startTLSHandshake();

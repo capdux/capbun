@@ -436,10 +436,15 @@ pub enum QueryStatus: u8 {
                     switch (stmt.status) {
                         .failed => {
                             _.statement = null;
-                            const error_response = stmt.error_response.?.toJS(globalObject)?;
+                            if (err_resp := stmt.error_response) {
+                                const error_response = err_resp.toJS(globalObject)?;
+                                stmt.deref();
+                                _.deref();
+                                return globalObject.throwValue(error_response);
+                            }
                             stmt.deref();
                             _.deref();
-                            return globalObject.throwValue(error_response);
+                            return globalObject.throw("Postgres statement failed", .{});
                         },
                         .prepared => {
                             if (!connection.hasQueryRunning() || connection.canPipeline()) {

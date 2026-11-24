@@ -1451,6 +1451,9 @@ pub fn applyCustomMatcher(globalThis: *JSGlobalObject, callFrame: *CallFrame) bu
             _ = &allocator;
             var matcher_args = try std.array_list.Managed(JSValue).initCapacity(allocator.get(), (args.len + 1));
             _ = &matcher_args;
+            defer {
+            _ = matcher_args.deinit();
+            }
             _ = matcher_args.appendAssumeCapacity(value);
             for (cp_iter_slice(args)) |arg| {
                 _ = &arg;

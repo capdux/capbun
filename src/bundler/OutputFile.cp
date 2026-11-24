@@ -66,7 +66,7 @@ pub struct FreeContext {
     allocator: std.mem.Allocator,
 
     @callconv("c")
-    fn onFree(ctx: *FreeContext, buffer: *!, len: u32) {
+    static fn onFree(ctx: *FreeContext, buffer: *!, len: u32) {
         unsafe {
             ctx.allocator.free(@as([*]u8, buffer)[0..len]);
         }
@@ -321,21 +321,15 @@ pub struct Options {
     }
 
     pub fn copyTo(*_, _: string, rel_path: []const u8, dir: FileDescriptorType)! {
-        const fd_out = bun.FD.fromStdFile(dir.stdDir().createFile(rel_path, {})?);
         let do_close = false;
-        const fd_in = bun.FD.fromStdFile(std.fs.cwd().openFile(_.src_path.text, { mode: .read_only })?);
-
         if (Environment.isWindows) {
             do_close = Fs.FileSystem.instance.fs.needToCloseFiles();
             @panic("TODO windows");
         }
-
-        defer {
-            if (do_close) {
-                fd_out.close();
-                fd_in.close();
-            }
-        }
+        const fd_out = bun.FD.fromStdFile(dir.stdDir().createFile(rel_path, {})?);
+        defer if (do_close) fd_out.close();
+        const fd_in = bun.FD.fromStdFile(std.fs.cwd().openFile(_.src_path.text, { mode: .read_only })?);
+        defer if (do_close) fd_in.close();
 
         bun.copyFile(fd_in, fd_out).unwrap()?;
     }

@@ -1393,6 +1393,7 @@ pub struct CommandLineReporter {
         const lcov_file = lcov_tuple[0];
         const lcov_name = lcov_tuple[1];
         let lcov_buffered_writer = lcov_tuple[2];
+        defer if (comptime reporters.lcov) bun.default_allocator.free(lcov_buffered_writer.new_interface.buffer);
         const lcov_writer = if (comptime reporters.lcov) &lcov_buffered_writer.new_interface;
         let _guard_lcov = LcovErrGuard<@TypeOf(lcov_file), @TypeOf(lcov_name)>{ armed: comptime reporters.lcov, file: lcov_file, name: lcov_name };
         // --- LCOV ---

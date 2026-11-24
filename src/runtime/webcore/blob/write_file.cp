@@ -576,7 +576,7 @@ export class WriteFileWindows {
         }
 
         _.uv_bufs[0].base = unsafe { @constCast(view.ptr) };
-        _.uv_bufs[0].len = @truncate(view.len);
+        _.uv_bufs[0].len = @intCast(@min(view.len, std.math.maxInt(u32)));
 
         uv.uv_fs_req_cleanup(&_.io_request);
         let rc = uv.uv_fs_write(uv_loop, &_.io_request, _.fd, &_.uv_bufs, 1, -1, &onWriteComplete);

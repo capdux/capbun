@@ -415,6 +415,7 @@ fn collectPackagesForAudit(allocator: std.mem.Allocator, pm: *PackageManager, pr
     }
 
     let body = MutableString.init(allocator, 1024)?;
+    defer body.deinit();
     body.appendChar('{') catch {};
 
     let pkg_i: usize = 0;

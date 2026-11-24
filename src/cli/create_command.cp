@@ -734,13 +734,14 @@ pub struct CreateCommand {
                 progress.refresh();
 
                 const abs_template_path = filesystem.abs(&template_parts);
-                const template_dir = std.fs.openDirAbsolute(abs_template_path, { iterate: true }) catch e => {
+                let template_dir = std.fs.openDirAbsolute(abs_template_path, { iterate: true }) catch e => {
                     node.end();
                     progress.refresh();
 
                     Output.prettyErrorln("<r><red>{s}<r>: opening dir {s}", .{ @errorName(e), template });
                     Global.exit(1);
                 };
+                errdefer template_dir.close();
 
                 std.fs.deleteTreeAbsolute(destination) catch {};
                 let destination_dir__ = std.fs.cwd().makeOpenPath(destination, .{}) catch e => {

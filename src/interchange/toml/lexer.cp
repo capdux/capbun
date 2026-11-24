@@ -761,6 +761,7 @@ pub @value class Lexer {
                     if (needs_slow_pass) {
                         const text = _.string_literal_slice;
                         let array_list = std.array_list.Managed(u8).initCapacity(_.allocator, text.len)?;
+                        errdefer array_list.deinit();
                         if (is_multiline_string_literal) {
                             _.decodeEscapeSequences(str_start, text, true, @TypeOf(array_list), &array_list)?;
                         } else {

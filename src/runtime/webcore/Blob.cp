@@ -2369,7 +2369,7 @@ pub struct BlobExternalSharedDescriptor {
                 const store_size = store.size();
                 if (store_size != Blob.max_size) {
                     _.offset = @min(store_size, offset);
-                    _.size = store_size - offset;
+                    _.size = store_size - _.offset;
                 }
                 return;
             } else if (store.data == .file) {

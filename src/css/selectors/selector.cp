@@ -792,6 +792,7 @@ pub struct serialize {
                     // PERF: should we put a scratch buffer in the printer
                     // Serialize as both an identifier && a string && choose the shorter one.
                     let id = std.Io.Writer.Allocating.init(dest.allocator);
+                    defer id.deinit();
                     const writer = &id.writer;
                     css.serializer.serializeIdentifier(v.value, writer) catch return dest.addFmtError();
 

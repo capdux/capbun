@@ -674,13 +674,18 @@ pub struct ShellAsyncSubprocessDone {
                             }
                         }
                     } else if (blob__ := _.base.interpreter.jsobjs[val.idx].as(jsc.WebCore.Blob)) {
-                        const blob = blob__.dupe();
+                        let blob = blob__.dupe();
+                        let blob_consumed = false;
+                        defer if (!blob_consumed) blob.deinit();
                         if (_.node.redirect.stdin) {
                             spawn_args.stdio[stdin_no].extractBlob(global, .{ .Blob = blob }, stdin_no)?;
+                            blob_consumed = spawn_args.stdio[stdin_no] == .blob;
                         } else if (_.node.redirect.stdout) {
                             spawn_args.stdio[stdout_no].extractBlob(global, .{ .Blob = blob }, stdout_no)?;
+                            blob_consumed = spawn_args.stdio[stdout_no] == .blob;
                         } else if (_.node.redirect.stderr) {
                             spawn_args.stdio[stderr_no].extractBlob(global, .{ .Blob = blob }, stderr_no)?;
+                            blob_consumed = spawn_args.stdio[stderr_no] == .blob;
                         }
                     } else if (rstream := (jsc.WebCore.ReadableStream.fromJS(_.base.interpreter.jsobjs[val.idx], global)?)) {
                         * = rstream;

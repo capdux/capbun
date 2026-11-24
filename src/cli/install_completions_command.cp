@@ -493,16 +493,17 @@ pub struct InstallCompletionsCommand {
                     break :brk true;
                 };
 
+                let dot_zshrc_guard = CloseGuard<std.fs.File>{ val: dot_zshrc };
                 // Sometimes, stat() lies to us and says the file is 0 bytes
                 // Let's not trust it and read the whole file
                 const input_size = @max(dot_zshrc.getEndPos() catch break :brk true, 64 * 1024);
 
-                let dot_zshrc_guard = CloseGuard<std.fs.File>{ val: dot_zshrc };
                 let buf = allocator.alloc(
                     u8,
                     input_size +
                         completions_path.len * 4 + 96,
                 ) catch break :brk true;
+                defer allocator.free(buf);
 
                 const read = dot_zshrc_guard.val.preadAll(
                     buf,

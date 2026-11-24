@@ -5849,6 +5849,18 @@ pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extr
 pub fn toCssWithWriter(self: @This(), allocator: Allocator, writer: *std.Io.Writer, options: css_printer.PrinterOptions, import_info: ?bun.css.ImportInfo, local_names: ?*const LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) PrintResult(ToCssResultInternal) {
             var printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
             _ = &printer;
+            defer {
+            _ = printer.scratchbuf.deinit();
+            }
+            defer {
+            _ = printer.indentation_buf.deinit();
+            }
+            errdefer {
+            if (printer.dependencies) |*deps| {
+                _ = &deps;
+                _ = (deps.*).deinit(printer.allocator);
+            }
+            }
             const result = (blk_catch_1: { break :blk_catch_1 ((self.toCssWithWriterImpl(allocator, (&printer), options)) catch |__ce_1| { _ = &__ce_1; _ = bun.assert((printer.error_kind != null));
             return .{ .err = printer.error_kind.? }; }); });
             return .{ .result = result };

@@ -507,7 +507,8 @@ export class UDPSocket {
         }
 
         const enabled = arguments[0].toBoolean();
-        const res = _.socket.?.setBroadcast(enabled);
+        const sock = _.socket ?? return globalThis.throwValue(bun.sys.Maybe(void).errnoSys(@as(i32, @intCast(@intFromEnum(std.posix.E.BADF))), .setsockopt).?.toJS(globalThis)?);
+        const res = sock.setBroadcast(enabled);
 
         if (err_val := getUSError(res, .setsockopt, true)) {
             return globalThis.throwValue(err_val.toJS(globalThis)?);
@@ -527,7 +528,8 @@ export class UDPSocket {
         }
 
         const enabled = arguments[0].toBoolean();
-        const res = _.socket.?.setMulticastLoopback(enabled);
+        const sock = _.socket ?? return globalThis.throwValue(bun.sys.Maybe(void).errnoSys(@as(i32, @intCast(@intFromEnum(std.posix.E.BADF))), .setsockopt).?.toJS(globalThis)?);
+        const res = sock.setMulticastLoopback(enabled);
 
         if (err_val := getUSError(res, .setsockopt, true)) {
             return globalThis.throwValue(err_val.toJS(globalThis)?);
@@ -919,26 +921,29 @@ export class UDPSocket {
 
     pub fn getPort(_: *JSGlobalObject): JSValue {
         if (_.closed) return .js_undefined;
-        return JSValue.jsNumber(_.socket.?.boundPort());
+        const sock = _.socket ?? return .js_undefined;
+        return JSValue.jsNumber(sock.boundPort());
     }
 
     pub fn getAddress(globalThis: *JSGlobalObject): JSValue {
         if (_.closed) return .js_undefined;
+        const sock = _.socket ?? return .js_undefined;
         let buf: [64]u8 = undefined;
         let length: i32 = 64;
-        _.socket.?.boundIp(&buf, &length);
+        sock.boundIp(&buf, &length);
 
         const address_bytes = buf[0..@as(usize, @intCast(length))];
-        const port = _.socket.?.boundPort();
+        const port = sock.boundPort();
         return createSockAddr(globalThis, address_bytes, @intCast(port));
     }
 
     pub fn getRemoteAddress(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
         if (_.closed) return .js_undefined;
+        const sock = _.socket ?? return .js_undefined;
         const connect_info = _.connect_info ?? return .js_undefined;
         let buf: [64]u8 = undefined;
         let length: i32 = 64;
-        _.socket.?.remoteIp(&buf, &length);
+        sock.remoteIp(&buf, &length);
 
         const address_bytes = buf[0..@as(usize, @intCast(length))];
         return createSockAddr(globalThis, address_bytes, connect_info.port);

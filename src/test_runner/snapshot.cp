@@ -170,7 +170,9 @@ pub struct Snapshots {
         )?;
 
         _.added += 1;
-        _.values.put(name_hash, _.allocator.dupe(u8, target_value)?)?;
+        const duped = _.allocator.dupe(u8, target_value)?;
+        errdefer _.allocator.free(duped);
+        _.values.put(name_hash, duped)?;
         return null;
     }
 

@@ -473,10 +473,14 @@ var template_parts: [1][]const u8 = .{ template };
             (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = "Copying files";
             _ = progress.refresh();
             const abs_template_path = filesystem.abs((&template_parts));
-            const template_dir = (blk_catch_10: { break :blk_catch_10 ((std.fs.openDirAbsolute(abs_template_path, .{ .iterate = true })) catch |e| { _ = &e; _ = node.end();
+            var template_dir = (blk_catch_10: { break :blk_catch_10 ((std.fs.openDirAbsolute(abs_template_path, .{ .iterate = true })) catch |e| { _ = &e; _ = node.end();
             _ = progress.refresh();
             _ = Output.prettyErrorln("<r><red>{s}<r>: opening dir {s}", .{ @errorName(e), template });
             break :blk_catch_10 Global.exit(1); }); });
+            _ = &template_dir;
+            errdefer {
+            _ = template_dir.close();
+            }
             _ = (blk_catch_11: { break :blk_catch_11 ((std.fs.deleteTreeAbsolute(destination)) catch |__ce_11| { _ = &__ce_11;  }); });
             var destination_dir__ = (blk_catch_12: { break :blk_catch_12 ((std.fs.cwd().makeOpenPath(destination, .{})) catch |e| { _ = &e; _ = node.end();
             _ = progress.refresh();

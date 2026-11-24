@@ -3314,6 +3314,9 @@ pub fn StyleSheet(comptime AtRule: type): type {
             symbols: *const bun.ast.Symbol.Map,
         ): PrintResult(ToCssResultInternal) {
             let printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
+            defer printer.scratchbuf.deinit();
+            defer printer.indentation_buf.deinit();
+            errdefer if (*deps := printer.dependencies) deps.deinit(printer.allocator);
             const result = _.toCssWithWriterImpl(allocator, &printer, options) catch {
                 bun.assert(printer.error_kind != null);
                 return .{

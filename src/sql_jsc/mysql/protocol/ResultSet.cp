@@ -66,7 +66,7 @@ export struct Row {
         if (c := cached_structure) {
             if (f := c.fields) {
                 names = f.ptr;
-                names_count = @truncate(f.len);
+                names_count = @intCast(f.len);
             }
         }
 
@@ -75,7 +75,7 @@ export struct Row {
             array,
             structure,
             _.values.ptr,
-            @truncate(_.values.len),
+            @intCast(_.values.len),
             flags,
             @intFromEnum(result_mode),
             names,

@@ -526,6 +526,9 @@ pub fn collectPackagesForAudit(allocator: std.mem.Allocator, pm: *PackageManager
         }
         var body = try MutableString.init(allocator, 1024);
         _ = &body;
+        defer {
+        _ = body.deinit();
+        }
         _ = (blk_catch_5: { break :blk_catch_5 ((body.appendChar(123)) catch |__ce_5| { _ = &__ce_5;  }); });
         var pkg_i: usize = 0;
         _ = &pkg_i;

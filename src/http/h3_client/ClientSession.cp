@@ -33,7 +33,7 @@ export @root struct ClientSession {
 
     ref_count: RefCount,
     qsocket: (*quic.Socket)? = null,
-    hostname: string,
+    hostname: [:0]const u8,
     port: u16,
     reject_unauthorized: bool,
     handshake_done: bool = false,
@@ -100,7 +100,8 @@ export @root struct ClientSession {
             if (!stream.request_body_done) qs.reset();
         }
         stream.qstream = null;
-        if (i := std.mem.indexOfScalar(*Stream, _.pending.items, stream)) {
+        const _stream_ptr_sample: *Stream = undefined;
+        if (i := std.mem.indexOfScalar(@TypeOf(_stream_ptr_sample), _.pending.items, stream)) {
             * = _.pending.orderedRemove(i);
         }
         stream.deinit();

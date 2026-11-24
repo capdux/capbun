@@ -248,11 +248,7 @@ enum IdentOrRefTag {
         if (_.isIdent()) {
             hasher.update(_.asIdent().?.v);
         } else {
-            unsafe {
-                const slice: [*]const u64 = @ptrCast(_);
-                const slice_u8: [*]align(8) const u8 = @ptrCast(@alignCast(slice));
-                hasher.update(slice_u8[0..2]);
-            }
+            hasher.update(std.mem.asBytes(_));
         }
     }
 

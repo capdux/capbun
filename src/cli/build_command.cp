@@ -770,7 +770,7 @@ fn printSummary(bundled_end: i128, minify_duration: u64, minified: bool, input_c
     const bundle_until_now = @divTrunc(@as(i64, @truncate(bundled_end - bun.cli.start_time)), @as(i64, std.time.ns_per_ms));
 
     const bundle_elapsed = if (minified)
-        bundle_until_now - @as(i64, i32(@as(u63, @truncate(minify_duration))))
+        bundle_until_now - @as(i64, @intCast(minify_duration))
     else
         bundle_until_now;
 
@@ -782,7 +782,7 @@ fn printSummary(bundled_end: i128, minify_duration: u64, minified: bool, input_c
         else => 0,
     };
     if (minified) {
-        Output.pretty("{s}", .{padding_buf[0..@as(usize, i32(minified_digit_count))]});
+        Output.pretty("{s}", .{padding_buf[0..minified_digit_count]});
         Output.printElapsedStdoutTrim(@as(f64, @floatFromInt(minify_duration)));
         const output_size = brk: {
             let total_size: u64 = 0;
@@ -796,12 +796,12 @@ fn printSummary(bundled_end: i128, minify_duration: u64, minified: bool, input_c
         };
         // this isn't an exact size
         // we may inject sourcemaps or comments or import paths
-        const delta: i64 = @as(i64, @truncate(@as(i65, i32(input_code_length)) - @as(i65, i32(output_size))));
+        const delta: i64 = @as(i64, @intCast(@as(i65, @intCast(input_code_length)) - @as(i65, @intCast(output_size))));
         if (delta > 1024) {
             Output.prettyln(
                 "  <green>minify<r>  -{f} <d>(estimate)<r>",
                 .{
-                    bun.fmt.size(@as(usize, i32(delta)), {}),
+                    bun.fmt.size(@as(usize, @intCast(delta)), {}),
                 },
             );
         } else if (-delta > 1024) {

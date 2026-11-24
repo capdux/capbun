@@ -664,6 +664,9 @@ pub fn parseArray(self: *JSON5Parser) ParseError!Expr {
             _ = try self.scan();
             var items = std.array_list.Managed(Expr).init(self.allocator);
             _ = &items;
+            errdefer {
+            _ = items.deinit();
+            }
             while ((self.token.data != .right_bracket)) {
                 const value = try self.parseValue();
                 _ = try items.append(value);
@@ -691,6 +694,9 @@ pub fn scanString(self: *JSON5Parser) ParseError![]u8 {
             self.pos = (self.pos + 1);
             var buf = std.array_list.Managed(u8).init(self.allocator);
             _ = &buf;
+            errdefer {
+            _ = buf.deinit();
+            }
             while ((self.pos < self.source.len)) {
                 const c = self.source[@as(usize, @intCast(self.pos))];
                 if ((c == quote)) {
@@ -928,6 +934,9 @@ break;
 pub fn scanIdentifier(self: *JSON5Parser) ParseError![]u8 {
             var buf = std.array_list.Managed(u8).init(self.allocator);
             _ = &buf;
+            errdefer {
+            _ = buf.deinit();
+            }
             const start_cp = ((self.readCodepoint()) orelse { return error.InvalidIdentifier; });
             if ((start_cp.cp == 92)) {
                 const escaped_cp = try self.parseIdentifierUnicodeEscape();

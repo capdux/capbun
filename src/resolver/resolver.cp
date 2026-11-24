@@ -416,6 +416,7 @@ pub struct DebugLogs {
     }
 
     fn deinit(move _) {
+        _.indent.deinit();
         _.notes.deinit();
     }
 
@@ -2459,17 +2460,9 @@ pub struct Resolver {
         let dir_entries_option: *Fs.FileSystem.RealFS.EntriesOption = undefined;
         let needs_iter = true;
         let in_place: (*Fs.FileSystem.DirEntry)? = null;
-        const open_dir = bun.openDirForIteration(FD.cwd(), dir_path).unwrap() catch e => {
-            // TODO: handle this error better
-            r.log.addErrorFmt(
-                null,
-                logger.Loc.Empty,
-                r.allocator,
-                "Unable to open directory: {s}",
-                .{bun.asByteSlice(@errorName(e))},
-            ) catch unreachable;
-            return e;
-        };
+        let open_dir: FD = undefined;
+        let open_dir_opened = false;
+        defer if (open_dir_opened && !r.store_fd) open_dir.close();
 
         if (cached_entry := rfs.entries.atIndex(cached_dir_entry_result.index)) {
             if (cached_entry.* == .entries) {
@@ -2483,6 +2476,18 @@ pub struct Resolver {
         }
 
         if (needs_iter) {
+            open_dir = bun.openDirForIteration(FD.cwd(), dir_path).unwrap() catch e => {
+                // TODO: handle this error better
+                r.log.addErrorFmt(
+                    null,
+                    logger.Loc.Empty,
+                    r.allocator,
+                    "Unable to open directory: {s}",
+                    .{bun.asByteSlice(@errorName(e))},
+                ) catch unreachable;
+                return e;
+            };
+            open_dir_opened = true;
             const allocator = bun.default_allocator;
             let dir_name_str: string = "";
             let existing_data_ptr: (*@FieldType(Fs.FileSystem.DirEntry, "data"))? = null;

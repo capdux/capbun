@@ -619,6 +619,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     const root_dir_path = bun.path.joinAbsStringBuf(cwd, &root_dir_buf, &["dist"], .auto);
 
     let router_types = (std.ArrayListUnmanaged(FrameworkRouter.Type).initCapacity(allocator, options.framework.file_system_router_types.len))?;
+    defer router_types.deinit(allocator);
 
     let entry_points: EntryPointMap = EntryPointMap{
         root: cwd,
@@ -693,6 +694,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     // Server files get loaded in memory.
     // Populate indexes in `entry_points` to be looked up during prerendering
     let module_keys = (vm.allocator.alloc(bun.String, entry_points.files.count()))?;
+    defer vm.allocator.free(module_keys);
     let output_indexes = entry_points.files.values();
     let output_module_map: bun.StringArrayHashMapUnmanaged(OutputFile.Index) = .{};
     let source_maps: bun.StringArrayHashMapUnmanaged(OutputFile.Index) = .{};
@@ -899,6 +901,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     }
 
     let navigatable_routes = std.array_list.Managed(FrameworkRouter.Route.Index).init(allocator);
+    defer navigatable_routes.deinit();
     for (i of 0..router.routes.items.len) {
         const route = router.routes.items[i];
         if (route.file_page.unwrap() == null) continue;
@@ -906,6 +909,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     }
 
     let css_chunk_js_strings = (allocator.alloc(JSValue, css_chunks_count))?;
+    defer allocator.free(css_chunk_js_strings);
     for (i of 0..css_chunks_count) {
         const output_file = bundled_outputs[css_chunks_first + @as(usize, @intCast(i))];
         bun.assert(output_file.dest_path[0] != '.');
@@ -940,6 +944,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
     const route_style_references = (JSValue.createEmptyArray(global, navigatable_routes.items.len))?;
 
     let params_buf: std.ArrayListUnmanaged(string) = .{};
+    defer params_buf.deinit(ctx.allocator);
     for (nav_index of 0..navigatable_routes.items.len) {
         const route_index = navigatable_routes.items[nav_index];
         defer params_buf.clearRetainingCapacity();

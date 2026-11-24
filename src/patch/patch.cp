@@ -1306,9 +1306,10 @@ pub fn gitDiffInternal(
     }
 
     debug("Before postprocess: {s}\n", [stdout.items]);
-    let stdout_managed = stdout.toManaged(allocator);
-    gitDiffPostprocess(&stdout_managed, old_folder, new_folder)?;
     stdout_guard.ptr = null;
+    let stdout_managed = stdout.toManaged(allocator);
+    errdefer stdout_managed.deinit();
+    gitDiffPostprocess(&stdout_managed, old_folder, new_folder)?;
     return { result: stdout_managed };
 }
 

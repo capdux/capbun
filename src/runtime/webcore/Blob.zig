@@ -1457,7 +1457,7 @@ pub fn resolveSize(self: *Blob) void {
                 const store_size = store.size();
                 if ((store_size != Blob.max_size)) {
                     self.offset = @min(store_size, offset);
-                    self.size = (store_size - offset);
+                    self.size = (store_size - self.offset);
                 }
                 return;
             } else {

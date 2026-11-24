@@ -521,6 +521,7 @@ pub struct JSON5Parser {
         _.scan()?; // advance past '['
 
         let items = std.array_list.Managed(Expr).init(_.allocator);
+        errdefer items.deinit();
 
         while (_.token.data != .right_bracket) {
             const value = _.parseValue()?;
@@ -547,6 +548,7 @@ pub struct JSON5Parser {
         _.pos += 1; // skip opening quote
 
         let buf = std.array_list.Managed(u8).init(_.allocator);
+        errdefer buf.deinit();
 
         while (_.pos < _.source.len) {
             const c = _.source[_.pos];
@@ -784,6 +786,7 @@ pub struct JSON5Parser {
 
     fn scanIdentifier(*_): ParseError![]u8 {
         let buf = std.array_list.Managed(u8).init(_.allocator);
+        errdefer buf.deinit();
 
         // First character must be IdentifierStart
         const start_cp = _.readCodepoint() ?? return error.InvalidIdentifier;

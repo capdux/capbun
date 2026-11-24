@@ -249,7 +249,11 @@ else => error.SnapshotFailed,
             _ = try self.file_buf.ensureUnusedCapacity((estimated_length + 10));
             _ = try self.file_buf.writer().print("\nexports[`{f}`] = `{f}`;\n", .{ strings.formatEscapes(name_with_counter, .{ .quote_char = 96 }), strings.formatEscapes(target_value, .{ .quote_char = 96 }) });
             self.added = (self.added + 1);
-            _ = try self.values.put(name_hash, try self.allocator.dupe(u8, target_value));
+            const duped = try self.allocator.dupe(u8, target_value);
+            errdefer {
+            _ = self.allocator.free(duped);
+            }
+            _ = try self.values.put(name_hash, duped);
             return null;
     }
 

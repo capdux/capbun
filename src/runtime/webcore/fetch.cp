@@ -947,6 +947,7 @@ fn fetchImpl(
             const opened_fd = switch (opened_fd_res) {
                 .@"err" e => {
                     const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e.toJS(globalThis) catch return JSValue.zero);
+                    body.detach();
                     return rejected_value;
                 },
                 .result fd => fd,
@@ -1010,9 +1011,7 @@ fn fetchImpl(
                 .sync,
             );
 
-            if (body.store().?.data.file.pathlike == .path) {
-                opened_fd.close();
-            }
+            opened_fd.close();
 
             switch (res) {
                 .@"err" e => {

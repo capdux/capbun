@@ -475,12 +475,12 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
         }
     }
 
-    if (!reached_end || array.items.len > std.math.maxInt(u32)) {
+    if (!reached_end || array.items.len > std.math.maxInt(u32) || array.capacity > std.math.maxInt(u32)) {
         @branchHint(.unlikely);
         return error.UnsupportedArrayFormat;
     }
     array_guard.ptr = null;
-    return SQLDataCell{ tag: .array, value: { array: { ptr: array.items.ptr, len: @truncate(array.items.len), cap: @truncate(array.capacity) } }, free_value: 1 };
+    return SQLDataCell{ tag: .array, value: { array: { ptr: array.items.ptr, len: @intCast(array.items.len), cap: @intCast(array.capacity) } }, free_value: 1 };
 }
 
 fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject): AnyPostgresError!SQLDataCell {
@@ -531,14 +531,17 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
         const PgArrType = tag.pgArrayType()?;
         const elements = PgArrType.init(bytes).slice();
 
+        if (elements.len > std.math.maxInt(u32) || bytes.len > std.math.maxInt(u32)) {
+            return error.InvalidBinaryData;
+        }
         return SQLDataCell{
             tag: .typed_array,
             value: {
                 typed_array: {
                     head_ptr: if (bytes.len > 0) unsafe { @constCast(bytes.ptr) } else null,
                     ptr: if (elements.len > 0) unsafe { @ptrCast(elements.ptr) } else null,
-                    len: @truncate(elements.len),
-                    byte_len: @truncate(bytes.len),
+                    len: @intCast(elements.len),
+                    byte_len: @intCast(bytes.len),
                     type: tag.toJSTypedArrayType() catch e => return @errorCast(e),
                 },
             },
@@ -889,7 +892,7 @@ export struct Putter {
         if (c := cached_structure) {
             if (f := c.fields) {
                 names = f.ptr;
-                names_count = @truncate(f.len);
+                names_count = @intCast(f.len);
             }
         }
 
@@ -898,7 +901,7 @@ export struct Putter {
             array,
             structure,
             _.list.ptr,
-            @truncate(_.fields.len),
+            @intCast(_.fields.len),
             flags,
             @intFromEnum(result_mode),
             names,

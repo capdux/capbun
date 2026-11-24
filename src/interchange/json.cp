@@ -583,6 +583,7 @@ pub fn toAST(
                 }
 
                 const exprs = allocator.alloc(Expr, value.len)?;
+                errdefer allocator.free(exprs);
                 let i: usize = 0;
                 for (*ex of exprs) {
                     ex.* = toAST(allocator, @TypeOf(value[i]), value[i])?;
@@ -599,6 +600,7 @@ pub fn toAST(
             }
 
             const exprs = allocator.alloc(Expr, value.len)?;
+            errdefer allocator.free(exprs);
             let i: usize = 0;
             for (*ex of exprs) {
                 ex.* = toAST(allocator, @TypeOf(value[i]), value[i])?;

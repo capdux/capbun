@@ -84,7 +84,7 @@ pub union(enum) Start {
         }
         if (chunkSize := value.get(globalThis, "chunkSize")?) {
             if (chunkSize.isNumber()) {
-                return .{ .chunk_size = @as(Blob.SizeType, @intCast(@as(i52, @truncate(chunkSize.toInt64())))) };
+                return .{ .chunk_size = @as(Blob.SizeType, @intCast(@max(0, @as(i52, @truncate(chunkSize.toInt64()))))) };
             }
         }
         return Start.empty;

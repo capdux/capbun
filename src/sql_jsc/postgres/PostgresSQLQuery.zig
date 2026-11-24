@@ -520,10 +520,16 @@ pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfra
                 switch (stmt.status) {
 .failed => {
 self.statement = null;
-                const error_response = try stmt.error_response.?.toJS(globalObject);
+                if (stmt.error_response) |err_resp| {
+                    _ = &err_resp;
+                    const error_response = try err_resp.toJS(globalObject);
+                    _ = stmt.deref();
+                    _ = self.deref();
+                    return globalObject.throwValue(error_response);
+                }
                 _ = stmt.deref();
                 _ = self.deref();
-                return globalObject.throwValue(error_response);
+                return globalObject.throw("Postgres statement failed", .{});
 },
 .prepared => {
 if (((!connection.hasQueryRunning()) or connection.canPipeline())) {

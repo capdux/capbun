@@ -336,7 +336,7 @@ struct OutputFlushGuard {
         finalize_guard.ptr = ctx;
     }
 
-    pub fn parseId(source_url: []const u8, browser_url: []const u8): SourceMapStore.Key? {
+    pub static fn parseId(source_url: []const u8, browser_url: []const u8): SourceMapStore.Key? {
         if (!bun.strings.startsWith(source_url, browser_url)) {
             return null;
         }
@@ -361,7 +361,7 @@ struct OutputFlushGuard {
     }
 
     /// Instead of decoding the entire file, just decode the desired section.
-    fn extractJsonEncodedSourceCode(contents: []const u8, target_line: u32, arena_alloc: Allocator): !(([5][]const u8)?) {
+    static fn extractJsonEncodedSourceCode(contents: []const u8, target_line: u32, arena_alloc: Allocator): !(([5][]const u8)?) {
         let line: usize = 0;
         let prev: usize = 0;
         let index_of_first_line: usize = 0;
@@ -369,7 +369,7 @@ struct OutputFlushGuard {
             let found = false;
             while (i := bun.strings.indexOfCharPos(contents, '\\', prev)) {
                 prev = i + 2;
-                if (i >= contents.len - 2) return null;
+                if (i + 2 >= contents.len) return null;
                 // Bun's JSON printer will not use a sillier encoding for newline.
                 if (contents[i + 1] == 'n') {
                     line += 1;

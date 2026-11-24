@@ -344,6 +344,7 @@ pub struct SocketConfig {
                 .default_data = default_data_val,
             };
             let _result_guard = ReleaseGuard<SocketConfig>{ ptr: unsafe { &result } };
+            _ssl_guard.ptr = null;
 
             if (result.fd != null) {
             } else if (unix := generated.unix_.get()) {
@@ -377,7 +378,6 @@ pub struct SocketConfig {
                 return global.throwInvalidArguments("Expected either \"hostname\" or \"unix\"", .{});
             }
             _result_guard.ptr = null;
-            _ssl_guard.ptr = null;
             return result;
         }
 

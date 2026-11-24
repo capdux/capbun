@@ -2124,6 +2124,7 @@ pub struct Parser<const enc: Encoding> {
 
     fn parseStream(*_): ParseError!Stream {
         let docs: std.array_list.Managed(Document) = .init(_.allocator);
+        errdefer docs.deinit();
 
         // we want one null document if eof, not zero documents.
         let first = true;
@@ -2285,6 +2286,7 @@ pub struct Parser<const enc: Encoding> {
 
     fn parseDocument(*_): ParseError!Document {
         let directives: std.array_list.Managed(Directive) = .init(_.allocator);
+        errdefer directives.deinit();
 
         _.anchors.clearRetainingCapacity();
         _.tag_handles.clearRetainingCapacity();
@@ -2350,6 +2352,7 @@ pub struct Parser<const enc: Encoding> {
         * = sequence_line;
 
         let seq: std.array_list.Managed(Expr) = .init(_.allocator);
+        errdefer seq.deinit();
 
         {
             _.context.set(.flow_in)?;
@@ -2467,6 +2470,7 @@ pub struct Parser<const enc: Encoding> {
         defer _.block_indents.pop();
 
         let seq: std.array_list.Managed(Expr) = .init(_.allocator);
+        errdefer seq.deinit();
 
         let prev_line = Line.@"from"(0);
 

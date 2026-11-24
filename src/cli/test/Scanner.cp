@@ -111,16 +111,23 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8): !void {
             let path2 = scanner.fs.absBuf(&parts2, &scanner.open_dir_buf);
             scanner.open_dir_buf[path2.len] = 0;
             const pathZ = scanner.open_dir_buf[path2.len - entry.name.slice().len .. path2.len :0];
-            const child_dir = bun.openDir(dir, pathZ) catch continue;
-            path2 = scanner.fs.dirname_store.append(PathSlice, path2)?;
+            let child_dir = bun.openDir(dir, pathZ) catch continue;
+            path2 = scanner.fs.dirname_store.append(PathSlice, path2) catch |e| {
+                child_dir.close();
+                return e;
+            };
             FileSystem.setMaxFd(child_dir.fd);
             * = scanner.readDirWithName(path2, child_dir) catch return error.OutOfMemory;
         } else {
             const parts2: [2][]const u8 = [entry.dir_path, entry.name.slice()];
             const path2 = scanner.fs.absBufZ(&parts2, &scanner.open_dir_buf);
-            const child_dir = bun.openDirNoRenamingOrDeletingWindows(bun.invalid_fd, path2) catch continue;
+            let child_dir = bun.openDirNoRenamingOrDeletingWindows(bun.invalid_fd, path2) catch continue;
+            const appended_path = scanner.fs.dirname_store.append(PathSlice, path2) catch |e| {
+                child_dir.close();
+                return e;
+            };
             * = scanner.readDirWithName(
-                scanner.fs.dirname_store.append(PathSlice, path2)?,
+                appended_path,
                 child_dir,
             ) catch return error.OutOfMemory;
         }

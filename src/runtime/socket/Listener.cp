@@ -851,14 +851,22 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         if (ssl != null) ssl.?.* else null,
                         ctx_for_pipe,
                         .{ .tls = tls },
-                    ) catch return promise_value,
+                    ) catch {
+                        tls.poll_ref.unref(handlers.vm);
+                        tls.deref();
+                        return promise_value;
+                    },
                     .fd => |fd| WindowsNamedPipeContext.open(
                         globalObject,
                         fd,
                         if (ssl != null) ssl.?.* else null,
                         ctx_for_pipe,
                         .{ .tls = tls },
-                    ) catch return promise_value,
+                    ) catch {
+                        tls.poll_ref.unref(handlers.vm);
+                        tls.deref();
+                        return promise_value;
+                    },
                     else => unreachable,
                 };
                 tls.socket = TLSSocket.Socket.fromNamedPipe(named_pipe);
@@ -903,14 +911,22 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         null,
                         null,
                         .{ .tcp = tcp },
-                    ) catch return promise_value,
+                    ) catch {
+                        tcp.poll_ref.unref(handlers.vm);
+                        tcp.deref();
+                        return promise_value;
+                    },
                     .fd => |fd| WindowsNamedPipeContext.open(
                         globalObject,
                         fd,
                         null,
                         null,
                         .{ .tcp = tcp },
-                    ) catch return promise_value,
+                    ) catch {
+                        tcp.poll_ref.unref(handlers.vm);
+                        tcp.deref();
+                        return promise_value;
+                    },
                     else => unreachable,
                 };
                 tcp.socket = TCPSocket.Socket.fromNamedPipe(named_pipe);
@@ -973,7 +989,8 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                 prev_sock.server_name = if (ssl != null) ssl.?.takeServerName() else null;
                 if (old := prev_sock.owned_ssl_ctx) BoringSSL.SSL_CTX_free(old);
                 prev_sock.owned_ssl_ctx = owned_ssl_ctx;
-                socket = bun.cast(*SocketType, prev_sock);
+                const _sock_ptr_sample: *SocketType = undefined;
+                socket = bun.cast(@TypeOf(_sock_ptr_sample), prev_sock);
             } else {
                 socket = bun.new(SocketType, .{
                     .ref_count = .init(),

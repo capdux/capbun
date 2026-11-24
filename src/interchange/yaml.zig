@@ -2089,6 +2089,9 @@ pub fn parse(self: *@This()) ParseError!Stream {
 pub fn parseStream(self: *@This()) ParseError!Stream {
                 var docs: std.array_list.Managed(Document) = .init(self.allocator);
                 _ = &docs;
+                errdefer {
+                _ = docs.deinit();
+                }
                 var first = true;
                 _ = &first;
                 while ((first or (self.token.data != .eof))) {
@@ -2218,6 +2221,9 @@ pub fn parseDirectiveTagPrefix(self: *@This()) ParseError!Directive.Tag.Prefix {
 pub fn parseDocument(self: *@This()) ParseError!Document {
                 var directives: std.array_list.Managed(Directive) = .init(self.allocator);
                 _ = &directives;
+                errdefer {
+                _ = directives.deinit();
+                }
                 _ = self.anchors.clearRetainingCapacity();
                 _ = self.tag_handles.clearRetainingCapacity();
                 var has_yaml_directive = false;
@@ -2275,6 +2281,9 @@ pub fn parseFlowSequence(self: *@This()) ParseError!Expr {
                 _ = &sequence_line;
                 var seq: std.array_list.Managed(Expr) = .init(self.allocator);
                 _ = &seq;
+                errdefer {
+                _ = seq.deinit();
+                }
                 {
                     _ = try self.context.set(.flow_in);
                     defer {
@@ -2378,6 +2387,9 @@ pub fn parseBlockSequence(self: *@This()) ParseError!Expr {
                 }
                 var seq: std.array_list.Managed(Expr) = .init(self.allocator);
                 _ = &seq;
+                errdefer {
+                _ = seq.deinit();
+                }
                 var prev_line = Line.@"from"(0);
                 _ = &prev_line;
                 while (((self.token.data == .sequence_entry) and (self.token.indent == sequence_indent))) {

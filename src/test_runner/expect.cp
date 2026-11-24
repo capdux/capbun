@@ -1419,6 +1419,7 @@ pub struct Expect {
         const args = callFrame.arguments();
         let allocator = std.heap.stackFallback(8 * @sizeOf(JSValue), globalThis.allocator());
         let matcher_args = std.array_list.Managed(JSValue).initCapacity(allocator.get(), args.len + 1)?;
+        defer matcher_args.deinit();
         matcher_args.appendAssumeCapacity(value);
         for (arg of args) matcher_args.appendAssumeCapacity(arg);
 

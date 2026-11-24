@@ -76,7 +76,12 @@ export struct Reader {
 
     pub fn skip(count: usize)  {
         let conn = _.connection;
-        conn.read_buffer.head = @min(conn.read_buffer.head + @as(u32, @truncate(count)), conn.read_buffer.byte_list.len);
+        const remaining = conn.read_buffer.byte_list.len -| conn.read_buffer.head;
+        if (count >= remaining) {
+            conn.read_buffer.head = conn.read_buffer.byte_list.len;
+        } else {
+            conn.read_buffer.head += @as(u32, @intCast(count));
+        }
     }
 
     pub fn ensureCapacity(count: usize): bool {
@@ -580,11 +585,16 @@ pub struct DataCellsGuard<P, C> {
 
     pub fn setupTLS(*_)  {
         debug("setupTLS", .{});
+        if (_.secure == null) {
+            _.fail("Missing TLS context", error.TLSUpgradeFailed);
+            return;
+        }
+        const secure = _.secure.?;
         const tls_group = _.vm.rareData().postgresGroup(_.vm, true);
         const new_socket_opt = _.socket.SocketTCP.socket.connected.adoptTLS(
             tls_group,
             .postgres_tls,
-            _.secure.?,
+            secure,
             _.tls_config.server_name,
             @sizeOf(*PostgresSQLConnection),
             @sizeOf(*PostgresSQLConnection),
@@ -1644,8 +1654,12 @@ pub struct DataCellsGuard<P, C> {
                 switch (request.flags.result_mode) {
                     .objects => {
                         cached_structure = statement.structure(_.js_value, _.globalObject);
-                        if (s := cached_structure.?.jsValue()) {
-                            structure = s;
+                        if (cs := cached_structure) {
+                            if (s := cs.jsValue()) {
+                                structure = s;
+                            } else {
+                                structure = .js_undefined;
+                            }
                         } else {
                             structure = .js_undefined;
                         }
