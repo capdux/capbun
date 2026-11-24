@@ -2046,8 +2046,8 @@ pub fn GenericSelectorList(comptime Impl: type) type {
         return struct {
     v: css.SmallList(SelectorT, 1) = .{},
 
-pub fn debug(self: @This()) SelectorListDebugFmt(This) {
-            return SelectorListDebugFmt(This){ .this = (&self) };
+pub fn debug(self: *const @This()) SelectorListDebugFmt(This) {
+            return SelectorListDebugFmt(This){ .this = self };
     }
 
 pub fn anyHasPseudoElement(self: @This()) bool {
@@ -2234,8 +2234,8 @@ pub fn GenericSelector(comptime Impl: type) type {
     specificity_and_flags: SpecificityAndFlags,
     components: ArrayList(GenericComponent(Impl)),
 
-pub fn debug(self: @This()) SelectorDebugFmt(This) {
-            return SelectorDebugFmt(This){ .this = (&self) };
+pub fn debug(self: *const @This()) SelectorDebugFmt(This) {
+            return SelectorDebugFmt(This){ .this = self };
     }
 
 pub fn parse(parser: *SelectorParser, input: *css.Parser) Result(This) {

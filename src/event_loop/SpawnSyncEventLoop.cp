@@ -90,7 +90,7 @@ pub enum TickState { timeout, completed }
         }
     }
 
-    fn handle(): jsc.EventLoopHandle {
+    fn handle(*_): jsc.EventLoopHandle {
         return jsc.EventLoopHandle.init(&_.event_loop);
     }
 

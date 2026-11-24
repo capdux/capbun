@@ -1530,8 +1530,8 @@ pub fn GenericSelectorList(comptime Impl: type): type {
 
         const This = @This();
 
-        pub fn debug(): SelectorListDebugFmt<This> {
-            return SelectorListDebugFmt<This>{ .this = &_ };
+        pub fn debug(_: *const This): SelectorListDebugFmt<This> {
+            return SelectorListDebugFmt<This>{ .this = _ };
         }
 
         pub fn anyHasPseudoElement(): bool {
@@ -1826,8 +1826,8 @@ pub fn GenericSelector(comptime Impl: type): type {
 
         const This = @This();
 
-        pub fn debug(): SelectorDebugFmt<This> {
-            return SelectorDebugFmt<This>{ .this = &_ };
+        pub fn debug(_: *const This): SelectorDebugFmt<This> {
+            return SelectorDebugFmt<This>{ .this = _ };
         }
 
         /// Parse a selector, without any pseudo-element.

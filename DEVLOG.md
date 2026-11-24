@@ -1821,3 +1821,5 @@
 - [Phase 2 第七批修复] 解决 2 项运行时缺陷：(1) 用已修复一元负号的 `cpc` 重编 `src/interchange/json5.cp`，`json5.zig:512` 恢复 `(-n)` 保留 `-0.0` 符号位；(2) `src/runtime/api/bun/Terminal.cp` `createPty` 补回 `bun.sys.updateNonblocking(..., true)` 与 `bun.sys.setCloseOnExec(...)`，根除 `/dev/ptmx` 处于阻塞模式时 `PipeReader` 二次排空读在内核永久阻塞导致 `Bun.Terminal` / `26286.test.ts` 卡死问题；`zig:check` 5/5 通过。
 
 - [Phase 2 第八批修复] 根治 `migrate-bun-lockb-v2.test.ts` 中 `SemverRange.zig:147` ASan `stack-buffer-overflow`：`SemverRange.cp` `Comparator.fmt`/`Range.fmt` 省略指针接收者导致按值传参返回 `&_` 栈帧悬垂指针；同步全仓 `rg` 扫描清理 `Chunk.cp:247` 同类隐患，全部改用 `_: *const ...` 接收者并返回 `_`，`zig:check` 5/5 通过。
+
+- [Phase 2 第九批修复] 全仓静态安全审计 1,295 个 `.cp` 文件后，消除最后 3 处值接收者方法内返回 `&_` 悬垂栈指针隐患：`src/css/selectors/parser.cp`（`SelectorList.debug`、`ComplexSelector.debug` 改为 `_: *const This` 返回 `_`）与 `src/event_loop/SpawnSyncEventLoop.cp`（`handle` 改为 `*_` 接收者）；`zig:check` 5/5 全绿通过。

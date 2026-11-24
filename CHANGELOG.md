@@ -2267,3 +2267,5 @@
 - [Phase 2 第七批修复] 修改 .cp/.zig：`src/interchange/json5.zig`（重编恢复 `-n` 保留 `-0.0` 符号位）、`src/runtime/api/bun/Terminal.{cp,zig}`（`createPty` 补全 `O_NONBLOCK` 与 `FD_CLOEXEC`，`zig:check` 5/5）。
 
 - [Phase 2 第八批修复] 修改 .cp/.zig：`src/semver/SemverRange.{cp,zig}`、`src/bundler/Chunk.{cp,zig}`（`fmt` 显式声明 `*const` 指针接收者根除悬垂栈指针，`zig:check` 5/5）。
+
+- [Phase 2 第九批修复] 修改 .cp/.zig：`src/css/selectors/parser.{cp,zig}`、`src/event_loop/SpawnSyncEventLoop.{cp,zig}`（消除全仓最后 3 处值接收者 `&_` 悬垂栈指针，`zig:check` 5/5）。

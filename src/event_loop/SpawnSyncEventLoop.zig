@@ -129,7 +129,7 @@ pub fn cleanup(self: *SpawnSyncEventLoop, vm: *jsc.VirtualMachine, prev_event_lo
         }
 }
 
-pub fn handle(self: SpawnSyncEventLoop) jsc.EventLoopHandle {
+pub fn handle(self: *SpawnSyncEventLoop) jsc.EventLoopHandle {
         return jsc.EventLoopHandle.init((&self.event_loop));
 }
 
