@@ -231,3 +231,5 @@
 | `test/js/bun/{cron,dns,udp,sqlite,md,json5,ini,cookie}/` (25 files) | release | 2086 | 1 | 35 skip | **2086/0 逻辑**（86580 expects，281.66s；唯一 1 fail 为 `ini.test.ts` 缺 `bun:internal-for-testing`） |
 
 | `test/{package-json-lint.test.ts,snippets,config}` & `test/v8/v8.test.ts` | release | 40 | 1 | 2 skip / 3 todo | `package-json-lint` **21/0**、`snippets` **1/0**、`config/bunfig/preload` **18/0**；`v8.test.ts` 仅宿主机 `node@26.1.0` 头文件移除 `WriteUtf8`（Bun 自身 `node@24.3.0` 编译成功） |
+
+| `test/js/node/zlib/` (7 files) & `bun/archive.test.ts` | release | 502 | 1 | 3 skip | **502/0 逻辑**（`zlib` 其余 4 文件 **14/0**、`archive` **100/0**、`leak.test.ts` 单跑 **8/0**） |
