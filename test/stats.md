@@ -247,3 +247,5 @@
 | 外部条件模拟复验 (`ls` 降权、`serve #7187` 降权、`ffi/addr32` `-fPIC` wrapper, `bun-debug`) | debug (`abb8c9b9`) | 28 | 1 | - | `ls` 权限拒绝 2 项 **PASS**、`serve #7187` **PASS**、`addr32.test.ts` **1/0 PASS**（验证全为外部权限/编译参数差异） |
 
 | `test/js/node/process:1152` & `node/module/` (6 files, `bun-debug`) | debug (`abb8c9b9`) | 61 | 0 | - | **61/0 全绿**（`process:1152` **1/0**、`node/module` **60/0**，21.91s，exit 0） |
+
+| `test/js/bun/{cron,dns,udp,sqlite}/` (11 files, `bun-debug`) | debug (`abb8c9b9`) | 486 | 0 | 35 skip | **486/0 全绿**（83726 expects，337.26s，exit 0） |
