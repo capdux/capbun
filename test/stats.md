@@ -127,3 +127,5 @@
 | `test/js/bun/css/` (5 files, `bun-debug`) | debug (最新 `08df2206`) | 2010 | 3 | 67 skip | **2010/0 逻辑**（`css.test.ts` **1032/0**、`doesnt_crash` **60/0**、`small-list-grow` **1/0**、`color` **916/0**；仅 `css-fuzz` 3 项 10s 压测与 `fuzz ansi256` 在 Debug 超时） |
 
 | `test/js/bun/http/proxy.test.ts` & `node/http/node-http-uaf.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 40 | 1 | - | `proxy.test.ts` **39/0** 全绿；`node-http-uaf` `fixture-2` 通过，`fixture-1` 在 Debug+ASan 下完成 6000 次请求无崩溃但达 60s 限时（Release 已 2/0） |
+
+| `test/js/{valkey,bun/yaml,bun/json5,bun/ini,bun/cookie,bun/cron}` & `cli/env/ci-info` (`bun-debug`) | debug (最新 `08df2206`) | 1324 | 1 | 1100 skip / 44 todo | **1324/0 逻辑**（3796 expects；`valkey`/`json5`/`ini`/`cookie`/`cron`/`ci-info` 全绿，唯一 1 fail 为 `YAML bombs` Debug 111ms > 100ms 限时） |
