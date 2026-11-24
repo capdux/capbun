@@ -1328,11 +1328,11 @@ pub fn getPrefix(selectors: *const SelectorList) css.VendorPrefix {
         var s_i: usize = 0;
         _ = &s_i;
         const sel_slice = selectors.v.slice();
-        while ((s_i < sel_slice.len)) {
+        while ((s_i < sel_slice.len)) : (s_i = (s_i + 1)) {
             const selector = (&sel_slice[@as(usize, @intCast(s_i))]);
             var c_i: usize = 0;
             _ = &c_i;
-            while ((c_i < selector.components.items.len)) {
+            while ((c_i < selector.components.items.len)) : (c_i = (c_i + 1)) {
                 const component: *const Component = (&selector.components.items[@as(usize, @intCast(c_i))]);
                 const p = (switch (component.*) {
 .non_ts_pseudo_class => |*pc| (switch (pc.*) {

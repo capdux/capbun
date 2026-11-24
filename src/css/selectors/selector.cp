@@ -252,10 +252,10 @@ pub fn getPrefix(selectors: *const SelectorList): css.VendorPrefix {
     let prefix = css.VendorPrefix{};
     let s_i: usize = 0;
     const sel_slice = selectors.v.slice();
-    while (s_i < sel_slice.len) {
+    while (s_i < sel_slice.len) : (s_i += 1) {
         const selector = &sel_slice[s_i];
         let c_i: usize = 0;
-        while (c_i < selector.components.items.len) {
+        while (c_i < selector.components.items.len) : (c_i += 1) {
             const component: *const Component = &selector.components.items[c_i];
             const p = switch (component.*) {
                 // Return none rather than empty for these so that we call downlevel_selectors.

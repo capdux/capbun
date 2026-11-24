@@ -915,3 +915,4 @@
 - [Phase 2 第十一批修复] 修复 `src/test_runner/snapshot.cp:545`（`appendSlice(" ")` 改为 `appendSlice("  ")` 修复多行 inline snapshot 缩进少 1 空格），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
 - [Phase 2 第十二批修复] 修复两处 `while + continue` 漏步进死循环：`src/css/selectors/selector.cp`（`isCompatible` 与前序循环改用 `: (s_i += 1)` / `: (c_i += 1)` 步进，消除 `21907.test.ts` 与 `bootstrap-4.css` 卡死）及全仓审计同步发现的 `src/runtime/dns_jsc/dns.cp:1396`（`entry.refcount != 0` 分支补全 `i += 1`），`zig:check` 5/5 通过并原子提交。
 - [Phase 2 第十三批修复] 修复 `src/css/generics.cp:150`（`implementHash` 对 `*const T` 误写为 `std.mem.asBytes(&val)` 哈希栈指针地址，改为 `std.mem.asBytes(val)` 修复 `FontFamily` 哈希与 `font > ui-sans-serif` 去重失效），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
+- [Phase 2 第十四批修复] 修复 `src/css/selectors/selector.cp:255,258`（`getPrefix` 外/内两层 `while` 循环补全 `: (s_i += 1)` 与 `: (c_i += 1)`，根除 CSS 压缩/前缀路径死循环；全仓 `deeb718b` 审计确认再无同类漏步进循环），`zig:check` 5/5 通过并原子提交。

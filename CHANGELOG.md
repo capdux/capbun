@@ -2277,3 +2277,5 @@
 - [Phase 2 第十二批修复] 修改 .cp/.zig：`src/css/selectors/selector.{cp,zig}`、`src/runtime/dns_jsc/dns.{cp,zig}`（修复 `while + continue` 漏步进死循环，`zig:check` 5/5）。
 
 - [Phase 2 第十三批修复] 修改 .cp/.zig：`src/css/generics.{cp,zig}`（`implementHash` `std.mem.asBytes(val)` 修复 `isSimpleEqlType` 哈希，`zig:check` 5/5）。
+
+- [Phase 2 第十四批修复] 修改 .cp/.zig：`src/css/selectors/selector.{cp,zig}`（`getPrefix` 补全 `: (s_i += 1)` 与 `: (c_i += 1)` 消除死循环，`zig:check` 5/5）。
