@@ -612,7 +612,7 @@ else => {
                             } else {
                                 _ = try re_indented_string.appendSlice(start_indent);
                                 if (needs_more_spaces) {
-                                    _ = try re_indented_string.appendSlice(" ");
+                                    _ = try re_indented_string.appendSlice("  ");
                                 }
                             }
                         }

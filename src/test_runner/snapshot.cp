@@ -542,7 +542,7 @@ pub struct Snapshots {
                         } else {
                             // regular line. indent.
                             re_indented_string.appendSlice(start_indent)?;
-                            if (needs_more_spaces) re_indented_string.appendSlice(" ")?;
+                            if (needs_more_spaces) re_indented_string.appendSlice("  ")?;
                         }
                         re_indented_string.appendSlice(segment)?;
                         re_indented_source = re_indented_source[next_newline..];

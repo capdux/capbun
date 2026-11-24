@@ -1825,3 +1825,5 @@
 - [Phase 2 第九批修复] 全仓静态安全审计 1,295 个 `.cp` 文件后，消除最后 3 处值接收者方法内返回 `&_` 悬垂栈指针隐患：`src/css/selectors/parser.cp`（`SelectorList.debug`、`ComplexSelector.debug` 改为 `_: *const This` 返回 `_`）与 `src/event_loop/SpawnSyncEventLoop.cp`（`handle` 改为 `*_` 接收者）；`zig:check` 5/5 全绿通过。
 
 - [Phase 2 第十批修复] 全仓 1,295 个 `.cp` 文件 RAII Guard 漏注入 `defer` 静态审计发现最后一处真实漏注：`src/interchange/json.cp` `DuplicateNodeGuard` 返回 `struct { ~init() }` 导致 `json.zig:480` 缺失 `defer __cp_deinit` 造成 `HashMapPool` 节点泄漏；改为 `defer releaseDuplicateNode` 后 `zig:check` 5/5 通过。
+
+- [Phase 2 第十一批修复] 修复 `test/js/bun/test/snapshot-tests/snapshots/snapshot.test.ts` 中 `inline snapshot update cases` 缩进少 1 空格缺陷：`src/test_runner/snapshot.cp:545` `appendSlice(" ")` 补全为 `appendSlice("  ")` 对齐 `snapshot_.zig:445`，`zig:check` 5/5 通过。

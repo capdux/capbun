@@ -2271,3 +2271,5 @@
 - [Phase 2 第九批修复] 修改 .cp/.zig：`src/css/selectors/parser.{cp,zig}`、`src/event_loop/SpawnSyncEventLoop.{cp,zig}`（消除全仓最后 3 处值接收者 `&_` 悬垂栈指针，`zig:check` 5/5）。
 
 - [Phase 2 第十批修复] 修改 .cp/.zig：`src/interchange/json.{cp,zig}`（`DuplicateNodeGuard` 改为 `defer releaseDuplicateNode` 消除 `HashMapPool` 泄漏，`zig:check` 5/5）。
+
+- [Phase 2 第十一批修复] 修改 .cp/.zig：`src/test_runner/snapshot.{cp,zig}`（`needs_more_spaces` 缩进补全 2 空格，`zig:check` 5/5）。

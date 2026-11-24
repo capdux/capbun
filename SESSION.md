@@ -912,3 +912,4 @@
 - [Phase 2 第八批修复] 修复 `src/semver/SemverRange.cp`（`Comparator.fmt`、`Range.fmt` 显式声明 `_: *const ...` 指针接收者并返回 `_`）及全仓 `rg` 排雷同步发现的 `src/bundler/Chunk.cp:247`（`ChunkCssImportOrder.fmt` 同类 `&_` 悬垂栈指针），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
 - [Phase 2 第九批修复] 根据全仓静态安全审计结果修复最后 3 处「值接收者方法内返回 `&_` 悬垂栈指针」隐患：`src/css/selectors/parser.cp:1533,1829`（`debug()` 显式声明 `_: *const This` 并返回 `_`）与 `src/event_loop/SpawnSyncEventLoop.cp:93`（`handle(*_)` 显式声明可变指针接收者），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
 - [Phase 2 第十批修复] 修复 `src/interchange/json.cp`（将返回 `struct { ~init() }` 的 `DuplicateNodeGuard` 改为显式 `defer releaseDuplicateNode(...)`，根除 `json.zig:480` 缺失 `defer __cp_deinit` 导致的 `HashMapPool` 节点泄漏），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
+- [Phase 2 第十一批修复] 修复 `src/test_runner/snapshot.cp:545`（`appendSlice(" ")` 改为 `appendSlice("  ")` 修复多行 inline snapshot 缩进少 1 空格），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
