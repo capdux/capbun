@@ -84,3 +84,7 @@
 | `test/js/bun/{dns,udp,websocket}/` (`--timeout=15000`) | debug | 337 | 45 | 3 todo | `dns` **76/0**、`udp` **209/0**、websocket 泄漏/GC 3 文件全绿；`websocket-server` 45 项超时排查中 |
 | `test/js/bun/websocket/websocket-server.test.ts` (`--max-concurrency=2`) & `stream/` | debug | 356 | 5 | 268 skip / 3 todo | `websocket-server` 升至 **87 pass / 0 逻辑 fail**（5 项硬编码超时）；`stream` **269/0** |
 | `test/js/bun/{sqlite,md,s3}/` (`--timeout=15000`) | debug | 1173 | 1 | 294 skip | `sqlite` **82/0**、`md` **1022/0**、`s3` **69/1**（`s3-stream-cancel-leak.test.ts:88` 收到 `30 <= 5` 排查中） |
+| `test/integration/` (17 files, `--timeout=15000`) | release | 20 | 5 | 1 todo | `esbuild`/`jsdom`/`nest`/`sass`/`sharp`/`svelte`/`typegraphql`/`vite-build` 全绿；5 fail 为 `install` 超时或缺失 Chrome |
+| `test/js/bun/{http,util}/` (`--max-concurrency=2`) | debug | 2820 | 48 | 29 skip / 4 todo | `http` 1074/14（2 非超时均环境/阈值原因）；`util` 1746/34（26 非超时源于 `fuzzy-wuzzy` 污染，单跑 `password`/`heap-snapshot` 等 **98/0**） |
+| `test/js/bun/s3/s3-stream-cancel-leak.test.ts` & `node/zlib/zlib.test.js` & 核心回归 16 文件 | debug (最新 `3898985e`) | 1844 | 1 | 2 skip | `s3-stream-cancel-leak` **1/0**（泄漏根除）；`zlib` **375/1**（0 panic，仅 brotli 15s 超时）；`dns`/`udp`/`brotli`/`text-decoder`/`sqlite`/`md` **1468/0** 全绿 |
+| `test/js/web/fetch/` (57 files) & `cli/{test,run}` & `node/{path,buffer,events,crypto,util,vm,child_process,dns,os,module,v8,async_hooks,stream,timers,assert}` | release | 14198 | 6 | 30 skip / 95 todo | `fetch` 10525/2；`cli/test` 200/0；`cli/run` 1037/4（缺 FUSE）；`node` 18+ 目录 **2416/0** 全绿 |
