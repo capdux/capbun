@@ -139,3 +139,5 @@
 | `test/js/bun/{repl,console,binary}/` (5 files) | release | 179 | 0 | 2 skip | **179/0 全绿**（45 snapshots，302 expects，5.80s） |
 
 | `test/js/{node/worker_threads,web/workers}/` (17 files) | release | 227 | 3 | 3 skip / 1 todo | **227/0 逻辑**（1350 expects；仅 `structuredClone-classes` 缺 `bun:internal-for-testing` 与 `worker.test.ts` 同跑时 `argv[1]` 差异，单跑已 23/0） |
+
+| `test/js/web/workers/{structuredClone-classes,worker}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 77 | 3 | 1 todo | `structuredClone-classes` **57/0** 全绿；`worker` **20/3**（仅 Debug 启动慢触发 500ms/1000ms 内部定时器，Release 已 23/0） |
