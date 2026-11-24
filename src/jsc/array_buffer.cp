@@ -290,7 +290,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
 
         const size = stat.size;
 
-        if (size == 0) {
+        if (size <= 0) {
             fd.close();
             return createBuffer(globalObject, "");
         }

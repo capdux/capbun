@@ -170,11 +170,13 @@ struct DeinitGuard<T> {
             api_exception.name = error_list.allocator.dupe(u8, _name)?;
             is_empty = false;
         }
+        errdefer if (n := api_exception.name) error_list.allocator.free(n);
 
         if (message.len > 0) {
             api_exception.message = error_list.allocator.dupe(u8, message)?;
             is_empty = false;
         }
+        errdefer if (m := api_exception.message) error_list.allocator.free(m);
 
         if (_.stack.frames_len > 0) {
             api_exception.stack = _.stack.toAPI(error_list.allocator, root_path, origin)?;

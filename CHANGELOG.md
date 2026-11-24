@@ -2343,3 +2343,5 @@
 - Phase 3 第二十一批：修复 `src/http/Headers.{cp,zig}` `Headers.clone()` 在 `buf.clone` OOM 时泄漏已克隆 `entries` 的问题。
 
 - Phase 3 第二十一批（续）：修复 `src/shell/interpreter.{cp,zig}` `initAndRunFromFile` 在 `readFileAlloc` 失败路径泄漏 `ShellArgs` 的问题。
+
+- Phase 3 第二十二批：加固 4 个 `src/jsc/` `.cp` 模块及其生成的 `.zig`（`src/jsc/{BuildMessage,ResolveMessage,ZigException,array_buffer}.{cp,zig}`）。

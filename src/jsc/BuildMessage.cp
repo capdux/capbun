@@ -64,6 +64,7 @@ pub struct BuildMessage {
         // resolve_result: *const Resolver.Result,
     ): bun.OOM!jsc.JSValue {
         let build_error = allocator.create(BuildMessage)?;
+        errdefer allocator.destroy(build_error);
         build_error.* = BuildMessage{
             msg: msg.clone(allocator)?,
             // .resolve_result = resolve_result.*,

@@ -184,8 +184,11 @@ pub struct ResolveMessage {
         referrer: string,
     ): bun.OOM!jsc.JSValue {
         let resolve_error = allocator.create(ResolveMessage)?;
+        errdefer allocator.destroy(resolve_error);
+        let cloned_msg = msg.clone(allocator)?;
+        errdefer cloned_msg.deinit(allocator);
         resolve_error.* = {
-            msg: msg.clone(allocator)?,
+            msg: cloned_msg,
             allocator: allocator,
             referrer: Fs.Path.init(allocator.dupe(u8, referrer)?),
             logged: false,

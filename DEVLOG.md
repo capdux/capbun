@@ -1904,3 +1904,5 @@
 - Phase 3 第二十一批安全性加固要点：`Headers.cp:29-35` `Headers.clone()` 将 `entries.clone` 与 `buf.clone` 拆分，并在 `buf.clone` 失败时释放 `entries`，消除 OOM 路径泄漏。
 
 - Phase 3 第二十一批（续）安全性加固要点：`interpreter.cp:1112-1114` 将 `DeinitGuard<ShellArgs>` 提前至 `readFileAlloc` 调用前，防止文件读取失败时泄漏 `ArenaAllocator`。
+
+- Phase 3 第二十二批安全性加固要点：`BuildMessage.cp`、`ResolveMessage.cp`、`ZigException.cp` 补齐结构体/克隆消息/字符串分配后的 `errdefer` 释放路径；`array_buffer.cp:293` `toJSBufferFromMemfd` 将 `size == 0` 收窄为 `size <= 0` 防止负数 `@intCast` 越界。
