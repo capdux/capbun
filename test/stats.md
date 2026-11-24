@@ -123,3 +123,5 @@
 | `test/js/bun/test/{*expect*,*snapshot*}` (18 files, `bun-debug`) | debug (最新 `08df2206`) | 558 | 2 | 1 skip / 10 todo | **558/0 逻辑**（22931 expects；仅 `deepEquals Set/Map` Debug 30s 超时与 `snapshot.test.ts:895` ANSI） |
 
 | `test/js/bun/shell/commands/` (13 files, `bun-debug`) | debug (最新 `08df2206`) | 123 | 2 | 30 skip | **123/0 逻辑**（20.11s；唯一 2 fail 为 root 身份下 `ls.test.ts` `permission denied directory` 仍可读） |
+
+| `test/js/bun/css/` (5 files, `bun-debug`) | debug (最新 `08df2206`) | 2010 | 3 | 67 skip | **2010/0 逻辑**（`css.test.ts` **1032/0**、`doesnt_crash` **60/0**、`small-list-grow` **1/0**、`color` **916/0**；仅 `css-fuzz` 3 项 10s 压测与 `fuzz ansi256` 在 Debug 超时） |
