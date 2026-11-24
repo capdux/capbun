@@ -173,16 +173,21 @@ export @root struct CompileTarget {
 
             // TODO: This is way too much code necessary to send a single HTTP request...
             let async_http = allocator.create(HTTP.AsyncHTTP)?;
+            defer allocator.destroy(async_http);
             let compressed_archive_bytes = allocator.create(MutableString)?;
+            defer allocator.destroy(compressed_archive_bytes);
             unsafe {
                 compressed_archive_bytes.* = MutableString.init(allocator, 24 * 1024 * 1024)?;
             }
+            const archive_guard = unsafe { DeinitWithAllocGuard<@TypeOf(compressed_archive_bytes.list)>{ ptr: &compressed_archive_bytes.list, allocator: allocator } };
+            * = archive_guard;
             let url_buffer: [2048]u8 = undefined;
             const url_str = _.toNPMRegistryURL(&url_buffer) catch err_val => {
                 // Return error without printing - let caller decide how to handle
                 return err_val;
             };
             const url_str_copy = bun.default_allocator.dupe(u8, url_str)?;
+            defer bun.default_allocator.free(url_str_copy);
             const url = bun.URL.parse(url_str_copy);
             {
                 const progress_guard = EndGuard<@TypeOf(refresher.start("Downloading", 0))>{ item: refresher.start("Downloading", 0) };
@@ -224,8 +229,6 @@ export @root struct CompileTarget {
             let tarball_bytes: std.ArrayListUnmanaged(u8) = std.ArrayListUnmanaged(u8).empty;
             {
                 refresher.refresh();
-                const archive_guard = unsafe { DeinitWithAllocGuard<@TypeOf(compressed_archive_bytes.list)>{ ptr: &compressed_archive_bytes.list, allocator: allocator } };
-                * = archive_guard;
 
                 if (compressed_archive_bytes.list.items.len == 0) {
                     // Return error without printing - let caller handle the messaging

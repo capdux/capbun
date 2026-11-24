@@ -1916,3 +1916,5 @@
 - Phase 3 第二十六批安全性加固要点：`renamer.cp:160` 补齐 `MinifyRenamer.init` 循环 OOM `errdefer`；`lexer.cp:2083,2104` 补齐 `errdefer lex.deinit()`；`Watcher.cp:213`、`walker_skippable.cp:176`、`unicode.cp`、`credentials.cp:371`、`npm_jsc.cp:115` 补齐 `errdefer`/`SliceFreeGuard`/`DeinitGuard` 释放；`immutable.cp:852` 与 `fmt.cp:1417` 补齐空切片长度守卫；同步向 `cp_agy` 提单 `task-bun-20261125-c-method-self` 修复 `struct` 内 `@c pub fn foo(*_)` 漏声明 `self` 缺陷。
 
 - Phase 3 第二十七批安全性加固要点：`websocket_client.cp:624,658` 消除无符号减法下溢并同 `WebSocketUpgradeClient.cp` 一起将 9 处 `@c pub fn` 转为显式 `@c pub static fn` 绕过 `cpc` `self` 漏绑定缺陷；`env_loader.cp` 补齐非抛错早退释放 `buf`；`valkey_protocol.cp` 补齐 `OptFreeGuard<u8>` 托管 `format`；`bun.js.cp` 补齐 cron 脚本 `errdefer`；`StandaloneModuleGraph.cp` 使用 `DeinitGuard` 托管 `input_result.bytes` 消除早退泄漏。至此全仓所有 `.cp` 目录均已完成 Phase 3 内存安全与资源生命周期专项审计。
+
+- Phase 3 第二十八批安全性加固要点：全仓 323 处 `allocator.create` 专项扫雷，修复 `CompileTarget.cp:175` `downloadToPath` 24MB 缓冲区与 `async_http`/`url_str_copy` 守卫提前、`upgrade_command.cp:208,483` 下载/检查路径释放、以及 `lockfile.cp:1293` `cleanWithLogger` `new_lf` 错误路径销毁与 `deinit`。

@@ -1291,10 +1291,12 @@ pub fn cleanWithLogger(
     }
 
     let new_lf: *Lockfile = old.allocator.create(Lockfile)?;
+    errdefer old.allocator.destroy(new_lf);
     initEmpty(
         new_lf,
         old.allocator,
     );
+    errdefer deinit(new_lf);
     new_lf.string_pool.ensureTotalCapacity(old.string_pool.capacity())?;
     new_lf.package_index.ensureTotalCapacity(old.package_index.capacity())?;
     new_lf.packages.ensureTotalCapacity(old.allocator, old.packages.len)?;

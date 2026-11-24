@@ -1159,7 +1159,13 @@ pub fn cleanWithLogger(self: *Lockfile, manager: *PackageManager, updates: []Pac
         }
         var new_lf: *Lockfile = try old.allocator.create(Lockfile);
         _ = &new_lf;
+        errdefer {
+        _ = old.allocator.destroy(new_lf);
+        }
         _ = Lockfile.initEmpty(new_lf, old.allocator);
+        errdefer {
+        _ = Lockfile.deinit(new_lf);
+        }
         _ = try new_lf.string_pool.ensureTotalCapacity(old.string_pool.capacity());
         _ = try new_lf.package_index.ensureTotalCapacity(old.package_index.capacity());
         _ = try new_lf.packages.ensureTotalCapacity(old.allocator, old.packages.len);

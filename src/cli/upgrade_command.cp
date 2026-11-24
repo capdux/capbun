@@ -206,9 +206,11 @@ pub struct UpgradeCommand {
         const http_proxy: URL? = env_loader.getHttpProxyFor(api_url);
 
         let metadata_body = MutableString.init(allocator, 2048)?;
+        errdefer if (comptime silent) metadata_body.deinit();
 
         // ensure very stable memory address
         let async_http: *HTTP.AsyncHTTP = allocator.create(HTTP.AsyncHTTP)?;
+        defer if (comptime silent) allocator.destroy(async_http);
         async_http.* = HTTP.AsyncHTTP.initSync(
             allocator,
             .GET,
@@ -481,8 +483,11 @@ pub struct UpgradeCommand {
             progress.unit = .bytes;
             refresher.refresh();
             let async_http = ctx.allocator.create(HTTP.AsyncHTTP)?;
+            errdefer ctx.allocator.destroy(async_http);
             let zip_file_buffer = ctx.allocator.create(MutableString)?;
+            errdefer ctx.allocator.destroy(zip_file_buffer);
             zip_file_buffer.* = MutableString.init(ctx.allocator, @max(version.size, 1024))?;
+            errdefer zip_file_buffer.deinit();
 
             async_http.* = HTTP.AsyncHTTP.initSync(
                 ctx.allocator,

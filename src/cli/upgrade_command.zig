@@ -250,8 +250,18 @@ pub fn getLatestVersion(allocator: std.mem.Allocator, env_loader: *DotEnv.Loader
             const http_proxy: ?URL = env_loader.getHttpProxyFor(api_url);
             var metadata_body = try MutableString.init(allocator, 2048);
             _ = &metadata_body;
+            errdefer {
+            if (comptime silent) {
+                _ = metadata_body.deinit();
+            }
+            }
             var async_http: *HTTP.AsyncHTTP = try allocator.create(HTTP.AsyncHTTP);
             _ = &async_http;
+            defer {
+            if (comptime silent) {
+                _ = allocator.destroy(async_http);
+            }
+            }
             async_http.* = HTTP.AsyncHTTP.initSync(allocator, .GET, api_url, header_entries, headers_buf, (&metadata_body), "", http_proxy, null, HTTP.FetchRedirect.follow);
             async_http.client.flags.reject_unauthorized = env_loader.getTLSRejectUnauthorized();
             if ((!silent)) {
@@ -492,9 +502,18 @@ pub fn _exec(ctx: Command.Context) !void {
                 _ = refresher.refresh();
                 var async_http = try ctx.allocator.create(HTTP.AsyncHTTP);
                 _ = &async_http;
+                errdefer {
+                _ = ctx.allocator.destroy(async_http);
+                }
                 var zip_file_buffer = try ctx.allocator.create(MutableString);
                 _ = &zip_file_buffer;
+                errdefer {
+                _ = ctx.allocator.destroy(zip_file_buffer);
+                }
                 zip_file_buffer.* = try MutableString.init(ctx.allocator, @max(version.size, 1024));
+                errdefer {
+                _ = zip_file_buffer.deinit();
+                }
                 async_http.* = HTTP.AsyncHTTP.initSync(ctx.allocator, .GET, zip_url, .{}, "", zip_file_buffer, "", http_proxy, null, HTTP.FetchRedirect.follow);
                 async_http.client.progress_node = progress;
                 async_http.client.flags.reject_unauthorized = env_loader.getTLSRejectUnauthorized();
