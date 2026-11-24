@@ -69,11 +69,10 @@ pub struct Linker {
         } else {
             file = std.fs.cwd().openFile(file_path.text, { mode: .read_only })?;
         }
+        defer if (fd == null) file.close();
         Fs.FileSystem.setMaxFd(file.handle);
         const modkey = Fs.FileSystem.RealFS.ModKey.generate(&_.fs.fs, file_path.text, file)?;
 
-        if (fd == null)
-            file.close();
         return modkey;
     }
 

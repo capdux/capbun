@@ -1871,3 +1871,5 @@
 - [Phase 3 第二批内存安全加固] 采纳 `10c3615a` 与 `c2271e18` 审计结果加固 5 个核心模块：(1) `napi.cp:601` 补全 `transferToJS` 异常分支 `str_val.deref()`；(2) `RuntimeTranspilerCache.cp:472` 补全 `_.sourcemap` 在后续读取/哈希失败时的 `errdefer` 释放；(3) `ZigStackTrace.cp:125` 与 `toml.cp:119` 补全 `errdefer`；(4) `StandaloneModuleGraph.cp:668-671,1485` 补全 `string_builder`/`modules` 释放与 `fromBytesAlloc` `errdefer destroy`；`cpc_brief.py` 与 `zig:check` 5/5 通过。
 
 - [Phase 3 第三批内存安全加固] 采纳 `938ae16e` 定位修复 `dns.cp`、`server.cp`、`multipart.cp` 共 6 处 `.ref()` 后在 `?` 路径缺失 `deref()` 的引用计数泄漏隐患，全部通过 `cpc_brief.py` 与 `zig:check` 5/5。
+
+- [Phase 3 第四批内存安全加固] 采纳 `7f0d477b` 与 `deb49709` 审计结果加固 5 个模块：(1) `DirectoryWatchStore.cp:108-120` 将 `UnlockGuard` 移至 `dev.graph_safety_lock.lock()` 紧后，彻底消除 `insertEmpty` OOM 早退导致永久死锁的风险；(2) `linker.cp:70-76` 与 `bundle_v2.cp:2163-2172` 补全 `fd` 异常/失败分支关闭；(3) `json5.cp:462` 与 `yaml.cp:3854,3959` 补全容器 `errdefer`；`cpc_brief.py` 与 `zig:check` 5/5 通过。

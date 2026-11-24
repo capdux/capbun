@@ -460,6 +460,7 @@ pub struct JSON5Parser {
         _.scan()?; // advance past '{'
 
         let properties = std.array_list.Managed(G.Property).init(_.allocator);
+        errdefer properties.deinit();
 
         while (_.token.data != .right_brace) {
             const key = _.parseObjectKey()?;

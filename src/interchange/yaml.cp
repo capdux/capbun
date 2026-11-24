@@ -3852,6 +3852,7 @@ pub struct Parser<const enc: Encoding> {
         const scalar_indent = _.line_indent;
 
         let text: std.array_list.Managed(enc.unit()) = .init(_.allocator);
+        errdefer text.deinit();
 
         let nl = false;
 
@@ -3956,6 +3957,7 @@ pub struct Parser<const enc: Encoding> {
         const scalar_line = _.line;
         const scalar_indent = _.line_indent;
         let text: std.array_list.Managed(enc.unit()) = .init(_.allocator);
+        errdefer text.deinit();
 
         let nl = false;
 

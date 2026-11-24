@@ -2160,7 +2160,7 @@ pub struct BundleV2 {
                     else
                         bun.invalid_fd;
 
-                    * = watcher.addFile(
+                    if (watcher.addFile(
                         fd,
                         load.path,
                         bun.Watcher.getHash(load.path),
@@ -2168,7 +2168,9 @@ pub struct BundleV2 {
                         bun.invalid_fd,
                         null,
                         true,
-                    );
+                    ).asErr() != null) {
+                        if (fd.isValid()) fd.close();
+                    }
                 }
             },
             .err => |msg| {

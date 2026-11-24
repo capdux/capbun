@@ -107,6 +107,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
         {
             const dev = _.owner();
             dev.graph_safety_lock.lock();
+            const _lock_guard = UnlockGuard{ dev: dev };
             owned_file_path = switch (renderer) {
                 .client => blk: {
                     const entry = dev.client_graph.insertEmpty(import_source, .unknown)?;
@@ -118,7 +119,6 @@ pub const empty_watch_dep: WatchDep = WatchDep{
                 },
             };
         }
-        const _lock_guard = UnlockGuard{ dev: unsafe { _.owner() } };
 
         _.insert(dir, owned_file_path, specifier) catch e => {
             if (e == error.OutOfMemory) return error.OutOfMemory;
