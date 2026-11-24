@@ -2315,3 +2315,5 @@
 - [Phase 3 第一批内存安全加固] 修改 18 对 `.cp`/`.zig`（`AsyncHTTP`, `TextDecoder`, `spawn`, `FormData`, `FetchTasklet`, `Blob`, `IndexStringMap`, `Buffers`, `processDependencyList`, `FrameworkRouter`, `PackageManager`, `tsconfig_json`, `fs`, `css/selectors/parser`, `AnyTaskWithExtraContext`, `source_map_mode_jsc`, `expect`, `PostgresSQLQuery`，消除匿名 Guard 漏析构、热路径 `SingleHTTPChannel`/CSS `toCss`/`matcher_args` 泄漏及 `?` 路径 `errdefer` 遗漏，`zig:check` 5/5）。
 
 - [Phase 3 第二批内存安全加固] 修改 5 对 `.cp`/`.zig`（`napi`, `RuntimeTranspilerCache`, `ZigStackTrace`, `toml`, `StandaloneModuleGraph`，修复 `napi_create_string_utf16`、`sourcemap`、`stack_frames`、`parseKey` 及 `StandaloneModuleGraph` 错误路径泄漏，`zig:check` 5/5）。
+
+- [Phase 3 第三批内存安全加固] 修改 3 对 `.cp`/`.zig`（`dns`, `server`, `multipart`，修复 `.ref()` 后在 OOM/异常路径漏 `deref()`，`zig:check` 5/5）。

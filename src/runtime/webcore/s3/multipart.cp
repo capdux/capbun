@@ -159,6 +159,7 @@ export struct UploadPart {
     pub fn start(*_): JSTerminatedError!void {
         if (_.state != .pending || _.ctx.state != .multipart_completed) return;
         _.ctx.ref();
+        errdefer _.ctx.deref();
         _.state = .started;
         _.perform()?;
     }
@@ -556,6 +557,7 @@ export class MultiPartUpload {
         if (_.state == .not_started) {
             _.state = .multipart_started;
             _.ref();
+            errdefer _.deref();
             executeSimpleS3Request(_.credentials, .{
                 .path = _.path,
                 .method = bun.http.Method.POST,

@@ -967,11 +967,10 @@ pub struct CAresReverse {
     name: string,
 
     pub static fn init(resolver: (*Resolver)?, globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, name: string): !*@This() {
+        let obj = allocator.create(@This())?;
         if (resolver_ := resolver) {
             resolver_.ref();
         }
-
-        let obj = allocator.create(@This())?;
         let poll_ref = Async.KeepAlive.init();
         poll_ref.ref(globalThis.bunVM());
         obj.* = .{
@@ -1122,9 +1121,8 @@ pub struct DNSLookup {
 
     pub static fn init(resolver: *Resolver, globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator): !*DNSLookup {
         log("init", .{});
-        resolver.ref();
-
         let obj = allocator.create(DNSLookup)?;
+        resolver.ref();
         let poll_ref = Async.KeepAlive.init();
         poll_ref.ref(globalThis.bunVM());
 

@@ -485,8 +485,8 @@ struct ServePlugins {
                 .pending => |*pending| {
                     switch (cb) {
                         .html_bundle_route => |route| {
-                            route.ref();
                             pending.html_bundle_routes.append(bun.default_allocator, route)?;
+                            route.ref();
                         },
                         .dev_server => |server| {
                             assert(pending.dev_server == null || pending.dev_server == server); // one dev server per server
@@ -552,6 +552,7 @@ struct ServePlugins {
                     // promise not fulfilled yet
                     .pending => {
                         _.ref();
+                        errdefer _.deref();
                         const promise_value = promise.asValue();
                         _.state.pending.promise.strong.set(global, promise_value);
                         promise_value.then(global, _, onResolveImpl, onRejectImpl)?;
