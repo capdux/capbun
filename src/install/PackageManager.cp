@@ -357,9 +357,13 @@ struct ConfigureEnvForScriptsOnce_ {
             } else brk: {
                 const current_path = client.env.get("PATH") ?? "";
                 let path_list = std.array_list.Managed(u8).initCapacity(bun.default_allocator, current_path.len)?;
+                errdefer path_list.deinit();
                 path_list.appendSlice(current_path)?;
                 let bun_path: string = "";
-                bun_path = RunCommand.createFakeTemporaryNodeExecutable(&path_list, bun_path) catch break :brk;
+                bun_path = RunCommand.createFakeTemporaryNodeExecutable(&path_list, bun_path) catch {
+                    path_list.deinit();
+                    break :brk;
+                };
                 client.env.map.put("PATH", path_list.items)?;
                 * = client.env.loadNodeJSConfig(this_transpiler.fs, bun.handleOom(bun.default_allocator.dupe(u8, bun_path)))?;
             }
@@ -505,6 +509,7 @@ struct EnsureTempNodeGypScriptOnce_ {
         // Add our node-gyp tempdir to the path
         const existing_path = manager.env.get("PATH") ?? "";
         let PATH = std.array_list.Managed(u8).initCapacity(bun.default_allocator, existing_path.len + 1 + tempdir.name.len + 1 + manager.node_gyp_tempdir_name.len)?;
+        errdefer PATH.deinit();
         PATH.appendSlice(existing_path)?;
         if (existing_path.len > 0 && existing_path[existing_path.len - 1] != std.fs.path.delimiter)
             PATH.append(std.fs.path.delimiter)?;

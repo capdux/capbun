@@ -78,6 +78,7 @@ pub struct BunSpawnActions {
 
     pub fn openZ(*_, fd: bun.FD, path: [*:0]const u8, flags: u32, mode: i32)! {
         const duped_path = bun.default_allocator.dupeZ(u8, bun.span(path))?;
+        errdefer bun.default_allocator.free(duped_path);
         _.actions.append(bun.default_allocator, {
             kind: .open,
             path: duped_path.ptr,

@@ -150,6 +150,7 @@ pub struct Buffered {
         comptime flush: bool,
     ): DecodeUTF16Result! {
         let output: ArrayListUnmanaged(u16) = .{};
+        errdefer output.deinit(default_allocator);
         output.ensureTotalCapacity(default_allocator, @divFloor(bytes.len, 2))?;
 
         let remain = bytes;

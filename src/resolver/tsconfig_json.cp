@@ -176,7 +176,6 @@ pub struct TSConfigJSON {
             if (base_url_prop := compiler_opts.expr.asProperty("baseUrl")) {
                 if (base_url := base_url_prop.expr.asString(allocator)) {
                     result.base_url = strReplacingTemplates(allocator, base_url, source) catch {
-                        paths_guard.disarm();
                         return null;
                     };
                     has_base_url = true;
@@ -307,8 +306,6 @@ pub struct TSConfigJSON {
                                         for (expr of array) {
                                             if (str_ := expr.asString(allocator)) {
                                                 const str = strReplacingTemplates(allocator, str_, source) catch {
-                                                    values_guard.disarm();
-                                                    paths_guard.disarm();
                                                     return null;
                                                 };
                                                 let str_guard = FreeConstSliceGuard<u8>{ allocator: allocator, slice: str };

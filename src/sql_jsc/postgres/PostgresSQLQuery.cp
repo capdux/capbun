@@ -277,6 +277,9 @@ pub enum QueryStatus: u8 {
             return globalThis.throwInvalidArgumentType("query", "pendingValue", "Array");
         }
 
+        const query_str = query.toBunString(globalThis)?;
+        errdefer query_str.deref();
+
         let ptr = bun.default_allocator.create(PostgresSQLQuery)?;
 
         const this_value = ptr.toJS(globalThis);
@@ -284,7 +287,7 @@ pub enum QueryStatus: u8 {
 
         unsafe {
             ptr.* = PostgresSQLQuery{
-                query: query.toBunString(globalThis)?,
+                query: query_str,
                 thisValue: JSRef.initWeak(this_value),
                 flags: QueryFlags{
                     bigint: bigint,

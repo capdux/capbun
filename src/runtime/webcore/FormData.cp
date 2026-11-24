@@ -56,6 +56,7 @@ pub struct _AsyncFormData {
 
     static fn init(allocator: Allocator, encoding: _Encoding): (*_AsyncFormData!)! {
         const inst = allocator.create(_AsyncFormData)?;
+        errdefer allocator.destroy(inst);
         inst.* = _AsyncFormData{
             encoding: switch (encoding) {
                 .Multipart => _Encoding{

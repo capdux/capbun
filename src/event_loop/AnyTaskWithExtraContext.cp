@@ -17,7 +17,7 @@ fn AutoDeinitWrapper(comptime Ptr: type, comptime fieldName: [:0]const u8): type
         static fn function(raw: *!, extra: *!) {
             unsafe {
                 const that: *@This() = @ptrCast(@alignCast(raw));
-                * = DestroyDefaultGuard<@This()>{ ptr: that };
+                defer bun.default_allocator.destroy(that);
                 const ctx = that.wrapped;
                 @field(Ptr, fieldName)(ctx, extra);
             }

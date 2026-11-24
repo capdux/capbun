@@ -409,6 +409,7 @@ export @root @value struct AsyncHTTP {
         HTTPThread.init(&_init_opts);
 
         let ctx = bun.default_allocator.create(SingleHTTPChannel)?;
+        defer bun.default_allocator.destroy(ctx);
         ctx.* = SingleHTTPChannel.init();
         _.result_callback = HTTPClientResult.Callback.New(
             *SingleHTTPChannel,

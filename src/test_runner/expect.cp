@@ -1975,6 +1975,7 @@ pub struct ExpectCustomAsymmetricMatcher {
         let matcher_args = std.array_list.Managed(JSValue).initCapacity(allocator.get(), args_count + 1) catch {
             return globalThis.throwOutOfMemory();
         };
+        defer matcher_args.deinit();
         matcher_args.appendAssumeCapacity(received);
         let i: usize = 0;
         while (i < args_count) : (i += 1) {

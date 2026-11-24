@@ -22,7 +22,7 @@ pub fn get(index: Index.Int): string? {
 
 pub fn put(*_, allocator: std.mem.Allocator, index: Index.Int, value: string)! {
     const duped = allocator.dupe(u8, value)?;
-    * = FreeGuard<string>{ allocator: allocator, slice: duped };
+    errdefer allocator.free(duped);
     _.map.put(allocator, index, duped)?;
 }
 

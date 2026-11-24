@@ -1668,12 +1668,13 @@ pub struct RealFS {
                 });
                 debug("stat({f}) = {d}", .{ file.handle, size });
 
-                let buf = allocator.alloc(u8, size + 1)?;
-                @memcpy(buf[0..initial_read.len], initial_read);
-
                 if (size == 0) {
                     return PathContentsPair{ .path = Path.init(path), .contents = "" };
                 }
+
+                let buf = allocator.alloc(u8, size + 1)?;
+                errdefer allocator.free(buf);
+                @memcpy(buf[0..initial_read.len], initial_read);
 
                 // stick a zero at the end
                 buf[size] = 0;

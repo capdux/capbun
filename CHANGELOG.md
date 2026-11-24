@@ -2311,3 +2311,5 @@
 - [Phase 2 第二十八批修复] 修改 .cp/.zig：`src/runtime/api/bun/subprocess.{cp,zig}`（`jsRef`/`jsUnref` 补全 `process` 事件循环保活控制与 `updateHasPendingActivity`，`zig:check` 5/5）。
 
 - [Phase 2 第二十九批修复] 修改 `src/js/node/child_process.ts`（`ChildProcess.ref/unref` 同步 `ref/unref` stdio 流）及 `test/stats.md`。
+
+- [Phase 3 第一批内存安全加固] 修改 18 对 `.cp`/`.zig`（`AsyncHTTP`, `TextDecoder`, `spawn`, `FormData`, `FetchTasklet`, `Blob`, `IndexStringMap`, `Buffers`, `processDependencyList`, `FrameworkRouter`, `PackageManager`, `tsconfig_json`, `fs`, `css/selectors/parser`, `AnyTaskWithExtraContext`, `source_map_mode_jsc`, `expect`, `PostgresSQLQuery`，消除匿名 Guard 漏析构、热路径 `SingleHTTPChannel`/CSS `toCss`/`matcher_args` 泄漏及 `?` 路径 `errdefer` 遗漏，`zig:check` 5/5）。

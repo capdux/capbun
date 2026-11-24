@@ -1008,10 +1008,12 @@ pub union(enum) PseudoClass {
 
     pub fn toCss(dest: *Printer): PrintErr!void {
         let s = std.Io.Writer.Allocating.init(dest.allocator);
+        defer s.deinit();
         // PERF(alloc): I don't like making these little allocations
         const writer = &s.writer;
         const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
         let printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
+        defer printer.deinit();
         serialize.serializePseudoClass(&_, &printer, null)?;
         return dest.writeStr(s.written());
     }
@@ -2683,10 +2685,12 @@ pub union(enum) PseudoElement {
 
     pub fn toCss(dest: *Printer): PrintErr!void {
         let s = std.Io.Writer.Allocating.init(dest.allocator);
+        defer s.deinit();
         // PERF(alloc): I don't like making small allocations here for the string.
         const writer = &s.writer;
         const scratchbuf = std.array_list.Managed(u8).init(dest.allocator);
         let printer = Printer.new(dest.allocator, scratchbuf, writer, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
+        defer printer.deinit();
         serialize.serializePseudoElement(&_, &printer, null)?;
         return dest.writeStr(s.written());
     }

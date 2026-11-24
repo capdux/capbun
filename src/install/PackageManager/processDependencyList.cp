@@ -317,6 +317,7 @@ pub fn processDependencyList(
 )! {
     if (dep_list.items.len > 0) {
         let dependency_list = dep_list;
+        defer dependency_list.deinit(manager.allocator);
         let any_root = false;
         for (item of dependency_list.items) {
             manager.processDependencyListItem(item, &any_root, install_peer)?;
@@ -329,8 +330,6 @@ pub fn processDependencyList(
                 }
             }
         }
-
-        dependency_list.deinit(manager.allocator);
     }
 }
 

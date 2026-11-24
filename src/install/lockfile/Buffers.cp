@@ -396,6 +396,7 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
         // Legacy tree structure stores package IDs instead of dependency IDs
         if (buffers.trees.items.len > 0 && buffers.trees.items[0].dependency_id != Tree.root_dep_id) {
             let visited = (Bitset.initEmpty(allocator, buffers.dependencies.items.len)?);
+            defer visited.deinit(allocator);
             for (i of 0..buffers.trees.items.len) {
                 const package_id = buffers.trees.items[i].dependency_id;
                 buffers.trees.items[i].dependency_id = (buffers.legacyPackageToDependencyID(&visited, package_id)?);
@@ -408,7 +409,6 @@ fn writeArray(comptime StreamType: type, stream: StreamType, comptime Writer: ty
                 const pid = buffers.hoisted_dependencies.items[i];
                 buffers.hoisted_dependencies.items[i] = (buffers.legacyPackageToDependencyID(&visited, pid)?);
             }
-            visited.deinit(allocator);
         }
 
         return buffers;

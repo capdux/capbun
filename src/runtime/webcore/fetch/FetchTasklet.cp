@@ -1124,6 +1124,7 @@ export class FetchTasklet {
     ): !*FetchTasklet {
         let jsc_vm = globalThis.bunVM();
         let fetch_tasklet = allocator.create(FetchTasklet)?;
+        errdefer allocator.destroy(fetch_tasklet);
 
         fetch_tasklet.* = .{
             .mutex = .{},

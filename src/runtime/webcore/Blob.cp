@@ -2509,6 +2509,7 @@ pub struct BlobExternalSharedDescriptor {
         const _guard_path = DeinitUnprotectGuard<jsc.Node.PathOrFileDescriptor>{ ptr: &path };
 
         let blob = Blob.findOrCreateFileFromPath(&path, globalObject, false);
+        errdefer if (blob.content_type_allocated) default_allocator.free(blob.content_type);
 
         if (opts := options) {
             if (opts.isObject()) {

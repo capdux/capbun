@@ -1022,9 +1022,10 @@ pub struct JSFrameworkRouter {
         const parsed = parsed_opt.?;
 
         let rendered = std.array_list.Managed(u8).initCapacity(alloc, filepath.slice().len)?;
+        defer rendered.deinit();
         for (part of parsed.parts) part.toStringForInternalUse(rendered.writer())?;
 
-        let out = bun.String.init(rendered.items);
+        let out = bun.String.cloneUTF8(rendered.items);
         const obj = JSValue.createEmptyObject(global, 2);
         obj.put(global, "kind", bun.String.static(@tagName(parsed.kind)).toJS(global)?);
         obj.put(global, "pattern", out.transferToJS(global)?);
