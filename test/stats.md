@@ -241,3 +241,5 @@
 | `fetch.tls.test.ts` (`NODE_EXTRA_CA_CERTS`) & `archive.test.ts` & `cli/init/init.test.ts` (`bun-debug`) | debug (最新 `abb8c9b9`) | 114 | 0 | 1 skip | **114/0 全绿**（`NODE_EXTRA_CA_CERTS` **4/0**、`archive`+`init` **110/0**，10559 expects，exit 0） |
 
 | `test/js/third_party/{astro,svelte,next-auth,http2-wrapper}` | release | 10 | 0 | - | **10/0 全绿**（`astro` 4/0、`svelte` 4/0、`next-auth` 1/0、`http2-wrapper` 1/0） |
+
+| `test/js/third_party/{jsonwebtoken,undici-h2,wpt-h2,socket.io,pg,pg-gateway,es-module-lexer,http2-wrapper,postgres}` | release | 547 | 0 | 172 skip / 16 todo | **547/0 全绿**（`jsonwebtoken` **499/0**、`undici-h2` **11/0**、`wpt-h2` **20/0**、`socket.io` **13/0**、其余 **4/0**） |
