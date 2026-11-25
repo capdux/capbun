@@ -893,13 +893,33 @@ pub fn finish(client: *TarballStream) void {
         _ = client.closeOutputFile();
         _ = network.response_buffer.deinit();
         _ = client.populateResult(task);
+        if (client.http_err) |http_err| {
+            _ = &http_err;
+            if ((task.status != .success)) {
+                if ((client.tmpname.len > 0)) {
+                    if (client.dest) |d| {
+                        _ = &d;
+                        _ = d.close();
+                        client.dest = null;
+                    }
+                    _ = (blk_catch_11: { break :blk_catch_11 ((task.request.extract.tarball.temp_dir.deleteTree(client.tmpname)) catch |__ce_11| { _ = &__ce_11;  }); });
+                }
+                network.response.fail = http_err;
+                network.streaming_committed = false;
+                network.tarball_stream = null;
+                _ = client.deinit();
+                _ = manager.async_network_task_queue.push(network);
+                _ = manager.wake();
+                return;
+            }
+        }
         if (((task.status != .success) and (client.tmpname.len > 0))) {
             if (client.dest) |d| {
                 _ = &d;
                 _ = d.close();
                 client.dest = null;
             }
-            _ = (blk_catch_11: { break :blk_catch_11 ((task.request.extract.tarball.temp_dir.deleteTree(client.tmpname)) catch |__ce_11| { _ = &__ce_11;  }); });
+            _ = (blk_catch_12: { break :blk_catch_12 ((task.request.extract.tarball.temp_dir.deleteTree(client.tmpname)) catch |__ce_12| { _ = &__ce_12;  }); });
         }
         _ = client.deinit();
         _ = manager.resolve_tasks.push(task);
@@ -927,13 +947,13 @@ pub fn populateResult(client: *TarballStream, task: *Task) void {
         if ((tarball.resolution.tag == .github)) {
             if ((client.resolved_github_dirname.len > 0)) {
                 _ = insert_tag: {
-                const gh_tag = (blk_catch_14: { break :blk_catch_14 ((bun.sys.openat(client.dest.?, ".bun-tag", ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), 420).unwrap()) catch |__ce_14| { _ = &__ce_14; break :insert_tag; }); });
+                const gh_tag = (blk_catch_15: { break :blk_catch_15 ((bun.sys.openat(client.dest.?, ".bun-tag", ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), 420).unwrap()) catch |__ce_15| { _ = &__ce_15; break :insert_tag; }); });
                 var _guard_gh_tag = CloseValGuard(@TypeOf(gh_tag)){ .val = gh_tag };
                 _ = &_guard_gh_tag;
                 var ___guard_gh_tag_moved = false; _ = &___guard_gh_tag_moved;
                 defer if (!___guard_gh_tag_moved) { ___guard_gh_tag_moved = true; const __T = @TypeOf(_guard_gh_tag); if (@typeInfo(__T) == .optional) { if (_guard_gh_tag) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_gh_tag.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_gh_tag; _drop_val.__cp_deinit(); } };
                 const gh_file = bun.sys.File{ .handle = gh_tag };
-                break :insert_tag (blk_catch_15: { break :blk_catch_15 ((gh_file.writeAll(client.resolved_github_dirname).unwrap()) catch |__ce_15| { _ = &__ce_15; _ = bun.sys.unlinkat(client.dest.?, ".bun-tag"); }); });
+                break :insert_tag (blk_catch_16: { break :blk_catch_16 ((gh_file.writeAll(client.resolved_github_dirname).unwrap()) catch |__ce_16| { _ = &__ce_16; _ = bun.sys.unlinkat(client.dest.?, ".bun-tag"); }); });
 
 };
             }
@@ -946,7 +966,7 @@ pub fn populateResult(client: *TarballStream, task: *Task) void {
         const nb_pair = tarball.nameAndBasename();
         const name = nb_pair[0];
         const basename = nb_pair[1];
-        var result = (blk_catch_16: { break :blk_catch_16 ((tarball.moveToCacheDirectory((&task.log), client.tmpname, name, basename, client.resolved_github_dirname)) catch |e| { _ = &e; task.err = e;
+        var result = (blk_catch_17: { break :blk_catch_17 ((tarball.moveToCacheDirectory((&task.log), client.tmpname, name, basename, client.resolved_github_dirname)) catch |e| { _ = &e; task.err = e;
         task.status = .fail;
         return; }); });
         _ = &result;

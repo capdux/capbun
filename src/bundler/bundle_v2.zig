@@ -1842,23 +1842,39 @@ var out_source_index: ?Index = null;
                     _ = mut_res.deinit();
                 }
             } else {
-                var mut_res = result;
-                _ = &mut_res;
-                _ = mut_res.deinit();
+                if ((resolve.import_record.kind == .entry_point_build)) {
+                    const log = bundle.logForResolutionFailures(resolve.import_record.source_file, resolve.import_record.original_target.bakeGraph());
+                    _ = (blk_catch_42: { break :blk_catch_42 ((log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "The entry point {f} cannot be marked as external", .{ bun.fmt.quote(resolve.import_record.specifier) })) catch |__ce_42| { _ = &__ce_42;  }); });
+                    var mut_res = result;
+                    _ = &mut_res;
+                    _ = mut_res.deinit();
+                } else {
+                    var path = Fs.Path.init(result.path);
+                    _ = &path;
+                    if (((result.namespace.len == 0) or strings.eqlComptime(result.namespace, "file"))) {
+                        path.namespace = "file";
+                    } else {
+                        path.namespace = result.namespace;
+                    }
+                    const free_items: [2][]const u8 = .{ result.namespace, result.path };
+                    _ = (blk_catch_43: { break :blk_catch_43 ((bundle.free_list.appendSlice((&free_items))) catch |__ce_43| { _ = &__ce_43;  }); });
+                    const import_record: *ImportRecord = (&bundle.graph.ast.items(.import_records)[@as(usize, @intCast(resolve.import_record.importer_source_index))].slice()[@as(usize, @intCast(resolve.import_record.import_record_index))]);
+                    import_record.path = path;
+                }
             }
             if (out_source_index) |source_index| {
                 _ = &source_index;
                 if ((resolve.import_record.kind == .entry_point_build)) {
-                    _ = (blk_catch_42: { break :blk_catch_42 ((bundle.graph.entry_points.append(bundle.allocator(), source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_42 bun.handleOom(oom_err); }); });
-                    _ = (blk_catch_43: { break :blk_catch_43 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_43 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_44: { break :blk_catch_44 ((bundle.graph.entry_points.append(bundle.allocator(), source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_44 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_45: { break :blk_catch_45 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_45 bun.handleOom(oom_err); }); });
                 } else {
                     const source_import_records = (&bundle.graph.ast.items(.import_records)[@as(usize, @intCast(resolve.import_record.importer_source_index))]);
                     if ((source_import_records.len <= resolve.import_record.import_record_index)) {
-                        const entry = (blk_catch_44: { break :blk_catch_44 ((bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(bundle.allocator(), resolve.import_record.importer_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_44 bun.handleOom(oom_err); }); });
+                        const entry = (blk_catch_46: { break :blk_catch_46 ((bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(bundle.allocator(), resolve.import_record.importer_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_46 bun.handleOom(oom_err); }); });
                         if ((!entry.found_existing)) {
                             entry.value_ptr.* = .{};
                         }
-                        _ = (blk_catch_45: { break :blk_catch_45 ((entry.value_ptr.append(bundle.allocator(), .{ .to_source_index = source_index, .import_record_index = resolve.import_record.import_record_index })) catch |oom_err| { _ = &oom_err; break :blk_catch_45 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_47: { break :blk_catch_47 ((entry.value_ptr.append(bundle.allocator(), .{ .to_source_index = source_index, .import_record_index = resolve.import_record.import_record_index })) catch |oom_err| { _ = &oom_err; break :blk_catch_47 bun.handleOom(oom_err); }); });
                     } else {
                         const import_record: *ImportRecord = (&source_import_records.slice()[@as(usize, @intCast(resolve.import_record.import_record_index))]);
                         import_record.source_index = source_index;
@@ -1970,6 +1986,10 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
             if ((self.transpiler.log.errors > 0)) {
                 return error.BuildFailed;
             }
+            if ((self.graph.entry_points.items.len == 0)) {
+                _ = (blk_catch_49: { break :blk_catch_49 ((self.transpiler.log.addError(null, Logger.Loc.Empty, "None of the entry points could be bundled")) catch |__ce_49| { _ = &__ce_49;  }); });
+                return error.BuildFailed;
+            }
             _ = self.scanForSecondaryPaths();
             _ = try self.processServerComponentManifestFiles();
             _ = self.graph.heap.helpCatchMemoryIssues();
@@ -1984,11 +2004,11 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
             }
             var output_files = try self.linker.generateChunksInParallel(chunks, false);
             _ = &output_files;
-            const metafile: ?[]const u8 = (if (self.linker.options.metafile) (blk_catch_47: { break :blk_catch_47 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&self.linker), chunks)) catch |e| { _ = &e; break :blk_catch_47 blk: {
+            const metafile: ?[]const u8 = (if (self.linker.options.metafile) (blk_catch_50: { break :blk_catch_50 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&self.linker), chunks)) catch |e| { _ = &e; break :blk_catch_50 blk: {
             _ = bun.Output.warn("Failed to generate metafile: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
-            const metafile_markdown: ?[]const u8 = (if (((self.linker.options.metafile_markdown_path.len > 0) and (metafile != null))) (blk_catch_48: { break :blk_catch_48 ((LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?)) catch |e| { _ = &e; break :blk_catch_48 blk: {
+            const metafile_markdown: ?[]const u8 = (if (((self.linker.options.metafile_markdown_path.len > 0) and (metafile != null))) (blk_catch_51: { break :blk_catch_51 ((LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?)) catch |e| { _ = &e; break :blk_catch_51 blk: {
             _ = bun.Output.warn("Failed to generate metafile markdown: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
@@ -2010,7 +2030,7 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
 
 pub fn writeMetafileOutput(output_files: *std.array_list.Managed(options.OutputFile), outdir: []const u8, file_path: []const u8, content: []const u8, output_kind: jsc.API.BuildArtifact.OutputKind) !void {
             if ((outdir.len > 0)) {
-                var root_dir = (blk_catch_49: { break :blk_catch_49 ((bun.FD.cwd().stdDir().makeOpenPath(outdir, .{})) catch |e| { _ = &e; _ = bun.Output.warn("Failed to open output directory '{s}': {s}", .{ outdir, @errorName(e) });
+                var root_dir = (blk_catch_52: { break :blk_catch_52 ((bun.FD.cwd().stdDir().makeOpenPath(outdir, .{})) catch |e| { _ = &e; _ = bun.Output.warn("Failed to open output directory '{s}': {s}", .{ outdir, @errorName(e) });
                 return; }); });
                 _ = &root_dir;
                 var _guard_root_dir = CloseGuard(@TypeOf(root_dir)){ .ptr = (blk: {
@@ -2023,15 +2043,15 @@ pub fn writeMetafileOutput(output_files: *std.array_list.Managed(options.OutputF
                 if (std.fs.path.dirname(file_path)) |parent| {
                     _ = &parent;
                     if ((parent.len > 0)) {
-                        _ = (blk_catch_50: { break :blk_catch_50 ((root_dir.makePath(parent)) catch |__ce_50| { _ = &__ce_50;  }); });
+                        _ = (blk_catch_53: { break :blk_catch_53 ((root_dir.makePath(parent)) catch |__ce_53| { _ = &__ce_53;  }); });
                     }
                 }
                 var path_buf: bun.PathBuffer = undefined;
                 _ = &path_buf;
-                _ = (blk_catch_51: { break :blk_catch_51 ((jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
+                _ = (blk_catch_54: { break :blk_catch_54 ((jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
                 break :blk @constCast(content.ptr);
 
-}), .len = @as(u32, @truncate(content.len)), .byte_len = @as(u32, @truncate(content.len)) } } }, .encoding = .buffer, .mode = 420, .dirfd = bun.FD.fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(file_path) } } }).unwrap()) catch |e| { _ = &e; break :blk_catch_51 bun.Output.warn("Failed to write metafile to '{s}': {s}", .{ file_path, @errorName(e) }); }); });
+}), .len = @as(u32, @truncate(content.len)), .byte_len = @as(u32, @truncate(content.len)) } } }, .encoding = .buffer, .mode = 420, .dirfd = bun.FD.fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(file_path) } } }).unwrap()) catch |e| { _ = &e; break :blk_catch_54 bun.Output.warn("Failed to write metafile to '{s}': {s}", .{ file_path, @errorName(e) }); }); });
             }
             const is_json = (output_kind == .@"metafile-json");
             _ = try output_files.append(options.OutputFile.init(.{ .loader = (if (is_json) .json else .file), .input_loader = (if (is_json) .json else .file), .input_path = bun.handleOom(bun.default_allocator.dupe(u8, (if (is_json) "metafile.json" else "metafile.md"))), .output_path = bun.handleOom(bun.default_allocator.dupe(u8, file_path)), .data = .{ .saved = content.len }, .output_kind = output_kind, .is_executable = false, .side = null, .entry_point_index = null }));
@@ -2256,12 +2276,12 @@ pub fn enqueueOnLoadPluginIfNeeded(self: *BundleV2, parse: *ParseTask) bool {
                 return true;
             }
             if (bun.strings.eqlComptime(parse.path.namespace, "dataurl")) {
-                const maybe_data_url = (blk_catch_54: { break :blk_catch_54 ((DataURL.parse(parse.path.text)) catch |__ce_54| { _ = &__ce_54; return false; }); });
+                const maybe_data_url = (blk_catch_57: { break :blk_catch_57 ((DataURL.parse(parse.path.text)) catch |__ce_57| { _ = &__ce_57; return false; }); });
                 if ((maybe_data_url == null)) {
                     return false;
                 }
                 const data_url = maybe_data_url.?;
-                const maybe_decoded = (blk_catch_55: { break :blk_catch_55 ((data_url.decodeData(bun.default_allocator)) catch |__ce_55| { _ = &__ce_55; return false; }); });
+                const maybe_decoded = (blk_catch_58: { break :blk_catch_58 ((data_url.decodeData(bun.default_allocator)) catch |__ce_58| { _ = &__ce_58; return false; }); });
                 _ = bun.handleOom(self.free_list.append(maybe_decoded));
                 parse.contents_or_fd = .{ .contents = maybe_decoded };
                 parse.loader = (switch (data_url.decodeMimeType().category) {
@@ -2437,12 +2457,12 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &target;
                 if (((import_record.*).tag == .bake_resolve_to_ssr_graph)) {
                     if ((self.framework == null)) {
-                        _ = (blk_catch_56: { break :blk_catch_56 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_56| { _ = &__ce_56; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_59: { break :blk_catch_59 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_59| { _ = &__ce_59; @panic("unexpected log error"); }); });
                         continue;
                     }
                     const is_supported = ((self.framework.?.server_components != null) and self.framework.?.server_components.?.separate_ssr_graph);
                     if ((!is_supported)) {
-                        _ = (blk_catch_57: { break :blk_catch_57 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_57| { _ = &__ce_57; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_60: { break :blk_catch_60 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_60| { _ = &__ce_60; @panic("unexpected log error"); }); });
                         continue;
                     }
                     transpiler = (blk: {
@@ -2474,7 +2494,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             (import_record.*).source_index = .init(id);
                             continue;
                         }
-                        const resolve_entry = (blk_catch_58: { break :blk_catch_58 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_58 bun.handleOom(oom_err); }); });
+                        const resolve_entry = (blk_catch_61: { break :blk_catch_61 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
                         if (resolve_entry.found_existing) {
                             (import_record.*).path = resolve_entry.value_ptr.*.path;
                             continue;
@@ -2508,7 +2528,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &resolve_result;
                 const dummy_resolve_result: _resolver.Result = undefined;
                 inner: while (true) {
-                    resolve_result = (blk_catch_59: { break :blk_catch_59 ((transpiler.resolver.resolveWithFramework(source_dir, (import_record.*).path.text, (import_record.*).kind)) catch |e| { _ = &e; break :blk_catch_59 blk_res: {
+                    resolve_result = (blk_catch_62: { break :blk_catch_62 ((transpiler.resolver.resolveWithFramework(source_dir, (import_record.*).path.text, (import_record.*).kind)) catch |e| { _ = &e; break :blk_catch_62 blk_res: {
                     const log = self.logForResolutionFailures(source.path.text, bake_graph);
                     if ((e == error.ModuleNotFound)) {
                         if ((self.bun_watcher != null)) {
@@ -2521,7 +2541,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             }
                             if (self.transpiler.options.dev_server) |dev| {
                                 _ = &dev;
-                                _ = (blk_catch_60: { break :blk_catch_60 ((dev.directory_watchers.trackResolutionFailure(source.path.text, (import_record.*).path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_63: { break :blk_catch_63 ((dev.directory_watchers.trackResolutionFailure(source.path.text, (import_record.*).path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
                             }
                         }
                     }
@@ -2531,15 +2551,15 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                         last_error = e;
                         if (isPackagePath((import_record.*).path.text)) {
                             if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin((import_record.*).path.text))) {
-                                _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
                             } else {
                                 if (((!ctx.target.isBun()) and strings.eqlComptime((import_record.*).path.text, "bun"))) {
-                                    _ = (blk_catch_62: { break :blk_catch_62 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
+                                    _ = (blk_catch_65: { break :blk_catch_65 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
                                 } else {
                                     if (((!ctx.target.isBun()) and strings.hasPrefixComptime((import_record.*).path.text, "bun:"))) {
-                                        _ = (blk_catch_63: { break :blk_catch_63 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_66: { break :blk_catch_66 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
                                     } else {
-                                        _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_67: { break :blk_catch_67 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
                                     }
                                 }
                             }
@@ -2556,7 +2576,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             }
                             break :brk specifier_to_use;
 } else (import_record.*).path.text);
-                            _ = (blk_catch_65: { break :blk_catch_65 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
+                            _ = (blk_catch_68: { break :blk_catch_68 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
                         }
                     } break :__sw_blk_31; } } {  last_error = e; break :__sw_blk_31; }  }
                     had_resolve_error = true;
@@ -2588,7 +2608,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                     _ = brk: {
                     if (((path.loader((&self.transpiler.options.loaders)) == .html) and (((import_record.*).loader == null) or ((import_record.*).loader.? == .html)))) {
                         const log = self.logForResolutionFailures(source.path.text, bake_graph);
-                        _ = (blk_catch_66: { break :blk_catch_66 ((log.addRangeErrorFmt(source, (import_record.*).range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_69: { break :blk_catch_69 ((log.addRangeErrorFmt(source, (import_record.*).range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_69 bun.handleOom(oom_err); }); });
                         continue;
                     }
                     if ((loader == .css)) {
@@ -2602,7 +2622,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             const hash = ((dev_server.assets.getHash(path.text)) orelse (@panic("cached asset not found")));
                             (import_record.*).path.text = path.text;
                             (import_record.*).path.namespace = "file";
-                            (import_record.*).path.pretty = (blk_catch_67: { break :blk_catch_67 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
+                            (import_record.*).path.pretty = (blk_catch_70: { break :blk_catch_70 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_70 bun.handleOom(oom_err); }); });
                             (import_record.*).path.is_disabled = false;
                         } else {
                             (import_record.*).path.text = path.text;
@@ -2637,7 +2657,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 if (is_html_entrypoint) {
                     (import_record.*).kind = .html_manifest;
                 }
-                const resolve_entry = (blk_catch_68: { break :blk_catch_68 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
+                const resolve_entry = (blk_catch_71: { break :blk_catch_71 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_71 bun.handleOom(oom_err); }); });
                 if (resolve_entry.found_existing) {
                     (import_record.*).path = resolve_entry.value_ptr.*.path;
                     continue;
@@ -2661,7 +2681,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 if ((resolve_result.path_pair.secondary != null)) {
                     const secondary = (&resolve_result.path_pair.secondary.?);
                     if ((((!secondary.is_disabled) and (secondary != path)) and (!strings.eqlLong(secondary.text, path.text, true)))) {
-                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_69: { break :blk_catch_69 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_69 bun.handleOom(oom_err); }); });
+                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_72: { break :blk_catch_72 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_72 bun.handleOom(oom_err); }); });
                     }
                 }
                 if (is_html_entrypoint) {
@@ -2911,7 +2931,7 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
             if (((result.unique_key_for_additional_file.len > 0) and result.loader.shouldCopyForBundling())) {
                 if (bundle.transpiler.options.dev_server) |dev| {
                     _ = &dev;
-                    _ = (blk_catch_77: { break :blk_catch_77 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_77 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_80: { break :blk_catch_80 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_80 bun.handleOom(oom_err); }); });
                 }
             }
             graph.input_files.items(.loader)[cp_cast_int(usize, result.source.index.get())] = result.loader;
@@ -2957,20 +2977,20 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
                 var ssr_index: Index.Int = undefined;
                 _ = &ssr_index;
                 if (bundle.framework.?.server_components.?.separate_ssr_graph) {
-                    reference_source_index = (blk_catch_79: { break :blk_catch_79 ((bundle.enqueueServerComponentGeneratedFile(.{ .client_reference_proxy = .{ .other_source = result.source, .named_exports = result.ast.named_exports } }, result.source)) catch |oom_err| { _ = &oom_err; break :blk_catch_79 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    reference_source_index = (blk_catch_82: { break :blk_catch_82 ((bundle.enqueueServerComponentGeneratedFile(.{ .client_reference_proxy = .{ .other_source = result.source, .named_exports = result.ast.named_exports } }, result.source)) catch |oom_err| { _ = &oom_err; break :blk_catch_82 @as(Index.Int, bun.handleOom(oom_err)); }); });
                     const ssr_source = (&result.source);
                     ssr_source.path.pretty = ssr_source.path.text;
                     ssr_source.path = bun.handleOom(bundle.pathWithPrettyInitialized(ssr_source.path, .bake_server_components_ssr));
-                    ssr_index = (blk_catch_80: { break :blk_catch_80 ((bundle.enqueueParseTask2(ssr_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .bake_server_components_ssr)) catch |oom_err| { _ = &oom_err; break :blk_catch_80 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    ssr_index = (blk_catch_83: { break :blk_catch_83 ((bundle.enqueueParseTask2(ssr_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .bake_server_components_ssr)) catch |oom_err| { _ = &oom_err; break :blk_catch_83 @as(Index.Int, bun.handleOom(oom_err)); }); });
                 } else {
                     const server_source = (&result.source);
                     server_source.path.pretty = server_source.path.text;
                     server_source.path = bun.handleOom(bundle.pathWithPrettyInitialized(server_source.path, bundle.transpiler.options.target));
-                    reference_source_index = (blk_catch_81: { break :blk_catch_81 ((bundle.enqueueParseTask2(server_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .browser)) catch |oom_err| { _ = &oom_err; break :blk_catch_81 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    reference_source_index = (blk_catch_84: { break :blk_catch_84 ((bundle.enqueueParseTask2(server_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .browser)) catch |oom_err| { _ = &oom_err; break :blk_catch_84 @as(Index.Int, bun.handleOom(oom_err)); }); });
                     ssr_index = Index.invalid.get();
                 }
-                _ = (blk_catch_82: { break :blk_catch_82 ((graph.pathToSourceIndexMap(result.ast.target).put(bundle.allocator(), result.source.path.text, reference_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_82 bun.handleOom(oom_err); }); });
-                _ = (blk_catch_83: { break :blk_catch_83 ((graph.server_component_boundaries.put(bundle.allocator(), result.source.index.get(), result.use_directive, reference_source_index, ssr_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_83 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_85: { break :blk_catch_85 ((graph.pathToSourceIndexMap(result.ast.target).put(bundle.allocator(), result.source.path.text, reference_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_85 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_86: { break :blk_catch_86 ((graph.server_component_boundaries.put(bundle.allocator(), result.source.index.get(), result.use_directive, reference_source_index, ssr_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_86 bun.handleOom(oom_err); }); });
             }
 },
 .err => |*e| {
@@ -2980,7 +3000,7 @@ if (comptime Environment.enable_logs) {
             if (process_log) {
                 if (bundle.transpiler.options.dev_server) |dev_server| {
                     _ = &dev_server;
-                    _ = (blk_catch_84: { break :blk_catch_84 ((dev_server.handleParseTaskFailure(e.err, e.target.bakeGraph(), graph.input_files.items(.source)[@as(usize, @intCast(e.source_index.get()))].path.text, (&e.log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_84 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_87: { break :blk_catch_87 ((dev_server.handleParseTaskFailure(e.err, e.target.bakeGraph(), graph.input_files.items(.source)[@as(usize, @intCast(e.source_index.get()))].path.text, (&e.log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_87 bun.handleOom(oom_err); }); });
                 } else {
                     if ((e.log.msgs.items.len > 0)) {
                         _ = ((e.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreachable);
@@ -3406,7 +3426,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             var path_clone = path;
             _ = &path_clone;
             if ((target == .bake_server_components_ssr)) {
-                path_clone.pretty = (blk_catch_88: { break :blk_catch_88 ((std.fmt.bufPrint(buf, "ssr:{s}", .{ rel })) catch |__ce_88| { _ = &__ce_88; break :blk_catch_88 buf[0..]; }); });
+                path_clone.pretty = (blk_catch_91: { break :blk_catch_91 ((std.fmt.bufPrint(buf, "ssr:{s}", .{ rel })) catch |__ce_91| { _ = &__ce_91; break :blk_catch_91 buf[0..]; }); });
             } else {
                 path_clone.pretty = rel;
             }
@@ -3415,7 +3435,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             var path_clone = path;
             _ = &path_clone;
             const NamespaceAlt = std.fmt.Alt(string, fmtEscapedNamespace);
-            path_clone.pretty = (blk_catch_89: { break :blk_catch_89 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_89| { _ = &__ce_89; break :blk_catch_89 buf[0..]; }); });
+            path_clone.pretty = (blk_catch_92: { break :blk_catch_92 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_92| { _ = &__ce_92; break :blk_catch_92 buf[0..]; }); });
             return path_clone.dupeAllocFixPretty(allocator);
         }
 }

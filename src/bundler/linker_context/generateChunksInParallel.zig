@@ -258,12 +258,20 @@ pub fn generateChunksInParallel(c: *LinkerContext, chunks: []Chunk, comptime is_
         _ = &has_html_chunk;
         _ = bun.assert((chunks.len > 0));
         {
+            if ((!c.options.minify_identifiers)) {
+                _ = try LinkerContext.crossChunkNames.assignUnminified(c, chunks);
+            }
             _ = debug(" START {d} renamers", .{ chunks.len });
             defer {
             _ = debug("  DONE {d} renamers", .{ chunks.len });
             }
             const ctx = GenerateChunkCtx{ .chunk = (&chunks[0]), .c = c, .chunks = chunks };
             _ = try c.parse_graph.pool.worker_pool.eachPtr(c.allocator(), ctx, LinkerContext.generateJSRenamer, chunks);
+            if (c.options.minify_identifiers) {
+                _ = try LinkerContext.crossChunkNames.assignMinified(c, chunks);
+                _ = try c.parse_graph.pool.worker_pool.eachPtr(c.allocator(), ctx, LinkerContext.finishJSRenamer, chunks);
+            }
+            _ = LinkerContext.crossChunkNames.applyToClauses(c, chunks);
         }
         if ((c.source_maps.line_offset_tasks.len > 0)) {
             _ = debug(" START {d} source maps (line offset)", .{ chunks.len });

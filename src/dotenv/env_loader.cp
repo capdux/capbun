@@ -958,46 +958,88 @@ pub struct Loader {
         };
         const _file_guard = FileCloseGuard{ file: file };
 
-        const end = brk: {
-            if (comptime Environment.isWindows) {
-                const pos = file.getEndPos()?;
-                if (pos == 0) {
-                    _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
-                    return;
+        let buf: []u8 = undefined;
+        let amount_read: usize = 0;
+
+        let is_regular = true;
+        let regular_end: usize = 0;
+        if (comptime Environment.isWindows) {
+            regular_end = file.getEndPos() catch e => {
+                if (e == error.Unseekable) {
+                    is_regular = false;
+                } else {
+                    return e;
                 }
-
-                break :brk pos;
-            }
-
+                0
+            };
+        } else {
             const stat = file.stat()?;
-
-            if (stat.size == 0 || stat.kind != .file) {
-                _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
-                return;
-            }
-
-            break :brk stat.size;
-        };
-
-        let buf = _.allocator.alloc(u8, end + 1)?;
-        const _buf_guard = ErrFreeU8SliceGuard{ slice: buf, allocator: _.allocator };
-        const amount_read = file.readAll(buf[0..end]) catch e => {
-            if (e == error.Unexpected || e == error.SystemResources || e == error.OperationAborted || e == error.BrokenPipe || e == error.AccessDenied || e == error.IsDir) {
-                if (!_.quiet) {
-                    Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
-                }
-
-                // prevent retrying
-                _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
-                _.allocator.free(buf);
-                return;
+            if (stat.kind != .file) {
+                is_regular = false;
             } else {
-                return e;
+                regular_end = stat.size;
             }
-        };
+        }
 
-        // The null byte here is mostly for debugging purposes.
-        buf[end] = 0;
+        if (is_regular) {
+            if (regular_end == 0) {
+                _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
+                return;
+            }
+
+            buf = _.allocator.alloc(u8, regular_end + 1)?;
+            const _buf_guard = ErrFreeU8SliceGuard{ slice: buf, allocator: _.allocator };
+            amount_read = file.readAll(buf[0..regular_end]) catch e => {
+                if (e == error.Unexpected || e == error.SystemResources || e == error.OperationAborted || e == error.BrokenPipe || e == error.AccessDenied || e == error.IsDir) {
+                    if (!_.quiet) {
+                        Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
+                    }
+
+                    // prevent retrying
+                    _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
+                    _.allocator.free(buf);
+                    return;
+                } else {
+                    return e;
+                }
+            };
+
+            // The null byte here is mostly for debugging purposes.
+            buf[regular_end] = 0;
+        } else {
+            // A pipe or device is not seekable, so read until EOF.
+            let list = std.array_list.Managed(u8).init(_.allocator);
+            errdefer list.deinit();
+            let chunk: [4096]u8 = undefined;
+            while (true) {
+                const n = file.read(&chunk) catch e => {
+                    if (e == error.Unexpected || e == error.SystemResources || e == error.OperationAborted || e == error.BrokenPipe || e == error.AccessDenied || e == error.IsDir) {
+                        if (!_.quiet) {
+                            Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
+                        }
+
+                        // prevent retrying
+                        _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
+                        list.deinit();
+                        return;
+                    } else {
+                        return e;
+                    }
+                };
+                if (n == 0) break;
+                list.appendSlice(chunk[0..n])?;
+            }
+
+            if (list.items.len == 0) {
+                list.deinit();
+                _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
+                return;
+            }
+
+            amount_read = list.items.len;
+            list.append(0)?;
+            buf = list.toOwnedSlice()?;
+        }
 
         const source = &logger.Source.initPathString(file_path, buf[0..amount_read]);
 

@@ -1788,12 +1788,18 @@ pub fn openatWindowsA(
 
 pub fn openatOSPath(dirfd: bun.FD, file_path: bun.OSPathSliceZ, flags: i32, perm: bun.Mode): Maybe(bun.FD) {
     if (comptime Environment.isMac) {
-        // https://opensource.apple.com/source/xnu/xnu-7195.81.3/libsyscall/wrappers/open-base.c
-        const rc = darwin_nocancel.@"openat$NOCANCEL"(dirfd.cast(), file_path.ptr, @bitCast(bun.O.toPacked(flags)), perm);
-        if (comptime Environment.allow_assert)
-            log("openat({f}, {s}, {d}) = {d}", .{ dirfd, bun.sliceTo(file_path, 0), flags, rc });
+        while (true) {
+            // https://opensource.apple.com/source/xnu/xnu-7195.81.3/libsyscall/wrappers/open-base.c
+            const rc = darwin_nocancel.@"openat$NOCANCEL"(dirfd.cast(), file_path.ptr, @bitCast(bun.O.toPacked(flags)), perm);
+            if (comptime Environment.allow_assert)
+                log("openat({f}, {s}, {d}) = {d}", .{ dirfd, bun.sliceTo(file_path, 0), flags, rc });
 
-        return Maybe(bun.FD).errnoSysFP(rc, .open, dirfd, file_path) ?? { result: .fromNative(rc) };
+            if (e := Maybe(bun.FD).errnoSysFP(rc, .open, dirfd, file_path)) {
+                if (e.getErrno() == .INTR) continue;
+                return e;
+            }
+            return { result: .fromNative(rc) };
+        }
     } else if (comptime Environment.isWindows) {
         return openatWindowsT(bun.OSPathChar, dirfd, file_path, flags, perm);
     } else if (comptime Environment.isFreeBSD) {
@@ -1988,14 +1994,17 @@ pub fn write(fd: bun.FD, bytes: []const u8): Maybe(usize) {
 
     return switch (Environment.os) {
         .mac => {
-            const rc = darwin_nocancel.@"write$NOCANCEL"(fd.cast(), bytes.ptr, adjusted_len);
-            log("write({f}, {d}) = {d} ({f})", .{ fd, adjusted_len, rc, debug_timer });
+            while (true) {
+                const rc = darwin_nocancel.@"write$NOCANCEL"(fd.cast(), bytes.ptr, adjusted_len);
+                log("write({f}, {d}) = {d} ({f})", .{ fd, adjusted_len, rc, debug_timer });
 
-            if (e := Maybe(usize).errnoSysFd(rc, .write, fd)) {
-                return e;
+                if (e := Maybe(usize).errnoSysFd(rc, .write, fd)) {
+                    if (e.getErrno() == .INTR) continue;
+                    return e;
+                }
+
+                return { result: @intCast(rc) };
             }
-
-            return { result: @intCast(rc) };
         },
         .linux, .freebsd => {
             while (true) {
@@ -2059,62 +2068,38 @@ fn veclen(buffers: auto): usize {
 }
 
 pub fn writev(fd: bun.FD, buffers: []std.posix.iovec): Maybe(usize) {
-    if (comptime Environment.isMac) {
-        const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, buffers.ptr), @as(i32, i32(buffers.len)));
+    while (true) {
+        const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, buffers.ptr), @intCast(buffers.len));
         if (comptime Environment.allow_assert)
             log("writev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
         if (e := Maybe(usize).errnoSysFd(rc, .writev, fd)) {
+            if (e.getErrno() == .INTR) continue;
             return e;
         }
 
         return { result: @as(usize, i32(rc)) };
-    } else {
-        while (true) {
-            const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, buffers.ptr), @intCast(buffers.len));
-            if (comptime Environment.allow_assert)
-                log("writev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-
-            if (e := Maybe(usize).errnoSysFd(rc, .writev, fd)) {
-                if (e.getErrno() == .INTR) continue;
-                return e;
-            }
-
-            return { result: @as(usize, i32(rc)) };
-        }
-        unreachable;
     }
+    unreachable;
 }
 
 pub fn pwritev(fd: bun.FD, buffers: []const bun.PlatformIOVecConst, position: isize): Maybe(usize) {
     if (comptime Environment.isWindows) {
         return sys_uv.pwritev(fd, buffers, position);
     }
-    if (comptime Environment.isMac) {
-        const rc = pwritev_sym(fd.cast(), buffers.ptr, @as(i32, i32(buffers.len)), position);
+    while (true) {
+        const rc = pwritev_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
         if (comptime Environment.allow_assert)
             log("pwritev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
         if (e := Maybe(usize).errnoSysFd(rc, .pwritev, fd)) {
+            if (e.getErrno() == .INTR) continue;
             return e;
         }
 
         return { result: @as(usize, i32(rc)) };
-    } else {
-        while (true) {
-            const rc = pwritev_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
-            if (comptime Environment.allow_assert)
-                log("pwritev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-
-            if (e := Maybe(usize).errnoSysFd(rc, .pwritev, fd)) {
-                if (e.getErrno() == .INTR) continue;
-                return e;
-            }
-
-            return { result: @as(usize, i32(rc)) };
-        }
-        unreachable;
     }
+    unreachable;
 }
 
 pub fn readv(fd: bun.FD, buffers: []std.posix.iovec): Maybe(usize) {
@@ -2124,31 +2109,19 @@ pub fn readv(fd: bun.FD, buffers: []std.posix.iovec): Maybe(usize) {
         }
     }
 
-    if (comptime Environment.isMac) {
-        const rc = readv_sym(fd.cast(), buffers.ptr, @as(i32, i32(buffers.len)));
+    while (true) {
+        const rc = readv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len));
         if (comptime Environment.allow_assert)
             log("readv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
         if (e := Maybe(usize).errnoSysFd(rc, .readv, fd)) {
+            if (e.getErrno() == .INTR) continue;
             return e;
         }
 
         return { result: @as(usize, i32(rc)) };
-    } else {
-        while (true) {
-            const rc = readv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len));
-            if (comptime Environment.allow_assert)
-                log("readv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-
-            if (e := Maybe(usize).errnoSysFd(rc, .readv, fd)) {
-                if (e.getErrno() == .INTR) continue;
-                return e;
-            }
-
-            return { result: @as(usize, i32(rc)) };
-        }
-        unreachable;
     }
+    unreachable;
 }
 
 pub fn preadv(fd: bun.FD, buffers: []std.posix.iovec, position: isize): Maybe(usize) {
@@ -2158,31 +2131,19 @@ pub fn preadv(fd: bun.FD, buffers: []std.posix.iovec, position: isize): Maybe(us
         }
     }
 
-    if (comptime Environment.isMac) {
-        const rc = preadv_sym(fd.cast(), buffers.ptr, @as(i32, i32(buffers.len)), position);
+    while (true) {
+        const rc = preadv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
         if (comptime Environment.allow_assert)
             log("preadv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
 
         if (e := Maybe(usize).errnoSysFd(rc, .preadv, fd)) {
+            if (e.getErrno() == .INTR) continue;
             return e;
         }
 
         return { result: @as(usize, i32(rc)) };
-    } else {
-        while (true) {
-            const rc = preadv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
-            if (comptime Environment.allow_assert)
-                log("preadv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-
-            if (e := Maybe(usize).errnoSysFd(rc, .preadv, fd)) {
-                if (e.getErrno() == .INTR) continue;
-                return e;
-            }
-
-            return { result: @as(usize, i32(rc)) };
-        }
-        unreachable;
     }
+    unreachable;
 }
 
 const preadv_sym = if (builtin.os.tag == .linux && builtin.link_libc)
@@ -2275,15 +2236,18 @@ pub fn read(fd: bun.FD, buf: []u8): Maybe(usize) {
     const adjusted_len = @min(buf.len, max_count);
     return switch (Environment.os) {
         .mac => {
-            const rc = darwin_nocancel.@"read$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len);
+            while (true) {
+                const rc = darwin_nocancel.@"read$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len);
 
-            if (e := Maybe(usize).errnoSysFd(rc, .read, fd)) {
-                log("read({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, e.err.name(), debug_timer });
-                return e;
+                if (e := Maybe(usize).errnoSysFd(rc, .read, fd)) {
+                    if (e.getErrno() == .INTR) continue;
+                    log("read({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, e.err.name(), debug_timer });
+                    return e;
+                }
+                log("read({f}, {d}) = {d} ({f})", .{ fd, adjusted_len, rc, debug_timer });
+
+                return { result: @as(usize, i32(rc)) };
             }
-            log("read({f}, {d}) = {d} ({f})", .{ fd, adjusted_len, rc, debug_timer });
-
-            return { result: @as(usize, i32(rc)) };
         },
         .linux, .freebsd => {
             while (true) {
@@ -2462,16 +2426,19 @@ pub fn recv(fd: bun.FD, buf: []u8, flag: u32): Maybe(usize) {
     }
 
     if (comptime Environment.isMac) {
-        const rc = darwin_nocancel.@"recvfrom$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
+        while (true) {
+            const rc = darwin_nocancel.@"recvfrom$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
 
-        if (e := Maybe(usize).errnoSysFd(rc, .recv, fd)) {
-            log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, e.err.name(), debug_timer });
-            return e;
+            if (e := Maybe(usize).errnoSysFd(rc, .recv, fd)) {
+                if (e.getErrno() == .INTR) continue;
+                log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, e.err.name(), debug_timer });
+                return e;
+            }
+
+            log("recv({f}, {d}) = {d} {f}", .{ fd, adjusted_len, rc, debug_timer });
+
+            return { result: @as(usize, i32(rc)) };
         }
-
-        log("recv({f}, {d}) = {d} {f}", .{ fd, adjusted_len, rc, debug_timer });
-
-        return { result: @as(usize, i32(rc)) };
     } else {
         while (true) {
             const rc = linux.recvfrom(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
@@ -2507,16 +2474,19 @@ pub fn sendNonBlock(fd: bun.FD, buf: []const u8): Maybe(usize) {
 pub fn send(fd: bun.FD, buf: []const u8, flag: u32): Maybe(usize) {
     if (comptime Environment.isMac) {
         const debug_timer = bun.Output.DebugTimer.start();
-        const rc = darwin_nocancel.@"sendto$NOCANCEL"(fd.cast(), buf.ptr, buf.len, flag, null, 0);
+        while (true) {
+            const rc = darwin_nocancel.@"sendto$NOCANCEL"(fd.cast(), buf.ptr, buf.len, flag, null, 0);
 
-        if (e := Maybe(usize).errnoSysFd(rc, .send, fd)) {
-            syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, e.err.name(), debug_timer });
-            return e;
+            if (e := Maybe(usize).errnoSysFd(rc, .send, fd)) {
+                if (e.getErrno() == .INTR) continue;
+                syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, e.err.name(), debug_timer });
+                return e;
+            }
+
+            syslog("send({f}, {d}) = {d} ({f})", .{ fd, buf.len, rc, debug_timer });
+
+            return { result: @as(usize, i32(rc)) };
         }
-
-        syslog("send({f}, {d}) = {d} ({f})", .{ fd, buf.len, rc, debug_timer });
-
-        return { result: @as(usize, i32(rc)) };
     } else {
         const debug_timer = bun.Output.DebugTimer.start();
         while (true) {

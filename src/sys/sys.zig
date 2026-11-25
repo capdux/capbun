@@ -1720,11 +1720,20 @@ pub fn openatWindowsA(dir: bun.FD, path: []const u8, flags: i32, perm: bun.Mode)
 
 pub fn openatOSPath(dirfd: bun.FD, file_path: bun.OSPathSliceZ, flags: i32, perm: bun.Mode) Maybe(bun.FD) {
         if (comptime Environment.isMac) {
-            const rc = darwin_nocancel.@"openat$NOCANCEL"(dirfd.cast(), file_path.ptr, @bitCast(bun.O.toPacked(flags)), perm);
-            if (comptime Environment.allow_assert) {
-                _ = log("openat({f}, {s}, {d}) = {d}", .{ dirfd, bun.sliceTo(file_path, 0), flags, rc });
+            while (true) {
+                const rc = darwin_nocancel.@"openat$NOCANCEL"(dirfd.cast(), file_path.ptr, @bitCast(bun.O.toPacked(flags)), perm);
+                if (comptime Environment.allow_assert) {
+                    _ = log("openat({f}, {s}, {d}) = {d}", .{ dirfd, bun.sliceTo(file_path, 0), flags, rc });
+                }
+                if (Maybe(bun.FD).errnoSysFP(rc, .open, dirfd, file_path)) |e| {
+                    _ = &e;
+                    if ((e.getErrno() == .INTR)) {
+                        continue;
+                    }
+                    return e;
+                }
+                return .{ .result = .fromNative(rc) };
             }
-            return ((Maybe(bun.FD).errnoSysFP(rc, .open, dirfd, file_path)) orelse (.{ .result = .fromNative(rc) }));
         } else {
             if (comptime Environment.isWindows) {
                 return openatWindowsT(bun.OSPathChar, dirfd, file_path, flags, perm);
@@ -1876,11 +1885,14 @@ pub fn write(fd: bun.FD, bytes: []const u8) Maybe(usize) {
         }
         return (switch (Environment.os) {
 .mac => {
-{
+while (true) {
             const rc = darwin_nocancel.@"write$NOCANCEL"(fd.cast(), bytes.ptr, adjusted_len);
             _ = log("write({f}, {d}) = {d} ({f})", .{ fd, adjusted_len, rc, debug_timer });
             if (Maybe(usize).errnoSysFd(rc, .write, fd)) |e| {
                 _ = &e;
+                if ((e.getErrno() == .INTR)) {
+                    continue;
+                }
                 return e;
             }
             return .{ .result = @intCast(rc) };
@@ -1934,66 +1946,42 @@ pub fn veclen(buffers: anytype) usize {
 }
 
 pub fn writev(fd: bun.FD, buffers: []std.posix.iovec) Maybe(usize) {
-        if (comptime Environment.isMac) {
-            const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, @ptrCast(@alignCast(buffers.ptr))), (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))));
+        while (true) {
+            const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, @ptrCast(@alignCast(buffers.ptr))), @intCast(buffers.len));
             if (comptime Environment.allow_assert) {
                 _ = log("writev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
             }
             if (Maybe(usize).errnoSysFd(rc, .writev, fd)) |e| {
                 _ = &e;
+                if ((e.getErrno() == .INTR)) {
+                    continue;
+                }
                 return e;
             }
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-        } else {
-            while (true) {
-                const rc = writev_sym(fd.cast(), @as([*]std.posix.iovec_const, @ptrCast(@alignCast(buffers.ptr))), @intCast(buffers.len));
-                if (comptime Environment.allow_assert) {
-                    _ = log("writev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-                }
-                if (Maybe(usize).errnoSysFd(rc, .writev, fd)) |e| {
-                    _ = &e;
-                    if ((e.getErrno() == .INTR)) {
-                        continue;
-                    }
-                    return e;
-                }
-                return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-            }
-            _ = unreachable;
         }
+        _ = unreachable;
 }
 
 pub fn pwritev(fd: bun.FD, buffers: []const bun.PlatformIOVecConst, position: isize) Maybe(usize) {
         if (comptime Environment.isWindows) {
             return sys_uv.pwritev(fd, buffers, position);
         }
-        if (comptime Environment.isMac) {
-            const rc = pwritev_sym(fd.cast(), buffers.ptr, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))), position);
+        while (true) {
+            const rc = pwritev_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
             if (comptime Environment.allow_assert) {
                 _ = log("pwritev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
             }
             if (Maybe(usize).errnoSysFd(rc, .pwritev, fd)) |e| {
                 _ = &e;
+                if ((e.getErrno() == .INTR)) {
+                    continue;
+                }
                 return e;
             }
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-        } else {
-            while (true) {
-                const rc = pwritev_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
-                if (comptime Environment.allow_assert) {
-                    _ = log("pwritev({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-                }
-                if (Maybe(usize).errnoSysFd(rc, .pwritev, fd)) |e| {
-                    _ = &e;
-                    if ((e.getErrno() == .INTR)) {
-                        continue;
-                    }
-                    return e;
-                }
-                return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-            }
-            _ = unreachable;
         }
+        _ = unreachable;
 }
 
 pub fn readv(fd: bun.FD, buffers: []std.posix.iovec) Maybe(usize) {
@@ -2002,33 +1990,21 @@ pub fn readv(fd: bun.FD, buffers: []std.posix.iovec) Maybe(usize) {
                 _ = bun.Output.debugWarn("readv() called with 0 length buffer", .{});
             }
         }
-        if (comptime Environment.isMac) {
-            const rc = readv_sym(fd.cast(), buffers.ptr, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))));
+        while (true) {
+            const rc = readv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len));
             if (comptime Environment.allow_assert) {
                 _ = log("readv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
             }
             if (Maybe(usize).errnoSysFd(rc, .readv, fd)) |e| {
                 _ = &e;
+                if ((e.getErrno() == .INTR)) {
+                    continue;
+                }
                 return e;
             }
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-        } else {
-            while (true) {
-                const rc = readv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len));
-                if (comptime Environment.allow_assert) {
-                    _ = log("readv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-                }
-                if (Maybe(usize).errnoSysFd(rc, .readv, fd)) |e| {
-                    _ = &e;
-                    if ((e.getErrno() == .INTR)) {
-                        continue;
-                    }
-                    return e;
-                }
-                return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-            }
-            _ = unreachable;
         }
+        _ = unreachable;
 }
 
 pub fn preadv(fd: bun.FD, buffers: []std.posix.iovec, position: isize) Maybe(usize) {
@@ -2037,33 +2013,21 @@ pub fn preadv(fd: bun.FD, buffers: []std.posix.iovec, position: isize) Maybe(usi
                 _ = bun.Output.debugWarn("preadv() called with 0 length buffer", .{});
             }
         }
-        if (comptime Environment.isMac) {
-            const rc = preadv_sym(fd.cast(), buffers.ptr, (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(buffers.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buffers.len)) else cp_cast_int(i32, buffers.len)))), position);
+        while (true) {
+            const rc = preadv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
             if (comptime Environment.allow_assert) {
                 _ = log("preadv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
             }
             if (Maybe(usize).errnoSysFd(rc, .preadv, fd)) |e| {
                 _ = &e;
+                if ((e.getErrno() == .INTR)) {
+                    continue;
+                }
                 return e;
             }
             return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-        } else {
-            while (true) {
-                const rc = preadv_sym(fd.cast(), buffers.ptr, @intCast(buffers.len), position);
-                if (comptime Environment.allow_assert) {
-                    _ = log("preadv({f}, {d}) = {d}", .{ fd, veclen(buffers), rc });
-                }
-                if (Maybe(usize).errnoSysFd(rc, .preadv, fd)) |e| {
-                    _ = &e;
-                    if ((e.getErrno() == .INTR)) {
-                        continue;
-                    }
-                    return e;
-                }
-                return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
-            }
-            _ = unreachable;
         }
+        _ = unreachable;
 }
 
 pub fn pread(fd: bun.FD, buf: []u8, offset: i64) Maybe(usize) {
@@ -2122,10 +2086,13 @@ pub fn read(fd: bun.FD, buf: []u8) Maybe(usize) {
         const adjusted_len = @min(buf.len, max_count);
         return (switch (Environment.os) {
 .mac => {
-{
+while (true) {
             const rc = darwin_nocancel.@"read$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len);
             if (Maybe(usize).errnoSysFd(rc, .read, fd)) |e| {
                 _ = &e;
+                if ((e.getErrno() == .INTR)) {
+                    continue;
+                }
                 _ = log("read({f}, {d}) = {s} ({f})", .{ fd, adjusted_len, e.err.name(), debug_timer });
                 return e;
             }
@@ -2258,14 +2225,19 @@ pub fn recv(fd: bun.FD, buf: []u8, flag: u32) Maybe(usize) {
             }
         }
         if (comptime Environment.isMac) {
-            const rc = darwin_nocancel.@"recvfrom$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
-            if (Maybe(usize).errnoSysFd(rc, .recv, fd)) |e| {
-                _ = &e;
-                _ = log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, e.err.name(), debug_timer });
-                return e;
+            while (true) {
+                const rc = darwin_nocancel.@"recvfrom$NOCANCEL"(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
+                if (Maybe(usize).errnoSysFd(rc, .recv, fd)) |e| {
+                    _ = &e;
+                    if ((e.getErrno() == .INTR)) {
+                        continue;
+                    }
+                    _ = log("recv({f}, {d}) = {s} {f}", .{ fd, adjusted_len, e.err.name(), debug_timer });
+                    return e;
+                }
+                _ = log("recv({f}, {d}) = {d} {f}", .{ fd, adjusted_len, rc, debug_timer });
+                return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
             }
-            _ = log("recv({f}, {d}) = {d} {f}", .{ fd, adjusted_len, rc, debug_timer });
-            return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         } else {
             while (true) {
                 const rc = linux.recvfrom(fd.cast(), buf.ptr, adjusted_len, flag, null, null);
@@ -2306,14 +2278,19 @@ pub fn sendNonBlock(fd: bun.FD, buf: []const u8) Maybe(usize) {
 pub fn send(fd: bun.FD, buf: []const u8, flag: u32) Maybe(usize) {
         if (comptime Environment.isMac) {
             const debug_timer = bun.Output.DebugTimer.start();
-            const rc = darwin_nocancel.@"sendto$NOCANCEL"(fd.cast(), buf.ptr, buf.len, flag, null, 0);
-            if (Maybe(usize).errnoSysFd(rc, .send, fd)) |e| {
-                _ = &e;
-                _ = syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, e.err.name(), debug_timer });
-                return e;
+            while (true) {
+                const rc = darwin_nocancel.@"sendto$NOCANCEL"(fd.cast(), buf.ptr, buf.len, flag, null, 0);
+                if (Maybe(usize).errnoSysFd(rc, .send, fd)) |e| {
+                    _ = &e;
+                    if ((e.getErrno() == .INTR)) {
+                        continue;
+                    }
+                    _ = syslog("send({f}, {d}) = {s} ({f})", .{ fd, buf.len, e.err.name(), debug_timer });
+                    return e;
+                }
+                _ = syslog("send({f}, {d}) = {d} ({f})", .{ fd, buf.len, rc, debug_timer });
+                return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
             }
-            _ = syslog("send({f}, {d}) = {d} ({f})", .{ fd, buf.len, rc, debug_timer });
-            return .{ .result = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         } else {
             const debug_timer = bun.Output.DebugTimer.start();
             while (true) {

@@ -435,6 +435,46 @@ fn isMalformedFieldValue(value: []const u8): bool {
     return !isValidHeaderValue(value);
 }
 
+const HeaderValueBytes = struct {
+    bytes: []const u8,
+    owned: ([]u8)? = null,
+
+    static fn from(value_str: *jsc.JSString, globalObject: *jsc.JSGlobalObject): HeaderValueBytes {
+        const zs = value_str.getZigString(globalObject);
+        if (!zs.is16Bit()) {
+            const dup = bun.default_allocator.dupe(u8, zs.slice()) catch bun.outOfMemory();
+            return HeaderValueBytes{ bytes: dup, owned: dup };
+        }
+        const units = zs.utf16SliceAligned();
+        let all_latin1 = true;
+        for (u of units) {
+            if (u > 0xFF) {
+                all_latin1 = false;
+                break;
+            }
+        }
+        if (all_latin1) {
+            const buf = bun.default_allocator.alloc(u8, units.len) catch bun.outOfMemory();
+            bun.strings.copyU16IntoU8(buf, units);
+            return HeaderValueBytes{ bytes: buf, owned: buf };
+        }
+        const slice_res = value_str.toSlice(globalObject, bun.default_allocator);
+        const dup = bun.default_allocator.dupe(u8, slice_res.slice()) catch bun.outOfMemory();
+        slice_res.deinit();
+        return HeaderValueBytes{ bytes: dup, owned: dup };
+    }
+
+    fn slice(): []const u8 {
+        return _.bytes;
+    }
+
+    ~init() {
+        if (buf := _.owned) {
+            bun.default_allocator.free(buf);
+        }
+    }
+};
+
 const SingleValueHeaders = bun.ComptimeStringMap(void, .{
     .{":status"},
     .{":method"},
@@ -3957,8 +3997,8 @@ pub struct H2FrameParser {
 
                     const never_index = (sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)? ?? sensitive_arg.getTruthyPropertyValue(globalObject, name)?) != null;
 
-                    const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
-                    const value = value_slice.val.slice();
+                    const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                    const value = value_slice.slice();
                     if (!isValidHeaderValue(value)) {
                         const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name});
                         return globalObject.throwValue(exception);
@@ -4001,8 +4041,8 @@ pub struct H2FrameParser {
 
                 const never_index = (sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)? ?? sensitive_arg.getTruthyPropertyValue(globalObject, name)?) != null;
 
-                const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
-                const value = value_slice.val.slice();
+                const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                const value = value_slice.slice();
                 if (!isValidHeaderValue(value)) {
                     const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name});
                     return globalObject.throwValue(exception);
@@ -4475,8 +4515,8 @@ pub struct H2FrameParser {
 
                         const never_index = (sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)? ?? sensitive_arg.getTruthyPropertyValue(globalObject, name)?) != null;
 
-                        const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
-                        const value = value_slice.val.slice();
+                        const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                        const value = value_slice.slice();
                         if (!isValidHeaderValue(value)) {
                             return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name}).throw();
                         }
@@ -4518,8 +4558,8 @@ pub struct H2FrameParser {
 
                     const never_index = (sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)? ?? sensitive_arg.getTruthyPropertyValue(globalObject, name)?) != null;
 
-                    const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
-                    const value = value_slice.val.slice();
+                    const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                    const value = value_slice.slice();
                     if (!isValidHeaderValue(value)) {
                         const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name});
                         return globalObject.throwValue(exception);
@@ -5326,14 +5366,18 @@ pub struct H2FrameParser {
             maxHeaderListSize: s.max_header_list_size,
             enableConnectProtocol: s.enable_connect_protocol,
         };
+        let window_grew = false;
         let it = _.streams.valueIterator();
         while (item := it.next()) {
             const stream = item.*;
-            if (@as(u64, s.initial_window_size) >= stream.remoteWindowSize) {
+            if (@as(u64, s.initial_window_size) > stream.remoteWindowSize) {
                 stream.remoteWindowSize = s.initial_window_size;
+                window_grew = true;
             }
         }
-        * = _.flush();
+        if (window_grew) {
+            * = _.flush();
+        }
         const js_val = settingsToJS(s, _.globalThis);
         _.dispatch(.onRemoteSettings, js_val);
     }

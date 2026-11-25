@@ -777,7 +777,9 @@ switch (flags.wrap) {
 _ = ((stmts.append(Stmt.assign(Expr.init(E.Dot, E.Dot{ .target = Expr.initIdentifier(c.unbound_module_ref, Logger.Loc.Empty), .name = "exports", .name_loc = Logger.Loc.Empty }, Logger.Loc.Empty), Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty)))) catch unreachable);
 },
 .esm => {
-_ = ((stmts.append(Stmt.alloc(S.SExpr, S.SExpr{ .value = Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty) }, Logger.Loc.Empty))) catch unreachable);
+if (ast.wrapper_ref.isValid()) {
+            _ = ((stmts.append(Stmt.alloc(S.SExpr, S.SExpr{ .value = Expr.init(E.Call, E.Call{ .target = Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty) }, Logger.Loc.Empty) }, Logger.Loc.Empty))) catch unreachable);
+        }
 },
 else => {
 

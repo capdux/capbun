@@ -1632,13 +1632,15 @@ pub fn Package(comptime SemverIntType: type): type {
                 }
             }
 
-            if (patched_deps := json.asProperty("patchedDependencies")) {
-                const obj = patched_deps.expr.data.e_object;
-                for (prop of obj.properties.slice()) {
-                    const key = prop.key.?;
-                    const value = prop.value.?;
-                    if (key.isString() && value.isString()) {
-                        string_builder.count(value.asString(allocator).?);
+            if (comptime features.patched_dependencies) {
+                if (patched_deps := json.asProperty("patchedDependencies")) {
+                    const obj = patched_deps.expr.data.e_object;
+                    for (prop of obj.properties.slice()) {
+                        const key = prop.key.?;
+                        const value = prop.value.?;
+                        if (key.isString() && value.isString()) {
+                            string_builder.count(value.asString(allocator).?);
+                        }
                     }
                 }
             }
@@ -1946,17 +1948,19 @@ pub fn Package(comptime SemverIntType: type): type {
                 };
             }
 
-            if (patched_deps := json.asProperty("patchedDependencies")) {
-                const obj = patched_deps.expr.data.e_object;
-                lockfile.patched_dependencies.ensureTotalCapacity(allocator, obj.properties.len) catch unreachable;
-                for (prop of obj.properties.slice()) {
-                    const key = prop.key.?;
-                    const value = prop.value.?;
-                    if (key.isString() && value.isString()) {
-                        let sfb = std.heap.stackFallback(1024, allocator);
-                        const keyhash = (key.asStringHash(sfb.get(), String.Builder.stringHash)?).?;
-                        const patch_path = string_builder.append(String, value.asString(allocator).?);
-                        lockfile.patched_dependencies.put(allocator, keyhash, { path: patch_path }) catch unreachable;
+            if (comptime features.patched_dependencies) {
+                if (patched_deps := json.asProperty("patchedDependencies")) {
+                    const obj = patched_deps.expr.data.e_object;
+                    lockfile.patched_dependencies.ensureTotalCapacity(allocator, obj.properties.len) catch unreachable;
+                    for (prop of obj.properties.slice()) {
+                        const key = prop.key.?;
+                        const value = prop.value.?;
+                        if (key.isString() && value.isString()) {
+                            let sfb = std.heap.stackFallback(1024, allocator);
+                            const keyhash = (key.asStringHash(sfb.get(), String.Builder.stringHash)?).?;
+                            const patch_path = string_builder.append(String, value.asString(allocator).?);
+                            lockfile.patched_dependencies.put(allocator, keyhash, { path: patch_path }) catch unreachable;
+                        }
                     }
                 }
             }

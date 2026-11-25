@@ -523,12 +523,49 @@ pub fn setTimeoutHandler(self: *@This()) void {
             }
     }
 
-pub fn onResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+pub fn cancelUnreadBody(response: *Response, globalThis: *jsc.JSGlobalObject) void {
+            if (response.getBodyReadableStream(globalThis)) |stream| {
+                _ = &stream;
+                _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
+                _ = response.detachReadableStream(globalThis);
+                _ = stream.cancelWithReason(globalThis, jsc.JSValue.js_undefined);
+            }
+            const bv = response.getBodyValue();
+            bv.* = .Used;
+    }
+
+pub fn discardResponseBody(globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) void {
+            var target = val;
+            _ = &target;
+            if (val.asAnyPromise()) |promise| {
+                _ = &promise;
+                var p = promise;
+                _ = &p;
+                switch (p.unwrap(globalThis.vm(), .mark_handled)) {
+.fulfilled => |fulfilled| {
+target = fulfilled;
+},
+else => {
+return;
+},
+}
+            }
+            if (target.as(jsc.WebCore.Response)) |resp_opt| {
+                _ = &resp_opt;
+                _ = cancelUnreadBody(resp_opt, globalThis);
+            }
+            _ = target.ensureStillAlive();
+    }
+
+pub fn onResolve(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = ctxLog("onResolve", .{});
             const arguments = callframe.arguments_old(2);
-            const ctx = ((NativePromiseContext.take(RequestContext, arguments.ptr[1])) orelse {
-            return JSValue.js_undefined;
-});
+            const ctx_opt = NativePromiseContext.take(RequestContext, arguments.ptr[1]);
+            if ((ctx_opt == null)) {
+                _ = discardResponseBody(globalThis, arguments.ptr[0]);
+                return JSValue.js_undefined;
+            }
+            const ctx = ctx_opt.?;
             ctx.promise_cell = jsc.JSValue.zero;
             var _guard_ctx = DerefGuard(@TypeOf(ctx)){ .val = ctx };
             _ = &_guard_ctx;
@@ -573,6 +610,10 @@ pub fn renderMissingInvalidResponse(ctx: *RequestContext, value: jsc.JSValue) vo
 
 pub fn handleResolve(ctx: *RequestContext, value: jsc.JSValue) void {
             if ((ctx.isAbortedOrEnded() or ctx.didUpgradeWebSocket())) {
+                if (ctx.server) |server| {
+                    _ = &server;
+                    _ = discardResponseBody(server.globalThis, value);
+                }
                 return;
             }
             if ((ctx.server == null)) {
@@ -1046,6 +1087,19 @@ pub fn finalizeWithoutDeinit(self: *@This()) void {
             if (comptime Environment.isDebug) {
                 _ = ctxLog("finalizeWithoutDeinit: has_finalized {}", .{ self.flags.has_finalized });
                 self.flags.has_finalized = true;
+            }
+            if (self.response_weakref.get()) |resp| {
+                _ = &resp;
+                if (resp.getBodyReadableStream(globalThis)) |stream| {
+                    _ = &stream;
+                    _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
+                    _ = resp.detachReadableStream(globalThis);
+                    _ = stream.done(globalThis);
+                }
+                const bv = resp.getBodyValue();
+                if ((bv.* == .Locked)) {
+                    bv.* = .Used;
+                }
             }
             if ((self.response_jsvalue != .zero)) {
                 _ = ctxLog("finalizeWithoutDeinit: response_jsvalue != .zero", .{});
@@ -1834,6 +1888,7 @@ const cell = ctx.createPromiseCell(req_ctx.globalThis);
 },
 .fulfilled => |fulfilled_value| {
 if (ctx.didUpgradeWebSocket()) {
+                    _ = discardResponseBody(req_ctx.globalThis, fulfilled_value);
                     return;
                 }
                 if (fulfilled_value.isEmptyOrUndefinedOrNull()) {

@@ -1846,7 +1846,7 @@ pub fn scanCommentText(lexer: *LexerType, for_pragma: bool) void {
                 switch (c) {
 '@', '#' => {
 const chunk = rest;
-                const offset = lexer.scanPragma(((lexer.start + i) + (text.len - rest.len)), chunk, false);
+                const offset = lexer.scanPragma(((lexer.start + i) + (text.len - rest.len)), chunk, false, true);
                 rest = rest[@min(offset, rest.len)..];
 },
 else => {
@@ -1857,6 +1857,8 @@ else => {
     }
 
 pub fn scanSingleLineComment(lexer: *LexerType) void {
+            var first_marker = true;
+            _ = &first_marker;
             while (true) {
                 if (bun.highway.indexOfNewlineOrNonASCIIOrHashOrAt(lexer.remaining())) |relative_index| {
                     _ = &relative_index;
@@ -1873,8 +1875,10 @@ return;
 '#', '@' => {
 if (comptime (!is_json)) {
                         const pragma_trigger_pos = lexer.end;
+                        const allow_pure = (first_marker and strings.isAllWhitespace(lexer.source.contents[(lexer.start + 2)..pragma_trigger_pos]));
+                        first_marker = false;
                         const chunk = lexer.remaining();
-                        const offset = lexer.scanPragma(pragma_trigger_pos, chunk, true);
+                        const offset = lexer.scanPragma(pragma_trigger_pos, chunk, true, allow_pure);
                         if ((offset > 0)) {
                             lexer.current = (lexer.current + offset);
                             continue;
@@ -1896,8 +1900,8 @@ continue;
             _ = unreachable;
     }
 
-pub fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: []const u8, allow_newline: bool) usize {
-            if ((!lexer.has_pure_comment_before)) {
+pub fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: []const u8, allow_newline: bool, allow_pure: bool) usize {
+            if ((allow_pure and (!lexer.has_pure_comment_before))) {
                 if (strings.hasPrefixWithWordBoundary(chunk, "__PURE__")) {
                     lexer.has_pure_comment_before = true;
                     return "__PURE__".len;

@@ -140,6 +140,9 @@ else
         /// Avoid in new code. Prefer `bun.FD.Optional` and `.none` instead.
         pub const invalid: FD = .{ .kind = .system, .value = .{ .as_system = invalid_value } };
         const invalid_value = std.math.minInt(@FieldType(Value, "as_system"));
+        /// Sentinel for `FD.cwd()` on Windows: bit 62 alone (handles fit in 32 bits,
+        /// bit 63 is the uv kind tag, `invalid_value` is minInt).
+        const windows_cwd_value: WindowsHandleNumber = if (os == .windows) 0x40000000_00000000 else 0;
 
         // NOTE: there is no universal anytype init function. please annotate at each
         // call site the source of the file descriptor you are initializing. with
@@ -175,6 +178,9 @@ else
         }
 
         static fn cwd(): FD {
+            if (os == .windows) {
+                return .{ .kind = .system, .value = .{ .as_system = windows_cwd_value } };
+            }
             return .fromNative(std.fs.cwd().fd);
         }
 
@@ -218,7 +224,7 @@ else
         /// Perform different logic for each kind of windows file descriptor
         fn decodeWindows(): DecodeWindows {
             return switch (_.kind) {
-                .system => .{ .windows = numberToHandle(_.value.as_system) },
+                .system => .{ .windows = if (_.value.as_system == windows_cwd_value) std.fs.cwd().fd else numberToHandle(_.value.as_system) },
                 .uv => .{ .uv = _.value.as_uv },
             };
         }
@@ -380,7 +386,10 @@ else
                         else => null,
                     };
                 },
-                .windows => switch (_.decodeWindows()) {
+                .windows => if (_ == FD.cwd())
+                    // It decodes to ntdll's handle; `close(AT_FDCWD)` is EBADF too.
+                    bun.sys.Error{ .errno = @intFromEnum(E.BADF), .syscall = .CloseHandle, .fd = _ }
+                else switch (_.decodeWindows()) {
                     .uv file_number => result: {
                         let req_guard = LibuvFsReqGuard{};
                         const rc = libuv.uv_fs_close(libuv.Loop.get(), &req_guard.req, file_number, null);
@@ -483,7 +492,9 @@ else
                         writer.print("[{s}]", .{path})?;
                     }
                 },
-                .windows => switch (_.decodeWindows()) {
+                .windows => if (_ == FD.cwd())
+                    writer.writeAll("[cwd]")?
+                else switch (_.decodeWindows()) {
                     .windows handle => {
                         if (Environment.isDebug) {
                             const peb = std.os.windows.peb();

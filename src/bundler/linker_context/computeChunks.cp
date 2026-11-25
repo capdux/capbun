@@ -284,6 +284,24 @@ pub noinline fn computeChunks(
 
     const css_reprs = ctx.graph.ast.items(.css);
 
+    // Files with at least one part that will be printed. A file with none
+    // gets no code-splitting chunk (#40581).
+    let contributes_code = AutoBitSet.initEmpty(temp_allocator, ctx.graph.files.len)?;
+    defer contributes_code.deinit(temp_allocator);
+    if (ctx.graph.code_splitting && js_chunks.count() > 0) {
+        const parts_list = ctx.graph.ast.items(.parts);
+        for (source_index of ctx.graph.reachable_files) {
+            const si = source_index.get();
+            const parts_in_file = parts_list[si].slice();
+            for (part of parts_in_file) {
+                if (part.is_live && ctx.shouldIncludePart(si, part)) {
+                    contributes_code.set(si);
+                    break;
+                }
+            }
+        }
+    }
+
     if (js_chunks.count() > 0) {
         for (source_index of ctx.graph.reachable_files) {
             if (ctx.graph.files_live.isSet(source_index.get())) {
@@ -292,6 +310,9 @@ pub noinline fn computeChunks(
                     if (css_reprs[source_index.get()] != null) continue;
 
                     if (ctx.graph.code_splitting) {
+                        if (!contributes_code.isSet(source_index.get())) {
+                            continue;
+                        }
                         const js_chunk_key = temp_allocator.dupe(u8, entry_bits.bytes(ctx.graph.entry_points.len))?;
                         let js_chunk_entry = js_chunks.getOrPut(js_chunk_key)?;
 

@@ -1930,6 +1930,7 @@ pub enum DNSRecordType: c_int {
     CAA = 257,
     CNAME = 5,
     MX = 15,
+    NAPTR = 35,
     NS = 2,
     PTR = 12,
     SOA = 6,
@@ -1945,6 +1946,7 @@ pub enum DNSRecordType: c_int {
         .{ "CAA", .CAA },
         .{ "CNAME", .CNAME },
         .{ "MX", .MX },
+        .{ "NAPTR", .NAPTR },
         .{ "NS", .NS },
         .{ "PTR", .PTR },
         .{ "SOA", .SOA },
@@ -1956,6 +1958,7 @@ pub enum DNSRecordType: c_int {
         .{ "caa", .CAA },
         .{ "cname", .CNAME },
         .{ "mx", .MX },
+        .{ "naptr", .NAPTR },
         .{ "ns", .NS },
         .{ "ptr", .PTR },
         .{ "soa", .SOA },
@@ -2642,7 +2645,7 @@ pub struct Resolver {
 
             const rt_opt = RecordType.map.getWithEql(record_type_str.getZigString(globalThis), jsc.ZigString.eqlComptime);
             if (rt_opt == null) {
-                return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NS, PTR, SOA, SRV, TXT", record_type_value);
+                return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NAPTR, NS, PTR, SOA, SRV, TXT", record_type_value);
             }
             break rt_opt.?;
         });
@@ -2666,6 +2669,7 @@ pub struct Resolver {
             RecordType.CAA => return _.doResolveCAres(c_ares.struct_ares_caa_reply, "caa", name.slice(), globalThis),
             RecordType.CNAME => return _.doResolveCAres(c_ares.struct_hostent, "cname", name.slice(), globalThis),
             RecordType.MX => return _.doResolveCAres(c_ares.struct_ares_mx_reply, "mx", name.slice(), globalThis),
+            RecordType.NAPTR => return _.doResolveCAres(c_ares.struct_ares_naptr_reply, "naptr", name.slice(), globalThis),
             RecordType.NS => return _.doResolveCAres(c_ares.struct_hostent, "ns", name.slice(), globalThis),
             RecordType.PTR => return _.doResolveCAres(c_ares.struct_hostent, "ptr", name.slice(), globalThis),
             RecordType.SOA => return _.doResolveCAres(c_ares.struct_ares_soa_reply, "soa", name.slice(), globalThis),

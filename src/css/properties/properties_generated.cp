@@ -16,6 +16,9 @@ const Targets = css.targets.Targets;
 const Feature = css.prefixes.Feature;
 
 const ColorScheme = css.css_properties.ui.ColorScheme;
+const ViewTransitionName = css.css_properties.transition.ViewTransitionName;
+const ViewTransitionGroup = css.css_properties.transition.ViewTransitionGroup;
+const NoneOrCustomIdentList = css.css_values.ident.NoneOrCustomIdentList;
 
 const TransformList = css.css_properties.transform.TransformList;
 const TransformStyle = css.css_properties.transform.TransformStyle;
@@ -29,7 +32,7 @@ const Scale = css.css_properties.transform.Scale;
 const css_values = css.css_values;
 const CssColor = css.css_values.color.CssColor;
 
-pub enum PropertyIdNameEnum { @"background-color", @"background-image", @"background-position-x", @"background-position-y", @"background-position", @"background-size", @"background-repeat", @"background-attachment", @"background-clip", @"background-origin", background, @"box-shadow", opacity, color, display, visibility, width, height, @"min-width", @"min-height", @"max-width", @"max-height", @"block-size", @"inline-size", @"min-block-size", @"min-inline-size", @"max-block-size", @"max-inline-size", @"box-sizing", @"aspect-ratio", overflow, @"overflow-x", @"overflow-y", @"text-overflow", position, top, bottom, left, right, @"inset-block-start", @"inset-block-end", @"inset-inline-start", @"inset-inline-end", @"inset-block", @"inset-inline", inset, @"border-spacing", @"border-top-color", @"border-bottom-color", @"border-left-color", @"border-right-color", @"border-block-start-color", @"border-block-end-color", @"border-inline-start-color", @"border-inline-end-color", @"border-top-style", @"border-bottom-style", @"border-left-style", @"border-right-style", @"border-block-start-style", @"border-block-end-style", @"border-inline-start-style", @"border-inline-end-style", @"border-top-width", @"border-bottom-width", @"border-left-width", @"border-right-width", @"border-block-start-width", @"border-block-end-width", @"border-inline-start-width", @"border-inline-end-width", @"border-top-left-radius", @"border-top-right-radius", @"border-bottom-left-radius", @"border-bottom-right-radius", @"border-start-start-radius", @"border-start-end-radius", @"border-end-start-radius", @"border-end-end-radius", @"border-radius", @"border-image-source", @"border-image-outset", @"border-image-repeat", @"border-image-width", @"border-image-slice", @"border-image", @"border-color", @"border-style", @"border-width", @"border-block-color", @"border-block-style", @"border-block-width", @"border-inline-color", @"border-inline-style", @"border-inline-width", border, @"border-top", @"border-bottom", @"border-left", @"border-right", @"border-block", @"border-block-start", @"border-block-end", @"border-inline", @"border-inline-start", @"border-inline-end", outline, @"outline-color", @"outline-style", @"outline-width", @"flex-direction", @"flex-wrap", @"flex-flow", @"flex-grow", @"flex-shrink", @"flex-basis", flex, order, @"align-content", @"justify-content", @"place-content", @"align-self", @"justify-self", @"place-self", @"align-items", @"justify-items", @"place-items", @"row-gap", @"column-gap", gap, @"box-orient", @"box-direction", @"box-ordinal-group", @"box-align", @"box-flex", @"box-flex-group", @"box-pack", @"box-lines", @"flex-pack", @"flex-order", @"flex-align", @"flex-item-align", @"flex-line-pack", @"flex-positive", @"flex-negative", @"flex-preferred-size", @"margin-top", @"margin-bottom", @"margin-left", @"margin-right", @"margin-block-start", @"margin-block-end", @"margin-inline-start", @"margin-inline-end", @"margin-block", @"margin-inline", margin, @"padding-top", @"padding-bottom", @"padding-left", @"padding-right", @"padding-block-start", @"padding-block-end", @"padding-inline-start", @"padding-inline-end", @"padding-block", @"padding-inline", padding, @"scroll-margin-top", @"scroll-margin-bottom", @"scroll-margin-left", @"scroll-margin-right", @"scroll-margin-block-start", @"scroll-margin-block-end", @"scroll-margin-inline-start", @"scroll-margin-inline-end", @"scroll-margin-block", @"scroll-margin-inline", @"scroll-margin", @"scroll-padding-top", @"scroll-padding-bottom", @"scroll-padding-left", @"scroll-padding-right", @"scroll-padding-block-start", @"scroll-padding-block-end", @"scroll-padding-inline-start", @"scroll-padding-inline-end", @"scroll-padding-block", @"scroll-padding-inline", @"scroll-padding", @"font-weight", @"font-size", @"font-stretch", @"font-family", @"font-style", @"font-variant-caps", @"line-height", font, @"transition-property", @"transition-duration", @"transition-delay", @"transition-timing-function", transition, transform, @"transform-origin", @"transform-style", @"transform-box", @"backface-visibility", perspective, @"perspective-origin", translate, rotate, scale, @"text-decoration-color", @"text-emphasis-color", @"text-shadow", direction, composes, @"mask-image", @"mask-mode", @"mask-repeat", @"mask-position-x", @"mask-position-y", @"mask-position", @"mask-clip", @"mask-origin", @"mask-size", @"mask-composite", @"mask-type", mask, @"mask-border-source", @"mask-border-mode", @"mask-border-slice", @"mask-border-width", @"mask-border-outset", @"mask-border-repeat", @"mask-border", @"-webkit-mask-composite", @"mask-source-type", @"mask-box-image", @"mask-box-image-source", @"mask-box-image-slice", @"mask-box-image-width", @"mask-box-image-outset", @"mask-box-image-repeat", @"color-scheme" }
+pub enum PropertyIdNameEnum { @"background-color", @"background-image", @"background-position-x", @"background-position-y", @"background-position", @"background-size", @"background-repeat", @"background-attachment", @"background-clip", @"background-origin", background, @"box-shadow", opacity, color, display, visibility, width, height, @"min-width", @"min-height", @"max-width", @"max-height", @"block-size", @"inline-size", @"min-block-size", @"min-inline-size", @"max-block-size", @"max-inline-size", @"box-sizing", @"aspect-ratio", overflow, @"overflow-x", @"overflow-y", @"text-overflow", position, top, bottom, left, right, @"inset-block-start", @"inset-block-end", @"inset-inline-start", @"inset-inline-end", @"inset-block", @"inset-inline", inset, @"border-spacing", @"border-top-color", @"border-bottom-color", @"border-left-color", @"border-right-color", @"border-block-start-color", @"border-block-end-color", @"border-inline-start-color", @"border-inline-end-color", @"border-top-style", @"border-bottom-style", @"border-left-style", @"border-right-style", @"border-block-start-style", @"border-block-end-style", @"border-inline-start-style", @"border-inline-end-style", @"border-top-width", @"border-bottom-width", @"border-left-width", @"border-right-width", @"border-block-start-width", @"border-block-end-width", @"border-inline-start-width", @"border-inline-end-width", @"border-top-left-radius", @"border-top-right-radius", @"border-bottom-left-radius", @"border-bottom-right-radius", @"border-start-start-radius", @"border-start-end-radius", @"border-end-start-radius", @"border-end-end-radius", @"border-radius", @"border-image-source", @"border-image-outset", @"border-image-repeat", @"border-image-width", @"border-image-slice", @"border-image", @"border-color", @"border-style", @"border-width", @"border-block-color", @"border-block-style", @"border-block-width", @"border-inline-color", @"border-inline-style", @"border-inline-width", border, @"border-top", @"border-bottom", @"border-left", @"border-right", @"border-block", @"border-block-start", @"border-block-end", @"border-inline", @"border-inline-start", @"border-inline-end", outline, @"outline-color", @"outline-style", @"outline-width", @"flex-direction", @"flex-wrap", @"flex-flow", @"flex-grow", @"flex-shrink", @"flex-basis", flex, order, @"align-content", @"justify-content", @"place-content", @"align-self", @"justify-self", @"place-self", @"align-items", @"justify-items", @"place-items", @"row-gap", @"column-gap", gap, @"box-orient", @"box-direction", @"box-ordinal-group", @"box-align", @"box-flex", @"box-flex-group", @"box-pack", @"box-lines", @"flex-pack", @"flex-order", @"flex-align", @"flex-item-align", @"flex-line-pack", @"flex-positive", @"flex-negative", @"flex-preferred-size", @"margin-top", @"margin-bottom", @"margin-left", @"margin-right", @"margin-block-start", @"margin-block-end", @"margin-inline-start", @"margin-inline-end", @"margin-block", @"margin-inline", margin, @"padding-top", @"padding-bottom", @"padding-left", @"padding-right", @"padding-block-start", @"padding-block-end", @"padding-inline-start", @"padding-inline-end", @"padding-block", @"padding-inline", padding, @"scroll-margin-top", @"scroll-margin-bottom", @"scroll-margin-left", @"scroll-margin-right", @"scroll-margin-block-start", @"scroll-margin-block-end", @"scroll-margin-inline-start", @"scroll-margin-inline-end", @"scroll-margin-block", @"scroll-margin-inline", @"scroll-margin", @"scroll-padding-top", @"scroll-padding-bottom", @"scroll-padding-left", @"scroll-padding-right", @"scroll-padding-block-start", @"scroll-padding-block-end", @"scroll-padding-inline-start", @"scroll-padding-inline-end", @"scroll-padding-block", @"scroll-padding-inline", @"scroll-padding", @"font-weight", @"font-size", @"font-stretch", @"font-family", @"font-style", @"font-variant-caps", @"line-height", font, @"transition-property", @"transition-duration", @"transition-delay", @"transition-timing-function", transition, transform, @"transform-origin", @"transform-style", @"transform-box", @"backface-visibility", perspective, @"perspective-origin", translate, rotate, scale, @"text-decoration-color", @"text-emphasis-color", @"text-shadow", direction, composes, @"mask-image", @"mask-mode", @"mask-repeat", @"mask-position-x", @"mask-position-y", @"mask-position", @"mask-clip", @"mask-origin", @"mask-size", @"mask-composite", @"mask-type", mask, @"mask-border-source", @"mask-border-mode", @"mask-border-slice", @"mask-border-width", @"mask-border-outset", @"mask-border-repeat", @"mask-border", @"-webkit-mask-composite", @"mask-source-type", @"mask-box-image", @"mask-box-image-source", @"mask-box-image-slice", @"mask-box-image-width", @"mask-box-image-outset", @"mask-box-image-repeat", @"color-scheme", @"view-transition-name", @"view-transition-class", @"view-transition-group" }
 const Image = css.css_values.image.Image;
 const Length = css.css_values.length.Length;
 const LengthValue = css.css_values.length.LengthValue;
@@ -506,6 +509,9 @@ pub union(PropertyIdTag) Property {
  @"mask-box-image-outset": [Rect(LengthOrNumber), VendorPrefix],
  @"mask-box-image-repeat": [BorderImageRepeat, VendorPrefix],
  @"color-scheme": ColorScheme,
+ @"view-transition-name": ViewTransitionName,
+ @"view-transition-class": NoneOrCustomIdentList,
+ @"view-transition-group": ViewTransitionGroup,
   all: CSSWideKeyword,
   unparsed: UnparsedProperty,
   custom: CustomProperty,
@@ -2487,6 +2493,27 @@ pub union(PropertyIdTag) Property {
     }
   }
 },
+.@"view-transition-name"  => {
+  if (c := css.generic.parseWithOptions(ViewTransitionName, input, options).asValue()) {
+    if (input.expectExhausted().isOk()) {
+      return R{ result: Property{ @"view-transition-name": c } };
+    }
+  }
+},
+.@"view-transition-class"  => {
+  if (c := css.generic.parseWithOptions(NoneOrCustomIdentList, input, options).asValue()) {
+    if (input.expectExhausted().isOk()) {
+      return R{ result: Property{ @"view-transition-class": c } };
+    }
+  }
+},
+.@"view-transition-group"  => {
+  if (c := css.generic.parseWithOptions(ViewTransitionGroup, input, options).asValue()) {
+    if (input.expectExhausted().isOk()) {
+      return R{ result: Property{ @"view-transition-group": c } };
+    }
+  }
+},
       .all => return R{ result: Property{ all: switch (CSSWideKeyword.parse(input)) {
         .result v => v,
         .err e => return R{ err: e },
@@ -2757,6 +2784,9 @@ pub union(PropertyIdTag) Property {
 .@"mask-box-image-outset" => |*v| PropertyId{ @"mask-box-image-outset": v[1] },
 .@"mask-box-image-repeat" => |*v| PropertyId{ @"mask-box-image-repeat": v[1] },
 .@"color-scheme" => .@"color-scheme",
+.@"view-transition-name" => .@"view-transition-name",
+.@"view-transition-class" => .@"view-transition-class",
+.@"view-transition-group" => .@"view-transition-group",
       .all => PropertyId.all,
       .unparsed => |unparsed| unparsed.property_id,
       .custom => |c| PropertyId{ custom: c.name },
@@ -3011,6 +3041,9 @@ pub union(PropertyIdTag) Property {
 .@"mask-box-image-outset" => |*v| Property{ @"mask-box-image-outset": .{ v[0].deepClone(allocator), v[1] } },
 .@"mask-box-image-repeat" => |*v| Property{ @"mask-box-image-repeat": .{ v[0].deepClone(allocator), v[1] } },
 .@"color-scheme" => |*v| Property{ @"color-scheme": v.deepClone(allocator) },
+.@"view-transition-name" => |*v| Property{ @"view-transition-name": v.deepClone(allocator) },
+.@"view-transition-class" => |*v| Property{ @"view-transition-class": v.deepClone(allocator) },
+.@"view-transition-group" => |*v| Property{ @"view-transition-group": v.deepClone(allocator) },
       .all => |*a| return Property{ all: a.deepClone(allocator) },
       .unparsed => |*u| return Property{ unparsed: u.deepClone(allocator) },
       .custom => |*c| return Property{ custom: c.deepClone(allocator) },
@@ -3273,6 +3306,9 @@ pub union(PropertyIdTag) Property {
 .@"mask-box-image-outset" => |*x| .{"mask-box-image-outset", x[1]},
 .@"mask-box-image-repeat" => |*x| .{"mask-box-image-repeat", x[1]},
 .@"color-scheme" =>  .{"color-scheme", VendorPrefix{ none: true }},
+.@"view-transition-name" =>  .{"view-transition-name", VendorPrefix{ none: true }},
+.@"view-transition-class" =>  .{"view-transition-class", VendorPrefix{ none: true }},
+.@"view-transition-group" =>  .{"view-transition-group", VendorPrefix{ none: true }},
       .all => .{ "all", VendorPrefix{ none: true } },
       .unparsed => |*unparsed| brk: {
         let prefix = unparsed.property_id.prefix();
@@ -3534,6 +3570,9 @@ pub union(PropertyIdTag) Property {
 .@"mask-box-image-outset" => |*value| value[0].toCss(dest),
 .@"mask-box-image-repeat" => |*value| value[0].toCss(dest),
 .@"color-scheme" => |*value| value.toCss(dest),
+.@"view-transition-name" => |*value| value.toCss(dest),
+.@"view-transition-class" => |*value| value.toCss(dest),
+.@"view-transition-group" => |*value| value.toCss(dest),
       .all => |*keyword| keyword.toCss(dest),
       .unparsed => |*unparsed| unparsed.value.toCss(dest, false),
       .custom => |*c| c.value.toCss(dest, c.name == .custom),
@@ -3865,6 +3904,9 @@ pub union(PropertyIdTag) Property {
 .@"mask-box-image-outset" => |*v| css.generic.eql(Rect(LengthOrNumber), &v[0], &rhs.@"mask-box-image-outset"[0]) && v[1].eq(rhs.@"mask-box-image-outset"[1]),
 .@"mask-box-image-repeat" => |*v| css.generic.eql(BorderImageRepeat, &v[0], &rhs.@"mask-box-image-repeat"[0]) && v[1].eq(rhs.@"mask-box-image-repeat"[1]),
 .@"color-scheme" => |*v| css.generic.eql(ColorScheme, v, &rhs.@"color-scheme"),
+.@"view-transition-name" => |*v| css.generic.eql(ViewTransitionName, v, &rhs.@"view-transition-name"),
+.@"view-transition-class" => |*v| css.generic.eql(NoneOrCustomIdentList, v, &rhs.@"view-transition-class"),
+.@"view-transition-group" => |*v| css.generic.eql(ViewTransitionGroup, v, &rhs.@"view-transition-group"),
       .unparsed => |*u| u.eql(&rhs.unparsed),
       .all => true,
       .custom => |*c| c.eql(&rhs.custom),
@@ -8875,6 +8917,9 @@ pub union(PropertyIdTag) PropertyId {
  @"mask-box-image-outset": VendorPrefix,
  @"mask-box-image-repeat": VendorPrefix,
  @"color-scheme": void,
+ @"view-transition-name": void,
+ @"view-transition-class": void,
+ @"view-transition-group": void,
   all: void,
   unparsed: void,
   custom: CustomPropertyName,
@@ -9141,6 +9186,9 @@ pub union(PropertyIdTag) PropertyId {
 .@"mask-box-image-outset" p => p,
 .@"mask-box-image-repeat" p => p,
 .@"color-scheme" => VendorPrefix{},
+.@"view-transition-name" => VendorPrefix{},
+.@"view-transition-class" => VendorPrefix{},
+.@"view-transition-group" => VendorPrefix{},
       .all, .custom, .unparsed => VendorPrefix{},
     };
   }
@@ -10133,6 +10181,18 @@ pub union(PropertyIdTag) PropertyId {
             const allowed_prefixes = VendorPrefix{ none: true };
             if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) return .@"color-scheme";
           },
+.@"view-transition-name" => {
+            const allowed_prefixes = VendorPrefix{ none: true };
+            if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) return .@"view-transition-name";
+          },
+.@"view-transition-class" => {
+            const allowed_prefixes = VendorPrefix{ none: true };
+            if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) return .@"view-transition-class";
+          },
+.@"view-transition-group" => {
+            const allowed_prefixes = VendorPrefix{ none: true };
+            if (bun.bits.contains(VendorPrefix, allowed_prefixes, pre)) return .@"view-transition-group";
+          },
       }
     }
 
@@ -10387,6 +10447,9 @@ pub union(PropertyIdTag) PropertyId {
 .@"mask-box-image-outset" => PropertyId{ @"mask-box-image-outset": pre },
 .@"mask-box-image-repeat" => PropertyId{ @"mask-box-image-repeat": pre },
 .@"color-scheme" => .@"color-scheme",
+.@"view-transition-name" => .@"view-transition-name",
+.@"view-transition-class" => .@"view-transition-class",
+.@"view-transition-group" => .@"view-transition-group",
       else => _,
     };
   }
@@ -10639,6 +10702,9 @@ pub union(PropertyIdTag) PropertyId {
 .@"mask-box-image-outset" => |*p| { bun.bits.insert(VendorPrefix, p, pre); },
 .@"mask-box-image-repeat" => |*p| { bun.bits.insert(VendorPrefix, p, pre); },
 .@"color-scheme" => {},
+.@"view-transition-name" => {},
+.@"view-transition-class" => {},
+.@"view-transition-group" => {},
       else => {},
     };
   }
@@ -11045,6 +11111,9 @@ pub union(PropertyIdTag) PropertyId {
 .@"mask-box-image-outset" => {},
 .@"mask-box-image-repeat" => {},
 .@"color-scheme" => {},
+.@"view-transition-name" => {},
+.@"view-transition-class" => {},
+.@"view-transition-group" => {},
       else => {},
     }
   }
@@ -11297,6 +11366,9 @@ mask,
 @"mask-box-image-outset",
 @"mask-box-image-repeat",
 @"color-scheme",
+@"view-transition-name",
+@"view-transition-class",
+@"view-transition-group",
     all,
     unparsed,
     custom,
@@ -11551,6 +11623,9 @@ mask,
 .@"mask-box-image-outset" => true,
 .@"mask-box-image-repeat" => true,
 .@"color-scheme" => false,
+.@"view-transition-name" => false,
+.@"view-transition-class" => false,
+.@"view-transition-group" => false,
         .unparsed => false,
         .custom => false,
         .all => false,
@@ -11807,6 +11882,9 @@ mask,
 .@"mask-box-image-outset" => Rect(LengthOrNumber),
 .@"mask-box-image-repeat" => BorderImageRepeat,
 .@"color-scheme" => ColorScheme,
+.@"view-transition-name" => ViewTransitionName,
+.@"view-transition-class" => NoneOrCustomIdentList,
+.@"view-transition-group" => ViewTransitionGroup,
         .all => CSSWideKeyword,
         .unparsed => UnparsedProperty,
         .custom => CustomProperty,

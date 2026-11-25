@@ -100,6 +100,7 @@ pub const ToCssCtx = enum {
 pub const _PseudoElementEnum = enum {
     cue,
     @"cue-region",
+    picker,
     @"view-transition-group",
     @"view-transition-image-pair",
     @"view-transition-old",
@@ -860,6 +861,12 @@ return .{ .err = e };
 return .{ .err = e };
 },
 }) } } },
+.picker => .{ .result = .{ .picker_function = .{ .identifier = (switch (css.css_values.ident.Ident.parse(input)) {
+.result => |a| a,
+.err => |e| {
+return .{ .err = e };
+},
+}) } } },
 .@"view-transition-group" => .{ .result = .{ .view_transition_group = .{ .part_name = (switch (ViewTransitionPartName.parse(input)) {
 .result => |a| a,
 .err => |e| {
@@ -1027,7 +1034,7 @@ pub fn isAndWhereErrorRecovery(self: *SelectorParser) ParseErrorRecovery {
     }
 
 pub fn parsePseudoElement(self: *SelectorParser, loc: css.SourceLocation, name: []const u8) Result(PseudoElement) {
-            const Map = (comptime bun.ComptimeStringMap(PseudoElement, .{ .{ "before", PseudoElement.before }, .{ "after", PseudoElement.after }, .{ "first-line", PseudoElement.first_line }, .{ "first-letter", PseudoElement.first_letter }, .{ "cue", PseudoElement.cue }, .{ "cue-region", PseudoElement.cue_region }, .{ "selection", PseudoElement{ .selection = css.VendorPrefix{ .none = true } } }, .{ "-moz-selection", PseudoElement{ .selection = css.VendorPrefix{ .moz = true } } }, .{ "placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .none = true } } }, .{ "-webkit-input-placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .webkit = true } } }, .{ "-moz-placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .moz = true } } }, .{ "-ms-input-placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .ms = true } } }, .{ "marker", PseudoElement.marker }, .{ "backdrop", PseudoElement{ .backdrop = css.VendorPrefix{ .none = true } } }, .{ "-webkit-backdrop", PseudoElement{ .backdrop = css.VendorPrefix{ .webkit = true } } }, .{ "file-selector-button", PseudoElement{ .file_selector_button = css.VendorPrefix{ .none = true } } }, .{ "-webkit-file-upload-button", PseudoElement{ .file_selector_button = css.VendorPrefix{ .webkit = true } } }, .{ "-ms-browse", PseudoElement{ .file_selector_button = css.VendorPrefix{ .ms = true } } }, .{ "-webkit-scrollbar", PseudoElement{ .webkit_scrollbar = .scrollbar } }, .{ "-webkit-scrollbar-button", PseudoElement{ .webkit_scrollbar = .button } }, .{ "-webkit-scrollbar-track", PseudoElement{ .webkit_scrollbar = .track } }, .{ "-webkit-scrollbar-track-piece", PseudoElement{ .webkit_scrollbar = .track_piece } }, .{ "-webkit-scrollbar-thumb", PseudoElement{ .webkit_scrollbar = .thumb } }, .{ "-webkit-scrollbar-corner", PseudoElement{ .webkit_scrollbar = .corner } }, .{ "-webkit-resizer", PseudoElement{ .webkit_scrollbar = .resizer } }, .{ "view-transition", PseudoElement.view_transition } }));
+            const Map = (comptime bun.ComptimeStringMap(PseudoElement, .{ .{ "before", PseudoElement.before }, .{ "after", PseudoElement.after }, .{ "first-line", PseudoElement.first_line }, .{ "first-letter", PseudoElement.first_letter }, .{ "cue", PseudoElement.cue }, .{ "cue-region", PseudoElement.cue_region }, .{ "selection", PseudoElement{ .selection = css.VendorPrefix{ .none = true } } }, .{ "-moz-selection", PseudoElement{ .selection = css.VendorPrefix{ .moz = true } } }, .{ "placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .none = true } } }, .{ "-webkit-input-placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .webkit = true } } }, .{ "-moz-placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .moz = true } } }, .{ "-ms-input-placeholder", PseudoElement{ .placeholder = css.VendorPrefix{ .ms = true } } }, .{ "marker", PseudoElement.marker }, .{ "backdrop", PseudoElement{ .backdrop = css.VendorPrefix{ .none = true } } }, .{ "-webkit-backdrop", PseudoElement{ .backdrop = css.VendorPrefix{ .webkit = true } } }, .{ "file-selector-button", PseudoElement{ .file_selector_button = css.VendorPrefix{ .none = true } } }, .{ "-webkit-file-upload-button", PseudoElement{ .file_selector_button = css.VendorPrefix{ .webkit = true } } }, .{ "-ms-browse", PseudoElement{ .file_selector_button = css.VendorPrefix{ .ms = true } } }, .{ "-webkit-scrollbar", PseudoElement{ .webkit_scrollbar = .scrollbar } }, .{ "-webkit-scrollbar-button", PseudoElement{ .webkit_scrollbar = .button } }, .{ "-webkit-scrollbar-track", PseudoElement{ .webkit_scrollbar = .track } }, .{ "-webkit-scrollbar-track-piece", PseudoElement{ .webkit_scrollbar = .track_piece } }, .{ "-webkit-scrollbar-thumb", PseudoElement{ .webkit_scrollbar = .thumb } }, .{ "-webkit-scrollbar-corner", PseudoElement{ .webkit_scrollbar = .corner } }, .{ "-webkit-resizer", PseudoElement{ .webkit_scrollbar = .resizer } }, .{ "view-transition", PseudoElement.view_transition }, .{ "details-content", PseudoElement.details_content }, .{ "picker-icon", PseudoElement.picker_icon }, .{ "checkmark", PseudoElement.checkmark } }));
             const pseudo_element = ((Map.getCaseInsensitiveWithEql(name, bun.strings.eqlComptimeIgnoreLen)) orelse (brk: {
             if ((!bun.strings.startsWithChar(name, 45))) {
                 _ = self.options.warn(loc.newCustomError(SelectorParseErrorKind{ .unsupported_pseudo_class_or_element = name }));
@@ -1407,6 +1414,22 @@ pub fn __generateHash(self: PseudoElementViewTransition) void {
     }
 };
 
+pub const PseudoElementPicker = struct {
+    identifier: css.css_values.ident.Ident,
+
+pub fn __generateEql(self: PseudoElementPicker) void {
+        _ = self;
+    }
+
+pub fn __generateDeepClone(self: PseudoElementPicker) void {
+        _ = self;
+    }
+
+pub fn __generateHash(self: PseudoElementPicker) void {
+        _ = self;
+    }
+};
+
 pub const PseudoElementCustom = struct {
     name: []const u8,
 
@@ -1460,6 +1483,10 @@ pub const PseudoElement = union(enum) {
     view_transition_image_pair: PseudoElementViewTransition,
     view_transition_old: PseudoElementViewTransition,
     view_transition_new: PseudoElementViewTransition,
+    details_content: void,
+    picker_icon: void,
+    checkmark: void,
+    picker_function: PseudoElementPicker,
     custom: PseudoElementCustom,
     custom_function: PseudoElementCustomFunction,
 

@@ -1341,15 +1341,17 @@ else => break :name,
                 _ = string_builder.count(resolver.new_name);
             }
 };
-            if (json.asProperty("patchedDependencies")) |patched_deps| {
-                _ = &patched_deps;
-                const obj = patched_deps.expr.data.e_object;
-                for (cp_iter_slice(obj.properties.slice())) |prop| {
-                    _ = &prop;
-                    const key = prop.key.?;
-                    const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
-                    if ((key.isString() and value.isString())) {
-                        _ = string_builder.count((value.asString(allocator)).?);
+            if (comptime features.patched_dependencies) {
+                if (json.asProperty("patchedDependencies")) |patched_deps| {
+                    _ = &patched_deps;
+                    const obj = patched_deps.expr.data.e_object;
+                    for (cp_iter_slice(obj.properties.slice())) |prop| {
+                        _ = &prop;
+                        const key = prop.key.?;
+                        const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
+                        if ((key.isString() and value.isString())) {
+                            _ = string_builder.count((value.asString(allocator)).?);
+                        }
                     }
                 }
             }
@@ -1618,20 +1620,22 @@ _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, q.loc, alloca
             } else {
                 package.resolution = .{ .tag = .root, .value = .{ .root = undefined } };
             }
-            if (json.asProperty("patchedDependencies")) |patched_deps| {
-                _ = &patched_deps;
-                const obj = patched_deps.expr.data.e_object;
-                _ = ((lockfile.patched_dependencies.ensureTotalCapacity(allocator, obj.properties.len)) catch unreachable);
-                for (cp_iter_slice(obj.properties.slice())) |prop| {
-                    _ = &prop;
-                    const key = prop.key.?;
-                    const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
-                    if ((key.isString() and value.isString())) {
-                        var sfb = std.heap.stackFallback(1024, allocator);
-                        _ = &sfb;
-                        const keyhash = (try key.asStringHash(sfb.get(), String.Builder.stringHash)).?;
-                        const patch_path = string_builder.append(String, (value.asString(allocator)).?);
-                        _ = ((lockfile.patched_dependencies.put(allocator, keyhash, .{ .path = patch_path })) catch unreachable);
+            if (comptime features.patched_dependencies) {
+                if (json.asProperty("patchedDependencies")) |patched_deps| {
+                    _ = &patched_deps;
+                    const obj = patched_deps.expr.data.e_object;
+                    _ = ((lockfile.patched_dependencies.ensureTotalCapacity(allocator, obj.properties.len)) catch unreachable);
+                    for (cp_iter_slice(obj.properties.slice())) |prop| {
+                        _ = &prop;
+                        const key = prop.key.?;
+                        const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
+                        if ((key.isString() and value.isString())) {
+                            var sfb = std.heap.stackFallback(1024, allocator);
+                            _ = &sfb;
+                            const keyhash = (try key.asStringHash(sfb.get(), String.Builder.stringHash)).?;
+                            const patch_path = string_builder.append(String, (value.asString(allocator)).?);
+                            _ = ((lockfile.patched_dependencies.put(allocator, keyhash, .{ .path = patch_path })) catch unreachable);
+                        }
                     }
                 }
             }

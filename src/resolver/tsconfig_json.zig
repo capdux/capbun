@@ -255,16 +255,22 @@ pub fn parse(allocator: std.mem.Allocator, log: *logger.Log, source: *const logg
                     _ = &jsx_prop;
                     if (jsx_prop.expr.asString(allocator)) |str| {
                         _ = &str;
-                        result.jsx.factory = try parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator);
-                        _ = result.jsx_flags.insert(.factory);
+                        if (parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator)) |factory| {
+                            _ = &factory;
+                            result.jsx.factory = factory;
+                            _ = result.jsx_flags.insert(.factory);
+                        }
                     }
                 }
                 if (compiler_opts.expr.asProperty("jsxFragmentFactory")) |jsx_prop| {
                     _ = &jsx_prop;
                     if (jsx_prop.expr.asString(allocator)) |str| {
                         _ = &str;
-                        result.jsx.fragment = try parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator);
-                        _ = result.jsx_flags.insert(.fragment);
+                        if (parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator)) |fragment| {
+                            _ = &fragment;
+                            result.jsx.fragment = fragment;
+                            _ = result.jsx_flags.insert(.fragment);
+                        }
                     }
                 }
                 if (compiler_opts.expr.asProperty("jsx")) |jsx_prop| {
@@ -444,39 +450,28 @@ pub fn isValidTSConfigPathPattern(text: []const u8, log: *logger.Log, source: *c
             return true;
     }
 
-pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
+pub fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: []const u8, allocator: std.mem.Allocator) ?[][]const u8 {
             if ((text.len == 0)) {
-                var empty_parts: [0][]const u8 = undefined;
-                _ = &empty_parts;
-                return empty_parts[0..0];
+                return null;
             }
-            const parts_count = (std.mem.count(u8, text, ".") + (if (comptime @typeInfo(@TypeOf(@intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))) else cp_cast_int(usize, @intFromBool((text[@as(usize, @intCast((text.len - 1)))] != 46)))));
-            var parts = ((std.array_list.Managed(string).initCapacity(allocator, parts_count)) catch unreachable);
+            var parts = std.array_list.Managed(string).init(allocator);
             _ = &parts;
-            if ((parts_count == 1)) {
-                if ((!js_lexer.isIdentifier(text))) {
-                    const warn = source.rangeOfString(loc);
-                    _ = (blk_catch_12: { break :blk_catch_12 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ text })) catch |__ce_12| { _ = &__ce_12;  }); });
-                    _ = parts.deinit();
-                    var empty_parts: [0][]const u8 = undefined;
-                    _ = &empty_parts;
-                    return empty_parts[0..0];
-                }
-                _ = parts.appendAssumeCapacity(text);
-                return parts.items;
-            }
             var iter = std.mem.tokenizeScalar(u8, text, 46);
             _ = &iter;
             while (iter.next()) |part| {
                 if ((!js_lexer.isIdentifier(part))) {
                     const warn = source.rangeOfString(loc);
-                    _ = (blk_catch_13: { break :blk_catch_13 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ part })) catch |__ce_13| { _ = &__ce_13;  }); });
+                    _ = (blk_catch_11: { break :blk_catch_11 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ part })) catch |__ce_11| { _ = &__ce_11;  }); });
                     _ = parts.deinit();
-                    var empty_parts: [0][]const u8 = undefined;
-                    _ = &empty_parts;
-                    return empty_parts[0..0];
+                    return null;
                 }
-                _ = parts.appendAssumeCapacity(part);
+                _ = ((parts.append(part)) catch unreachable);
+            }
+            if ((parts.items.len == 0)) {
+                const warn = source.rangeOfString(loc);
+                _ = (blk_catch_13: { break :blk_catch_13 ((log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", .{ text })) catch |__ce_13| { _ = &__ce_13;  }); });
+                _ = parts.deinit();
+                return null;
             }
             return parts.items;
     }

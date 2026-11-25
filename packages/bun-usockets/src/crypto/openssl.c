@@ -898,7 +898,7 @@ static int ssl_renegotiate(struct us_socket_t *s) {
 
 /* Returns 1 if shutdown is complete (or impossible) and the TCP socket may be
  * closed; 0 if we sent close_notify but must wait for the peer's. */
-static int ssl_handle_shutdown(struct us_socket_t *s, int force_fast_shutdown) {
+static int ssl_handle_shutdown(struct us_socket_t *s) {
     if (!s->ssl || us_internal_ssl_is_shut_down(s) || s->ssl_fatal_error || !SSL_is_init_finished(s_ssl(s)))
     return 1;
 
@@ -908,7 +908,6 @@ static int ssl_handle_shutdown(struct us_socket_t *s, int force_fast_shutdown) {
   if (!sent_shutdown || !received_shutdown) {
     ssl_set_loop_data(s);
     int ret = SSL_shutdown(s_ssl(s));
-    if (ret == 0 && force_fast_shutdown) ret = SSL_shutdown(s_ssl(s));
     if (ret < 0) {
       int err = SSL_get_error(s_ssl(s), ret);
       if (err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL) {
@@ -969,7 +968,7 @@ struct us_socket_t *us_internal_ssl_close(struct us_socket_t *s, int code, void 
    * under low-prio fan-out (connectionListener race). The actual raw-close
    * happens via on_end/ZERO_RETURN re-entering this function with
    * SSL_SENT_SHUTDOWN already set (ssl_handle_shutdown then returns 1). */
-  if (ssl_handle_shutdown(s, code != 0)) {
+  if (code != LIBUS_SOCKET_CLOSE_CODE_CLEAN_SHUTDOWN || ssl_handle_shutdown(s)) {
     return us_internal_socket_close_raw(s, code, reason);
   }
   return s;

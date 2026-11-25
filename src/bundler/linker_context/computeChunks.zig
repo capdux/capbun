@@ -335,6 +335,26 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
         var file_entry_bits: []AutoBitSet = ctx.graph.files.items(.entry_bits);
         _ = &file_entry_bits;
         const css_reprs = ctx.graph.ast.items(.css);
+        var contributes_code = try AutoBitSet.initEmpty(temp_allocator, ctx.graph.files.len);
+        _ = &contributes_code;
+        defer {
+        _ = contributes_code.deinit(temp_allocator);
+        }
+        if ((ctx.graph.code_splitting and (js_chunks.count() > 0))) {
+            const parts_list = ctx.graph.ast.items(.parts);
+            for (cp_iter_slice(ctx.graph.reachable_files)) |source_index| {
+                _ = &source_index;
+                const si = source_index.get();
+                const parts_in_file = parts_list[@as(usize, @intCast(si))].slice();
+                for (cp_iter_slice(parts_in_file)) |part| {
+                    _ = &part;
+                    if ((part.is_live and ctx.shouldIncludePart(si, part))) {
+                        _ = contributes_code.set(si);
+                        break;
+                    }
+                }
+            }
+        }
         if ((js_chunks.count() > 0)) {
             for (cp_iter_slice(ctx.graph.reachable_files)) |source_index| {
                 _ = &source_index;
@@ -345,6 +365,9 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
                             continue;
                         }
                         if (ctx.graph.code_splitting) {
+                            if ((!contributes_code.isSet(source_index.get()))) {
+                                continue;
+                            }
                             const js_chunk_key = try temp_allocator.dupe(u8, entry_bits.bytes(ctx.graph.entry_points.len));
                             var js_chunk_entry = try js_chunks.getOrPut(js_chunk_key);
                             _ = &js_chunk_entry;
@@ -404,8 +427,8 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
             {
                 var k_idx: i32 = 0;
                 _ = &k_idx;
-                const __end_6 = sorted_css_keys.len;
-                while (k_idx < __end_6) : (k_idx += 1) {
+                const __end_8 = sorted_css_keys.len;
+                while (k_idx < __end_8) : (k_idx += 1) {
                     const key = sorted_css_keys[@as(usize, @intCast(k_idx))];
                     const sorted_index: usize = (base_sorted_len + @as(usize, @intCast(k_idx)));
                     const index = ((css_chunks.getIndex(key)) orelse (unreachable));
@@ -429,8 +452,8 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
         {
             var chunk_id: i32 = 0;
             _ = &chunk_id;
-            const __end_9 = chunks.len;
-            while (chunk_id < __end_9) : (chunk_id += 1) {
+            const __end_11 = chunks.len;
+            while (chunk_id < __end_11) : (chunk_id += 1) {
                 var chunk = (&chunks[@as(usize, @intCast(chunk_id))]);
                 _ = &chunk;
                 if (chunk.entry_point.is_entry_point) {
@@ -466,8 +489,8 @@ pub noinline fn computeChunks(ctx: *LinkerContext, unique_key: u64) ![]Chunk {
         {
             var chunk_id: i32 = 0;
             _ = &chunk_id;
-            const __end_10 = chunks.len;
-            while (chunk_id < __end_10) : (chunk_id += 1) {
+            const __end_12 = chunks.len;
+            while (chunk_id < __end_12) : (chunk_id += 1) {
                 var chunk = (&chunks[@as(usize, @intCast(chunk_id))]);
                 _ = &chunk;
                 chunk.unique_key = unique_key_builder.fmt("{f}C{d:0>8}", .{ bun.fmt.hexIntLower(unique_key), @as(usize, @intCast(chunk_id)) });

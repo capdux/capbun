@@ -294,6 +294,7 @@ pub fn AstMaybe(
                             }
 
                             // rewrite `module.exports` to `exports`
+                            p.module_exports_rewrite_count += 1;
                             return Expr{ data: Expr.Data{ e_special: .module_exports }, loc: name_loc };
                         } else if (p.options.bundle && strings.eqlComptime(name, "id") && identifier_opts.assign_target == .none) {
                             // inline module.id

@@ -1031,22 +1031,24 @@ pub fn generateEntryPointTailJS(
                     ) catch unreachable;
                 },
                 .esm => {
-                    // "init_foo();"
-                    stmts.append(
-                        Stmt.alloc(
-                            S.SExpr,
-                            S.SExpr{
-                                value: Expr.init(
-                                    E.Call,
-                                    E.Call{
-                                        target: Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty),
-                                    },
-                                    Logger.Loc.Empty,
-                                ),
-                            },
-                            Logger.Loc.Empty,
-                        ),
-                    ) catch unreachable;
+                    if (ast.wrapper_ref.isValid()) {
+                        // "init_foo();"
+                        stmts.append(
+                            Stmt.alloc(
+                                S.SExpr,
+                                S.SExpr{
+                                    value: Expr.init(
+                                        E.Call,
+                                        E.Call{
+                                            target: Expr.initIdentifier(ast.wrapper_ref, Logger.Loc.Empty),
+                                        },
+                                        Logger.Loc.Empty,
+                                    ),
+                                },
+                                Logger.Loc.Empty,
+                            ),
+                        ) catch unreachable;
+                    }
                 },
                 else => {},
             }

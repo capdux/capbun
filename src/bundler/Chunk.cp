@@ -808,6 +808,10 @@ pub struct Chunk {
         return _.entry_point.is_entry_point;
     }
 
+    pub inline fn isEntryPointFile(source_index: u32): bool {
+        return _.entry_point.is_entry_point && _.entry_point.source_index == source_index;
+    }
+
     /// Returns the HTML closing tag that must be escaped when this chunk's content
     /// is inlined into a standalone HTML file (e.g. "</script" for JS, "</style" for CSS).
     fn closingTagForContent(): []const u8 {

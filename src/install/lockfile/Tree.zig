@@ -273,6 +273,12 @@ pub fn processSubtree(self: Tree, dependency_id: DependencyID, hoist_root_id: Tr
                 continue;
             }
             if ((pkg_resolutions[@as(usize, @intCast(pkg_id))].tag == .folder)) {
+                if (dependency.behavior.isPeer()) {
+                    const peer_hoist = try next.hoistDependency(true, hoist_root_id, pkg_id, (&dependency), dependency_lists, trees, method, builder);
+                    if ((peer_hoist == .hoisted)) {
+                        break :hoisted .hoisted;
+                    }
+                }
                 break :hoisted .{ .placement = .{ .id = next.id } };
             }
             break :hoisted try next.hoistDependency(true, hoist_root_id, pkg_id, (&dependency), dependency_lists, trees, method, builder);

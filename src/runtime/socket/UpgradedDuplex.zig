@@ -124,6 +124,7 @@ onDataCallback: jsc.Strong.Optional = .empty,
 onEndCallback: jsc.Strong.Optional = .empty,
 onWritableCallback: jsc.Strong.Optional = .empty,
 onCloseCallback: jsc.Strong.Optional = .empty,
+transport_eof: bool = false,
 event_loop_timer: EventLoopTimer = .{ .next = .epoch, .tag = .UpgradedDuplex },
 current_timeout: u32 = 0,
 
@@ -155,6 +156,9 @@ pub fn onClose(self: *UpgradedDuplex) void {
 
 pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) void {
         if (self.vm.isShuttingDown()) {
+            return;
+        }
+        if ((((data != null) and self.transport_eof) and self.isShutdown())) {
             return;
         }
         if (self.origin.get()) |duplex| {
@@ -235,6 +239,7 @@ pub fn onEnd(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
         if (jsc.host_fn.getFunctionData(function)) |ctx| {
             _ = &ctx;
             const req = bun.cast(*UpgradedDuplex, ctx);
+            req.transport_eof = true;
             if ((req.wrapper != null)) {
                 _ = req.handlers.onEnd(req.handlers.ctx);
             }

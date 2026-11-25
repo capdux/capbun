@@ -139,10 +139,18 @@ pub fn generateCodeForFileInChunkJS(
         namespace_export_part_index < part_range.part_index_end &&
         parts[namespace_export_part_index].is_live)
     {
+        let ns_part_stmts = parts[namespace_export_part_index].stmts;
+        if (c.options.output_format == .cjs &&
+            flags.force_include_exports_for_entry_point &&
+            !chunk.isEntryPointFile(part_range.source_index.get()) &&
+            ns_part_stmts.len > 0)
+        {
+            ns_part_stmts = ns_part_stmts[0 .. ns_part_stmts.len - 1];
+        }
         c.convertStmtsForChunk(
             part_range.source_index.get(),
             stmts,
-            parts[namespace_export_part_index].stmts,
+            ns_part_stmts,
             chunk,
             temp_allocator,
             flags.wrap,

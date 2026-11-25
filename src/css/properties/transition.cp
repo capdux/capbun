@@ -8,6 +8,7 @@ const Property = css.css_properties.Property;
 const PropertyId = css.css_properties.PropertyId;
 const Time = css.css_values.time.Time;
 const EasingFunction = css.css_values.easing.EasingFunction;
+const CustomIdent = css.css_values.ident.CustomIdent;
 
 const VendorPrefix = css.VendorPrefix;
 const Feature = css.prefixes.Feature;
@@ -538,6 +539,38 @@ fn isTransitionProperty(property_id: *const PropertyId): bool {
         .transition => true,
         else => false,
     };
+}
+
+pub union(enum) ViewTransitionName {
+    none: void, auto: void, @"match-element": void, custom: CustomIdent,
+    static fn parse(input: *css.Parser): css.Result(ViewTransitionName) {
+        if (input.tryParse(css.Parser.expectIdentMatching, .{"none"}).isOk()) return .{ .result = .none };
+        if (input.tryParse(css.Parser.expectIdentMatching, .{"auto"}).isOk()) return .{ .result = .auto };
+        if (input.tryParse(css.Parser.expectIdentMatching, .{"match-element"}).isOk()) return .{ .result = .@"match-element" };
+        return switch (CustomIdent.parse(input)) { .result => |v| .{ .result = .{ .custom = v } }, .err => |e| .{ .err = e } };
+    }
+    fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) { .none => dest.writeStr("none"), .auto => dest.writeStr("auto"), .@"match-element" => dest.writeStr("match-element"), .custom => |c| c.toCss(dest) };
+    }
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool { return css.implementEql(@This(), lhs, rhs); }
+    fn deepClone(allocator: Allocator): @This() { return css.implementDeepClone(@This(), &_, allocator); }
+    fn hash(hasher: *std.hash.Wyhash) { return css.implementHash(@This(), &_, hasher); }
+}
+
+pub union(enum) ViewTransitionGroup {
+    normal: void, contain: void, nearest: void, custom: CustomIdent,
+    static fn parse(input: *css.Parser): css.Result(ViewTransitionGroup) {
+        if (input.tryParse(css.Parser.expectIdentMatching, .{"normal"}).isOk()) return .{ .result = .normal };
+        if (input.tryParse(css.Parser.expectIdentMatching, .{"contain"}).isOk()) return .{ .result = .contain };
+        if (input.tryParse(css.Parser.expectIdentMatching, .{"nearest"}).isOk()) return .{ .result = .nearest };
+        return switch (CustomIdent.parse(input)) { .result => |v| .{ .result = .{ .custom = v } }, .err => |e| .{ .err = e } };
+    }
+    fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) { .normal => dest.writeStr("normal"), .contain => dest.writeStr("contain"), .nearest => dest.writeStr("nearest"), .custom => |c| c.toCss(dest) };
+    }
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool { return css.implementEql(@This(), lhs, rhs); }
+    fn deepClone(allocator: Allocator): @This() { return css.implementDeepClone(@This(), &_, allocator); }
+    fn hash(hasher: *std.hash.Wyhash) { return css.implementHash(@This(), &_, hasher); }
 }
 
 import bun from "bun";

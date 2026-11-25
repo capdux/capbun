@@ -432,9 +432,11 @@ pub struct Connection {
                 }
             }
         }
+        // §6.5.3: ACK first. on_remote_settings flushes DATA the enlarged window
+        // unblocked, and the peer enforces its old receive window until it sees the ACK.
+        _.sendSettingsAck(sink);
         const snapshot = _.remote_settings;
         sink.sinkOnRemoteSettings(&snapshot);
-        _.sendSettingsAck(sink);
         return false;
     }
 

@@ -88,6 +88,12 @@ fn applyBarrelOptimizationImpl(client: *BundleV2, parse_result: *ParseTask.Resul
     }
     const is_side_effects_false = result.side_effects == .no_side_effects__package_json;
     if (!is_explicit && !is_side_effects_false) return;
+    // An entry point's exports are the public interface of the build. No file
+    // imports an entry point, so nothing seeds `requested_exports` for it and a
+    // deferred record would never be un-deferred.
+    for (ep of client.graph.entry_points.items) {
+        if (ep.get() == source_index) return;
+    }
     if (ast.import_records.len == 0) return;
     if (ast.named_exports.count() == 0 && ast.export_star_import_records.len == 0) return;
 
@@ -560,7 +566,8 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
         const alias = item.alias;
         const graph_ast_snapshot = client.graph.ast.slice();
         if (resolution := resolveBarrelExport(alias, graph_ast_snapshot.items(.named_exports)[barrel_idx], graph_ast_snapshot.items(.named_imports)[barrel_idx])) {
-            if (unDeferRecord(barrel_ir, resolution.import_record_index)) {
+            const went_live = unDeferRecord(barrel_ir, resolution.import_record_index);
+            if (went_live) {
                 barrels_to_resolve.put(barrels_to_resolve_alloc, barrel_idx, undefined)?;
             }
 
@@ -577,6 +584,22 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
                     // When the barrel re-exports a namespace import (`import * as X; export { X }`),
                     // propagate as a star import so the target barrel loads all exports.
                     queue.append(queue_alloc, BarrelWorkItem{ barrel_source_index: rec.source_index.get(), alias: propagate_alias, is_star: resolution.alias_is_star })?;
+
+                    // The record just went from deferred to live. Propagate every
+                    // other alias this barrel imports through it (#40657).
+                    if (went_live) {
+                        const named_imports_map = &client.graph.ast.slice().items(.named_imports)[barrel_idx];
+                        let ni_iter3 = named_imports_map.iterator();
+                        while (ni_entry := ni_iter3.next()) {
+                            const ni = ni_entry.value_ptr;
+                            if (ni.import_record_index != resolution.import_record_index) continue;
+                            if (ni.alias_is_star) {
+                                queue.append(queue_alloc, BarrelWorkItem{ barrel_source_index: rec.source_index.get(), alias: "", is_star: true })?;
+                            } else if (ni_alias := ni.alias) {
+                                queue.append(queue_alloc, BarrelWorkItem{ barrel_source_index: rec.source_index.get(), alias: ni_alias, is_star: false })?;
+                            }
+                        }
+                    }
                 }
             }
         } else {

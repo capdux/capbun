@@ -80,6 +80,7 @@ const Integrity = @import("./integrity.zig").Integrity;
 const Resolution = @import("./resolution.zig").Resolution;
 pub const Lockfile = @import("./lockfile.zig");
 pub const migration = @import("./migration.zig");
+pub const add_remove_with_filter = @import("./PackageManager/add_remove_with_filter.zig");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -1603,24 +1604,14 @@ _ = read_pnpm_workspace_yaml: {
             }
         }
         if (needs_update) {
-            var buffer_writer = JSPrinter.BufferWriter.init(allocator);
-            _ = &buffer_writer;
-            var _guard_buffer_writer = DeinitGuard(@TypeOf(buffer_writer.buffer)){ .ptr = (&buffer_writer.buffer) };
-            _ = &_guard_buffer_writer;
-            var ___guard_buffer_writer_moved = false; _ = &___guard_buffer_writer_moved;
-            defer if (!___guard_buffer_writer_moved) { ___guard_buffer_writer_moved = true; const __T = @TypeOf(_guard_buffer_writer); if (@typeInfo(__T) == .optional) { if (_guard_buffer_writer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buffer_writer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buffer_writer; _drop_val.__cp_deinit(); } };
-            buffer_writer.append_newline = ((root_pkg_json.source.contents.len > 0) and (root_pkg_json.source.contents[@as(usize, @intCast((root_pkg_json.source.contents.len - 1)))] == 10));
-            var package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
-            _ = &package_json_writer;
-            _ = (blk_catch_10: { break :blk_catch_10 ((JSPrinter.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), json, (&root_pkg_json.source), .{ .indent = root_pkg_json.indentation, .mangled_props = null })) catch |__ce_10| { _ = &__ce_10; return; }); });
-            _ = (blk_catch_11: { break :blk_catch_11 ((package_json_writer.flush()) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
-            root_pkg_json.source.contents = try allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero());
-            var write_file_res = (blk_catch_12: { break :blk_catch_12 ((bun.sys.File.openat(dir, "package.json", (bun.O.WRONLY | bun.O.TRUNC), 0).unwrap()) catch |__ce_12| { _ = &__ce_12; return; }); });
+            _ = add_remove_with_filter.printPackageJsonIntoCacheEntry(allocator, root_pkg_json, json);
+            _ = add_remove_with_filter.reparseEntryRoot(allocator, log, root_pkg_json);
+            var write_file_res = (blk_catch_10: { break :blk_catch_10 ((bun.sys.File.openat(dir, "package.json", (bun.O.WRONLY | bun.O.TRUNC), 0).unwrap()) catch |__ce_10| { _ = &__ce_10; return; }); });
             _ = &write_file_res;
             var _guard_write_file_res = CloseGuard(bun.sys.File){ .ptr = (&write_file_res) };
             _ = &_guard_write_file_res;
             var ___guard_write_file_res_moved = false; _ = &___guard_write_file_res_moved;
             defer if (!___guard_write_file_res_moved) { ___guard_write_file_res_moved = true; const __T = @TypeOf(_guard_write_file_res); if (@typeInfo(__T) == .optional) { if (_guard_write_file_res) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_write_file_res.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_write_file_res; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_13: { break :blk_catch_13 ((write_file_res.write(root_pkg_json.source.contents).unwrap()) catch |__ce_13| { _ = &__ce_13; return; }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((write_file_res.write(root_pkg_json.source.contents).unwrap()) catch |__ce_11| { _ = &__ce_11; return; }); });
         }
 }

@@ -595,6 +595,26 @@ pub fn edit(
                 }, logger.Loc.Empty);
 
                 request.e_string = new_dependencies.items[k].value.?.data.e_string;
+
+                // For a non-aliased git/github/tarball/folder request, `getName()` is the
+                // URL or path literal: if the list already declared this package under
+                // the resolved name with a different literal, drop that stale entry.
+                if (!request.is_aliased && k < new_dependencies.items.len) {
+                    const resolved_name = request.getResolvedName(manager.lockfile);
+                    let j: usize = new_dependencies.items.len;
+                    while (j > 0) {
+                        j -= 1;
+                        if (j == k) continue;
+                        if (key := new_dependencies.items[j].key) {
+                            if (key.data.e_string.eql(string, resolved_name)) {
+                                * = new_dependencies.orderedRemove(j);
+                                if (j < k) {
+                                    k -= 1;
+                                }
+                            }
+                        }
+                    }
+                }
                 break;
             }
         }

@@ -135,12 +135,19 @@ fn copyFilesCopyfile(
                     }
                 },
                 .file => {
-                    if (bun.windows.CopyFileW(src.ptr, dest.ptr, 0) == 0) {
-                        if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
+                    // `dest` can be a hardlink of `src`, which CopyFileW cannot overwrite.
+                    if (bun.windows.CopyFileW(src.ptr, dest.ptr, 1) == 0) {
+                        const win_err = bun.windows.Win32Error.get();
+                        let copied = false;
+                        if (win_err == .FILE_EXISTS || win_err == .ALREADY_EXISTS) {
+                            * = bun.windows.DeleteFileW(dest.ptr);
+                            copied = bun.windows.CopyFileW(src.ptr, dest.ptr, 1) != 0;
+                        } else if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
                             bun.MakePath.makePath(u16, destination_dir_, entry_dirname) catch {};
-                            if (bun.windows.CopyFileW(src.ptr, dest.ptr, 0) != 0) {
-                                continue;
-                            }
+                            copied = bun.windows.CopyFileW(src.ptr, dest.ptr, 1) != 0;
+                        }
+                        if (copied) {
+                            continue;
                         }
 
                         if (progress := progress_) {
@@ -168,17 +175,20 @@ fn copyFilesCopyfile(
             const _guard_in_file = CloseGuard<@TypeOf(&in_file)>{ ptr: &in_file };
 
             PackageInstall.debug("createFile {} {s}\n", .{ destination_dir_.fd, entry.path });
-            let outfile = createFile(destination_dir_, entry.path, .{}) catch brk: {
-                if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
+            // The file can be a hardlink of `in_file`, and O_TRUNC would empty both.
+            let outfile = createFile(destination_dir_, entry.path, .{ .exclusive = true }) catch e => brk: {
+                if (e == error.PathAlreadyExists) {
+                    destination_dir_.deleteFile(entry.path) catch {};
+                } else if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
                     bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
                 }
-                break :brk createFile(destination_dir_, entry.path, .{}) catch e => {
+                break :brk createFile(destination_dir_, entry.path, .{ .exclusive = true }) catch e2 => {
                     if (progress := progress_) {
                         progress.root.end();
                         progress.refresh();
                     }
 
-                    Output.prettyErrorln("<r><red>{s}<r>: copying file {f}", .{ @errorName(e), bun.fmt.fmtOSPath(entry.path, .{}) });
+                    Output.prettyErrorln("<r><red>{s}<r>: copying file {f}", .{ @errorName(e2), bun.fmt.fmtOSPath(entry.path, .{}) });
                     Global.crash();
                 };
             };

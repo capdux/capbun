@@ -924,39 +924,83 @@ pub fn loadEnvFileDynamic(self: *Loader, file_path: []const u8, comptime overrid
             _ = &_file_guard;
             var ___file_guard_moved = false; _ = &___file_guard_moved;
             defer if (!___file_guard_moved) { ___file_guard_moved = true; const __T = @TypeOf(_file_guard); if (@typeInfo(__T) == .optional) { if (_file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _file_guard; _drop_val.__cp_deinit(); } };
-            const end = brk: {
+            var buf: []u8 = undefined;
+            _ = &buf;
+            var amount_read: usize = 0;
+            _ = &amount_read;
+            var is_regular = true;
+            _ = &is_regular;
+            var regular_end: usize = 0;
+            _ = &regular_end;
             if (comptime Environment.isWindows) {
-                const pos = try file.getEndPos();
-                if ((pos == 0)) {
+                regular_end = (blk_catch_6: { break :blk_catch_6 ((file.getEndPos()) catch |e| { _ = &e; if ((e == error.Unseekable)) {
+                    is_regular = false;
+                } else {
+                    return e;
+                }
+                break :blk_catch_6 0; }); });
+            } else {
+                const stat = try file.stat();
+                if ((stat.kind != .file)) {
+                    is_regular = false;
+                } else {
+                    regular_end = stat.size;
+                }
+            }
+            if (is_regular) {
+                if ((regular_end == 0)) {
                     _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
                     return;
                 }
-                break :brk pos;
-            }
-            const stat = try file.stat();
-            if (((stat.size == 0) or (stat.kind != .file))) {
-                _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
-                return;
-            }
-            break :brk stat.size;
-};
-            var buf = try self.allocator.alloc(u8, (end + 1));
-            _ = &buf;
-            var _buf_guard = ErrFreeU8SliceGuard{ .slice = buf, .allocator = self.allocator };
-            _ = &_buf_guard;
-            var ___buf_guard_moved = false; _ = &___buf_guard_moved;
-            errdefer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _buf_guard; _drop_val.__cp_errdeinit(); } };
-            const amount_read = (blk_catch_6: { break :blk_catch_6 ((file.readAll(buf[0..end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
-                if ((!self.quiet)) {
-                    _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
-                }
-                _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
-                _ = self.allocator.free(buf);
-                return;
+                buf = try self.allocator.alloc(u8, (regular_end + 1));
+                var _buf_guard = ErrFreeU8SliceGuard{ .slice = buf, .allocator = self.allocator };
+                _ = &_buf_guard;
+                var ___buf_guard_moved = false; _ = &___buf_guard_moved;
+                errdefer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _buf_guard; _drop_val.__cp_errdeinit(); } };
+                amount_read = (blk_catch_7: { break :blk_catch_7 ((file.readAll(buf[0..regular_end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
+                    if ((!self.quiet)) {
+                        _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
+                    }
+                    _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
+                    _ = self.allocator.free(buf);
+                    return;
+                } else {
+                    return e;
+                } }); });
+                buf[cp_cast_int(usize, regular_end)] = 0;
             } else {
-                return e;
-            } }); });
-            buf[cp_cast_int(usize, end)] = 0;
+                var list = std.array_list.Managed(u8).init(self.allocator);
+                _ = &list;
+                errdefer {
+                _ = list.deinit();
+                }
+                var chunk: [4096]u8 = undefined;
+                _ = &chunk;
+                while (true) {
+                    const n = (blk_catch_8: { break :blk_catch_8 ((file.read((&chunk))) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
+                        if ((!self.quiet)) {
+                            _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
+                        }
+                        _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
+                        _ = list.deinit();
+                        return;
+                    } else {
+                        return e;
+                    } }); });
+                    if ((n == 0)) {
+                        break;
+                    }
+                    _ = try list.appendSlice(chunk[0..n]);
+                }
+                if ((list.items.len == 0)) {
+                    _ = list.deinit();
+                    _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
+                    return;
+                }
+                amount_read = list.items.len;
+                _ = try list.append(0);
+                buf = try list.toOwnedSlice();
+            }
             const source = (&logger.Source.initPathString(file_path, buf[0..amount_read]));
             _ = try Parser.parse(source, self.allocator, self.map, value_buffer, override, false, true);
             _ = try self.custom_files_loaded.put(file_path, source.*);

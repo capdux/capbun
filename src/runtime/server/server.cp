@@ -3223,6 +3223,17 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
         pub fn listen(*_): jsc.JSValue {
             httplog("listen", .{});
             const globalThis = _.globalThis;
+            if (_.config.address == .tcp) {
+                if (hn_raw := _.config.address.tcp.hostname) {
+                    const hn = bun.span(hn_raw);
+                    const bare = if (hn.len > 2 && hn[0] == '[' && hn[hn.len - 1] == ']') hn[1 .. hn.len - 1] else hn;
+                    if (!bun.dns.isValidHostname(bare)) {
+                        switch (globalThis.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalThis, hn))) { else => {} }
+                        _.deinit();
+                        return .zero;
+                    }
+                }
+            }
             let route_list_value = jsc.JSValue.zero;
             if (ssl_enabled) {
                 bun.BoringSSL.load();

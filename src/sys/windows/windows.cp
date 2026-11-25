@@ -2940,8 +2940,19 @@ pub enum Win32Error: u16 {
     /// A reserved policy element was found in the QoS provider-specific buffer.
     pub const WSA_QOS_RESERVED_PETYPE: Win32Error = @enumFromInt(11031);
 
+    static fn fromU32(code: u32): Win32Error {
+        if (code <= 0xFFFF) {
+            return @enumFromInt(@as(u16, @intCast(code)));
+        }
+        // Unwrap HRESULT_FROM_WIN32 (0x8007_xxxx).
+        if ((code & 0xFFFF_0000) == 0x8007_0000) {
+            return @enumFromInt(@as(u16, @truncate(code)));
+        }
+        return @enumFromInt(0xFFFF);
+    }
+
     static fn get(): Win32Error {
-        return @enumFromInt(@intFromEnum(bun.windows.kernel32.GetLastError()));
+        return Win32Error.fromU32(@intFromEnum(bun.windows.kernel32.GetLastError()));
     }
 
     fn int(): u16 {

@@ -1265,6 +1265,20 @@ fn NewPrinter(
             p.print("}");
         }
 
+        static fn isStableDestructuringTarget(p: *Printer, id: E.Identifier, target_ref: Ref): bool {
+            if (id.must_keep_due_to_with_stmt) {
+                return false;
+            }
+            const symbol = p.symbols().get(target_ref) ?? return false;
+            if (symbol.has_been_assigned_to || symbol.namespace_alias != null) {
+                return false;
+            }
+            if (symbol.kind == .unbound) {
+                return id.can_be_removed_if_unused;
+            }
+            return !symbol.must_not_be_renamed;
+        }
+
         static fn printDecls(p: *Printer, comptime keyword: string, decls_: []G.Decl, flags: ExprFlag.Set, tlm: TopLevelAndIsExport) {
             p.print(keyword);
             p.printSpace();
@@ -1276,137 +1290,158 @@ fn NewPrinter(
                 unreachable;
             }
 
-            if (comptime FeatureFlags.same_target_becomes_destructuring) {
-                // Minify
-                //
-                //    var a = obj.foo, b = obj.bar, c = obj.baz;
-                //
-                // to
-                //
-                //    var {a, b, c} = obj;
-                //
-                // Caveats:
-                //   - Same consecutive target
-                //   - No optional chaining
-                //   - No computed property access
-                //   - Identifier bindings only
-                if (decls.len > 1) brk: {
-                    const first_decl = &decls[0];
-                    const second_decl = &decls[1];
+            // A `using` or `await using` declaration admits only identifier
+            // bindings, never a binding pattern.
+            const allow_destructuring = comptime (FeatureFlags.same_target_becomes_destructuring &&
+                !strings.eqlComptime(keyword, "using") &&
+                !strings.eqlComptime(keyword, "await using"));
 
-                    if (first_decl.binding.data != .b_identifier) break :brk;
-                    if (second_decl.value == null ||
-                        second_decl.value.?.data != .e_dot ||
-                        second_decl.binding.data != .b_identifier)
-                    {
-                        break :brk;
-                    }
-
-                    if (first_decl.value == null) break :brk;
-                    const target_value = first_decl.value.?;
-                    const target_e_dot: *E.Dot = if (target_value.data == .e_dot)
-                        target_value.data.e_dot
-                    else
-                        break :brk;
-                    const target_ref = if (target_e_dot.target.data == .e_identifier && target_e_dot.optional_chain == null)
-                        target_e_dot.target.data.e_identifier.ref
-                    else
-                        break :brk;
-
-                    const second_e_dot = second_decl.value.?.data.e_dot;
-                    if (second_e_dot.target.data != .e_identifier || second_e_dot.optional_chain != null) {
-                        break :brk;
-                    }
-
-                    const second_ref = second_e_dot.target.data.e_identifier.ref;
-                    if (!second_ref.eql(target_ref)) {
-                        break :brk;
-                    }
-
-                    {
-                        // Reset the temporary bindings array early on
-                        let temp_bindings = p.temporary_bindings;
-                        p.temporary_bindings = {};
-                        defer {
-                            if (p.temporary_bindings.capacity > 0) {
-                                temp_bindings.deinit(bun.default_allocator);
-                            } else {
-                                temp_bindings.clearRetainingCapacity();
-                                p.temporary_bindings = temp_bindings;
-                            }
-                        }
-                        temp_bindings.ensureUnusedCapacity(bun.default_allocator, 2) catch unreachable;
-                        temp_bindings.appendAssumeCapacity({
-                            key: Expr.init(E.String, E.String.init(target_e_dot.name), target_e_dot.name_loc),
-                            value: decls[0].binding,
-                        });
-                        temp_bindings.appendAssumeCapacity({
-                            key: Expr.init(E.String, E.String.init(second_e_dot.name), second_e_dot.name_loc),
-                            value: decls[1].binding,
-                        });
-
-                        decls = decls[2..];
-                        while (decls.len > 0) {
-                            const decl = &decls[0];
-
-                            if (decl.value == null || decl.value.?.data != .e_dot || decl.binding.data != .b_identifier) {
-                                break;
-                            }
-
-                            const e_dot = decl.value.?.data.e_dot;
-                            if (e_dot.target.data != .e_identifier || e_dot.optional_chain != null) {
-                                break;
-                            }
-
-                            const sym_ref = e_dot.target.data.e_identifier.ref;
-                            if (!sym_ref.eql(target_ref)) {
-                                break;
-                            }
-
-                            temp_bindings.append(bun.default_allocator, {
-                                key: Expr.init(E.String, E.String.init(e_dot.name), e_dot.name_loc),
-                                value: decl.binding,
-                            }) catch unreachable;
-                            decls = decls[1..];
-                        }
-                        let b_object = B.Object{
-                            properties: temp_bindings.items,
-                            is_single_line: true,
-                        };
-                        const binding = Binding.init(&b_object, target_e_dot.target.loc);
-                        p.printBinding(binding, tlm);
-                    }
-
-                    p.printWhitespacer(ws(" = "));
-                    p.printExpr(second_e_dot.target, .comma, flags);
-
-                    if (decls.len == 0) {
-                        return;
-                    }
-
+            let needs_comma = false;
+            while (decls.len > 0) {
+                if (needs_comma) {
                     p.print(",");
                     p.printSpace();
                 }
-            }
+                needs_comma = true;
 
-            {
-                p.printBinding(decls[0].binding, tlm);
+                let did_destructure = false;
+                if (comptime allow_destructuring) {
+                    // Minify each run of
+                    //
+                    //    a = obj.foo, b = obj.bar, c = obj.baz
+                    //
+                    // to
+                    //
+                    //    {foo: a, bar: b, baz: c} = obj
+                    //
+                    // Caveats:
+                    //   - Same consecutive target
+                    //   - A stable target (`isStableDestructuringTarget`)
+                    //   - No optional chaining
+                    //   - No computed property access
+                    //   - Identifier bindings only
+                    if (decls.len > 1) brk: {
+                        const first_decl = &decls[0];
+                        const second_decl = &decls[1];
 
-                if (value := decls[0].value) {
-                    p.printWhitespacer(ws(" = "));
-                    p.printExpr(value, .comma, flags);
+                        if (first_decl.binding.data != .b_identifier) break :brk;
+                        if (second_decl.value == null ||
+                            second_decl.value.?.data != .e_dot ||
+                            second_decl.binding.data != .b_identifier)
+                        {
+                            break :brk;
+                        }
+
+                        if (first_decl.value == null) break :brk;
+                        const target_value = first_decl.value.?;
+                        const target_e_dot: *E.Dot = if (target_value.data == .e_dot)
+                            target_value.data.e_dot
+                        else
+                            break :brk;
+                        const target_id = if (target_e_dot.target.data == .e_identifier && target_e_dot.optional_chain == null)
+                            target_e_dot.target.data.e_identifier
+                        else
+                            break :brk;
+                        const syms = p.symbols();
+                        const target_ref = syms.follow(target_id.ref);
+
+                        if (!p.isStableDestructuringTarget(target_id, target_ref)) {
+                            break :brk;
+                        }
+
+                        // A group evaluates its target once, before any
+                        // assignment, but the original declarators execute in
+                        // order. A declarator that binds the target itself can
+                        // only be the last member of a group: a later member
+                        // would read the rebound target.
+                        if (syms.follow(first_decl.binding.data.b_identifier.ref).eql(target_ref)) {
+                            break :brk;
+                        }
+
+                        const second_e_dot = second_decl.value.?.data.e_dot;
+                        if (second_e_dot.target.data != .e_identifier || second_e_dot.optional_chain != null) {
+                            break :brk;
+                        }
+
+                        const second_ref = syms.follow(second_e_dot.target.data.e_identifier.ref);
+                        if (!second_ref.eql(target_ref)) {
+                            break :brk;
+                        }
+                        let target_rebound = syms.follow(second_decl.binding.data.b_identifier.ref).eql(target_ref);
+
+                        {
+                            // Reset the temporary bindings array early on
+                            let temp_bindings = p.temporary_bindings;
+                            p.temporary_bindings = {};
+                            defer {
+                                if (p.temporary_bindings.capacity > 0) {
+                                    temp_bindings.deinit(bun.default_allocator);
+                                } else {
+                                    temp_bindings.clearRetainingCapacity();
+                                    p.temporary_bindings = temp_bindings;
+                                }
+                            }
+                            temp_bindings.ensureUnusedCapacity(bun.default_allocator, 2) catch unreachable;
+                            temp_bindings.appendAssumeCapacity({
+                                key: Expr.init(E.String, E.String.init(target_e_dot.name), target_e_dot.name_loc),
+                                value: decls[0].binding,
+                            });
+                            temp_bindings.appendAssumeCapacity({
+                                key: Expr.init(E.String, E.String.init(second_e_dot.name), second_e_dot.name_loc),
+                                value: decls[1].binding,
+                            });
+
+                            decls = decls[2..];
+                            if (!target_rebound) {
+                                while (decls.len > 0) {
+                                    const decl = &decls[0];
+
+                                    if (decl.value == null || decl.value.?.data != .e_dot || decl.binding.data != .b_identifier) {
+                                        break;
+                                    }
+
+                                    const e_dot = decl.value.?.data.e_dot;
+                                    if (e_dot.target.data != .e_identifier || e_dot.optional_chain != null) {
+                                        break;
+                                    }
+
+                                    const sym_ref = syms.follow(e_dot.target.data.e_identifier.ref);
+                                    if (!sym_ref.eql(target_ref)) {
+                                        break;
+                                    }
+
+                                    temp_bindings.append(bun.default_allocator, {
+                                        key: Expr.init(E.String, E.String.init(e_dot.name), e_dot.name_loc),
+                                        value: decl.binding,
+                                    }) catch unreachable;
+                                    decls = decls[1..];
+                                    if (syms.follow(decl.binding.data.b_identifier.ref).eql(target_ref)) {
+                                        break;
+                                    }
+                                }
+                            }
+                            let b_object = B.Object{
+                                properties: temp_bindings.items,
+                                is_single_line: true,
+                            };
+                            const binding = Binding.init(&b_object, target_e_dot.target.loc);
+                            p.printBinding(binding, tlm);
+                        }
+
+                        p.printWhitespacer(ws(" = "));
+                        p.printExpr(second_e_dot.target, .comma, flags);
+                        did_destructure = true;
+                    }
                 }
-            }
 
-            for (*decl of decls[1..]) {
-                p.print(",");
-                p.printSpace();
+                if (!did_destructure) {
+                    p.printBinding(decls[0].binding, tlm);
 
-                p.printBinding(decl.binding, tlm);
-
-                if (value := decl.value) {
-                    p.printWhitespacer(ws(" = "));
-                    p.printExpr(value, .comma, flags);
+                    if (value := decls[0].value) {
+                        p.printWhitespacer(ws(" = "));
+                        p.printExpr(value, .comma, flags);
+                    }
+                    decls = decls[1..];
                 }
             }
         }
@@ -1606,24 +1641,12 @@ fn NewPrinter(
                         formatUnsignedIntegerBetween(4, buf, val);
                         p.writer.advance(4);
                     },
-                    10000 => {
-                        p.print("1e4");
-                    },
-                    100000 => {
-                        p.print("1e5");
-                    },
-                    1000000 => {
-                        p.print("1e6");
-                    },
-                    10000000 => {
-                        p.print("1e7");
-                    },
-                    100000000 => {
-                        p.print("1e8");
-                    },
-                    1000000000 => {
-                        p.print("1e9");
-                    },
+                    10000 => if (comptime !is_json) p.print("1e4") else p.print("10000"),
+                    100000 => if (comptime !is_json) p.print("1e5") else p.print("100000"),
+                    1000000 => if (comptime !is_json) p.print("1e6") else p.print("1000000"),
+                    10000000 => if (comptime !is_json) p.print("1e7") else p.print("10000000"),
+                    100000000 => if (comptime !is_json) p.print("1e8") else p.print("100000000"),
+                    1000000000 => if (comptime !is_json) p.print("1e9") else p.print("1000000000"),
 
                     10001..=99999 => {
                         const buf = unsafe { (p.writer.reserve(5) catch unreachable)[0..5] };

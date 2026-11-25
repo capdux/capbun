@@ -776,8 +776,11 @@ pub struct Parser {
                             }
                         }
 
-                        if (needs_decl_count > 0) {
+                        if (needs_decl_count > 0 || p.has_top_level_function_merged_with_var) {
                             p.symbols.items[p.exports_ref.innerIndex()].use_count_estimate += @as(u32, @truncate(export_refs.len));
+                            p.deoptimizeCommonJSNamedExports();
+                        } else if (p.symbols.items[p.module_ref.innerIndex()].use_count_estimate > p.module_exports_rewrite_count) {
+                            // `module.constructor` and other uses of `module` need the wrapper.
                             p.deoptimizeCommonJSNamedExports();
                         }
                     }
@@ -1065,6 +1068,8 @@ pub struct Parser {
         const uses_module_ref = p.symbols.items[p.module_ref.innerIndex()].use_count_estimate > 0;
 
         let wrap_mode: WrapMode = .none;
+        // Checked after `toAST`, which marks TypeScript type-only imports unused.
+        let reject_import_statements = false;
 
         if (p.isDeoptimizedCommonJS()) {
             exports_kind = .cjs;
@@ -1074,53 +1079,7 @@ pub struct Parser {
             exports_kind = .cjs;
             if (p.options.features.commonjs_at_runtime) {
                 wrap_mode = .bun_commonjs;
-
-                const import_record: (*const ImportRecord)? = brk: {
-                    for (i of 0..p.import_records.items.len) {
-                        const import_record = &p.import_records.items[i];
-                        if (import_record.flags.is_internal || import_record.flags.is_unused) continue;
-                        if (import_record.kind == .stmt) break :brk import_record;
-                    }
-
-                    break :brk null;
-                };
-
-                // make it an error to use an import statement with a commonjs exports usage
-                if (record := import_record) {
-                    // find the usage of the export symbol
-
-                    let notes = ListManaged(logger.Data).init(p.allocator);
-
-                    notes.append(logger.Data{
-                        text: std.fmt.allocPrint(p.allocator, "Try require({f}) instead", .{bun.fmt.QuotedFormatter{ text: record.path.text }})?,
-                    })?;
-
-                    if (uses_module_ref) {
-                        notes.append(logger.Data{
-                            text: "This file is CommonJS because 'module' was used",
-                        })?;
-                    }
-
-                    if (uses_exports_ref) {
-                        notes.append(logger.Data{
-                            text: "This file is CommonJS because 'exports' was used",
-                        })?;
-                    }
-
-                    if (p.has_top_level_return) {
-                        notes.append(logger.Data{
-                            text: "This file is CommonJS because top-level return was used",
-                        })?;
-                    }
-
-                    if (p.has_with_scope) {
-                        notes.append(logger.Data{
-                            text: "This file is CommonJS because a \"with\" statement is used",
-                        })?;
-                    }
-
-                    p.log.addRangeErrorWithNotes(p.source, record.range, "Cannot use import statement with CommonJS-only features", notes.items)?;
-                }
+                reject_import_statements = true;
             }
         } else {
             switch (p.options.module_type) {
@@ -1498,7 +1457,42 @@ pub struct Parser {
             }
         }
 
-        return js_ast.Result{ ast: p.toAST(&parts, exports_kind, wrap_mode, hashbang)? };
+        const ast = p.toAST(&parts, exports_kind, wrap_mode, hashbang)?;
+
+        if (reject_import_statements) {
+            const import_record: (*const ImportRecord)? = brk: {
+                const recs = ast.import_records.slice();
+                let ri: usize = 0;
+                while (ri < recs.len) : (ri += 1) {
+                    const rec = &recs[ri];
+                    if (rec.flags.is_internal || rec.flags.is_unused) continue;
+                    if (rec.kind == .stmt && !rec.range.isEmpty()) break :brk rec;
+                }
+                break :brk null;
+            };
+
+            if (record := import_record) {
+                let notes = ListManaged(logger.Data).init(p.allocator);
+                notes.append(logger.Data{
+                    text: std.fmt.allocPrint(p.allocator, "Try require({f}) instead", .{bun.fmt.QuotedFormatter{ text: record.path.text }})?,
+                })?;
+                if (uses_module_ref) {
+                    notes.append(logger.Data{ text: "This file is CommonJS because 'module' was used" })?;
+                }
+                if (uses_exports_ref) {
+                    notes.append(logger.Data{ text: "This file is CommonJS because 'exports' was used" })?;
+                }
+                if (p.has_top_level_return) {
+                    notes.append(logger.Data{ text: "This file is CommonJS because top-level return was used" })?;
+                }
+                if (p.has_with_scope) {
+                    notes.append(logger.Data{ text: "This file is CommonJS because a \"with\" statement is used" })?;
+                }
+                p.log.addRangeErrorWithNotes(p.source, record.range, "Cannot use import statement with CommonJS-only features", notes.items)?;
+            }
+        }
+
+        return js_ast.Result{ ast: ast };
     }
 
     fn init(_options: Options, log: *logger.Log, source: *const logger.Source, define: *Define, allocator: Allocator): Parser! {

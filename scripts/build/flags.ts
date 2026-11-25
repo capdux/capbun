@@ -833,6 +833,11 @@ export const linkerFlags: Flag[] = [
     desc: "Wrap glibc 2.18+ symbols (portable down to glibc 2.17)",
   },
   {
+    flag: ["-Wl,--wrap=execve", "-Wl,--wrap=pthread_create"],
+    when: c => c.linux,
+    desc: "Retry pthread_create EAGAIN caused by an in-flight execve",
+  },
+  {
     flag: ["-static-libstdc++", "-static-libgcc"],
     when: c => c.linux && c.abi === "gnu",
     desc: "Static C++ runtime (don't depend on host libstdc++)",

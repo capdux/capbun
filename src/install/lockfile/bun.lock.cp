@@ -886,12 +886,30 @@ pub struct Stringifier {
             has_any = true;
         }
 
+        // Re-sort by current name: a no-alias git/tarball dep sorts under its version
+        // literal at parse time, and `assign_resolution` renames it without a re-sort.
+        const deps_list = pkg_deps[pkg_id];
+        let deps_sort_buf = std.array_list.Managed(DependencyID).initCapacity(optional_peers_buf.allocator, deps_list.len)?;
+        defer deps_sort_buf.deinit();
+        let dep_id: u32 = deps_list.begin();
+        const dep_end: u32 = deps_list.end();
+        while (dep_id < dep_end) : (dep_id += 1) {
+            deps_sort_buf.appendAssumeCapacity(@intCast(dep_id));
+        }
+        std.sort.block(
+            DependencyID,
+            deps_sort_buf.items,
+            TreeDepsSortCtx{ .string_buf = buf, .deps_buf = deps_buf },
+            TreeDepsSortCtx.isLessThan,
+        );
+
         inline for (group of workspace_dependency_groups) {
             const group_name = group.name;
             const group_behavior = group.behavior;
 
             let first = true;
-            for (*dep of pkg_deps[pkg_id].get(deps_buf)) {
+            for (sorted_dep_id of deps_sort_buf.items) {
+                const dep = &deps_buf[sorted_dep_id];
                 const includesFn = Dependency.Behavior.includes;
                 if (!includesFn(dep.behavior, group_behavior)) continue;
 
@@ -929,7 +947,7 @@ pub struct Stringifier {
                 })?;
 
                 if (dep.behavior.peer && !dep.behavior.optional && pkg_map.map.count() > 0) {
-                    pkg_map.findResolution(relative_path, unsafe { &dep }, buf, path_buf) catch e => {
+                    pkg_map.findResolution(relative_path, dep, buf, path_buf) catch e => {
                         if (e == error.Unresolvable) {
                             optional_peers_buf.append(dep.name)?;
                         }

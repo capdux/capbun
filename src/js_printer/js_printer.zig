@@ -1517,6 +1517,20 @@ pub fn printTwoBlocksInOne(p: *Printer, loc: logger.Loc, stmts: []const Stmt, pr
             _ = p.print("}");
     }
 
+pub fn isStableDestructuringTarget(p: *Printer, id: E.Identifier, target_ref: Ref) bool {
+            if (id.must_keep_due_to_with_stmt) {
+                return false;
+            }
+            const symbol = ((p.symbols().get(target_ref)) orelse { return false; });
+            if ((symbol.has_been_assigned_to or (symbol.namespace_alias != null))) {
+                return false;
+            }
+            if ((symbol.kind == .unbound)) {
+                return id.can_be_removed_if_unused;
+            }
+            return (!symbol.must_not_be_renamed);
+    }
+
 pub fn printDecls(p: *Printer, comptime keyword: []const u8, decls_: []G.Decl, flags: ExprFlag.Set, tlm: TopLevelAndIsExport) void {
             _ = p.print(keyword);
             _ = p.printSpace();
@@ -1525,98 +1539,110 @@ pub fn printDecls(p: *Printer, comptime keyword: []const u8, decls_: []G.Decl, f
             if ((decls.len == 0)) {
                 _ = unreachable;
             }
-            if (comptime FeatureFlags.same_target_becomes_destructuring) {
-                if ((decls.len > 1)) {
-                    _ = brk: {
-                    const first_decl = (&decls[0]);
-                    const second_decl = (&decls[1]);
-                    if ((first_decl.binding.data != .b_identifier)) {
-                        break :brk;
-                    }
-                    if (((((if (@typeInfo(@TypeOf(second_decl)) == .@"enum") @intFromEnum(second_decl) else second_decl.value) == null) or ((if (@typeInfo(@TypeOf(second_decl)) == .@"enum") @intFromEnum(second_decl) else second_decl.value).?.data != .e_dot)) or (second_decl.binding.data != .b_identifier))) {
-                        break :brk;
-                    }
-                    if (((if (@typeInfo(@TypeOf(first_decl)) == .@"enum") @intFromEnum(first_decl) else first_decl.value) == null)) {
-                        break :brk;
-                    }
-                    const target_value = (if (@typeInfo(@TypeOf(first_decl)) == .@"enum") @intFromEnum(first_decl) else first_decl.value).?;
-                    const target_e_dot: *E.Dot = (if ((target_value.data == .e_dot)) target_value.data.e_dot else break :brk);
-                    const target_ref = (if (((target_e_dot.target.data == .e_identifier) and (target_e_dot.optional_chain == null))) target_e_dot.target.data.e_identifier.ref else break :brk);
-                    const second_e_dot = (if (@typeInfo(@TypeOf(second_decl)) == .@"enum") @intFromEnum(second_decl) else second_decl.value).?.data.e_dot;
-                    if (((second_e_dot.target.data != .e_identifier) or (second_e_dot.optional_chain != null))) {
-                        break :brk;
-                    }
-                    const second_ref = second_e_dot.target.data.e_identifier.ref;
-                    if ((!second_ref.eql(target_ref))) {
-                        break :brk;
-                    }
-                    {
-                        var temp_bindings = p.temporary_bindings;
-                        _ = &temp_bindings;
-                        p.temporary_bindings = .{};
-                        defer {
-                        {
-                            if ((p.temporary_bindings.capacity > 0)) {
-                                _ = temp_bindings.deinit(bun.default_allocator);
-                            } else {
-                                _ = temp_bindings.clearRetainingCapacity();
-                                p.temporary_bindings = temp_bindings;
-                            }
-                        }
-                        }
-                        _ = ((temp_bindings.ensureUnusedCapacity(bun.default_allocator, 2)) catch unreachable);
-                        _ = temp_bindings.appendAssumeCapacity(.{ .key = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(target_e_dot)) == .@"enum" or @typeInfo(@TypeOf(target_e_dot)) == .@"union") @tagName(target_e_dot) else target_e_dot.name)), target_e_dot.name_loc), .value = decls[0].binding });
-                        _ = temp_bindings.appendAssumeCapacity(.{ .key = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(second_e_dot)) == .@"enum" or @typeInfo(@TypeOf(second_e_dot)) == .@"union") @tagName(second_e_dot) else second_e_dot.name)), second_e_dot.name_loc), .value = decls[1].binding });
-                        decls = decls[2..];
-                        while ((decls.len > 0)) {
-                            const decl = (&decls[0]);
-                            if (((((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) == null) or ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value).?.data != .e_dot)) or (decl.binding.data != .b_identifier))) {
-                                break;
-                            }
-                            const e_dot = (if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value).?.data.e_dot;
-                            if (((e_dot.target.data != .e_identifier) or (e_dot.optional_chain != null))) {
-                                break;
-                            }
-                            const sym_ref = e_dot.target.data.e_identifier.ref;
-                            if ((!sym_ref.eql(target_ref))) {
-                                break;
-                            }
-                            _ = ((temp_bindings.append(bun.default_allocator, .{ .key = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(e_dot)) == .@"enum" or @typeInfo(@TypeOf(e_dot)) == .@"union") @tagName(e_dot) else e_dot.name)), e_dot.name_loc), .value = decl.binding })) catch unreachable);
-                            decls = decls[1..];
-                        }
-                        var b_object = B.Object{ .properties = temp_bindings.items, .is_single_line = true };
-                        _ = &b_object;
-                        const binding = Binding.init((&b_object), target_e_dot.target.loc);
-                        _ = p.printBinding(binding, tlm);
-                    }
-                    _ = p.printWhitespacer(ws(" = "));
-                    _ = p.printExpr(second_e_dot.target, .comma, flags);
-                    if ((decls.len == 0)) {
-                        return;
-                    }
+            const allow_destructuring = (comptime ((FeatureFlags.same_target_becomes_destructuring and (!strings.eqlComptime(keyword, "using"))) and (!strings.eqlComptime(keyword, "await using"))));
+            var needs_comma = false;
+            _ = &needs_comma;
+            while ((decls.len > 0)) {
+                if (needs_comma) {
                     _ = p.print(",");
-                    break :brk p.printSpace();
-
+                    _ = p.printSpace();
+                }
+                needs_comma = true;
+                var did_destructure = false;
+                _ = &did_destructure;
+                if (comptime allow_destructuring) {
+                    if ((decls.len > 1)) {
+                        _ = brk: {
+                        const first_decl = (&decls[0]);
+                        const second_decl = (&decls[1]);
+                        if ((first_decl.binding.data != .b_identifier)) {
+                            break :brk;
+                        }
+                        if (((((if (@typeInfo(@TypeOf(second_decl)) == .@"enum") @intFromEnum(second_decl) else second_decl.value) == null) or ((if (@typeInfo(@TypeOf(second_decl)) == .@"enum") @intFromEnum(second_decl) else second_decl.value).?.data != .e_dot)) or (second_decl.binding.data != .b_identifier))) {
+                            break :brk;
+                        }
+                        if (((if (@typeInfo(@TypeOf(first_decl)) == .@"enum") @intFromEnum(first_decl) else first_decl.value) == null)) {
+                            break :brk;
+                        }
+                        const target_value = (if (@typeInfo(@TypeOf(first_decl)) == .@"enum") @intFromEnum(first_decl) else first_decl.value).?;
+                        const target_e_dot: *E.Dot = (if ((target_value.data == .e_dot)) target_value.data.e_dot else break :brk);
+                        const target_id = (if (((target_e_dot.target.data == .e_identifier) and (target_e_dot.optional_chain == null))) target_e_dot.target.data.e_identifier else break :brk);
+                        const syms = p.symbols();
+                        const target_ref = syms.follow(target_id.ref);
+                        if ((!p.isStableDestructuringTarget(target_id, target_ref))) {
+                            break :brk;
+                        }
+                        if (syms.follow(first_decl.binding.data.b_identifier.ref).eql(target_ref)) {
+                            break :brk;
+                        }
+                        const second_e_dot = (if (@typeInfo(@TypeOf(second_decl)) == .@"enum") @intFromEnum(second_decl) else second_decl.value).?.data.e_dot;
+                        if (((second_e_dot.target.data != .e_identifier) or (second_e_dot.optional_chain != null))) {
+                            break :brk;
+                        }
+                        const second_ref = syms.follow(second_e_dot.target.data.e_identifier.ref);
+                        if ((!second_ref.eql(target_ref))) {
+                            break :brk;
+                        }
+                        var target_rebound = syms.follow(second_decl.binding.data.b_identifier.ref).eql(target_ref);
+                        _ = &target_rebound;
+                        {
+                            var temp_bindings = p.temporary_bindings;
+                            _ = &temp_bindings;
+                            p.temporary_bindings = .{};
+                            defer {
+                            {
+                                if ((p.temporary_bindings.capacity > 0)) {
+                                    _ = temp_bindings.deinit(bun.default_allocator);
+                                } else {
+                                    _ = temp_bindings.clearRetainingCapacity();
+                                    p.temporary_bindings = temp_bindings;
+                                }
+                            }
+                            }
+                            _ = ((temp_bindings.ensureUnusedCapacity(bun.default_allocator, 2)) catch unreachable);
+                            _ = temp_bindings.appendAssumeCapacity(.{ .key = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(target_e_dot)) == .@"enum" or @typeInfo(@TypeOf(target_e_dot)) == .@"union") @tagName(target_e_dot) else target_e_dot.name)), target_e_dot.name_loc), .value = decls[0].binding });
+                            _ = temp_bindings.appendAssumeCapacity(.{ .key = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(second_e_dot)) == .@"enum" or @typeInfo(@TypeOf(second_e_dot)) == .@"union") @tagName(second_e_dot) else second_e_dot.name)), second_e_dot.name_loc), .value = decls[1].binding });
+                            decls = decls[2..];
+                            if ((!target_rebound)) {
+                                while ((decls.len > 0)) {
+                                    const decl = (&decls[0]);
+                                    if (((((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value) == null) or ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value).?.data != .e_dot)) or (decl.binding.data != .b_identifier))) {
+                                        break;
+                                    }
+                                    const e_dot = (if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value).?.data.e_dot;
+                                    if (((e_dot.target.data != .e_identifier) or (e_dot.optional_chain != null))) {
+                                        break;
+                                    }
+                                    const sym_ref = syms.follow(e_dot.target.data.e_identifier.ref);
+                                    if ((!sym_ref.eql(target_ref))) {
+                                        break;
+                                    }
+                                    _ = ((temp_bindings.append(bun.default_allocator, .{ .key = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(e_dot)) == .@"enum" or @typeInfo(@TypeOf(e_dot)) == .@"union") @tagName(e_dot) else e_dot.name)), e_dot.name_loc), .value = decl.binding })) catch unreachable);
+                                    decls = decls[1..];
+                                    if (syms.follow(decl.binding.data.b_identifier.ref).eql(target_ref)) {
+                                        break;
+                                    }
+                                }
+                            }
+                            var b_object = B.Object{ .properties = temp_bindings.items, .is_single_line = true };
+                            _ = &b_object;
+                            const binding = Binding.init((&b_object), target_e_dot.target.loc);
+                            _ = p.printBinding(binding, tlm);
+                        }
+                        _ = p.printWhitespacer(ws(" = "));
+                        _ = p.printExpr(second_e_dot.target, .comma, flags);
+                        did_destructure = true;
 };
+                    }
                 }
-            }
-            {
-                _ = p.printBinding(decls[0].binding, tlm);
-                if ((if (@typeInfo(@TypeOf(decls[0])) == .@"enum") @intFromEnum(decls[0]) else decls[0].value)) |value| {
-                    _ = &value;
-                    _ = p.printWhitespacer(ws(" = "));
-                    _ = p.printExpr(value, .comma, flags);
-                }
-            }
-            for (cp_mut_slice(&decls[1..])) |*decl| {
-                _ = &decl;
-                _ = p.print(",");
-                _ = p.printSpace();
-                _ = p.printBinding((decl.*).binding, tlm);
-                if ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value)) |value| {
-                    _ = &value;
-                    _ = p.printWhitespacer(ws(" = "));
-                    _ = p.printExpr(value, .comma, flags);
+                if ((!did_destructure)) {
+                    _ = p.printBinding(decls[0].binding, tlm);
+                    if ((if (@typeInfo(@TypeOf(decls[0])) == .@"enum") @intFromEnum(decls[0]) else decls[0].value)) |value| {
+                        _ = &value;
+                        _ = p.printWhitespacer(ws(" = "));
+                        _ = p.printExpr(value, .comma, flags);
+                    }
+                    decls = decls[1..];
                 }
             }
     }
@@ -1803,22 +1829,22 @@ const buf = (blk: {
                 _ = p.writer.advance(4);
 },
 10000 => {
-_ = p.print("1e4");
+_ = (if (comptime (!is_json)) p.print("1e4") else p.print("10000"));
 },
 100000 => {
-_ = p.print("1e5");
+_ = (if (comptime (!is_json)) p.print("1e5") else p.print("100000"));
 },
 1000000 => {
-_ = p.print("1e6");
+_ = (if (comptime (!is_json)) p.print("1e6") else p.print("1000000"));
 },
 10000000 => {
-_ = p.print("1e7");
+_ = (if (comptime (!is_json)) p.print("1e7") else p.print("10000000"));
 },
 100000000 => {
-_ = p.print("1e8");
+_ = (if (comptime (!is_json)) p.print("1e8") else p.print("100000000"));
 },
 1000000000 => {
-_ = p.print("1e9");
+_ = (if (comptime (!is_json)) p.print("1e9") else p.print("1000000000"));
 },
 10001...99999 => {
 const buf = (blk: {

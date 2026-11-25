@@ -1209,9 +1209,19 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
             _ = &iter;
             var module_type = result.module_type;
             _ = &module_type;
+            var is_primary = true;
+            _ = &is_primary;
             while (iter.next()) |path| {
+                const primary = is_primary;
+                is_primary = false;
                 var dir: *DirInfo = (((blk_catch_20: { break :blk_catch_20 ((r.readDirInfo((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).dir)) catch |__ce_20| { _ = &__ce_20; continue; }); })) orelse continue);
                 _ = &dir;
+                if (((primary and (!kind.isFromCSS())) and (module_type == .unknown))) {
+                    if (dir.package_json_for_module_type) |pkg| {
+                        _ = &pkg;
+                        module_type = pkg.module_type;
+                    }
+                }
                 var needs_side_effects = true;
                 _ = &needs_side_effects;
                 if (result.package_json) |existing| {
@@ -1312,12 +1322,6 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
                             }
                         }
                     }
-                }
-            }
-            if (((!kind.isFromCSS()) and (module_type == .unknown))) {
-                if (result.package_json) |package| {
-                    _ = &package;
-                    module_type = package.module_type;
                 }
             }
             result.module_type = module_type;
@@ -2312,7 +2316,38 @@ const resolved_dir_info_opt = (blk_catch_47: { break :blk_catch_47 ((r.dirInfoCa
             const entries = entries_opt.?;
             const extension_order = (if (((kind == .at) or (kind == .at_conditional))) r.extension_order else r.opts.extension_order.kind(kind, resolved_dir_info.isInsideNodeModules()));
             const base = std.fs.path.basename(abs_esm_path);
-            const entry_query_opt = entries.get(base);
+            var entry_query_opt = entries.get(base);
+            _ = &entry_query_opt;
+            if ((entry_query_opt == null)) {
+                if (strings.lastIndexOfChar(base, 46)) |last_dot| {
+                    _ = &last_dot;
+                    const ext = base[last_dot..];
+                    const exts = rewrittenFileExtensions(ext, resolved_dir_info.isInsideNodeModules());
+                    if ((exts.len > 0)) {
+                        const segment = base[0..last_dot];
+                        var tail = bufs(.load_as_file);
+                        _ = &tail;
+                        _ = bun.copy(u8, tail, segment);
+                        for (cp_iter_slice(exts)) |ext_to_replace| {
+                            _ = &ext_to_replace;
+                            var file_name = tail[0..(segment.len + ext_to_replace.len)];
+                            _ = &file_name;
+                            _ = bun.copy(u8, file_name[segment.len..], ext_to_replace);
+                            if (entries.get(file_name)) |q| {
+                                _ = &q;
+                                if ((q.entry.kind((&r.fs.fs), r.store_fd) == .file)) {
+                                    if (r.debug_logs) |*debug| {
+                                        _ = &debug;
+                                        _ = (debug.*).addNoteFmt("Rewrote to \"{s}\" ", .{ file_name });
+                                    }
+                                    entry_query_opt = q;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             if ((entry_query_opt == null)) {
                 const ends_with_star = (esm_resolution.status == .ExactEndsWithStar);
                 esm_resolution.status = .ModuleNotFound;
@@ -2776,6 +2811,9 @@ pub fn matchTSConfigPaths(r: *ThisResolver, tsconfig: *const TSConfigJSON, path:
                     if (strings.eqlLong(key, path, true)) {
                         for (cp_iter_slice(entry.value_ptr.*)) |original_path| {
                             _ = &original_path;
+                            if (isTypeOnlyTSConfigPath(r, original_path)) {
+                                continue;
+                            }
                             var absolute_original_path = original_path;
                             _ = &absolute_original_path;
                             if ((!std.fs.path.isAbsolute(absolute_original_path))) {
@@ -2819,6 +2857,9 @@ pub fn matchTSConfigPaths(r: *ThisResolver, tsconfig: *const TSConfigJSON, path:
                 }
                 for (cp_iter_slice(longest_match.original_paths)) |original_path| {
                     _ = &original_path;
+                    if (isTypeOnlyTSConfigPath(r, original_path)) {
+                        continue;
+                    }
                     const matched_text = path[longest_match.prefix.len..(path.len - longest_match.suffix.len)];
                     const total_length: ?u32 = strings.indexOfChar(original_path, 42);
                     const prefix_len = ((total_length) orelse (original_path.len));
@@ -3294,12 +3335,12 @@ _ = (blk_catch_72: { break :blk_catch_72 ((r.log.addErrorFmt(null, logger.Loc.Em
             if (strings.lastIndexOfChar(base, 46)) |last_dot| {
                 _ = &last_dot;
                 const ext = base[last_dot..base.len];
-                if (((strings.eqlComptime(ext, ".js") or strings.eqlComptime(ext, ".jsx")) or (strings.eqlComptime(ext, ".mjs") and ((!FeatureFlags.disable_auto_js_to_ts_in_node_modules) or (!strings.pathContainsNodeModulesFolder(path)))))) {
+                const exts = rewrittenFileExtensions(ext, strings.pathContainsNodeModulesFolder(path));
+                if ((exts.len > 0)) {
                     const segment = base[0..last_dot];
                     var tail = bufs(.load_as_file)[(path.len - base.len)..];
                     _ = &tail;
                     _ = bun.copy(u8, tail, segment);
-                    const exts: []const []const u8 = (if (strings.eqlComptime(ext, ".mjs")) (&.{ ".mts" }) else (&.{ ".ts", ".tsx", ".mts" }));
                     for (cp_iter_slice(exts)) |ext_to_replace| {
                         _ = &ext_to_replace;
                         var buffer = tail[0..(segment.len + ext_to_replace.len)];
@@ -3470,6 +3511,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                     }
                 }
                 if (info.enclosing_package_json == null) { info.enclosing_package_json = parent_.enclosing_package_json; }
+                info.package_json_for_module_type = parent_.package_json_for_module_type;
                 if (info.package_json_for_dependencies == null) { info.package_json_for_dependencies = parent_.package_json_for_dependencies; }
                 if ((!r.opts.preserve_symlinks)) {
                     if (parent_.getEntries(r.generation)) |parent_entries| {
@@ -3527,6 +3569,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                         info.package_json = (if (((r.usePackageManager() and (!info.hasNodeModules())) and (!info.isNodeModules()))) (blk_catch_90: { break :blk_catch_90 ((r.parsePackageJSON(path, (if (FeatureFlags.store_file_descriptors) fd else .invalid), package_id, true)) catch |__ce_90| { _ = &__ce_90; break :blk_catch_90 null; }); }) else (blk_catch_91: { break :blk_catch_91 ((r.parsePackageJSON(path, (if (FeatureFlags.store_file_descriptors) fd else .invalid), null, false)) catch |__ce_91| { _ = &__ce_91; break :blk_catch_91 null; }); }));
                         if (info.package_json) |pkg| {
                             _ = &pkg;
+                            info.package_json_for_module_type = pkg;
                             if ((pkg.browser_map.count() > 0)) {
                                 info.enclosing_browser_scope = result.index;
                                 info.package_json_for_browser_field = pkg;
@@ -3752,4 +3795,35 @@ pub fn watch(ctx: *anyopaque, dir_path: []const u8, fd: FD) void {
             _ = onWatch(bun.cast(Context, ctx), dir_path, fd);
     }
 };
+}
+
+pub fn isTypeOnlyTSConfigPath(r: *Resolver, substitution: []const u8) bool {
+        const declaration_exts: [3][]const u8 = .{ ".d.ts", ".d.mts", ".d.cts" };
+        for (cp_iter_slice(declaration_exts)) |ext| {
+            _ = &ext;
+            if (((substitution.len >= ext.len) and strings.eqlCaseInsensitiveASCIIICheckLength(substitution[(substitution.len - ext.len)..], ext))) {
+                if (r.debug_logs) |*debug| {
+                    _ = &debug;
+                    _ = (debug.*).addNoteFmt("Ignoring substitution \"{s}\" because it ends in \"{s}\"", .{ substitution, ext });
+                }
+                return true;
+            }
+        }
+        return false;
+}
+
+pub fn rewrittenFileExtensions(ext: []const u8, inside_node_modules: bool) []const []const u8 {
+        if ((strings.eqlComptime(ext, ".js") or strings.eqlComptime(ext, ".jsx"))) {
+            return (&.{ ".ts", ".tsx", ".mts" });
+        }
+        if ((strings.eqlComptime(ext, ".mjs") or strings.eqlComptime(ext, ".cjs"))) {
+            if ((FeatureFlags.disable_auto_js_to_ts_in_node_modules and inside_node_modules)) {
+                return (&.{});
+            }
+            if (strings.eqlComptime(ext, ".mjs")) {
+                return (&.{ ".mts" });
+            }
+            return (&.{ ".cts" });
+        }
+        return (&.{});
 }

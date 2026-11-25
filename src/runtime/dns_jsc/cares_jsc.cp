@@ -704,3 +704,7 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
 
     return bun.String.createUTF8ForJS(globalThis, slice);
 }
+
+pub fn notAHostnameError(globalThis: *jsc.JSGlobalObject, hostname: []const u8): jsc.JSValue {
+    return errorToJSWithSyscallAndHostname(.ENOTFOUND, globalThis, "getaddrinfo", hostname) catch return .js_undefined;
+}

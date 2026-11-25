@@ -1188,6 +1188,8 @@ extern "C" void Bun__onSignalForJS(int signalNumber, Zig::GlobalObject* globalOb
     Process* process = globalObject->processObject();
 
     String signalName = signalNumberToNameMap->get(signalNumber);
+    if (signalName.isNull())
+        return;
     Identifier signalNameIdentifier = Identifier::fromString(JSC::getVM(globalObject), signalName);
     MarkedArgumentBuffer args;
     args.append(jsString(JSC::getVM(globalObject), signalNameIdentifier.string()));

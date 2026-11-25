@@ -257,10 +257,25 @@ pub fn _resolveEntryPoint(transpiler: *Transpiler, entry_point: []const u8) !_re
             return e; }); });
     }
 
+pub fn rejectDisabledEntryPoint(transpiler: *Transpiler, resolved: _resolver.Result, entry_point: []const u8) !_resolver.Result {
+            if ((resolved.pathConst() != null)) {
+                return resolved;
+            }
+            if (strings.eqlComptime(resolved.path_pair.primary.namespace, "node")) {
+                _ = bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "Cannot use Node.js builtin \"{s}\" as an entry point", .{ entry_point }));
+            } else {
+                _ = bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "\"{s}\" is disabled due to \"browser\" field in package.json (entry point)", .{ entry_point }));
+            }
+            return error.ResolveMessage;
+    }
+
 pub fn resolveEntryPoint(transpiler: *Transpiler, entry_point: []const u8) !_resolver.Result {
-            return (blk_catch_2: { break :blk_catch_2 ((_resolveEntryPoint(transpiler, entry_point)) catch |e| { _ = &e; var cache_bust_buf: bun.PathBuffer = undefined;
+            const res = (blk_catch_2: { break :blk_catch_2 ((_resolveEntryPoint(transpiler, entry_point)) catch |e| { _ = &e; var cache_bust_buf: bun.PathBuffer = undefined;
             _ = &cache_bust_buf;
             const buster_name = name: {
+            if ((((transpiler.fs.top_level_dir.len + entry_point.len) + 4) > bun.MAX_PATH_BYTES)) {
+                break :name "";
+            }
             if (std.fs.path.isAbsolute(entry_point)) {
                 if (std.fs.path.dirname(entry_point)) |dir| {
                     _ = &dir;
@@ -271,18 +286,19 @@ pub fn resolveEntryPoint(transpiler: *Transpiler, entry_point: []const u8) !_res
             _ = &parts;
             break :name bun.path.joinAbsStringBufZ(transpiler.fs.top_level_dir, (&cache_bust_buf), (&parts), .auto);
 };
-            if (transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
+            if (((buster_name.len > 0) and transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name)))) {
                 const maybe_result: ?_resolver.Result = blk: {
-                const res = (blk_catch_3: { break :blk_catch_3 ((_resolveEntryPoint(transpiler, entry_point)) catch |__ce_3| { _ = &__ce_3; break :blk @as(?_resolver.Result, null); }); });
-                break :blk @as(?_resolver.Result, res);
+                const res2 = (blk_catch_3: { break :blk_catch_3 ((_resolveEntryPoint(transpiler, entry_point)) catch |__ce_3| { _ = &__ce_3; break :blk @as(?_resolver.Result, null); }); });
+                break :blk @as(?_resolver.Result, res2);
 };
                 if (maybe_result) |result| {
                     _ = &result;
-                    return result;
+                    return rejectDisabledEntryPoint(transpiler, result, entry_point);
                 }
             }
             _ = bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} resolving \"{s}\" (entry point)", .{ @errorName(e), entry_point }));
             return e; }); });
+            return rejectDisabledEntryPoint(transpiler, res, entry_point);
     }
 
 pub fn init(allocator: std.mem.Allocator, log: *logger.Log, opts: api.TransformOptions, env_loader_: ?*DotEnv.Loader) !Transpiler {

@@ -86,11 +86,21 @@ pub fn generateChunksInParallel(
     bun.assert(chunks.len > 0);
 
     {
+        if (!c.options.minify_identifiers) {
+            LinkerContext.crossChunkNames.assignUnminified(c, chunks)?;
+        }
+
         // TODO(@paperclover/bake): instead of running a renamer per chunk, run it per file
         debug(" START {d} renamers", [ chunks.len ]);
         defer debug("  DONE {d} renamers", [ chunks.len ]);
         const ctx = GenerateChunkCtx{ chunk: &chunks[0], c: c, chunks: chunks };
         c.parse_graph.pool.worker_pool.eachPtr(c.allocator(), ctx, LinkerContext.generateJSRenamer, chunks)?;
+
+        if (c.options.minify_identifiers) {
+            LinkerContext.crossChunkNames.assignMinified(c, chunks)?;
+            c.parse_graph.pool.worker_pool.eachPtr(c.allocator(), ctx, LinkerContext.finishJSRenamer, chunks)?;
+        }
+        LinkerContext.crossChunkNames.applyToClauses(c, chunks);
     }
 
     if (c.source_maps.line_offset_tasks.len > 0) {

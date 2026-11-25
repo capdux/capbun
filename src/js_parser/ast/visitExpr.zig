@@ -502,6 +502,7 @@ const index = p.visitExpr(e_.index);
             e_.index = index;
             const unwrapped = e_.index.unwrapInlined();
             if (((unwrapped.data == .e_string) and unwrapped.data.e_string.isUTF8())) {
+                _ = unwrapped.data.e_string.resolveRopeIfNeeded(p.allocator);
                 if ((p.options.features.minify_syntax and unwrapped.data.e_string.isIdentifier(p.allocator))) {
                     const dot = p.newExpr(E.Dot{ .name = unwrapped.data.e_string.slice(p.allocator), .name_loc = unwrapped.loc, .target = e_.target, .optional_chain = e_.optional_chain }, expr.loc);
                     if (is_call_target) {

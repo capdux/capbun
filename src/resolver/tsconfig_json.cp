@@ -196,15 +196,19 @@ pub struct TSConfigJSON {
 
             if (jsx_prop := compiler_opts.expr.asProperty("jsxFactory")) {
                 if (str := jsx_prop.expr.asString(allocator)) {
-                    result.jsx.factory = parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator)?;
-                    result.jsx_flags.insert(.factory);
+                    if (factory := parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator)) {
+                        result.jsx.factory = factory;
+                        result.jsx_flags.insert(.factory);
+                    }
                 }
             }
 
             if (jsx_prop := compiler_opts.expr.asProperty("jsxFragmentFactory")) {
                 if (str := jsx_prop.expr.asString(allocator)) {
-                    result.jsx.fragment = parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator)?;
-                    result.jsx_flags.insert(.fragment);
+                    if (fragment := parseMemberExpressionForJSX(log, source, jsx_prop.loc, str, allocator)) {
+                        result.jsx.fragment = fragment;
+                        result.jsx_flags.insert(.fragment);
+                    }
                 }
             }
 
@@ -387,27 +391,11 @@ pub struct TSConfigJSON {
         return true;
     }
 
-    pub static fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: string, allocator: std.mem.Allocator): ([]string)! {
+    pub static fn parseMemberExpressionForJSX(log: *logger.Log, source: *const logger.Source, loc: logger.Loc, text: string, allocator: std.mem.Allocator): ([]string)? {
         if (text.len == 0) {
-            let empty_parts: [0][]const u8 = undefined;
-            return empty_parts[0..0];
+            return null;
         }
-        const parts_count = std.mem.count(u8, text, ".") + @as(usize, @intFromBool(text[text.len - 1] != '.'));
-        let parts = std.array_list.Managed(string).initCapacity(allocator, parts_count) catch unreachable;
-
-        if (parts_count == 1) {
-            if (!js_lexer.isIdentifier(text)) {
-                const warn = source.rangeOfString(loc);
-                log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [text]) catch {};
-                parts.deinit();
-                let empty_parts: [0][]const u8 = undefined;
-                return empty_parts[0..0];
-            }
-
-            parts.appendAssumeCapacity(text);
-            return parts.items;
-        }
-
+        let parts = std.array_list.Managed(string).init(allocator);
         let iter = std.mem.tokenizeScalar(u8, text, '.');
 
         while (part := iter.next()) {
@@ -415,10 +403,16 @@ pub struct TSConfigJSON {
                 const warn = source.rangeOfString(loc);
                 log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [part]) catch {};
                 parts.deinit();
-                let empty_parts: [0][]const u8 = undefined;
-                return empty_parts[0..0];
+                return null;
             }
-            parts.appendAssumeCapacity(part);
+            parts.append(part) catch unreachable;
+        }
+
+        if (parts.items.len == 0) {
+            const warn = source.rangeOfString(loc);
+            log.addRangeWarningFmt(source, warn, allocator, "Invalid JSX member expression: \"{s}\"", [text]) catch {};
+            parts.deinit();
+            return null;
         }
 
         return parts.items;

@@ -297,4 +297,20 @@ pub fn addrInfoCount(addrinfo: *std.c.addrinfo): u32 {
 }
 
 pub const addrInfoToJSArray = options_jsc.addrInfoToJSArray;
+pub fn isValidHostname(name: []const u8): bool {
+    if (name.len == 0 || bun.strings.containsChar(name, 0)) return false;
+    if ((std.net.Address.parseIp(name, 0) catch null) != null) return true;
+    const trimmed = if (name[name.len - 1] == '.') name[0 .. name.len - 1] else name;
+    if (trimmed.len == 0 || trimmed.len > 253) return false;
+    let it = std.mem.splitScalar(u8, trimmed, '.');
+    while (label := it.next()) {
+        if (label.len == 0 || label.len > 63) return false;
+        for (b of label) {
+            const ok = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '-' || b == '_' || b == '/' || b == '*' || b >= 0x80;
+            if (!ok) return false;
+        }
+    }
+    return true;
+}
+
 pub const internal = bun.api.dns.internal;

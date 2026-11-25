@@ -146,8 +146,12 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
     const server_source_index = graph.html_imports.server_source_indices.slice()[index];
     const sources: []const bun.logger.Source = graph.input_files.items(.source);
     const bv2: *const BundleV2 = unsafe { @alignCast(@fieldParentPtr("graph", graph)) };
-    let entry_point_bits = bun.bit_set.AutoBitSet.initEmpty(bun.default_allocator, graph.entry_points.items.len)?;
+    let entry_point_bits = bun.bit_set.AutoBitSet.initEmpty(bun.default_allocator, linker_graph.entry_points.len)?;
     const entry_point_bits_guard = DeinitWithAllocGuard<bun.bit_set.AutoBitSet>{ ptr: unsafe { &entry_point_bits }, allocator: bun.default_allocator };
+    let chunks_to_write = bun.bit_set.AutoBitSet.initEmpty(bun.default_allocator, chunks.len)?;
+    const chunks_to_write_guard = DeinitWithAllocGuard<bun.bit_set.AutoBitSet>{ ptr: unsafe { &chunks_to_write }, allocator: bun.default_allocator };
+    let chunks_to_visit = std.array_list.Managed(u32).init(bun.default_allocator);
+    const chunks_to_visit_guard = DeinitGuard<std.array_list.Managed(u32)>{ ptr: unsafe { &chunks_to_visit } };
 
     const root_dir = if (bv2.transpiler.options.root_dir.len > 0) bv2.transpiler.options.root_dir else bun.fs.FileSystem.instance.top_level_dir;
 
@@ -159,9 +163,12 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
     let temp_buffer = std.array_list.Managed(u8).init(bun.default_allocator);
     const temp_buffer_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &temp_buffer } };
 
-    for (*ch of chunks) {
+    let chunk_idx_iter: usize = 0;
+    while (chunk_idx_iter < chunks.len) : (chunk_idx_iter += 1) {
+        const ch = &chunks[chunk_idx_iter];
         if (ch.entry_point.source_index == browser_source_index && ch.entry_point.is_entry_point) {
             entry_point_bits.set(ch.entry_point.entry_point_id);
+            chunks_to_visit.append(@as(u32, @intCast(chunk_idx_iter)))?;
 
             if (ch.content == .html) {
                 writer.writeAll("\"index\":")?;
@@ -178,15 +185,33 @@ pub fn write(index: u32, graph: *const Graph, linker_graph: *const LinkerGraph, 
         }
     }
 
+    // Every chunk the page's chunks import, transitively.
+    while (visit_idx := chunks_to_visit.pop()) {
+        if (chunks_to_write.isSet(visit_idx)) continue;
+        chunks_to_write.set(visit_idx);
+
+        const ch = &chunks[visit_idx];
+        for (imp of ch.cross_chunk_imports.slice()) {
+            const imported = &chunks[imp.chunk_index];
+            if (imported.entry_point.is_entry_point) {
+                // A dynamic import's entry point: its bit is what the assets only it reaches carry.
+                entry_point_bits.set(imported.entry_point.entry_point_id);
+            }
+            chunks_to_visit.append(imp.chunk_index)?;
+        }
+        if (ch.content == .javascript) {
+            chunks_to_visit.appendSlice(ch.content.javascript.css_chunks)?;
+        }
+    }
+
     writer.writeAll("\"files\":[")?;
 
     let first = true;
-    const has_single_html_import = graph.html_imports.html_source_indices.len == 1;
 
-    for (*ch of chunks) {
-        if (ch.entryBits().hasIntersection(&entry_point_bits) ||
-            (has_single_html_import && ch.flags.is_browser_chunk_from_server_build))
-        {
+    let write_chunk_idx: usize = 0;
+    while (write_chunk_idx < chunks.len) : (write_chunk_idx += 1) {
+        const ch = &chunks[write_chunk_idx];
+        if (chunks_to_write.isSet(write_chunk_idx)) {
             if (!first) writer.writeAll(",")?;
             first = false;
 

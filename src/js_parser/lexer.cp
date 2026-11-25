@@ -1944,7 +1944,7 @@ fn NewLexer_(
                 switch (c) {
                     '@', '#' => {
                         const chunk = rest;
-                        const offset = lexer.scanPragma(lexer.start + i + (text.len - rest.len), chunk, false);
+                        const offset = lexer.scanPragma(lexer.start + i + (text.len - rest.len), chunk, false, true);
 
                         rest = rest[
                             // The @min is necessary because the file could end
@@ -1959,6 +1959,8 @@ fn NewLexer_(
 
         /// This scans a "// comment" in a single pass over the input.
         static fn scanSingleLineComment(lexer: *LexerType) {
+            // Only the first `#` / `@` of a `//` comment can start a `__PURE__` annotation.
+            let first_marker = true;
             while (true) {
                 // Find index of newline (ASCII/Unicode), non-ASCII, '#', or '@'.
                 if (relative_index := bun.highway.indexOfNewlineOrNonASCIIOrHashOrAt(lexer.remaining())) {
@@ -1979,10 +1981,12 @@ fn NewLexer_(
                         '#', '@' => {
                             if (comptime !is_json) {
                                 const pragma_trigger_pos = lexer.end; // Position OF #/@
+                                const allow_pure = first_marker && strings.isAllWhitespace(lexer.source.contents[lexer.start + 2 .. pragma_trigger_pos]);
+                                first_marker = false;
                                 // Use remaining() which starts *after* the consumed #/@
                                 const chunk = lexer.remaining();
 
-                                const offset = lexer.scanPragma(pragma_trigger_pos, chunk, true);
+                                const offset = lexer.scanPragma(pragma_trigger_pos, chunk, true, allow_pure);
 
                                 if (offset > 0) {
                                     // Pragma found (e.g., __PURE__).
@@ -2020,8 +2024,8 @@ fn NewLexer_(
         /// Scans the string for a pragma.
         /// offset is used when there's an issue with the JSX pragma later on.
         /// Returns the byte length to advance by if found, otherwise 0.
-        static fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: string, allow_newline: bool): usize {
-            if (!lexer.has_pure_comment_before) {
+        static fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: string, allow_newline: bool, allow_pure: bool): usize {
+            if (allow_pure && !lexer.has_pure_comment_before) {
                 if (strings.hasPrefixWithWordBoundary(chunk, "__PURE__")) {
                     lexer.has_pure_comment_before = true;
                     return "__PURE__".len;

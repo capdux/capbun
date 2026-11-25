@@ -1,13 +1,13 @@
 import * as std from "std";
 import * as bun from "bun";
 
-export const Mode = std.posix.mode_t;
-export const E = std.posix.E;
-export const S = std.posix.S;
+pub const Mode = std.posix.mode_t;
+pub const E = std.posix.E;
+pub const S = std.posix.S;
 
-const MAX_ERRNO = 134;
+const MAX_ERRNO = 135;
 
-export enum SystemErrno: u16 {
+pub enum SystemErrno: u16 {
     SUCCESS = 0,
     EPERM = 1,
     ENOENT = 2,
@@ -142,8 +142,14 @@ export enum SystemErrno: u16 {
     ENOTRECOVERABLE = 131,
     ERFKILL = 132,
     EHWPOISON = 133,
+    EUNKNOWN = 134,
 
     pub const max = MAX_ERRNO;
+
+    static fn fromRaw(raw: anytype): SystemErrno {
+        if (raw >= 0 && raw < MAX_ERRNO) return @enumFromInt(raw);
+        return .EUNKNOWN;
+    }
 
     static fn init(code: anytype): SystemErrno? {
         if (code < 0) {
@@ -229,15 +235,15 @@ export struct UV_E {
     pub const NOEXEC: i32 = @intFromEnum(SystemErrno.ENOEXEC);
 }
 
-export fn getErrno(rc: anytype): E {
+pub fn getErrno(rc: anytype): E {
     const Type = @TypeOf(rc);
 
     if (Type == usize) {
         let signed: isize = @bitCast(rc);
         let int = if (signed > -4096 && signed < 0) -signed else 0;
-        return @enumFromInt(int);
+        return @enumFromInt(@intFromEnum(SystemErrno.fromRaw(int)));
     } else if (rc == -1) {
-        return @enumFromInt(std.c._errno().*);
+        return @enumFromInt(@intFromEnum(SystemErrno.fromRaw(std.c._errno().*)));
     } else {
         return .SUCCESS;
     }

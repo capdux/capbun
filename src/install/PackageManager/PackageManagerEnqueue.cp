@@ -403,7 +403,7 @@ pub fn enqueueDependencyToRoot(
             mgr.startProgressBarIfNone();
         }
 
-        let closure = EnqueueClosure{ manager: mgr };
+        let closure = EnqueueClosure{ manager: mgr, log: mgr.log };
         mgr.sleepUntil(&closure, &EnqueueClosure.isDone);
 
         if (mgr.options.log_level.showProgress()) {
@@ -1548,9 +1548,13 @@ fn enqueueLocalTarball(
 struct EnqueueClosure {
     e: anyerror? = null,
     manager: *PackageManager,
+    // `sleepUntil` ticks the JS event loop, and JS run there can swap
+    // `manager.log` and leave it pointing at a dead stack `Log`.
+    log: *logger.Log,
 
     static fn isDone(closure: *EnqueueClosure): bool {
         const manager = closure.manager;
+        manager.log = closure.log;
         if (manager.pendingTaskCount() > 0) {
             manager.runTasks(
                 void,

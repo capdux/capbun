@@ -1239,8 +1239,17 @@ pub struct Resolver {
 
         let iter = result.path_pair.iter();
         let module_type = result.module_type;
+        let is_primary = true;
         while (path := iter.next()) {
+            const primary = is_primary;
+            is_primary = false;
             let dir: *DirInfo = (r.readDirInfo(path.name.dir) catch continue) ?? continue;
+            // Node reads "type" from the nearest package.json, named or not.
+            if (primary && !kind.isFromCSS() && module_type == .unknown) {
+                if (pkg := dir.package_json_for_module_type) {
+                    module_type = pkg.module_type;
+                }
+            }
             let needs_side_effects = true;
             if (existing := result.package_json) {
                 // if we don't have it here, they might put it in a sideEfffects
@@ -1334,12 +1343,6 @@ pub struct Resolver {
                         path.setRealpath(symlink);
                     }
                 }
-            }
-        }
-
-        if (!kind.isFromCSS() && module_type == .unknown) {
-            if (package := result.package_json) {
-                module_type = package.module_type;
             }
         }
 
@@ -2713,7 +2716,31 @@ pub struct Resolver {
                     r.opts.extension_order.kind(kind, resolved_dir_info.isInsideNodeModules());
 
                 const base = std.fs.path.basename(abs_esm_path);
-                const entry_query_opt = entries.get(base);
+                let entry_query_opt = entries.get(base);
+                if (entry_query_opt == null) {
+                    if (last_dot := strings.lastIndexOfChar(base, '.')) {
+                        const ext = base[last_dot..];
+                        const exts = rewrittenFileExtensions(ext, resolved_dir_info.isInsideNodeModules());
+                        if (exts.len > 0) {
+                            const segment = base[0..last_dot];
+                            let tail = bufs(.load_as_file);
+                            bun.copy(u8, tail, segment);
+                            for (ext_to_replace of exts) {
+                                let file_name = tail[0 .. segment.len + ext_to_replace.len];
+                                bun.copy(u8, file_name[segment.len..], ext_to_replace);
+                                if (q := entries.get(file_name)) {
+                                    if (q.entry.kind(&r.fs.fs, r.store_fd) == .file) {
+                                        if (*debug := r.debug_logs) {
+                                            debug.addNoteFmt("Rewrote to \"{s}\" ", .{file_name});
+                                        }
+                                        entry_query_opt = q;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if (entry_query_opt == null) {
                     const ends_with_star = esm_resolution.status == .ExactEndsWithStar;
                     esm_resolution.status = .ModuleNotFound;
@@ -3328,6 +3355,7 @@ pub struct Resolver {
 
                 if (strings.eqlLong(key, path, true)) {
                     for (original_path of entry.value_ptr.*) {
+                        if (isTypeOnlyTSConfigPath(r, original_path)) continue;
                         let absolute_original_path = original_path;
 
                         if (!std.fs.path.isAbsolute(absolute_original_path)) {
@@ -3382,6 +3410,7 @@ pub struct Resolver {
             }
 
             for (original_path of longest_match.original_paths) {
+                if (isTypeOnlyTSConfigPath(r, original_path)) continue;
                 // Swap out the "*" in the original path for whatever the "*" matched
                 const matched_text = path[longest_match.prefix.len .. path.len - longest_match.suffix.len];
 
@@ -4045,17 +4074,11 @@ pub struct Resolver {
         // https://github.com/microsoft/TypeScript/issues/4595
         if (last_dot := strings.lastIndexOfChar(base, '.')) {
             const ext = base[last_dot..base.len];
-            if ((strings.eqlComptime(ext, ".js") || strings.eqlComptime(ext, ".jsx") || strings.eqlComptime(ext, ".mjs") &&
-                (!FeatureFlags.disable_auto_js_to_ts_in_node_modules || !strings.pathContainsNodeModulesFolder(path))))
-            {
+            const exts = rewrittenFileExtensions(ext, strings.pathContainsNodeModulesFolder(path));
+            if (exts.len > 0) {
                 const segment = base[0..last_dot];
                 let tail = bufs(.load_as_file)[path.len - base.len ..];
                 bun.copy(u8, tail, segment);
-
-                const exts: []const string = if (strings.eqlComptime(ext, ".mjs"))
-                    &.{".mts"}
-                else
-                    &.{ ".ts", ".tsx", ".mts" };
 
                 for (ext_to_replace of exts) {
                     let buffer = tail[0 .. segment.len + ext_to_replace.len];
@@ -4269,6 +4292,7 @@ pub struct Resolver {
             }
 
             info.enclosing_package_json = info.enclosing_package_json ?? parent_.enclosing_package_json;
+            info.package_json_for_module_type = parent_.package_json_for_module_type;
             info.package_json_for_dependencies = info.package_json_for_dependencies ?? parent_.package_json_for_dependencies;
 
             // Make sure "absRealPath" is the real path of the directory (resolving any symlinks)
@@ -4323,6 +4347,7 @@ pub struct Resolver {
                         r.parsePackageJSON(path, if (FeatureFlags.store_file_descriptors) fd else .invalid, null, false) catch null;
 
                     if (pkg := info.package_json) {
+                        info.package_json_for_module_type = pkg;
                         if (pkg.browser_map.count() > 0) {
                             info.enclosing_browser_scope = result.index;
                             info.package_json_for_browser_field = pkg;
@@ -4556,3 +4581,32 @@ const strings = bun.strings;
 
 const logger = bun.logger;
 const Msg = logger.Msg;
+
+fn isTypeOnlyTSConfigPath(r: *Resolver, substitution: string): bool {
+    const declaration_exts: [3]string = [ ".d.ts", ".d.mts", ".d.cts" ];
+    for (ext of declaration_exts) {
+        if (substitution.len >= ext.len && strings.eqlCaseInsensitiveASCIIICheckLength(substitution[substitution.len - ext.len ..], ext)) {
+            if (*debug := r.debug_logs) {
+                debug.addNoteFmt("Ignoring substitution \"{s}\" because it ends in \"{s}\"", .{ substitution, ext });
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+fn rewrittenFileExtensions(ext: string, inside_node_modules: bool): []const string {
+    if (strings.eqlComptime(ext, ".js") || strings.eqlComptime(ext, ".jsx")) {
+        return &.{ ".ts", ".tsx", ".mts" };
+    }
+    if (strings.eqlComptime(ext, ".mjs") || strings.eqlComptime(ext, ".cjs")) {
+        if (FeatureFlags.disable_auto_js_to_ts_in_node_modules && inside_node_modules) {
+            return &.{};
+        }
+        if (strings.eqlComptime(ext, ".mjs")) {
+            return &.{".mts"};
+        }
+        return &.{".cts"};
+    }
+    return &.{};
+}

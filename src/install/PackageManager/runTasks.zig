@@ -295,7 +295,7 @@ const name = (if (@typeInfo(@TypeOf(manifest_req)) == .@"enum" or @typeInfo(@Typ
                     _ = AsyncHTTP.max_simultaneous_requests.store(@max(min, (max / 2)), .monotonic);
                 }
             }
-            if (((task.response.metadata == null) or (task.response.metadata.?.response.status_code > 499))) {
+            if ((((task.response.fail != null) or (task.response.metadata == null)) or (task.response.metadata.?.response.status_code > 499))) {
                 const e = ((task.response.fail) orelse (error.HTTPError));
                 if ((task.retried < manager.options.max_retry_count)) {
                     task.retried = (task.retried + 1);
@@ -306,7 +306,7 @@ const name = (if (@typeInfo(@TypeOf(manifest_req)) == .@"enum" or @typeInfo(@Typ
                     continue;
                 }
             }
-            if ((task.response.metadata == null)) {
+            if (((task.response.metadata == null) or (task.response.fail != null))) {
                 const e = ((task.response.fail) orelse (error.HTTPError));
                 if (((@TypeOf(callbacks.onPackageManifestError) != void) and (@TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{})))) {
                     _ = callbacks.onPackageManifestError(extract_ctx, name.slice(), e, task.url_buf);
@@ -411,7 +411,7 @@ _ = bun.debugAssert((!task.streaming_committed));
                     _ = AsyncHTTP.max_simultaneous_requests.store(@max(min, (max / 2)), .monotonic);
                 }
             }
-            if (((task.response.metadata == null) or (task.response.metadata.?.response.status_code > 499))) {
+            if ((((task.response.fail != null) or (task.response.metadata == null)) or (task.response.metadata.?.response.status_code > 499))) {
                 const e = ((task.response.fail) orelse (error.TarballFailedToDownload));
                 if ((task.retried < manager.options.max_retry_count)) {
                     task.retried = (task.retried + 1);
@@ -424,7 +424,7 @@ _ = bun.debugAssert((!task.streaming_committed));
                 }
             }
             _ = task.discardUnusedStreamingState(manager);
-            if ((task.response.metadata == null)) {
+            if (((task.response.metadata == null) or (task.response.fail != null))) {
                 const e = ((task.response.fail) orelse (error.TarballFailedToDownload));
                 const is_required = manager.isNetworkTaskRequired(task.task_id);
                 _ = markNetworkTaskFailed(manager, task.task_id);

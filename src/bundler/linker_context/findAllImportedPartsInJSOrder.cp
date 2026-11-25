@@ -64,6 +64,21 @@ pub fn findImportedPartsInJSOrder(
 
     Chunk.Order.sort(chunk_order_array.items);
 
+    // Without code splitting, visit this chunk's own entry point first so files
+    // print in the order this entry point imports them (#41263).
+    if (!ctx.graph.code_splitting && chunk.entry_point.is_entry_point) {
+        const ep_si = chunk.entry_point.source_index;
+        let ep_idx: usize = 0;
+        while (ep_idx < chunk_order_array.items.len) : (ep_idx += 1) {
+            if (chunk_order_array.items[ep_idx].source_index == ep_si) {
+                if (ep_idx > 0) {
+                    std.mem.rotate(Chunk.Order, chunk_order_array.items[0 .. ep_idx + 1], ep_idx);
+                }
+                break;
+            }
+        }
+    }
+
     part_ranges_shared.clearRetainingCapacity();
     parts_prefix_shared.clearRetainingCapacity();
 

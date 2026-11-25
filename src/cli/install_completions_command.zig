@@ -171,6 +171,11 @@ pub fn installUninstallerWindows() !void {
             _ = try file_guard.val.writeAll(content);
     }
 
+pub fn printPowershellCompletionsUnsupported() void {
+            _ = Output.errGeneric("PowerShell completions are not yet written for Bun.", .{});
+            _ = Output.printErrorln("See https://github.com/oven-sh/bun/issues/8939", .{});
+    }
+
 pub fn exec(allocator: std.mem.Allocator) !void {
             const fail_exit_code: u8 = (if ((!bun.env_var.IS_BUN_AUTO_UPDATE.get())) 1 else 0);
             var cwd_buf: bun.PathBuffer = undefined;
@@ -183,9 +188,10 @@ pub fn exec(allocator: std.mem.Allocator) !void {
                 _ = &shell_name;
                 shell = ShellCompletions.Shell.fromEnv(@TypeOf(shell_name), shell_name);
             }
-            const cwd = (blk_catch_10: { break :blk_catch_10 ((bun.getcwd((&cwd_buf))) catch |__ce_10| { _ = &__ce_10; if ((fail_exit_code == 1)) {
-                if ((!stdout.isTty())) {
-                    _ = (blk_catch_11: { break :blk_catch_11 ((stdout.writeAll(shell.completions())) catch |e| { _ = &e; break :blk_catch_11 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .BrokenPipe)) {  break :__sw_blk_0 cp_val(Global.exit(0)); } } {  return e; }  unreachable; }); }); });
+            const cwd = (blk_catch_10: { break :blk_catch_10 ((bun.getcwd((&cwd_buf))) catch |__ce_10| { _ = &__ce_10; if (((fail_exit_code == 1) and (!stdout.isTty()))) {
+                const completions = shell.completions();
+                if ((completions.len > 0)) {
+                    _ = (blk_catch_11: { break :blk_catch_11 ((stdout.writeAll(completions)) catch |e| { _ = &e; break :blk_catch_11 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .BrokenPipe)) {  break :__sw_blk_0 cp_val(Global.exit(0)); } } {  return e; }  unreachable; }); }); });
                     _ = Global.exit(0);
                 }
             }
@@ -198,6 +204,10 @@ pub fn exec(allocator: std.mem.Allocator) !void {
             switch (shell) {
 .unknown => {
 _ = Output.errGeneric("Unknown or unsupported shell. Please set $SHELL to one of zsh, fish, or bash.", .{});
+            _ = Global.exit(fail_exit_code);
+},
+.pwsh => {
+_ = printPowershellCompletionsUnsupported();
             _ = Global.exit(fail_exit_code);
 },
 else => {
@@ -367,7 +377,7 @@ if (bun.env_var.XDG_DATA_HOME.get()) |data_dir| {
                 break :found (blk_catch_32: { break :blk_catch_32 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_32| { _ = &__ce_32; continue; }); });
             }
 },
-else => {
+.unknown, .pwsh => {
 _ = unreachable;
 },
 }
@@ -383,7 +393,7 @@ _ = unreachable;
 .fish => "bun.fish",
 .zsh => "_bun",
 .bash => "bun.completion.bash",
-else => unreachable,
+.unknown, .pwsh => unreachable,
 });
             _ = bun.assert((completions_dir.len > 0));
             var output_file = (blk_catch_33: { break :blk_catch_33 ((output_dir.createFileZ(filename, .{ .truncate = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Could not open {s} for writing: {s}", .{ filename, @errorName(e) });

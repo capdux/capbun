@@ -809,6 +809,28 @@ static fn finish(client: *TarballStream) {
 
     client.populateResult(task);
 
+    // If the HTTP connection dropped mid-body (or integrity failed with a
+    // transport error), hand the NetworkTask back to `runTasks` so it can
+    // retry/report the download just like a pre-body failure.
+    if (http_err := client.http_err) {
+        if (task.status != .success) {
+            if (client.tmpname.len > 0) {
+                if (d := client.dest) {
+                    d.close();
+                    client.dest = null;
+                }
+                task.request.extract.tarball.temp_dir.deleteTree(client.tmpname) catch {};
+            }
+            network.response.fail = http_err;
+            network.streaming_committed = false;
+            network.tarball_stream = null;
+            client.deinit();
+            manager.async_network_task_queue.push(network);
+            manager.wake();
+            return;
+        }
+    }
+
     // Temp-dir cleanup must happen before we release the stream or
     // publish the task: both `this.tmpname` and
     // `task.request.extract.tarball.temp_dir` become invalid once

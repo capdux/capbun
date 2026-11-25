@@ -413,9 +413,9 @@ pub fn handleSettings(self: *Connection, sink: anytype, hdr: FrameHeader, payloa
                     }
                 }
             }
+            _ = self.sendSettingsAck(sink);
             const snapshot = self.remote_settings;
             _ = sink.sinkOnRemoteSettings((&snapshot));
-            _ = self.sendSettingsAck(sink);
             return false;
     }
 

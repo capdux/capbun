@@ -583,6 +583,8 @@ pub fn NewParser_(comptime parser_feature__typescript: bool, comptime parser_fea
     commonjs_named_exports: js_ast.Ast.CommonJSNamedExports = .{},
     commonjs_named_exports_deoptimized: bool = false,
     commonjs_module_exports_assigned_deoptimized: bool = false,
+    module_exports_rewrite_count: u32 = 0,
+    has_top_level_function_merged_with_var: bool = false,
     commonjs_named_exports_needs_conversion: u32 = std.math.maxInt(u32),
     had_commonjs_named_exports_this_visit: bool = false,
     commonjs_replacement_stmts: StmtNodeList = &.{},
@@ -2127,6 +2129,9 @@ pub fn hoistSymbols(p: *P, scope: *js_ast.Scope) void {
                                     const entry = ((_scope.getOrPutMemberWithHash(p.allocator, name, hash.?)) catch unreachable);
                                     entry.value_ptr.* = member_in_scope;
                                     entry.key_ptr.* = name;
+                                    if ((((_scope == p.module_scope) and (symbol.kind == .hoisted)) and Symbol.isKindFunction(existing_kind))) {
+                                        p.has_top_level_function_merged_with_var = true;
+                                    }
                                     continue :nextMember;
                                 }
                                 if (((existing_kind != .catch_identifier) and (existing_kind != .arguments))) {
@@ -2879,9 +2884,14 @@ _ = try p.log.addSymbolAlreadyDeclaredError(p.allocator, p.source, symbol.origin
 sym_ref = existing.ref;
 },
 .replace_with_new => {
-symbol.link = sym_ref;
-                    if ((kind.isFunction() and symbol.kind.isFunction())) {
+const existing_kind = symbol.kind;
+                    symbol.link = sym_ref;
+                    if ((kind.isFunction() and existing_kind.isFunction())) {
                         symbol.remove_overwritten_function_declaration = true;
+                    } else {
+                        if (((p.current_scope == p.module_scope) and (((existing_kind == .hoisted) and kind.isFunction()) or (existing_kind.isFunction() and (kind == .hoisted))))) {
+                            p.has_top_level_function_merged_with_var = true;
+                        }
                     }
 },
 .become_private_get_set_pair => {
@@ -3136,19 +3146,26 @@ pub fn appendPart(p: *P, parts: *ListManaged(js_ast.Part), stmts: []Stmt) !void 
             }
     }
 
-pub fn bindingCanBeRemovedIfUnused(p: *P, binding: Binding) bool {
-            if ((!p.options.features.dead_code_elimination)) {
-                return false;
+pub fn declBindingCanBeRemovedIfUnusedWithoutDCECheck(p: *P, decl: *const G.Decl) bool {
+            if ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value)) |value| {
+                _ = &value;
+                return p.patternCanBeRemovedIfUnusedWithoutDCECheck(decl.binding, (&value));
             }
-            return bindingCanBeRemovedIfUnusedWithoutDCECheck(p, binding);
+            return (decl.binding.data == .b_identifier);
     }
 
-pub fn bindingCanBeRemovedIfUnusedWithoutDCECheck(p: *P, binding: Binding) bool {
+pub fn patternCanBeRemovedIfUnusedWithoutDCECheck(p: *P, binding: Binding, value: *const Expr) bool {
             switch (binding.data) {
+.b_identifier, .b_missing => {
+return true;
+},
 .b_array => |bi| {
-for (bi.items) |*item| {
+if ((value.data != .e_array)) {
+                return false;
+            }
+            for (bi.items) |*item| {
                 _ = &item;
-                if ((!p.bindingCanBeRemovedIfUnusedWithoutDCECheck((item.*).binding))) {
+                if ((((item.*).binding.data != .b_identifier) and ((item.*).binding.data != .b_missing))) {
                     return false;
                 }
                 if (((item.*).default_value != null)) {
@@ -3157,14 +3174,19 @@ for (bi.items) |*item| {
                     }
                 }
             }
+            return true;
 },
-.b_object => |bi| {
-for (cp_mut_slice(&bi.properties)) |*property| {
+.b_object => |bo| {
+if ((value.data != .e_object)) {
+                return false;
+            }
+            const literal = value.data.e_object;
+            if ((!objectLiteralHasOnlyPlainKeys(literal))) {
+                return false;
+            }
+            for (cp_mut_slice(&bo.properties)) |*property| {
                 _ = &property;
-                if (((!(property.*).flags.contains(.is_spread)) and (!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(property.*).key))))) {
-                    return false;
-                }
-                if ((!p.bindingCanBeRemovedIfUnusedWithoutDCECheck((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value)))) {
+                if (((property.*).flags.contains(.is_spread) or (property.*).flags.contains(.is_computed))) {
                     return false;
                 }
                 if (((property.*).default_value != null)) {
@@ -3172,13 +3194,54 @@ for (cp_mut_slice(&bi.properties)) |*property| {
                         return false;
                     }
                 }
+                if (((property.*).key.data != .e_string)) {
+                    return false;
+                }
+                const matched = ((objectLiteralDataProperty(literal, (property.*).key.data.e_string)) orelse { return false; });
+                if ((!p.patternCanBeRemovedIfUnusedWithoutDCECheck((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value), (&matched)))) {
+                    return false;
+                }
             }
-},
-else => {
-
+            return true;
 },
 }
+    }
+
+pub fn objectLiteralHasOnlyPlainKeys(literal: *const E.Object) bool {
+            for (cp_mut_slice(&literal.properties.slice())) |*property| {
+                _ = &property;
+                if (((((property.*).kind == .spread) or (property.*).flags.contains(.is_computed)) or ((property.*).initializer != null))) {
+                    return false;
+                }
+                const key = (((property.*).key) orelse { return false; });
+                if ((key.data != .e_string)) {
+                    return false;
+                }
+                if (key.data.e_string.eqlComptime("__proto__")) {
+                    return false;
+                }
+            }
             return true;
+    }
+
+pub fn objectLiteralDataProperty(literal: *const E.Object, key: *const E.String) ?Expr {
+            const props = literal.properties.slice();
+            var i: usize = props.len;
+            _ = &i;
+            while ((i > 0)) {
+                i = (i - 1);
+                const property = (&props[@as(usize, @intCast(i))]);
+                if (property.key) |prop_key| {
+                    _ = &prop_key;
+                    if (((prop_key.data == .e_string) and prop_key.data.e_string.eql(E.String, key))) {
+                        if ((property.kind == .normal)) {
+                            return (if (@typeInfo(@TypeOf(property)) == .@"enum") @intFromEnum(property) else property.value);
+                        }
+                        return null;
+                    }
+                }
+            }
+            return null;
     }
 
 pub fn stmtsCanBeRemovedIfUnused(p: *P, stmts: []Stmt) bool {
@@ -3215,17 +3278,20 @@ if (st.does_not_affect_tree_shaking) {
 if ((st.kind == .k_await_using)) {
                     return false;
                 }
-                for (cp_mut_slice(&st.decls.slice())) |*decl| {
-                    _ = &decl;
-                    if ((!p.bindingCanBeRemovedIfUnusedWithoutDCECheck((decl.*).binding))) {
+                const decls_slice = st.decls.slice();
+                var di: usize = 0;
+                _ = &di;
+                while ((di < decls_slice.len)) : (di = (di + 1)) {
+                    const decl_ptr = (&decls_slice[@as(usize, @intCast(di))]);
+                    if ((!p.declBindingCanBeRemovedIfUnusedWithoutDCECheck(decl_ptr))) {
                         return false;
                     }
-                    if (((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) != null)) {
-                        if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?)))) {
+                    if (((if (@typeInfo(@TypeOf(decl_ptr)) == .@"enum") @intFromEnum(decl_ptr) else decl_ptr.value) != null)) {
+                        if ((!p.exprCanBeRemovedIfUnusedWithoutDCECheck((&(if (@typeInfo(@TypeOf(decl_ptr)) == .@"enum") @intFromEnum(decl_ptr) else decl_ptr.value).?)))) {
                             return false;
                         } else {
                             if ((st.kind == .k_using)) {
-                                if ((((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data != .e_null) and ((if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value).?.data != .e_undefined))) {
+                                if ((((if (@typeInfo(@TypeOf(decl_ptr)) == .@"enum") @intFromEnum(decl_ptr) else decl_ptr.value).?.data != .e_null) and ((if (@typeInfo(@TypeOf(decl_ptr)) == .@"enum") @intFromEnum(decl_ptr) else decl_ptr.value).?.data != .e_undefined))) {
                                     return false;
                                 }
                             }
@@ -4889,7 +4955,7 @@ if ((local.was_commonjs_export or (p.commonjs_named_exports.count() == 0))) {
                             _ = &decl;
                             if ((if (@typeInfo(@TypeOf(decl)) == .@"enum") @intFromEnum(decl) else decl.value)) |value| {
                                 _ = &value;
-                                if (((value.data != .e_missing) and (!value.canBeMoved()))) {
+                                if (((value.data != .e_missing) and ((!value.canBeMoved()) or (decl.binding.data != .b_identifier)))) {
                                     return true;
                                 }
                             }

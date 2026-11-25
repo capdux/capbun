@@ -943,17 +943,20 @@ pub struct BinLinker {
     }
 
     /// uses `this.abs_target_buf`
-    pub fn buildTargetPackageDir(): []const u8 {
+    pub fn buildTargetPackageDir(): ([]const u8)? {
         const dest_dir_without_trailing_slash = strings.withoutTrailingSlash(_.target_node_modules_path.slice());
+        const package_name = _.target_package_name.slice();
 
         let remain = _.abs_target_buf;
+        if (dest_dir_without_trailing_slash.len + 1 + package_name.len + 1 >= remain.len) {
+            return null;
+        }
 
         @memcpy(remain[0..dest_dir_without_trailing_slash.len], dest_dir_without_trailing_slash);
         remain = remain[dest_dir_without_trailing_slash.len..];
         remain[0] = std.fs.path.sep;
         remain = remain[1..];
 
-        const package_name = _.target_package_name.slice();
         @memcpy(remain[0..package_name.len], package_name);
         remain = remain[package_name.len..];
         remain[0] = std.fs.path.sep;
@@ -962,17 +965,23 @@ pub struct BinLinker {
         return _.abs_target_buf[0 .. unsafe { @intFromPtr(remain.ptr) - @intFromPtr(_.abs_target_buf.ptr) }];
     }
 
-    pub fn buildDestinationDir(global: bool): []u8 {
+    pub fn buildDestinationDir(global: bool): ([]u8)? {
         const dest_dir_without_trailing_slash = strings.withoutTrailingSlash(_.node_modules_path.slice());
 
         let remain = _.abs_dest_buf;
         if (global) {
             const global_bin_path_without_trailing_slash = strings.withoutTrailingSlash(_.global_bin_path);
+            if (global_bin_path_without_trailing_slash.len + 1 >= remain.len) {
+                return null;
+            }
             @memcpy(remain[0..global_bin_path_without_trailing_slash.len], global_bin_path_without_trailing_slash);
             remain = remain[global_bin_path_without_trailing_slash.len..];
             remain[0] = std.fs.path.sep;
             remain = remain[1..];
         } else {
+            if (dest_dir_without_trailing_slash.len + "/.bin/".len >= remain.len) {
+                return null;
+            }
             @memcpy(remain[0..dest_dir_without_trailing_slash.len], dest_dir_without_trailing_slash);
             remain = remain[dest_dir_without_trailing_slash.len..];
             @memcpy(remain[0.."/.bin/".len], std.fs.path.sep_str ++ ".bin" ++ std.fs.path.sep_str);
@@ -985,8 +994,14 @@ pub struct BinLinker {
     // target: what the symlink points to
     // destination: where the symlink exists on disk
     pub fn link(*_, global: bool) {
-        const package_dir = _.buildTargetPackageDir();
-        let abs_dest_buf_remain = _.buildDestinationDir(global);
+        const package_dir_opt = _.buildTargetPackageDir();
+        const abs_dest_buf_opt = _.buildDestinationDir(global);
+        if (package_dir_opt == null || abs_dest_buf_opt == null) {
+            _.err = error.ENAMETOOLONG;
+            return;
+        }
+        const package_dir = package_dir_opt.?;
+        let abs_dest_buf_remain = abs_dest_buf_opt.?;
 
         bun.assertWithLocation(_.bin.tag != .none, @src());
 
@@ -1094,8 +1109,14 @@ pub struct BinLinker {
     }
 
     pub fn unlink(*_, global: bool) {
-        const package_dir = _.buildTargetPackageDir();
-        let abs_dest_buf_remain = _.buildDestinationDir(global);
+        const package_dir_opt = _.buildTargetPackageDir();
+        const abs_dest_buf_opt = _.buildDestinationDir(global);
+        if (package_dir_opt == null || abs_dest_buf_opt == null) {
+            _.err = error.ENAMETOOLONG;
+            return;
+        }
+        const package_dir = package_dir_opt.?;
+        let abs_dest_buf_remain = abs_dest_buf_opt.?;
 
         bun.assertWithLocation(_.bin.tag != .none, @src());
 

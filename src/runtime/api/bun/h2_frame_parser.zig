@@ -3505,11 +3505,8 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                         const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                         return globalObject.throwValue(exception); }); });
                         const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
-                        var value_slice = DeinitGuard(bun.String.Slice){ .val = value_str.toSlice(globalObject, bun.default_allocator) };
-                        _ = &value_slice;
-                        var __value_slice_moved = false; _ = &__value_slice_moved;
-                        defer if (!__value_slice_moved) { __value_slice_moved = true; const __T = @TypeOf(value_slice); if (@typeInfo(__T) == .optional) { if (value_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_slice; _drop_val.__cp_deinit(); } };
-                        const value = value_slice.val.slice();
+                        const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                        const value = value_slice.slice();
                         if ((!isValidHeaderValue(value))) {
                             const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                             return globalObject.throwValue(exception);
@@ -3541,11 +3538,8 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                     const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                     return globalObject.throwValue(exception); }); });
                     const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
-                    var value_slice = DeinitGuard(bun.String.Slice){ .val = value_str.toSlice(globalObject, bun.default_allocator) };
-                    _ = &value_slice;
-                    var __value_slice_moved = false; _ = &__value_slice_moved;
-                    defer if (!__value_slice_moved) { __value_slice_moved = true; const __T = @TypeOf(value_slice); if (@typeInfo(__T) == .optional) { if (value_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_slice; _drop_val.__cp_deinit(); } };
-                    const value = value_slice.val.slice();
+                    const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                    const value = value_slice.slice();
                     if ((!isValidHeaderValue(value))) {
                         const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                         return globalObject.throwValue(exception);
@@ -3954,11 +3948,8 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                 const value_str = (blk_catch_43: { break :blk_catch_43 ((item.toJSString(globalObject)) catch |__ce_43| { _ = &__ce_43; _ = globalObject.clearException();
                                 return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name }).throw(); }); });
                                 const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
-                                var value_slice = DeinitGuard(bun.String.Slice){ .val = value_str.toSlice(globalObject, bun.default_allocator) };
-                                _ = &value_slice;
-                                var __value_slice_moved = false; _ = &__value_slice_moved;
-                                defer if (!__value_slice_moved) { __value_slice_moved = true; const __T = @TypeOf(value_slice); if (@typeInfo(__T) == .optional) { if (value_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_slice; _drop_val.__cp_deinit(); } };
-                                const value = value_slice.val.slice();
+                                const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                                const value = value_slice.slice();
                                 if ((!isValidHeaderValue(value))) {
                                     return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name }).throw();
                                 }
@@ -3997,11 +3988,8 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                 const value_str = (blk_catch_45: { break :blk_catch_45 ((js_value.toJSString(globalObject)) catch |__ce_45| { _ = &__ce_45; _ = globalObject.clearException();
                                 return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ name }).throw(); }); });
                                 const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
-                                var value_slice = DeinitGuard(bun.String.Slice){ .val = value_str.toSlice(globalObject, bun.default_allocator) };
-                                _ = &value_slice;
-                                var __value_slice_moved = false; _ = &__value_slice_moved;
-                                defer if (!__value_slice_moved) { __value_slice_moved = true; const __T = @TypeOf(value_slice); if (@typeInfo(__T) == .optional) { if (value_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_slice; _drop_val.__cp_deinit(); } };
-                                const value = value_slice.val.slice();
+                                const value_slice = HeaderValueBytes.from(value_str, globalObject);
+                                const value = value_slice.slice();
                                 if ((!isValidHeaderValue(value))) {
                                     const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                                     return globalObject.throwValue(exception);
@@ -4742,15 +4730,20 @@ pub fn sinkOnLocalSettings(self: *H2FrameParser, s: *const h2.Settings) void {
 
 pub fn sinkOnRemoteSettings(self: *H2FrameParser, s: *const h2.Settings) void {
             self.remoteSettings = FullSettingsPayload{ .headerTableSize = s.header_table_size, .enablePush = s.enable_push, .maxConcurrentStreams = s.max_concurrent_streams, .initialWindowSize = s.initial_window_size, .maxFrameSize = s.max_frame_size, .maxHeaderListSize = s.max_header_list_size, .enableConnectProtocol = s.enable_connect_protocol };
+            var window_grew = false;
+            _ = &window_grew;
             var it = self.streams.valueIterator();
             _ = &it;
             while (it.next()) |item| {
                 const stream = item.*;
-                if (((if (comptime @typeInfo(@TypeOf(s.initial_window_size)) == .@"enum") cp_cast_int(u64, @intFromEnum(s.initial_window_size)) else cp_cast_int(u64, s.initial_window_size)) >= stream.remoteWindowSize)) {
+                if (((if (comptime @typeInfo(@TypeOf(s.initial_window_size)) == .@"enum") cp_cast_int(u64, @intFromEnum(s.initial_window_size)) else cp_cast_int(u64, s.initial_window_size)) > stream.remoteWindowSize)) {
                     stream.remoteWindowSize = s.initial_window_size;
+                    window_grew = true;
                 }
             }
-            _ = self.flush();
+            if (window_grew) {
+                _ = self.flush();
+            }
             const js_val = self.settingsToJS(s, self.globalThis);
             _ = self.dispatch(.onRemoteSettings, js_val);
     }
@@ -5129,6 +5122,51 @@ const MAX_CUSTOM_SETTINGS = 10;
 const MAX_CUSTOM_SETTING_ID: f64 = 65535;
 const ValidResponsePseudoHeaders = bun.ComptimeStringMap(void, .{ .{ ":status" } });
 const ValidRequestPseudoHeaders = bun.ComptimeStringMap(void, .{ .{ ":method" }, .{ ":authority" }, .{ ":scheme" }, .{ ":path" }, .{ ":protocol" } });
+const HeaderValueBytes = struct {
+    bytes: []const u8,
+    owned: ?[]u8 = null,
+    __cp_dropped: bool = false,
+
+pub fn from(value_str: *jsc.JSString, globalObject: *jsc.JSGlobalObject) HeaderValueBytes {
+            const zs = value_str.getZigString(globalObject);
+            if ((!zs.is16Bit())) {
+                const dup = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, zs.slice())) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 bun.outOfMemory(); }); });
+                return HeaderValueBytes{ .bytes = dup, .owned = dup };
+            }
+            const units = zs.utf16SliceAligned();
+            var all_latin1 = true;
+            _ = &all_latin1;
+            for (cp_iter_slice(units)) |u| {
+                _ = &u;
+                if ((u > 255)) {
+                    all_latin1 = false;
+                    break;
+                }
+            }
+            if (all_latin1) {
+                const buf = (blk_catch_1: { break :blk_catch_1 ((bun.default_allocator.alloc(u8, units.len)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 bun.outOfMemory(); }); });
+                _ = bun.strings.copyU16IntoU8(buf, units);
+                return HeaderValueBytes{ .bytes = buf, .owned = buf };
+            }
+            const slice_res = value_str.toSlice(globalObject, bun.default_allocator);
+            const dup = (blk_catch_2: { break :blk_catch_2 ((bun.default_allocator.dupe(u8, slice_res.slice())) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 bun.outOfMemory(); }); });
+            _ = slice_res.deinit();
+            return HeaderValueBytes{ .bytes = dup, .owned = dup };
+    }
+
+pub fn slice(self: *const @This()) []const u8 {
+            return self.bytes;
+    }
+
+pub fn __cp_deinit(self: *@This()) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.owned) |buf| {
+                _ = &buf;
+                _ = bun.default_allocator.free(buf);
+            }
+    }
+};
 const SingleValueHeaders = bun.ComptimeStringMap(void, .{ .{ ":status" }, .{ ":method" }, .{ ":authority" }, .{ ":scheme" }, .{ ":path" }, .{ ":protocol" }, .{ "access-control-allow-credentials" }, .{ "access-control-max-age" }, .{ "access-control-request-method" }, .{ "age" }, .{ "authorization" }, .{ "content-encoding" }, .{ "content-language" }, .{ "content-length" }, .{ "content-location" }, .{ "content-md5" }, .{ "content-range" }, .{ "content-type" }, .{ "date" }, .{ "dnt" }, .{ "etag" }, .{ "expires" }, .{ "from" }, .{ "host" }, .{ "if-match" }, .{ "if-modified-since" }, .{ "if-none-match" }, .{ "if-range" }, .{ "if-unmodified-since" }, .{ "last-modified" }, .{ "location" }, .{ "max-forwards" }, .{ "proxy-authorization" }, .{ "range" }, .{ "referer" }, .{ "retry-after" }, .{ "tk" }, .{ "upgrade-insecure-requests" }, .{ "user-agent" }, .{ "x-content-type-options" } });
 pub const H2FrameParserConstructor = H2FrameParser.js.getConstructor;
 const h2_log = Output.scoped(.H2FrameParser, .visible);

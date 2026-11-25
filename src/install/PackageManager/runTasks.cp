@@ -227,7 +227,7 @@ pub fn runTasks(
                 }
 
                 // Handle retry-able errors.
-                if (task.response.metadata == null || task.response.metadata.?.response.status_code > 499) {
+                if (task.response.fail != null || task.response.metadata == null || task.response.metadata.?.response.status_code > 499) {
                     const e = task.response.fail ?? error.HTTPError;
 
                     if (task.retried < manager.options.max_retry_count) {
@@ -248,7 +248,7 @@ pub fn runTasks(
                     }
                 }
 
-                if (task.response.metadata == null) {
+                if (task.response.metadata == null || task.response.fail != null) {
                     // Handle non-retry-able errors.
                     const e = task.response.fail ?? error.HTTPError;
 
@@ -425,7 +425,7 @@ pub fn runTasks(
                     }
                 }
 
-                if (task.response.metadata == null || task.response.metadata.?.response.status_code > 499) {
+                if (task.response.fail != null || task.response.metadata == null || task.response.metadata.?.response.status_code > 499) {
                     const e = task.response.fail ?? error.TarballFailedToDownload;
 
                     if (task.retried < manager.options.max_retry_count) {
@@ -463,7 +463,7 @@ pub fn runTasks(
                 // path below allocates its own Task.
                 task.discardUnusedStreamingState(manager);
 
-                if (task.response.metadata == null) {
+                if (task.response.metadata == null || task.response.fail != null) {
                     const e = task.response.fail ?? error.TarballFailedToDownload;
 
                     // The download will not be retried for this task_id, so

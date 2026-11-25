@@ -1107,18 +1107,21 @@ pub fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool) *
 pub fn isDone(closure: *@This()) bool {
             var mgr = closure.manager;
             _ = &mgr;
-            if (comptime check_peers) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((mgr.processPeerDependencyList()) catch |e| { _ = &e; closure.err = e;
-                return true; }); });
-            }
-            _ = mgr.drainDependencyList();
-            const _pkg_mgr_ptr_sample: *PackageManager = undefined;
-            _ = (blk_catch_1: { break :blk_catch_1 ((mgr.runTasks(@TypeOf(_pkg_mgr_ptr_sample), mgr, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{}, .progress_bar = true }, check_peers, mgr.options.log_level)) catch |e| { _ = &e; closure.err = e;
-            return true; }); });
-            if (comptime check_peers) {
-                if ((mgr.peer_dependencies.readableLength() > 0)) {
-                    return false;
+            while (true) {
+                if (comptime check_peers) {
+                    _ = (blk_catch_0: { break :blk_catch_0 ((mgr.processPeerDependencyList()) catch |e| { _ = &e; closure.err = e;
+                    return true; }); });
                 }
+                _ = mgr.drainDependencyList();
+                const _pkg_mgr_ptr_sample: *PackageManager = undefined;
+                _ = (blk_catch_1: { break :blk_catch_1 ((mgr.runTasks(@TypeOf(_pkg_mgr_ptr_sample), mgr, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{}, .progress_bar = true }, check_peers, mgr.options.log_level)) catch |e| { _ = &e; closure.err = e;
+                return true; }); });
+                if (comptime check_peers) {
+                    if ((mgr.peer_dependencies.readableLength() > 0)) {
+                        continue;
+                    }
+                }
+                break;
             }
             if (comptime only_pre_patch) {
                 const pending_patch = mgr.pending_pre_calc_hashes.load(.monotonic);

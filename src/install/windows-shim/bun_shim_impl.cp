@@ -108,6 +108,11 @@ struct k32 {
     const GetConsoleMode = w.kernel32.GetConsoleMode;
     /// https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-sethandleinformation
     const SetHandleInformation = w.kernel32.SetHandleInformation;
+    /// https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler
+    const SetConsoleCtrlHandler = @extern(*const fn (
+        HandlerRoutine: (*const fn (dwCtrlType: w.DWORD) callconv(.winapi) w.BOOL)?,
+        Add: w.BOOL,
+    ) callconv(.winapi) w.BOOL, { name: "SetConsoleCtrlHandler", library_name: "kernel32" });
     /// https://learn.microsoft.com/en-us/windows/console/setconsolemode
     const SetConsoleMode = @extern(*const fn (
         hConsoleHandle: w.HANDLE, // [in]
@@ -265,6 +270,20 @@ noinline fn failAndExitWithReason(reason: FailReason): noreturn {
 }
 
 const nt_object_prefix: [4]u16 = [ '\\', '?', '?', '\\' ];
+
+@callconv("winapi")
+fn ctrlCHandler(ctrl_type: w.DWORD): w.BOOL {
+    if (ctrl_type == w.CTRL_C_EVENT) {
+        return w.TRUE;
+    }
+    return w.FALSE;
+}
+
+/// The child shares our console and gets Ctrl+C itself; outlive it to report its
+/// exit code. Every path after this exits the process, so it is never removed.
+fn ignoreCtrlC() {
+    * = k32.SetConsoleCtrlHandler(&ctrlCHandler, w.TRUE);
+}
 
 // This is used for CreateProcessW's lpCommandLine
 // "The maximum length of this string is 32,767 characters, including the Unicode terminating null character."
@@ -765,6 +784,8 @@ unsafe fn launcher(comptime mode: LauncherMode, bun_ctx: anytype): mode.RetType(
         hStdOutput: if (is_standalone) ProcessParameters.hStdOutput else bun.FD.stdout().native(),
         hStdError: if (is_standalone) ProcessParameters.hStdError else bun.FD.stderr().native(),
     };
+
+    ignoreCtrlC();
 
     inline for (attempt_number of [0, 1]) {
         if (dbg)

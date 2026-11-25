@@ -23,13 +23,13 @@ declare module "*.jsonc" {
   export = contents;
 }
 
-declare module "*.xml" {
-  var contents: Record<string, any>;
+declare module "*.json5" {
+  var contents: any;
   export = contents;
 }
 
-declare module "*.json5" {
-  var contents: any;
+declare module "*.xml" {
+  var contents: import("bun").XML.Document;
   export = contents;
 }
 

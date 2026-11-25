@@ -1282,13 +1282,22 @@ if ((bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0)) {
                 }
 },
 .file => {
-if ((bun.windows.CopyFileW(src.ptr, dest.ptr, 0) == 0)) {
-                    if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
-                        _ = &entry_dirname;
-                        _ = (blk_catch_39: { break :blk_catch_39 ((bun.MakePath.makePath(u16, destination_dir_, entry_dirname)) catch |__ce_39| { _ = &__ce_39;  }); });
-                        if ((bun.windows.CopyFileW(src.ptr, dest.ptr, 0) != 0)) {
-                            continue;
+if ((bun.windows.CopyFileW(src.ptr, dest.ptr, 1) == 0)) {
+                    const win_err = bun.windows.Win32Error.get();
+                    var copied = false;
+                    _ = &copied;
+                    if (((win_err == .FILE_EXISTS) or (win_err == .ALREADY_EXISTS))) {
+                        _ = bun.windows.DeleteFileW(dest.ptr);
+                        copied = (bun.windows.CopyFileW(src.ptr, dest.ptr, 1) != 0);
+                    } else {
+                        if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
+                            _ = &entry_dirname;
+                            _ = (blk_catch_39: { break :blk_catch_39 ((bun.MakePath.makePath(u16, destination_dir_, entry_dirname)) catch |__ce_39| { _ = &__ce_39;  }); });
+                            copied = (bun.windows.CopyFileW(src.ptr, dest.ptr, 1) != 0);
                         }
+                    }
+                    if (copied) {
+                        continue;
                     }
                     if (progress_) |progress| {
                         _ = &progress;
@@ -1321,18 +1330,22 @@ _ = unreachable;
                 var ___guard_in_file_moved = false; _ = &___guard_in_file_moved;
                 defer if (!___guard_in_file_moved) { ___guard_in_file_moved = true; const __T = @TypeOf(_guard_in_file); if (@typeInfo(__T) == .optional) { if (_guard_in_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_in_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_in_file; _drop_val.__cp_deinit(); } };
                 _ = PackageInstall.debug("createFile {} {s}\n", .{ destination_dir_.fd, entry.path });
-                var outfile = (blk_catch_40: { break :blk_catch_40 ((createFile(destination_dir_, entry.path, .{})) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 brk: {
-                if (bun.Dirname.dirname(bun.OSPathChar, entry.path)) |entry_dirname| {
-                    _ = &entry_dirname;
-                    _ = (blk_catch_41: { break :blk_catch_41 ((bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname)) catch |__ce_41| { _ = &__ce_41;  }); });
+                var outfile = (blk_catch_40: { break :blk_catch_40 ((createFile(destination_dir_, entry.path, .{ .exclusive = true })) catch |e| { _ = &e; break :blk_catch_40 brk: {
+                if ((e == error.PathAlreadyExists)) {
+                    _ = (blk_catch_41: { break :blk_catch_41 ((destination_dir_.deleteFile(entry.path)) catch |__ce_41| { _ = &__ce_41;  }); });
+                } else {
+                    if (bun.Dirname.dirname(bun.OSPathChar, entry.path)) |entry_dirname| {
+                        _ = &entry_dirname;
+                        _ = (blk_catch_42: { break :blk_catch_42 ((bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname)) catch |__ce_42| { _ = &__ce_42;  }); });
+                    }
                 }
-                break :brk (blk_catch_42: { break :blk_catch_42 ((createFile(destination_dir_, entry.path, .{})) catch |e| { _ = &e; if (progress_) |progress| {
+                break :brk (blk_catch_43: { break :blk_catch_43 ((createFile(destination_dir_, entry.path, .{ .exclusive = true })) catch |e2| { _ = &e2; if (progress_) |progress| {
                     _ = &progress;
                     _ = progress.root.end();
                     _ = progress.refresh();
                 }
-                _ = Output.prettyErrorln("<r><red>{s}<r>: copying file {f}", .{ @errorName(e), bun.fmt.fmtOSPath(entry.path, .{}) });
-                break :blk_catch_42 Global.crash(); }); });
+                _ = Output.prettyErrorln("<r><red>{s}<r>: copying file {f}", .{ @errorName(e2), bun.fmt.fmtOSPath(entry.path, .{}) });
+                break :blk_catch_43 Global.crash(); }); });
 }; }); });
                 _ = &outfile;
                 var _guard_outfile = CloseGuard(@TypeOf(&outfile)){ .ptr = (&outfile) };
@@ -1340,16 +1353,16 @@ _ = unreachable;
                 var ___guard_outfile_moved = false; _ = &___guard_outfile_moved;
                 defer if (!___guard_outfile_moved) { ___guard_outfile_moved = true; const __T = @TypeOf(_guard_outfile); if (@typeInfo(__T) == .optional) { if (_guard_outfile) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_outfile.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_outfile; _drop_val.__cp_deinit(); } };
                 if (comptime Environment.isPosix) {
-                    const stat = (blk_catch_43: { break :blk_catch_43 ((in_file.stat().unwrap()) catch |__ce_43| { _ = &__ce_43; continue; }); });
+                    const stat = (blk_catch_44: { break :blk_catch_44 ((in_file.stat().unwrap()) catch |__ce_44| { _ = &__ce_44; continue; }); });
                     _ = bun.c.fchmod(outfile.handle, @intCast(stat.mode));
                 }
-                _ = (blk_catch_44: { break :blk_catch_44 ((bun.copyFileWithState(in_file, .fromStdFile(outfile), (&copy_file_state)).unwrap()) catch |e| { _ = &e; if (progress_) |progress| {
+                _ = (blk_catch_45: { break :blk_catch_45 ((bun.copyFileWithState(in_file, .fromStdFile(outfile), (&copy_file_state)).unwrap()) catch |e| { _ = &e; if (progress_) |progress| {
                     _ = &progress;
                     _ = progress.root.end();
                     _ = progress.refresh();
                 }
                 _ = Output.prettyError("<r><red>{s}<r>: copying file {f}", .{ @errorName(e), bun.fmt.fmtOSPath(entry.path, .{}) });
-                break :blk_catch_44 Global.crash(); }); });
+                break :blk_catch_45 Global.crash(); }); });
             }
         }
         return real_file_count;
@@ -1363,17 +1376,17 @@ pub fn copyFilesHardlink(destination_dir: std.fs.Dir, walker: *Walker, to_copy_i
             if (comptime Environment.isPosix) {
                 switch (entry.kind) {
 .directory => {
-_ = (blk_catch_45: { break :blk_catch_45 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_45| { _ = &__ce_45;  }); });
+_ = (blk_catch_46: { break :blk_catch_46 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_46| { _ = &__ce_46;  }); });
 },
 .file => {
-_ = (blk_catch_46: { break :blk_catch_46 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e| { _ = &e; if (((e == error.AccessDenied) or (e == error.PermissionDenied))) {
+_ = (blk_catch_47: { break :blk_catch_47 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e| { _ = &e; if (((e == error.AccessDenied) or (e == error.PermissionDenied))) {
                     return error.NotSameFileSystem;
                 }
                 if ((e != error.PathAlreadyExists)) {
                     return e;
                 }
-                _ = (blk_catch_47: { break :blk_catch_47 ((std.posix.unlinkatZ(destination_dir.fd, entry.path, 0)) catch |__ce_47| { _ = &__ce_47;  }); });
-                break :blk_catch_46 (blk_catch_48: { break :blk_catch_48 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e2| { _ = &e2; if (((e2 == error.AccessDenied) or (e2 == error.PermissionDenied))) {
+                _ = (blk_catch_48: { break :blk_catch_48 ((std.posix.unlinkatZ(destination_dir.fd, entry.path, 0)) catch |__ce_48| { _ = &__ce_48;  }); });
+                break :blk_catch_47 (blk_catch_49: { break :blk_catch_49 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e2| { _ = &e2; if (((e2 == error.AccessDenied) or (e2 == error.PermissionDenied))) {
                     return error.NotSameFileSystem;
                 }
                 return e2; }); }); }); });
@@ -1425,17 +1438,17 @@ pub fn copyFilesSymlink(destination_dir: std.fs.Dir, walker: *Walker, to_copy_in
             if (comptime Environment.isPosix) {
                 switch (entry.kind) {
 .directory => {
-_ = (blk_catch_49: { break :blk_catch_49 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_49| { _ = &__ce_49;  }); });
+_ = (blk_catch_50: { break :blk_catch_50 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_50| { _ = &__ce_50;  }); });
 },
 .file => {
 _ = @memcpy(to_copy_into2[0..entry.path.len], entry.path);
                 head2[cp_cast_int(usize, (entry.path.len + (head2.len - to_copy_into2.len)))] = 0;
                 const target: [:0]u8 = head2[0..((entry.path.len + head2.len) - to_copy_into2.len) :0];
-                _ = (blk_catch_50: { break :blk_catch_50 ((std.posix.symlinkat(target, destination_dir.fd, entry.path)) catch |e| { _ = &e; if ((e != error.PathAlreadyExists)) {
+                _ = (blk_catch_51: { break :blk_catch_51 ((std.posix.symlinkat(target, destination_dir.fd, entry.path)) catch |e| { _ = &e; if ((e != error.PathAlreadyExists)) {
                     return e;
                 }
-                _ = (blk_catch_51: { break :blk_catch_51 ((std.posix.unlinkat(destination_dir.fd, entry.path, 0)) catch |__ce_51| { _ = &__ce_51;  }); });
-                break :blk_catch_50 try std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path); }); });
+                _ = (blk_catch_52: { break :blk_catch_52 ((std.posix.unlinkat(destination_dir.fd, entry.path, 0)) catch |__ce_52| { _ = &__ce_52;  }); });
+                break :blk_catch_51 try std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path); }); });
                 real_file_count = (real_file_count + 1);
 },
 else => {
@@ -1463,7 +1476,7 @@ _ = continue;
                 switch (entry.kind) {
 .directory => {
 if ((bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0)) {
-                    _ = (blk_catch_52: { break :blk_catch_52 ((bun.MakePath.makePath(u16, destination_dir, entry.path)) catch |__ce_52| { _ = &__ce_52;  }); });
+                    _ = (blk_catch_53: { break :blk_catch_53 ((bun.MakePath.makePath(u16, destination_dir, entry.path)) catch |__ce_53| { _ = &__ce_53;  }); });
                 }
 },
 .file => {
@@ -1471,7 +1484,7 @@ switch (bun.sys.symlinkW(dest, src, .{})) {
 .err => |e| {
 if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
                     _ = &entry_dirname;
-                    _ = (blk_catch_53: { break :blk_catch_53 ((bun.MakePath.makePath(u16, destination_dir, entry_dirname)) catch |__ce_53| { _ = &__ce_53;  }); });
+                    _ = (blk_catch_54: { break :blk_catch_54 ((bun.MakePath.makePath(u16, destination_dir, entry_dirname)) catch |__ce_54| { _ = &__ce_54;  }); });
                     if ((bun.sys.symlinkW(dest, src, .{}) == .result)) {
                         continue;
                     }

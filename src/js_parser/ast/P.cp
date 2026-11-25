@@ -633,6 +633,8 @@ pub fn NewParser_(
         commonjs_named_exports: js_ast.Ast.CommonJSNamedExports = {},
         commonjs_named_exports_deoptimized: bool = false,
         commonjs_module_exports_assigned_deoptimized: bool = false,
+        module_exports_rewrite_count: u32 = 0,
+        has_top_level_function_merged_with_var: bool = false,
         commonjs_named_exports_needs_conversion: u32 = std.math.maxInt(u32),
         had_commonjs_named_exports_this_visit: bool = false,
         commonjs_replacement_stmts: StmtNodeList = [],
@@ -2770,6 +2772,9 @@ pub fn NewParser_(
                                     const entry = _scope.getOrPutMemberWithHash(p.allocator, name, hash.?) catch unreachable;
                                     entry.value_ptr.* = member_in_scope;
                                     entry.key_ptr.* = name;
+                                    if (_scope == p.module_scope && symbol.kind == .hoisted && Symbol.isKindFunction(existing_kind)) {
+                                        p.has_top_level_function_merged_with_var = true;
+                                    }
                                     continue :nextMember;
                                 }
 
@@ -3752,11 +3757,18 @@ pub fn NewParser_(
                         },
 
                         .replace_with_new => {
+                            const existing_kind = symbol.kind;
                             symbol.link = sym_ref;
 
                             // If these are both functions, remove the overwritten declaration
-                            if (kind.isFunction() && symbol.kind.isFunction()) {
+                            if (kind.isFunction() && existing_kind.isFunction()) {
                                 symbol.remove_overwritten_function_declaration = true;
+                            } else if (p.current_scope == p.module_scope &&
+                                ((existing_kind == .hoisted && kind.isFunction()) ||
+                                    (existing_kind.isFunction() && kind == .hoisted)))
+                            {
+                                // "var foo; function foo() {}" or "function foo() {} var foo;"
+                                p.has_top_level_function_merged_with_var = true;
                             }
                         },
 
@@ -4134,47 +4146,82 @@ pub fn NewParser_(
             }
         }
 
-        static fn bindingCanBeRemovedIfUnused(p: *P, binding: Binding): bool {
-            if (!p.options.features.dead_code_elimination) return false;
-            return bindingCanBeRemovedIfUnusedWithoutDCECheck(p, binding);
+        static fn declBindingCanBeRemovedIfUnusedWithoutDCECheck(p: *P, decl: *const G.Decl): bool {
+            if (value := decl.value) {
+                return p.patternCanBeRemovedIfUnusedWithoutDCECheck(decl.binding, &value);
+            }
+            return decl.binding.data == .b_identifier;
         }
 
-        static fn bindingCanBeRemovedIfUnusedWithoutDCECheck(p: *P, binding: Binding): bool {
+        static fn patternCanBeRemovedIfUnusedWithoutDCECheck(p: *P, binding: Binding, value: *const Expr): bool {
             switch (binding.data) {
+                .b_identifier, .b_missing => return true,
                 .b_array => |bi| {
+                    if (value.data != .e_array) return false;
                     for (*item of bi.items) {
-                        if (!p.bindingCanBeRemovedIfUnusedWithoutDCECheck(item.binding)) {
+                        if (item.binding.data != .b_identifier && item.binding.data != .b_missing) {
                             return false;
                         }
-
                         if (item.default_value != null) {
                             if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&item.default_value.?)) {
                                 return false;
                             }
                         }
                     }
+                    return true;
                 },
-                .b_object => |bi| {
-                    for (*property of bi.properties) {
-                        if (!property.flags.contains(.is_spread) && !p.exprCanBeRemovedIfUnusedWithoutDCECheck(&property.key)) {
+                .b_object => |bo| {
+                    if (value.data != .e_object) return false;
+                    const literal = value.data.e_object;
+                    if (!objectLiteralHasOnlyPlainKeys(literal)) return false;
+                    for (*property of bo.properties) {
+                        if (property.flags.contains(.is_spread) || property.flags.contains(.is_computed)) {
                             return false;
                         }
-
-                        if (!p.bindingCanBeRemovedIfUnusedWithoutDCECheck(property.value)) {
-                            return false;
-                        }
-
                         if (property.default_value != null) {
                             if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&property.default_value.?)) {
                                 return false;
                             }
                         }
+                        if (property.key.data != .e_string) return false;
+                        const matched = objectLiteralDataProperty(literal, property.key.data.e_string) ?? return false;
+                        if (!p.patternCanBeRemovedIfUnusedWithoutDCECheck(property.value, &matched)) {
+                            return false;
+                        }
                     }
+                    return true;
                 },
-                else => {},
             }
+        }
 
+        static fn objectLiteralHasOnlyPlainKeys(literal: *const E.Object): bool {
+            for (*property of literal.properties.slice()) {
+                if (property.kind == .spread || property.flags.contains(.is_computed) || property.initializer != null) {
+                    return false;
+                }
+                const key = property.key ?? return false;
+                if (key.data != .e_string) return false;
+                if (key.data.e_string.eqlComptime("__proto__")) return false;
+            }
             return true;
+        }
+
+        static fn objectLiteralDataProperty(literal: *const E.Object, key: *const E.String): Expr? {
+            const props = literal.properties.slice();
+            let i: usize = props.len;
+            while (i > 0) {
+                i -= 1;
+                const property = &props[i];
+                if (prop_key := property.key) {
+                    if (prop_key.data == .e_string && prop_key.data.e_string.eql(E.String, key)) {
+                        if (property.kind == .normal) {
+                            return property.value;
+                        }
+                        return null;
+                    }
+                }
+            }
+            return null;
         }
 
         static fn stmtsCanBeRemovedIfUnused(p: *P, stmts: []Stmt): bool {
@@ -4216,17 +4263,20 @@ pub fn NewParser_(
                         // "await" is a side effect because it affects code timing
                         if (st.kind == .k_await_using) return false;
 
-                        for (*decl of st.decls.slice()) {
-                            if (!p.bindingCanBeRemovedIfUnusedWithoutDCECheck(decl.binding)) {
+                        const decls_slice = st.decls.slice();
+                        let di: usize = 0;
+                        while (di < decls_slice.len) : (di += 1) {
+                            const decl_ptr = &decls_slice[di];
+                            if (!p.declBindingCanBeRemovedIfUnusedWithoutDCECheck(decl_ptr)) {
                                 return false;
                             }
 
-                            if (decl.value != null) {
-                                if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&decl.value.?)) {
+                            if (decl_ptr.value != null) {
+                                if (!p.exprCanBeRemovedIfUnusedWithoutDCECheck(&decl_ptr.value.?)) {
                                     return false;
                                 } else if (st.kind == .k_using) {
                                     // "using" declarations are only side-effect free if they are initialized to null or undefined
-                                    if (decl.value.?.data != .e_null && decl.value.?.data != .e_undefined) {
+                                    if (decl_ptr.value.?.data != .e_null && decl_ptr.value.?.data != .e_undefined) {
                                         return false;
                                     }
                                 }
@@ -6895,7 +6945,7 @@ pub fn NewParser_(
                             if (local.was_commonjs_export || p.commonjs_named_exports.count() == 0) {
                                 for (decl of local.decls.slice()) {
                                     if (value := decl.value)
-                                        if (value.data != .e_missing && !value.canBeMoved())
+                                        if (value.data != .e_missing && (!value.canBeMoved() || decl.binding.data != .b_identifier))
                                             return true;
                                 }
                                 continue;

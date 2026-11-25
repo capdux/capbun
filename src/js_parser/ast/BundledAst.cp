@@ -20,7 +20,8 @@
     commonjs_module_exports_assigned_deoptimized: bool = false,
     has_explicit_use_strict_directive: bool = false,
     has_import_meta: bool = false,
-    _padding: u7 = 0,
+    has_esm_namespace: bool = false,
+    _padding: u6 = 0,
 }
 
 let empty_u32s: [0]u32 = undefined;

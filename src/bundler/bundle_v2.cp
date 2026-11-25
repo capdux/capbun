@@ -2368,9 +2368,28 @@ pub struct BundleV2 {
                         let mut_res = result;
                         mut_res.deinit();
                     }
-                } else {
+                } else if (resolve.import_record.kind == .entry_point_build) {
+                    const log = bundle.logForResolutionFailures(resolve.import_record.source_file, resolve.import_record.original_target.bakeGraph());
+                    log.addErrorFmt(
+                        null,
+                        Logger.Loc.Empty,
+                        bun.default_allocator,
+                        "The entry point {f} cannot be marked as external",
+                        [ bun.fmt.quote(resolve.import_record.specifier) ],
+                    ) catch {};
                     let mut_res = result;
                     mut_res.deinit();
+                } else {
+                    let path = Fs.Path.init(result.path);
+                    if (result.namespace.len == 0 || strings.eqlComptime(result.namespace, "file")) {
+                        path.namespace = "file";
+                    } else {
+                        path.namespace = result.namespace;
+                    }
+                    const free_items: [2][]const u8 = [result.namespace, result.path];
+                    bundle.free_list.appendSlice(&free_items) catch {};
+                    const import_record: *ImportRecord = &bundle.graph.ast.items(.import_records)[resolve.import_record.importer_source_index].slice()[resolve.import_record.import_record_index];
+                    import_record.path = path;
                 }
 
                 if (source_index := out_source_index) {
@@ -2485,6 +2504,10 @@ pub struct BundleV2 {
         _.graph.heap.helpCatchMemoryIssues();
 
         if (_.transpiler.log.errors > 0) {
+            return error.BuildFailed;
+        }
+        if (_.graph.entry_points.items.len == 0) {
+            _.transpiler.log.addError(null, Logger.Loc.Empty, "None of the entry points could be bundled") catch {};
             return error.BuildFailed;
         }
 

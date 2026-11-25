@@ -2506,6 +2506,7 @@ function emitListeningNextTick(self) {
   self.emit("listening");
 }
 
+const { isPrimary } = require("internal/cluster/isPrimary");
 let cluster;
 function listenInCluster(
   server,
@@ -2528,9 +2529,9 @@ function listenInCluster(
 ) {
   exclusive = !!exclusive;
 
-  if (cluster === undefined) cluster = require("node:cluster");
+  if (!isPrimary && cluster === undefined) cluster = require("node:cluster");
 
-  if (cluster.isPrimary || exclusive) {
+  if (isPrimary || exclusive) {
     server[kRealListen](
       path,
       port,

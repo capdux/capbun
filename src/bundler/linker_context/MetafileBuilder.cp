@@ -274,6 +274,13 @@ pub fn generate(
             }
         }
     }
+    // ...and live files that contribute no code to any chunk (every part tree-shaken).
+    for (si_item of c.graph.reachable_files) {
+        const si = si_item.get();
+        if (si < sources.len && si != 0 && c.graph.files_live.isSet(si)) {
+            seen_sources.set(si);
+        }
+    }
 
     // Write inputs
     let source_index: u32 = 0;

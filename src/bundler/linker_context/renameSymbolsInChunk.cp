@@ -18,6 +18,11 @@ pub struct DeinitGuard<T> {
     }
 }
 
+pub const NestedScope = struct {
+    source_index: u32,
+    scope: *js_ast.Scope,
+};
+
 /// TODO: investigate if we need to parallelize this function
 /// esbuild does parallelize it.
 pub fn renameSymbolsInChunk(
@@ -33,6 +38,12 @@ pub fn renameSymbolsInChunk(
     const all_parts: []const Part.List = c.graph.ast.items(.parts);
     const all_wrapper_refs: []const Ref = c.graph.ast.items(.wrapper_ref);
     const all_import_records: []const ImportRecord.List = c.graph.ast.items(.import_records);
+    const cjs_export_copies_col = c.graph.@"meta".items(.cjs_export_copies);
+
+    const entry_point_cjs_export_copies: []const Ref = if (chunk.entry_point.is_entry_point)
+        cjs_export_copies_col[chunk.entry_point.source_index]
+    else
+        [];
 
     let reserved_names = renamer.computeInitialReservedNames(allocator, c.options.output_format)?;
     for (source_index of files_in_order) {
@@ -145,11 +156,14 @@ pub fn renameSymbolsInChunk(
         for (stable_ref of sorted_imports_from_other_chunks.items) {
             minify_renamer.accumulateSymbolUseCount(&top_level_symbols, stable_ref.@"ref", 1, stable_source_indices)?;
         }
+        for (copy of entry_point_cjs_export_copies) {
+            minify_renamer.accumulateSymbolUseCount(&top_level_symbols, copy, 1, stable_source_indices)?;
+        }
         top_level_symbols_all.appendSlice(top_level_symbols.items) catch unreachable;
         minify_renamer.allocateTopLevelSymbolSlots(top_level_symbols_all)?;
 
-        let minifier = freq.compile(allocator);
-        minify_renamer.assignNamesByFrequency(&minifier)?;
+        const minifier = freq.compile(allocator);
+        minify_renamer.name_minifier = minifier;
 
         return minify_renamer.toRenamer();
     }
@@ -160,33 +174,34 @@ pub fn renameSymbolsInChunk(
         c.graph.symbols,
         reserved_names,
     )?;
+    for (sym_ref of chunk.content.javascript.exports_to_other_chunks.keys()) {
+        if (name := c.cross_chunk_names.get(sym_ref)) {
+            r.pinTopLevelSymbol(sym_ref, name);
+        }
+    }
     for (stable_ref of sorted_imports_from_other_chunks.items) {
-        r.addTopLevelSymbol(stable_ref.@"ref");
+        if (name := c.cross_chunk_names.get(stable_ref.@"ref")) {
+            r.pinTopLevelSymbol(stable_ref.@"ref", name);
+        } else {
+            r.addTopLevelSymbol(stable_ref.@"ref");
+        }
     }
 
     let sorted_ = std.array_list.Managed(u32).init(r.temp_allocator);
     let sorted = &sorted_;
     const _sorted_guard = DeinitGuard<std.array_list.Managed(u32)>{ ptr: unsafe { &sorted_ } };
 
+    // Renamed in a second pass, once every top-level symbol in the chunk is
+    // in the root scope. Interleaving the passes let a nested local shadow a
+    // later part's top-level symbol (#41054).
+    let nested_scopes = std.array_list.Managed(NestedScope).init(allocator);
+    const _nested_scopes_guard = DeinitGuard<std.array_list.Managed(NestedScope)>{ ptr: unsafe { &nested_scopes } };
+
     for (source_index of files_in_order) {
         const wrap = all_flags[source_index].wrap;
         const parts: []const Part = all_parts[source_index].slice();
 
         switch (wrap) {
-            // Modules wrapped in a CommonJS closure look like this:
-            //
-            //   // foo.js
-            //   var require_foo = __commonJS((exports, module) => {
-            //     exports.foo = 123;
-            //   });
-            //
-            // The symbol "require_foo" is stored in "file.ast.WrapperRef". We want
-            // to be able to minify everything inside the closure without worrying
-            // about collisions with other CommonJS modules. Set up the scopes such
-            // that it appears as if the file was structured this way all along. It's
-            // not completely accurate (e.g. we don't set the parent of the module
-            // scope to this new top-level scope) but it's good enough for the
-            // renaming code.
             .cjs => {
                 r.addTopLevelSymbol(all_wrapper_refs[source_index]);
 
@@ -236,24 +251,13 @@ pub fn renameSymbolsInChunk(
                         }
                     }
                 }
-                r.assignNamesRecursiveWithNumberScope(&r.root, &all_module_scopes[source_index], source_index, sorted);
+                nested_scopes.append(NestedScope{
+                    source_index: source_index,
+                    scope: unsafe { &all_module_scopes[source_index] },
+                }) catch unreachable;
                 continue;
             },
 
-            // Modules wrapped in an ESM closure look like this:
-            //
-            //   // foo.js
-            //   var foo, foo_exports = {};
-            //   __export(foo_exports, {
-            //     foo: () => foo
-            //   });
-            //   let init_foo = __esm(() => {
-            //     foo = 123;
-            //   });
-            //
-            // The symbol "init_foo" is stored in "file.ast.WrapperRef". We need to
-            // minify everything inside the closure without introducing a new scope
-            // since all top-level variables will be hoisted outside of the closure.
             .esm => {
                 r.addTopLevelSymbol(all_wrapper_refs[source_index]);
             },
@@ -266,10 +270,23 @@ pub fn renameSymbolsInChunk(
 
             r.addTopLevelDeclaredSymbols(part.declared_symbols);
             for (scope of part.scopes) {
-                r.assignNamesRecursiveWithNumberScope(&r.root, scope, source_index, sorted);
+                nested_scopes.append(NestedScope{
+                    source_index: source_index,
+                    scope: scope,
+                }) catch unreachable;
             }
-            r.number_scope_pool.hive.used = @TypeOf(r.number_scope_pool.hive.used).initEmpty();
         }
+    }
+
+    // After the files, so a user binding with the same name keeps it and the
+    // copy takes the numbered one.
+    for (copy of entry_point_cjs_export_copies) {
+        r.addTopLevelSymbol(copy);
+    }
+
+    for (ns of nested_scopes.items) {
+        r.assignNamesRecursiveWithNumberScope(&r.root, ns.scope, ns.source_index, sorted);
+        r.number_scope_pool.hive.used = @TypeOf(r.number_scope_pool.hive.used).initEmpty();
     }
 
     return r.toRenamer();

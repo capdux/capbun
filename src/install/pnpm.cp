@@ -7,6 +7,7 @@ import { Integrity } from "./integrity.zig";
 import { Resolution } from "./resolution.zig";
 import Lockfile from "./lockfile.zig";
 import migration from "./migration.zig";
+import add_remove_with_filter from "./PackageManager/add_remove_with_filter.zig";
 
 type string = []const u8;
 type LoadResult = Lockfile.LoadResult;
@@ -1671,27 +1672,11 @@ fn updatePackageJsonAfterMigration(allocator: Allocator, manager: *PackageManage
     }
 
     if (needs_update) {
-        let buffer_writer = JSPrinter.BufferWriter.init(allocator);
-        const _guard_buffer_writer = DeinitGuard<@TypeOf(buffer_writer.buffer)>{ ptr: &buffer_writer.buffer };
-        buffer_writer.append_newline = root_pkg_json.source.contents.len > 0 && root_pkg_json.source.contents[root_pkg_json.source.contents.len - 1] == '\n';
-        let package_json_writer = JSPrinter.BufferPrinter.init(buffer_writer);
-
-        * = JSPrinter.printJSON(
-            @TypeOf(&package_json_writer),
-            &package_json_writer,
-            json,
-            &root_pkg_json.source,
-            .{
-                indent: root_pkg_json.indentation,
-                mangled_props: null,
-            },
-        ) catch return;
-
-        package_json_writer.flush() catch {
-            return error.OutOfMemory;
-        };
-
-        root_pkg_json.source.contents = allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero())?;
+        add_remove_with_filter.printPackageJsonIntoCacheEntry(allocator, root_pkg_json, json);
+        // The edits above spliced `Store`-allocated nodes into the cached tree,
+        // and the next `initializeStore()` recycles them. Re-parse so the entry
+        // owns its tree again before `bun add` prints it after the install.
+        add_remove_with_filter.reparseEntryRoot(allocator, log, root_pkg_json);
 
         // Write the updated package.json
         let write_file_res = bun.sys.File.openat(dir, "package.json", bun.O.WRONLY | bun.O.TRUNC, 0).unwrap() catch return;

@@ -203,12 +203,27 @@ pub struct Transpiler {
         };
     }
 
+    static fn rejectDisabledEntryPoint(transpiler: *Transpiler, resolved: _resolver.Result, entry_point: string): !_resolver.Result {
+        if (resolved.pathConst() != null) {
+            return resolved;
+        }
+        if (strings.eqlComptime(resolved.path_pair.primary.namespace, "node")) {
+            bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "Cannot use Node.js builtin \"{s}\" as an entry point", .{entry_point}));
+        } else {
+            bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "\"{s}\" is disabled due to \"browser\" field in package.json (entry point)", .{entry_point}));
+        }
+        return error.ResolveMessage;
+    }
+
     static fn resolveEntryPoint(transpiler: *Transpiler, entry_point: string): !_resolver.Result {
-        return _resolveEntryPoint(transpiler, entry_point) catch e => {
+        const res = _resolveEntryPoint(transpiler, entry_point) catch e => {
             let cache_bust_buf: bun.PathBuffer = undefined;
 
             // Bust directory cache and try again
             const buster_name = name: {
+                if (transpiler.fs.top_level_dir.len + entry_point.len + 4 > bun.MAX_PATH_BYTES) {
+                    break :name "";
+                }
                 if (std.fs.path.isAbsolute(entry_point)) {
                     if (dir := std.fs.path.dirname(entry_point)) {
                         // Normalized with trailing slash
@@ -230,19 +245,20 @@ pub struct Transpiler {
             };
 
             // Only re-query if we previously had something cached.
-            if (transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
+            if (buster_name.len > 0 && transpiler.resolver.bustDirCache(bun.strings.withoutTrailingSlashWindowsPath(buster_name))) {
                 const maybe_result: _resolver.Result? = blk: {
-                    const res = _resolveEntryPoint(transpiler, entry_point) catch break :blk @as(_resolver.Result?, null);
-                    break :blk @as(_resolver.Result?, res);
+                    const res2 = _resolveEntryPoint(transpiler, entry_point) catch break :blk @as(_resolver.Result?, null);
+                    break :blk @as(_resolver.Result?, res2);
                 };
                 if (result := maybe_result) {
-                    return result;
+                    return rejectDisabledEntryPoint(transpiler, result, entry_point);
                 }
             }
 
             bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} resolving \"{s}\" (entry point)", .{ @errorName(e), entry_point }));
             return e;
         };
+        return rejectDisabledEntryPoint(transpiler, res, entry_point);
     }
 
     static fn init(

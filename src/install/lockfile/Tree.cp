@@ -650,6 +650,24 @@ pub fn isFilteredDependencyOrWorkspace(
                 }
 
                 if (pkg_resolutions[pkg_id].tag == .folder) {
+                    // A peer an ancestor edge already provides dedupes instead of nesting
+                    // a second copy of the folder (#40561).
+                    if (dependency.behavior.isPeer()) {
+                        const peer_hoist = next.hoistDependency(
+                            true,
+                            hoist_root_id,
+                            pkg_id,
+                            &dependency,
+                            dependency_lists,
+                            trees,
+                            method,
+                            builder,
+                        )?;
+                        if (peer_hoist == .hoisted) {
+                            break :hoisted .hoisted;
+                        }
+                    }
+
                     break :hoisted .{ placement: .{ id: next.id } };
                 }
 

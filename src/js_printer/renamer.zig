@@ -226,6 +226,7 @@ pub const SymbolSlot = struct {
     name: TinyString = TinyString{ .string = "" },
     count: u32 = 0,
     needs_capital_for_jsx: bool = false,
+    pinned: bool = false,
     pub const List = std.EnumArray(js_ast.Symbol.SlotNamespace, std.array_list.Managed(SymbolSlot));
 };
 
@@ -235,6 +236,7 @@ pub const MinifyRenamer = struct {
     slots: SymbolSlot.List = undefined,
     top_level_symbol_to_slot: TopLevelSymbolSlotMap,
     symbols: js_ast.Symbol.Map,
+    name_minifier: ?js_ast.NameMinifier = null,
 
 pub fn init(allocator: std.mem.Allocator, symbols: js_ast.Symbol.Map, first_top_level_slots: js_ast.SlotCounts, reserved_names: bun.StringHashMapUnmanaged(u32)) !*MinifyRenamer {
             const renamer = try allocator.create(MinifyRenamer);
@@ -362,6 +364,31 @@ pub fn allocateTopLevelSymbolSlots(self: *MinifyRenamer, top_level_symbols: Stab
             }
     }
 
+pub fn topLevelCount(self: MinifyRenamer, sym_ref: Ref) ?u32 {
+            const resolved = self.symbols.follow(sym_ref);
+            const slot_idx = ((self.top_level_symbol_to_slot.get(resolved)) orelse { return null; });
+            const ns = (self.symbols.get(resolved)).?.slotNamespace();
+            return self.slots.get(ns).items[@as(usize, @intCast(slot_idx))].count;
+    }
+
+pub fn pin(self: *MinifyRenamer, sym_ref: Ref, name: []const u8) !void {
+            const resolved = self.symbols.follow(sym_ref);
+            const slot_idx = ((self.top_level_symbol_to_slot.get(resolved)) orelse { return; });
+            const ns = (self.symbols.get(resolved)).?.slotNamespace();
+            var slot = (&self.slots.getPtr(ns).items[@as(usize, @intCast(slot_idx))]);
+            _ = &slot;
+            (if (@typeInfo(@TypeOf(slot)) == .@"enum" or @typeInfo(@TypeOf(slot)) == .@"union") @tagName(slot) else slot.name) = try TinyString.init(name, self.allocator);
+            slot.pinned = true;
+            _ = try self.reserved_names.put(self.allocator, name, 1);
+    }
+
+pub fn finish(self: *MinifyRenamer) !void {
+            var minifier = ((self.name_minifier) orelse (unreachable));
+            _ = &minifier;
+            _ = try self.assignNamesByFrequency((&minifier));
+            self.name_minifier = minifier;
+    }
+
 pub fn assignNamesByFrequency(self: *MinifyRenamer, name_minifier: *js_ast.NameMinifier) !void {
             var name_buf = try std.array_list.Managed(u8).initCapacity(self.allocator, 64);
             _ = &name_buf;
@@ -388,11 +415,12 @@ pub fn assignNamesByFrequency(self: *MinifyRenamer, name_minifier: *js_ast.NameM
                 _ = &slots;
                 _ = sorted.clearRetainingCapacity();
                 _ = try sorted.ensureUnusedCapacity(slots.items.len);
-                sorted.items.len = slots.items.len;
                 var i: usize = 0;
                 _ = &i;
-                while ((i < sorted.items.len)) : (i = (i + 1)) {
-                    sorted.items[cp_cast_int(usize, i)] = SlotAndCount{ .slot = @as(u32, @intCast(i)), .count = slots.items[@as(usize, @intCast(i))].count };
+                while ((i < slots.items.len)) : (i = (i + 1)) {
+                    if ((!slots.items[@as(usize, @intCast(i))].pinned)) {
+                        _ = sorted.appendAssumeCapacity(SlotAndCount{ .slot = @as(u32, @intCast(i)), .count = slots.items[@as(usize, @intCast(i))].count });
+                    }
                 }
                 const empty_sort_ctx: void = undefined;
                 _ = std.sort.pdq(SlotAndCount, sorted.items, empty_sort_ctx, SlotAndCount.lessThan);
@@ -768,6 +796,28 @@ pub fn assignNamesRecursiveWithNumberScope(self: *NumberRenamer, initial_scope: 
                 _ = &child;
                 _ = self.assignNamesRecursiveWithNumberScope(s, child, source_index, sorted);
             }
+    }
+
+pub fn pinTopLevelSymbol(self: *NumberRenamer, input_ref: Ref, name: []const u8) void {
+            const sym_ref = self.symbols.follow(input_ref);
+            var inner: *bun.BabyList(string) = (blk: {
+            break :blk (&self.names[@as(usize, @intCast(sym_ref.sourceIndex()))]);
+
+});
+            _ = &inner;
+            const new_len = @max(inner.len, (sym_ref.innerIndex() + 1));
+            if ((inner.cap <= new_len)) {
+                const prev_cap = inner.len;
+                _ = ((inner.ensureUnusedCapacity(self.allocator, (new_len - prev_cap))) catch unreachable);
+                const to_write = (blk: {
+                break :blk inner.ptr[prev_cap..inner.cap];
+
+});
+                _ = @memset(std.mem.sliceAsBytes(to_write), 0);
+            }
+            inner.len = new_len;
+            (inner.mut(sym_ref.innerIndex())).* = name;
+            _ = ((self.root.name_counts.put(self.allocator, name, 1)) catch unreachable);
     }
 
 pub fn addTopLevelSymbol(self: *NumberRenamer, sym_ref: Ref) void {

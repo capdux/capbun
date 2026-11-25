@@ -1279,8 +1279,18 @@ pub const Win32Error = enum(u16) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
+pub fn fromU32(code: u32) Win32Error {
+            if ((code <= 65535)) {
+                return @enumFromInt(@as(u16, @intCast(code)));
+            }
+            if (((code & 4294901760) == 2147942400)) {
+                return @enumFromInt(@as(u16, @truncate(code)));
+            }
+            return @enumFromInt(65535);
+    }
+
 pub fn get() Win32Error {
-            return @enumFromInt(@intFromEnum(bun.windows.kernel32.GetLastError()));
+            return Win32Error.fromU32(@intFromEnum(bun.windows.kernel32.GetLastError()));
     }
 
 pub fn int(self: Win32Error) u16 {

@@ -293,7 +293,9 @@ pub fn processExit(self: *State, handle: *ProcessHandle) !void {
                 }
             }
             if (self.pretty_output) {
-                _ = (blk_catch_6: { break :blk_catch_6 ((self.redraw(false)) catch |__ce_6| { _ = &__ce_6;  }); });
+                if ((!self.aborted)) {
+                    _ = (blk_catch_6: { break :blk_catch_6 ((self.redraw(false)) catch |__ce_6| { _ = &__ce_6;  }); });
+                }
             } else {
                 _ = self.draw_buf.clearRetainingCapacity();
                 if ((handle.buffer.items.len > 0)) {
@@ -329,9 +331,48 @@ pub fn redraw(self: *State, is_abort: bool) !void {
                     _ = try self.draw_buf.appendSlice("\x1b[1A\x1b[K");
                 }
             }
+            const final_frame = (is_abort or self.isDone());
+            var rows: usize = 24;
+            _ = &rows;
+            if (comptime Environment.isPosix) {
+                var size: std.posix.winsize = undefined;
+                _ = &size;
+                if (((std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, (blk: {
+                break :blk @intFromPtr((&size));
+
+})) == 0) and (size.row > 0))) {
+                    rows = size.row;
+                }
+            } else {
+                if ((Output.terminal_size.row > 0)) {
+                    rows = Output.terminal_size.row;
+                }
+            }
+            const per_script_cap = @max((((rows -| 1) / @max(self.handles.len, 1)) -| 3), 1);
             for (cp_mut_slice(&self.handles)) |*handle| {
                 _ = &handle;
-                const elide_lines = (if (is_abort) null else (((handle.*).config.elide_count) orelse (10)));
+                var user_cap: ?usize = null;
+                _ = &user_cap;
+                if ((handle.*).config.elide_count) |n| {
+                    _ = &n;
+                    if ((n > 0)) {
+                        user_cap = n;
+                    }
+                }
+                var elide_lines: ?usize = null;
+                _ = &elide_lines;
+                if ((!is_abort)) {
+                    if (final_frame) {
+                        elide_lines = user_cap;
+                    } else {
+                        if (user_cap) |n| {
+                            _ = &n;
+                            elide_lines = @min(n, per_script_cap);
+                        } else {
+                            elide_lines = per_script_cap;
+                        }
+                    }
+                }
                 const e = elide((handle.*).buffer.items, elide_lines);
                 _ = try self.draw_buf.writer().print(fmt("<b>{s}<r> {s} $ <d>{s}<r>\n"), .{ (handle.*).config.package_name, (handle.*).config.script_name, (handle.*).config.script_content });
                 if ((e.elided_count > 0)) {

@@ -75,6 +75,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
     onEndCallback: jsc.Strong.Optional = .empty,
     onWritableCallback: jsc.Strong.Optional = .empty,
     onCloseCallback: jsc.Strong.Optional = .empty,
+    transport_eof: bool = false,
     event_loop_timer: EventLoopTimer = .{
         .next = .epoch,
         .tag = .UpgradedDuplex,
@@ -111,6 +112,9 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
     fn callWriteOrEnd(_: *UpgradedDuplex, data: string?, msg_more: bool) {
         if (_.vm.isShuttingDown()) {
+            return;
+        }
+        if (data != null && _.transport_eof && _.isShutdown()) {
             return;
         }
         if (duplex := _.origin.get()) {
@@ -197,6 +201,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
         if (ctx := jsc.host_fn.getFunctionData(function)) {
             const req = bun.cast(*UpgradedDuplex, ctx);
+            req.transport_eof = true;
             if (req.wrapper != null) {
                 req.handlers.onEnd(req.handlers.ctx);
             }

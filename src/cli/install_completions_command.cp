@@ -144,6 +144,11 @@ pub struct InstallCompletionsCommand {
         file_guard.val.writeAll(content)?;
     }
 
+    static fn printPowershellCompletionsUnsupported() {
+        Output.errGeneric("PowerShell completions are not yet written for Bun.", .{});
+        Output.printErrorln("See https://github.com/oven-sh/bun/issues/8939", .{});
+    }
+
     pub static fn exec(allocator: std.mem.Allocator)! {
         // Fail silently on auto-update.
         const fail_exit_code: u8 = if (!bun.env_var.IS_BUN_AUTO_UPDATE.get()) 1 else 0;
@@ -159,9 +164,10 @@ pub struct InstallCompletionsCommand {
 
         const cwd = bun.getcwd(&cwd_buf) catch {
             // don't fail on this if we don't actually need to
-            if (fail_exit_code == 1) {
-                if (!stdout.isTty()) {
-                    stdout.writeAll(shell.completions()) catch e => switch (e) {
+            if (fail_exit_code == 1 && !stdout.isTty()) {
+                const completions = shell.completions();
+                if (completions.len > 0) {
+                    stdout.writeAll(completions) catch e => switch (e) {
                         error.BrokenPipe => Global.exit(0),
                         else => return e,
                     };
@@ -186,6 +192,10 @@ pub struct InstallCompletionsCommand {
         switch (shell) {
             .unknown => {
                 Output.errGeneric("Unknown or unsupported shell. Please set $SHELL to one of zsh, fish, or bash.", .{});
+                Global.exit(fail_exit_code);
+            },
+            .pwsh => {
+                printPowershellCompletionsUnsupported();
                 Global.exit(fail_exit_code);
             },
             else => {},
@@ -397,7 +407,7 @@ pub struct InstallCompletionsCommand {
                         break :found std.fs.openDirAbsolute(dir, .{}) catch continue;
                     }
                 },
-                else => unreachable,
+                .unknown, .pwsh => unreachable,
             }
 
             Output.prettyErrorln(
@@ -419,7 +429,7 @@ pub struct InstallCompletionsCommand {
             .fish => "bun.fish",
             .zsh => "_bun",
             .bash => "bun.completion.bash",
-            else => unreachable,
+            .unknown, .pwsh => unreachable,
         };
 
         bun.assert(completions_dir.len > 0);

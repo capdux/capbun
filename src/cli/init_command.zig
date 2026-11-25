@@ -702,6 +702,16 @@ pub fn normalizePackageName(allocator: std.mem.Allocator, input: []const u8) ![]
             return normalized;
     }
 
+pub fn dependencyMap(obj: *const js_ast.E.Object, key: []const u8) js_ast.Expr {
+            if (obj.get(key)) |existing| {
+                _ = &existing;
+                if ((existing.data == .e_object)) {
+                    return existing;
+                }
+            }
+            return js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{  }, logger.Loc.Empty);
+    }
+
 pub fn exec(alloc: std.mem.Allocator, init_args: [][:0]const u8) !void {
             var minimal = false;
             _ = &minimal;
@@ -1054,7 +1064,7 @@ else => {
 });
                 need_run_bun_install = ((needs_dependencies or needs_dev_dependencies) or needs_typescript_dependency);
                 if (needs_dependencies) {
-                    var dependencies_object = ((fields.object.get("dependencies")) orelse (js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{  }, logger.Loc.Empty)));
+                    var dependencies_object = dependencyMap(fields.object, "dependencies");
                     _ = &dependencies_object;
                     var iter = needed_dependencies.iterator(.{ .kind = .set });
                     _ = &iter;
@@ -1065,7 +1075,7 @@ else => {
                     _ = try fields.object.put(alloc, "dependencies", dependencies_object);
                 }
                 if (needs_dev_dependencies) {
-                    var object = ((fields.object.get("devDependencies")) orelse (js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{  }, logger.Loc.Empty)));
+                    var object = dependencyMap(fields.object, "devDependencies");
                     _ = &object;
                     var iter = needed_dev_dependencies.iterator(.{ .kind = .set });
                     _ = &iter;
@@ -1076,7 +1086,7 @@ else => {
                     _ = try fields.object.put(alloc, "devDependencies", object);
                 }
                 if (needs_typescript_dependency) {
-                    var peer_dependencies = ((fields.object.get("peerDependencies")) orelse (js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{  }, logger.Loc.Empty)));
+                    var peer_dependencies = dependencyMap(fields.object, "peerDependencies");
                     _ = &peer_dependencies;
                     _ = try peer_dependencies.data.e_object.putString(alloc, "typescript", "^5");
                     _ = try fields.object.put(alloc, "peerDependencies", peer_dependencies);

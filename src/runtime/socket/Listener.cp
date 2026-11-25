@@ -501,6 +501,12 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
 
     const hostname_or_unix = &socket_config.hostname_or_unix;
     const port = socket_config.port;
+    if (port != null) {
+        const hn = hostname_or_unix.slice();
+        if (!bun.dns.isValidHostname(hn)) {
+            return globalObject.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalObject, hn));
+        }
+    }
     const ssl = if (socket_config.ssl != null) &socket_config.ssl.? else null;
     const ssl_enabled = ssl != null;
     const socket_flags = socket_config.socketFlags();
@@ -725,6 +731,12 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
 
     const hostname_or_unix = &socket_config.hostname_or_unix;
     const port = socket_config.port;
+    if (port != null) {
+        const hn = hostname_or_unix.slice();
+        if (!bun.dns.isValidHostname(hn)) {
+            return globalObject.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalObject, hn));
+        }
+    }
     const ssl = if (socket_config.ssl != null) &socket_config.ssl.? else null;
     const ssl_enabled = ssl != null;
     const default_data = socket_config.default_data;

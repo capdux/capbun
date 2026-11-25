@@ -612,6 +612,7 @@ fn VisitExprVisitors(
                     if (unwrapped.data == .e_string &&
                         unwrapped.data.e_string.isUTF8())
                     {
+                        unwrapped.data.e_string.resolveRopeIfNeeded(p.allocator);
                         // "a['b' + '']" => "a.b"
                         // "enum A { B = 'b' }; a[A.B]" => "a.b"
                         if (p.options.features.minify_syntax &&

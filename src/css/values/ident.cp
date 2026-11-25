@@ -322,6 +322,61 @@ pub struct CustomIdent {
 /// A list of CSS [`<custom-ident>`](https://www.w3.org/TR/css-values-4/#custom-idents) values.
 pub const CustomIdentList = css.SmallList(CustomIdent, 1);
 
+/// `none | <custom-ident>+`: the `none` keyword, or a space-separated list of
+/// [`<custom-ident>`](https://www.w3.org/TR/css-values-4/#custom-idents) values.
+pub union(enum) NoneOrCustomIdentList {
+    /// The `none` keyword.
+    none: void,
+    /// A list of idents.
+    idents: CustomIdentList,
+
+    static fn parse(input: *css.Parser): Result(NoneOrCustomIdentList) {
+        let idents: CustomIdentList = .{};
+        while (ident := input.tryParse(CustomIdent.parse, .{}).asValue()) {
+            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident.v, "none")) {
+                if (idents.len() == 0) {
+                    return .{ .result = .none };
+                }
+                return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+            }
+            idents.append(input.allocator(), ident);
+        }
+        if (idents.len() == 0) {
+            return .{ .err = input.newErrorForNextToken() };
+        }
+        return .{ .result = .{ .idents = idents } };
+    }
+
+    fn toCss(dest: *Printer): PrintErr!void {
+        switch (_) {
+            .none => return dest.writeStr("none"),
+            .idents => |idents| {
+                let first = true;
+                for (ident of idents.slice()) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        dest.writeChar(' ')?;
+                    }
+                    ident.toCss(dest)?;
+                }
+            },
+        }
+    }
+
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
+    }
+
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
+    }
+}
+
 import bun from "bun";
 const Allocator = std.mem.Allocator;
 const Symbol = bun.ast.Symbol;

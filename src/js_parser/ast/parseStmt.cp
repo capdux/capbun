@@ -104,7 +104,8 @@ pub fn ParseStmt(
                                     // "export type foo = ..."
                                     const type_range = p.lexer.range();
                                     p.lexer.next()?;
-                                    if (p.lexer.has_newline_before) {
+                                    // "export type\n{ foo }" and "export type\n* from 'bar'" are fine
+                                    if (p.lexer.has_newline_before && p.lexer.token != .t_open_brace && p.lexer.token != .t_asterisk) {
                                         p.log.addErrorFmt(p.source, type_range.end(), p.allocator, "Unexpected newline after \"type\"", {})?;
                                         return error.SyntaxError;
                                     }
@@ -1015,18 +1016,40 @@ pub fn ParseStmt(
                         if (strings.eqlComptime(default_name, "type")) {
                             switch (p.lexer.token) {
                                 .t_identifier => {
-                                    if (!strings.eqlComptime(p.lexer.identifier, "from")) {
+                                    // A name of "from" is left to the code below when this is
+                                    // "import type from 'bar';" (a value import named "type"), or
+                                    // when only "import foo = bar" is valid here and the guard
+                                    // below has to reject everything but "import type from = bar".
+                                    const import_equals_only = opts.is_export || (opts.is_namespace_scope && !opts.is_typescript_declare);
+                                    let leave_from = false;
+                                    if (strings.eqlComptime(p.lexer.identifier, "from")) {
+                                        const old_lexer = p.lexer;
+                                        p.lexer.is_log_disabled = true;
+                                        defer p.lexer.restore(&old_lexer);
+                                        let next_ok = true;
+                                        p.lexer.next() catch {
+                                            next_ok = false;
+                                        };
+                                        if (next_ok) {
+                                            leave_from = if (import_equals_only)
+                                                p.lexer.token != .t_equals
+                                            else
+                                                (p.lexer.token == .t_string_literal || p.lexer.token == .t_no_substitution_template_literal);
+                                        } else {
+                                            leave_from = false;
+                                        }
+                                    }
+                                    if (!leave_from) {
                                         default_name = p.lexer.identifier;
                                         stmt.default_name.?.loc = p.lexer.loc();
                                         p.lexer.next()?;
 
                                         if (p.lexer.token == .t_equals) {
-                                            // "import type foo = require('bar');"
-                                            // "import type foo = bar.baz;"
+                                            // "import type foo = require('bar');" (foo may be "from")
                                             opts.is_typescript_declare = true;
                                             return p.parseTypeScriptImportEqualsStmt(loc, opts, stmt.default_name.?.loc, default_name)?;
                                         } else {
-                                            // "import type foo from 'bar';"
+                                            // "import type foo from 'bar';" (foo may be "from")
                                             p.lexer.expectContextualKeyword("from")?;
                                             * = p.parsePath()?;
                                             p.lexer.expectOrInsertSemicolon()?;

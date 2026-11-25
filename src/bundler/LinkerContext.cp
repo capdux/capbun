@@ -15,6 +15,7 @@ import postProcessJSChunkModule from "./linker_context/postProcessJSChunk.zig";
 import postProcessCSSChunkModule from "./linker_context/postProcessCSSChunk.zig";
 import postProcessHTMLChunkModule from "./linker_context/postProcessHTMLChunk.zig";
 import renameSymbolsInChunkModule from "./linker_context/renameSymbolsInChunk.zig";
+import crossChunkNamesModule from "./linker_context/crossChunkNames.zig";
 import generateChunksInParallelModule from "./linker_context/generateChunksInParallel.zig";
 import generateCompileResultForJSChunkModule from "./linker_context/generateCompileResultForJSChunk.zig";
 import generateCompileResultForCssChunkModule from "./linker_context/generateCompileResultForCssChunk.zig";
@@ -423,6 +424,7 @@ pub struct LinkerContext {
     framework: *const bake.Framework? = null,
 
     mangled_props: MangledProps = .{},
+    cross_chunk_names: std.AutoHashMapUnmanaged(Ref, string) = .{},
 
     pub fn allocator(): std.mem.Allocator {
         return _.graph.allocator;
@@ -880,6 +882,15 @@ pub struct LinkerContext {
     }
 
     pub const renameSymbolsInChunk = renameSymbolsInChunkModule.renameSymbolsInChunk;
+    pub const crossChunkNames = crossChunkNamesModule;
+
+    pub static fn finishJSRenamer(ctx: GenerateChunkCtx, chunk: *Chunk, chunk_index: usize) {
+        * = ctx;
+        * = chunk_index;
+        if (chunk.renamer == .MinifyRenamer) {
+            bun.handleOom(chunk.renamer.MinifyRenamer.finish());
+        }
+    }
 
     pub static fn generateJSRenamer(ctx: GenerateChunkCtx, chunk: *Chunk, chunk_index: usize)  {
         let worker = ThreadPool.Worker.get(@fieldParentPtr("linker", ctx.c));
@@ -1713,7 +1724,7 @@ pub struct LinkerContext {
                 },
             );
 
-        if (css_reprs[source_index] != null) {
+        if (css_reprs[source_index] != null || _.parse_graph.input_files.items(.loader)[source_index] == .html) {
             for (*record of import_records[source_index].slice()) {
                 if (record.source_index.isValid() && !_.isExternalDynamicImport(&record, source_index)) {
                     _.markFileReachableForCodeSplitting(
@@ -1731,10 +1742,23 @@ pub struct LinkerContext {
             return;
         }
 
-        for (*record of import_records[source_index].slice()) {
-            if (record.source_index.isValid() && !_.isExternalDynamicImport(&record, source_index)) {
+        const records = import_records[source_index].slice();
+        const parts_in_file = parts[source_index].slice();
+        for (part of parts_in_file) {
+            if (!part.is_live) continue;
+
+            for (import_index of part.import_record_indices.slice()) {
+                const record = &records[import_index];
+                if (!record.source_index.isValid() || _.isExternalDynamicImport(record, source_index)) continue;
+                const other = record.source_index.get();
+                if (record.kind == .stmt &&
+                    _.parse_graph.input_files.items(.side_effects)[other] != .has_side_effects &&
+                    !_.options.ignore_dce_annotations)
+                {
+                    continue;
+                }
                 _.markFileReachableForCodeSplitting(
-                    record.source_index.get(),
+                    other,
                     entry_points_count,
                     distances,
                     out_dist,
@@ -1744,10 +1768,7 @@ pub struct LinkerContext {
                     css_reprs,
                 );
             }
-        }
 
-        const parts_in_file = parts[source_index].slice();
-        for (part of parts_in_file) {
             for (dependency of part.dependencies.slice()) {
                 if (dependency.source_index.get() != source_index) {
                     _.markFileReachableForCodeSplitting(
@@ -1763,6 +1784,62 @@ pub struct LinkerContext {
                 }
             }
         }
+    }
+
+    fn partIsRemovableNamespaceDestructuring(source_index: Index.Int, part: *const Part): bool {
+        if (_.graph.ast.items(.module_scope)[source_index].contains_direct_eval) {
+            return false;
+        }
+        const stmts = part.stmts;
+        if (stmts.len == 0) {
+            return false;
+        }
+        for (stmt of stmts) {
+            if (stmt.data != .s_local) return false;
+            const local = stmt.data.s_local;
+            if (local.kind == .k_using || local.kind == .k_await_using) return false;
+            for (decl of local.decls.slice()) {
+                if (decl.binding.data != .b_object) return false;
+                const value = decl.value ?? return false;
+                if (!_.valueIsImportNamespace(source_index, &value)) return false;
+                for (property of decl.binding.data.b_object.properties) {
+                    if (property.flags.contains(.is_spread) ||
+                        property.flags.contains(.is_computed) ||
+                        property.default_value != null ||
+                        property.key.data != .e_string ||
+                        property.value.data != .b_identifier)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    fn valueIsImportNamespace(source_index: Index.Int, value: *const Expr): bool {
+        const sym_ref = switch (value.data) {
+            .e_identifier => |id| id.ref,
+            .e_import_identifier => |id| id.ref,
+            .e_require_string => |req| return req.unwrapped_id != std.math.maxInt(u32),
+            else => return false,
+        };
+        const symbol = _.graph.symbols.get(sym_ref) ?? return false;
+        if (symbol.has_been_assigned_to || symbol.kind == .hoisted || symbol.kind == .hoisted_function) {
+            return false;
+        }
+        if (named_import := _.graph.ast.items(.named_imports)[source_index].get(sym_ref)) {
+            if (named_import.alias_is_star) {
+                return true;
+            }
+        }
+        if (import_data := _.graph.meta.items(.imports_to_bind)[source_index].get(sym_ref)) {
+            const target = import_data.data;
+            const target_ast_flags = _.graph.ast.items(.flags)[target.source_index.get()];
+            const target_ns_ref = _.graph.ast.items(.exports_ref)[target.source_index.get()];
+            return target_ast_flags.has_esm_namespace && target.import_ref.eql(target_ns_ref);
+        }
+        return false;
     }
 
     pub fn markFileLiveForTreeShaking(
@@ -1836,7 +1913,8 @@ pub struct LinkerContext {
         let part_index: usize = 0;
         for (part of parts[source_index].slice()) {
             defer part_index += 1;
-            let can_be_removed_if_unused = part.can_be_removed_if_unused;
+            let can_be_removed_if_unused = part.can_be_removed_if_unused ||
+                _.partIsRemovableNamespaceDestructuring(source_index, &part);
 
             if (can_be_removed_if_unused && part.tag == .commonjs_named_export) {
                 if (_.graph.meta.items(.flags)[source_index].wrap == .cjs) {

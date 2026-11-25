@@ -708,7 +708,12 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
                             } else {
                                 // We should use "__require" instead of "require" if we're not
                                 // generating a CommonJS output file, since it won't exist otherwise.
-                                if (shouldCallRuntimeRequire(output_format)) {
+                                // An `import()` is printed as-is and never becomes `__require()`,
+                                // nor does a split `require()` (`import.meta.require`).
+                                if (kind != .dynamic &&
+                                    !client.isExternalDynamicImport(record, source_index) &&
+                                    shouldCallRuntimeRequire(output_format))
+                                {
                                     runtime_require_uses += 1;
                                 }
 

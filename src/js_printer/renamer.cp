@@ -138,6 +138,7 @@ pub struct SymbolSlot {
     name: TinyString = TinyString{ string: "" },
     count: u32 = 0,
     needs_capital_for_jsx: bool = false,
+    pinned: bool = false,
 
     pub const List = std.EnumArray(js_ast.Symbol.SlotNamespace, std.array_list.Managed(SymbolSlot));
 }
@@ -148,6 +149,7 @@ pub struct MinifyRenamer {
     slots: SymbolSlot.List = undefined,
     top_level_symbol_to_slot: TopLevelSymbolSlotMap,
     symbols: js_ast.Symbol.Map,
+    name_minifier: js_ast.NameMinifier? = null,
 
     pub const TopLevelSymbolSlotMap = std.HashMapUnmanaged(Ref, usize, RefCtx, 80);
 
@@ -297,6 +299,29 @@ pub struct MinifyRenamer {
         }
     }
 
+    pub fn topLevelCount(sym_ref: Ref): u32? {
+        const resolved = _.symbols.follow(sym_ref);
+        const slot_idx = _.top_level_symbol_to_slot.get(resolved) ?? return null;
+        const ns = _.symbols.get(resolved).?.slotNamespace();
+        return _.slots.get(ns).items[slot_idx].count;
+    }
+
+    pub fn pin(*_, sym_ref: Ref, name: string)! {
+        const resolved = _.symbols.follow(sym_ref);
+        const slot_idx = _.top_level_symbol_to_slot.get(resolved) ?? return;
+        const ns = _.symbols.get(resolved).?.slotNamespace();
+        let slot = &_.slots.getPtr(ns).items[slot_idx];
+        slot.name = TinyString.init(name, _.allocator)?;
+        slot.pinned = true;
+        _.reserved_names.put(_.allocator, name, 1)?;
+    }
+
+    pub fn finish(*_)! {
+        let minifier = _.name_minifier orelse unreachable;
+        _.assignNamesByFrequency(&minifier)?;
+        _.name_minifier = minifier;
+    }
+
     fn assignNamesByFrequency(*_, name_minifier: *js_ast.NameMinifier)! {
         let name_buf = std.array_list.Managed(u8).initCapacity(_.allocator, 64)?;
         const name_buf_ptr = unsafe { &name_buf };
@@ -310,14 +335,15 @@ pub struct MinifyRenamer {
             let slots = _.slots.getPtr(ns);
             sorted.clearRetainingCapacity();
             sorted.ensureUnusedCapacity(slots.items.len)?;
-            sorted.items.len = slots.items.len;
 
             let i: usize = 0;
-            while (i < sorted.items.len) : (i += 1) {
-                sorted.items[i] = SlotAndCount{
-                    slot: @as(u32, @intCast(i)),
-                    count: slots.items[i].count,
-                };
+            while (i < slots.items.len) : (i += 1) {
+                if (!slots.items[i].pinned) {
+                    sorted.appendAssumeCapacity(SlotAndCount{
+                        slot: @as(u32, @intCast(i)),
+                        count: slots.items[i].count,
+                    });
+                }
             }
             const empty_sort_ctx: void = undefined;
             std.sort.pdq(SlotAndCount, sorted.items, empty_sort_ctx, SlotAndCount.lessThan);
@@ -800,6 +826,21 @@ pub struct NumberRenamer {
         for (child of scope.children.slice()) {
             _.assignNamesRecursiveWithNumberScope(s, child, source_index, sorted);
         }
+    }
+
+    pub fn pinTopLevelSymbol(*_, input_ref: Ref, name: string) {
+        const sym_ref = _.symbols.follow(input_ref);
+        let inner: *bun.BabyList(string)! = unsafe { &_.names[sym_ref.sourceIndex()] };
+        const new_len = @max(inner.len, sym_ref.innerIndex() + 1);
+        if (inner.cap <= new_len) {
+            const prev_cap = inner.len;
+            inner.ensureUnusedCapacity(_.allocator, new_len - prev_cap) catch unreachable;
+            const to_write = unsafe { inner.ptr[prev_cap..inner.cap] };
+            @memset(std.mem.sliceAsBytes(to_write), 0);
+        }
+        inner.len = new_len;
+        inner.mut(sym_ref.innerIndex()).* = name;
+        _.root.name_counts.put(_.allocator, name, 1) catch unreachable;
     }
 
     fn addTopLevelSymbol(*_, sym_ref: Ref) {

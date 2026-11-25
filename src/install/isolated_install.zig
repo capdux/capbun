@@ -926,9 +926,6 @@ pub fn buildStore(manager: *const PackageManager, lockfile: *const Lockfile, ins
                     }
                     break :resolved invalid_package_id;
 };
-                    if ((resolved == invalid_package_id)) {
-                        break :dont_dedupe;
-                    }
                     _ = hasher.update(std.mem.asBytes((&peer_name_hash)));
                     _ = hasher.update(std.mem.asBytes((&resolved)));
                 }

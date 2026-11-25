@@ -770,6 +770,20 @@ _ = try dest.writeStr("::view-transition-new(");
             _ = try v.part_name.toCss(dest);
             _ = try dest.writeChar(41);
 },
+.details_content => {
+_ = try dest.writeStr("::details-content");
+},
+.picker_icon => {
+_ = try dest.writeStr("::picker-icon");
+},
+.checkmark => {
+_ = try dest.writeStr("::checkmark");
+},
+.picker_function => |v| {
+_ = try dest.writeStr("::picker(");
+            _ = try v.identifier.toCss(dest);
+            _ = try dest.writeChar(41);
+},
 .custom => |val| {
 _ = try dest.writeStr("::");
             return dest.writeStr((if (@typeInfo(@TypeOf(val)) == .@"enum" or @typeInfo(@TypeOf(val)) == .@"union") @tagName(val) else val.name));

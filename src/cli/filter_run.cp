@@ -231,7 +231,9 @@ pub struct State {
             }
         }
         if (_.pretty_output) {
-            _.redraw(false) catch {};
+            if (!_.aborted) {
+                _.redraw(false) catch {};
+            }
         } else {
             _.draw_buf.clearRetainingCapacity();
             if (handle.buffer.items.len > 0) {
@@ -262,8 +264,36 @@ pub struct State {
                 _.draw_buf.appendSlice("\x1b[1A\x1b[K")?;
             }
         }
+        // While scripts are running every chunk redraws the whole frame, so cap
+        // it to the terminal: each script shows the tail of its output. The
+        // final frame (and abort, to aid debugging) prints everything unless
+        // --elide-lines says otherwise.
+        const final_frame = is_abort || _.isDone();
+        let rows: usize = 24;
+        if (comptime Environment.isPosix) {
+            let size: std.posix.winsize = undefined;
+            if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, unsafe { @intFromPtr(&size) }) == 0 && size.row > 0) {
+                rows = size.row;
+            }
+        } else if (Output.terminal_size.row > 0) {
+            rows = Output.terminal_size.row;
+        }
+        const per_script_cap = @max((rows -| 1) / @max(_.handles.len, 1) -| 3, 1);
         for (*handle of _.handles) {
-            const elide_lines = if (is_abort) null else handle.config.elide_count ?? 10;
+            let user_cap: usize? = null;
+            if (n := handle.config.elide_count) {
+                if (n > 0) user_cap = n;
+            }
+            let elide_lines: usize? = null;
+            if (!is_abort) {
+                if (final_frame) {
+                    elide_lines = user_cap;
+                } else if (n := user_cap) {
+                    elide_lines = @min(n, per_script_cap);
+                } else {
+                    elide_lines = per_script_cap;
+                }
+            }
             const e = elide(handle.buffer.items, elide_lines);
 
             _.draw_buf.writer().print(fmt("<b>{s}<r> {s} $ <d>{s}<r>\n"), .{ handle.config.package_name, handle.config.script_name, handle.config.script_content })?;

@@ -774,6 +774,12 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
         defer if (!___guard_handlers_moved) { ___guard_handlers_moved = true; const __T = @TypeOf(_guard_handlers); if (@typeInfo(__T) == .optional) { if (_guard_handlers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_handlers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_handlers; _drop_val.__cp_deinit(); } };
         const hostname_or_unix = (&socket_config.hostname_or_unix);
         const port = socket_config.port;
+        if ((port != null)) {
+            const hn = hostname_or_unix.slice();
+            if ((!bun.dns.isValidHostname(hn))) {
+                return globalObject.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalObject, hn));
+            }
+        }
         const ssl = (if ((socket_config.ssl != null)) (&socket_config.ssl.?) else null);
         const ssl_enabled = (ssl != null);
         const socket_flags = socket_config.socketFlags();
@@ -967,6 +973,12 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: ?*TCPSock
         defer if (!___guard_handlers_moved) { ___guard_handlers_moved = true; const __T = @TypeOf(_guard_handlers); if (@typeInfo(__T) == .optional) { if (_guard_handlers) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_handlers.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_handlers; _drop_val.__cp_deinit(); } };
         const hostname_or_unix = (&socket_config.hostname_or_unix);
         const port = socket_config.port;
+        if ((port != null)) {
+            const hn = hostname_or_unix.slice();
+            if ((!bun.dns.isValidHostname(hn))) {
+                return globalObject.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalObject, hn));
+            }
+        }
         const ssl = (if ((socket_config.ssl != null)) (&socket_config.ssl.?) else null);
         const ssl_enabled = (ssl != null);
         const default_data = socket_config.default_data;

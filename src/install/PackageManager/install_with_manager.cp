@@ -1229,36 +1229,43 @@ fn runAndWaitFn(comptime check_peers: bool, comptime only_pre_patch: bool): *con
         err: anyerror? = null,
         static fn isDone(closure: *@This()): bool {
             let mgr = closure.manager;
-            if (comptime check_peers)
-                mgr.processPeerDependencyList() catch e => {
+            while (true) {
+                if (comptime check_peers)
+                    mgr.processPeerDependencyList() catch e => {
+                        closure.err = e;
+                        return true;
+                    };
+
+                mgr.drainDependencyList();
+
+                const _pkg_mgr_ptr_sample: *PackageManager = undefined;
+                mgr.runTasks(
+                    @TypeOf(_pkg_mgr_ptr_sample),
+                    mgr,
+                    {
+                        onExtract: {},
+                        onResolve: {},
+                        onPackageManifestError: {},
+                        onPackageDownloadError: {},
+                        progress_bar: true,
+                    },
+                    check_peers,
+                    mgr.options.log_level,
+                ) catch e => {
                     closure.err = e;
                     return true;
                 };
 
-            mgr.drainDependencyList();
-
-            const _pkg_mgr_ptr_sample: *PackageManager = undefined;
-            mgr.runTasks(
-                @TypeOf(_pkg_mgr_ptr_sample),
-                mgr,
-                {
-                    onExtract: {},
-                    onResolve: {},
-                    onPackageManifestError: {},
-                    onPackageDownloadError: {},
-                    progress_bar: true,
-                },
-                check_peers,
-                mgr.options.log_level,
-            ) catch e => {
-                closure.err = e;
-                return true;
-            };
-
-            if (comptime check_peers) {
-                if (mgr.peer_dependencies.readableLength() > 0) {
-                    return false;
+                // `runTasks` can resolve a package whose deferred peers create no
+                // new async task (e.g. its tarball is already extracted). With zero
+                // pending tasks nothing wakes this loop again, so drain the peer
+                // queue now instead of sleeping on a wakeup that never comes.
+                if (comptime check_peers) {
+                    if (mgr.peer_dependencies.readableLength() > 0) {
+                        continue;
+                    }
                 }
+                break;
             }
 
             if (comptime only_pre_patch) {

@@ -100,9 +100,11 @@ pub const DependencyToEnqueue = union(enum) {
 pub const EnqueueClosure = struct {
     e: ?anyerror = null,
     manager: *PackageManager,
+    log: *logger.Log,
 
 pub fn isDone(closure: *EnqueueClosure) bool {
             const manager = closure.manager;
+            manager.log = closure.log;
             if ((manager.pendingTaskCount() > 0)) {
                 _ = (blk_catch_0: { break :blk_catch_0 ((manager.runTasks(void, undefined, .{ .onExtract = .{}, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, false, manager.options.log_level)) catch |e| { _ = &e; closure.e = e;
                 return true; }); });
@@ -378,7 +380,7 @@ pub fn enqueueDependencyToRoot(mgr: *PackageManager, name: []const u8, version: 
             if (mgr.options.log_level.showProgress()) {
                 _ = mgr.startProgressBarIfNone();
             }
-            var closure = EnqueueClosure{ .manager = mgr };
+            var closure = EnqueueClosure{ .manager = mgr, .log = mgr.log };
             _ = &closure;
             _ = mgr.sleepUntil((&closure), (&EnqueueClosure.isDone));
             if (mgr.options.log_level.showProgress()) {

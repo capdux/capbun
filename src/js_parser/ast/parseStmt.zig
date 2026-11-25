@@ -168,7 +168,7 @@ if (p.lexer.isContextualKeyword("let")) {
 .s_type => {
 const type_range = p.lexer.range();
                     _ = try p.lexer.next();
-                    if (p.lexer.has_newline_before) {
+                    if (((p.lexer.has_newline_before and (p.lexer.token != .t_open_brace)) and (p.lexer.token != .t_asterisk))) {
                         _ = try p.log.addErrorFmt(p.source, type_range.end(), p.allocator, "Unexpected newline after \"type\"", .{});
                         return error.SyntaxError;
                     }
@@ -872,7 +872,26 @@ if (((!opts.is_module_scope) and (!opts.is_namespace_scope))) {
                 if (strings.eqlComptime(default_name, "type")) {
                     switch (p.lexer.token) {
 .t_identifier => {
-if ((!strings.eqlComptime(p.lexer.identifier, "from"))) {
+const import_equals_only = (opts.is_export or (opts.is_namespace_scope and (!opts.is_typescript_declare)));
+                    var leave_from = false;
+                    _ = &leave_from;
+                    if (strings.eqlComptime(p.lexer.identifier, "from")) {
+                        const old_lexer = p.lexer;
+                        p.lexer.is_log_disabled = true;
+                        defer {
+                        _ = p.lexer.restore((&old_lexer));
+                        }
+                        var next_ok = true;
+                        _ = &next_ok;
+                        _ = (blk_catch_5: { break :blk_catch_5 ((p.lexer.next()) catch |__ce_5| { _ = &__ce_5; next_ok = false;
+                        break :blk_catch_5 {}; }); });
+                        if (next_ok) {
+                            leave_from = (if (import_equals_only) (p.lexer.token != .t_equals) else ((p.lexer.token == .t_string_literal) or (p.lexer.token == .t_no_substitution_template_literal)));
+                        } else {
+                            leave_from = false;
+                        }
+                    }
+                    if ((!leave_from)) {
                         default_name = p.lexer.identifier;
                         stmt.default_name.?.loc = p.lexer.loc();
                         _ = try p.lexer.next();

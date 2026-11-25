@@ -239,6 +239,7 @@ else => (!(if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else pro
                                 _ = p.deoptimizeCommonJSNamedExports();
                                 return null;
                             }
+                            p.module_exports_rewrite_count = (p.module_exports_rewrite_count + 1);
                             return Expr{ .data = Expr.Data{ .e_special = .module_exports }, .loc = name_loc };
                         } else {
                             if (((p.options.bundle and strings.eqlComptime(name, "id")) and (identifier_opts.assign_target == .none))) {

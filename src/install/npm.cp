@@ -1382,16 +1382,9 @@ pub struct PackageManifestSerializer {
 
     static fn save(manifest: *const PackageManifest, scope: *const Registry.Scope, tmpdir: std.fs.Dir, cache_dir: std.fs.Dir)! {
         const file_id = bun.Wyhash11.hash(0, manifest.name());
-        let dest_path_buf: [576]u8 = undefined;
+        let tmp_path_buf: [64]u8 = undefined;
         let out_path_buf: [46]u8 = undefined;
-        let dest_path_stream = std.io.fixedBufferStream(&dest_path_buf);
-        let dest_path_stream_writer = dest_path_stream.writer();
-        const file_id_hex_fmt = bun.fmt.hexIntLower(file_id);
-        const hex_timestamp = @as(usize, @intCast(@max(std.time.milliTimestamp(), 0)));
-        const hex_timestamp_fmt = bun.fmt.hexIntLower(hex_timestamp);
-        dest_path_stream_writer.print("{f}.npm-{f}", .{ file_id_hex_fmt, hex_timestamp_fmt })?;
-        dest_path_stream_writer.writeByte(0)?;
-        const tmp_path: [:0]u8 = dest_path_buf[0 .. dest_path_stream.pos - 1 :0];
+        const tmp_path = bun.fs.FileSystem.tmpname("npm", &tmp_path_buf, bun.fastRandom())?;
         const out_path = manifestFileName(&out_path_buf, file_id, scope)?;
         writeFile(manifest, scope, tmp_path, tmpdir, cache_dir, out_path)?;
     }

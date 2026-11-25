@@ -298,15 +298,43 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
         }
 
-        static fn onResolve(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn cancelUnreadBody(response: *Response, globalThis: *jsc.JSGlobalObject) {
+            if (stream := response.getBodyReadableStream(globalThis)) {
+                stream.value.ensureStillAlive();
+                response.detachReadableStream(globalThis);
+                stream.cancelWithReason(globalThis, jsc.JSValue.js_undefined);
+            }
+            const bv = response.getBodyValue();
+            bv.* = .Used;
+        }
+
+        static fn discardResponseBody(globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) {
+            let target = val;
+            if (promise := val.asAnyPromise()) {
+                let p = promise;
+                switch (p.unwrap(globalThis.vm(), .mark_handled)) {
+                    .fulfilled => |fulfilled| {
+                        target = fulfilled;
+                    },
+                    else => { return; },
+                }
+            }
+            if (resp_opt := target.as(jsc.WebCore.Response)) {
+                cancelUnreadBody(resp_opt, globalThis);
+            }
+            target.ensureStillAlive();
+        }
+
+        static fn onResolve(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             ctxLog("onResolve", .{});
 
             const arguments = callframe.arguments_old(2);
-            const ctx = NativePromiseContext.take(RequestContext, arguments.ptr[1]) ?? {
-                // The cell's destructor already released the ref (the Promise
-                // was collected before a prior microtask turn reached us).
+            const ctx_opt = NativePromiseContext.take(RequestContext, arguments.ptr[1]);
+            if (ctx_opt == null) {
+                discardResponseBody(globalThis, arguments.ptr[0]);
                 return JSValue.js_undefined;
-            };
+            }
+            const ctx = ctx_opt.?;
             ctx.promise_cell = jsc.JSValue.zero;
             const _guard_ctx = DerefGuard<@TypeOf(ctx)>{ val: ctx };
 
@@ -350,6 +378,9 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
         static fn handleResolve(ctx: *RequestContext, value: jsc.JSValue) {
             if (ctx.isAbortedOrEnded() || ctx.didUpgradeWebSocket()) {
+                if (server := ctx.server) {
+                    discardResponseBody(server.globalThis, value);
+                }
                 return;
             }
 
@@ -867,6 +898,18 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (comptime Environment.isDebug) {
                 ctxLog("finalizeWithoutDeinit: has_finalized {}", .{_.flags.has_finalized});
                 _.flags.has_finalized = true;
+            }
+
+            if (resp := _.response_weakref.get()) {
+                if (stream := resp.getBodyReadableStream(globalThis)) {
+                    stream.value.ensureStillAlive();
+                    resp.detachReadableStream(globalThis);
+                    stream.done(globalThis);
+                }
+                const bv = resp.getBodyValue();
+                if (bv.* == .Locked) {
+                    bv.* = .Used;
+                }
             }
 
             if (_.response_jsvalue != .zero) {
@@ -1757,6 +1800,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                         // just ignore the Response object. It doesn't do anything.
                         // it's better to do that than to throw an error
                         if (ctx.didUpgradeWebSocket()) {
+                            discardResponseBody(req_ctx.globalThis, fulfilled_value);
                             return;
                         }
 

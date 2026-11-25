@@ -32,6 +32,7 @@ pub enum ToCssCtx {
 enum _PseudoElementEnum {
     cue,
     @"cue-region",
+    picker,
     @"view-transition-group",
     @"view-transition-image-pair",
     @"view-transition-old",
@@ -1158,6 +1159,10 @@ pub struct SelectorParser {
                     .result => |a| bun.create(input.allocator(), Selector, a),
                     .err => |e| return .{ .err = e },
                 } } } },
+                .picker => .{ .result = .{ .picker_function = .{ .identifier = switch (css.css_values.ident.Ident.parse(input)) {
+                    .result => |a| a,
+                    .err => |e| return .{ .err = e },
+                } } } },
                 .@"view-transition-group" => .{ .result = .{ .view_transition_group = .{ .part_name = switch (ViewTransitionPartName.parse(input)) {
                     .result => |a| a,
                     .err => |e| return .{ .err = e },
@@ -1453,6 +1458,9 @@ pub struct SelectorParser {
             .{ "-webkit-scrollbar-corner", PseudoElement{ .webkit_scrollbar = .corner } },
             .{ "-webkit-resizer", PseudoElement{ .webkit_scrollbar = .resizer } },
             .{ "view-transition", PseudoElement.view_transition },
+            .{ "details-content", PseudoElement.details_content },
+            .{ "picker-icon", PseudoElement.picker_icon },
+            .{ "checkmark", PseudoElement.checkmark },
         });
 
         const pseudo_element = Map.getCaseInsensitiveWithEql(name, bun.strings.eqlComptimeIgnoreLen) ?? brk: {
@@ -2544,6 +2552,15 @@ struct PseudoElementViewTransition {
     pub fn __generateHash() {}
 }
 
+struct PseudoElementPicker {
+    /// The identifier argument, e.g. `select` in `::picker(select)`.
+    identifier: css.css_values.ident.Ident,
+
+    pub fn __generateEql() {}
+    pub fn __generateDeepClone() {}
+    pub fn __generateHash() {}
+}
+
 struct PseudoElementCustom {
     /// The name of the pseudo element.
     name: []const u8,
@@ -2604,6 +2621,14 @@ pub union(enum) PseudoElement {
     view_transition_old: PseudoElementViewTransition,
     /// The [::view-transition-new()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-new-pt-name-selector) functional pseudo element.
     view_transition_new: PseudoElementViewTransition,
+    /// The [::details-content](https://drafts.csswg.org/css-pseudo-4/#details-content-pseudo) pseudo element.
+    details_content: void,
+    /// The [::picker-icon](https://drafts.csswg.org/css-forms-1/#picker-icon-pseudo) pseudo element.
+    picker_icon: void,
+    /// The [::checkmark](https://drafts.csswg.org/css-forms-1/#checkmark-pseudo) pseudo element.
+    checkmark: void,
+    /// The [::picker()](https://drafts.csswg.org/css-forms-1/#picker-pseudo) functional pseudo element.
+    picker_function: PseudoElementPicker,
     /// An unknown pseudo element.
     custom: PseudoElementCustom,
     /// An unknown functional pseudo element.

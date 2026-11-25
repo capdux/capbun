@@ -725,22 +725,36 @@ pub fn writeWorkspaceDeps(writer: anytype, indent: *u32, pkg_id: PackageID, res:
                 }
                 has_any = true;
             }
+            const deps_list = pkg_deps[@as(usize, @intCast(pkg_id))];
+            var deps_sort_buf = try std.array_list.Managed(DependencyID).initCapacity(optional_peers_buf.allocator, deps_list.len);
+            _ = &deps_sort_buf;
+            defer {
+            _ = deps_sort_buf.deinit();
+            }
+            var dep_id: u32 = deps_list.begin();
+            _ = &dep_id;
+            const dep_end: u32 = deps_list.end();
+            while ((dep_id < dep_end)) : (dep_id = (dep_id + 1)) {
+                _ = deps_sort_buf.appendAssumeCapacity(@intCast(dep_id));
+            }
+            _ = std.sort.block(DependencyID, deps_sort_buf.items, TreeDepsSortCtx{ .string_buf = buf, .deps_buf = deps_buf }, TreeDepsSortCtx.isLessThan);
             inline for (workspace_dependency_groups) |group| {
                 const group_name = (if (@typeInfo(@TypeOf(group)) == .@"enum" or @typeInfo(@TypeOf(group)) == .@"union") @tagName(group) else group.name);
                 const group_behavior = group.behavior;
                 var first = true;
                 _ = &first;
-                for (cp_mut_slice(&pkg_deps[@as(usize, @intCast(pkg_id))].get(deps_buf))) |*dep| {
-                    _ = &dep;
+                for (deps_sort_buf.items) |sorted_dep_id| {
+                    _ = &sorted_dep_id;
+                    const dep = (&deps_buf[@as(usize, @intCast(sorted_dep_id))]);
                     const includesFn = Dependency.Behavior.includes;
-                    if ((!includesFn((dep.*).behavior, group_behavior))) {
+                    if ((!includesFn(dep.behavior, group_behavior))) {
                         continue;
                     }
-                    if ((dep.*).behavior.isOptionalPeer()) {
+                    if (dep.behavior.isOptionalPeer()) {
                         if (group_behavior.isOptional()) {
                             continue;
                         }
-                        _ = try optional_peers_buf.append((if (@typeInfo(@TypeOf((dep.*))) == .@"enum" or @typeInfo(@TypeOf((dep.*))) == .@"union") @tagName((dep.*)) else (dep.*).name));
+                        _ = try optional_peers_buf.append((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name));
                     }
                     if (first) {
                         if (has_any) {
@@ -760,15 +774,12 @@ pub fn writeWorkspaceDeps(writer: anytype, indent: *u32, pkg_id: PackageID, res:
                         _ = try writer.writeAll(",\n");
                         _ = try writeIndent(writer, indent);
                     }
-                    const name = (if (@typeInfo(@TypeOf((dep.*))) == .@"enum" or @typeInfo(@TypeOf((dep.*))) == .@"union") @tagName((dep.*)) else (dep.*).name).slice(buf);
-                    const version = (dep.*).version.literal.slice(buf);
+                    const name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(buf);
+                    const version = dep.version.literal.slice(buf);
                     _ = try writer.print("{f}: {f}", .{ bun.fmt.formatJSONStringUTF8(name, .{}), bun.fmt.formatJSONStringUTF8(version, .{}) });
-                    if ((((dep.*).behavior.peer and (!(dep.*).behavior.optional)) and (pkg_map.map.count() > 0))) {
-                        _ = (blk_catch_1: { break :blk_catch_1 ((pkg_map.findResolution(relative_path, (blk: {
-                        break :blk (&(dep.*));
-
-}), buf, path_buf)) catch |e| { _ = &e; if ((e == error.Unresolvable)) {
-                            _ = try optional_peers_buf.append((if (@typeInfo(@TypeOf((dep.*))) == .@"enum" or @typeInfo(@TypeOf((dep.*))) == .@"union") @tagName((dep.*)) else (dep.*).name));
+                    if (((dep.behavior.peer and (!dep.behavior.optional)) and (pkg_map.map.count() > 0))) {
+                        _ = (blk_catch_1: { break :blk_catch_1 ((pkg_map.findResolution(relative_path, dep, buf, path_buf)) catch |e| { _ = &e; if ((e == error.Unresolvable)) {
+                            _ = try optional_peers_buf.append((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name));
                         } }); });
                     }
                 }

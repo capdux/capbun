@@ -1188,6 +1188,14 @@ pub struct serialize {
                 v.part_name.toCss(dest)?;
                 dest.writeChar(')')?;
             },
+            .details_content => dest.writeStr("::details-content")?,
+            .picker_icon => dest.writeStr("::picker-icon")?,
+            .checkmark => dest.writeStr("::checkmark")?,
+            .picker_function v => {
+                dest.writeStr("::picker(")?;
+                v.identifier.toCss(dest)?;
+                dest.writeChar(')')?;
+            },
             .custom val => {
                 dest.writeStr("::")?;
                 return dest.writeStr(val.name);

@@ -8,13 +8,51 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <unistd.h>
+#include <atomic>
+#include <cerrno>
 #include <cstring>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <pthread.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#if OS(LINUX)
+static std::atomic<int> threads_in_execve { 0 };
+static std::atomic<unsigned> execve_generation { 0 };
+static pid_t execve_counting_pid = 0;
+
+extern "C" int __real_execve(const char*, char* const[], char* const[]);
+extern "C" int __real_pthread_create(pthread_t*, const pthread_attr_t*, void* (*)(void*), void*);
+
+extern "C" int __wrap_execve(const char* path, char* const argv[], char* const envp[])
+{
+    if (getpid() != execve_counting_pid)
+        return __real_execve(path, argv, envp);
+    threads_in_execve.fetch_add(1, std::memory_order_seq_cst);
+    execve_generation.fetch_add(1, std::memory_order_seq_cst);
+    int rc = __real_execve(path, argv, envp);
+    threads_in_execve.fetch_sub(1, std::memory_order_seq_cst);
+    return rc;
+}
+
+extern "C" int __wrap_pthread_create(pthread_t* thread, const pthread_attr_t* attr, void* (*start_routine)(void*), void* arg)
+{
+    for (int attempt = 0;; attempt++) {
+        unsigned generation = execve_generation.load(std::memory_order_seq_cst);
+        bool execInFlight = threads_in_execve.load(std::memory_order_seq_cst) > 0;
+        int rc = __real_pthread_create(thread, attr, start_routine, arg);
+        if (rc != EAGAIN || attempt >= 1000)
+            return rc;
+        if (!execInFlight && threads_in_execve.load(std::memory_order_seq_cst) == 0
+            && execve_generation.load(std::memory_order_seq_cst) == generation) {
+            return rc;
+        }
+        usleep(1000);
+    }
+}
+#endif // OS(LINUX)
 #else
 #include <uv.h>
 #include <windows.h>
@@ -528,6 +566,9 @@ extern "C" void bun_initialize_process()
     // This is best effort, not all linux kernels support close_range or CLOSE_RANGE_CLOEXEC
     // To avoid breaking --watch, we skip stdin, stdout, stderr and IPC.
     bun_close_range(4, ~0U, CLOSE_RANGE_CLOEXEC);
+#if OS(LINUX)
+    execve_counting_pid = getpid();
+#endif
 #endif
 
 #if OS(LINUX) || OS(DARWIN) || OS(FREEBSD)

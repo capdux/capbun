@@ -819,15 +819,18 @@ pub fn resolveBinTarget(self: *const BinLinker, package_dir: []const u8, target:
             return path.joinAbsStringZ(package_dir, (&.{ target }), .auto);
     }
 
-pub fn buildTargetPackageDir(self: *const BinLinker) []const u8 {
+pub fn buildTargetPackageDir(self: *const BinLinker) ?[]const u8 {
             const dest_dir_without_trailing_slash = strings.withoutTrailingSlash(self.target_node_modules_path.slice());
+            const package_name = self.target_package_name.slice();
             var remain = self.abs_target_buf;
             _ = &remain;
+            if (((((dest_dir_without_trailing_slash.len + 1) + package_name.len) + 1) >= remain.len)) {
+                return null;
+            }
             _ = @memcpy(remain[0..dest_dir_without_trailing_slash.len], dest_dir_without_trailing_slash);
             remain = remain[dest_dir_without_trailing_slash.len..];
             remain[cp_cast_int(usize, 0)] = std.fs.path.sep;
             remain = remain[1..];
-            const package_name = self.target_package_name.slice();
             _ = @memcpy(remain[0..package_name.len], package_name);
             remain = remain[package_name.len..];
             remain[cp_cast_int(usize, 0)] = std.fs.path.sep;
@@ -838,17 +841,23 @@ pub fn buildTargetPackageDir(self: *const BinLinker) []const u8 {
 })];
     }
 
-pub fn buildDestinationDir(self: *const BinLinker, global: bool) []u8 {
+pub fn buildDestinationDir(self: *const BinLinker, global: bool) ?[]u8 {
             const dest_dir_without_trailing_slash = strings.withoutTrailingSlash(self.node_modules_path.slice());
             var remain = self.abs_dest_buf;
             _ = &remain;
             if (global) {
                 const global_bin_path_without_trailing_slash = strings.withoutTrailingSlash(self.global_bin_path);
+                if (((global_bin_path_without_trailing_slash.len + 1) >= remain.len)) {
+                    return null;
+                }
                 _ = @memcpy(remain[0..global_bin_path_without_trailing_slash.len], global_bin_path_without_trailing_slash);
                 remain = remain[global_bin_path_without_trailing_slash.len..];
                 remain[cp_cast_int(usize, 0)] = std.fs.path.sep;
                 remain = remain[1..];
             } else {
+                if (((dest_dir_without_trailing_slash.len + "/.bin/".len) >= remain.len)) {
+                    return null;
+                }
                 _ = @memcpy(remain[0..dest_dir_without_trailing_slash.len], dest_dir_without_trailing_slash);
                 remain = remain[dest_dir_without_trailing_slash.len..];
                 _ = @memcpy(remain[0.."/.bin/".len], ((std.fs.path.sep_str ++ ".bin") ++ std.fs.path.sep_str));
@@ -858,8 +867,14 @@ pub fn buildDestinationDir(self: *const BinLinker, global: bool) []u8 {
     }
 
 pub fn link(self: *BinLinker, global: bool) void {
-            const package_dir = self.buildTargetPackageDir();
-            var abs_dest_buf_remain = self.buildDestinationDir(global);
+            const package_dir_opt = self.buildTargetPackageDir();
+            const abs_dest_buf_opt = self.buildDestinationDir(global);
+            if (((package_dir_opt == null) or (abs_dest_buf_opt == null))) {
+                self.err = error.ENAMETOOLONG;
+                return;
+            }
+            const package_dir = package_dir_opt.?;
+            var abs_dest_buf_remain = abs_dest_buf_opt.?;
             _ = &abs_dest_buf_remain;
             _ = bun.assertWithLocation((self.bin.tag != .none), @src());
             switch (self.bin.tag) {
@@ -973,8 +988,14 @@ else => {
     }
 
 pub fn unlink(self: *BinLinker, global: bool) void {
-            const package_dir = self.buildTargetPackageDir();
-            var abs_dest_buf_remain = self.buildDestinationDir(global);
+            const package_dir_opt = self.buildTargetPackageDir();
+            const abs_dest_buf_opt = self.buildDestinationDir(global);
+            if (((package_dir_opt == null) or (abs_dest_buf_opt == null))) {
+                self.err = error.ENAMETOOLONG;
+                return;
+            }
+            const package_dir = package_dir_opt.?;
+            var abs_dest_buf_remain = abs_dest_buf_opt.?;
             _ = &abs_dest_buf_remain;
             _ = bun.assertWithLocation((self.bin.tag != .none), @src());
             switch (self.bin.tag) {

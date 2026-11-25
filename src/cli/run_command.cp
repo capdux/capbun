@@ -423,6 +423,12 @@ pub struct RunCommand {
                     Global.raiseIgnoringPanicHandler(exit_code.signal);
                 }
 
+                if (comptime Environment.isWindows) {
+                    if (@intFromEnum(exit_code.code) == ctrl_c.STATUS_CONTROL_C_EXIT) {
+                        ctrl_c.exitLikeChild();
+                    }
+                }
+
                 if (exit_code.code != 0) {
                     if (exit_code.code != 2 && !silent) {
                         Output.prettyErrorln("<r><red>error<r><d>:<r> script <b>\"{s}\"<r> exited with code {d}<r>", .{ name, exit_code.code });
@@ -638,6 +644,12 @@ pub struct RunCommand {
                             }
 
                             Global.raiseIgnoringPanicHandler(exit_code.signal);
+                        }
+
+                        if (comptime Environment.isWindows) {
+                            if (@intFromEnum(exit_code.code) == ctrl_c.STATUS_CONTROL_C_EXIT) {
+                                ctrl_c.exitLikeChild();
+                            }
                         }
 
                         const code = exit_code.code;
@@ -2269,6 +2281,7 @@ type string = []const u8;
 type stringZ = [:0]const u8;
 
 import DotEnv from "../dotenv/env_loader.zig";
+import ctrl_c from "./ctrl_c.zig";
 import ShellCompletions from "./shell_completions.zig";
 import options from "../bundler/options.zig";
 import resolve_path from "../paths/resolve_path.zig";

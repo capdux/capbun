@@ -395,6 +395,15 @@ pub struct InitCommand {
 
     const PackageJSONFields = _PackageJSONFields;
 
+    static fn dependencyMap(obj: *const js_ast.E.Object, key: string): js_ast.Expr {
+        if (existing := obj.get(key)) {
+            if (existing.data == .e_object) {
+                return existing;
+            }
+        }
+        return js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{}, logger.Loc.Empty);
+    }
+
     static fn exec(alloc: std.mem.Allocator, init_args: [][:0]const u8)! {
         // --minimal is a special preset to create only empty package.json + tsconfig.json
         let minimal = false;
@@ -756,7 +765,7 @@ pub struct InitCommand {
             need_run_bun_install = needs_dependencies || needs_dev_dependencies || needs_typescript_dependency;
 
             if (needs_dependencies) {
-                let dependencies_object = fields.object.get("dependencies") ?? js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{}, logger.Loc.Empty);
+                let dependencies_object = dependencyMap(fields.object, "dependencies");
                 let iter = needed_dependencies.iterator({ kind: .set });
                 while (index := iter.next()) {
                     const dep = dependencies[index];
@@ -766,7 +775,7 @@ pub struct InitCommand {
             }
 
             if (needs_dev_dependencies) {
-                let object = fields.object.get("devDependencies") ?? js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{}, logger.Loc.Empty);
+                let object = dependencyMap(fields.object, "devDependencies");
                 let iter = needed_dev_dependencies.iterator({ kind: .set });
                 while (index := iter.next()) {
                     const dep = dev_dependencies[index];
@@ -776,7 +785,7 @@ pub struct InitCommand {
             }
 
             if (needs_typescript_dependency) {
-                let peer_dependencies = fields.object.get("peerDependencies") ?? js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{}, logger.Loc.Empty);
+                let peer_dependencies = dependencyMap(fields.object, "peerDependencies");
                 peer_dependencies.data.e_object.putString(alloc, "typescript", "^5")?;
                 fields.object.put(alloc, "peerDependencies", peer_dependencies)?;
             }

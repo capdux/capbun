@@ -147,6 +147,7 @@ pub const DNSRecordType = enum(c_int) {
     CAA = 257,
     CNAME = 5,
     MX = 15,
+    NAPTR = 35,
     NS = 2,
     PTR = 12,
     SOA = 6,
@@ -160,7 +161,7 @@ pub const DNSRecordType = enum(c_int) {
     
     pub const default = DNSRecordType.A;
     
-    pub const map = bun.ComptimeStringMap(DNSRecordType, .{ .{ "A", .A }, .{ "AAAA", .AAAA }, .{ "ANY", .ANY }, .{ "CAA", .CAA }, .{ "CNAME", .CNAME }, .{ "MX", .MX }, .{ "NS", .NS }, .{ "PTR", .PTR }, .{ "SOA", .SOA }, .{ "SRV", .SRV }, .{ "TXT", .TXT }, .{ "a", .A }, .{ "aaaa", .AAAA }, .{ "any", .ANY }, .{ "caa", .CAA }, .{ "cname", .CNAME }, .{ "mx", .MX }, .{ "ns", .NS }, .{ "ptr", .PTR }, .{ "soa", .SOA }, .{ "srv", .SRV }, .{ "txt", .TXT } });
+    pub const map = bun.ComptimeStringMap(DNSRecordType, .{ .{ "A", .A }, .{ "AAAA", .AAAA }, .{ "ANY", .ANY }, .{ "CAA", .CAA }, .{ "CNAME", .CNAME }, .{ "MX", .MX }, .{ "NAPTR", .NAPTR }, .{ "NS", .NS }, .{ "PTR", .PTR }, .{ "SOA", .SOA }, .{ "SRV", .SRV }, .{ "TXT", .TXT }, .{ "a", .A }, .{ "aaaa", .AAAA }, .{ "any", .ANY }, .{ "caa", .CAA }, .{ "cname", .CNAME }, .{ "mx", .MX }, .{ "naptr", .NAPTR }, .{ "ns", .NS }, .{ "ptr", .PTR }, .{ "soa", .SOA }, .{ "srv", .SRV }, .{ "txt", .TXT } });
 };
 
 pub const ResolverOrder = enum(u8) {
@@ -2470,7 +2471,7 @@ pub fn resolve(self: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc
             }
             const rt_opt = RecordType.map.getWithEql(record_type_str.getZigString(globalThis), jsc.ZigString.eqlComptime);
             if ((rt_opt == null)) {
-                return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NS, PTR, SOA, SRV, TXT", record_type_value);
+                return globalThis.throwInvalidArgumentPropertyValue("record", "one of: A, AAAA, ANY, CAA, CNAME, MX, NAPTR, NS, PTR, SOA, SRV, TXT", record_type_value);
             }
             break :blk rt_opt.?;
 });
@@ -2501,6 +2502,9 @@ return self.doResolveCAres(c_ares.struct_hostent, "cname", name.slice(), globalT
 },
 RecordType.MX => {
 return self.doResolveCAres(c_ares.struct_ares_mx_reply, "mx", name.slice(), globalThis);
+},
+RecordType.NAPTR => {
+return self.doResolveCAres(c_ares.struct_ares_naptr_reply, "naptr", name.slice(), globalThis);
 },
 RecordType.NS => {
 return self.doResolveCAres(c_ares.struct_hostent, "ns", name.slice(), globalThis);

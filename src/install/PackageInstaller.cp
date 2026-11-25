@@ -915,6 +915,19 @@ pub struct PackageInstaller {
 
         if (needs_install) {
             if (resolution.tag.canEnqueueInstallTask() && installer.packageMissingFromCache(_.manager, package_id, resolution.tag)) {
+                if (comptime !needs_verify) {
+                    const name_str = alias.slice(_.lockfile.buffers.string_bytes.items);
+                    _.manager.log.addErrorFmt(
+                        null,
+                        bun.logger.Loc.Empty,
+                        _.manager.allocator,
+                        "Package \"{s}\" was downloaded but is missing from the cache",
+                        .{name_str},
+                    ) catch unreachable;
+                    _.summary.fail += 1;
+                    _.incrementTreeInstallCount(_.current_tree_id, !is_pending_package_install, log_level);
+                    return;
+                }
                 if (comptime Environment.allow_assert) {
                     bun.assertWithLocation(resolution.canEnqueueInstallTask(), @src());
                 }

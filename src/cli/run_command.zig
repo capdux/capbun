@@ -65,6 +65,7 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const DotEnv = @import("../dotenv/env_loader.zig");
+pub const ctrl_c = @import("./ctrl_c.zig");
 pub const ShellCompletions = @import("./shell_completions.zig");
 pub const options = @import("../bundler/options.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
@@ -414,6 +415,11 @@ if (((exit_code.signal.valid() and (exit_code.signal != .SIGINT)) and (!silent))
                 }
                 _ = Global.raiseIgnoringPanicHandler(exit_code.signal);
             }
+            if (comptime Environment.isWindows) {
+                if ((@intFromEnum(exit_code.code) == ctrl_c.STATUS_CONTROL_C_EXIT)) {
+                    _ = ctrl_c.exitLikeChild();
+                }
+            }
             if ((exit_code.code != 0)) {
                 if (((exit_code.code != 2) and (!silent))) {
                     _ = Output.prettyErrorln("<r><red>error<r><d>:<r> script <b>\"{s}\"<r> exited with code {d}<r>", .{ name, exit_code.code });
@@ -545,6 +551,11 @@ if (exit_code.signal.valid()) {
                     _ = bun.crash_handler.suppressReporting();
                 }
                 _ = Global.raiseIgnoringPanicHandler(exit_code.signal);
+            }
+            if (comptime Environment.isWindows) {
+                if ((@intFromEnum(exit_code.code) == ctrl_c.STATUS_CONTROL_C_EXIT)) {
+                    _ = ctrl_c.exitLikeChild();
+                }
             }
             const code = exit_code.code;
             if ((code != 0)) {

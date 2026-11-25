@@ -3816,6 +3816,22 @@ pub fn on404(_: *ThisServer, req: *uws.Request, resp: *App.Response) void {
 pub fn listen(self: *@This()) jsc.JSValue {
             _ = httplog("listen", .{});
             const globalThis = self.globalThis;
+            if ((self.config.address == .tcp)) {
+                if (self.config.address.tcp.hostname) |hn_raw| {
+                    _ = &hn_raw;
+                    const hn = bun.span(hn_raw);
+                    const bare = (if ((((hn.len > 2) and (hn[0] == 91)) and (hn[@as(usize, @intCast((hn.len - 1)))] == 93))) hn[1..(hn.len - 1)] else hn);
+                    if ((!bun.dns.isValidHostname(bare))) {
+                        switch (globalThis.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalThis, hn))) {
+else => {
+
+},
+}
+                        _ = self.deinit();
+                        return .zero;
+                    }
+                }
+            }
             var route_list_value = jsc.JSValue.zero;
             _ = &route_list_value;
             if (ssl_enabled) {

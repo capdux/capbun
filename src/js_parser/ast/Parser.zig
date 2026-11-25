@@ -615,9 +615,13 @@ var sliced = try ListManaged(Stmt).initCapacity(p.allocator, 1);
                                 break :break_optimize;
                             }
                         }
-                        if ((needs_decl_count > 0)) {
+                        if (((needs_decl_count > 0) or p.has_top_level_function_merged_with_var)) {
                             p.symbols.items[@as(usize, @intCast(p.exports_ref.innerIndex()))].use_count_estimate = (p.symbols.items[@as(usize, @intCast(p.exports_ref.innerIndex()))].use_count_estimate + @as(u32, @truncate(export_refs.len)));
                             _ = p.deoptimizeCommonJSNamedExports();
+                        } else {
+                            if ((p.symbols.items[@as(usize, @intCast(p.module_ref.innerIndex()))].use_count_estimate > p.module_exports_rewrite_count)) {
+                                _ = p.deoptimizeCommonJSNamedExports();
+                            }
                         }
                     }
 };
@@ -796,6 +800,8 @@ break :brk null;
             const uses_module_ref = (p.symbols.items[@as(usize, @intCast(p.module_ref.innerIndex()))].use_count_estimate > 0);
             var wrap_mode: WrapMode = .none;
             _ = &wrap_mode;
+            var reject_import_statements = false;
+            _ = &reject_import_statements;
             if (p.isDeoptimizedCommonJS()) {
                 exports_kind = .cjs;
             } else {
@@ -806,42 +812,7 @@ break :brk null;
                         exports_kind = .cjs;
                         if (p.options.features.commonjs_at_runtime) {
                             wrap_mode = .bun_commonjs;
-                            const import_record: ?*const ImportRecord = brk: {
-                            {
-                                var i: i32 = 0;
-                                _ = &i;
-                                const __end_11 = p.import_records.items.len;
-                                while (i < __end_11) : (i += 1) {
-                                    const import_record = (&p.import_records.items[@as(usize, @intCast(i))]);
-                                    if ((import_record.flags.is_internal or import_record.flags.is_unused)) {
-                                        continue;
-                                    }
-                                    if ((import_record.kind == .stmt)) {
-                                        break :brk import_record;
-                                    }
-                                }
-                            }
-                            break :brk null;
-};
-                            if (import_record) |record| {
-                                _ = &record;
-                                var notes = ListManaged(logger.Data).init(p.allocator);
-                                _ = &notes;
-                                _ = try notes.append(logger.Data{ .text = try std.fmt.allocPrint(p.allocator, "Try require({f}) instead", .{ bun.fmt.QuotedFormatter{ .text = record.path.text } }) });
-                                if (uses_module_ref) {
-                                    _ = try notes.append(logger.Data{ .text = "This file is CommonJS because 'module' was used" });
-                                }
-                                if (uses_exports_ref) {
-                                    _ = try notes.append(logger.Data{ .text = "This file is CommonJS because 'exports' was used" });
-                                }
-                                if (p.has_top_level_return) {
-                                    _ = try notes.append(logger.Data{ .text = "This file is CommonJS because top-level return was used" });
-                                }
-                                if (p.has_with_scope) {
-                                    _ = try notes.append(logger.Data{ .text = "This file is CommonJS because a \"with\" statement is used" });
-                                }
-                                _ = try p.log.addRangeErrorWithNotes(p.source, record.range, "Cannot use import statement with CommonJS-only features", notes.items);
-                            }
+                            reject_import_statements = true;
                         }
                     } else {
                         switch (p.options.module_type) {
@@ -1060,7 +1031,44 @@ const uses_any_import_statements = brk: {
                     }
                 }
             }
-            return js_ast.Result{ .ast = try p.toAST((&parts), exports_kind, wrap_mode, hashbang) };
+            const ast = try p.toAST((&parts), exports_kind, wrap_mode, hashbang);
+            if (reject_import_statements) {
+                const import_record: ?*const ImportRecord = brk: {
+                const recs = ast.import_records.slice();
+                var ri: usize = 0;
+                _ = &ri;
+                while ((ri < recs.len)) : (ri = (ri + 1)) {
+                    const rec = (&recs[@as(usize, @intCast(ri))]);
+                    if ((rec.flags.is_internal or rec.flags.is_unused)) {
+                        continue;
+                    }
+                    if (((rec.kind == .stmt) and (!rec.range.isEmpty()))) {
+                        break :brk rec;
+                    }
+                }
+                break :brk null;
+};
+                if (import_record) |record| {
+                    _ = &record;
+                    var notes = ListManaged(logger.Data).init(p.allocator);
+                    _ = &notes;
+                    _ = try notes.append(logger.Data{ .text = try std.fmt.allocPrint(p.allocator, "Try require({f}) instead", .{ bun.fmt.QuotedFormatter{ .text = record.path.text } }) });
+                    if (uses_module_ref) {
+                        _ = try notes.append(logger.Data{ .text = "This file is CommonJS because 'module' was used" });
+                    }
+                    if (uses_exports_ref) {
+                        _ = try notes.append(logger.Data{ .text = "This file is CommonJS because 'exports' was used" });
+                    }
+                    if (p.has_top_level_return) {
+                        _ = try notes.append(logger.Data{ .text = "This file is CommonJS because top-level return was used" });
+                    }
+                    if (p.has_with_scope) {
+                        _ = try notes.append(logger.Data{ .text = "This file is CommonJS because a \"with\" statement is used" });
+                    }
+                    _ = try p.log.addRangeErrorWithNotes(p.source, record.range, "Cannot use import statement with CommonJS-only features", notes.items);
+                }
+            }
+            return js_ast.Result{ .ast = ast };
     }
 
 pub fn init(_options: Options, log: *logger.Log, source: *const logger.Source, define: *Define, allocator: Allocator) !Parser {
