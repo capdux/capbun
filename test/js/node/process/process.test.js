@@ -970,7 +970,7 @@ describe.concurrent(() => {
     });
 
     let [out, exited] = await Promise.all([new Response(subprocess.stdout).text(), subprocess.exited]);
-    expect(out.trim()).toEqual("v26.3.0");
+    expect(out.trim()).toEqual("v26.12.1");
     expect(exited).toBe(0);
   });
 

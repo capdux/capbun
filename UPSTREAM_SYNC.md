@@ -53,3 +53,8 @@
 - **`bundler`/`js_parser`/`js_printer`/`css`/`sourcemap`（27 `.cp`）**：吸收 `#46229` (`ConvertESMExportsForHmr.cp`/`ImportScanner.cp`)、`#45210` (`transform.cp`)、`#45290` (`lexer.cp` `RadixInteger`)、`#46327`/`#46301`/`#46161`/`#45677`（覆盖率与源码位置映射：`S.cp`/`B.cp`/`Binding.cp`/`js_parser.cp`/`parse*.cp`/`P.cp`/`visit*.cp`/`defines.cp`/`convertStmtsForChunk.cp`/`sourcemap.cp`/`InternalSourceMap.cp`/`Chunk.cp`/`ParsedSourceMap.cp`/`js_printer.cp`/`runtime.cp`）、`#46270` & `#46021`（`bundle_v2.cp`/`doStep5.cp`/`transpiler.cp`/`selector.cp`）。
 - **`http`/`tls`/`jsc`/`webcore`/`sql`**：吸收 `#46300`/`#46159`（NSS 3.131.1 根证书、`blocked_spkis.cpp` 公钥拦截、`openssl.c`、`NodeTLS.cpp/.h`、`quic/tls.cp`）、`#46456`（`h2/connection.cp` 伪头部/Content-Length/控制字节校验 + `ErrorCode.ts` `HPE_INVALID_URL`）、`#46410`/`#46387`（`SerializedScriptValue.cpp` RSA/ChaCha20-Poly1305 校验）、`#45593`（`YAMLObject.cp` 延迟属性防 UAF）、`#46379`（`http.cp` keepalive）、`#46291`（`sqlite.ts`）、`#45281`（`JSTextEncoder.cpp`）、`#45289`（`BundlerPlugin.ts`/`BunBuiltinNames.h`/`diagnostics_channel.ts`）、`#45291`（`util/inspect.js`/`NodeUtilTypesModule.h`）、`#45423`（`fs.promises.ts` `realpathNative`）、`#46405`（`VirtualMachine.cp` `--isolate` 宏上下文重置）。
 - **验证**：全部修改 `.cp` 通过 `cpc_brief.py` 4 项硬门禁，`bun run zig:check` 5/5 步通过（27s, MaxRSS 3G），打标 `cp-v1.4.4-sync`。
+
+### 2026-11-26 `bun-v1.4.5` 全量同步闭合 (`bun-v1.4.4..bun-v1.4.5`)
+- **测试与类型同步**：全量同步 `test/` 与 `packages/bun-types/` 至 `bun-v1.4.5`。
+- **依赖与安全补丁**：升级 `llhttp` 至 `9.4.4`（`src/jsc/bindings/node/http/llhttp/*` + `BunProcess.cpp`）、`SQLite` 至 `3.54.1`（`sqlite3.c`/`sqlite3_local.h` + `NodeSqlite.cpp`），确认 `patches/zlib/inflate-window-size.patch` 与 `patches/zstd/literals-buffer-tail.patch` 就位。
+- **验证**：`bun run zig:check` 5/5 步通过（29s, MaxRSS 2G），打标 `cp-v1.4.5-sync`。
