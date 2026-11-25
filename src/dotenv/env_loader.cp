@@ -1020,7 +1020,9 @@ struct Parser {
     src: string,
     value_buffer: *std.array_list.Managed(u8),
 
-    const whitespace_chars = "\t\x0B\x0C \xA0\n\r";
+    // Input is UTF-8, so this set must be ASCII-only: 0xA0 is a continuation byte
+    // there (NBSP is C2 A0), and trimming it byte-wise corrupts multi-byte sequences.
+    const whitespace_chars = "\t\x0B\x0C \n\r";
 
     fn skipLine(*_) {
         if (i := strings.indexOfAny(_.src[_.pos..], "\n\r")) {

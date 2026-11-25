@@ -235,7 +235,10 @@ pub fn decode(self: *TextDecoder, globalThis: *JSGlobalObject, callframe: *jsc.C
         _ = &arguments;
         var stream = false;
         _ = &stream;
-        if (((arguments.len > 1) and arguments[1].isObject())) {
+        if (((arguments.len > 1) and (!arguments[1].isUndefinedOrNull()))) {
+            if ((!arguments[1].isObject())) {
+                return globalThis.throwInvalidArgumentTypeValue("options", "object", arguments[1]);
+            }
             if (try arguments[1].fastGet(globalThis, .stream)) |stream_value| {
                 _ = &stream_value;
                 stream = stream_value.toBoolean();
@@ -433,9 +436,9 @@ pub fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSErr
                 return globalThis.throwInvalidArguments("TextDecoder(encoding) label is invalid", .{});
             }
         }
-        if ((!options_value.isUndefined())) {
+        if ((!options_value.isUndefinedOrNull())) {
             if ((!options_value.isObject())) {
-                return globalThis.throwInvalidArguments("TextDecoder(options) is invalid", .{});
+                return globalThis.throwInvalidArgumentTypeValue("options", "object", options_value);
             }
             if (try options_value.get(globalThis, "fatal")) |fatal| {
                 _ = &fatal;

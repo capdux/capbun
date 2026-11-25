@@ -199,12 +199,16 @@ pub fn postProcessJSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chu
         const all_parts = c.graph.ast.items(.parts);
         const all_flags = c.graph.meta.items(.flags);
         const all_import_records = c.graph.ast.items(.import_records);
+        const all_parts_live = c.graph.parts_live.slice();
         for (part_range of chunk.content.javascript.parts_in_chunk_in_order) {
             if (all_flags[part_range.source_index.get()].wrap == .cjs) continue;
             const source_parts = all_parts[part_range.source_index.get()].slice();
             const source_import_records = all_import_records[part_range.source_index.get()].slice();
+            // A wrapped file's range spans all of its parts, including the tree-shaken ones.
+            const parts_live = all_parts_live[part_range.source_index.get()];
             let part_i = part_range.part_index_begin;
             while (part_i < part_range.part_index_end) : (part_i += 1) {
+                if (!parts_live.isSet(part_i)) continue;
                 for (stmt of source_parts[part_i].stmts) {
                     switch (stmt.data) {
                         .s_import => |s| {

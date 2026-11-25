@@ -81,10 +81,22 @@ export @value struct LibdeflateState {
     pub const new = bun.TrivialNew(@This());
 
     decompressor: *bun.libdeflate.Decompressor = undefined,
+    compressor: (*bun.libdeflate.Compressor)? = null,
     shared_buffer: [u8; 524288] = undefined,
+
+    fn compressorMut(*_): *bun.libdeflate.Compressor {
+        if (_.compressor == null) {
+            _.compressor = bun.libdeflate.Compressor.alloc(6) ?? bun.outOfMemory();
+        }
+        return _.compressor.?;
+    }
 
     fn release(*_) {
         _.decompressor.deinit();
+        if (c := _.compressor) {
+            c.deinit();
+            _.compressor = null;
+        }
         bun.TrivialDeinit(LibdeflateState)(_);
     }
 

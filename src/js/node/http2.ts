@@ -1935,6 +1935,10 @@ enum StreamState {
   Closed = 1 << 3, // 01000 = 8
   StreamResponded = 1 << 4, // 10000 = 16
   WritableClosed = 1 << 5, // 100000 = 32
+  // The server stream has been handed to user code (the 'stream' event). Until then no
+  // 'error' listener can exist, so stream errors must not be emitted: node never constructs
+  // the JS stream object before a complete header block arrives.
+  Delivered = 1 << 7, // 10000000 = 128
 }
 function markWritableDone(stream: Http2Stream) {
   const _final = stream[bunHTTP2StreamFinal];
@@ -2186,6 +2190,17 @@ class Http2Stream extends Duplex {
     // seamless compatibility with http1
     if (err == null && rstCode !== NGHTTP2_NO_ERROR && rstCode !== NGHTTP2_CANCEL)
       err = $ERR_HTTP2_STREAM_ERROR(nameForErrorCode[rstCode] || rstCode);
+
+    // A server stream user code was never handed (e.g. the peer's header block failed to decode,
+    // so the 'stream' event never fired) cannot have an 'error' listener; emitting would raise an
+    // uncaught exception any peer can trigger. The session already reported the protocol error.
+    if (
+      err != null &&
+      this instanceof ServerHttp2Stream &&
+      (this[bunHTTP2StreamStatus] & StreamState.Delivered) === 0
+    ) {
+      err = null;
+    }
 
     markStreamClosed(this);
     this[bunHTTP2Session] = null;
@@ -2961,7 +2976,7 @@ class ServerHttp2Session extends Http2Session {
         // and wrote it back AFTER the emit, we'd clobber any bits set by the
         // user handler — in particular, losing WantTrailer/FinalCalled breaks
         // any later `sendTrailers()` with ERR_HTTP2_TRAILERS_NOT_READY.
-        stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded;
+        stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded | StreamState.Delivered;
         self[kServer].emit("stream", stream, headers, flags, rawheaders);
         self.emit("stream", stream, headers, flags, rawheaders);
       }
@@ -3468,7 +3483,7 @@ class ClientHttp2Session extends Http2Session {
           // 'response' handler that mutates stream state would otherwise be
           // clobbered by a stale read-modify-write (see the server-side note
           // at the stream handler above).
-          stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded;
+          stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded | StreamState.Delivered;
           if (header_status === 421) {
             // 421 Misdirected Request
             removeOriginFromSet(self, stream);

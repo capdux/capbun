@@ -11,6 +11,7 @@ pub struct YAML {
 
     static fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): ParseError!Expr {
         bun.analytics.Features.yaml_parse += 1;
+        source.checkParseableLen(log, "YAML document") catch return error.SyntaxError;
 
         let parser: Parser(.utf8) = .init(allocator, source.contents);
 
@@ -515,10 +516,16 @@ pub union(enum) TokenData<const encoding: Encoding> {
     scalar: TokenScalar<encoding>,
 }
 
+pub union(enum) ScalarStyle {
+    plain: bool,
+    block: void,
+    quoted: void,
+}
+
 pub struct TokenScalar<const encoding: Encoding> {
     const NodeScalar = Parser(encoding).NodeScalar;
     data: NodeScalar,
-    multiline: bool,
+    style: ScalarStyle,
 }
 
 pub struct ParserErrorPos {
@@ -961,7 +968,7 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
                 if (scalar_str.len() == _.resolved_scalar_len) {
                     scalar_str.deinit();
                     break :scalar {
-                        multiline: _.multiline,
+                        style: { plain: _.multiline },
                         data: scalar,
                     };
                 }
@@ -970,7 +977,7 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
             }
 
             break :scalar {
-                multiline: _.multiline,
+                style: { plain: _.multiline },
                 data: { string: scalar_str },
             };
         };
@@ -1495,7 +1502,7 @@ struct ParserLiteralScalarCtx<const enc: Encoding> {
             line: _.line,
             resolved: {
                 data: { string: { list: _.text } },
-                multiline: true,
+                style: .block,
             },
         });
     }
@@ -2772,12 +2779,16 @@ pub struct Parser<const enc: Encoding> {
                     if (value_tag != null) {
                         switch (_.token.data) {
                             .scalar => |s| {
-                                const ch = _.input[_.token.start.cast()];
-                                if (ch != '\'' && ch != '"' && !s.multiline) {
-                                    _.pos = _.token.start;
-                                    _.line = _.token.line;
-                                    _.line_indent = _.token.indent;
-                                    _.scan({})?;
+                                switch (s.style) {
+                                    .plain => |multiline| {
+                                        if (!multiline) {
+                                            _.pos = _.token.start;
+                                            _.line = _.token.line;
+                                            _.line_indent = _.token.indent;
+                                            _.scan({})?;
+                                        }
+                                    },
+                                    else => {},
                                 }
                             },
                             else => {},
@@ -3347,6 +3358,9 @@ pub struct Parser<const enc: Encoding> {
         sw_12: while (true) {
             switch (sw_v_12) {
             0 => {
+                if (!_.isEof()) {
+                    return error.UnexpectedCharacter;
+                }
                 return ctx.done();
             },
 
@@ -3678,6 +3692,9 @@ pub struct Parser<const enc: Encoding> {
         sw_13: while (true) {
             switch (sw_v_13) {
             0 => {
+                if (!_.isEof()) {
+                    return error.UnexpectedCharacter;
+                }
                 return ScanBlockHeaderResult{ indent: indent_indicator ?? .default, chomp: chomp ?? .default };
             },
             '1'..='9' => |digit| {
@@ -3718,6 +3735,9 @@ pub struct Parser<const enc: Encoding> {
                 if (_.next() == '#') {
                     _.inc(1);
                     while (!_.isBCharOrEof()) {
+                        if (_.next() == 0) {
+                            return error.UnexpectedCharacter;
+                        }
                         _.inc(1);
                     }
                 }
@@ -3793,6 +3813,9 @@ pub struct Parser<const enc: Encoding> {
         first_sw: while (true) {
             switch (first_ch) {
             0 => {
+                if (!_.isEof()) {
+                    return error.UnexpectedCharacter;
+                }
                 if (explicit_indent == null) {
                     ctx.content_indent = _.line_indent;
                 }
@@ -3867,6 +3890,9 @@ pub struct Parser<const enc: Encoding> {
         lit_sw: while (true) {
             switch (lit_ch) {
             0 => {
+                if (!_.isEof()) {
+                    return error.UnexpectedCharacter;
+                }
                 return ctx.done();
             },
 
@@ -4080,8 +4106,7 @@ pub struct Parser<const enc: Encoding> {
                     indent: scalar_indent,
                     line: scalar_line,
                     resolved: .{
-                        // TODO: wrong!
-                        multiline: _.line != scalar_line,
+                        style: .quoted,
                         data: {
                             string: {
                                 list: text,
@@ -4180,8 +4205,7 @@ pub struct Parser<const enc: Encoding> {
                     indent: scalar_indent,
                     line: scalar_line,
                     resolved: .{
-                        // TODO: wrong!
-                        multiline: _.line != scalar_line,
+                        style: .quoted,
                         data: {
                             string: { list: text },
                         },
@@ -4565,6 +4589,12 @@ pub struct Parser<const enc: Encoding> {
         scan_sw: while (true) {
             switch (scan_ch) {
             0 => {
+                // [1] c-printable excludes U+0000. `next()` returns NUL as
+                // the EOF sentinel, so a literal NUL in the input must be
+                // rejected here rather than silently ending the stream.
+                if (!_.isEof()) {
+                    return error.UnexpectedCharacter;
+                }
                 const start = _.pos;
                 _.token = Token(enc).eof({
                     start: start,
@@ -4868,6 +4898,9 @@ pub struct Parser<const enc: Encoding> {
 
                 _.inc(1);
                 while (!_.isBCharOrEof()) {
+                    if (_.next() == 0) {
+                        return error.UnexpectedCharacter;
+                    }
                     _.inc(1);
                 }
                 scan_ch = _.next(); continue :scan_sw;

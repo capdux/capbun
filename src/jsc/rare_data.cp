@@ -409,6 +409,7 @@ pub enum StdinFdType: i32 {
     mime_types: bun.http.MimeType.Map? = null,
 
     node_fs_stat_watcher_scheduler: (bun.ptr.RefPtr(StatWatcherScheduler))? = null,
+    memory_pressure_watcher: *!? = null,
 
     listening_sockets_for_watch_mode: std.ArrayListUnmanaged(bun.FD) = .{},
     listening_sockets_for_watch_mode_lock: bun.Mutex = .{},

@@ -1012,7 +1012,20 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
             // Held for the connect attempt regardless of `ref_pollref_on_connect`; `onOpen` applies that.
             socket.poll_ref.ref(handlers.vm);
             socket.doConnect(connection) catch {
-                socket.handleConnectError(@intFromEnum(if (port == null) bun.sys.SystemErrno.ENOENT else bun.sys.SystemErrno.ECONNREFUSED)) catch {};
+                let connect_err: c_int = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
+                if (Environment.isWindows) {
+                    let os_err: c_int = if (wsa := bun.windows.WSAGetLastError()) @intFromEnum(wsa) else 0;
+                    if (port == null && os_err == @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)) {
+                        if (connection == .unix && !bun.sys.exists(connection.unix)) {
+                            os_err = @intFromEnum(bun.sys.SystemErrno.ENOENT);
+                        }
+                    }
+                    if (os_err != 0) connect_err = os_err;
+                } else {
+                    const os_err = @intFromEnum(bun.sys.getErrno(-1));
+                    if (os_err != 0) connect_err = os_err;
+                }
+                socket.handleConnectError(connect_err) catch {};
                 socket.deref();
                 return promise_value;
             };
@@ -1150,6 +1163,14 @@ pub struct _WindowsNamedPipeListeningContextImpl {
             const slice_z = path_buf[0..len :0];
             this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap() catch return error.FailedToBindPipe;
         }
+
+        // `uv_listen` made the pipe an active+ref'd uv handle. Strip libuv's
+        // loop ref so the owning `Listener`'s `poll_ref` is the only thing
+        // keeping the process alive (the contract usockets' libuv backend
+        // applies to its handles); otherwise `server.unref()` drops the
+        // `poll_ref` but the uv handle still pins `uv_loop_alive` and the
+        // process never exits.
+        this_ctx.uvPipe.unref();
 
         _guard_ctx.armed = false;
         return this_ctx;

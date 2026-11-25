@@ -154,7 +154,7 @@ pub fn onOpen(ptr: AnyPtr, socket: SocketHandler(ssl)) void {
                 const active = HTTPContext(ssl).getTagged(ptr);
                 if (active.get(bun.http)) |client| {
                     _ = &client;
-                    _ = (blk_catch_0: { break :blk_catch_0 ((client.onOpen((comptime ssl), socket)) catch |__ce_0| { _ = &__ce_0; _ = HTTPContext(ssl).terminateSocket(socket);
+                    _ = (blk_catch_0: { break :blk_catch_0 ((client.onConnect((comptime ssl), socket)) catch |__ce_0| { _ = &__ce_0; _ = HTTPContext(ssl).terminateSocket(socket);
                     return; }); });
                     return;
                 }
@@ -181,6 +181,7 @@ pub fn onHandshake(ptr: AnyPtr, socket: SocketHandler(ssl), success: i32, ssl_er
                             if ((!client.checkServerIdentity((comptime ssl), socket, handshake_error, ssl_ptr, true))) {
                                 return;
                             }
+                            _ = bun.http.session_cache.arm(ssl_ptr);
                         }
                         return client.firstCall((comptime ssl), socket);
                     } else {
@@ -352,8 +353,9 @@ pub fn HTTPContext(comptime ssl: bool) type {
         secure: ?*bun.BoringSSL.c.SSL_CTX = null,
         active_h2_sessions: std.ArrayListUnmanaged(*bun.http.H2.ClientSession) = .{},
         pending_h2_connects: std.ArrayListUnmanaged(*bun.http.H2.PendingConnect) = .{},
+        session_cache: bun.http.session_cache.SessionCache = .{},
         
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.pending_unix_sockets = PooledUnixSocketHiveAllocator.init(); self_ptr.park_seq = 0; self_ptr.group = .{}; self_ptr.secure = null; self_ptr.active_h2_sessions = .{}; self_ptr.pending_h2_connects = .{}; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.pending_unix_sockets = PooledUnixSocketHiveAllocator.init(); self_ptr.park_seq = 0; self_ptr.group = .{}; self_ptr.secure = null; self_ptr.active_h2_sessions = .{}; self_ptr.pending_h2_connects = .{}; self_ptr.session_cache = .{}; return self_ptr; }
 
 pub fn markTaggedSocketAsDead(socket: HTTPSocket, tagged: ActiveSocket) void {
                 if (tagged.is(PooledSocket)) {
@@ -372,6 +374,11 @@ pub fn markSocketAsDead(socket: HTTPSocket) void {
 pub fn terminateSocket(socket: HTTPSocket) void {
                 _ = markSocketAsDead(socket);
                 _ = socket.close(.failure);
+        }
+
+pub fn failSocket(socket: HTTPSocket) void {
+                _ = markSocketAsDead(socket);
+                _ = socket.close(.fast_shutdown);
         }
 
 pub fn closeSocket(socket: HTTPSocket) void {
@@ -806,6 +813,7 @@ pub fn deinit(self: *@This()) void {
                 _ = self.group.closeAll();
                 _ = self.group.deinit();
                 if (ssl) {
+                    _ = self.session_cache.deinit();
                     if (self.secure) |s| {
                         _ = &s;
                         _ = bun.BoringSSL.c.SSL_CTX_free(s);

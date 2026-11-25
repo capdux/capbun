@@ -2033,6 +2033,28 @@ interface BunFetchRequestInit extends RequestInit {
    * ```
    */
   decompress?: boolean;
+
+  /**
+   * Compress the request body before sending and set the `Content-Encoding` header.
+   *
+   * - `true` compresses with `"gzip"` at the default level.
+   * - `"gzip" | "deflate" | "br" | "zstd"` selects the encoding at its default level.
+   * - `{ encoding, level? }` selects both encoding and compression level.
+   *
+   * Only buffered bodies (`string`, `ArrayBuffer`/`TypedArray`, `Blob`) are compressed;
+   * `ReadableStream` bodies, empty bodies, and requests that already specify
+   * `Content-Encoding` are sent as-is.
+   */
+  compress?:
+    | boolean
+    | "gzip"
+    | "deflate"
+    | "br"
+    | "zstd"
+    | {
+        encoding: "gzip" | "deflate" | "br" | "zstd";
+        level?: number;
+      };
 }
 
 /**

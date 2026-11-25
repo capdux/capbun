@@ -287,6 +287,9 @@ struct FreeSliceGuard {
                 if (_.buffer_action != null) {
                     @panic("Expected buffer action to be null");
                 }
+                // Erroring a stream discards queued chunks; drop the buffered
+                // bytes now instead of retaining them off-heap until GC.
+                _.buffer.clearAndFree();
                 _.pending.result = .{ .err = stream.err };
             },
             .done => {},
@@ -348,6 +351,13 @@ struct FreeSliceGuard {
         }
 
         if (_.has_received_last_chunk) {
+            // Surface a stored terminal error (set by `append(.err)` when no
+            // reader was waiting) instead of silently reporting `.done`.
+            if (_.pending.result == .err) {
+                const res = _.pending.result;
+                _.pending.result = .done;
+                return res;
+            }
             return .done;
         }
 

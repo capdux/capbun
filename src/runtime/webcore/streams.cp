@@ -779,7 +779,6 @@ export class NetworkSink {
         _.ended = true;
         _.done = true;
         _.signal.close(null);
-        _.cancel = true;
         _.finalize();
     }
 
@@ -836,14 +835,9 @@ export class NetworkSink {
             return .{ .result = _.endPromise.value() };
         }
         if (task := _.task) {
+            * = task;
             _.endPromise = JSPromise.Strong.init(_.globalThis);
-            let value = _.endPromise.value();
-            if (!_.ended) {
-                _.ended = true;
-                * = bun.handleOom(task.writeBytes("", true));
-                _.signal.close(null);
-            }
-            return .{ .result = value };
+            return .{ .result = _.endPromise.value() };
         }
         return .{ .result = JSValue.jsNumber(0) };
     }

@@ -18,6 +18,10 @@ import * as InternalState from "./InternalState.cp";
 import * as CertificateInfo from "./CertificateInfo.cp";
 import * as InitErrorMod from "./InitError.cp";
 pub const InitError = InitErrorMod.InitError;
+import * as SessionCacheMod from "./session_cache.cp";
+pub const session_cache = SessionCacheMod;
+import * as CompressBodyMod from "./compress_body.cp";
+pub const compress_body = CompressBodyMod;
 
 pub type HttpCallbackCtx = *!?;
 
@@ -485,6 +489,23 @@ pub fn unregisterAbortTrackerForSocket(
     }
 }
 
+/// Runs once per connection, from the uSockets open callback. A socket
+/// reused from the pool skips this and goes straight to `onOpen`,
+/// so socket options belong here, not there.
+pub fn onConnect(
+    client: *HTTPClient,
+    comptime is_ssl: bool,
+    socket: NewHTTPContext(is_ssl).HTTPSocket,
+): ! {
+    // Enable TCP keepalive so a half-open connection (peer closed but the
+    // FIN/RST never reached us) is detected in ~70s instead of hanging until
+    // an application-level timeout. TCP options do not apply to a unix socket.
+    if (!client.flags.disable_keepalive && client.unix_socket_path.length() == 0) {
+        * = socket.setKeepAlive(true, 60);
+    }
+    return onOpen(client, is_ssl, socket);
+}
+
 pub fn onOpen(
     client: *HTTPClient,
     comptime is_ssl: bool,
@@ -530,6 +551,17 @@ pub fn onOpen(
             }
 
             ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
+
+            if (session_cache.eligible(client)) {
+                const want_tunnel = client.http_proxy != null && client.url.isHTTPS();
+                session_cache.install(
+                    ssl_ptr,
+                    client.getSslCtx(true),
+                    client.connected_url.hostname,
+                    client.connected_url.getPortAuto(),
+                    if (want_tunnel || client.http_proxy == null) client.proxyAuthHash() else 0,
+                );
+            }
         }
     } else {
         client.firstCall(is_ssl, socket);
@@ -795,6 +827,9 @@ export @root @value struct HTTPClient {
     async_http_id: u32 = 0,
     hostname: string? = null,
     unix_socket_path: bun.jsc.ZigString.Slice = bun.jsc.ZigString.Slice.empty,
+    compress: CompressBodyMod.CompressOption? = null,
+    compressed_request_body: std.ArrayListUnmanaged(u8) = .{},
+    compressed_body_len: usize = 0,
 
     fn deinit(*_) {
         if (_.redirect.len > 0) {
@@ -805,6 +840,7 @@ export @root @value struct HTTPClient {
             bun.default_allocator.free(_.prev_redirect);
             _.prev_redirect = "";
         }
+        _.compressed_request_body.deinit(bun.default_allocator);
         if (auth := _.proxy_authorization) {
             _.allocator.free(auth);
             _.proxy_authorization = null;
@@ -1045,6 +1081,7 @@ export @root @value struct HTTPClient {
             bun.default_allocator.free(_.prev_redirect);
             _.prev_redirect = "";
         }
+        _.compressed_request_body.deinit(bun.default_allocator);
         if (_.state.flags.clear_hostname_on_redirect) {
             _.state.flags.clear_hostname_on_redirect = false;
             _.hostname = null;
@@ -1501,14 +1538,59 @@ export @root @value struct HTTPClient {
 
         const InitialRequestPayloadResult = _InitialRequestPayloadResult;
 
+        pub fn bodyLenForSend(*_): usize {
+            if (_.state.flags.body_compressed) {
+                return _.compressed_body_len;
+            }
+            return _.state.original_request_body.len();
+        }
+
+        pub fn compressBodyForSend(*_, into_shared: bool): ! {
+            const opt = _.compress ?? return;
+            if (_.state.flags.body_compressed) return;
+            if (_.state.original_request_body != .bytes) return;
+            const input = _.state.original_request_body.bytes;
+            if (input.len == 0) return;
+
+            const deflater = HTTPThread.http_thread.deflater();
+            const out = CompressBodyMod.compressInto(deflater, input, opt, &_.compressed_request_body)?;
+            let slice: []const u8 = undefined;
+            switch (out) {
+                .shared n => {
+                    if (into_shared) {
+                        slice = deflater.shared_buffer[0..n];
+                    } else {
+                        _.compressed_request_body.appendSlice(bun.default_allocator, deflater.shared_buffer[0..n]) catch return error.OutOfMemory;
+                        slice = _.compressed_request_body.items;
+                    }
+                },
+                .spilled => {
+                    slice = _.compressed_request_body.items;
+                },
+            }
+            _.compressed_body_len = slice.len;
+            _.state.request_body = slice;
+            _.state.flags.body_compressed = true;
+        }
+
+        fn spillCompressedBody(*_) {
+            if (!_.state.flags.body_compressed || _.compressed_request_body.items.len > 0 || _.state.request_body.len == 0) {
+                return;
+            }
+            _.compressed_request_body.appendSlice(bun.default_allocator, _.state.request_body) catch bun.outOfMemory();
+            const remaining_len = _.state.request_body.len;
+            _.state.request_body = _.compressed_request_body.items[0..remaining_len];
+        }
+
         noinline fn sendInitialRequestPayload(*_, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket): InitialRequestPayloadResult! {
+            _.compressBodyForSend(true)?;
             let request_body_buffer = _.getRequestBodySendBuffer();
             const _request_body_buffer_guard = DeinitGuard<@TypeOf(request_body_buffer)>{ ptr: &request_body_buffer };
             let temporary_send_buffer = request_body_buffer.toArrayList();
             const _temporary_send_buffer_guard = DeinitGuard<@TypeOf(temporary_send_buffer)>{ ptr: &temporary_send_buffer };
 
             const writer = &temporary_send_buffer.writer();
-            const request = _.buildRequest(_.state.original_request_body.len());
+            const request = _.buildRequest(_.bodyLenForSend());
 
             if (_ := _.http_proxy) {
                 if (_.url.isHTTPS()) {
@@ -1551,6 +1633,7 @@ export @root @value struct HTTPClient {
             const amount = writeToSocket(is_ssl, socket, to_send)?;
             if (comptime is_first_call) {
                 if (amount == 0) {
+                    _.spillCompressedBody();
                     return .{
                         .has_sent_headers = _.state.request_sent_len >= headers_len,
                         .has_sent_body = false,
@@ -1574,6 +1657,8 @@ export @root @value struct HTTPClient {
                 _.state.request_body.len == 0
             else
                 false;
+
+            _.spillCompressedBody();
 
             return .{
                 .has_sent_headers = has_sent_headers,
@@ -1858,6 +1943,10 @@ export @root @value struct HTTPClient {
                     log("send proxy headers", .{});
                     if (proxy := _.proxy_tunnel) {
                         _.setTimeout(socket);
+                        _.compressBodyForSend(false) catch (e) {
+                            _.closeAndFail(e, is_ssl, socket);
+                            return;
+                        };
                         let stack_buffer = std.heap.stackFallback(1024 * 16, bun.default_allocator);
                         const stack_allocator = stack_buffer.get();
                         let temporary_send_buffer = std.array_list.Managed(u8).fromOwnedSlice(stack_allocator, &stack_buffer.buffer);
@@ -1865,7 +1954,7 @@ export @root @value struct HTTPClient {
                         const _temporary_send_buffer_guard = DeinitGuard<@TypeOf(temporary_send_buffer)>{ ptr: &temporary_send_buffer };
                         const writer = &temporary_send_buffer.writer();
 
-                        const request = _.buildRequest(_.state.request_body.len);
+                        const request = _.buildRequest(_.bodyLenForSend());
                         writeRequest(
                             @TypeOf(writer),
                             writer,
@@ -1939,7 +2028,15 @@ export @root @value struct HTTPClient {
 
         pub fn closeAndFail(*_, err: anyerror, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
             log("closeAndFail: {s}", .{@errorName(err)});
-            NewHTTPContext(is_ssl).terminateSocket(socket);
+            if (comptime Environment.isMac) {
+                if (_.state.original_request_body.len() > 0) {
+                    NewHTTPContext(is_ssl).failSocket(socket);
+                } else {
+                    NewHTTPContext(is_ssl).terminateSocket(socket);
+                }
+            } else {
+                NewHTTPContext(is_ssl).terminateSocket(socket);
+            }
             _.fail(err);
         }
 
@@ -2054,6 +2151,9 @@ export @root @value struct HTTPClient {
             }
 
             if (should_continue == .finished) {
+                if (to_read.len > 0) {
+                    _.state.flags.allow_keepalive = false;
+                }
                 if (_.state.flags.is_redirect_pending) {
                     _.doRedirect(is_ssl, ctx, socket);
                     return;
@@ -2620,6 +2720,7 @@ export @root @value struct HTTPClient {
             let location: string = "";
             let pretend_304 = false;
             let is_server_sent_events = false;
+            let has_keep_alive_token = false;
             let header_i: usize = 0;
             while (header_i < response.headers.list.len) : (header_i += 1) {
                 const header = response.headers.list[header_i];
@@ -2690,13 +2791,13 @@ export @root @value struct HTTPClient {
                 } else if (header_hash == location_header_hash) {
                     location = header.value;
                 } else if (header_hash == connection_header_hash) {
-                    if (response.status_code >= 200 && response.status_code <= 299) {
-                        // HTTP headers are case-insensitive (RFC 7230)
-                        if (std.ascii.eqlIgnoreCase(header.value, "close")) {
-                            _.state.flags.allow_keepalive = false;
-                        } else if (std.ascii.eqlIgnoreCase(header.value, "keep-alive")) {
-                            _.state.flags.allow_keepalive = true;
-                        }
+                    // `close` applies on any status (RFC 9112 §9.6); only an
+                    // explicit `keep-alive` is gated on a 2xx success.
+                    if (std.ascii.eqlIgnoreCase(header.value, "close")) {
+                        _.state.flags.allow_keepalive = false;
+                    } else if (response.status_code >= 200 && response.status_code <= 299 && std.ascii.eqlIgnoreCase(header.value, "keep-alive")) {
+                        _.state.flags.allow_keepalive = true;
+                        has_keep_alive_token = true;
                     }
                 } else if (header_hash == last_modified_header_hash) {
                     pretend_304 = _.flags.force_last_modified && response.status_code > 199 && response.status_code < 300 && _.if_modified_since.len > 0 && strings.eql(_.if_modified_since, header.value);
@@ -2759,6 +2860,14 @@ export @root @value struct HTTPClient {
                 is_proxy_connect_failure = true;
             }
 
+            // RFC 9112 §9.3: an HTTP/1.0 response is non-persistent unless it says
+            // `Connection: keep-alive`. Deliberately below the CONNECT return above:
+            // proxies commonly answer CONNECT with `HTTP/1.0 200`, which says nothing
+            // about the tunneled origin, whose own response is what gets judged here.
+            if (response.minor_version == 0 && !has_keep_alive_token) {
+                _.state.flags.allow_keepalive = false;
+            }
+
             const status_code = response.status_code;
 
             if (status_code == 407) {
@@ -2767,7 +2876,11 @@ export @root @value struct HTTPClient {
             }
 
             // if is no redirect or if is redirect == "manual" just proceed
-            const is_redirect = status_code >= 300 && status_code <= 399;
+            // https://fetch.spec.whatwg.org/#redirect-status
+            const is_redirect = switch (status_code) {
+                301, 302, 303, 307, 308 => true,
+                else => false,
+            };
             if (is_redirect) {
                 if (!is_proxy_connect_failure && _.redirect_type == FetchRedirect.follow && location.len > 0 && _.remaining_redirect_count > 0) {
                     switch (status_code) {

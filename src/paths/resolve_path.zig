@@ -400,7 +400,8 @@ const SliceZU8 = [:0]const u8;
 const assert = bun.assert;
 const strings = bun.strings;
 threadlocal var parser_join_input_buffer: [4096]u8 = undefined;
-threadlocal var parser_buffer: [1024]u8 = undefined;
+const PARSER_BUFFER_LEN: usize = 1024;
+threadlocal var parser_buffer: [PARSER_BUFFER_LEN]u8 = undefined;
 pub threadlocal var join_buf: [4096]u8 = undefined;
 const IsSeparatorFunc = *const fn (u8) bool;
 const IsSeparatorFuncT = *const fn (type, anytype) bool;
@@ -414,7 +415,7 @@ const relative_bufs = bun.ThreadlocalBuffers(struct {
 pub const join = joinImpl;
 
 pub fn z(input: []const u8, output: *bun.PathBuffer) [:0]const u8 {
-        if ((input.len > bun.MAX_PATH_BYTES)) {
+        if ((input.len >= bun.MAX_PATH_BYTES)) {
             if (comptime bun.Environment.allow_assert) {
                 _ = @panic("path too long");
             }
@@ -1253,6 +1254,17 @@ pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, co
 
 pub fn normalizeString(str: []const u8, comptime allow_above_root: bool, comptime platform: Platform) []u8 {
         return normalizeStringBuf(str, (&parser_buffer), allow_above_root, platform, false);
+}
+
+pub fn normalizeStringSpill(spill: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, str: []const u8, comptime allow_above_root: bool, comptime platform: Platform) []const u8 {
+        const needed = (str.len + 1);
+        if ((needed <= PARSER_BUFFER_LEN)) {
+            return normalizeString(str, allow_above_root, platform);
+        }
+        if ((spill.items.len < needed)) {
+            _ = bun.handleOom(spill.resize(allocator, needed));
+        }
+        return normalizeStringBuf(str, spill.items, allow_above_root, platform, false);
 }
 
 pub fn normalizeStringZ(str: []const u8, comptime allow_above_root: bool, comptime platform: Platform) [:0]u8 {

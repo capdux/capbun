@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { compileFunction, createContext, runInContext, runInNewContext, runInThisContext, Script } from "node:vm";
+import { bunEnv, bunExe, isWindows, normalizeBunSnapshot } from "harness";
+import {
+  compileFunction,
+  constants,
+  createContext,
+  runInContext,
+  runInNewContext,
+  runInThisContext,
+  Script,
+} from "node:vm";
 
 function capture(_: any, _1?: any) {}
 
@@ -317,6 +326,171 @@ describe("Script", () => {
       message: "Class constructor Script cannot be invoked without 'new'",
     });
   });
+
+  test("can specify displayErrors", () => {
+    const src = 'throw new Error("boom")';
+    // displayErrors: false — no source-line/caret decoration on the stack.
+    try {
+      new Script(src, { filename: "t.vm" }).runInThisContext({ displayErrors: false });
+      expect.unreachable();
+    } catch (e: any) {
+      expect(e.message).toBe("boom");
+      expect(e.stack).not.toMatch(/^t\.vm:1\n/);
+    }
+    // displayErrors: true (default) — stack is decorated with the source line.
+    try {
+      new Script(src, { filename: "t.vm" }).runInThisContext({ displayErrors: true });
+      expect.unreachable();
+    } catch (e: any) {
+      expect(e.stack).toMatch(/^t\.vm:1\nthrow new Error/);
+    }
+    // Same for runInContext.
+    try {
+      new Script(src, { filename: "t.vm" }).runInContext(createContext({}), { displayErrors: false });
+      expect.unreachable();
+    } catch (e: any) {
+      expect(e.stack).not.toMatch(/^t\.vm:1\n/);
+    }
+  });
+  test("throws SyntaxError at construction like Node", () => {
+    // Node's vm.Script parses eagerly; the REPL depends on this.
+    expect(() => new Script("function {")).toThrow(SyntaxError);
+    expect(() => new Script("const x = ")).toThrow(SyntaxError);
+  });
+  test("compile-time SyntaxError has arrow-decorated stack (Node DecorateErrorStack)", () => {
+    // Node prepends `<url>:<line>\n<source>\n^\n\n` to compile-time SyntaxErrors
+    // from `new vm.Script`, unconditionally (independent of displayErrors).
+    for (const opts of [undefined, { displayErrors: true }, { displayErrors: false }]) {
+      let err: any;
+      try {
+        new Script("%%", opts);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(SyntaxError);
+      expect(err.stack.split("\n").slice(0, 4)).toEqual(["evalmachine.<anonymous>:1", "%%", "^", ""]);
+    }
+
+    // Custom filename + lineOffset: reported line is offset-adjusted, source
+    // line and caret still come from the physical position.
+    let err: any;
+    try {
+      new Script("1;\n%%", { filename: "foo.js", lineOffset: 5 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err.stack.split("\n").slice(0, 4)).toEqual(["foo.js:7", "%%", "^", ""]);
+
+    // Negative lineOffset: Node renders a signed line, still with source + caret.
+    // JSC clamps a negative provider start line to zero, so the offset is
+    // re-applied to the physical line when building the header.
+    err = undefined;
+    try {
+      new Script("1;\n%%", { lineOffset: -5 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err.stack.split("\n").slice(0, 4)).toEqual(["evalmachine.<anonymous>:-3", "%%", "^", ""]);
+
+    // columnOffset on line 1 is subtracted from the caret; on later lines it
+    // is not (Node applies it only to the first physical line).
+    err = undefined;
+    try {
+      new Script("   %%", { columnOffset: 10 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err.stack.split("\n").slice(0, 4)).toEqual(["evalmachine.<anonymous>:1", "   %%", "   ^", ""]);
+
+    err = undefined;
+    try {
+      new Script("1;\n   %%", { columnOffset: 10 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err.stack.split("\n").slice(0, 4)).toEqual(["evalmachine.<anonymous>:2", "   %%", "   ^", ""]);
+  });
+
+  test("a compile-time error without a position gets no arrow header", () => {
+    // Overflowing the parser's stack fails compilation without a line, like Node's RangeError.
+    let err: any;
+    try {
+      new Script(Buffer.alloc(200_000, "(").toString());
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(RangeError);
+    expect(err.stack.split("\n")[0]).toBe("RangeError: Maximum call stack size exceeded.");
+  });
+
+  test("vm.compileFunction compile-time SyntaxError is arrow-decorated like new Script", () => {
+    // Node decorates both compile paths, but compileFunction defaults filename to
+    // "" where new Script defaults to "evalmachine.<anonymous>". An explicitly
+    // empty filename is honored by both and renders as ":<line>".
+    const header = (fn: () => unknown) => {
+      let err: any;
+      try {
+        fn();
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(SyntaxError);
+      return err.stack.split("\n").slice(0, 4);
+    };
+
+    expect(header(() => compileFunction("%%"))).toEqual([":1", "%%", "^", ""]);
+    expect(header(() => compileFunction("%%", [], {}))).toEqual([":1", "%%", "^", ""]);
+    expect(header(() => compileFunction("%%", [], { filename: "" }))).toEqual([":1", "%%", "^", ""]);
+    expect(header(() => compileFunction("%%", [], { filename: "foo.js" }))).toEqual(["foo.js:1", "%%", "^", ""]);
+    expect(header(() => compileFunction("1;\n%%", [], { filename: "f.js", lineOffset: 5 }))).toEqual([
+      "f.js:7",
+      "%%",
+      "^",
+      "",
+    ]);
+    expect(header(() => compileFunction("1;\n%%", [], { lineOffset: -5 }))).toEqual([":-3", "%%", "^", ""]);
+
+    // An explicitly empty filename is not the same as an absent one.
+    expect(header(() => new Script("%%", { filename: "" }))).toEqual([":1", "%%", "^", ""]);
+
+    // The string-options form counts as "provided" too, "" included.
+    expect(header(() => new Script("%%", "myfile.js"))).toEqual(["myfile.js:1", "%%", "^", ""]);
+    expect(header(() => new Script("%%", ""))).toEqual([":1", "%%", "^", ""]);
+  });
+
+  test("a throwing Error.prepareStackTrace does not escape the compile-time SyntaxError", () => {
+    // Building the error materializes its stack, running a user
+    // prepareStackTrace; if that throws, the SyntaxError must still be what is
+    // thrown (node does the same) and the arrow header must survive.
+    const prev = Error.prepareStackTrace;
+    Error.prepareStackTrace = () => {
+      throw new Error("boom-from-prepareStackTrace");
+    };
+    try {
+      let err: any;
+      try {
+        new Script("%%");
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(SyntaxError);
+      expect(err.message).toBe("Unexpected token '%'");
+      expect(err.stack.split("\n").slice(0, 4)).toEqual(["evalmachine.<anonymous>:1", "%%", "^", ""]);
+
+      // Same eager-materialization path via vm.compileFunction.
+      let fnErr: any;
+      try {
+        compileFunction("%%");
+      } catch (e) {
+        fnErr = e;
+      }
+      expect(fnErr).toBeInstanceOf(SyntaxError);
+      expect(fnErr.message).toBe("Unexpected token '%'");
+      expect(fnErr.stack.split("\n").slice(0, 4)).toEqual([":1", "%%", "^", ""]);
+    } finally {
+      Error.prepareStackTrace = prev;
+    }
+  });
 });
 
 type TestRunInContextArg =
@@ -533,9 +707,6 @@ function testRunInContext({ fn, isIsolated, isNew }: TestRunInContextArg) {
   test.todo("can specify columnOffset", () => {
     //
   });
-  test.todo("can specify displayErrors", () => {
-    //
-  });
   test.todo("can specify timeout", () => {
     //
   });
@@ -707,15 +878,12 @@ resp.text().then((a) => {
 });
 
 test("can't use export syntax in vm.Script", () => {
-  expect(() => {
-    const script = new Script("export default {};");
-    script.runInThisContext();
-  }).toThrow({ name: "SyntaxError", message: "Unexpected keyword 'export'" });
-
-  expect(() => {
-    const script = new Script("export default {};");
-    script.createCachedData();
-  }).toThrow({ message: "createCachedData failed" });
+  // vm.Script now parses eagerly (like Node), so the SyntaxError surfaces at
+  // construction rather than at runInThisContext()/createCachedData().
+  expect(() => new Script("export default {};")).toThrow({
+    name: "SyntaxError",
+    message: "Unexpected keyword 'export'",
+  });
 });
 
 test("rejects invalid bytecode", () => {
@@ -752,6 +920,104 @@ test("can't use bytecode from a different script", () => {
   expect(secondScript.cachedDataRejected).toBeTrue();
   expect(firstScript.runInThisContext()).toBe(2);
   expect(secondScript.runInThisContext()).toBe(4);
+});
+
+describe("Script compiles its source once and links that in every context it runs in", () => {
+  // Runs Script(s) in fresh contexts, keeping what every run produced alive (each run's wrapper function
+  // pins that run's ProgramExecutable), and reports how many UnlinkedProgramCodeBlock cells (one per
+  // compile of a program) the runs after the first added. BUN_JSC_useCodeCache=0 takes JSC's own cache
+  // out of the picture, so a Script that does not hold on to its compile adds one per context.
+  const fixture = String.raw`
+    const { Script, createContext } = require("node:vm");
+    const { heapStats } = require("bun:jsc");
+    let body = "";
+    for (let i = 0; i < 50; i++) body += "function f" + i + "(a) { return a + " + i + "; }\n";
+    const source = "(function (exports) {\n" + body + "exports.sum = f0(1) + f49(1);\n})";
+    const options = process.env.VM_FIXTURE_CACHED_DATA ? { cachedData: new Script(source).createCachedData() } : {};
+    const scripts = [new Script(source, options)];
+    if (process.env.VM_FIXTURE_TWO_SCRIPTS) scripts.push(new Script(source, options));
+    const programBlocks = () => {
+      Bun.gc(true);
+      return heapStats().objectTypeCounts.UnlinkedProgramCodeBlock ?? 0;
+    };
+    const keep = [];
+    let afterFirstContext = 0;
+    for (let i = 0; i < 6; i++) {
+      const context = createContext({});
+      for (const script of scripts) {
+        const wrapper = script.runInContext(context);
+        const exports = {};
+        wrapper(exports);
+        if (exports.sum !== 51) throw new Error("context " + i + " computed " + exports.sum);
+        keep.push(wrapper);
+      }
+      if (i === 0) afterFirstContext = programBlocks();
+    }
+    console.log(JSON.stringify({
+      programBlocksAddedByLaterContexts: programBlocks() - afterFirstContext,
+      cachedDataRejected: scripts.map(script => script.cachedDataRejected),
+      cachedDataStillProducible: scripts.every(script => script.createCachedData().length > 0),
+    }));
+  `;
+
+  async function runFixture(extraEnv: Record<string, string>) {
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", fixture],
+      env: { ...bunEnv, BUN_JSC_useCodeCache: "0", ...extraEnv },
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const { programBlocksAddedByLaterContexts, ...rest } = JSON.parse(stdout);
+    // A Script that recompiles adds one per Script per context (+5 / +10 here). Slightly negative is
+    // possible: garbage from before the first measurement may only be collected by the second one.
+    expect(programBlocksAddedByLaterContexts).toBeLessThanOrEqual(0);
+    return rest;
+  }
+
+  test.concurrent("one Script", async () => {
+    expect(await runFixture({})).toEqual({ cachedDataRejected: [null], cachedDataStillProducible: true });
+  });
+
+  test.concurrent("two Scripts with the same source", async () => {
+    expect(await runFixture({ VM_FIXTURE_TWO_SCRIPTS: "1" })).toEqual({
+      cachedDataRejected: [null, null],
+      cachedDataStillProducible: true,
+    });
+  });
+
+  test.concurrent("a Script constructed with accepted cachedData", async () => {
+    expect(await runFixture({ VM_FIXTURE_CACHED_DATA: "1" })).toEqual({
+      cachedDataRejected: [false],
+      cachedDataStillProducible: true,
+    });
+  });
+
+  test("each context gets its own global declarations", () => {
+    const script = new Script(
+      "var counter = (typeof counter === 'number' ? counter : 0) + 1; function whoami() { return tag; } counter;",
+    );
+    const first = createContext({ tag: "first" });
+    const second = createContext({ tag: "second" });
+    expect(script.runInContext(first)).toBe(1);
+    expect(script.runInContext(second)).toBe(1);
+    expect(script.runInContext(first)).toBe(2);
+    expect(runInContext("whoami()", first)).toBe("first");
+    expect(runInContext("whoami()", second)).toBe("second");
+    expect(first.counter).toBe(2);
+    expect(second.counter).toBe(1);
+  });
+
+  test("source positions are the same in every context the compile is linked into", () => {
+    const script = new Script("\n\nnew Error('where').stack.split('\\n')[1].trim()", {
+      filename: "shared.js",
+      lineOffset: 100,
+    });
+    for (const context of [createContext({}), createContext({})]) {
+      expect(script.runInContext(context)).toBe("at shared.js:103:10");
+    }
+  });
 });
 
 describe("codeGeneration options", () => {
@@ -874,21 +1140,47 @@ describe("codeGeneration options", () => {
   });
 });
 
-test("Loader is not defined in vm context", () => {
-  // Test with empty context - internal Loader should not leak through
-  const emptyContext = createContext({});
-  expect(runInContext("typeof Loader;", emptyContext)).toBe("undefined");
-  expect(runInContext("Object.hasOwn(globalThis, 'Loader');", emptyContext)).toBe(false);
+describe("the options argument", () => {
+  // Node checks `options` with validateObject() (lib/vm.js), which rejects
+  // arrays and functions as well as null and primitives.
+  const script = new Script("1 + 1;");
+  const entryPoints: Record<string, (options: unknown) => unknown> = {
+    "createContext()": options => createContext({}, options as any),
+    "new Script()": options => new Script("1 + 1;", options as any),
+    "compileFunction()": options => compileFunction("return 1 + 1;", [], options as any),
+    "vm.runInThisContext()": options => runInThisContext("1 + 1;", options as any),
+    "Script#runInThisContext()": options => script.runInThisContext(options as any),
+    "Script#runInContext()": options => script.runInContext(createContext({}), options as any),
+    "Script#runInNewContext()": options => script.runInNewContext({}, options as any),
+  };
+  const invalidOptions: [description: string, options: unknown, received: string][] = [
+    ["an array", [], "an instance of Array"],
+    ["a Proxy around an array", new Proxy([], {}), "an instance of Array"],
+    ["a function", function foo() {}, "function foo"],
+    ["null", null, "null"],
+    ["a number", 1, "type number (1)"],
+  ];
 
-  // Test with context that has a user-provided Loader - should be preserved
-  const customLoader = { custom: true, load: () => "loaded" };
-  const customContext = createContext({ Loader: customLoader });
-  expect(runInContext("typeof Loader;", customContext)).toBe("object");
-  expect(runInContext("Loader.custom;", customContext)).toBe(true);
-  expect(runInContext("Loader.load();", customContext)).toBe("loaded");
-  expect(runInContext("Object.hasOwn(globalThis, 'Loader');", customContext)).toBe(true);
-  // Ensure internal JSC Loader properties are not leaking through
-  expect(runInContext("typeof Loader.registry;", customContext)).toBe("undefined");
+  describe.each(Object.entries(entryPoints))("%s", (_, run) => {
+    test.each(invalidOptions)("rejects %s", (_, options, received) => {
+      expect(() => run(options)).toThrow(
+        expect.objectContaining({
+          name: "TypeError",
+          code: "ERR_INVALID_ARG_TYPE",
+          message: `The "options" argument must be of type object. Received ${received}`,
+        }),
+      );
+    });
+  });
+
+  test("vm.runInContext() and vm.runInNewContext() copy options into a fresh object like Node", () => {
+    // lib/vm.js spreads `options` before handing it to Script, so any
+    // non-string value behaves like passing no options to these two.
+    for (const [, options] of invalidOptions) {
+      expect(runInContext("1 + 1;", createContext({}), options as any)).toBe(2);
+      expect(runInNewContext("1 + 1;", {}, options as any)).toBe(2);
+    }
+  });
 });
 
 describe("context options with throwing getters", () => {
@@ -956,7 +1248,629 @@ describe("context options with throwing getters", () => {
   });
 });
 
+describe("DONT_CONTEXTIFY", () => {
+  test("globalThis prototype chain stays inside the sandbox realm", () => {
+    const ctx = createContext(constants.DONT_CONTEXTIFY);
+    const sandboxObjectPrototype = runInContext("Object.prototype", ctx);
+
+    expect(sandboxObjectPrototype).not.toBe(Object.prototype);
+    expect(Object.getPrototypeOf(ctx)).not.toBe(Object.prototype);
+
+    // The full prototype chain of the sandbox's globalThis must stay inside the
+    // sandbox realm and terminate at the sandbox's own Object.prototype.
+    const chain: object[] = [];
+    for (let proto = Object.getPrototypeOf(ctx); proto !== null; proto = Object.getPrototypeOf(proto)) {
+      chain.push(proto);
+    }
+    expect(chain).not.toContain(Object.prototype);
+    expect(chain.at(-1)).toBe(sandboxObjectPrototype);
+
+    // globalThis.constructor.constructor must resolve to the sandbox's Function,
+    // so code it creates runs in the sandbox realm where host globals are absent.
+    expect(runInContext(`globalThis.constructor.constructor("return typeof Bun")()`, ctx)).toBe("undefined");
+    expect(runInContext(`globalThis.constructor.constructor("return typeof process")()`, ctx)).toBe("undefined");
+    expect(runInContext(`globalThis.constructor.constructor`, ctx)).toBe(runInContext(`Function`, ctx));
+    expect(runInContext(`globalThis.constructor.constructor`, ctx)).not.toBe(Function);
+
+    // Script#runInNewContext takes the same code path.
+    expect(
+      new Script(`globalThis.constructor.constructor("return typeof Bun")()`).runInNewContext(
+        constants.DONT_CONTEXTIFY,
+      ),
+    ).toBe("undefined");
+  });
+
+  test("writing to Object.getPrototypeOf(globalThis) does not leak to the host realm", () => {
+    const ctx = createContext(constants.DONT_CONTEXTIFY);
+    try {
+      runInContext(`Object.getPrototypeOf(globalThis).__vmDontContextifyLeakCheck = true`, ctx);
+      expect(({} as any).__vmDontContextifyLeakCheck).toBeUndefined();
+      expect((Object.prototype as any).__vmDontContextifyLeakCheck).toBeUndefined();
+      // The write lands somewhere inside the sandbox realm, so the sandbox's
+      // globalThis still sees it through its own prototype chain.
+      expect(runInContext(`globalThis.__vmDontContextifyLeakCheck`, ctx)).toBe(true);
+    } finally {
+      delete (Object.prototype as any).__vmDontContextifyLeakCheck;
+    }
+  });
+
+  test("basic usage still works", () => {
+    const ctx = createContext(constants.DONT_CONTEXTIFY);
+    expect(runInContext("globalThis", ctx)).toBe(ctx);
+    expect(typeof ctx.Array).toBe("function");
+
+    runInContext("globalThis.fromInside = 123", ctx);
+    expect(ctx.fromInside).toBe(123);
+
+    ctx.fromOutside = 456;
+    expect(runInContext("fromOutside", ctx)).toBe(456);
+  });
+});
+
+test("Loader is not defined in vm context", () => {
+  // Test with empty context - internal Loader should not leak through
+  const emptyContext = createContext({});
+  expect(runInContext("typeof Loader;", emptyContext)).toBe("undefined");
+  expect(runInContext("Object.hasOwn(globalThis, 'Loader');", emptyContext)).toBe(false);
+
+  // Test with context that has a user-provided Loader - should be preserved
+  const customLoader = { custom: true, load: () => "loaded" };
+  const customContext = createContext({ Loader: customLoader });
+  expect(runInContext("typeof Loader;", customContext)).toBe("object");
+  expect(runInContext("Loader.custom;", customContext)).toBe(true);
+  expect(runInContext("Loader.load();", customContext)).toBe("loaded");
+  expect(runInContext("Object.hasOwn(globalThis, 'Loader');", customContext)).toBe(true);
+  // Ensure internal JSC Loader properties are not leaking through
+  expect(runInContext("typeof Loader.registry;", customContext)).toBe("undefined");
+});
+
+test("node:vm native Module prototype methods reject non-module receivers", async () => {
+  // The native NodeVMModule prototype (reachable via the kNative own-symbol on a
+  // vm.SourceTextModule instance) must validate its receiver. Calling its methods
+  // with a plain object as `this` must throw a TypeError instead of reinterpreting
+  // the object's inline property storage as native module fields.
+  const fixture = `
+    const vm = require("node:vm");
+    const mod = new vm.SourceTextModule('import "./dep.js"; export const a = 1;');
+    const kNative = Object.getOwnPropertySymbols(mod).find(s => s.description === "kNative");
+    const native = mod[kNative];
+    const proto = Object.getPrototypeOf(native);
+    const fake = { p1: 1n, p2: 0x41414141n };
+
+    const results = [];
+    for (const name of ["getStatus", "getStatusCode", "getModuleRequests", "createModuleRecord", "getError"]) {
+      if (typeof proto[name] !== "function") {
+        results.push(name + ": missing");
+        continue;
+      }
+      try {
+        const value = proto[name].call(fake);
+        results.push(name + ": returned " + String(value));
+      } catch (e) {
+        results.push(name + ": " + (e instanceof TypeError ? "TypeError" : "unexpected " + e));
+      }
+    }
+    const identifierGetter = Object.getOwnPropertyDescriptor(proto, "identifier")?.get;
+    if (typeof identifierGetter !== "function") {
+      results.push("identifier: missing");
+    } else {
+      try {
+        const value = identifierGetter.call(fake);
+        results.push("identifier: returned " + String(value));
+      } catch (e) {
+        results.push("identifier: " + (e instanceof TypeError ? "TypeError" : "unexpected " + e));
+      }
+    }
+
+    // The legitimate receiver still works through the same native entry points.
+    results.push("status: " + proto.getStatus.call(native));
+    results.push("requests: " + JSON.stringify(proto.getModuleRequests.call(native).map(r => r[0])));
+    console.log(results.join("\\n"));
+  `;
+
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "-e", fixture],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+  expect(stderr).toBe("");
+  expect(normalizeBunSnapshot(stdout)).toMatchInlineSnapshot(`
+    "getStatus: TypeError
+    getStatusCode: TypeError
+    getModuleRequests: TypeError
+    createModuleRecord: TypeError
+    getError: TypeError
+    identifier: TypeError
+    status: unlinked
+    requests: [\"./dep.js\"]"
+  `);
+  expect(exitCode).toBe(0);
+});
+
+test("node:vm SourceTextModule.link() rejects non-module entries in the moduleNatives array", async () => {
+  // The native link(specifiers, moduleNatives, scriptFetcher) entry point validates
+  // that the two arguments are arrays but must also validate every element of
+  // moduleNatives. A plain object whose inline property storage holds caller-chosen
+  // doubles must produce a clean TypeError instead of being reinterpreted as a
+  // native Module and having those doubles read back as internal pointers.
+  const fixture = `
+    const vm = require("node:vm");
+
+    const mod = new vm.SourceTextModule('import "x";');
+    const kNative = Object.getOwnPropertySymbols(mod).find(s => s.description === "kNative");
+    const native = mod[kNative];
+    native.createModuleRecord();
+
+    const results = [];
+    try {
+      native.link(["x"], [{ a: 1.1, b: 2.2, c: 3.3, d: 4.4 }], 0);
+      results.push("link(plain object): returned");
+    } catch (e) {
+      results.push("link(plain object): " + (e instanceof TypeError ? "TypeError " + e.code : "unexpected " + e));
+    }
+    results.push("status after rejected link: " + native.getStatus());
+
+    // A real native module in the same slot still links.
+    const dep = new vm.SourceTextModule("export const x = 1;");
+    const depNative = dep[kNative];
+    depNative.createModuleRecord();
+    native.link(["x"], [depNative], 0);
+    results.push("status after valid link: " + native.getStatus());
+    console.log(results.join("\\n"));
+  `;
+
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "-e", fixture],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+  expect(stderr).toBe("");
+  expect(normalizeBunSnapshot(stdout)).toMatchInlineSnapshot(`
+    "link(plain object): TypeError ERR_INVALID_THIS
+    status after rejected link: unlinked
+    status after valid link: unlinked"
+  `);
+  expect(exitCode).toBe(0);
+});
+
+test("node:vm SourceTextModule.link() rejects holey and mismatched argument arrays", async () => {
+  // Holes in the argument arrays surface as empty JSValues from getDirectIndex,
+  // which pass isCell() with a null cell — link() must reject them (and a
+  // specifiers/moduleNatives length mismatch) instead of crashing.
+  const fixture = `
+    const vm = require("node:vm");
+    const mod = new vm.SourceTextModule('import { z } from "x"; export const w = z;');
+    const kNative = Object.getOwnPropertySymbols(mod).find(s => s.description === "kNative");
+    const native = mod[kNative];
+    native.createModuleRecord();
+
+    const results = [];
+    const attempt = (label, specifiers, moduleNatives) => {
+      try {
+        native.link(specifiers, moduleNatives, 0);
+        results.push(label + ": returned");
+      } catch (e) {
+        results.push(label + ": " + (e instanceof TypeError ? "TypeError" : e.constructor.name) + " " + e.code);
+      }
+    };
+
+    const dep = new vm.SourceTextModule("export const z = 1;");
+    const depNative = dep[kNative];
+    depNative.createModuleRecord();
+
+    attempt("holey both", new Array(1), new Array(1));
+    attempt("holey specifiers", new Array(1), [depNative]);
+    attempt("holey moduleNatives", ["x"], new Array(1));
+    attempt("length mismatch", ["x"], []);
+    attempt("non-string specifier", [42], [depNative]);
+    results.push("status: " + native.getStatus());
+    attempt("valid", ["x"], [depNative]);
+    results.push("status: " + native.getStatus());
+    console.log(results.join("\\n"));
+  `;
+
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "-e", fixture],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+  expect(stderr).toBe("");
+  expect(normalizeBunSnapshot(stdout)).toMatchInlineSnapshot(`
+    "holey both: TypeError ERR_INVALID_ARG_TYPE
+    holey specifiers: TypeError ERR_INVALID_ARG_TYPE
+    holey moduleNatives: TypeError ERR_INVALID_THIS
+    length mismatch: TypeError ERR_INVALID_ARG_VALUE
+    non-string specifier: TypeError ERR_INVALID_ARG_TYPE
+    status: unlinked
+    valid: returned
+    status: unlinked"
+  `);
+  expect(exitCode).toBe(0);
+});
+
+describe("node:vm SourceTextModule cyclic graph linking", () => {
+  // Building a cyclic SourceTextModule graph and linking + evaluating each
+  // module from inside the linker callback (instead of linking the whole graph
+  // first and evaluating once) used to segfault: instantiate() runs JSC's
+  // whole-graph record->link(), which walks into a dependency whose own link()
+  // has not run yet (its loadedModules() is empty), dereferencing an end()
+  // iterator. Bun must instead throw a catchable ERR_VM_MODULE_LINK_FAILURE,
+  // matching Node. See https://github.com/oven-sh/bun/issues/31623.
+  test("link + evaluate inside the linker throws instead of crashing", async () => {
+    const fixture = `
+      const vm = require("node:vm");
+      const ctx = vm.createContext({ globalThis });
+      const sources = {
+        a: 'import { b } from "b"; export const a = "A"; export const ab = () => b;',
+        b: 'import { a } from "a"; export const b = "B"; export const ba = () => a;',
+      };
+      const built = new Map();
+      async function ensure(id) {
+        const existing = built.get(id);
+        if (existing) return existing;
+        const m = new vm.SourceTextModule(sources[id], { context: ctx, identifier: id });
+        built.set(id, m);
+        await m.link(async spec => await ensure(spec));
+        await m.evaluate();
+        return m;
+      }
+      try {
+        const root = await ensure("a");
+        console.log("UNEXPECTED_OK " + Object.keys(root.namespace).join(","));
+      } catch (e) {
+        console.log("CAUGHT " + e.code + " " + e.message);
+      }
+    `;
+
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", fixture],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+    expect(stderr).toBe("");
+    expect(stdout.trim()).toBe("CAUGHT ERR_VM_MODULE_LINK_FAILURE request for 'b' is not in cache");
+    expect(exitCode).toBe(0);
+  });
+
+  test("a self-importing module links + evaluates without crashing", async () => {
+    const fixture = `
+      const vm = require("node:vm");
+      const ctx = vm.createContext({ globalThis });
+      const sources = { self: 'import {} from "self"; export const x = 1;' };
+      const built = new Map();
+      async function ensure(id) {
+        const existing = built.get(id);
+        if (existing) return existing;
+        const m = new vm.SourceTextModule(sources[id], { context: ctx, identifier: id });
+        built.set(id, m);
+        await m.link(async spec => await ensure(spec));
+        await m.evaluate();
+        return m;
+      }
+      const root = await ensure("self");
+      console.log("OK " + Object.keys(root.namespace).join(","));
+    `;
+
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", fixture],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+    expect(stderr).toBe("");
+    expect(stdout.trim()).toBe("OK x");
+    expect(exitCode).toBe(0);
+  });
+
+  test("the canonical link-whole-graph-then-evaluate pattern still works", async () => {
+    const fixture = `
+      const vm = require("node:vm");
+      const ctx = vm.createContext({ globalThis });
+      const sources = {
+        a: 'import { b } from "b"; export const a = "A"; export const ab = () => b;',
+        b: 'import { a } from "a"; export const b = "B"; export const ba = () => a;',
+      };
+      const built = new Map();
+      function get(id) {
+        let m = built.get(id);
+        if (m) return m;
+        m = new vm.SourceTextModule(sources[id], { context: ctx, identifier: id });
+        built.set(id, m);
+        return m;
+      }
+      const root = get("a");
+      await root.link(spec => get(spec));
+      await root.evaluate();
+      const nsA = root.namespace;
+      const nsB = built.get("b").namespace;
+      console.log("ab=" + nsA.ab() + " ba=" + nsB.ba());
+    `;
+
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", fixture],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+    expect(stderr).toBe("");
+    expect(stdout.trim()).toBe("ab=B ba=A");
+    expect(exitCode).toBe(0);
+  });
+});
+
+test("node:vm Object.defineProperty on the context global when the sandbox is an uncacheable dictionary holding an accessor for a built-in", async () => {
+  // Regression: NodeVMGlobalObject::defineOwnProperty used a single PropertySlot
+  // for both the global-object lookup and the sandbox lookup. When the first
+  // lookup fills the slot as cacheable (e.g. Array is a lazy CustomGetterSetter
+  // on a non-dictionary global) and the sandbox has transitioned to an
+  // uncacheable dictionary with an accessor for the same name, the second lookup
+  // would hit setGetterSlot, which asserts the slot is still CachingDisallowed.
+  // Debug builds aborted; this test asserts the Node-matching behaviour so
+  // release lanes still exercise the path.
+  const fixture = `
+    const vm = require("node:vm");
+    const sandbox = {};
+    for (let i = 0; i < 200; i++) { sandbox["k" + i] = i; delete sandbox["k" + i]; }
+    Object.defineProperty(sandbox, "Array", { get: () => Array, configurable: true });
+    vm.createContext(sandbox);
+    const result = vm.runInContext(
+      'Object.defineProperty(this, "Array", { value: 1, configurable: true, writable: true }); Array',
+      sandbox,
+    );
+    console.log(JSON.stringify({ result, sandboxArray: sandbox.Array }));
+  `;
+
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "-e", fixture],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+
+  expect(stderr).toBe("");
+  expect(stdout.trim()).toBe(JSON.stringify({ result: 1, sandboxArray: 1 }));
+  expect(exitCode).toBe(0);
+});
+
+// `timeout` is wall-clock, as in Node: a script that spends the budget off-CPU (blocked in
+// sleepSync / Atomics.wait / I/O) times out too. It used to be built on JSC's CPU-time watchdog,
+// which not only let such a script finish "normally" but also could not be retired afterwards: its
+// stale deadline was serviced later and terminated the *caller's* own JS once it had used up the
+// script's leftover CPU budget (and asserted on debug builds).
+test.concurrent("vm timeout is wall-clock and leaves nothing armed against the caller afterwards", async () => {
+  await using proc = Bun.spawn({
+    cmd: [
+      bunExe(),
+      "-e",
+      `
+      const vm = require("node:vm");
+      const sleepSync = (ms) => Bun.sleepSync(ms);   // off-CPU and not interruptible by the deadline's trap
+      try {
+        vm.runInNewContext("sleepSync(80)", { sleepSync }, { timeout: 20 });
+        console.log("finished");
+      } catch (e) {
+        console.log("threw", e.code);
+      }
+      // Same synchronous section: burn CPU well past the script's leftover CPU budget.
+      const t = performance.now();
+      let s = 0;
+      while (performance.now() - t < 300) s += Math.sqrt(s + 1);
+      console.log("caller ran on", s > 0);
+      const script = new vm.Script("sleepSync(80)");
+      try {
+        script.runInThisContext({ timeout: 20 });
+        console.log("finished");
+      } catch (e) {
+        console.log("threw", e.code);
+      }
+      setImmediate(() => console.log("event loop ran on"));
+      `,
+    ],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe(
+    "threw ERR_SCRIPT_EXECUTION_TIMEOUT\ncaller ran on true\nthrew ERR_SCRIPT_EXECUTION_TIMEOUT\nevent loop ran on\n",
+  );
+  expect(exitCode).toBe(0);
+});
+
+test.concurrent("a vm timeout that never fires leaves nothing behind either", async () => {
+  await using proc = Bun.spawn({
+    cmd: [
+      bunExe(),
+      "-e",
+      `
+      const vm = require("node:vm");
+      // Runs that finish well inside their timeout: nothing they armed may hit later runs or the caller,
+      // which stays busy — in script and idle — for far longer than that timeout afterwards.
+      const ctx = vm.createContext({});
+      for (let i = 0; i < 50; i++) vm.runInContext("1 + 1", ctx, { timeout: 100 });
+      const t = performance.now();
+      let s = 0;
+      while (performance.now() - t < 500) s += Math.sqrt(s + 1);   // 5x the timeout, in script
+      await new Promise(r => setTimeout(r, 200));                    // and idle in the loop
+      for (let i = 0; i < 20; i++) vm.runInContext("2 + 2", ctx, { timeout: 100 });
+      console.log("ok");
+      `,
+    ],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe("ok\n");
+  expect(exitCode).toBe(0);
+});
+
+// The following tests run unbounded `for(;;)` loops that only the mechanism under test can stop, so they run
+// in a child: a regression then fails that child (spawn timeout) instead of hanging this file.
+// As in Node: microtasks a script left on an afterEvaluate context when its synchronous part timed out run
+// at the next evaluation's checkpoint, under that run's timeout (never unbounded); a checkpoint that is
+// itself cut short discards the rest; the context stays usable throughout.
+test.concurrent("microtasks left on an afterEvaluate context by a timed-out script stay bounded", async () => {
+  const code = `
+    const vm = require("node:vm");
+    const ctx = vm.createContext({ log: console.log }, { microtaskMode: "afterEvaluate" });
+    const run = (src, timeout) => { try { return String(vm.runInContext(src, ctx, { timeout })); } catch (e) { return e.code; } };
+    console.log(run("Promise.resolve().then(() => log('leftover ran')); for (;;) {}", 20));
+    console.log(run("1 + 1", 1000));
+    console.log(run("Promise.resolve().then(() => { for (;;) {} }); 2", 20));
+    console.log(run("3", 1000));
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe("ERR_SCRIPT_EXECUTION_TIMEOUT\nleftover ran\n2\nERR_SCRIPT_EXECUTION_TIMEOUT\n3\n");
+  expect(exitCode).toBe(0);
+});
+
+// POSIX-only: a real SIGINT, sent from a worker while the main thread is stuck in a breakOnSigint run.
+test.skipIf(isWindows)(
+  "breakOnSigint interrupts a stuck run with ERR_SCRIPT_EXECUTION_INTERRUPTED and nothing lingers",
+  async () => {
+    const code = `
+    const vm = require("node:vm");
+    const { Worker } = require("node:worker_threads");
+    new Worker('setTimeout(() => process.kill(process.pid, "SIGINT"), 100)', { eval: true });
+    let code_;
+    try { vm.runInNewContext("for (;;) {}", {}, { breakOnSigint: true }); } catch (e) { code_ = e.code; }
+    const t = Date.now(); while (Date.now() - t < 50);   // still running normally afterwards
+    // ...and SIGINT handling is back to the default-less state Node leaves it in: a listener sees the next one.
+    process.on("SIGINT", () => { console.log(code_, "second SIGINT observed"); process.exit(0); });
+    process.kill(process.pid, "SIGINT");
+    setTimeout(() => { console.log("no second SIGINT"); process.exit(1); }, 5000);
+  `;
+    await using proc = Bun.spawn({ cmd: [bunExe(), "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(stderr).toBe("");
+    expect(stdout).toBe("ERR_SCRIPT_EXECUTION_INTERRUPTED second SIGINT observed\n");
+    expect(exitCode).toBe(0);
+  },
+  30_000,
+);
+
+// POSIX-only for the same reason. As in Node, one SIGINT interrupts only the innermost breakOnSigint run.
+test.skipIf(isWindows)("a SIGINT interrupts only the innermost of nested breakOnSigint runs", async () => {
+  const code = `
+    const vm = require("node:vm");
+    const { Worker } = require("node:worker_threads");
+    new Worker('setTimeout(() => process.kill(process.pid, "SIGINT"), 100)', { eval: true });
+    const r = vm.runInNewContext(
+      'let inner; try { vm.runInNewContext("for (;;) {}", {}, { breakOnSigint: true }); } catch (e) { inner = e.code; } "outer completed, inner " + inner',
+      { vm }, { breakOnSigint: true });
+    console.log(r);
+    process.exit(0);
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe("outer completed, inner ERR_SCRIPT_EXECUTION_INTERRUPTED\n");
+  expect(exitCode).toBe(0);
+});
+
+test("nested vm runs each keep their own deadline", async () => {
+  const code = `
+    const vm = require("node:vm");
+    const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    const codeOf = (fn) => { try { fn(); return "returned"; } catch (e) { return e.code; } };
+    // Inner run times out; the outer script catches that (catchable) error and carries on within its budget.
+    console.log(vm.runInNewContext(
+      'let r; try { vm.runInNewContext("for(;;){}", {}, { timeout: 20 }) } catch (e) { r = "inner:" + e.code } r',
+      { vm }, { timeout: 5000 }));
+    // Outer deadline passes while the inner run is on the stack: the outer run is what times out.
+    console.log(codeOf(() => vm.runInNewContext('vm.runInNewContext("for(;;){}", {}, { timeout: 5000 })', { vm }, { timeout: 30 })));
+    // Both deadlines pass before the inner run ends (it is blocked off-CPU past both): the inner
+    // run's error is caught by the outer script, which must nevertheless still be stopped by its own,
+    // already-fired deadline rather than loop forever.
+    const t = performance.now();
+    console.log(codeOf(() => vm.runInNewContext(
+      'try { vm.runInNewContext("sleepSync(120)", { sleepSync }, { timeout: 20 }) } catch {} for (;;) {}',
+      { vm, sleepSync }, { timeout: 40 })), performance.now() - t < 2000);
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe(
+    "inner:ERR_SCRIPT_EXECUTION_TIMEOUT\nERR_SCRIPT_EXECUTION_TIMEOUT\nERR_SCRIPT_EXECUTION_TIMEOUT true\n",
+  );
+  expect(exitCode).toBe(0);
+}, 30_000);
+
+test("a module whose evaluation times out is errored", async () => {
+  const code = `
+    const vm = require("node:vm");
+    const m = new vm.SourceTextModule("for (;;) {}", { context: vm.createContext({}) });
+    await m.link(() => { throw new Error("unreachable"); });
+    const first = await m.evaluate({ timeout: 20 }).then(() => "resolved", (e) => e.code + "|" + e.message);
+    // A second evaluate() re-throws the recorded error rather than complaining about the status.
+    const second = await m.evaluate({ timeout: 20 }).then(() => "resolved", (e) => e.code);
+    console.log(first, m.status, second);
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe(
+    "ERR_SCRIPT_EXECUTION_TIMEOUT|Script execution timed out after 20ms errored ERR_SCRIPT_EXECUTION_TIMEOUT\n",
+  );
+  expect(exitCode).toBe(0);
+}, 30_000);
+
+// A vm timeout that lands while a host function beneath the timed script is spinning a nested event-loop
+// wait (expect().resolves ticks the loop until its promise settles) must unwind to the run and surface as
+// ERR_SCRIPT_EXECUTION_TIMEOUT; the nested wait used to keep ticking over the pending termination (a hang).
+// In a child, like the other unbounded waits above.
+test.concurrent("timeout during a nested event-loop wait beneath the script", async () => {
+  const code = `
+    const vm = require("node:vm"); const { expect } = require("bun:test");
+    const never = new Promise(() => {}); const iv = setInterval(() => {}, 1);
+    try { vm.runInNewContext("expect(never).resolves.toBe(1)", { expect, never }, { timeout: 100 }); console.log("returned"); }
+    catch (e) { console.log(e.code); } finally { clearInterval(iv); }
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe("ERR_SCRIPT_EXECUTION_TIMEOUT\n");
+  expect(exitCode).toBe(0);
+});
+
 describe("node:vm lineOffset/columnOffset at the edge of int32", () => {
+  // Node's validator accepts any int32 here. JSC stores positions as ints,
+  // converts the offset to one-based and counts the source's own lines on top
+  // of it, so an offset this large used to overflow in the parser: assertion
+  // builds abort in JSTextPosition::checkConsistency ("line >= 0"), release
+  // builds report wrapped negative line numbers. Each case gets its own
+  // process because the failure mode is an abort.
   const INT32_MAX = 2147483647;
 
   async function runFixture(body: string) {
@@ -978,17 +1892,18 @@ describe("node:vm lineOffset/columnOffset at the edge of int32", () => {
       "new Script, second line steps past INT32_MAX",
       `new vm.Script(${JSON.stringify("1;\n2;")}, { lineOffset: ${INT32_MAX - 1} })`,
     ],
-    ["new Script, columnOffset", `new vm.Script("1", { columnOffset: ${INT32_MAX} })`],
+    ["new Script, columnOffset", `new vm.Script(${JSON.stringify("1;\n2;")}, { columnOffset: ${INT32_MAX} })`],
+    ["compileFunction", `vm.compileFunction("return 1", [], { lineOffset: ${INT32_MAX} })`],
     [
-      "compileFunction, one-line body",
-      `vm.compileFunction("return 1", [], { lineOffset: ${INT32_MAX} })`,
+      "compileFunction with params, a multi-line body and both offsets",
+      `vm.compileFunction(${JSON.stringify("a;\nreturn a;")}, ["a"], { lineOffset: ${INT32_MAX - 1}, columnOffset: ${INT32_MAX} })`,
     ],
-    [
-      "compileFunction, columnOffset",
-      `vm.compileFunction("return 1", [], { columnOffset: ${INT32_MAX} })`,
-    ],
-  ])("%s does not overflow or abort", async (_, expression) => {
-    await runFixture(`${expression};`);
+    // Three lines so the counter steps past INT32_MAX whether the module's
+    // first line is taken as lineOffset or, like Script, as lineOffset + 1.
+    ["SourceTextModule", `new vm.SourceTextModule(${JSON.stringify("1;\n2;\n3;")}, { lineOffset: ${INT32_MAX - 1} })`],
+  ])("%s compiles", async (_, expression) => {
+    const stdout = await runFixture(`${expression};\nconsole.log("ok");`);
+    expect(stdout).toBe("ok\n");
   });
 
   test.concurrent.each([
@@ -1021,256 +1936,11 @@ describe("node:vm lineOffset/columnOffset at the edge of int32", () => {
     const stdout = await runFixture(`try { ${expression}; } catch (e) { console.log(e.stack); }`);
     const match = pattern.exec(stdout);
     expect(match).not.toBeNull();
+    // The offset is only pulled down by as much as the (tiny) source could
+    // possibly add to it, so the reported position stays just below INT32_MAX
+    // rather than wrapping negative or being dropped.
     const position = Number(match![1]);
     expect(position).toBeGreaterThan(INT32_MAX - 100);
     expect(position).toBeLessThanOrEqual(INT32_MAX);
-  });
-});
-
-import { bunEnv, bunExe, tempDir } from "harness";
-import { totalmem } from "node:os";
-
-test.concurrent("a FinalizationRegistry cleanup job is dropped when its context dies before the job runs", async () => {
-  const fixture = /* js */ `
-    import vm from "node:vm";
-    import { edenGC, fullGC } from "bun:jsc";
-
-    const nextTurn = () => new Promise(resolve => setImmediate(resolve));
-    const liveContextCleanedUp = Promise.withResolvers();
-    let liveContext;
-    let deadContextCleanups = 0;
-
-    function setup() {
-      const swept = Array.from({ length: 8 }, () => vm.createContext({}));
-      const contexts = Array.from({ length: 4 }, () => vm.createContext({ onCleanup: () => deadContextCleanups++ }));
-      liveContext = vm.createContext({ onCleanup: liveContextCleanedUp.resolve });
-      contexts.push(liveContext);
-      for (const context of contexts) vm.runInContext("globalThis.registry = new FinalizationRegistry(onCleanup)", context);
-      edenGC();
-      for (const context of contexts) for (let i = 0; i < 5; i++) context.registry.register({ i }, i);
-    }
-
-    await nextTurn().then(setup);
-    await nextTurn();
-    edenGC();
-    fullGC();
-    await liveContextCleanedUp.promise;
-    await nextTurn();
-    console.log({ deadContextCleanups });
-  `;
-  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", fixture], env: bunEnv, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
-  expect({ stdout, stderr, exitCode }).toEqual({
-    stdout: "{\n  deadContextCleanups: 0,\n}\n",
-    stderr: "",
-    exitCode: 0,
-  });
-});
-
-test.concurrent("Atomics.notify does not wake the Atomics.waitAsync of a context that died", async () => {
-  const fixture = /* js */ `
-    import vm from "node:vm";
-    import { fullGC } from "bun:jsc";
-
-    const nextTurn = () => new Promise(resolve => setImmediate(resolve));
-    const shared = new Int32Array(new SharedArrayBuffer(4));
-    const liveContextWoke = Promise.withResolvers();
-    let liveContext;
-
-    function setup() {
-      const swept = Array.from({ length: 8 }, () => vm.createContext({}));
-      const contexts = Array.from({ length: 4 }, () => vm.createContext({ shared, onWake() {} }));
-      liveContext = vm.createContext({ shared, onWake: liveContextWoke.resolve });
-      contexts.push(liveContext);
-      for (const context of contexts) vm.runInContext("Atomics.waitAsync(shared, 0, 0).value.then(onWake)", context);
-    }
-
-    await nextTurn().then(setup);
-    await nextTurn();
-    fullGC();
-    console.log("woken:", Atomics.notify(shared, 0));
-    console.log("the live context's wait resolved:", await liveContextWoke.promise);
-  `;
-  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", fixture], env: bunEnv, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
-  expect({ stdout, stderr, exitCode }).toEqual({
-    stdout: "woken: 1\nthe live context's wait resolved: ok\n",
-    stderr: "",
-    exitCode: 0,
-  });
-});
-
-const memoryForLongStrings = Math.min(totalmem(), process.constrainedMemory() || Infinity);
-test.skipIf(memoryForLongStrings < 10 * 1024 ** 3)(
-  "node:vm does not abort the process when text it joins passes the string length limit",
-  async () => {
-    const fixture = `
-      const vm = require("node:vm");
-      const long = "q".repeat(2 ** 31 - 10);
-
-      async function report(name, run) {
-        try {
-          console.log(name + ": " + (await run()));
-        } catch (e) {
-          console.log(name + ": " + e.name + ": " + e.message);
-        }
-      }
-
-      const half = long.slice(0, 2 ** 30);
-      await report("compileFunction params", () => typeof vm.compileFunction("", [half, half]));
-      await report("SyntheticModule#setExport", () => new vm.SyntheticModule([], () => {}).setExport(long, 1));
-      await report("import() in a context", () => vm.runInNewContext("Function")("s", "return import(s)")(long));
-
-      const keptItsStack = (error, name) =>
-        error.name === name && error.stack === long ? name + " with the stack it had" : error.name + " with another stack";
-
-      function thrownBy(code) {
-        const error = new Error("x");
-        error.stack = long;
-        try {
-          new vm.Script(code).runInNewContext({ error });
-        } catch (e) {
-          if (e !== error) throw e;
-          return keptItsStack(e, "Error");
-        }
-        return "did not throw";
-      }
-      await report("error thrown by a script", () => thrownBy("throw error"));
-      await report("error thrown from a line too long for the header", () => thrownBy("throw error;" + Buffer.alloc(2000, " ").toString()));
-
-      await report("SyntaxError from new Script", () => {
-        const prepareStackTrace = Error.prepareStackTrace;
-        Error.prepareStackTrace = () => long;
-        try {
-          new vm.Script("%%");
-        } catch (e) {
-          return keptItsStack(e, "SyntaxError");
-        } finally {
-          Error.prepareStackTrace = prepareStackTrace;
-        }
-        return "did not throw";
-      });
-    `;
-    await using proc = Bun.spawn({
-      cmd: [bunExe(), "-e", fixture],
-      env: bunEnv,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
-    expect({ stdout: stdout.trim().split("\n"), stderr, exitCode }).toEqual({
-      stdout: [
-        "compileFunction params: RangeError: Out of memory",
-        "SyntheticModule#setExport: RangeError: Out of memory",
-        "import() in a context: RangeError: Out of memory",
-        "error thrown by a script: Error with the stack it had",
-        "error thrown from a line too long for the header: Error with the stack it had",
-        "SyntaxError from new Script: SyntaxError with the stack it had",
-      ],
-      stderr: "",
-      exitCode: 0,
-    });
-  },
-  30_000,
-);
-
-describe.concurrent("File and fs.Stats accept a newTarget that belongs to a context", () => {
-  const prelude = /*js*/ `
-    const vm = require("node:vm");
-    const fs = require("node:fs");
-    const BigIntStats = fs.statSync(".", { bigint: true }).constructor;
-    const bigintArgs = [1n, 0o100644n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 2000000n, 0n, 0n, 0n];
-  `;
-
-  test.each([
-    {
-      name: "class extends File",
-      script: /*js*/ `
-        const context = vm.createContext({ File });
-        const [Upload, upload] = vm.runInContext(
-          'class Upload extends File { get custom() { return 42; } }; [Upload, new Upload(["abc"], "a.txt")]',
-          context,
-        );
-        console.log(JSON.stringify({
-          prototype: Object.getPrototypeOf(upload) === Upload.prototype,
-          instanceof: upload instanceof File,
-          name: upload.name,
-          size: upload.size,
-          custom: upload.custom,
-        }));
-      `,
-      expected: { prototype: true, instanceof: true, name: "a.txt", size: 3, custom: 42 },
-    },
-    {
-      name: "class extends fs.Stats",
-      script: /*js*/ `
-        const context = vm.createContext({ Stats: fs.Stats });
-        const [S, stats] = vm.runInContext(
-          "class S extends Stats { get custom() { return 42; } }; [S, new S(1, 0o100644)]",
-          context,
-        );
-        console.log(JSON.stringify({
-          prototype: Object.getPrototypeOf(stats) === S.prototype,
-          instanceof: stats instanceof fs.Stats,
-          isFile: stats.isFile(),
-          mode: stats.mode,
-          custom: stats.custom,
-        }));
-      `,
-      expected: { prototype: true, instanceof: true, isFile: true, mode: 0o100644, custom: 42 },
-    },
-    {
-      name: "class extends BigIntStats",
-      script: /*js*/ `
-        const context = vm.createContext({ BigIntStats, bigintArgs });
-        const [S, stats] = vm.runInContext(
-          "class S extends BigIntStats { get custom() { return 42; } }; [S, new S(...bigintArgs)]",
-          context,
-        );
-        console.log(JSON.stringify({
-          prototype: Object.getPrototypeOf(stats) === S.prototype,
-          instanceof: stats instanceof BigIntStats,
-          isFile: stats.isFile(),
-          atimeNs: String(stats.atimeNs),
-          custom: stats.custom,
-        }));
-      `,
-      expected: { prototype: true, instanceof: true, isFile: true, atimeNs: "2000000", custom: 42 },
-    },
-    {
-      name: "Reflect.construct with a function, a bound function, and a Proxy",
-      script: /*js*/ `
-        const context = vm.createContext({});
-        const constructors = [[File, [["abc"], "a.txt"]], [fs.Stats, [1, 0o100644]], [BigIntStats, bigintArgs]];
-        const result = {};
-        for (const source of ["(function F() {})", "(function F() {}).bind(null)", "new Proxy(function F() {}, {})"]) {
-          const newTarget = vm.runInContext(source, context);
-          result[source] = constructors.map(([C, args]) => {
-            const object = Reflect.construct(C, args, newTarget);
-            return Object.getPrototypeOf(object) === (newTarget.prototype ?? C.prototype);
-          });
-        }
-        console.log(JSON.stringify(result));
-      `,
-      expected: {
-        "(function F() {})": [true, true, true],
-        "(function F() {}).bind(null)": [true, true, true],
-        "new Proxy(function F() {}, {})": [true, true, true],
-      },
-    },
-  ])("$name", async ({ script, expected }) => {
-    await using proc = Bun.spawn({
-      cmd: [bunExe(), "-e", prelude + script],
-      env: bunEnv,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
-    expect({ stdout: stdout.trim(), stderr, exitCode, signalCode: proc.signalCode }).toEqual({
-      stdout: JSON.stringify(expected),
-      stderr: "",
-      exitCode: 0,
-      signalCode: null,
-    });
   });
 });

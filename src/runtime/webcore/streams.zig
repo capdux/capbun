@@ -928,7 +928,6 @@ pub fn abort(self: *NetworkSink) void {
             self.ended = true;
             self.done = true;
             _ = self.signal.close(null);
-            self.cancel = true;
             _ = self.finalize();
     }
 
@@ -995,15 +994,9 @@ pub fn endFromJS(self: *NetworkSink, _: *JSGlobalObject) sys.Maybe(JSValue) {
             }
             if (self.task) |task| {
                 _ = &task;
+                _ = &task;
                 self.endPromise = JSPromise.Strong.init(self.globalThis);
-                var value = self.endPromise.value();
-                _ = &value;
-                if ((!self.ended)) {
-                    self.ended = true;
-                    _ = bun.handleOom(task.writeBytes("", true));
-                    _ = self.signal.close(null);
-                }
-                return .{ .result = value };
+                return .{ .result = self.endPromise.value() };
             }
             return .{ .result = JSValue.jsNumber(0) };
     }

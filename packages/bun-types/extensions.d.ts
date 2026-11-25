@@ -23,6 +23,11 @@ declare module "*.jsonc" {
   export = contents;
 }
 
+declare module "*.xml" {
+  var contents: Record<string, any>;
+  export = contents;
+}
+
 declare module "*.json5" {
   var contents: any;
   export = contents;

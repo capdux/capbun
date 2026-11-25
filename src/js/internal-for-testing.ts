@@ -306,3 +306,15 @@ export const fetchH3Internals = {
 export const fileSinkInternals = {
   liveCount: $newZigFunction("runtime/webcore/FileSink.zig", "TestingAPIs.fileSinkLiveCount", 0) as () => number,
 };
+
+export const emitMemoryPressure: (level: "warning" | "critical") => void = $newCppFunction(
+  "InternalForTesting.cpp",
+  "jsFunction_emitMemoryPressure",
+  1,
+);
+
+export const isMemoryPressureWatcherInstalled: () => boolean = $newCppFunction(
+  "InternalForTesting.cpp",
+  "jsFunction_isMemoryPressureWatcherInstalled",
+  0,
+);

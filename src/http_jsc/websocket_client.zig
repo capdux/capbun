@@ -577,11 +577,7 @@ pub fn cancel(ws: *WebSocket) callconv(.c) void {
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             const had_tunnel = (ws.proxy_tunnel != null);
             _ = ws.clearData();
-            if (comptime ssl) {
-                _ = ws.tcp.close(.normal);
-            } else {
-                _ = ws.tcp.close(.failure);
-            }
+            _ = ws.tcp.close(.failure);
             if (had_tunnel) {
                 _ = ws.dispatchAbruptClose(ErrorCode.ended);
             }
@@ -1674,11 +1670,7 @@ pub fn finalize(ws: *WebSocket) callconv(.c) void {
                 _ = ws.deref();
             }
             if ((!ws.tcp.isClosed())) {
-                if (comptime ssl) {
-                    _ = ws.tcp.close(.normal);
-                } else {
-                    _ = ws.tcp.close(.failure);
-                }
+                _ = ws.tcp.close(.failure);
             }
     }
 

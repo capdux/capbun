@@ -98,12 +98,14 @@ pub const FilePollFlags = enum {
     poll_writable,
     poll_process,
     poll_machport,
+    poll_memory_pressure,
     readable,
     writable,
     process,
     eof,
     hup,
     machport,
+    memory_pressure,
     fifo,
     tty,
     one_shot,
@@ -129,6 +131,7 @@ pub fn poll(self: FilePollFlags) FilePollFlags {
 .writable => .poll_writable,
 .process => .poll_process,
 .machport => .poll_machport,
+.memory_pressure => .poll_memory_pressure,
 else => v,
 });
     }
@@ -168,6 +171,10 @@ pub fn fromKQueueEvent(kqueue_event: FilePollKQueueEvent) FilePollFlags.Set {
                         if (comptime Environment.isMac) {
                             if ((kqueue_event.filter == std.posix.system.EVFILT.MACHPORT)) {
                                 _ = flags.insert(FilePollFlags.machport);
+                            } else {
+                                if ((kqueue_event.filter == -14)) {
+                                    _ = flags.insert(FilePollFlags.memory_pressure);
+                                }
                             }
                         }
                     }
@@ -184,6 +191,9 @@ pub fn fromEpollEvent(epoll: std.os.linux.epoll_event) FilePollFlags.Set {
             }
             if (((epoll.events & std.os.linux.EPOLL.OUT) != 0)) {
                 _ = flags.insert(FilePollFlags.writable);
+            }
+            if (((epoll.events & std.os.linux.EPOLL.PRI) != 0)) {
+                _ = flags.insert(FilePollFlags.memory_pressure);
             }
             if (((epoll.events & std.os.linux.EPOLL.ERR) != 0)) {
                 _ = flags.insert(FilePollFlags.eof);
@@ -372,6 +382,7 @@ pub fn updateFlags(poll: *FilePoll, updated: Flags.Set) void {
             _ = flags.remove(.writable);
             _ = flags.remove(.process);
             _ = flags.remove(.machport);
+            _ = flags.remove(.memory_pressure);
             _ = flags.remove(.eof);
             _ = flags.remove(.hup);
             _ = flags.setUnion(updated);
@@ -398,6 +409,12 @@ pub fn onKQueueEvent(poll: *FilePoll, _: *Loop, kqueue_event: *const KQueueEvent
             _ = log("onKQueueEvent: {f}", .{ poll });
             if (comptime (Environment.isMac and (KQueueGenerationNumber != u0))) {
                 _ = bun.assert((poll.generation_number == kqueue_event.ext[0]));
+            }
+            if (comptime Environment.isMac) {
+                if ((kqueue_event.filter == -14)) {
+                    _ = poll.onUpdate(@intCast(kqueue_event.fflags));
+                    return;
+                }
             }
             _ = poll.onUpdate(kqueue_event.data);
     }
@@ -487,7 +504,7 @@ pub fn deinitWithVM(self: *FilePoll, vm_: anytype) void {
     }
 
 pub fn isRegistered(self: FilePoll) bool {
-            return (((self.flags.contains(.poll_writable) or self.flags.contains(.poll_readable)) or self.flags.contains(.poll_process)) or self.flags.contains(.poll_machport));
+            return ((((self.flags.contains(.poll_writable) or self.flags.contains(.poll_readable)) or self.flags.contains(.poll_process)) or self.flags.contains(.poll_machport)) or self.flags.contains(.poll_memory_pressure));
     }
 
 pub fn onUpdate(poll: *FilePoll, size_or_offset: i64) void {
@@ -569,6 +586,9 @@ if (comptime (!Environment.isMac)) {
             }
             _ = log((("onUpdate " ++ kqueue_or_epoll) ++ " (fd: {f}) ParentDeathWatchdog"), .{ poll.fd });
             _ = ptr.as(ParentDeathWatchdog).onParentExit();
+},
+@field(Owner.Tag, @typeName(MemoryPressureWatcher)) => {
+_ = MemoryPressureWatcher.onPoll(poll, size_or_offset);
 },
 else => {
 const possible_name = Owner.typeNameFromTag(@intFromEnum(ptr.tag()));
@@ -768,6 +788,7 @@ pub fn registerWithFd(self: *FilePoll, loop: *Loop, flag: Flags, one_shot: OneSh
                 var flags: u32 = (switch (flag) {
 .process, .readable => ((linux.EPOLL.IN | linux.EPOLL.HUP) | one_shot_flag),
 .writable => (((linux.EPOLL.OUT | linux.EPOLL.HUP) | linux.EPOLL.ERR) | one_shot_flag),
+.memory_pressure => ((linux.EPOLL.PRI | linux.EPOLL.ERR) | one_shot_flag),
 else => unreachable,
 });
                 _ = &flags;
@@ -816,6 +837,10 @@ else => unreachable,
                     break :blk @intFromPtr(Pollable.init(self).ptr());
 
 }), .flags = (std.c.EV.ADD | one_shot_flag), .ext = .{ self.generation_number, 0 } },
+.memory_pressure => .{ .ident = 0, .filter = -14, .data = 0, .fflags = (2 | 4), .udata = (blk: {
+                    break :blk @intFromPtr(Pollable.init(self).ptr());
+
+}), .flags = ((std.c.EV.ADD | std.c.EV.CLEAR) | one_shot_flag), .ext = .{ self.generation_number, 0 } },
 else => unreachable,
 });
                     const KEVENT_FLAG_ERROR_EVENTS: i32 = 2;
@@ -855,7 +880,7 @@ else => unreachable,
                         break :blk @intFromPtr(Pollable.init(self).ptr());
 
 }), .flags = (std.c.EV.ADD | one_shot_flag) },
-.machport => {
+.machport, .memory_pressure => {
 return .initErr(.{ .errno = @intFromEnum(bun.sys.E.OPNOTSUPP), .syscall = .kevent });
 },
 else => unreachable,
@@ -889,6 +914,7 @@ else => unreachable,
 .process => (if (comptime Environment.isLinux) .poll_readable else .poll_process),
 .writable => .poll_writable,
 .machport => .poll_machport,
+.memory_pressure => .poll_memory_pressure,
 else => unreachable,
 }));
             _ = self.flags.remove(.needs_rearm);
@@ -911,7 +937,7 @@ pub fn unregisterWithFd(self: *FilePoll, loop: *Loop, fd: bun.FD, force_unregist
             defer {
             _ = self.deactivate(loop);
             }
-            if ((!(((self.flags.contains(.poll_readable) or self.flags.contains(.poll_writable)) or self.flags.contains(.poll_process)) or self.flags.contains(.poll_machport)))) {
+            if ((!((((self.flags.contains(.poll_readable) or self.flags.contains(.poll_writable)) or self.flags.contains(.poll_process)) or self.flags.contains(.poll_machport)) or self.flags.contains(.poll_memory_pressure)))) {
                 return .success;
             }
             _ = bun.assert((fd != invalid_fd));
@@ -930,6 +956,9 @@ pub fn unregisterWithFd(self: *FilePoll, loop: *Loop, fd: bun.FD, force_unregist
             if (self.flags.contains(.poll_machport)) {
                 break :brk .machport;
             }
+            if (self.flags.contains(.poll_memory_pressure)) {
+                break :brk .memory_pressure;
+            }
             return .success;
 };
             if ((self.flags.contains(.needs_rearm) and (!force_unregister))) {
@@ -938,6 +967,7 @@ pub fn unregisterWithFd(self: *FilePoll, loop: *Loop, fd: bun.FD, force_unregist
                 _ = self.flags.remove(.poll_readable);
                 _ = self.flags.remove(.poll_writable);
                 _ = self.flags.remove(.poll_machport);
+                _ = self.flags.remove(.poll_memory_pressure);
                 return .success;
             }
             _ = log("unregister: FilePoll(0x{x}, generation_number={d}) {s}{s} ({f})", .{ (blk: {
@@ -960,6 +990,10 @@ pub fn unregisterWithFd(self: *FilePoll, loop: *Loop, fd: bun.FD, force_unregist
 
 }), .flags = std.c.EV.DELETE, .ext = .{ 0, 0 } },
 .machport => .{ .ident = @intCast(fd.cast()), .filter = std.posix.system.EVFILT.MACHPORT, .data = 0, .fflags = 0, .udata = (blk: {
+                    break :blk @intFromPtr(Pollable.init(self).ptr());
+
+}), .flags = std.c.EV.DELETE, .ext = .{ 0, 0 } },
+.memory_pressure => .{ .ident = 0, .filter = -14, .data = 0, .fflags = 0, .udata = (blk: {
                     break :blk @intFromPtr(Pollable.init(self).ptr());
 
 }), .flags = std.c.EV.DELETE, .ext = .{ 0, 0 } },
@@ -1011,7 +1045,7 @@ else => unreachable,
                         break :blk @intFromPtr(Pollable.init(self).ptr());
 
 }), .flags = std.c.EV.DELETE },
-.machport => {
+.machport, .memory_pressure => {
 return .initErr(.{ .errno = @intFromEnum(bun.sys.E.OPNOTSUPP), .syscall = .kevent });
 },
 else => unreachable,
@@ -1044,6 +1078,7 @@ else => unreachable,
             _ = self.flags.remove(.poll_writable);
             _ = self.flags.remove(.poll_process);
             _ = self.flags.remove(.poll_machport);
+            _ = self.flags.remove(.poll_memory_pressure);
             return .success;
     }
     const KQueueEvent = FilePollKQueueEvent;
@@ -1063,7 +1098,8 @@ else => unreachable,
     const LifecycleScriptSubprocessOutputReader = bun.install.LifecycleScriptSubprocess.OutputReader;
     const BufferedReader = bun.io.BufferedReader;
     const ParentDeathWatchdog = bun.ParentDeathWatchdog;
-    pub const Owner = bun.TaggedPointerUnion(.{ FileSink, StaticPipeWriter, ShellStaticPipeWriter, SecurityScanStaticPipeWriter, BufferedReader, DNSResolver, GetAddrInfoRequest, Request, Process, ShellBufferedWriter, TerminalPoll, ParentDeathWatchdog });
+    const MemoryPressureWatcher = bun.api.node.memory_pressure.MemoryPressureWatcher;
+    pub const Owner = bun.TaggedPointerUnion(.{ FileSink, StaticPipeWriter, ShellStaticPipeWriter, SecurityScanStaticPipeWriter, BufferedReader, DNSResolver, GetAddrInfoRequest, Request, Process, ShellBufferedWriter, TerminalPoll, ParentDeathWatchdog, MemoryPressureWatcher });
     const AllocatorType = FilePollAllocatorType;
     const kqueue_or_epoll = (if (Environment.isKqueue) "kevent" else "epoll");
     const Flags = FilePollFlags;

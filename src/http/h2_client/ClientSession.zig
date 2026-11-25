@@ -271,8 +271,13 @@ pub fn attach(self: *ClientSession, client: *HTTPClient) void {
             _ = encode.writePreface(self);
         }
         _ = self.rearmTimeout();
-        const request = client.buildRequest(client.state.original_request_body.len());
-        _ = (blk_catch_0: { break :blk_catch_0 ((encode.writeRequest(self, client, stream, request)) catch |e| { _ = &e; self.encoder_poisoned = true;
+        _ = (blk_catch_0: { break :blk_catch_0 ((client.compressBodyForSend(false)) catch |e| { _ = &e; _ = self.streams.swapRemove(stream.id);
+        _ = stream.deinit();
+        client.h2 = null;
+        _ = client.failFromH2(e);
+        return; }); });
+        const request = client.buildRequest(client.bodyLenForSend());
+        _ = (blk_catch_1: { break :blk_catch_1 ((encode.writeRequest(self, client, stream, request)) catch |e| { _ = &e; self.encoder_poisoned = true;
         _ = self.streams.swapRemove(stream.id);
         _ = stream.deinit();
         client.h2 = null;
@@ -282,7 +287,7 @@ pub fn attach(self: *ClientSession, client: *HTTPClient) void {
             _ = c.retryAfterH2Coalesce();
         }
         _ = self.pending_attach.clearRetainingCapacity();
-        _ = (blk_catch_1: { break :blk_catch_1 ((self.flush()) catch |__ce_1| { _ = &__ce_1;  }); });
+        _ = (blk_catch_2: { break :blk_catch_2 ((self.flush()) catch |__ce_2| { _ = &__ce_2;  }); });
         return; }); });
         if ((client.verbose != .none)) {
             _ = bun.http.printRequest(.http2, request, client.url.href, (!client.flags.reject_unauthorized), client.state.request_body, (client.verbose == .curl));
@@ -293,7 +298,7 @@ pub fn attach(self: *ClientSession, client: *HTTPClient) void {
             client.state.request_stage = .body;
         }
         client.state.response_stage = .headers;
-        _ = (blk_catch_2: { break :blk_catch_2 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
+        _ = (blk_catch_3: { break :blk_catch_3 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
         return; }); });
         if (client.flags.is_streaming_request_body) {
             _ = client.progressUpdate(true, self.ctx, self.socket);
@@ -312,7 +317,7 @@ pub fn removeStream(self: *ClientSession, stream: *Stream) void {
 
 pub fn detachWithFailure(self: *ClientSession, stream: *Stream, err: anyerror) void {
         _ = stream.rst(.CANCEL);
-        _ = (blk_catch_3: { break :blk_catch_3 ((self.flush()) catch |__ce_3| { _ = &__ce_3;  }); });
+        _ = (blk_catch_4: { break :blk_catch_4 ((self.flush()) catch |__ce_4| { _ = &__ce_4;  }); });
         var client = stream.client;
         _ = &client;
         stream.client = null;
@@ -395,7 +400,7 @@ pub fn streamBodyByHttpId(self: *ClientSession, async_http_id: u32, ended: bool)
                 client.state.original_request_body.stream.ended = ended;
                 _ = self.rearmTimeout();
                 _ = encode.drainSendBody(self, stream, std.math.maxInt(usize));
-                _ = (blk_catch_4: { break :blk_catch_4 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
+                _ = (blk_catch_5: { break :blk_catch_5 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
                 return; }); });
                 return;
             }
@@ -475,8 +480,8 @@ pub fn onData(self: *ClientSession, incoming: []const u8) void {
             }
             self.read_buffer.items.len = tail;
         }
-        _ = (blk_catch_5: { break :blk_catch_5 ((self.flush()) catch |__ce_5| { _ = &__ce_5; self.fatal_error = error.WriteFailed;
-        break :blk_catch_5 @as(bool, false); }); });
+        _ = (blk_catch_6: { break :blk_catch_6 ((self.flush()) catch |__ce_6| { _ = &__ce_6; self.fatal_error = error.WriteFailed;
+        break :blk_catch_6 @as(bool, false); }); });
         if (self.fatal_error) |err| {
             _ = &err;
             _ = self.failAll(err);
@@ -487,7 +492,7 @@ pub fn onData(self: *ClientSession, incoming: []const u8) void {
             return;
         }
         _ = encode.drainSendBodies(self);
-        _ = (blk_catch_6: { break :blk_catch_6 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
+        _ = (blk_catch_7: { break :blk_catch_7 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
         return; }); });
         self.delivering = true;
         var i: usize = 0;
@@ -510,7 +515,7 @@ pub fn onData(self: *ClientSession, incoming: []const u8) void {
         self.delivering = false;
         _ = self.replenishWindow();
         if ((rst_any or self.write_buffer.isNotEmpty())) {
-            _ = (blk_catch_7: { break :blk_catch_7 ((self.flush()) catch |__ce_7| { _ = &__ce_7;  }); });
+            _ = (blk_catch_8: { break :blk_catch_8 ((self.flush()) catch |__ce_8| { _ = &__ce_8;  }); });
         }
         if (self.stream_progressed) {
             _ = self.rearmTimeout();
@@ -520,7 +525,7 @@ pub fn onData(self: *ClientSession, incoming: []const u8) void {
             if ((self.fatal_error != null)) {
                 return;
             }
-            _ = (blk_catch_8: { break :blk_catch_8 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
+            _ = (blk_catch_9: { break :blk_catch_9 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
             return; }); });
         }
         _ = self.maybeRelease();
@@ -532,10 +537,10 @@ pub fn onWritable(self: *ClientSession) void {
         _ = &_deref_guard;
         var ___deref_guard_moved = false; _ = &___deref_guard_moved;
         defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_9: { break :blk_catch_9 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
+        _ = (blk_catch_10: { break :blk_catch_10 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
         return; }); });
         _ = encode.drainSendBodies(self);
-        _ = (blk_catch_10: { break :blk_catch_10 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
+        _ = (blk_catch_11: { break :blk_catch_11 ((self.flush()) catch |e| { _ = &e; _ = self.failAll(e);
         return; }); });
         _ = self.reapAborted();
         _ = self.rearmTimeout();
@@ -550,8 +555,8 @@ pub fn onIdleData(self: *ClientSession, incoming: []const u8) void {
             _ = bun.copy(u8, self.read_buffer.items[0..tail], self.read_buffer.items[consumed..]);
         }
         self.read_buffer.items.len = tail;
-        _ = (blk_catch_11: { break :blk_catch_11 ((self.flush()) catch |__ce_11| { _ = &__ce_11; self.fatal_error = error.WriteFailed;
-        break :blk_catch_11 @as(bool, false); }); });
+        _ = (blk_catch_12: { break :blk_catch_12 ((self.flush()) catch |__ce_12| { _ = &__ce_12; self.fatal_error = error.WriteFailed;
+        break :blk_catch_12 @as(bool, false); }); });
 }
 
 pub fn onClose(self: *ClientSession, err: anyerror) void {
@@ -597,7 +602,7 @@ pub fn failAll(self: *ClientSession, err: anyerror) void {
             _ = std.mem.writeInt(u32, goaway[0..4], 0, .big);
             _ = std.mem.writeInt(u32, goaway[4..8], @intFromEnum(dispatch.errorCodeFor(err)), .big);
             _ = self.writeFrame(.HTTP_FRAME_GOAWAY, 0, 0, (&goaway));
-            _ = (blk_catch_12: { break :blk_catch_12 ((self.flush()) catch |__ce_12| { _ = &__ce_12;  }); });
+            _ = (blk_catch_13: { break :blk_catch_13 ((self.flush()) catch |__ce_13| { _ = &__ce_13;  }); });
         }
         _ = HTTPContextTLS.markSocketAsDead(sock);
         _ = self.onClose(err);
@@ -679,7 +684,7 @@ pub fn deliverStream(self: *ClientSession, stream: *Stream) bool {
         _ = &client;
         if (client.signals.get(.aborted)) {
             _ = stream.rst(.CANCEL);
-            _ = (blk_catch_13: { break :blk_catch_13 ((self.flush()) catch |__ce_13| { _ = &__ce_13;  }); });
+            _ = (blk_catch_14: { break :blk_catch_14 ((self.flush()) catch |__ce_14| { _ = &__ce_14;  }); });
             stream.client = null;
             client.h2 = null;
             _ = client.failFromH2(error.Aborted);
@@ -698,15 +703,15 @@ pub fn deliverStream(self: *ClientSession, stream: *Stream) bool {
         }
         if (stream.headers_ready) {
             stream.headers_ready = false;
-            const result = (blk_catch_14: { break :blk_catch_14 ((self.applyHeaders(stream, client)) catch |e| { _ = &e; _ = stream.rst(.CANCEL);
-            _ = (blk_catch_15: { break :blk_catch_15 ((self.flush()) catch |__ce_15| { _ = &__ce_15;  }); });
+            const result = (blk_catch_15: { break :blk_catch_15 ((self.applyHeaders(stream, client)) catch |e| { _ = &e; _ = stream.rst(.CANCEL);
+            _ = (blk_catch_16: { break :blk_catch_16 ((self.flush()) catch |__ce_16| { _ = &__ce_16;  }); });
             stream.client = null;
             client.h2 = null;
             _ = client.failFromH2(e);
             return true; }); });
             if (client.state.flags.is_redirect_pending) {
                 _ = stream.rst(.CANCEL);
-                _ = (blk_catch_16: { break :blk_catch_16 ((self.flush()) catch |__ce_16| { _ = &__ce_16;  }); });
+                _ = (blk_catch_17: { break :blk_catch_17 ((self.flush()) catch |__ce_17| { _ = &__ce_17;  }); });
                 stream.client = null;
                 client.h2 = null;
                 _ = client.doRedirect(true, self.ctx, self.socket);
@@ -745,9 +750,9 @@ pub fn deliverStream(self: *ClientSession, stream: *Stream) bool {
                 stream.client = null;
                 client.h2 = null;
             }
-            const report = (blk_catch_17: { break :blk_catch_17 ((client.handleResponseBody(stream.body_buffer.items, false)) catch |e| { _ = &e; _ = stream.body_buffer.clearRetainingCapacity();
+            const report = (blk_catch_18: { break :blk_catch_18 ((client.handleResponseBody(stream.body_buffer.items, false)) catch |e| { _ = &e; _ = stream.body_buffer.clearRetainingCapacity();
             _ = stream.rst(.CANCEL);
-            _ = (blk_catch_18: { break :blk_catch_18 ((self.flush()) catch |__ce_18| { _ = &__ce_18;  }); });
+            _ = (blk_catch_19: { break :blk_catch_19 ((self.flush()) catch |__ce_19| { _ = &__ce_19;  }); });
             if ((!terminal)) {
                 stream.client = null;
                 client.h2 = null;

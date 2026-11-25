@@ -249,6 +249,65 @@ describe.concurrent("fetch-tls", () => {
     });
   });
 
+  // A second fetch to the same origin after `Connection: close` has to open a
+  // fresh TLS connection (no keep-alive socket to reuse). With a client-side
+  // session cache, that connect offers the ticket from the first handshake and
+  // the server observes a resumed session; without one, it's a full handshake.
+  describe("client-side TLS session resumption", () => {
+    const fixture = join(import.meta.dir, "fetch.tls.session-resumption-fixture.ts");
+    async function run(version: string, env: Record<string, string> = {}) {
+      await using proc = Bun.spawn({
+        cmd: [bunExe(), fixture, version],
+        env: { ...bunEnv, ...env },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+      expect(stderr).not.toMatch(/AddressSanitizer|ERROR: (Leak|Thread)Sanitizer/);
+      expect(stdout.trim()).toStartWith("{");
+      expect(exitCode).toBe(0);
+      return JSON.parse(stdout.trim()) as {
+        default: boolean[];
+        mismatch: boolean[];
+        checkServerIdentity: boolean[];
+        portIsolation: { a: boolean[]; b: boolean[] };
+        hostIsolation: boolean[];
+      };
+    }
+
+    const timeout = isASAN ? 20_000 : 10_000;
+    for (const version of ["TLSv1.2", "TLSv1.3"]) {
+      it(
+        `caches only verified sessions keyed on (host, port) (${version})`,
+        async () => {
+          const r = await run(version);
+          expect({
+            default: r.default,
+            checkServerIdentity: r.checkServerIdentity,
+            portIsolation: r.portIsolation,
+            hostIsolation: r.hostIsolation,
+          }).toEqual({
+            default: [false, true],
+            checkServerIdentity: [false, false],
+            portIsolation: { a: [false], b: [false] },
+            hostIsolation: [false, false],
+          });
+          expect(r.mismatch).not.toContain(true);
+        },
+        timeout,
+      );
+
+      it(
+        `is disabled by BUN_FEATURE_FLAG_DISABLE_FETCH_TLS_SESSION_CACHE (${version})`,
+        async () => {
+          const r = await run(version, { BUN_FEATURE_FLAG_DISABLE_FETCH_TLS_SESSION_CACHE: "1" });
+          expect(r.default).toEqual([false, false]);
+        },
+        timeout,
+      );
+    }
+  });
+
   it("fetch with self-sign certificate tls + rejectUnauthorized: false should not throw", async () => {
     await createServer(CERT_LOCALHOST_IP, async port => {
       const urls = [`https://localhost:${port}`, `https://127.0.0.1:${port}`];

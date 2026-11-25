@@ -90,18 +90,50 @@ void us_poll_free(struct us_poll_t *p, struct us_loop_t *loop) {
   }
 }
 
-void us_poll_start(struct us_poll_t *p, struct us_loop_t *loop, int events) {
-  if(!p->uv_p) return;
+int us_poll_start_rc(struct us_poll_t *p, struct us_loop_t *loop, int events) {
+  if(!p->uv_p) return 0;
   p->poll_type = us_internal_poll_type(p) |
                  ((events & LIBUS_SOCKET_READABLE) ? POLL_TYPE_POLLING_IN : 0) |
                  ((events & LIBUS_SOCKET_WRITABLE) ? POLL_TYPE_POLLING_OUT : 0);
 
-  uv_poll_init_socket(loop->uv_loop, p->uv_p, p->fd);
+  /* uv_poll_init_socket (win/poll.c) can fail either before uv__handle_init
+   * (ioctlsocket FIONBIO) or after it (getsockopt SO_PROTOCOL_INFOW). The
+   * latter leaves the handle linked into loop->handle_queue with
+   * submitted_events_* still unset. Zero first so, on failure, ->type
+   * distinguishes the two states and the fields uv__poll_close reads are 0
+   * rather than garbage. */
+  memset(p->uv_p, 0, sizeof(uv_poll_t));
+  p->uv_p->data = p;
+
+  int rc = uv_poll_init_socket(loop->uv_loop, p->uv_p, p->fd);
+  if (rc < 0) {
+    int saved = LIBUS_ERR;
+    if (p->uv_p->type == UV_POLL) {
+      /* uv__handle_init ran: the handle is in loop->handle_queue. Close it
+       * through libuv so it is unlinked; the caller's us_poll_free sees
+       * uv_is_closing and hands ownership to close_cb_free_poll. */
+      p->uv_p->data = 0;
+      uv_close((uv_handle_t *)p->uv_p, close_cb_free_poll);
+    } else {
+      /* Never reached uv__handle_init: uv_p is still our raw block. Free it
+       * here and null the pointer so the caller's us_poll_free takes the
+       * !uv_p fast path (its uv_is_closing check would read garbage). */
+      free(p->uv_p);
+      p->uv_p = NULL;
+    }
+    errno = saved ? saved : -rc;
+    return rc;
+  }
   // This unref is okay in the context of Bun's event loop, because sockets have
   // a `Async.KeepAlive` associated with them, which is used instead of the
   // usockets internals. usockets doesnt have a notion of ref-counted handles.
   uv_unref((uv_handle_t *)p->uv_p);
   uv_poll_start(p->uv_p, events, poll_cb);
+  return 0;
+}
+
+void us_poll_start(struct us_poll_t *p, struct us_loop_t *loop, int events) {
+  us_poll_start_rc(p, loop, events);
 }
 
 void us_poll_change(struct us_poll_t *p, struct us_loop_t *loop, int events) {
@@ -143,7 +175,16 @@ void us_internal_poll_set_type(struct us_poll_t *p, int poll_type) {
 LIBUS_SOCKET_DESCRIPTOR us_poll_fd(struct us_poll_t *p) { return p->fd; }
 
 void us_loop_pump(struct us_loop_t *loop) {
+  /* POSIX parity: us_loop_run_bun_tick polls epoll/kqueue and dispatches
+   * regardless of ref state (it only early-outs on num_polls == 0). libuv's
+   * uv_run() skips its body when uv__loop_alive() is 0, so IOCP completions
+   * for unref'd handles (subprocess exit packets, socket events) and due
+   * timers are never processed. Bun's outer drive loops (wait_for_promise,
+   * bun:test) supply their own keep-going predicate, so force exactly one
+   * non-blocking iteration; UV_RUN_NOWAIT keeps the poll timeout at 0. */
+  loop->uv_loop->active_handles++;
   uv_run(loop->uv_loop, UV_RUN_NOWAIT);
+  loop->uv_loop->active_handles--;
 }
 
 struct us_loop_t *us_create_loop(void *hint,

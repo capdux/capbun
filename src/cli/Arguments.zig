@@ -130,7 +130,7 @@ pub const run_params = (((run_only_params ++ runtime_params_) ++ transpiler_para
 pub const bunx_commands = (.{ ((clap.parseParam("-b, --bun                         Force a script or package to use Bun's runtime instead of Node.js (via symlinking node)")) catch unreachable) } ++ auto_only_params);
 pub const build_only_params = (.{ ((clap.parseParam("--production                     Set NODE_ENV=production and enable minification")) catch unreachable), ((clap.parseParam("--compile                        Generate a standalone Bun executable containing your bundled code. Implies --production")) catch unreachable), ((clap.parseParam("--compile-exec-argv <STR>       Prepend arguments to the standalone executable's execArgv")) catch unreachable), ((clap.parseParam("--compile-autoload-dotenv        Enable autoloading of .env files in standalone executable (default: true)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-dotenv     Disable autoloading of .env files in standalone executable")) catch unreachable), ((clap.parseParam("--compile-autoload-bunfig        Enable autoloading of bunfig.toml in standalone executable (default: true)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-bunfig     Disable autoloading of bunfig.toml in standalone executable")) catch unreachable), ((clap.parseParam("--compile-autoload-tsconfig      Enable autoloading of tsconfig.json at runtime in standalone executable (default: false)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-tsconfig   Disable autoloading of tsconfig.json at runtime in standalone executable")) catch unreachable), ((clap.parseParam("--compile-autoload-package-json  Enable autoloading of package.json at runtime in standalone executable (default: false)")) catch unreachable), ((clap.parseParam("--no-compile-autoload-package-json Disable autoloading of package.json at runtime in standalone executable")) catch unreachable), ((clap.parseParam("--compile-executable-path <STR>  Path to a Bun executable to use for cross-compilation instead of downloading")) catch unreachable), ((clap.parseParam("--bytecode                       Use a bytecode cache")) catch unreachable), ((clap.parseParam("--watch                          Automatically restart the process on file change")) catch unreachable), ((clap.parseParam("--no-clear-screen                Disable clearing the terminal screen on reload when --watch is enabled")) catch unreachable), ((clap.parseParam("--target <STR>                   The intended execution environment for the bundle. \"browser\", \"bun\" or \"node\"")) catch unreachable), ((clap.parseParam("--outdir <STR>                   Default to \"dist\" if multiple files")) catch unreachable), ((clap.parseParam("--outfile <STR>                  Write to a file")) catch unreachable), ((clap.parseParam("--metafile <STR>?                Write a JSON file with metadata about the build")) catch unreachable), ((clap.parseParam("--metafile-md <STR>?             Write a markdown file with a visualization of the module graph (LLM-friendly)")) catch unreachable), ((clap.parseParam("--sourcemap <STR>?               Build with sourcemaps - 'linked', 'inline', 'external', or 'none'")) catch unreachable), ((clap.parseParam("--banner <STR>                   Add a banner to the bundled output such as \"use client\"; for a bundle being used with RSCs")) catch unreachable), ((clap.parseParam("--footer <STR>                   Add a footer to the bundled output such as // built with bun!")) catch unreachable), ((clap.parseParam("--format <STR>                   Specifies the module format to build to. \"esm\", \"cjs\" and \"iife\" are supported. Defaults to \"esm\", or \"cjs\" with --bytecode.")) catch unreachable), ((clap.parseParam("--root <STR>                     Root directory used for multiple entry points")) catch unreachable), ((clap.parseParam("--splitting                      Enable code splitting")) catch unreachable), ((clap.parseParam("--public-path <STR>              A prefix to be appended to any import paths in bundled code")) catch unreachable), ((clap.parseParam("-e, --external <STR>...          Exclude module from transpilation (can use * wildcards). ex: -e react")) catch unreachable), ((clap.parseParam("--allow-unresolved <STR>...      Allow unresolved dynamic import()/require() specifiers matching these glob patterns. Use '<empty>' for opaque specifiers. Default is '*' (allow all).")) catch unreachable), ((clap.parseParam("--reject-unresolved              Fail the build on any dynamic import()/require() specifier that cannot be resolved at build time.")) catch unreachable), ((clap.parseParam("--packages <STR>                 Add dependencies to bundle or keep them external. \"external\", \"bundle\" is supported. Defaults to \"bundle\".")) catch unreachable), ((clap.parseParam("--entry-naming <STR>             Customize entry point filenames. Defaults to \"[dir]/[name].[ext]\"")) catch unreachable), ((clap.parseParam("--chunk-naming <STR>             Customize chunk filenames. Defaults to \"[name]-[hash].[ext]\"")) catch unreachable), ((clap.parseParam("--asset-naming <STR>             Customize asset filenames. Defaults to \"[name]-[hash].[ext]\"")) catch unreachable), ((clap.parseParam("--react-fast-refresh             Enable React Fast Refresh transform (does not emit hot-module code, use this for testing)")) catch unreachable), ((clap.parseParam("--no-bundle                      Transpile file only, do not bundle")) catch unreachable), ((clap.parseParam("--emit-dce-annotations           Re-emit DCE annotations in bundles. Enabled by default unless --minify-whitespace is passed.")) catch unreachable), ((clap.parseParam("--minify                         Enable all minification flags")) catch unreachable), ((clap.parseParam("--minify-syntax                  Minify syntax and inline data")) catch unreachable), ((clap.parseParam("--minify-whitespace              Minify whitespace")) catch unreachable), ((clap.parseParam("--minify-identifiers             Minify identifiers")) catch unreachable), ((clap.parseParam("--keep-names                     Preserve original function and class names when minifying")) catch unreachable), ((clap.parseParam("--css-chunking                   Chunk CSS files together to reduce duplicated CSS loaded in a browser. Only has an effect when multiple entrypoints import CSS")) catch unreachable), ((clap.parseParam("--dump-environment-variables")) catch unreachable), ((clap.parseParam("--conditions <STR>...            Pass custom conditions to resolve")) catch unreachable), ((clap.parseParam("--app                            (EXPERIMENTAL) Build a web app for production using Bun Bake.")) catch unreachable), ((clap.parseParam("--server-components              (EXPERIMENTAL) Enable server components")) catch unreachable), ((clap.parseParam("--env <inline|prefix*|disable>   Inline environment variables into the bundle as process.env.${name}. Defaults to 'disable'. To inline environment variables matching a prefix, use my prefix like 'FOO_PUBLIC_*'.")) catch unreachable), ((clap.parseParam("--windows-hide-console           When using --compile targeting Windows, prevent a Command prompt from opening alongside the executable")) catch unreachable), ((clap.parseParam("--windows-icon <STR>             When using --compile targeting Windows, assign an executable icon")) catch unreachable), ((clap.parseParam("--windows-title <STR>            When using --compile targeting Windows, set the executable product name")) catch unreachable), ((clap.parseParam("--windows-publisher <STR>        When using --compile targeting Windows, set the executable company name")) catch unreachable), ((clap.parseParam("--windows-version <STR>          When using --compile targeting Windows, set the executable version (e.g. 1.2.3.4)")) catch unreachable), ((clap.parseParam("--windows-description <STR>      When using --compile targeting Windows, set the executable description")) catch unreachable), ((clap.parseParam("--windows-copyright <STR>        When using --compile targeting Windows, set the executable copyright")) catch unreachable) } ++ (if (FeatureFlags.bake_debugging_features) .{ ((clap.parseParam("--debug-dump-server-files        When --app is set, dump all server files to disk even when building statically")) catch unreachable), ((clap.parseParam("--debug-no-minify                When --app is set, do not minify anything")) catch unreachable) } else empty_params));
 pub const build_params = ((build_only_params ++ transpiler_params_) ++ base_params_);
-pub const test_only_params = .{ ((clap.parseParam("--no-orphans                     Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.")) catch unreachable), ((clap.parseParam("--timeout <NUMBER>               Set the per-test timeout in milliseconds, default is 5000.")) catch unreachable), ((clap.parseParam("-u, --update-snapshots           Update snapshot files")) catch unreachable), ((clap.parseParam("--rerun-each <NUMBER>            Re-run each test file <NUMBER> times, helps catch certain bugs")) catch unreachable), ((clap.parseParam("--retry <NUMBER>                 Default retry count for all tests, overridden by per-test { retry: N }")) catch unreachable), ((clap.parseParam("--todo                           Include tests that are marked with \"test.todo()\"")) catch unreachable), ((clap.parseParam("--only                           Run only tests that are marked with \"test.only()\" or \"describe.only()\"")) catch unreachable), ((clap.parseParam("--pass-with-no-tests             Exit with code 0 when no tests are found")) catch unreachable), ((clap.parseParam("--concurrent                     Treat all tests as `test.concurrent()` tests")) catch unreachable), ((clap.parseParam("--randomize                      Run tests in random order")) catch unreachable), ((clap.parseParam("--seed <INT>                     Set the random seed for test randomization")) catch unreachable), ((clap.parseParam("--coverage                       Generate a coverage profile")) catch unreachable), ((clap.parseParam("--coverage-reporter <STR>...     Report coverage in 'text' and/or 'lcov'. Defaults to 'text'.")) catch unreachable), ((clap.parseParam("--coverage-dir <STR>             Directory for coverage files. Defaults to 'coverage'.")) catch unreachable), ((clap.parseParam("--bail <NUMBER>?                 Exit the test suite after <NUMBER> failures. If you do not specify a number, it defaults to 1.")) catch unreachable), ((clap.parseParam("-t, --test-name-pattern/--grep <STR>    Run only tests with a name that matches the given regex.")) catch unreachable), ((clap.parseParam("--reporter <STR>                 Test output reporter format. Available: 'junit' (requires --reporter-outfile), 'dots'. Default: console output.")) catch unreachable), ((clap.parseParam("--reporter-outfile <STR>         Output file path for the reporter format (required with --reporter).")) catch unreachable), ((clap.parseParam("--dots                           Enable dots reporter. Shorthand for --reporter=dots.")) catch unreachable), ((clap.parseParam("--only-failures                  Only display test failures, hiding passing tests.")) catch unreachable), ((clap.parseParam("--max-concurrency <NUMBER>        Maximum number of concurrent tests to execute at once. Default is 20.")) catch unreachable), ((clap.parseParam("--path-ignore-patterns <STR>...   Glob patterns for test file paths to ignore.")) catch unreachable), ((clap.parseParam("--changed <STR>?                 Only run test files affected by changed files according to git. Optionally pass a commit or branch to compare against.")) catch unreachable), ((clap.parseParam("--isolate                        Run each test file in a fresh global object. Leaked handles from one file cannot affect another.")) catch unreachable), ((clap.parseParam("--parallel <NUMBER>?             Run test files in parallel using N worker processes. Implies --isolate. Defaults to CPU core count.")) catch unreachable), ((clap.parseParam("--parallel-delay <NUMBER>        Milliseconds the first --parallel worker must be busy before spawning the rest. 0 spawns all immediately. Default 5.")) catch unreachable), ((clap.parseParam("--test-worker                    (internal) Run as a --parallel worker, receiving files over IPC.")) catch unreachable), ((clap.parseParam("--shard <STR>                    Run a subset of test files, e.g. '--shard=1/3' runs the first of three shards. Useful for splitting tests across multiple CI jobs.")) catch unreachable) };
+pub const test_only_params = .{ ((clap.parseParam("--no-orphans                     Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.")) catch unreachable), ((clap.parseParam("--timeout <NUMBER>               Set the per-test timeout in milliseconds, default is 5000.")) catch unreachable), ((clap.parseParam("-u, --update-snapshots           Update snapshot files")) catch unreachable), ((clap.parseParam("--rerun-each <NUMBER>            Re-run each test file <NUMBER> times, helps catch certain bugs")) catch unreachable), ((clap.parseParam("--retry <NUMBER>                 Default retry count for all tests, overridden by per-test { retry: N }")) catch unreachable), ((clap.parseParam("--todo                           Include tests that are marked with \"test.todo()\"")) catch unreachable), ((clap.parseParam("--only                           Run only tests that are marked with \"test.only()\" or \"describe.only()\"")) catch unreachable), ((clap.parseParam("--pass-with-no-tests             Exit with code 0 when no tests are found")) catch unreachable), ((clap.parseParam("--concurrent                     Treat all tests as `test.concurrent()` tests")) catch unreachable), ((clap.parseParam("--randomize                      Run tests in random order")) catch unreachable), ((clap.parseParam("--seed <INT>                     Set the random seed for test randomization")) catch unreachable), ((clap.parseParam("--coverage                       Generate a coverage profile")) catch unreachable), ((clap.parseParam("--coverage-reporter <STR>...     Report coverage in 'text' and/or 'lcov'. Defaults to 'text'.")) catch unreachable), ((clap.parseParam("--coverage-dir <STR>             Directory for coverage files. Defaults to 'coverage'.")) catch unreachable), ((clap.parseParam("--bail <NUMBER>?                 Exit the test suite after <NUMBER> failures. If you do not specify a number, it defaults to 1.")) catch unreachable), ((clap.parseParam("-t, --test-name-pattern/--grep <STR>    Run only tests with a name that matches the given regex.")) catch unreachable), ((clap.parseParam("--reporter <STR>                 Test output reporter format. Available: 'junit' (requires --reporter-outfile), 'dots'. Default: console output.")) catch unreachable), ((clap.parseParam("--reporter-outfile <STR>         Output file path for the reporter format (required with --reporter).")) catch unreachable), ((clap.parseParam("--dots                           Enable dots reporter. Shorthand for --reporter=dots.")) catch unreachable), ((clap.parseParam("--only-failures                  Only display test failures, hiding passing tests.")) catch unreachable), ((clap.parseParam("--max-concurrency <NUMBER>        Maximum number of concurrent tests to execute at once. Default is 20.")) catch unreachable), ((clap.parseParam("--path-ignore-patterns <STR>...   Glob patterns for test file paths to ignore.")) catch unreachable), ((clap.parseParam("--changed <STR>?                 Only run test files affected by changed files according to git. Optionally pass a commit or branch to compare against.")) catch unreachable), ((clap.parseParam("--isolate                        Run each test file in a fresh global object. Leaked handles from one file cannot affect another.")) catch unreachable), ((clap.parseParam("--no-isolate                     With --parallel: let each worker keep one global and module registry across the files it runs (faster; files can see each other's leftovers).")) catch unreachable), ((clap.parseParam("--parallel <NUMBER>?             Run test files in parallel using N worker processes. Implies --isolate. Defaults to CPU core count.")) catch unreachable), ((clap.parseParam("--parallel-delay <NUMBER>        Milliseconds the first --parallel worker must be busy before spawning the rest. 0 spawns all immediately. Default 5.")) catch unreachable), ((clap.parseParam("--test-worker                    (internal) Run as a --parallel worker, receiving files over IPC.")) catch unreachable), ((clap.parseParam("--shard <STR>                    Run a subset of test files, e.g. '--shard=1/3' runs the first of three shards. Useful for splitting tests across multiple CI jobs.")) catch unreachable), ((clap.parseParam("--timings <STR>...               JSON file(s) of per-file durations (ms); several are merged, e.g. one per CI shard. Balances --shard by total time and makes --parallel start the slowest files first.")) catch unreachable), ((clap.parseParam("--update-timings                 After the run, write measured per-file durations to the first --timings file (only this shard's files under --shard; merged with what was read otherwise).")) catch unreachable) };
 pub const test_params = (((test_only_params ++ runtime_params_) ++ transpiler_params_) ++ base_params_);
 pub export var Bun__Node__ZeroFillBuffers = false;
 pub export var Bun__Node__ProcessNoDeprecation = false;
@@ -172,7 +172,7 @@ pub fn noop_resolver(input: []const u8) ![]const u8 {
 }
 
 pub fn fileReadError(e: anyerror, stderr: anytype, filename: []const u8, kind: []const u8) noreturn {
-        _ = (blk_catch_176: { break :blk_catch_176 ((stderr.writer().print("Error reading file \"{s}\" for {s}: {s}", .{ filename, kind, @errorName(e) })) catch |__ce_176| { _ = &__ce_176;  }); });
+        _ = (blk_catch_179: { break :blk_catch_179 ((stderr.writer().print("Error reading file \"{s}\" for {s}: {s}", .{ filename, kind, @errorName(e) })) catch |__ce_179| { _ = &__ce_179;  }); });
         _ = std.process.exit(1);
 }
 
@@ -223,11 +223,11 @@ pub fn loadGlobalBunfig(allocator: std.mem.Allocator, ctx: Command.Context, comp
 
 pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
         if (comptime cmd.readGlobalConfig()) {
-            _ = (blk_catch_177: { break :blk_catch_177 ((loadGlobalBunfig(allocator, ctx, cmd)) catch |e| { _ = &e; if (auto_loaded) {
+            _ = (blk_catch_180: { break :blk_catch_180 ((loadGlobalBunfig(allocator, ctx, cmd)) catch |e| { _ = &e; if (auto_loaded) {
                 return;
             }
             _ = Output.prettyErrorln("{}\nreading global config \"{s}\"", .{ e, config_path });
-            break :blk_catch_177 @as(void, Global.exit(1)); }); });
+            break :blk_catch_180 @as(void, Global.exit(1)); }); });
         }
         _ = try loadBunfig(allocator, auto_loaded, config_path, ctx, cmd);
 }
@@ -293,14 +293,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
                 ctx.has_loaded_global_config = true;
                 if (getHomeConfigPath((&config_buf))) |path| {
                     _ = &path;
-                    _ = (blk_catch_178: { break :blk_catch_178 ((loadConfigPath(allocator, true, path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
-                        _ = (blk_catch_179: { break :blk_catch_179 ((ctx.log.print(Output.errorWriter())) catch |__ce_179| { _ = &__ce_179;  }); });
+                    _ = (blk_catch_181: { break :blk_catch_181 ((loadConfigPath(allocator, true, path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
+                        _ = (blk_catch_182: { break :blk_catch_182 ((ctx.log.print(Output.errorWriter())) catch |__ce_182| { _ = &__ce_182;  }); });
                     }
                     if (ctx.log.hasAny()) {
                         _ = Output.printError("\n", .{});
                     }
                     _ = Output.err(e, "failed to load bunfig", .{});
-                    break :blk_catch_178 @as(void, Global.crash()); }); });
+                    break :blk_catch_181 @as(void, Global.crash()); }); });
                 }
             }
         }
@@ -325,7 +325,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
             if ((ctx.args.absolute_working_dir == null)) {
                 var secondbuf: bun.PathBuffer = undefined;
                 _ = &secondbuf;
-                const cwd = (blk_catch_180: { break :blk_catch_180 ((bun.getcwd((&secondbuf))) catch |__ce_180| { _ = &__ce_180; return; }); });
+                const cwd = (blk_catch_183: { break :blk_catch_183 ((bun.getcwd((&secondbuf))) catch |__ce_183| { _ = &__ce_183; return; }); });
                 ctx.args.absolute_working_dir = try allocator.dupeZ(u8, cwd);
             }
             var parts: [2][]const u8 = .{ ctx.args.absolute_working_dir.?, config_path_ };
@@ -334,14 +334,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
             config_buf[cp_cast_int(usize, config_path_.len)] = 0;
             config_path = config_buf[0..config_path_.len :0];
         }
-        _ = (blk_catch_181: { break :blk_catch_181 ((loadConfigPath(allocator, auto_loaded, config_path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
-            _ = (blk_catch_182: { break :blk_catch_182 ((ctx.log.print(Output.errorWriter())) catch |__ce_182| { _ = &__ce_182;  }); });
+        _ = (blk_catch_184: { break :blk_catch_184 ((loadConfigPath(allocator, auto_loaded, config_path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
+            _ = (blk_catch_185: { break :blk_catch_185 ((ctx.log.print(Output.errorWriter())) catch |__ce_185| { _ = &__ce_185;  }); });
         }
         if (ctx.log.hasAny()) {
             _ = Output.printError("\n", .{});
         }
         _ = Output.err(e, "failed to load bunfig", .{});
-        break :blk_catch_181 @as(void, Global.crash()); }); });
+        break :blk_catch_184 @as(void, Global.crash()); }); });
 }
 
 pub fn loadConfigWithCmdArgs(comptime cmd: Command.Tag, allocator: std.mem.Allocator, args: clap.Args(clap.Help, cmd.params()), ctx: Command.Context) !void {
@@ -352,13 +352,13 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         var diag = clap.Diagnostic{  };
         _ = &diag;
         const params_to_parse = (comptime cmd.params());
-        var args = (blk_catch_183: { break :blk_catch_183 ((clap.parse(clap.Help, params_to_parse, .{ .diagnostic = (&diag), .allocator = allocator, .stop_after_positional_at = (switch (cmd) {
+        var args = (blk_catch_186: { break :blk_catch_186 ((clap.parse(clap.Help, params_to_parse, .{ .diagnostic = (&diag), .allocator = allocator, .stop_after_positional_at = (switch (cmd) {
 .RunCommand => 2,
 .AutoCommand, .RunAsNodeCommand => 1,
 else => 0,
-}) })) catch |e| { _ = &e; _ = (blk_catch_184: { break :blk_catch_184 ((diag.report(Output.errorWriter(), e)) catch |__ce_184| { _ = &__ce_184;  }); });
+}) })) catch |e| { _ = &e; _ = (blk_catch_187: { break :blk_catch_187 ((diag.report(Output.errorWriter(), e)) catch |__ce_187| { _ = &__ce_187;  }); });
         _ = cmd.printHelp(false);
-        break :blk_catch_183 Global.exit(1); }); });
+        break :blk_catch_186 Global.exit(1); }); });
         _ = &args;
         const print_help = args.flag("--help");
         if (print_help) {
@@ -387,8 +387,8 @@ else => 0,
             var outbuf: bun.PathBuffer = undefined;
             _ = &outbuf;
             const out = bun.path.joinAbs(try bun.getcwd((&outbuf)), .loose, cwd_arg);
-            _ = (blk_catch_185: { break :blk_catch_185 ((bun.sys.chdir("", out).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "Could not change directory to \"{s}\"\n", .{ cwd_arg });
-            break :blk_catch_185 Global.exit(1); }); });
+            _ = (blk_catch_188: { break :blk_catch_188 ((bun.sys.chdir("", out).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "Could not change directory to \"{s}\"\n", .{ cwd_arg });
+            break :blk_catch_188 Global.exit(1); }); });
             break :brk try allocator.dupeZ(u8, out);
 };
         } else {
@@ -409,8 +409,8 @@ else => 0,
             if (args.option("--elide-lines")) |elide_lines| {
                 _ = &elide_lines;
                 if ((elide_lines.len > 0)) {
-                    ctx.bundler_options.elide_lines = (blk_catch_186: { break :blk_catch_186 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_186| { _ = &__ce_186; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
-                    break :blk_catch_186 Global.exit(1); }); });
+                    ctx.bundler_options.elide_lines = (blk_catch_189: { break :blk_catch_189 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_189| { _ = &__ce_189; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
+                    break :blk_catch_189 Global.exit(1); }); });
                 }
             }
         }
@@ -418,16 +418,16 @@ else => 0,
             if (args.option("--timeout")) |timeout_ms| {
                 _ = &timeout_ms;
                 if ((timeout_ms.len > 0)) {
-                    ctx.test_options.default_timeout_ms = (blk_catch_187: { break :blk_catch_187 ((std.fmt.parseInt(u32, timeout_ms, 10)) catch |__ce_187| { _ = &__ce_187; _ = Output.prettyErrorln("<r><red>error<r>: Invalid timeout: \"{s}\"", .{ timeout_ms });
+                    ctx.test_options.default_timeout_ms = (blk_catch_190: { break :blk_catch_190 ((std.fmt.parseInt(u32, timeout_ms, 10)) catch |__ce_190| { _ = &__ce_190; _ = Output.prettyErrorln("<r><red>error<r>: Invalid timeout: \"{s}\"", .{ timeout_ms });
                     _ = Output.flush();
-                    break :blk_catch_187 Global.exit(1); }); });
+                    break :blk_catch_190 Global.exit(1); }); });
                 }
             }
             if (args.option("--max-concurrency")) |max_concurrency| {
                 _ = &max_concurrency;
                 if ((max_concurrency.len > 0)) {
-                    ctx.test_options.max_concurrency = (blk_catch_188: { break :blk_catch_188 ((std.fmt.parseInt(u32, max_concurrency, 10)) catch |__ce_188| { _ = &__ce_188; _ = Output.prettyErrorln("<r><red>error<r>: Invalid max-concurrency: \"{s}\"", .{ max_concurrency });
-                    break :blk_catch_188 Global.exit(1); }); });
+                    ctx.test_options.max_concurrency = (blk_catch_191: { break :blk_catch_191 ((std.fmt.parseInt(u32, max_concurrency, 10)) catch |__ce_191| { _ = &__ce_191; _ = Output.prettyErrorln("<r><red>error<r>: Invalid max-concurrency: \"{s}\"", .{ max_concurrency });
+                    break :blk_catch_191 Global.exit(1); }); });
                 }
             }
             if ((!ctx.test_options.coverage.enabled)) {
@@ -487,9 +487,9 @@ else => 0,
             if (args.option("--bail")) |bail| {
                 _ = &bail;
                 if ((bail.len > 0)) {
-                    ctx.test_options.bail = (blk_catch_189: { break :blk_catch_189 ((std.fmt.parseInt(u32, bail, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{ @errorName(e) });
+                    ctx.test_options.bail = (blk_catch_192: { break :blk_catch_192 ((std.fmt.parseInt(u32, bail, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{ @errorName(e) });
                     _ = Output.flush();
-                    break :blk_catch_189 Global.exit(1); }); });
+                    break :blk_catch_192 Global.exit(1); }); });
                     if ((ctx.test_options.bail == 0)) {
                         _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number greater than 0", .{});
                         _ = Output.flush();
@@ -502,15 +502,15 @@ else => 0,
             if (args.option("--rerun-each")) |repeat_count| {
                 _ = &repeat_count;
                 if ((repeat_count.len > 0)) {
-                    ctx.test_options.repeat_count = (blk_catch_190: { break :blk_catch_190 ((std.fmt.parseInt(u32, repeat_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{ @errorName(e) });
-                    break :blk_catch_190 Global.exit(1); }); });
+                    ctx.test_options.repeat_count = (blk_catch_193: { break :blk_catch_193 ((std.fmt.parseInt(u32, repeat_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{ @errorName(e) });
+                    break :blk_catch_193 Global.exit(1); }); });
                 }
             }
             if (args.option("--retry")) |retry_count| {
                 _ = &retry_count;
                 if ((retry_count.len > 0)) {
-                    ctx.test_options.retry = (blk_catch_191: { break :blk_catch_191 ((std.fmt.parseInt(u32, retry_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{ @errorName(e) });
-                    break :blk_catch_191 Global.exit(1); }); });
+                    ctx.test_options.retry = (blk_catch_194: { break :blk_catch_194 ((std.fmt.parseInt(u32, retry_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{ @errorName(e) });
+                    break :blk_catch_194 Global.exit(1); }); });
                 }
             }
             if (((ctx.test_options.retry != 0) and (ctx.test_options.repeat_count != 0))) {
@@ -520,8 +520,8 @@ else => 0,
             if (args.option("--test-name-pattern")) |namePattern| {
                 _ = &namePattern;
                 ctx.test_options.test_filter_pattern = namePattern;
-                const regex = (blk_catch_192: { break :blk_catch_192 ((RegularExpression.init(bun.String.fromBytes(namePattern), RegularExpression.Flags.none)) catch |__ce_192| { _ = &__ce_192; _ = Output.prettyErrorln("<r><red>error<r>: --test-name-pattern expects a valid regular expression but received {f}", .{ bun.fmt.QuotedFormatter{ .text = namePattern } });
-                break :blk_catch_192 Global.exit(1); }); });
+                const regex = (blk_catch_195: { break :blk_catch_195 ((RegularExpression.init(bun.String.fromBytes(namePattern), RegularExpression.Flags.none)) catch |__ce_195| { _ = &__ce_195; _ = Output.prettyErrorln("<r><red>error<r>: --test-name-pattern expects a valid regular expression but received {f}", .{ bun.fmt.QuotedFormatter{ .text = namePattern } });
+                break :blk_catch_195 Global.exit(1); }); });
                 {
                     ctx.test_options.test_filter_regex = @ptrCast(regex);
                 }
@@ -540,10 +540,10 @@ else => 0,
                 const sep = sep_opt.?;
                 const index_str = shard[0..sep];
                 const count_str = shard[(sep + 1)..];
-                const index = (blk_catch_193: { break :blk_catch_193 ((std.fmt.parseInt(u32, index_str, 10)) catch |__ce_193| { _ = &__ce_193; _ = Output.prettyErrorln("<r><red>error<r>: --shard index must be a positive integer, got \"{s}\"", .{ index_str });
-                break :blk_catch_193 Global.exit(1); }); });
-                const count = (blk_catch_194: { break :blk_catch_194 ((std.fmt.parseInt(u32, count_str, 10)) catch |__ce_194| { _ = &__ce_194; _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be a positive integer, got \"{s}\"", .{ count_str });
-                break :blk_catch_194 Global.exit(1); }); });
+                const index = (blk_catch_196: { break :blk_catch_196 ((std.fmt.parseInt(u32, index_str, 10)) catch |__ce_196| { _ = &__ce_196; _ = Output.prettyErrorln("<r><red>error<r>: --shard index must be a positive integer, got \"{s}\"", .{ index_str });
+                break :blk_catch_196 Global.exit(1); }); });
+                const count = (blk_catch_197: { break :blk_catch_197 ((std.fmt.parseInt(u32, count_str, 10)) catch |__ce_197| { _ = &__ce_197; _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be a positive integer, got \"{s}\"", .{ count_str });
+                break :blk_catch_197 Global.exit(1); }); });
                 if ((count == 0)) {
                     _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be greater than 0", .{});
                     _ = Global.exit(1);
@@ -554,35 +554,66 @@ else => 0,
                 }
                 ctx.test_options.shard = .{ .index = index, .count = count };
             }
+            const timings_opts = args.options("--timings");
+            if ((timings_opts.len > 0)) {
+                var list = std.array_list.Managed(string).init(allocator);
+                _ = &list;
+                for (cp_iter_slice(timings_opts)) |p| {
+                    _ = &p;
+                    if ((p.len == 0)) {
+                        _ = Output.prettyErrorln("<r><red>error<r>: --timings expects a file path", .{});
+                        _ = Global.exit(1);
+                    }
+                    var dup = false;
+                    _ = &dup;
+                    for (list.items) |existing| {
+                        _ = &existing;
+                        if (bun.strings.eqlLong(existing, p, true)) {
+                            dup = true;
+                            break;
+                        }
+                    }
+                    if ((!dup)) {
+                        _ = (blk_catch_198: { break :blk_catch_198 ((list.append(p)) catch |__ce_198| { _ = &__ce_198; break :blk_catch_198 bun.outOfMemory(); }); });
+                    }
+                }
+                ctx.test_options.timings_files = list.items;
+            }
+            ctx.test_options.update_timings = args.flag("--update-timings");
+            if ((ctx.test_options.update_timings and (ctx.test_options.timings_files.len == 0))) {
+                _ = Output.prettyErrorln("<r><red>error<r>: --update-timings requires --timings, e.g. --timings=.bun-test-timings.json --update-timings", .{});
+                _ = Global.exit(1);
+            }
             ctx.test_options.update_snapshots = args.flag("--update-snapshots");
             ctx.test_options.run_todo = args.flag("--todo");
             ctx.test_options.only = args.flag("--only");
             ctx.test_options.pass_with_no_tests = args.flag("--pass-with-no-tests");
             ctx.test_options.concurrent = args.flag("--concurrent");
             ctx.test_options.randomize = args.flag("--randomize");
-            ctx.test_options.isolate = args.flag("--isolate");
+            const no_isolate = args.flag("--no-isolate");
+            ctx.test_options.isolate = (args.flag("--isolate") and (!no_isolate));
             ctx.test_options.test_worker = args.flag("--test-worker");
             if (args.option("--parallel")) |parallel_str| {
                 _ = &parallel_str;
-                const parsed: u32 = (if ((parallel_str.len > 0)) (blk_catch_195: { break :blk_catch_195 ((std.fmt.parseInt(u32, parallel_str, 10)) catch |__ce_195| { _ = &__ce_195; _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"{s}\"", .{ parallel_str });
-                break :blk_catch_195 Global.exit(1); }); }) else @max(bun.getThreadCount(), 1));
+                const parsed: u32 = (if ((parallel_str.len > 0)) (blk_catch_199: { break :blk_catch_199 ((std.fmt.parseInt(u32, parallel_str, 10)) catch |__ce_199| { _ = &__ce_199; _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"{s}\"", .{ parallel_str });
+                break :blk_catch_199 Global.exit(1); }); }) else @max(bun.getThreadCount(), 1));
                 if ((parsed == 0)) {
                     _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"0\"", .{});
                     _ = Global.exit(1);
                 }
                 ctx.test_options.parallel = parsed;
-                ctx.test_options.isolate = true;
+                ctx.test_options.isolate = (!no_isolate);
             }
             if (args.option("--parallel-delay")) |delay_str| {
                 _ = &delay_str;
-                ctx.test_options.parallel_delay_ms = (blk_catch_196: { break :blk_catch_196 ((std.fmt.parseInt(u32, delay_str, 10)) catch |__ce_196| { _ = &__ce_196; _ = Output.prettyErrorln("<red>error<r>: --parallel-delay expects a non-negative integer (milliseconds), received \"{s}\"", .{ delay_str });
-                break :blk_catch_196 Global.exit(1); }); });
+                ctx.test_options.parallel_delay_ms = (blk_catch_200: { break :blk_catch_200 ((std.fmt.parseInt(u32, delay_str, 10)) catch |__ce_200| { _ = &__ce_200; _ = Output.prettyErrorln("<red>error<r>: --parallel-delay expects a non-negative integer (milliseconds), received \"{s}\"", .{ delay_str });
+                break :blk_catch_200 Global.exit(1); }); });
             }
             if (args.option("--seed")) |seed_str| {
                 _ = &seed_str;
                 ctx.test_options.randomize = true;
-                ctx.test_options.seed = (blk_catch_197: { break :blk_catch_197 ((std.fmt.parseInt(u32, seed_str, 10)) catch |__ce_197| { _ = &__ce_197; _ = Output.prettyErrorln("<red>error<r>: Invalid seed value: {s}", .{ seed_str });
-                break :blk_catch_197 std.process.exit(1); }); });
+                ctx.test_options.seed = (blk_catch_201: { break :blk_catch_201 ((std.fmt.parseInt(u32, seed_str, 10)) catch |__ce_201| { _ = &__ce_201; _ = Output.prettyErrorln("<red>error<r>: Invalid seed value: {s}", .{ seed_str });
+                break :blk_catch_201 std.process.exit(1); }); });
             }
         }
         ctx.args.absolute_working_dir = cwd;
@@ -704,15 +735,15 @@ else => 0,
                     ctx.runtime_options.eval.script = port_str;
                     ctx.runtime_options.eval.eval_and_print = true;
                 } else {
-                    opts.port = (blk_catch_199: { break :blk_catch_199 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_199| { _ = &__ce_199; _ = Output.errFmt(bun.fmt.outOfRange(port_str, .{ .field_name = "--port", .min = 0, .max = std.math.maxInt(u16) }));
+                    opts.port = (blk_catch_203: { break :blk_catch_203 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_203| { _ = &__ce_203; _ = Output.errFmt(bun.fmt.outOfRange(port_str, .{ .field_name = "--port", .min = 0, .max = std.math.maxInt(u16) }));
                     _ = Output.note("To evaluate TypeScript here, use 'bun --print'", .{});
-                    break :blk_catch_199 Global.exit(1); }); });
+                    break :blk_catch_203 Global.exit(1); }); });
                 }
             }
             if (args.option("--max-http-header-size")) |size_str| {
                 _ = &size_str;
-                const size = (blk_catch_200: { break :blk_catch_200 ((std.fmt.parseInt(usize, size_str, 10)) catch |__ce_200| { _ = &__ce_200; _ = Output.errGeneric("Invalid value for --max-http-header-size: \"{s}\". Must be a positive integer\n", .{ size_str });
-                break :blk_catch_200 Global.exit(1); }); });
+                const size = (blk_catch_204: { break :blk_catch_204 ((std.fmt.parseInt(usize, size_str, 10)) catch |__ce_204| { _ = &__ce_204; _ = Output.errGeneric("Invalid value for --max-http-header-size: \"{s}\". Must be a positive integer\n", .{ size_str });
+                break :blk_catch_204 Global.exit(1); }); });
                 if ((size == 0)) {
                     bun.http.max_http_header_size = ((1024 * 1024) * 1024);
                 } else {
@@ -764,8 +795,8 @@ else => 0,
             ctx.runtime_options.expose_gc = args.flag("--expose-gc");
             if (args.option("--console-depth")) |depth_str| {
                 _ = &depth_str;
-                const depth = (blk_catch_201: { break :blk_catch_201 ((std.fmt.parseInt(u16, depth_str, 10)) catch |__ce_201| { _ = &__ce_201; _ = Output.errGeneric("Invalid value for --console-depth: \"{s}\". Must be a positive integer\n", .{ depth_str });
-                break :blk_catch_201 Global.exit(1); }); });
+                const depth = (blk_catch_205: { break :blk_catch_205 ((std.fmt.parseInt(u16, depth_str, 10)) catch |__ce_205| { _ = &__ce_205; _ = Output.errGeneric("Invalid value for --console-depth: \"{s}\". Must be a positive integer\n", .{ depth_str });
+                break :blk_catch_205 Global.exit(1); }); });
                 ctx.runtime_options.console_depth = (if ((depth == 0)) std.math.maxInt(u16) else depth);
             }
             if (args.option("--dns-result-order")) |order| {
@@ -820,7 +851,7 @@ else => 0,
                 ctx.runtime_options.cpu_prof.json_format = cpu_prof_flag;
                 if (args.option("--cpu-prof-interval")) |interval_str| {
                     _ = &interval_str;
-                    ctx.runtime_options.cpu_prof.interval = (blk_catch_202: { break :blk_catch_202 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_202| { _ = &__ce_202; break :blk_catch_202 1000; }); });
+                    ctx.runtime_options.cpu_prof.interval = (blk_catch_206: { break :blk_catch_206 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_206| { _ = &__ce_206; break :blk_catch_206 1000; }); });
                 }
             } else {
                 if (args.option("--cpu-prof-name")) |_| {
@@ -1153,10 +1184,6 @@ else => 0,
                 ctx.bundler_options.compile_executable_path = path;
             }
             if (args.flag("--windows-hide-console")) {
-                if ((!Environment.isWindows)) {
-                    _ = Output.errGeneric("Using --windows-hide-console is only available when compiling on Windows", .{});
-                    _ = Global.crash();
-                }
                 if ((ctx.bundler_options.compile_target.os != .windows)) {
                     _ = Output.errGeneric("--windows-hide-console requires a Windows compile target", .{});
                     _ = Global.crash();
@@ -1440,8 +1467,8 @@ else => {
             if (args.option("--elide-lines")) |elide_lines| {
                 _ = &elide_lines;
                 if ((elide_lines.len > 0)) {
-                    ctx.bundler_options.elide_lines = (blk_catch_203: { break :blk_catch_203 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_203| { _ = &__ce_203; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
-                    break :blk_catch_203 Global.exit(1); }); });
+                    ctx.bundler_options.elide_lines = (blk_catch_207: { break :blk_catch_207 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_207| { _ = &__ce_207; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
+                    break :blk_catch_207 Global.exit(1); }); });
                 }
             }
             if (opts.define) |define| {

@@ -142,6 +142,10 @@ export class All {
     pub fn insert(_: *All, timer: *EventLoopTimer) {
         _.assertJSThread();
         if (comptime Environment.ci_assert) bun.assert(timer.tag != .WTFTimer);
+        if (flags := timer.jsTimerInternalsFlags()) {
+            _.epoch +%= 1;
+            flags.epoch = _.epoch;
+        }
         if (_.fake_timers.isActive() && timer.tag.allowFakeTimers()) {
             _.fake_timers.timers.insert(timer);
             timer.state = .ACTIVE;
@@ -181,10 +185,6 @@ export class All {
         }
 
         timer.next = time.*;
-        if (flags := timer.jsTimerInternalsFlags()) {
-            _.epoch = _.epoch + 1;
-            flags.epoch = _.epoch;
-        }
 
         _.insert(timer);
     }

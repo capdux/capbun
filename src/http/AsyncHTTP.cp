@@ -49,6 +49,7 @@ export struct Options {
     disable_decompression: bool? = null,
     reject_unauthorized: bool? = null,
     tls_props: bun.api.server.ServerConfig.SSLConfig.SharedPtr? = null,
+    compress: bun.http.compress_body.CompressOption? = null,
 }
 
 pub const Channel8 = bun.threading.Channel(HTTPClientResult, { Static: 8 });
@@ -287,6 +288,7 @@ export @root @value struct AsyncHTTP {
         if (val := options.tls_props) {
             async_http.client.tls_props = val;
         }
+        async_http.client.compress = options.compress;
 
         if (proxy := options.http_proxy) {
             if (proxy.username.len > 0) {

@@ -1254,7 +1254,7 @@ pub fn parse(source: *const logger.Source, allocator: std.mem.Allocator, map: *E
             _ = &parser;
             _ = try parser._parse(allocator, map, override, is_process, expand);
     }
-    const whitespace_chars = "\t\x0B\x0C \xA0\n\r";
+    const whitespace_chars = "\t\x0B\x0C \n\r";
 };
 
 pub const _MapHashTableValue = struct {

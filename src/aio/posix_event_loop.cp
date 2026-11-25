@@ -140,6 +140,7 @@ pub enum FilePollFlags {
     poll_writable,
     poll_process,
     poll_machport,
+    poll_memory_pressure,
 
     readable,
     writable,
@@ -147,6 +148,7 @@ pub enum FilePollFlags {
     eof,
     hup,
     machport,
+    memory_pressure,
 
     fifo,
     tty,
@@ -175,6 +177,7 @@ pub enum FilePollFlags {
             .writable => .poll_writable,
             .process => .poll_process,
             .machport => .poll_machport,
+            .memory_pressure => .poll_memory_pressure,
             else => v,
         };
     }
@@ -213,6 +216,8 @@ pub enum FilePollFlags {
         } else if (comptime Environment.isMac) {
             if (kqueue_event.filter == std.posix.system.EVFILT.MACHPORT) {
                 flags.insert(FilePollFlags.machport);
+            } else if (kqueue_event.filter == -14) {
+                flags.insert(FilePollFlags.memory_pressure);
             }
         }
         return flags;
@@ -225,6 +230,9 @@ pub enum FilePollFlags {
         }
         if ((epoll.events & std.os.linux.EPOLL.OUT) != 0) {
             flags.insert(FilePollFlags.writable);
+        }
+        if ((epoll.events & std.os.linux.EPOLL.PRI) != 0) {
+            flags.insert(FilePollFlags.memory_pressure);
         }
         if ((epoll.events & std.os.linux.EPOLL.ERR) != 0) {
             flags.insert(FilePollFlags.eof);
@@ -329,6 +337,7 @@ pub struct FilePoll {
     const LifecycleScriptSubprocessOutputReader = bun.install.LifecycleScriptSubprocess.OutputReader;
     const BufferedReader = bun.io.BufferedReader;
     const ParentDeathWatchdog = bun.ParentDeathWatchdog;
+    const MemoryPressureWatcher = bun.api.node.memory_pressure.MemoryPressureWatcher;
 
     pub const Owner = bun.TaggedPointerUnion(.{
         FileSink,
@@ -343,6 +352,7 @@ pub struct FilePoll {
         ShellBufferedWriter,
         TerminalPoll,
         ParentDeathWatchdog,
+        MemoryPressureWatcher,
     });
 
     const AllocatorType = FilePollAllocatorType;
@@ -353,6 +363,7 @@ pub struct FilePoll {
         flags.remove(.writable);
         flags.remove(.process);
         flags.remove(.machport);
+        flags.remove(.memory_pressure);
         flags.remove(.eof);
         flags.remove(.hup);
 
@@ -384,6 +395,13 @@ pub struct FilePoll {
 
         if (comptime Environment.isMac && KQueueGenerationNumber != u0)
             bun.assert(poll.generation_number == kqueue_event.ext[0]);
+
+        if (comptime Environment.isMac) {
+            if (kqueue_event.filter == -14) {
+                poll.onUpdate(@intCast(kqueue_event.fflags));
+                return;
+            }
+        }
 
         poll.onUpdate(kqueue_event.data);
     }
@@ -472,7 +490,7 @@ pub struct FilePoll {
     }
 
     fn isRegistered(): bool {
-        return _.flags.contains(.poll_writable) || _.flags.contains(.poll_readable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport);
+        return _.flags.contains(.poll_writable) || _.flags.contains(.poll_readable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport) || _.flags.contains(.poll_memory_pressure);
     }
 
     const kqueue_or_epoll = if (Environment.isKqueue) "kevent" else "epoll";
@@ -553,6 +571,9 @@ pub struct FilePoll {
                 if (comptime !Environment.isMac) unreachable;
                 log("onUpdate " ++ kqueue_or_epoll ++ " (fd: {f}) ParentDeathWatchdog", .{poll.fd});
                 ptr.as(ParentDeathWatchdog).onParentExit();
+            },
+            @field(Owner.Tag, @typeName(MemoryPressureWatcher)) => {
+                MemoryPressureWatcher.onPoll(poll, size_or_offset);
             },
             else => {
                 const possible_name = Owner.typeNameFromTag(@intFromEnum(ptr.tag()));
@@ -773,6 +794,7 @@ pub struct FilePoll {
                 .readable,
                 => linux.EPOLL.IN | linux.EPOLL.HUP | one_shot_flag,
                 .writable => linux.EPOLL.OUT | linux.EPOLL.HUP | linux.EPOLL.ERR | one_shot_flag,
+                .memory_pressure => linux.EPOLL.PRI | linux.EPOLL.ERR | one_shot_flag,
                 else => unreachable,
             };
             if (flag == .readable && _.flags.contains(.poll_writable)) {
@@ -847,6 +869,15 @@ pub struct FilePoll {
                     .flags = std.c.EV.ADD | one_shot_flag,
                     .ext = .{ _.generation_number, 0 },
                 },
+                .memory_pressure => .{
+                    .ident = 0,
+                    .filter = -14,
+                    .data = 0,
+                    .fflags = 0x00000002 | 0x00000004,
+                    .udata = unsafe { @intFromPtr(Pollable.init(_).ptr()) },
+                    .flags = std.c.EV.ADD | std.c.EV.CLEAR | one_shot_flag,
+                    .ext = .{ _.generation_number, 0 },
+                },
                 else => unreachable,
             };
 
@@ -915,7 +946,7 @@ pub struct FilePoll {
                     .udata = unsafe { @intFromPtr(Pollable.init(_).ptr()) },
                     .flags = std.c.EV.ADD | one_shot_flag,
                 },
-                .machport => return .initErr(.{ .errno = @intFromEnum(bun.sys.E.OPNOTSUPP), .syscall = .kevent }),
+                .machport, .memory_pressure => return .initErr(.{ .errno = @intFromEnum(bun.sys.E.OPNOTSUPP), .syscall = .kevent }),
                 else => unreachable,
             };
 
@@ -948,6 +979,7 @@ pub struct FilePoll {
             .process => if (comptime Environment.isLinux) .poll_readable else .poll_process,
             .writable => .poll_writable,
             .machport => .poll_machport,
+            .memory_pressure => .poll_memory_pressure,
             else => unreachable,
         });
         _.flags.remove(.needs_rearm);
@@ -970,7 +1002,7 @@ pub struct FilePoll {
         }
         defer _.deactivate(loop);
 
-        if (!(_.flags.contains(.poll_readable) || _.flags.contains(.poll_writable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport))) {
+        if (!(_.flags.contains(.poll_readable) || _.flags.contains(.poll_writable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport) || _.flags.contains(.poll_memory_pressure))) {
             return .success;
         }
 
@@ -987,6 +1019,8 @@ pub struct FilePoll {
 
             if (_.flags.contains(.poll_machport))
                 break :brk .machport;
+            if (_.flags.contains(.poll_memory_pressure))
+                break :brk .memory_pressure;
             return .success;
         };
 
@@ -996,6 +1030,7 @@ pub struct FilePoll {
             _.flags.remove(.poll_readable);
             _.flags.remove(.poll_writable);
             _.flags.remove(.poll_machport);
+            _.flags.remove(.poll_memory_pressure);
             return .success;
         }
 
@@ -1028,6 +1063,15 @@ pub struct FilePoll {
                 .machport => .{
                     .ident = @intCast(fd.cast()),
                     .filter = std.posix.system.EVFILT.MACHPORT,
+                    .data = 0,
+                    .fflags = 0,
+                    .udata = unsafe { @intFromPtr(Pollable.init(_).ptr()) },
+                    .flags = std.c.EV.DELETE,
+                    .ext = .{ 0, 0 },
+                },
+                .memory_pressure => .{
+                    .ident = 0,
+                    .filter = -14,
                     .data = 0,
                     .fflags = 0,
                     .udata = unsafe { @intFromPtr(Pollable.init(_).ptr()) },
@@ -1119,7 +1163,7 @@ pub struct FilePoll {
                     .udata = unsafe { @intFromPtr(Pollable.init(_).ptr()) },
                     .flags = std.c.EV.DELETE,
                 },
-                .machport => return .initErr(.{ .errno = @intFromEnum(bun.sys.E.OPNOTSUPP), .syscall = .kevent }),
+                .machport, .memory_pressure => return .initErr(.{ .errno = @intFromEnum(bun.sys.E.OPNOTSUPP), .syscall = .kevent }),
                 else => unreachable,
             };
 
@@ -1157,6 +1201,7 @@ pub struct FilePoll {
         _.flags.remove(.poll_writable);
         _.flags.remove(.poll_process);
         _.flags.remove(.poll_machport);
+        _.flags.remove(.poll_memory_pressure);
 
         return .success;
     }

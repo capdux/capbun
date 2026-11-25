@@ -186,6 +186,7 @@ pub fn parseKey(self: *TOML, allocator: std.mem.Allocator) !*Rope {
     }
 
 pub fn parse(source_: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator, redact_logs: bool) !Expr {
+            _ = try source_.checkParseableLen(log, "TOML document");
             switch (source_.contents.len) {
 0 => {
 const empty_obj: E.Object = .{};

@@ -708,6 +708,7 @@ pub fn listen(globalThis: *jsc.JSGlobalObject, path: []const u8, backlog: i32, s
                 const slice_z = path_buf[0..len :0];
                 _ = (blk_catch_4: { break :blk_catch_4 ((this_ctx.uvPipe.listenNamedPipe(slice_z, backlog, this_ctx, onClientConnect).unwrap()) catch |__ce_4| { _ = &__ce_4; return error.FailedToBindPipe; }); });
             }
+            _ = this_ctx.uvPipe.unref();
             _guard_ctx.armed = false;
             return this_ctx;
     }
@@ -1228,7 +1229,26 @@ else => unreachable,
                 _ = SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
                 socket.flags.allow_half_open = socket_config.allowHalfOpen;
                 _ = socket.poll_ref.ref(handlers.vm);
-                _ = (blk_catch_11: { break :blk_catch_11 ((socket.doConnect(connection)) catch |__ce_11| { _ = &__ce_11; _ = (blk_catch_12: { break :blk_catch_12 ((socket.handleConnectError(@intFromEnum((if ((port == null)) bun.sys.SystemErrno.ENOENT else bun.sys.SystemErrno.ECONNREFUSED)))) catch |__ce_12| { _ = &__ce_12;  }); });
+                _ = (blk_catch_11: { break :blk_catch_11 ((socket.doConnect(connection)) catch |__ce_11| { _ = &__ce_11; var connect_err: c_int = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
+                _ = &connect_err;
+                if (Environment.isWindows) {
+                    var os_err: c_int = (if (bun.windows.WSAGetLastError()) |wsa| @intFromEnum(wsa) else 0);
+                    _ = &os_err;
+                    if (((port == null) and (os_err == @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)))) {
+                        if (((connection == .unix) and (!bun.sys.exists(connection.unix)))) {
+                            os_err = @intFromEnum(bun.sys.SystemErrno.ENOENT);
+                        }
+                    }
+                    if ((os_err != 0)) {
+                        connect_err = os_err;
+                    }
+                } else {
+                    const os_err = @intFromEnum(bun.sys.getErrno(-1));
+                    if ((os_err != 0)) {
+                        connect_err = os_err;
+                    }
+                }
+                _ = (blk_catch_12: { break :blk_catch_12 ((socket.handleConnectError(connect_err)) catch |__ce_12| { _ = &__ce_12;  }); });
                 _ = socket.deref();
                 return promise_value; }); });
                 return promise_value;

@@ -419,6 +419,10 @@ pub fn newline(self: *Printer) PrintErr!void {
             return self.writeIndent();
     }
 
+pub fn writeScratchbuf(self: *Printer, start: usize, end: usize) PrintErr!void {
+            return self.writeStr(self.scratchbuf.items[start..end]);
+    }
+
 pub fn delim(self: *Printer, delim_: u8, ws_before: bool) PrintErr!void {
             if (ws_before) {
                 _ = try self.whitespace();

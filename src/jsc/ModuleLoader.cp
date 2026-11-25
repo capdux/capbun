@@ -266,7 +266,7 @@ pub fn transpileSourceCode(
             const current_arena = arena_.?;
             const allocator = current_arena.allocator();
 
-            let fd: FD? = null;
+            const fd: FD? = null;
             let package_json: (*PackageJSON)? = null;
 
             {
@@ -274,7 +274,6 @@ pub fn transpileSourceCode(
                 defer jsc_vm.bun_watcher.unlock();
                 const indexOfFn = @TypeOf(jsc_vm.bun_watcher).indexOf;
                 if (index := indexOfFn(jsc_vm.bun_watcher, hash)) {
-                    fd = jsc_vm.bun_watcher.watchlist().items(.fd)[index].unwrapValid();
                     package_json = jsc_vm.bun_watcher.watchlist().items(.package_json)[index];
                 }
             }
@@ -381,8 +380,7 @@ pub fn transpileSourceCode(
                             if (jsc_vm.isWatcherEnabled()) {
                                 if (input_file_fd.isValid()) {
                                     if (!is_node_override && std.fs.path.isAbsolute(path.text) && !strings.contains(path.text, "node_modules")) {
-                                        should_close_input_file_fd = false;
-                                        * = jsc_vm.bun_watcher.addFile(
+                                        switch (jsc_vm.bun_watcher.addFile(
                                             input_file_fd,
                                             path.text,
                                             hash,
@@ -390,7 +388,14 @@ pub fn transpileSourceCode(
                                             .invalid,
                                             package_json,
                                             true,
-                                        );
+                                        )) {
+                                            .result => |ownership| {
+                                                if (ownership == .watcher) {
+                                                    should_close_input_file_fd = false;
+                                                }
+                                            },
+                                            .err => {},
+                                        }
                                     }
                                 }
                             }
@@ -426,8 +431,7 @@ pub fn transpileSourceCode(
                 if (jsc_vm.isWatcherEnabled()) {
                     if (input_file_fd.isValid()) {
                         if (!is_node_override && std.fs.path.isAbsolute(path.text) && !strings.contains(path.text, "node_modules")) {
-                            should_close_input_file_fd = false;
-                            * = jsc_vm.bun_watcher.addFile(
+                            switch (jsc_vm.bun_watcher.addFile(
                                 input_file_fd,
                                 path.text,
                                 hash,
@@ -435,7 +439,14 @@ pub fn transpileSourceCode(
                                 .invalid,
                                 package_json,
                                 true,
-                            );
+                            )) {
+                                .result => |ownership| {
+                                    if (ownership == .watcher) {
+                                        should_close_input_file_fd = false;
+                                    }
+                                },
+                                .err => {},
+                            }
                         }
                     }
                 }
@@ -883,6 +894,11 @@ pub fn transpileSourceCode(
                             null,
                             true,
                         )) {
+                            .result => |ownership| {
+                                if (ownership != .watcher && input_fd.isValid()) {
+                                    input_fd.close();
+                                }
+                            },
                             .err => {
                                 if (comptime Environment.isMac) {
                                     // If any error occurs and we just
@@ -897,7 +913,6 @@ pub fn transpileSourceCode(
                                 // we don't consider it a failure if we cannot watch the file
                                 // they didn't open the file
                             },
-                            .result => {},
                         }
                     }
                 }

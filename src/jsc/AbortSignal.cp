@@ -205,6 +205,10 @@ pub struct TimeoutImpl {
         return WebCore__AbortSignal__abortReason(_);
     }
 
+    fn jsReason(*_, global: *jsc.JSGlobalObject): JSValue {
+        return WebCore__AbortSignal__jsReason(_, global);
+    }
+
     fn reasonIfAborted(*_, global: *jsc.JSGlobalObject): AbortReasonImpl? {
         let reason: u8 = 0;
         const js_reason = WebCore__AbortSignal__reasonIfAborted(_, global, &reason);

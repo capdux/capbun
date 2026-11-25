@@ -282,10 +282,13 @@ pub const test_only_params = [
     clap.parseParam("--path-ignore-patterns <STR>...   Glob patterns for test file paths to ignore.") catch unreachable,
     clap.parseParam("--changed <STR>?                 Only run test files affected by changed files according to git. Optionally pass a commit or branch to compare against.") catch unreachable,
     clap.parseParam("--isolate                        Run each test file in a fresh global object. Leaked handles from one file cannot affect another.") catch unreachable,
+    clap.parseParam("--no-isolate                     With --parallel: let each worker keep one global and module registry across the files it runs (faster; files can see each other's leftovers).") catch unreachable,
     clap.parseParam("--parallel <NUMBER>?             Run test files in parallel using N worker processes. Implies --isolate. Defaults to CPU core count.") catch unreachable,
     clap.parseParam("--parallel-delay <NUMBER>        Milliseconds the first --parallel worker must be busy before spawning the rest. 0 spawns all immediately. Default 5.") catch unreachable,
     clap.parseParam("--test-worker                    (internal) Run as a --parallel worker, receiving files over IPC.") catch unreachable,
     clap.parseParam("--shard <STR>                    Run a subset of test files, e.g. '--shard=1/3' runs the first of three shards. Useful for splitting tests across multiple CI jobs.") catch unreachable,
+    clap.parseParam("--timings <STR>...               JSON file(s) of per-file durations (ms); several are merged, e.g. one per CI shard. Balances --shard by total time and makes --parallel start the slowest files first.") catch unreachable,
+    clap.parseParam("--update-timings                 After the run, write measured per-file durations to the first --timings file (only this shard's files under --shard; merged with what was read otherwise).") catch unreachable,
 ];
 pub const test_params = test_only_params ++ runtime_params_ ++ transpiler_params_ ++ base_params_;
 
@@ -686,13 +689,40 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
             }
             ctx.test_options.shard = { index: index, count: count };
         }
+        const timings_opts = args.options("--timings");
+        if (timings_opts.len > 0) {
+            let list = std.array_list.Managed(string).init(allocator);
+            for (p of timings_opts) {
+                if (p.len == 0) {
+                    Output.prettyErrorln("<r><red>error<r>: --timings expects a file path", {});
+                    Global.exit(1);
+                }
+                let dup = false;
+                for (existing of list.items) {
+                    if (bun.strings.eqlLong(existing, p, true)) {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (!dup) {
+                    list.append(p) catch bun.outOfMemory();
+                }
+            }
+            ctx.test_options.timings_files = list.items;
+        }
+        ctx.test_options.update_timings = args.flag("--update-timings");
+        if (ctx.test_options.update_timings && ctx.test_options.timings_files.len == 0) {
+            Output.prettyErrorln("<r><red>error<r>: --update-timings requires --timings, e.g. --timings=.bun-test-timings.json --update-timings", {});
+            Global.exit(1);
+        }
         ctx.test_options.update_snapshots = args.flag("--update-snapshots");
         ctx.test_options.run_todo = args.flag("--todo");
         ctx.test_options.only = args.flag("--only");
         ctx.test_options.pass_with_no_tests = args.flag("--pass-with-no-tests");
         ctx.test_options.concurrent = args.flag("--concurrent");
         ctx.test_options.randomize = args.flag("--randomize");
-        ctx.test_options.isolate = args.flag("--isolate");
+        const no_isolate = args.flag("--no-isolate");
+        ctx.test_options.isolate = args.flag("--isolate") && !no_isolate;
         ctx.test_options.test_worker = args.flag("--test-worker");
 
         if (parallel_str := args.option("--parallel")) {
@@ -708,8 +738,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
                 Global.exit(1);
             }
             ctx.test_options.parallel = parsed;
-            // --parallel implies --isolate inside each worker.
-            ctx.test_options.isolate = true;
+            ctx.test_options.isolate = !no_isolate;
         }
 
         if (delay_str := args.option("--parallel-delay")) {
@@ -1362,12 +1391,6 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         }
 
         if (args.flag("--windows-hide-console")) {
-            // --windows-hide-console technically doesnt depend on WinAPI, but since since --windows-icon
-            // does, all of these customization options have been gated to windows-only
-            if (!Environment.isWindows) {
-                Output.errGeneric("Using --windows-hide-console is only available when compiling on Windows", {});
-                Global.crash();
-            }
             if (ctx.bundler_options.compile_target.os != .windows) {
                 Output.errGeneric("--windows-hide-console requires a Windows compile target", {});
                 Global.crash();

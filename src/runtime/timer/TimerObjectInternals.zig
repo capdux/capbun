@@ -552,7 +552,7 @@ pub fn deinit(self: *TimerObjectInternals) void {
             }
             if (self.flags.has_accessed_primitive) {
                 const map = vm.timer.maps.get(kind);
-                if (map.orderedRemove(self.id)) {
+                if (map.swapRemove(self.id)) {
                     const allocated_bytes = (map.capacity() * @sizeOf(TimeoutMap.Data));
                     const used_bytes = (map.count() * @sizeOf(TimeoutMap.Data));
                     if (((allocated_bytes - used_bytes) > (256 * 1024))) {
@@ -560,7 +560,7 @@ pub fn deinit(self: *TimerObjectInternals) void {
                     }
                 } else {
                     if ((kind == .setInterval)) {
-                        _ = vm.timer.maps.setTimeout.orderedRemove(self.id);
+                        _ = vm.timer.maps.setTimeout.swapRemove(self.id);
                     }
                 }
             }

@@ -760,6 +760,7 @@ pub fn NewParser_(
         module_scope: *js_ast.Scope = undefined,
         module_scope_directive_loc: logger.Loc = {},
         is_control_flow_dead: bool = false,
+        is_inside_single_stmt_body: bool = false,
 
         /// We must be careful to avoid revisiting nodes that have scopes.
         is_revisit_for_substitution: bool = false,
@@ -1609,8 +1610,8 @@ pub fn NewParser_(
                 }
             }
 
-            // Create an error for assigning to an import namespace
-            if ((opts.assign_target != .none || opts.is_delete_target) && p.symbols.items[sym_ref.innerIndex()].kind == .@"import") {
+            // Run-time TypeError per spec; only hard-error when bundling (scope hoisting would hide it).
+            if (p.options.bundle && (opts.assign_target != .none || opts.is_delete_target) && p.symbols.items[sym_ref.innerIndex()].kind == .@"import") {
                 const r = js_lexer.rangeOfIdentifier(p.source, loc);
                 p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot assign to import \"{s}\"", .{
                     p.symbols.items[sym_ref.innerIndex()].original_name,

@@ -497,7 +497,7 @@ pub struct Transpiler {
         };
 
         switch (loader) {
-            .jsx, .tsx, .js, .ts, .json, .jsonc, .toml, .yaml, .json5, .text, .md => {
+            .jsx, .tsx, .js, .ts, .json, .jsonc, .toml, .yaml, .json5, .xml, .text, .md => {
                 const parse_opts: _ParseOptions = {
                     allocator: transpiler.allocator,
                     path: file_path,
@@ -1047,7 +1047,7 @@ pub struct Transpiler {
                 };
             },
             // TODO: use lazy export AST
-            inline .toml, .yaml, .json, .jsonc, .json5 => |kind| {
+            inline .toml, .yaml, .json, .jsonc, .json5, .xml => |kind| {
                 let expr = if (kind == .jsonc)
                     // We allow importing tsconfig.*.json or jsconfig.*.json with comments
                     // These files implicitly become JSONC files, which aligns with the behavior of text editors.
@@ -1060,6 +1060,8 @@ pub struct Transpiler {
                     YAML.parse(source, transpiler.log, allocator) catch return null
                 else if (kind == .json5)
                     JSON5.parse(source, transpiler.log, allocator) catch return null
+                else if (kind == .xml)
+                    XML.parse(source, transpiler.log, allocator, XML.Options{ compact: true, encoding: .File }) catch return null
                 else
                     @compileError("unreachable");
 
@@ -1453,13 +1455,32 @@ pub struct Transpiler {
                 }
             }
 
+            const errors_before = transpiler.log.errors;
             const output_file = (transpiler.buildWithResolveResultEager(
                 item,
                 import_path_format,
                 Outstream,
                 outstream,
                 null,
-            ) catch continue) ?? continue;
+            ) catch e => {
+                // Print errors (unlike parse errors) add nothing to the
+                // log, and an unlogged failure exits 0 with no output.
+                if (transpiler.log.errors == errors_before) {
+                    const path = if (p := item.pathConst()) p.text else "";
+                    const message: string = if (e == error.StackOverflow)
+                        "Maximum call stack size exceeded while generating code for"
+                    else
+                        "Failed to generate code for";
+                    transpiler.log.addErrorFmt(
+                        null,
+                        logger.Loc.Empty,
+                        transpiler.allocator,
+                        "{s} \"{s}\"",
+                        .{ message, path },
+                    ) catch {};
+                }
+                continue;
+            }) ?? continue;
             transpiler.output_files.append(output_file) catch unreachable;
         }
     }
@@ -1520,6 +1541,7 @@ const strings = bun.strings;
 const api = bun.schema.api;
 const JSON5 = bun.interchange.json5.JSON5Parser;
 const TOML = bun.interchange.toml.TOML;
+const XML = bun.interchange.xml;
 const YAML = bun.interchange.yaml.YAML;
 
 const js_ast = bun.ast;

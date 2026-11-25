@@ -143,6 +143,11 @@ fn InitWrapped(comptime T: type): type {
     };
 }
 
+pub enum FdOwnership {
+    watcher,
+    caller,
+}
+
 pub type OnFileUpdateFn = *const fn (ctx: *!, events: []WatchEvent, changed_files: []ChangedFilePath, watchlist: WatchList) void;
 pub type OnErrorFn = *const fn (ctx: *!, e: bun.sys.Error) void;
 
@@ -513,7 +518,7 @@ pub struct PathBufferGuard {
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
         comptime lock: bool,
-    ): bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(FdOwnership) {
         if (comptime lock) _.mutex.lock();
         const _lock_guard = MutexUnlockGuard{ mutex: if (comptime lock) &_.mutex else null };
         bun.assert(file_path.len > 1);
@@ -573,7 +578,7 @@ pub struct PathBufferGuard {
             });
         }
 
-        return .success;
+        return { result: .watcher };
     }
 
     @inline pub fn isEligibleDirectory(*_, dir: string): bool {
@@ -589,7 +594,7 @@ pub struct PathBufferGuard {
         dir_fd: bun.FD,
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
-    ): bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(FdOwnership) {
         return _.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, true);
     }
 
@@ -641,19 +646,10 @@ pub struct PathBufferGuard {
 
         const res = _.addFile(fd, file_path, hash, loader, bun.invalid_fd, null, true);
         switch (res) {
-            .result => {
-                if ((comptime Environment.isKqueue) && fd.isValid()) {
-                    _.mutex.lock();
-                    const maybe_idx = Watcher.indexOf(_, hash);
-                    const stored_fd = if (maybe_idx != null)
-                        _.watchlist.items(.fd)[maybe_idx.?]
-                    else
-                        bun.invalid_fd;
-                    _.mutex.unlock();
-
-                    if (maybe_idx != null && stored_fd.native() != fd.native()) {
-                        fd.close();
-                    }
+            .result => |ownership| {
+                // Not adopted (another thread won the add race); close the fd opened above.
+                if (ownership == .caller && fd.isValid()) {
+                    fd.close();
                 }
                 return true;
             },
@@ -673,18 +669,25 @@ pub struct PathBufferGuard {
         dir_fd: bun.FD,
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
-    ): bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(FdOwnership) {
         _.mutex.lock();
         const _lock_guard = MutexUnlockGuard{ mutex: &_.mutex };
 
         if (index := Watcher.indexOf(_, hash)) {
-            if (comptime FeatureFlags.atomic_file_watcher) {
-                if (fd.isValid()) {
-                    let fds = _.watchlist.items(.fd);
+            let ownership: FdOwnership = .caller;
+            if ((comptime FeatureFlags.atomic_file_watcher) && fd.isValid()) {
+                // Upgrade a path-only entry (`addFileByPathSlow` inserts
+                // fd-less, e.g. the `--hot` entrypoint) so `hot_reloader`'s
+                // directory-event recovery sees a valid fd. A valid stored fd
+                // is never replaced: the watchlist owns it until eviction,
+                // and the old overwrite leaked it.
+                let fds = _.watchlist.items(.fd);
+                if (!fds[index].isValid()) {
                     fds[index] = fd;
+                    ownership = .watcher;
                 }
             }
-            return .success;
+            return { result: ownership };
         }
 
         return _.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, false);

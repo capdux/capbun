@@ -294,19 +294,17 @@ _ = try dest.writeChar(91);
             _ = try css.css_values.ident.IdentFns.toCss(v.local_name, dest);
             _ = try v.operator.toCss(dest);
             if (dest.minify) {
-                var id = std.Io.Writer.Allocating.init(dest.allocator);
-                _ = &id;
-                defer {
-                _ = id.deinit();
-                }
-                const writer = (&id.writer);
-                _ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier((if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value), writer)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });
-                const s = try css.to_css.string(dest.allocator, CSSString, (&(if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value)), css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols);
-                const id_items = id.written();
-                if (((id_items.len > 0) and (id_items.len < s.len))) {
-                    _ = try dest.writeStr(id_items);
+                _ = dest.scratchbuf.clearRetainingCapacity();
+                const scratch_writer = dest.scratchbuf.writer();
+                _ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier((if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value), scratch_writer)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });
+                const id_len = dest.scratchbuf.items.len;
+                var count_writer = std.io.countingWriter(std.io.null_writer);
+                _ = &count_writer;
+                _ = (blk_catch_1: { break :blk_catch_1 ((css.serializer.serializeString((if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value), count_writer.writer())) catch |__ce_1| { _ = &__ce_1; return dest.addFmtError(); }); });
+                if (((id_len > 0) and (id_len < count_writer.bytes_written))) {
+                    _ = try dest.writeScratchbuf(0, id_len);
                 } else {
-                    _ = try dest.writeStr(s);
+                    _ = try css.CSSStringFns.toCss((&(if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value)), dest);
                 }
             } else {
                 _ = try css.CSSStringFns.toCss((&(if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value)), dest);
@@ -451,7 +449,7 @@ _ = try dest.writeStr(":lang(");
                 } else {
                     _ = try dest.delim(44, false);
                 }
-                _ = (blk_catch_1: { break :blk_catch_1 ((css.serializer.serializeIdentifier(lang, dest)) catch |__ce_1| { _ = &__ce_1; return dest.addFmtError(); }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((css.serializer.serializeIdentifier(lang, dest)) catch |__ce_2| { _ = &__ce_2; return dest.addFmtError(); }); });
             }
             return dest.writeStr(")");
 },

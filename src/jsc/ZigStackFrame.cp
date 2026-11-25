@@ -71,7 +71,7 @@ struct SourceURLFormatterImpl {
             }
         }
 
-        if (source_slice.len > 0 && (_.position.line.isValid() || _.position.column.isValid())) {
+        if (!_.exclude_line_column && source_slice.len > 0 && (_.position.line.isValid() || _.position.column.isValid())) {
             if (_.enable_color) {
                 writer.writeAll(comptime Output.prettyFmt("<r><d>:", true))?;
             } else {

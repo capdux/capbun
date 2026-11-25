@@ -4812,6 +4812,7 @@ fn NewPrinter(
                         .sqlite, .sqlite_embedded => p.printWhitespacer(ws(" with { type: \"sqlite\" }")),
                         .html => p.printWhitespacer(ws(" with { type: \"html\" }")),
                         .md => p.printWhitespacer(ws(" with { type: \"md\" }")),
+                        .xml => p.printWhitespacer(ws(" with { type: \"xml\" }")),
                     };
                     p.printSemicolonAfterStatement();
 
@@ -4841,6 +4842,7 @@ fn NewPrinter(
                                 .html => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("html"))),
                                 .json5 => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("json5"))),
                                 .md => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("md"))),
+                                .xml => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("xml"))),
                             }; }
                             bun.handleOom(mi.requestModule(irp_id, fetch_parameters));
 

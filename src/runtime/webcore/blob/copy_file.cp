@@ -281,24 +281,22 @@ export class CopyFile {
         let remain = @as(usize, _.max_length);
         let unknown_size = remain == Blob.max_size || remain == 0;
         if (unknown_size) {
-            remain = 4096;
+            remain = 64 * 1024;
         }
 
         let len_guard = CopyFileReadLenGuard{ copy_file: _ };
         let src_fd = _.source_fd;
         let dest_fd = _.destination_fd;
+        let bun_opened_dest = _.destination_file_store.pathlike == .path;
 
         let has_unset_append = false;
         if (!canUseCopyFileRangeSyscall()) {
-            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
+            switch (readWriteFallback(src_fd, dest_fd, bun_opened_dest, if (unknown_size) Blob.max_size else @as(SizeType, @intCast(remain)), unsafe { &len_guard.total_written })) {
                 .err => |err| {
                     _.system_error = err.toSystemError();
                     return errnoToZigErr(err.errno);
                 },
-                .result => {
-                    * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
-                    return;
-                },
+                .result => { return; },
             }
         }
 
@@ -312,15 +310,12 @@ export class CopyFile {
             switch (sys.getErrno(written)) {
                 .SUCCESS => {},
                 .NOSYS, .XDEV, .OPNOTSUPP => {
-                    switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
+                    switch (readWriteFallback(src_fd, dest_fd, bun_opened_dest, if (unknown_size) Blob.max_size else @as(SizeType, @intCast(remain)), unsafe { &len_guard.total_written })) {
                         .err => |err| {
                             _.system_error = err.toSystemError();
                             return errnoToZigErr(err.errno);
                         },
-                        .result => {
-                            * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
-                            return;
-                        },
+                        .result => { return; },
                     }
                 },
                 .INVAL => {
@@ -335,15 +330,12 @@ export class CopyFile {
                         }
                     }
                     if (len_guard.total_written == 0) {
-                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
+                        switch (readWriteFallback(src_fd, dest_fd, bun_opened_dest, if (unknown_size) Blob.max_size else @as(SizeType, @intCast(remain)), unsafe { &len_guard.total_written })) {
                             .err => |err| {
                                 _.system_error = err.toSystemError();
                                 return errnoToZigErr(err.errno);
                             },
-                            .result => {
-                                * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.total_written)));
-                                return;
-                            },
+                            .result => { return; },
                         }
                     }
                     return errnoToZigErr(std.os.linux.E.INVAL);
@@ -354,9 +346,12 @@ export class CopyFile {
             }
 
             let written_usize: usize = @intCast(written);
-            remain = if (remain > written_usize) remain - written_usize else 0;
             len_guard.total_written += written_usize;
-            if (written == 0 || remain == 0) break;
+            if (written == 0) break;
+            if (!unknown_size) {
+                remain = if (remain > written_usize) remain - written_usize else 0;
+                if (remain == 0) break;
+            }
         }
     }
 
@@ -495,13 +490,13 @@ export class CopyFile {
             return;
         }
 
-        if (stat.size != 0) {
+        if (stat.size != 0 && posix.S.ISREG(stat.mode)) {
             _.max_length = @max(@min(@as(SizeType, @intCast(stat.size)), _.max_length), _.offset) - _.offset;
             if (_.max_length == 0) {
                 _.doClose();
                 return;
             }
-            if (sys.preallocate_supported && posix.S.ISREG(stat.mode) && _.max_length > sys.preallocate_length && _.max_length != Blob.max_size) {
+            if (sys.preallocate_supported && _.destination_file_store.pathlike == .path && _.max_length > sys.preallocate_length && _.max_length != Blob.max_size) {
                 sys.preallocate_file(_.destination_fd.cast(), 0, _.max_length) catch {};
             }
         }
@@ -543,33 +538,100 @@ export class CopyFile {
         }
 
         if (Environment.isMac) {
-            _.doFCopyFileWithReadWriteLoopFallback() catch {
-                _.doClose();
-                return;
-            };
-            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > _.max_length) {
-                * = posix.system.ftruncate(_.destination_fd.cast(), @as(posix.off_t, @intCast(_.max_length)));
+            if (_.destination_file_store.pathlike == .path) {
+                _.doFCopyFileWithReadWriteLoopFallback() catch {
+                    _.doClose();
+                    return;
+                };
+                if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > _.max_length) {
+                    * = posix.system.ftruncate(_.destination_fd.cast(), @as(posix.off_t, @intCast(_.max_length)));
+                }
+            } else {
+                _.doReadWriteLoopCapped(_.max_length) catch {
+                    _.doClose();
+                    return;
+                };
             }
             _.doClose();
         } else if (Environment.isFreeBSD) {
-            let total_written: u64 = 0;
-            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", _.source_fd, _.destination_fd, 0, &total_written)) {
-                .err => |err| {
-                    _.system_error = err.toSystemError();
+            if (_.destination_file_store.pathlike == .path) {
+                let total_written: u64 = 0;
+                switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", _.source_fd, _.destination_fd, 0, &total_written)) {
+                    .err => |err| {
+                        _.system_error = err.toSystemError();
+                        _.doClose();
+                        return;
+                    },
+                    .result => {},
+                }
+                if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > _.max_length) {
+                    * = sys.ftruncate(_.destination_fd, @intCast(_.max_length));
+                    _.read_len = @truncate(@min(total_written, @as(u64, _.max_length)));
+                } else {
+                    _.read_len = @truncate(total_written);
+                }
+            } else {
+                _.doReadWriteLoopCapped(_.max_length) catch {
                     _.doClose();
                     return;
-                },
-                .result => {},
-            }
-            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > _.max_length) {
-                * = sys.ftruncate(_.destination_fd, @intCast(_.max_length));
-                _.read_len = @truncate(@min(total_written, @as(u64, _.max_length)));
-            } else {
-                _.read_len = @truncate(total_written);
+                };
             }
             _.doClose();
         }
     }
+
+    pub fn doReadWriteLoopCapped(*_, cap: SizeType): anyerror!void {
+        let total: u64 = 0;
+        switch (readWriteLoopCapped(_.source_fd, _.destination_fd, cap, unsafe { &total })) {
+            .result => {
+                _.read_len = @truncate(total);
+            },
+            .err => |err| {
+                _.read_len = @truncate(total);
+                _.system_error = err.toSystemError();
+                return errnoToZigErr(err.errno);
+            },
+        }
+    }
+}
+
+fn readWriteFallback(src_fd: FD, dest_fd: FD, bun_opened_dest: bool, cap: SizeType, total: *u64!): sys.Maybe(void) {
+    if (bun_opened_dest) {
+        const stat_size: usize = if (cap == Blob.max_size) 0 else @as(usize, cap);
+        const res = jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, stat_size, total);
+        if (res == .err) {
+            return .{ .err = res.err };
+        }
+        * = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(unsafe { total.* })));
+        return .success;
+    } else {
+        return readWriteLoopCapped(src_fd, dest_fd, cap, total);
+    }
+}
+
+fn readWriteLoopCapped(src_fd: FD, dest_fd: FD, cap: SizeType, total: *u64!): sys.Maybe(void) {
+    let buf: [64 * 1024]u8 = undefined;
+    let remaining: SizeType = cap;
+    while (remaining > 0) {
+        const want = @as(usize, @min(@as(SizeType, buf.len), remaining));
+        const amt = switch (sys.read(src_fd, buf[0..want])) {
+            .result => |n| n,
+            .err => |err| return .{ .err = err },
+        };
+        if (amt == 0) break;
+        remaining -= @as(SizeType, @intCast(amt));
+        let slice = buf[0..amt];
+        while (slice.len > 0) {
+            const n = switch (sys.write(dest_fd, slice)) {
+                .result => |w| w,
+                .err => |err| return .{ .err = err },
+            };
+            if (n == 0) return .success;
+            unsafe { total.* += @as(u64, n); }
+            slice = slice[n..];
+        }
+    }
+    return .success;
 }
 
 export class CopyFileWindowsReadWriteLoop {
@@ -769,7 +831,7 @@ export class CopyFileWindows {
                 u8,
                 invalid_fd,
                 pathlike.path.slice(),
-                if (is_reading) O.RDONLY else O.WRONLY | O.CREAT,
+                if (is_reading) O.RDONLY else O.WRONLY | O.CREAT | O.TRUNC,
                 0,
             )) {
                 .result res => res.makeLibUVOwned() catch {

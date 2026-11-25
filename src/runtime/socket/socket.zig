@@ -599,6 +599,22 @@ pub fn upgradeRejectPolicy(vm: *jsc.VirtualMachine, cfg_opt: OptSSLConfig, is_se
         return resolveRejectUnauthorized(vm, cfg_opt, is_server);
 }
 
+pub fn readErrorFromCloseCode(code: c_int) bun.sys.Error {
+        if ((!Environment.isWindows)) {
+            return bun.sys.Error.fromCodeInt(code, .read);
+        }
+        const raw: u32 = @intCast((if ((code < 0)) (-code) else code));
+        var errno: bun.sys.SystemErrno = .ECONNRESET;
+        _ = &errno;
+        if (bun.sys.SystemErrno.init(raw)) |mapped| {
+            _ = &mapped;
+            if ((mapped != .ECONNABORTED)) {
+                errno = mapped;
+            }
+        }
+        return .{ .errno = @intFromEnum(errno), .syscall = .read };
+}
+
 pub fn NewSocket(comptime ssl: bool) type {
         return struct {
     socket: Socket,
@@ -779,7 +795,7 @@ pub fn handleError(self: *@This(), err_value: jsc.JSValue) void {
             const h = self.getHandlers();
             var vm = h.vm;
             _ = &vm;
-            if (vm.isShuttingDown()) {
+            if ((vm.scriptExecutionStatus() != .running)) {
                 return;
             }
             var _scope_guard = HandlersScopeGuard(This, @TypeOf(h.enter())){ .socket = self, .scope = h.enter() };
@@ -806,7 +822,7 @@ pub fn onWritable(self: *@This(), _: Socket) void {
             }
             var vm = h.vm;
             _ = &vm;
-            if (vm.isShuttingDown()) {
+            if ((vm.scriptExecutionStatus() != .running)) {
                 return;
             }
             _ = self.ref();
@@ -876,18 +892,36 @@ pub fn handleConnectError(self: *@This(), errno: c_int) bun.JSError!void {
             defer if (!___opt_deref_guard_moved) { ___opt_deref_guard_moved = true; const __T = @TypeOf(_opt_deref_guard); if (@typeInfo(__T) == .optional) { if (_opt_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _opt_deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _opt_deref_guard; _drop_val.__cp_deinit(); } };
             const vm = h.vm;
             _ = self.poll_ref.unrefOnNextTick(vm);
-            if (vm.isShuttingDown()) {
+            if ((vm.scriptExecutionStatus() != .running)) {
                 return;
             }
             _ = bun.assert((errno >= 0));
-            var errno_: c_int = (if ((errno == @intFromEnum(bun.sys.SystemErrno.ENOENT))) @intFromEnum(bun.sys.SystemErrno.ENOENT) else @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED));
-            _ = &errno_;
-            const code_ = (if ((errno == @intFromEnum(bun.sys.SystemErrno.ENOENT))) bun.String.static("ENOENT") else bun.String.static("ECONNREFUSED"));
-            if ((Environment.isWindows and (errno_ == @intFromEnum(bun.sys.SystemErrno.ENOENT)))) {
-                errno_ = @intFromEnum(bun.sys.SystemErrno.UV_ENOENT);
+            var normalized_errno = errno;
+            _ = &normalized_errno;
+            if ((Environment.isWindows and (errno >= 10000))) {
+                normalized_errno = (if (bun.sys.SystemErrno.init(@intCast(errno))) |mapped| @intFromEnum(mapped) else @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED));
             }
-            if ((Environment.isWindows and (errno_ == @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)))) {
-                errno_ = @intFromEnum(bun.sys.SystemErrno.UV_ECONNREFUSED);
+            var errno_: c_int = (switch (normalized_errno) {
+@intFromEnum(bun.sys.SystemErrno.ENOENT), @intFromEnum(bun.sys.SystemErrno.ENOTSOCK), @intFromEnum(bun.sys.SystemErrno.EACCES), @intFromEnum(bun.sys.SystemErrno.EINVAL), @intFromEnum(bun.sys.SystemErrno.EADDRINUSE), @intFromEnum(bun.sys.SystemErrno.EADDRNOTAVAIL), @intFromEnum(bun.sys.SystemErrno.ECONNRESET), @intFromEnum(bun.sys.SystemErrno.ETIMEDOUT), @intFromEnum(bun.sys.SystemErrno.ENETUNREACH), @intFromEnum(bun.sys.SystemErrno.EHOSTUNREACH), @intFromEnum(bun.sys.SystemErrno.EAFNOSUPPORT) => normalized_errno,
+else => @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED),
+});
+            _ = &errno_;
+            const code_ = (if (bun.sys.SystemErrno.init(@intCast(errno_))) |sys_e| bun.String.static(@tagName(sys_e)) else bun.String.static("ECONNREFUSED"));
+            if (Environment.isWindows) {
+                errno_ = (switch (errno_) {
+@intFromEnum(bun.sys.SystemErrno.ENOENT) => @intFromEnum(bun.sys.SystemErrno.UV_ENOENT),
+@intFromEnum(bun.sys.SystemErrno.EACCES) => @intFromEnum(bun.sys.SystemErrno.UV_EACCES),
+@intFromEnum(bun.sys.SystemErrno.EINVAL) => @intFromEnum(bun.sys.SystemErrno.UV_EINVAL),
+@intFromEnum(bun.sys.SystemErrno.EADDRINUSE) => @intFromEnum(bun.sys.SystemErrno.UV_EADDRINUSE),
+@intFromEnum(bun.sys.SystemErrno.EADDRNOTAVAIL) => @intFromEnum(bun.sys.SystemErrno.UV_EADDRNOTAVAIL),
+@intFromEnum(bun.sys.SystemErrno.ECONNRESET) => @intFromEnum(bun.sys.SystemErrno.UV_ECONNRESET),
+@intFromEnum(bun.sys.SystemErrno.ETIMEDOUT) => @intFromEnum(bun.sys.SystemErrno.UV_ETIMEDOUT),
+@intFromEnum(bun.sys.SystemErrno.ENETUNREACH) => @intFromEnum(bun.sys.SystemErrno.UV_ENETUNREACH),
+@intFromEnum(bun.sys.SystemErrno.EHOSTUNREACH) => @intFromEnum(bun.sys.SystemErrno.UV_EHOSTUNREACH),
+@intFromEnum(bun.sys.SystemErrno.EAFNOSUPPORT) => @intFromEnum(bun.sys.SystemErrno.UV_EAFNOSUPPORT),
+@intFromEnum(bun.sys.SystemErrno.ENOTSOCK) => @intFromEnum(bun.sys.SystemErrno.UV_ENOTSOCK),
+else => @intFromEnum(bun.sys.SystemErrno.UV_ECONNREFUSED),
+});
             }
             const callback = h.onConnectError;
             const globalObject = h.globalObject;
@@ -1045,12 +1079,18 @@ pub fn onOpen(self: *@This(), socket: Socket) void {
                 ctx.* = bun.cast(OpaquePtrPtr, self);
             }
             const h = self.getHandlers();
+            if ((h.vm.scriptExecutionStatus() != .running)) {
+                return;
+            }
             const callback = h.onOpen;
             const handshake_callback = h.onHandshake;
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
             _ = self.markActive();
             _ = (blk_catch_4: { break :blk_catch_4 ((h.resolvePromise(this_value)) catch |__ce_4| { _ = &__ce_4;  }); });
+            if (globalObject.hasException()) {
+                return;
+            }
             if (comptime ssl) {
                 if (((callback == .zero) or (handshake_callback == .zero))) {
                     return;
@@ -1298,7 +1338,10 @@ pub fn onClose(self: *@This(), socket: Socket, code: c_int, reason: ?*anyopaque)
             if ((callback == .zero)) {
                 return;
             }
-            if (vm.isShuttingDown()) {
+            if ((vm.scriptExecutionStatus() != .running)) {
+                return;
+            }
+            if (h.globalObject.hasException()) {
                 return;
             }
             var _scope_guard = HandlersScopeGuard(This, @TypeOf(h.enter())){ .socket = self, .scope = h.enter() };
@@ -1309,8 +1352,8 @@ pub fn onClose(self: *@This(), socket: Socket, code: c_int, reason: ?*anyopaque)
             const this_value = self.getThisValue(globalObject);
             var js_error: JSValue = .js_undefined;
             _ = &js_error;
-            if ((code != 0)) {
-                js_error = try bun.sys.Error.fromCodeInt(code, .read).toJS(globalObject);
+            if ((code > 2)) {
+                js_error = try readErrorFromCloseCode(code).toJS(globalObject);
             }
             _ = (blk_catch_11: { break :blk_catch_11 ((callback.call(globalObject, this_value, (&.{ this_value, js_error }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }

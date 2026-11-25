@@ -89,7 +89,8 @@ pub union(enum) ImportWatcher {
         dir_fd: bun.FD,
         package_json: (*bun.PackageJSON)?,
         comptime copy_file_path: bool,
-    ): bun.sys.Maybe(void) {
+    ): bun.sys.Maybe(Watcher.FdOwnership) {
+        if (_.* == .none) return { result: .caller };
         return switch (_) {
             .hot watcher => watcher.addFile(
                 fd,
@@ -109,7 +110,7 @@ pub union(enum) ImportWatcher {
                 package_json,
                 copy_file_path,
             ),
-            .none => .success,
+            .none => unreachable,
         };
     }
 }

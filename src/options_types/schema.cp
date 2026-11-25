@@ -290,6 +290,7 @@ pub enum Loader: u8 {
     yaml = 19,
     json5 = 20,
     md = 21,
+    xml = 22,
     _,
 
     pub fn jsonStringify(writer: auto)! {

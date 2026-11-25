@@ -65,6 +65,12 @@ struct DummyReadHandler<T> {
     }
 }
 
+pub enum SSLWrapperTraffic {
+    idle,
+    running,
+    rerun_requested,
+}
+
 /// Mimics the behavior of openssl.c in uSockets, wrapping data that can be received from anywhere (network, DuplexStream, etc)
 pub fn SSLWrapper(comptime T: type): type {
     return struct {
@@ -80,6 +86,7 @@ pub fn SSLWrapper(comptime T: type): type {
         flags: SSLWrapperFlags = .{},
         renegotiation_count: u8 = 0,
         renegotiation_window_start_ms: u64 = 0,
+        traffic: SSLWrapperTraffic = .idle,
 
         pub const Flags = SSLWrapperFlags;
         pub const HandshakeState = SSLWrapperHandshakeState;
@@ -472,12 +479,37 @@ pub fn SSLWrapper(comptime T: type): type {
             }
         }
 
+        /// Not re-entrant. A call made from inside a pass's callback (a write
+        /// from onData, a synchronous peer feeding receiveData) flushes the
+        /// ciphertext queued so far and schedules another pass; decrypting there
+        /// would hand the owner the next chunk while it is still inside its
+        /// callback for the previous one.
         fn handleTraffic(*_) {
+            if (_.traffic != .idle) {
+                log("handleTraffic re-entered, flushing and deferring to the outer pass", .{});
+                let buffer: [BUFFER_SIZE]u8 = undefined;
+                _.handleWriting(&buffer);
+                _.traffic = .rerun_requested;
+                return;
+            }
+            while (true) {
+                _.traffic = .running;
+                _.trafficPass();
+                if (_.traffic != .rerun_requested) {
+                    break;
+                }
+            }
+            _.traffic = .idle;
+        }
+
+        fn trafficPass(*_) {
             if (_.updateHandshakeState()) {
                 let buffer: [BUFFER_SIZE]u8 = undefined;
                 _.handleWriting(&buffer);
 
-                while (_.hasPendingRead() && _.handleReading(&buffer)) {
+                // Once a callback re-entered, the next pass takes over: the bytes it fed in
+                // may belong to the handshake, which only updateHandshakeState reports.
+                while (_.traffic == .running && _.hasPendingRead() && _.handleReading(&buffer)) {
                     _.handleWriting(&buffer);
                 }
             }

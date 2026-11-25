@@ -519,9 +519,14 @@ pub fn Visit(
                 p.pushScopeForVisitPass(.block, stmt.loc) catch unreachable;
             }
 
+            const old_is_inside_single_stmt_body = p.is_inside_single_stmt_body;
+            p.is_inside_single_stmt_body = true;
+
             let stmts = ListManaged(Stmt).initCapacity(p.allocator, 1) catch unreachable;
             stmts.append(stmt) catch unreachable;
             p.visitStmts(&stmts, kind) catch unreachable;
+
+            p.is_inside_single_stmt_body = old_is_inside_single_stmt_body;
 
             if (has_if_scope) {
                 p.popScope();

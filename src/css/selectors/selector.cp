@@ -789,20 +789,21 @@ pub struct serialize {
                 v.operator.toCss(dest)?;
 
                 if (dest.minify) {
-                    // PERF: should we put a scratch buffer in the printer
-                    // Serialize as both an identifier && a string && choose the shorter one.
-                    let id = std.Io.Writer.Allocating.init(dest.allocator);
-                    defer id.deinit();
-                    const writer = &id.writer;
-                    css.serializer.serializeIdentifier(v.value, writer) catch return dest.addFmtError();
+                    // Identifier form goes into the printer's reusable scratch buffer;
+                    // the quoted-string length is counted in a discarding writer, so picking
+                    // the shorter form allocates nothing.
+                    dest.scratchbuf.clearRetainingCapacity();
+                    const scratch_writer = dest.scratchbuf.writer();
+                    css.serializer.serializeIdentifier(v.value, scratch_writer) catch return dest.addFmtError();
+                    const id_len = dest.scratchbuf.items.len;
 
-                    const s = css.to_css.string(dest.allocator, CSSString, &v.value, css.PrinterOptions.default(), dest.import_info, dest.local_names, dest.symbols)?;
+                    let count_writer = std.io.countingWriter(std.io.null_writer);
+                    css.serializer.serializeString(v.value, count_writer.writer()) catch return dest.addFmtError();
 
-                    const id_items = id.written();
-                    if (id_items.len > 0 && id_items.len < s.len) {
-                        dest.writeStr(id_items)?;
+                    if (id_len > 0 && id_len < count_writer.bytes_written) {
+                        dest.writeScratchbuf(0, id_len)?;
                     } else {
-                        dest.writeStr(s)?;
+                        css.CSSStringFns.toCss(&v.value, dest)?;
                     }
                 } else {
                     css.CSSStringFns.toCss(&v.value, dest)?;

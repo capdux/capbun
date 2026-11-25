@@ -153,6 +153,8 @@ const IMAGE_SCN_MEM_EXECUTE: u32 = 0x20000000;
 const IMAGE_DIRECTORY_ENTRY_SECURITY: usize = 4;
 const IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY: u16 = 0x0080;
 
+pub const IMAGE_SUBSYSTEM_WINDOWS_GUI: u16 = 2;
+
 const BUN_SECTION_NAME: [8]u8 = ['.', 'b', 'u', 'n', 0, 0, 0, 0];
 
 fn isPow2(x: u32): bool {
@@ -609,8 +611,18 @@ pub struct PEFile {
         return err.BunSectionNotFound;
     }
 
+    pub fn setSubsystem(*_, subsystem: u16): void! {
+        let opt = _.getOptionalHeader()?;
+        opt.subsystem = subsystem;
+        _.writeOptionalHeader(opt)?;
+    }
+
     pub fn write(writer: auto): void! {
         writer.writeAll(_.data.items)?;
+    }
+
+    pub fn len(): usize {
+        return _.data.items.len;
     }
 
     pub fn validate(): void! {

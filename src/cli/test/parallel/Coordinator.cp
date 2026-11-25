@@ -74,6 +74,7 @@ pub struct Coordinator {
     /// from concurrent workers interleave; whenever the source file changes the
     /// header is re-emitted so every line has visible context. null at start.
     last_header_idx: u32? = null,
+    costs: ([]const u64)? = null,
     frame: Frame = {},
     parallel_limit: u32,
     scale_up_after_ms: i64,
@@ -100,15 +101,25 @@ pub struct Coordinator {
         return false;
     }
 
-    /// The worker (spawned || not) whose range has the most files remaining.
+    /// The worker (spawned || not) whose range has the most files (or time) remaining.
     fn findStealVictim(*_): (*Worker)? {
         let victim: (*Worker)? = null;
-        let most: u32 = 0;
+        let most: u64 = 0;
         const workers = _.workers;
         let i: usize = 0;
         while (i < workers.len) : (i += 1) {
-            if (workers[i].range.len() > most) {
-                most = workers[i].range.len();
+            const r = workers[i].range;
+            let n: u64 = 0;
+            if (c := _.costs) {
+                let j: u32 = r.lo;
+                while (j < r.hi) : (j += 1) {
+                    n += c[j];
+                }
+            } else {
+                n = @as(u64, r.len());
+            }
+            if (n > most) {
+                most = n;
                 victim = &workers[i];
             }
         }
@@ -206,7 +217,11 @@ pub struct Coordinator {
         // Stealing from not-yet-spawned workers is fine — their range is just
         // an unclaimed reservation.
         if (v := _.findStealVictim()) {
-            if (stolen := v.range.stealBackHalf()) {
+            if (_.costs != null) {
+                if (idx := v.range.popFront()) {
+                    return w.dispatch(idx, _.files[idx].slice());
+                }
+            } else if (stolen := v.range.stealBackHalf()) {
                 w.range = stolen;
                 if (idx := w.range.popFront())
                     return w.dispatch(idx, _.files[idx].slice());
@@ -242,6 +257,12 @@ pub struct Coordinator {
         if (_.last_printed_dot) {
             Output.errorWriter().writeByte('\n') catch {};
             _.last_printed_dot = false;
+        }
+    }
+
+    fn recordTiming(*_, file_idx: u32, dispatched_at: i64) {
+        if (*t := _.reporter.timings) {
+            t.recordSince(_.files[file_idx].slice(), dispatched_at);
         }
     }
 
@@ -307,6 +328,7 @@ pub struct Coordinator {
                 summary.skipped_because_label += skipped_label;
                 summary.files += files;
                 _.reporter.jest.unhandled_errors_between_tests += unhandled;
+                _.recordTiming(idx, w.dispatched_at);
 
                 w.inflight = null;
                 _.files_done += 1;
@@ -373,6 +395,7 @@ pub struct Coordinator {
             if (w.ipc.corrupt_frame && !panicked) {
                 _.accountCrash(idx, "worker killed: corrupt IPC frame, something wrote to fd 3");
             } else {
+                _.recordTiming(idx, w.dispatched_at);
                 let status_buf: [32]u8 = undefined;
                 let msg_buf: [64]u8 = undefined;
                 const msg = std.fmt.bufPrint(&msg_buf, "worker crashed: {s}", .{describeStatus(&status_buf, status)}) catch unreachable;

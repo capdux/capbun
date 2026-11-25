@@ -193,6 +193,8 @@ export struct TestOptions {
     /// and only every Nth file (starting from M-1) is run. index is
     /// 1-based; both are validated at parse time so `1 <= index <= count`.
     shard: ShardOptions? = null;
+    timings_files: []const string = [];
+    update_timings: bool = false;
 
     reporters: TestReporters = .{};
     reporter_outfile: string? = null;

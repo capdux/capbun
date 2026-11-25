@@ -157,6 +157,7 @@ pub static struct Features {
     pub let yarn_migration: usize = 0;
     pub let pnpm_migration: usize = 0;
     pub let yaml_parse: usize = 0;
+    pub let xml_parse: usize = 0;
     pub let cpu_profile: usize = 0;
     pub let heap_snapshot: usize = 0;
     pub let webview_chrome: usize = 0;

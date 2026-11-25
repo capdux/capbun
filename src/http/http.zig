@@ -67,6 +67,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const HTTPCertErrorMod = @import("./HTTPCertError.zig");
@@ -81,6 +89,8 @@ pub const AsyncHTTP = @import("./AsyncHTTP.zig");
 pub const InternalState = @import("./InternalState.zig");
 pub const CertificateInfo = @import("./CertificateInfo.zig");
 pub const InitErrorMod = @import("./InitError.zig");
+pub const SessionCacheMod = @import("./session_cache.zig");
+pub const CompressBodyMod = @import("./compress_body.zig");
 pub const HTTPRequestBodyMod = @import("./HTTPRequestBody.zig");
 pub const SendFile = @import("./SendFile.zig");
 pub const HeaderValueIterator = @import("./HeaderValueIterator.zig");
@@ -307,6 +317,9 @@ signals: Signals = .{},
 async_http_id: u32 = 0,
 hostname: ?[]const u8 = null,
 unix_socket_path: bun.jsc.ZigString.Slice = bun.jsc.ZigString.Slice.empty,
+compress: ?CompressBodyMod.CompressOption = null,
+compressed_request_body: std.ArrayListUnmanaged(u8) = .{},
+compressed_body_len: usize = 0,
 
 pub fn deinit(self: *HTTPClient) void {
         if ((self.redirect.len > 0)) {
@@ -317,6 +330,7 @@ pub fn deinit(self: *HTTPClient) void {
             _ = bun.default_allocator.free(self.prev_redirect);
             self.prev_redirect = "";
         }
+        _ = self.compressed_request_body.deinit(bun.default_allocator);
         if (self.proxy_authorization) |auth| {
             _ = &auth;
             _ = self.allocator.free(auth);
@@ -595,6 +609,7 @@ pub fn doRedirectMultiplexed(self: *HTTPClient) void {
             _ = bun.default_allocator.free(self.prev_redirect);
             self.prev_redirect = "";
         }
+        _ = self.compressed_request_body.deinit(bun.default_allocator);
         if (self.state.flags.clear_hostname_on_redirect) {
             self.state.flags.clear_hostname_on_redirect = false;
             self.hostname = null;
@@ -994,7 +1009,58 @@ pub fn onPreconnect(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCon
         _ = self.result_callback.run(@fieldParentPtr("client", self), HTTPClientResult{ .fail = null, .metadata = null, .has_more = false });
 }
 
+pub fn bodyLenForSend(self: *HTTPClient) usize {
+        if (self.state.flags.body_compressed) {
+            return self.compressed_body_len;
+        }
+        return self.state.original_request_body.len();
+}
+
+pub fn compressBodyForSend(self: *HTTPClient, into_shared: bool) !void {
+        const opt = ((self.compress) orelse { return; });
+        if (self.state.flags.body_compressed) {
+            return;
+        }
+        if ((self.state.original_request_body != .bytes)) {
+            return;
+        }
+        const input = self.state.original_request_body.bytes;
+        if ((input.len == 0)) {
+            return;
+        }
+        const deflater = HTTPThread.http_thread.deflater();
+        const out = try CompressBodyMod.compressInto(deflater, input, opt, (&self.compressed_request_body));
+        var slice: []const u8 = undefined;
+        _ = &slice;
+        switch (out) {
+.shared => |n| {
+if (into_shared) {
+            slice = deflater.shared_buffer[0..n];
+        } else {
+            _ = (blk_catch_4: { break :blk_catch_4 ((self.compressed_request_body.appendSlice(bun.default_allocator, deflater.shared_buffer[0..n])) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
+            slice = self.compressed_request_body.items;
+        }
+},
+.spilled => {
+slice = self.compressed_request_body.items;
+},
+}
+        self.compressed_body_len = slice.len;
+        self.state.request_body = slice;
+        self.state.flags.body_compressed = true;
+}
+
+pub fn spillCompressedBody(self: *HTTPClient) void {
+        if ((((!self.state.flags.body_compressed) or (self.compressed_request_body.items.len > 0)) or (self.state.request_body.len == 0))) {
+            return;
+        }
+        _ = (blk_catch_5: { break :blk_catch_5 ((self.compressed_request_body.appendSlice(bun.default_allocator, self.state.request_body)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 bun.outOfMemory(); }); });
+        const remaining_len = self.state.request_body.len;
+        self.state.request_body = self.compressed_request_body.items[0..remaining_len];
+}
+
 pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) !InitialRequestPayloadResult {
+        _ = try self.compressBodyForSend(true);
         var request_body_buffer = self.getRequestBodySendBuffer();
         _ = &request_body_buffer;
         var _request_body_buffer_guard = DeinitGuard(@TypeOf(request_body_buffer)){ .ptr = (&request_body_buffer) };
@@ -1008,7 +1074,7 @@ pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_c
         var ___temporary_send_buffer_guard_moved = false; _ = &___temporary_send_buffer_guard_moved;
         defer if (!___temporary_send_buffer_guard_moved) { ___temporary_send_buffer_guard_moved = true; const __T = @TypeOf(_temporary_send_buffer_guard); if (@typeInfo(__T) == .optional) { if (_temporary_send_buffer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _temporary_send_buffer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _temporary_send_buffer_guard; _drop_val.__cp_deinit(); } };
         const writer = (&temporary_send_buffer.writer());
-        const request = self.buildRequest(self.state.original_request_body.len());
+        const request = self.buildRequest(self.bodyLenForSend());
         if (self.http_proxy) |_| {
             if (self.url.isHTTPS()) {
                 _ = log("start proxy tunneling (https proxy)", .{});
@@ -1040,6 +1106,7 @@ pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_c
         const amount = try self.writeToSocket(is_ssl, socket, to_send);
         if (comptime is_first_call) {
             if ((amount == 0)) {
+                _ = self.spillCompressedBody();
                 return .{ .has_sent_headers = (self.state.request_sent_len >= headers_len), .has_sent_body = false, .try_sending_more_data = false };
             }
         }
@@ -1052,6 +1119,7 @@ pub noinline fn sendInitialRequestPayload(self: *HTTPClient, comptime is_first_c
             self.state.request_body = self.state.request_body[(self.state.request_sent_len - headers_len)..];
         }
         const has_sent_body = (if ((self.state.original_request_body == .bytes)) (self.state.request_body.len == 0) else false);
+        _ = self.spillCompressedBody();
         return .{ .has_sent_headers = has_sent_headers, .has_sent_body = has_sent_body, .try_sending_more_data = ((amount == to_send.len) and ((!has_sent_body) or (!has_sent_headers))) };
 }
 
@@ -1096,7 +1164,7 @@ pub fn writeToStreamUsingBuffer(self: *HTTPClient, comptime is_ssl: bool, socket
             }
             const pending = buffer.slice();
             if ((pending.len > 0)) {
-                const n = (blk_catch_4: { break :blk_catch_4 ((proxy.write(pending)) catch |__ce_4| { _ = &__ce_4; if ((data.len > 0)) {
+                const n = (blk_catch_6: { break :blk_catch_6 ((proxy.write(pending)) catch |__ce_6| { _ = &__ce_6; if ((data.len > 0)) {
                     _ = bun.handleOom(buffer.write(data));
                 }
                 return true; }); });
@@ -1113,7 +1181,7 @@ pub fn writeToStreamUsingBuffer(self: *HTTPClient, comptime is_ssl: bool, socket
                 }
             }
             if ((data.len > 0)) {
-                const n = (blk_catch_5: { break :blk_catch_5 ((proxy.write(data)) catch |__ce_5| { _ = &__ce_5; _ = bun.handleOom(buffer.write(data));
+                const n = (blk_catch_7: { break :blk_catch_7 ((proxy.write(data)) catch |__ce_7| { _ = &__ce_7; _ = bun.handleOom(buffer.write(data));
                 return true; }); });
                 self.state.request_sent_len = (self.state.request_sent_len + n);
                 if ((n < data.len)) {
@@ -1168,7 +1236,7 @@ pub fn writeToStream(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
             }
             return;
         }
-        const has_backpressure = (blk_catch_6: { break :blk_catch_6 ((self.writeToStreamUsingBuffer(is_ssl, socket, buffer, data)) catch |e| { _ = &e; _ = stream_buffer.release();
+        const has_backpressure = (blk_catch_8: { break :blk_catch_8 ((self.writeToStreamUsingBuffer(is_ssl, socket, buffer, data)) catch |e| { _ = &e; _ = stream_buffer.release();
         _ = self.state.original_request_body.stream.detach();
         _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
@@ -1213,7 +1281,7 @@ pub fn onWritable(self: *HTTPClient, comptime is_first_call: bool, comptime is_s
 .pending, .headers, .opened => {
 _ = log("sendInitialRequestPayload", .{});
         _ = self.setTimeout(socket);
-        const result = (blk_catch_7: { break :blk_catch_7 ((self.sendInitialRequestPayload(is_first_call, is_ssl, socket)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+        const result = (blk_catch_9: { break :blk_catch_9 ((self.sendInitialRequestPayload(is_first_call, is_ssl, socket)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
         const has_sent_headers = result.has_sent_headers;
         const has_sent_body = result.has_sent_body;
@@ -1253,7 +1321,7 @@ _ = log("send body", .{});
 .bytes => {
 const to_send = self.state.request_body;
         if ((to_send.len > 0)) {
-            const sent = (blk_catch_8: { break :blk_catch_8 ((self.writeToSocket(is_ssl, socket, to_send)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+            const sent = (blk_catch_10: { break :blk_catch_10 ((self.writeToSocket(is_ssl, socket, to_send)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
             return; }); });
             self.state.request_sent_len = (self.state.request_sent_len + sent);
             self.state.request_body = self.state.request_body[sent..];
@@ -1294,7 +1362,7 @@ _ = log("send proxy body", .{});
 .bytes => {
 _ = self.setTimeout(socket);
             const to_send = self.state.request_body;
-            const sent = (blk_catch_9: { break :blk_catch_9 ((proxy.write(to_send)) catch |__ce_9| { _ = &__ce_9; return; }); });
+            const sent = (blk_catch_11: { break :blk_catch_11 ((proxy.write(to_send)) catch |__ce_11| { _ = &__ce_11; return; }); });
             self.state.request_sent_len = (self.state.request_sent_len + sent);
             self.state.request_body = self.state.request_body[sent..];
             if ((self.state.request_body.len == 0)) {
@@ -1316,6 +1384,8 @@ _ = log("send proxy headers", .{});
         if (self.proxy_tunnel) |proxy| {
             _ = &proxy;
             _ = self.setTimeout(socket);
+            _ = (blk_catch_12: { break :blk_catch_12 ((self.compressBodyForSend(false)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+            return; }); });
             var stack_buffer = std.heap.stackFallback((1024 * 16), bun.default_allocator);
             _ = &stack_buffer;
             const stack_allocator = stack_buffer.get();
@@ -1327,8 +1397,8 @@ _ = log("send proxy headers", .{});
             var ___temporary_send_buffer_guard_moved = false; _ = &___temporary_send_buffer_guard_moved;
             defer if (!___temporary_send_buffer_guard_moved) { ___temporary_send_buffer_guard_moved = true; const __T = @TypeOf(_temporary_send_buffer_guard); if (@typeInfo(__T) == .optional) { if (_temporary_send_buffer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _temporary_send_buffer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _temporary_send_buffer_guard; _drop_val.__cp_deinit(); } };
             const writer = (&temporary_send_buffer.writer());
-            const request = self.buildRequest(self.state.request_body.len);
-            _ = (blk_catch_10: { break :blk_catch_10 ((writeRequest(@TypeOf(writer), writer, request)) catch |__ce_10| { _ = &__ce_10; _ = self.closeAndFail(error.OutOfMemory, is_ssl, socket);
+            const request = self.buildRequest(self.bodyLenForSend());
+            _ = (blk_catch_13: { break :blk_catch_13 ((writeRequest(@TypeOf(writer), writer, request)) catch |__ce_13| { _ = &__ce_13; _ = self.closeAndFail(error.OutOfMemory, is_ssl, socket);
             return; }); });
             const headers_len = temporary_send_buffer.items.len;
             _ = assert((temporary_send_buffer.items.len == writer.context.items.len));
@@ -1345,7 +1415,7 @@ _ = log("send proxy headers", .{});
                 _ = assert((!socket.isShutdown()));
                 _ = assert((!socket.isClosed()));
             }
-            const amount = (blk_catch_11: { break :blk_catch_11 ((proxy.write(to_send)) catch |__ce_11| { _ = &__ce_11; return; }); });
+            const amount = (blk_catch_14: { break :blk_catch_14 ((proxy.write(to_send)) catch |__ce_14| { _ = &__ce_14; return; }); });
             if (comptime is_first_call) {
                 if ((amount == 0)) {
                     _ = log("is_first_call and amount == 0", .{});
@@ -1387,7 +1457,15 @@ else => {
 
 pub fn closeAndFail(self: *HTTPClient, err: anyerror, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) void {
         _ = log("closeAndFail: {s}", .{ @errorName(err) });
-        _ = NewHTTPContext(is_ssl).terminateSocket(socket);
+        if (comptime Environment.isMac) {
+            if ((self.state.original_request_body.len() > 0)) {
+                _ = NewHTTPContext(is_ssl).failSocket(socket);
+            } else {
+                _ = NewHTTPContext(is_ssl).terminateSocket(socket);
+            }
+        } else {
+            _ = NewHTTPContext(is_ssl).terminateSocket(socket);
+        }
         _ = self.fail(err);
 }
 
@@ -1427,7 +1505,7 @@ pub fn handleOnDataHeaders(self: *HTTPClient, comptime is_ssl: bool, incoming_da
                 _ = self.handleShortRead(is_ssl, incoming_data, socket, needs_move);
                 return;
             }
-            const response = (blk_catch_12: { break :blk_catch_12 ((picohttp.Response.parseParts(to_read, (&shared_response_headers_buf), (&amount_read))) catch |e| { _ = &e; if ((e == error.ShortRead)) {
+            const response = (blk_catch_15: { break :blk_catch_15 ((picohttp.Response.parseParts(to_read, (&shared_response_headers_buf), (&amount_read))) catch |e| { _ = &e; if ((e == error.ShortRead)) {
                 const MAX_RESPONSE_HEADER_BUFFER: usize = (1024 * 1024);
                 if ((to_read.len > MAX_RESPONSE_HEADER_BUFFER)) {
                     _ = self.closeAndFail(error.ResponseHeadersTooLarge, is_ssl, socket);
@@ -1465,7 +1543,7 @@ pub fn handleOnDataHeaders(self: *HTTPClient, comptime is_ssl: bool, incoming_da
         }
         var response = self.state.pending_response.?;
         _ = &response;
-        const should_continue = (blk_catch_13: { break :blk_catch_13 ((self.handleResponseMetadata((&response))) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+        const should_continue = (blk_catch_16: { break :blk_catch_16 ((self.handleResponseMetadata((&response))) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
         if (((self.state.content_encoding_i < response.headers.list.len) and (!self.state.flags.did_set_content_encoding))) {
             const mutable_headers: std.ArrayListUnmanaged(picohttp.Header) = .{ .items = response.headers.list, .capacity = response.headers.list.len };
@@ -1475,6 +1553,9 @@ pub fn handleOnDataHeaders(self: *HTTPClient, comptime is_ssl: bool, incoming_da
             self.state.pending_response = response;
         }
         if ((should_continue == .finished)) {
+            if ((to_read.len > 0)) {
+                self.state.flags.allow_keepalive = false;
+            }
             if (self.state.flags.is_redirect_pending) {
                 _ = self.doRedirect(is_ssl, ctx, socket);
                 return;
@@ -1497,7 +1578,7 @@ pub fn handleOnDataHeaders(self: *HTTPClient, comptime is_ssl: bool, incoming_da
             return;
         }
         if ((self.state.response_stage == .body)) {
-            const report_progress = (blk_catch_14: { break :blk_catch_14 ((self.handleResponseBody(to_read, true)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+            const report_progress = (blk_catch_17: { break :blk_catch_17 ((self.handleResponseBody(to_read, true)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
             return; }); });
             if (report_progress) {
                 _ = self.progressUpdate(is_ssl, ctx, socket);
@@ -1506,7 +1587,7 @@ pub fn handleOnDataHeaders(self: *HTTPClient, comptime is_ssl: bool, incoming_da
         } else {
             if ((self.state.response_stage == .body_chunk)) {
                 _ = self.setTimeout(socket);
-                const report_progress = (blk_catch_15: { break :blk_catch_15 ((self.handleResponseBodyChunkedEncoding(to_read)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+                const report_progress = (blk_catch_18: { break :blk_catch_18 ((self.handleResponseBodyChunkedEncoding(to_read)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
                 return; }); });
                 if (report_progress) {
                     _ = self.progressUpdate(is_ssl, ctx, socket);
@@ -1538,7 +1619,7 @@ _ = self.handleOnDataHeaders(is_ssl, incoming_data, ctx, socket);
 },
 .body => {
 _ = self.setTimeout(socket);
-        const report_progress = (blk_catch_16: { break :blk_catch_16 ((self.handleResponseBody(incoming_data, false)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+        const report_progress = (blk_catch_19: { break :blk_catch_19 ((self.handleResponseBody(incoming_data, false)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
         if (report_progress) {
             _ = self.progressUpdate(is_ssl, ctx, socket);
@@ -1547,7 +1628,7 @@ _ = self.setTimeout(socket);
 },
 .body_chunk => {
 _ = self.setTimeout(socket);
-        const report_progress = (blk_catch_17: { break :blk_catch_17 ((self.handleResponseBodyChunkedEncoding(incoming_data)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
+        const report_progress = (blk_catch_20: { break :blk_catch_20 ((self.handleResponseBodyChunkedEncoding(incoming_data)) catch |e| { _ = &e; _ = self.closeAndFail(e, is_ssl, socket);
         return; }); });
         if (report_progress) {
             _ = self.progressUpdate(is_ssl, ctx, socket);
@@ -1790,7 +1871,7 @@ pub fn handleResponseBodyFromMultiplePackets(self: *HTTPClient, incoming_data: [
         }
         if ((!self.state.flags.is_redirect_pending)) {
             if (((buffer.list.items.len == 0) and (incoming_data.len < preallocate_max))) {
-                _ = (blk_catch_18: { break :blk_catch_18 ((buffer.list.ensureTotalCapacityPrecise(buffer.allocator, incoming_data.len)) catch |__ce_18| { _ = &__ce_18;  }); });
+                _ = (blk_catch_21: { break :blk_catch_21 ((buffer.list.ensureTotalCapacityPrecise(buffer.allocator, incoming_data.len)) catch |__ce_21| { _ = &__ce_21;  }); });
             }
             _ = try buffer.write(remainder);
         }
@@ -1938,6 +2019,8 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
         _ = &pretend_304;
         var is_server_sent_events = false;
         _ = &is_server_sent_events;
+        var has_keep_alive_token = false;
+        _ = &has_keep_alive_token;
         var header_i: usize = 0;
         _ = &header_i;
         while ((header_i < response.headers.list.len)) : (header_i = (header_i + 1)) {
@@ -1947,7 +2030,7 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
                 if (((self.flags.proxy_tunneling and (self.proxy_tunnel == null)) and (response.status_code == 200))) {
                     continue;
                 }
-                const content_length = (blk_catch_19: { break :blk_catch_19 ((std.fmt.parseInt(usize, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 10)) catch |__ce_19| { _ = &__ce_19; return error.InvalidContentLength; }); });
+                const content_length = (blk_catch_22: { break :blk_catch_22 ((std.fmt.parseInt(usize, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 10)) catch |__ce_22| { _ = &__ce_22; return error.InvalidContentLength; }); });
                 if (self.method.hasBody()) {
                     if (((self.state.content_length != null) and (self.state.content_length.? != content_length))) {
                         return error.InvalidContentLength;
@@ -2027,13 +2110,12 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
                                 location = (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value);
                             } else {
                                 if ((header_hash == connection_header_hash)) {
-                                    if (((response.status_code >= 200) and (response.status_code <= 299))) {
-                                        if (std.ascii.eqlIgnoreCase((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "close")) {
-                                            self.state.flags.allow_keepalive = false;
-                                        } else {
-                                            if (std.ascii.eqlIgnoreCase((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "keep-alive")) {
-                                                self.state.flags.allow_keepalive = true;
-                                            }
+                                    if (std.ascii.eqlIgnoreCase((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "close")) {
+                                        self.state.flags.allow_keepalive = false;
+                                    } else {
+                                        if ((((response.status_code >= 200) and (response.status_code <= 299)) and std.ascii.eqlIgnoreCase((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "keep-alive"))) {
+                                            self.state.flags.allow_keepalive = true;
+                                            has_keep_alive_token = true;
                                         }
                                     }
                                 } else {
@@ -2077,11 +2159,17 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
             self.flags.disable_keepalive = true;
             is_proxy_connect_failure = true;
         }
+        if (((response.minor_version == 0) and (!has_keep_alive_token))) {
+            self.state.flags.allow_keepalive = false;
+        }
         const status_code = response.status_code;
         if ((status_code == 407)) {
             self.flags.disable_keepalive = true;
         }
-        const is_redirect = ((status_code >= 300) and (status_code <= 399));
+        const is_redirect = (switch (status_code) {
+301, 302, 303, 307, 308 => true,
+else => false,
+});
         if (is_redirect) {
             if (((((!is_proxy_connect_failure) and (self.redirect_type == FetchRedirect.follow)) and (location.len > 0)) and (self.remaining_redirect_count > 0))) {
                 switch (status_code) {
@@ -2197,7 +2285,7 @@ if (((status_code != 303) and (self.state.original_request_body == .stream))) {
                             if (new_url_.isEmpty()) {
                                 return error.InvalidRedirectURL;
                             }
-                            const new_url = (blk_catch_20: { break :blk_catch_20 ((new_url_.toOwnedSlice(bun.default_allocator)) catch |__ce_20| { _ = &__ce_20; return error.RedirectURLTooLong; }); });
+                            const new_url = (blk_catch_23: { break :blk_catch_23 ((new_url_.toOwnedSlice(bun.default_allocator)) catch |__ce_23| { _ = &__ce_23; return error.RedirectURLTooLong; }); });
                             self.url = URL.parse(new_url);
                             is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(self.url.origin), strings.withoutTrailingSlash(original_url.origin), true);
                             _ = bun.debugAssert((self.prev_redirect.len == 0));
@@ -2364,6 +2452,8 @@ pub const ProxyTunnel = ProxyTunnelMod.ProxyTunnel;
 pub const Decompressor = DecompressorMod.Decompressor;
 pub const NewHTTPContext = HTTPContextMod.NewHTTPContext;
 pub const InitError = InitErrorMod.InitError;
+pub const session_cache = SessionCacheMod;
+pub const compress_body = CompressBodyMod;
 pub const HTTPRequestBody = HTTPRequestBodyMod.HTTPRequestBody;
 pub const Method = MethodMod.Method;
 pub const Encoding = EncodingMod.Encoding;
@@ -2448,18 +2538,18 @@ pub fn cleanup(force: bool) void {
 }
 
 pub fn writeRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request) !void {
-        _ = (blk_catch_21: { break :blk_catch_21 ((writer.write(request.method)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 0; }); });
-        _ = (blk_catch_22: { break :blk_catch_22 ((writer.write(" ")) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 0; }); });
-        _ = (blk_catch_23: { break :blk_catch_23 ((writer.write(request.path)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 0; }); });
-        _ = (blk_catch_24: { break :blk_catch_24 ((writer.write(" HTTP/1.1\r\n")) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 0; }); });
+        _ = (blk_catch_24: { break :blk_catch_24 ((writer.write(request.method)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 0; }); });
+        _ = (blk_catch_25: { break :blk_catch_25 ((writer.write(" ")) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 0; }); });
+        _ = (blk_catch_26: { break :blk_catch_26 ((writer.write(request.path)) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 0; }); });
+        _ = (blk_catch_27: { break :blk_catch_27 ((writer.write(" HTTP/1.1\r\n")) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 0; }); });
         for (cp_iter_slice(request.headers)) |header| {
             _ = &header;
-            _ = (blk_catch_25: { break :blk_catch_25 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name))) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 0; }); });
-            _ = (blk_catch_26: { break :blk_catch_26 ((writer.write(": ")) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 0; }); });
-            _ = (blk_catch_27: { break :blk_catch_27 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value))) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 0; }); });
-            _ = (blk_catch_28: { break :blk_catch_28 ((writer.write("\r\n")) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 0; }); });
+            _ = (blk_catch_28: { break :blk_catch_28 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name))) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 0; }); });
+            _ = (blk_catch_29: { break :blk_catch_29 ((writer.write(": ")) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 0; }); });
+            _ = (blk_catch_30: { break :blk_catch_30 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value))) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 0; }); });
+            _ = (blk_catch_31: { break :blk_catch_31 ((writer.write("\r\n")) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 0; }); });
         }
-        _ = (blk_catch_29: { break :blk_catch_29 ((writer.write("\r\n")) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 0; }); });
+        _ = (blk_catch_32: { break :blk_catch_32 ((writer.write("\r\n")) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 0; }); });
 }
 
 pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPClient) !void {
@@ -2469,7 +2559,7 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
         _ = &port;
         if (client.url.getPort()) |p| {
             _ = &p;
-            port = (blk_catch_30: { break :blk_catch_30 ((std.fmt.bufPrint((&port_buf), "{d}", .{ p })) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 ""; }); });
+            port = (blk_catch_33: { break :blk_catch_33 ((std.fmt.bufPrint((&port_buf), "{d}", .{ p })) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 ""; }); });
         } else {
             if (client.url.isHTTPS()) {
                 port = "443";
@@ -2477,16 +2567,16 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
                 port = "80";
             }
         }
-        _ = (blk_catch_31: { break :blk_catch_31 ((writer.write("CONNECT ")) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 0; }); });
-        _ = (blk_catch_32: { break :blk_catch_32 ((writer.write(client.url.hostname)) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 0; }); });
-        _ = (blk_catch_33: { break :blk_catch_33 ((writer.write(":")) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 0; }); });
-        _ = (blk_catch_34: { break :blk_catch_34 ((writer.write(port)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 0; }); });
-        _ = (blk_catch_35: { break :blk_catch_35 ((writer.write(" HTTP/1.1\r\n")) catch |__ce_35| { _ = &__ce_35; break :blk_catch_35 0; }); });
-        _ = (blk_catch_36: { break :blk_catch_36 ((writer.write("Host: ")) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 0; }); });
-        _ = (blk_catch_37: { break :blk_catch_37 ((writer.write(client.url.hostname)) catch |__ce_37| { _ = &__ce_37; break :blk_catch_37 0; }); });
-        _ = (blk_catch_38: { break :blk_catch_38 ((writer.write(":")) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 0; }); });
-        _ = (blk_catch_39: { break :blk_catch_39 ((writer.write(port)) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 0; }); });
-        _ = (blk_catch_40: { break :blk_catch_40 ((writer.write("\r\nProxy-Connection: Keep-Alive\r\n")) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 0; }); });
+        _ = (blk_catch_34: { break :blk_catch_34 ((writer.write("CONNECT ")) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 0; }); });
+        _ = (blk_catch_35: { break :blk_catch_35 ((writer.write(client.url.hostname)) catch |__ce_35| { _ = &__ce_35; break :blk_catch_35 0; }); });
+        _ = (blk_catch_36: { break :blk_catch_36 ((writer.write(":")) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 0; }); });
+        _ = (blk_catch_37: { break :blk_catch_37 ((writer.write(port)) catch |__ce_37| { _ = &__ce_37; break :blk_catch_37 0; }); });
+        _ = (blk_catch_38: { break :blk_catch_38 ((writer.write(" HTTP/1.1\r\n")) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 0; }); });
+        _ = (blk_catch_39: { break :blk_catch_39 ((writer.write("Host: ")) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 0; }); });
+        _ = (blk_catch_40: { break :blk_catch_40 ((writer.write(client.url.hostname)) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 0; }); });
+        _ = (blk_catch_41: { break :blk_catch_41 ((writer.write(":")) catch |__ce_41| { _ = &__ce_41; break :blk_catch_41 0; }); });
+        _ = (blk_catch_42: { break :blk_catch_42 ((writer.write(port)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 0; }); });
+        _ = (blk_catch_43: { break :blk_catch_43 ((writer.write("\r\nProxy-Connection: Keep-Alive\r\n")) catch |__ce_43| { _ = &__ce_43; break :blk_catch_43 0; }); });
         var user_provided_proxy_auth = false;
         _ = &user_provided_proxy_auth;
         if (client.proxy_headers) |hdrs| {
@@ -2496,9 +2586,9 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
         if (client.proxy_authorization) |auth| {
             _ = &auth;
             if ((!user_provided_proxy_auth)) {
-                _ = (blk_catch_41: { break :blk_catch_41 ((writer.write("Proxy-Authorization: ")) catch |__ce_41| { _ = &__ce_41; break :blk_catch_41 0; }); });
-                _ = (blk_catch_42: { break :blk_catch_42 ((writer.write(auth)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 0; }); });
-                _ = (blk_catch_43: { break :blk_catch_43 ((writer.write("\r\n")) catch |__ce_43| { _ = &__ce_43; break :blk_catch_43 0; }); });
+                _ = (blk_catch_44: { break :blk_catch_44 ((writer.write("Proxy-Authorization: ")) catch |__ce_44| { _ = &__ce_44; break :blk_catch_44 0; }); });
+                _ = (blk_catch_45: { break :blk_catch_45 ((writer.write(auth)) catch |__ce_45| { _ = &__ce_45; break :blk_catch_45 0; }); });
+                _ = (blk_catch_46: { break :blk_catch_46 ((writer.write("\r\n")) catch |__ce_46| { _ = &__ce_46; break :blk_catch_46 0; }); });
             }
         }
         if (client.proxy_headers) |hdrs| {
@@ -2512,26 +2602,26 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
             var idx: usize = 0;
             _ = &idx;
             while ((idx < names.len)) {
-                _ = (blk_catch_44: { break :blk_catch_44 ((writer.write(hdrs.asStr(names[@as(usize, @intCast(idx))]))) catch |__ce_44| { _ = &__ce_44; break :blk_catch_44 0; }); });
-                _ = (blk_catch_45: { break :blk_catch_45 ((writer.write(": ")) catch |__ce_45| { _ = &__ce_45; break :blk_catch_45 0; }); });
-                _ = (blk_catch_46: { break :blk_catch_46 ((writer.write(hdrs.asStr(values[@as(usize, @intCast(idx))]))) catch |__ce_46| { _ = &__ce_46; break :blk_catch_46 0; }); });
-                _ = (blk_catch_47: { break :blk_catch_47 ((writer.write("\r\n")) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 0; }); });
+                _ = (blk_catch_47: { break :blk_catch_47 ((writer.write(hdrs.asStr(names[@as(usize, @intCast(idx))]))) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 0; }); });
+                _ = (blk_catch_48: { break :blk_catch_48 ((writer.write(": ")) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 0; }); });
+                _ = (blk_catch_49: { break :blk_catch_49 ((writer.write(hdrs.asStr(values[@as(usize, @intCast(idx))]))) catch |__ce_49| { _ = &__ce_49; break :blk_catch_49 0; }); });
+                _ = (blk_catch_50: { break :blk_catch_50 ((writer.write("\r\n")) catch |__ce_50| { _ = &__ce_50; break :blk_catch_50 0; }); });
                 idx = (idx + 1);
             }
         }
-        _ = (blk_catch_48: { break :blk_catch_48 ((writer.write("\r\n")) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 0; }); });
+        _ = (blk_catch_51: { break :blk_catch_51 ((writer.write("\r\n")) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 0; }); });
 }
 
 pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request, client: *HTTPClient) !void {
-        _ = (blk_catch_49: { break :blk_catch_49 ((writer.write(request.method)) catch |__ce_49| { _ = &__ce_49; break :blk_catch_49 0; }); });
-        _ = (blk_catch_50: { break :blk_catch_50 ((writer.write(" http://")) catch |__ce_50| { _ = &__ce_50; break :blk_catch_50 0; }); });
-        _ = (blk_catch_51: { break :blk_catch_51 ((writer.write(client.url.hostname)) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 0; }); });
+        _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(request.method)) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 0; }); });
+        _ = (blk_catch_53: { break :blk_catch_53 ((writer.write(" http://")) catch |__ce_53| { _ = &__ce_53; break :blk_catch_53 0; }); });
+        _ = (blk_catch_54: { break :blk_catch_54 ((writer.write(client.url.hostname)) catch |__ce_54| { _ = &__ce_54; break :blk_catch_54 0; }); });
         if ((client.url.getPort() != null)) {
-            _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(":")) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 0; }); });
-            _ = (blk_catch_53: { break :blk_catch_53 ((writer.write(client.url.port)) catch |__ce_53| { _ = &__ce_53; break :blk_catch_53 0; }); });
+            _ = (blk_catch_55: { break :blk_catch_55 ((writer.write(":")) catch |__ce_55| { _ = &__ce_55; break :blk_catch_55 0; }); });
+            _ = (blk_catch_56: { break :blk_catch_56 ((writer.write(client.url.port)) catch |__ce_56| { _ = &__ce_56; break :blk_catch_56 0; }); });
         }
-        _ = (blk_catch_54: { break :blk_catch_54 ((writer.write(request.path)) catch |__ce_54| { _ = &__ce_54; break :blk_catch_54 0; }); });
-        _ = (blk_catch_55: { break :blk_catch_55 ((writer.write(" HTTP/1.1\r\nProxy-Connection: Keep-Alive\r\n")) catch |__ce_55| { _ = &__ce_55; break :blk_catch_55 0; }); });
+        _ = (blk_catch_57: { break :blk_catch_57 ((writer.write(request.path)) catch |__ce_57| { _ = &__ce_57; break :blk_catch_57 0; }); });
+        _ = (blk_catch_58: { break :blk_catch_58 ((writer.write(" HTTP/1.1\r\nProxy-Connection: Keep-Alive\r\n")) catch |__ce_58| { _ = &__ce_58; break :blk_catch_58 0; }); });
         var user_provided_proxy_auth = false;
         _ = &user_provided_proxy_auth;
         if (client.proxy_headers) |hdrs| {
@@ -2541,9 +2631,9 @@ pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.pic
         if (client.proxy_authorization) |auth| {
             _ = &auth;
             if ((!user_provided_proxy_auth)) {
-                _ = (blk_catch_56: { break :blk_catch_56 ((writer.write("Proxy-Authorization: ")) catch |__ce_56| { _ = &__ce_56; break :blk_catch_56 0; }); });
-                _ = (blk_catch_57: { break :blk_catch_57 ((writer.write(auth)) catch |__ce_57| { _ = &__ce_57; break :blk_catch_57 0; }); });
-                _ = (blk_catch_58: { break :blk_catch_58 ((writer.write("\r\n")) catch |__ce_58| { _ = &__ce_58; break :blk_catch_58 0; }); });
+                _ = (blk_catch_59: { break :blk_catch_59 ((writer.write("Proxy-Authorization: ")) catch |__ce_59| { _ = &__ce_59; break :blk_catch_59 0; }); });
+                _ = (blk_catch_60: { break :blk_catch_60 ((writer.write(auth)) catch |__ce_60| { _ = &__ce_60; break :blk_catch_60 0; }); });
+                _ = (blk_catch_61: { break :blk_catch_61 ((writer.write("\r\n")) catch |__ce_61| { _ = &__ce_61; break :blk_catch_61 0; }); });
             }
         }
         if (client.proxy_headers) |hdrs| {
@@ -2557,21 +2647,21 @@ pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.pic
             var idx: usize = 0;
             _ = &idx;
             while ((idx < names.len)) {
-                _ = (blk_catch_59: { break :blk_catch_59 ((writer.write(hdrs.asStr(names[@as(usize, @intCast(idx))]))) catch |__ce_59| { _ = &__ce_59; break :blk_catch_59 0; }); });
-                _ = (blk_catch_60: { break :blk_catch_60 ((writer.write(": ")) catch |__ce_60| { _ = &__ce_60; break :blk_catch_60 0; }); });
-                _ = (blk_catch_61: { break :blk_catch_61 ((writer.write(hdrs.asStr(values[@as(usize, @intCast(idx))]))) catch |__ce_61| { _ = &__ce_61; break :blk_catch_61 0; }); });
-                _ = (blk_catch_62: { break :blk_catch_62 ((writer.write("\r\n")) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 0; }); });
+                _ = (blk_catch_62: { break :blk_catch_62 ((writer.write(hdrs.asStr(names[@as(usize, @intCast(idx))]))) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 0; }); });
+                _ = (blk_catch_63: { break :blk_catch_63 ((writer.write(": ")) catch |__ce_63| { _ = &__ce_63; break :blk_catch_63 0; }); });
+                _ = (blk_catch_64: { break :blk_catch_64 ((writer.write(hdrs.asStr(values[@as(usize, @intCast(idx))]))) catch |__ce_64| { _ = &__ce_64; break :blk_catch_64 0; }); });
+                _ = (blk_catch_65: { break :blk_catch_65 ((writer.write("\r\n")) catch |__ce_65| { _ = &__ce_65; break :blk_catch_65 0; }); });
                 idx = (idx + 1);
             }
         }
         for (cp_iter_slice(request.headers)) |header| {
             _ = &header;
-            _ = (blk_catch_63: { break :blk_catch_63 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name))) catch |__ce_63| { _ = &__ce_63; break :blk_catch_63 0; }); });
-            _ = (blk_catch_64: { break :blk_catch_64 ((writer.write(": ")) catch |__ce_64| { _ = &__ce_64; break :blk_catch_64 0; }); });
-            _ = (blk_catch_65: { break :blk_catch_65 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value))) catch |__ce_65| { _ = &__ce_65; break :blk_catch_65 0; }); });
-            _ = (blk_catch_66: { break :blk_catch_66 ((writer.write("\r\n")) catch |__ce_66| { _ = &__ce_66; break :blk_catch_66 0; }); });
+            _ = (blk_catch_66: { break :blk_catch_66 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name))) catch |__ce_66| { _ = &__ce_66; break :blk_catch_66 0; }); });
+            _ = (blk_catch_67: { break :blk_catch_67 ((writer.write(": ")) catch |__ce_67| { _ = &__ce_67; break :blk_catch_67 0; }); });
+            _ = (blk_catch_68: { break :blk_catch_68 ((writer.write((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value))) catch |__ce_68| { _ = &__ce_68; break :blk_catch_68 0; }); });
+            _ = (blk_catch_69: { break :blk_catch_69 ((writer.write("\r\n")) catch |__ce_69| { _ = &__ce_69; break :blk_catch_69 0; }); });
         }
-        _ = (blk_catch_67: { break :blk_catch_67 ((writer.write("\r\n")) catch |__ce_67| { _ = &__ce_67; break :blk_catch_67 0; }); });
+        _ = (blk_catch_70: { break :blk_catch_70 ((writer.write("\r\n")) catch |__ce_70| { _ = &__ce_70; break :blk_catch_70 0; }); });
 }
 
 pub fn printRequest(protocol: Protocol, request: bun.picohttp.Request, url: []const u8, ignore_insecure: bool, body: []const u8, curl: bool) void {
@@ -2599,10 +2689,10 @@ ver = "HTTP/3";
         if (bun.Output.enable_ansi_colors_stderr) {
             prefix = bun.Output.prettyFmt("<r><d>[fetch]<r> ", true);
         }
-        _ = (blk_catch_68: { break :blk_catch_68 ((bun.Output.errorWriter().print("{s}> {s} {s} {s}\n", .{ prefix, ver, request_.method, request_.path })) catch |__ce_68| { _ = &__ce_68;  }); });
+        _ = (blk_catch_71: { break :blk_catch_71 ((bun.Output.errorWriter().print("{s}> {s} {s} {s}\n", .{ prefix, ver, request_.method, request_.path })) catch |__ce_71| { _ = &__ce_71;  }); });
         for (cp_iter_slice(request_.headers)) |header| {
             _ = &header;
-            _ = (blk_catch_69: { break :blk_catch_69 ((bun.Output.errorWriter().print("{s}> {f}\n", .{ prefix, header })) catch |__ce_69| { _ = &__ce_69;  }); });
+            _ = (blk_catch_72: { break :blk_catch_72 ((bun.Output.errorWriter().print("{s}> {f}\n", .{ prefix, header })) catch |__ce_72| { _ = &__ce_72;  }); });
         }
         _ = bun.Output.flush();
 }
@@ -2645,9 +2735,9 @@ pub fn checkServerIdentity(client: *HTTPClient, comptime is_ssl: bool, socket: N
 pub fn registerAbortTracker(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) void {
         if ((client.signals.aborted != null)) {
             if (is_ssl) {
-                _ = (blk_catch_70: { break :blk_catch_70 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket })) catch |__ce_70| { _ = &__ce_70; @panic("unreachable"); }); });
+                _ = (blk_catch_73: { break :blk_catch_73 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTLS = socket })) catch |__ce_73| { _ = &__ce_73; @panic("unreachable"); }); });
             } else {
-                _ = (blk_catch_71: { break :blk_catch_71 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket })) catch |__ce_71| { _ = &__ce_71; @panic("unreachable"); }); });
+                _ = (blk_catch_74: { break :blk_catch_74 ((socket_async_http_abort_tracker.put(client.async_http_id, .{ .SocketTCP = socket })) catch |__ce_74| { _ = &__ce_74; @panic("unreachable"); }); });
             }
         }
 }
@@ -2671,6 +2761,13 @@ pub fn unregisterAbortTrackerForSocket(comptime is_ssl: bool, socket: NewHTTPCon
                 i = (i + 1);
             }
         }
+}
+
+pub fn onConnect(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) !void {
+        if (((!client.flags.disable_keepalive) and (client.unix_socket_path.length() == 0))) {
+            _ = socket.setKeepAlive(true, 60);
+        }
+        return onOpen(client, is_ssl, socket);
 }
 
 pub fn onOpen(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) !void {
@@ -2718,6 +2815,10 @@ pub fn onOpen(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext
                     }
                 }
                 _ = ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
+                if (session_cache.eligible(client)) {
+                    const want_tunnel = ((client.http_proxy != null) and client.url.isHTTPS());
+                    _ = session_cache.install(ssl_ptr, client.getSslCtx(true), client.connected_url.hostname, client.connected_url.getPortAuto(), (if ((want_tunnel or (client.http_proxy == null))) client.proxyAuthHash() else 0));
+                }
             }
         } else {
             _ = client.firstCall(is_ssl, socket);

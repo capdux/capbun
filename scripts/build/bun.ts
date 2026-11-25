@@ -304,6 +304,9 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   // here — root-pch.h transitively includes Windows.h via WTF, so the
   // force-include would lock those in before the source can speak.
   const noPchSources = new Set<string>();
+  if (cfg.debug) {
+    noPchSources.add(resolve(cfg.cwd, "src/jsc/bindings/highway_xml.cpp"));
+  }
 
   // Windows-only cpp sources (rescle — PE resource editor for --compile).
   if (cfg.windows) {

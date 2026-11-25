@@ -203,7 +203,10 @@ pub struct Buffered {
         let arguments = callframe.arguments_old(2).slice();
 
         let stream = false;
-        if (arguments.len > 1 && arguments[1].isObject()) {
+        if (arguments.len > 1 && !arguments[1].isUndefinedOrNull()) {
+            if (!arguments[1].isObject()) {
+                return globalThis.throwInvalidArgumentTypeValue("options", "object", arguments[1]);
+            }
             if (stream_value := arguments[1].fastGet(globalThis, .stream)?) {
                 stream = stream_value.toBoolean();
             }
@@ -393,9 +396,9 @@ pub struct Buffered {
             return globalThis.throwInvalidArguments("TextDecoder(encoding) label is invalid", .{});
         }
 
-        if (!options_value.isUndefined()) {
+        if (!options_value.isUndefinedOrNull()) {
             if (!options_value.isObject()) {
-                return globalThis.throwInvalidArguments("TextDecoder(options) is invalid", .{});
+                return globalThis.throwInvalidArgumentTypeValue("options", "object", options_value);
             }
 
             if (fatal := options_value.get(globalThis, "fatal")?) {

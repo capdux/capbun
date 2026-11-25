@@ -586,6 +586,7 @@ const strings = bun.strings;
 const BabyList = bun.collections.BabyList;
 const JSON5 = bun.interchange.json5.JSON5Parser;
 const TOML = bun.interchange.toml.TOML;
+const XML = bun.interchange.xml;
 const YAML = bun.interchange.yaml.YAML;
 const js_ast = bun.ast;
 const E = js_ast.E;
@@ -725,6 +726,25 @@ var trace = bun.perf.trace("Bundler.ParseJSON5");
         const root = try JSON5.parse(source, (&temp_log), allocator);
         return JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, (&temp_log), root, source, "")).?);
 },
+.xml => {
+var trace = bun.perf.trace("Bundler.ParseXML");
+        _ = &trace;
+        var _trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (&trace) };
+        _ = &_trace_guard;
+        var ___trace_guard_moved = false; _ = &___trace_guard_moved;
+        defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
+        var temp_log = bun.logger.Log.init(allocator);
+        _ = &temp_log;
+        var _temp_log_guard = TempLogCloneGuard{ .temp = (blk: {
+        break :blk (&temp_log);
+
+}), .log = log };
+        _ = &_temp_log_guard;
+        var ___temp_log_guard_moved = false; _ = &___temp_log_guard_moved;
+        defer if (!___temp_log_guard_moved) { ___temp_log_guard_moved = true; const __T = @TypeOf(_temp_log_guard); if (@typeInfo(__T) == .optional) { if (_temp_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _temp_log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _temp_log_guard; _drop_val.__cp_deinit(); } };
+        const root = (blk_catch_2: { break :blk_catch_2 ((XML.parse(source, (&temp_log), allocator, XML.Options{ .compact = true, .encoding = .File })) catch |__ce_2| { _ = &__ce_2; return error.ParserError; }); });
+        return JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, (&temp_log), root, source, "")).?);
+},
 .text => {
 const root = Expr.init(E.String, E.String{ .data = source.contents }, Logger.Loc{ .start = 0 });
         var ast = JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
@@ -733,7 +753,7 @@ const root = Expr.init(E.String, E.String{ .data = source.contents }, Logger.Loc
         return ast;
 },
 .md => {
-const html = (blk_catch_2: { break :blk_catch_2 ((bun.md.renderToHtml(source.contents, allocator)) catch |__ce_2| { _ = &__ce_2; _ = (blk_catch_3: { break :blk_catch_3 ((log.addError(source, Logger.Loc.Empty, "Failed to render markdown to HTML")) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+const html = (blk_catch_3: { break :blk_catch_3 ((bun.md.renderToHtml(source.contents, allocator)) catch |__ce_3| { _ = &__ce_3; _ = (blk_catch_4: { break :blk_catch_4 ((log.addError(source, Logger.Loc.Empty, "Failed to render markdown to HTML")) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
         return error.ParserError; }); });
         const root = Expr.init(E.String, E.String{ .data = html }, Logger.Loc{ .start = 0 });
         var ast = JSAst.init((try js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, log, root, source, "")).?);
@@ -743,7 +763,7 @@ const html = (blk_catch_2: { break :blk_catch_2 ((bun.md.renderToHtml(source.con
 },
 .sqlite_embedded, .sqlite => {
 if ((!transpiler.options.target.isBun())) {
-            _ = (blk_catch_4: { break :blk_catch_4 ((log.addError(source, Logger.Loc.Empty, "To use the \"sqlite\" loader, set target to \"bun\"")) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((log.addError(source, Logger.Loc.Empty, "To use the \"sqlite\" loader, set target to \"bun\"")) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
             return error.ParserError;
         }
         const path_to_use = brk: {
@@ -770,7 +790,7 @@ if ((!transpiler.options.target.isBun())) {
 },
 .napi => {
 if ((transpiler.options.target == .browser)) {
-            _ = (blk_catch_8: { break :blk_catch_8 ((log.addError(source, Logger.Loc.Empty, "Loading .node files won't work in the browser. Make sure to set target to \"bun\" or \"node\"")) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((log.addError(source, Logger.Loc.Empty, "Loading .node files won't work in the browser. Make sure to set target to \"bun\" or \"node\"")) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
             return error.ParserError;
         }
         const unique_key = ((std.fmt.allocPrint(allocator, "{f}A{d:0>8}", .{ bun.fmt.hexIntLower(unique_key_prefix), source.index.get() })) catch unreachable);
@@ -921,12 +941,12 @@ file_path.* = Fs.Path.init(path);
             break :brk .{ .contents = ((NodeFallbackModules.contentsFromPath(file_path.text)) orelse ("")), .fd = bun.invalid_fd };
 };
         }
-        break :brk (blk_catch_11: { break :blk_catch_11 ((resolver.caches.fs.readFileWithAllocator((if (loader.shouldCopyForBundling()) bun.default_allocator else allocator), transpiler.fs, file_path.text, task.contents_or_fd.fd.dir, false, contents.file.unwrapValid())) catch |e| { _ = &e; const source = (&Logger.Source.initEmptyFile(((log.msgs.allocator.dupe(u8, file_path.text)) catch unreachable)));
+        break :brk (blk_catch_12: { break :blk_catch_12 ((resolver.caches.fs.readFileWithAllocator((if (loader.shouldCopyForBundling()) bun.default_allocator else allocator), transpiler.fs, file_path.text, task.contents_or_fd.fd.dir, false, contents.file.unwrapValid())) catch |e| { _ = &e; const source = (&Logger.Source.initEmptyFile(((log.msgs.allocator.dupe(u8, file_path.text)) catch unreachable)));
         if (((e == error.ENOENT) or (e == error.FileNotFound))) {
-            _ = (blk_catch_13: { break :blk_catch_13 ((log.addErrorFmt(source, Logger.Loc.Empty, allocator, "File not found {f}", .{ bun.fmt.quote(file_path.text) })) catch |__ce_13| { _ = &__ce_13;  }); });
+            _ = (blk_catch_14: { break :blk_catch_14 ((log.addErrorFmt(source, Logger.Loc.Empty, allocator, "File not found {f}", .{ bun.fmt.quote(file_path.text) })) catch |__ce_14| { _ = &__ce_14;  }); });
             return error.FileNotFound;
         } else {
-            _ = (blk_catch_14: { break :blk_catch_14 ((log.addErrorFmt(source, Logger.Loc.Empty, allocator, "{s} reading file: {f}", .{ @errorName(e), bun.fmt.quote(file_path.text) })) catch |__ce_14| { _ = &__ce_14;  }); });
+            _ = (blk_catch_15: { break :blk_catch_15 ((log.addErrorFmt(source, Logger.Loc.Empty, allocator, "{s} reading file: {f}", .{ @errorName(e), bun.fmt.quote(file_path.text) })) catch |__ce_15| { _ = &__ce_15;  }); });
         }
         return e; }); });
 },
@@ -1100,7 +1120,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
         if ((client.stage == .needs_source_code)) {
             var maybe_entry: ?CacheEntry = null;
             _ = &maybe_entry;
-            const entry_res = (blk_catch_15: { break :blk_catch_15 ((getSourceCode(client, worker, (&log))) catch |e| { _ = &e; break :blk_catch_15 @as(CacheEntry, blk_err: {
+            const entry_res = (blk_catch_16: { break :blk_catch_16 ((getSourceCode(client, worker, (&log))) catch |e| { _ = &e; break :blk_catch_16 @as(CacheEntry, blk_err: {
             value = .{ .@"err" = .{ .@"err" = e, .step = step, .log = log, .source_index = client.source_index, .target = client.known_target } };
             done = true;
             break :blk_err undefined;
@@ -1124,7 +1144,7 @@ pub fn ParseTask_runFromThreadPool(client: *ParseTask) void {
         }
         if ((!done)) {
             var maybe_ast: ?ResultSuccess = blk: {
-            const ast = (blk_catch_16: { break :blk_catch_16 ((runWithSourceCode(client, worker, (&step), (&log), (&client.stage.needs_parse))) catch |e| { _ = &e; if ((e == error.EmptyAST)) {
+            const ast = (blk_catch_17: { break :blk_catch_17 ((runWithSourceCode(client, worker, (&step), (&log), (&client.stage.needs_parse))) catch |e| { _ = &e; if ((e == error.EmptyAST)) {
                 _ = log.deinit();
                 value = .{ .empty = .{ .source_index = client.source_index } };
                 break :blk null;

@@ -185,11 +185,14 @@ pub inline fn addFileByPathSlow(self: ImportWatcher, file_path: []const u8, load
 });
     }
 
-pub inline fn addFile(self: ImportWatcher, fd: bun.FD, file_path: []const u8, hash: Watcher.HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*bun.PackageJSON, comptime copy_file_path: bool) bun.sys.Maybe(void) {
+pub inline fn addFile(self: ImportWatcher, fd: bun.FD, file_path: []const u8, hash: Watcher.HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*bun.PackageJSON, comptime copy_file_path: bool) bun.sys.Maybe(Watcher.FdOwnership) {
+            if ((self.* == .none)) {
+                return .{ .result = .caller };
+            }
             return (switch (self) {
 .hot => |watcher| watcher.addFile(fd, file_path, hash, loader, dir_fd, package_json, copy_file_path),
 .watch => |watcher| watcher.addFile(fd, file_path, hash, loader, dir_fd, package_json, copy_file_path),
-.none => .success,
+.none => unreachable,
 });
     }
 };

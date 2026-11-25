@@ -141,6 +141,7 @@ pub struct TOML {
     }
 
     static fn parse(source_: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator, redact_logs: bool): !Expr {
+        source_.checkParseableLen(log, "TOML document")?;
         switch (source_.contents.len) {
             // This is to be consistent with how disabled JS files are handled
             0 => {

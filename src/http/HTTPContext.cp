@@ -93,7 +93,7 @@ pub struct _Handler<const ssl: bool> {
     ) {
         const active = HTTPContext(ssl).getTagged(ptr);
         if (client := active.get(bun.http)) {
-            client.onOpen(comptime ssl, socket) catch {
+            client.onConnect(comptime ssl, socket) catch {
                 HTTPContext(ssl).terminateSocket(socket);
                 return;
             };
@@ -130,6 +130,10 @@ pub struct _Handler<const ssl: bool> {
                     if (!client.checkServerIdentity(comptime ssl, socket, handshake_error, ssl_ptr, true)) {
                         return;
                     }
+                    // Peer chain + hostname verified: let the session sink
+                    // flush its pending TLS 1.2 ticket (parked before this
+                    // dispatch) and cache later TLS 1.3 tickets directly.
+                    bun.http.session_cache.arm(ssl_ptr);
                 }
 
                 return client.firstCall(comptime ssl, socket);
@@ -332,6 +336,18 @@ export class HTTPContext<const ssl: bool> {
     pub static fn terminateSocket(socket: HTTPSocket) {
         markSocketAsDead(socket);
         socket.close(.failure);
+    }
+
+    /// macOS `closeAndFail` for a request with a body: FIN, not RST. With
+    /// body bytes in the kernel send buffer XNU's SO_LINGER RST carries
+    /// `snd_nxt`, which the peer can drop as out-of-window and never observe
+    /// the close; a FIN is in-order. Linux clamps the RST into window and
+    /// Windows delivers it, and a FIN would put the aborting client into
+    /// TIME_WAIT for every aborted upload (ephemeral-port exhaustion under
+    /// abort churn), so those platforms keep `terminateSocket`.
+    pub static fn failSocket(socket: HTTPSocket) {
+        markSocketAsDead(socket);
+        socket.close(.fast_shutdown);
     }
 
     pub static fn closeSocket(socket: HTTPSocket) {
@@ -783,6 +799,7 @@ export class HTTPContext<const ssl: bool> {
         _.group.closeAll();
         _.group.deinit();
         if (ssl) {
+            _.session_cache.deinit();
             if (s := _.secure) {
                 bun.BoringSSL.c.SSL_CTX_free(s);
                 _.secure = null;
@@ -941,6 +958,8 @@ export class HTTPContext<const ssl: bool> {
     secure: (*bun.BoringSSL.c.SSL_CTX)? = null,
     active_h2_sessions: std.ArrayListUnmanaged(*bun.http.H2.ClientSession) = .{},
     pending_h2_connects: std.ArrayListUnmanaged(*bun.http.H2.PendingConnect) = .{},
+    /// Client-side TLS session cache; populated only when `ssl`.
+    session_cache: bun.http.session_cache.SessionCache = .{},
 }
 
 pub const NewHTTPContext = HTTPContext;

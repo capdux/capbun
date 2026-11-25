@@ -9,6 +9,7 @@
 
 #include "BunClientData.h"
 #include "NodeVM.h"
+#include "NodeValidator.h"
 #include "NodeVMScript.h"
 #include "NodeVMModule.h"
 #include "NodeVMSourceTextModule.h"
@@ -1108,7 +1109,13 @@ bool NodeVMGlobalObject::defineOwnProperty(JSObject* cell, JSGlobalObject* globa
         RELEASE_AND_RETURN(scope, contextifiedObject->defineOwnProperty(contextifiedObject, contextifiedObject->globalObject(), propertyName, descriptor, shouldThrow));
     }
 
-    bool isDeclaredOnSandbox = contextifiedObject->getPropertySlot(globalObject, propertyName, slot);
+    // The lookup above may have filled `slot` as cacheable (e.g. a lazy global
+    // stored as a CustomGetterSetter on a non-dictionary structure). Reusing it
+    // here would trip PropertySlot's CachingDisallowed asserts if the sandbox
+    // resolves the same name via setGetterSlot/setCustom/setValue(3-arg), which
+    // happens once the sandbox has transitioned to an uncacheable dictionary.
+    PropertySlot sandboxSlot(globalObject, PropertySlot::InternalMethodType::GetOwnProperty, nullptr);
+    bool isDeclaredOnSandbox = contextifiedObject->getPropertySlot(globalObject, propertyName, sandboxSlot);
     RETURN_IF_EXCEPTION(scope, false);
 
     if (isDeclaredOnSandbox && !isDeclaredOnGlobalProxy) {
@@ -1268,9 +1275,9 @@ JSC_DEFINE_HOST_FUNCTION(vmModule_createContext, (JSGlobalObject * globalObject,
 
     JSValue optionsArg = callFrame->argument(1);
 
-    // Validate options argument
-    if (!optionsArg.isUndefined() && !optionsArg.isObject()) {
-        return ERR::INVALID_ARG_TYPE(scope, globalObject, "options"_s, "object"_s, optionsArg);
+    if (!optionsArg.isUndefined()) {
+        V::validateObject(scope, globalObject, optionsArg, "options"_s);
+        RETURN_IF_EXCEPTION(scope, {});
     }
 
     JSValue importer;
@@ -1535,12 +1542,9 @@ bool BaseVMOptions::fromJS(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::
     bool any = false;
 
     if (!optionsArg.isUndefined()) {
-        if (optionsArg.isObject()) {
-            options = asObject(optionsArg);
-        } else {
-            auto _ = ERR::INVALID_ARG_TYPE(scope, globalObject, "options"_s, "object"_s, optionsArg);
-            return false;
-        }
+        V::validateObject(scope, globalObject, optionsArg, "options"_s);
+        RETURN_IF_EXCEPTION(scope, false);
+        options = asObject(optionsArg);
 
         auto filenameOpt = options->getIfPropertyExists(globalObject, builtinNames(vm).filenamePublicName());
         RETURN_IF_EXCEPTION(scope, false);

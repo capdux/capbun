@@ -427,6 +427,8 @@ onUnhandledRejection: OnUnhandledRejection = defaultOnUnhandledRejection,
 onUnhandledRejectionCtx: *!? = null,
 onUnhandledRejectionExceptionList: (*ExceptionList)? = null,
 unhandled_error_counter: usize = 0,
+on_print_error_zig_exception: OnPrintErrorZigException? = null,
+on_print_error_zig_exception_ctx: *!? = null,
 is_handling_uncaught_exception: bool = false,
 exit_on_uncaught_exception: bool = false,
 
@@ -500,6 +502,8 @@ pub fn getDevServerAsyncLocalStorage(client: *VirtualMachine): !jsc.JSValue? {
 pub const OnUnhandledRejection = fn (vm: *VirtualMachine, globalObject: *JSGlobalObject, val: JSValue) void;
 
 pub const OnException = fn (e: *ZigException) void;
+
+pub const OnPrintErrorZigException = *const fn (ctx: *!?, exception: *ZigException) void;
 
 @callconv("c")
 pub fn allowAddons(client: *VirtualMachine): bool {
@@ -1982,6 +1986,12 @@ pub struct ResolveFunctionResult {
 
 fn normalizeSpecifierForResolution(specifier_: []const u8, query_string: *[]const u8): []const u8 {
     let specifier = specifier_;
+
+    // In a `data:` URL everything after the comma is the payload; a `?` is
+    // part of the data, not a query string.
+    if (strings.hasPrefixComptime(specifier, "data:")) {
+        return specifier;
+    }
 
     if (i := strings.indexOfChar(specifier, '?')) {
         query_string.* = specifier[i..];
@@ -3573,7 +3583,7 @@ pub fn remapZigException(
         let frame_i: usize = 0;
         while (frame_i < frames.len) : (frame_i += 1) {
             const frame = &frames[frame_i];
-            if (unsafe { @intFromPtr(frame) == @intFromPtr(top) } || frame.position.isInvalid()) continue;
+            if (unsafe { @intFromPtr(frame) == @intFromPtr(top) } || frame.remapped || frame.position.isInvalid()) continue;
             const source_url = frame.source_url.toUTF8(bun.default_allocator);
             const _src_url_guard = DeinitGuard<@TypeOf(source_url)>{ val: source_url };
             if (lookup := client.resolveSourceMapping(
@@ -3667,6 +3677,9 @@ fn printErrorInstance(
     if (allow_side_effects) {
         if (*debugger := client.debugger) {
             debugger.lifecycle_reporter_agent.reportError(exception);
+        }
+        if (cb := client.on_print_error_zig_exception) {
+            cb(client.on_print_error_zig_exception_ctx, exception);
         }
     }
 

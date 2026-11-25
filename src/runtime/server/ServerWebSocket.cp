@@ -366,6 +366,13 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
         return;
     }
 
+    // on_open's error branch closes the socket, landing here with the
+    // termination from its handler still pending. Both branches below
+    // enter JS, which trips assertNoException().
+    if (handler.globalObject.hasException()) {
+        return;
+    }
+
     if (!handler.onClose.isEmptyOrUndefinedOrNull()) {
         const globalObject = handler.globalObject;
         const loop = vm.eventLoop();
@@ -1019,6 +1026,15 @@ fn pong(
     return _.sendPing(globalThis, callframe, "pong", .pong);
 }
 
+const MAX_CONTROL_FRAME_PAYLOAD: usize = 125;
+
+fn throwControlFrameTooLarge(globalThis: *jsc.JSGlobalObject, len: usize): bun.JSError {
+    return globalThis.throwRangeError(
+        "The data size must not be greater than {d} bytes. Received {d} bytes.",
+        .{ MAX_CONTROL_FRAME_PAYLOAD, len },
+    );
+}
+
 inline fn sendPing(
     *_,
     globalThis: *jsc.JSGlobalObject,
@@ -1037,6 +1053,9 @@ inline fn sendPing(
         if (!value.isEmptyOrUndefinedOrNull()) {
             if (data := value.asArrayBuffer(globalThis)) {
                 const buffer = data.slice();
+                if (buffer.len > MAX_CONTROL_FRAME_PAYLOAD) {
+                    return throwControlFrameTooLarge(globalThis, buffer.len);
+                }
 
                 switch (_.websocket().send(buffer, opcode, false, true)) {
                     .backpressure => {
@@ -1057,6 +1076,9 @@ inline fn sendPing(
                 let string_value = js_str.toSlice(globalThis, bun.default_allocator);
                 const _str_guard = DeinitGuard<@TypeOf(string_value)>{ ptr: unsafe { &string_value } };
                 const buffer = string_value.slice();
+                if (buffer.len > MAX_CONTROL_FRAME_PAYLOAD) {
+                    return throwControlFrameTooLarge(globalThis, buffer.len);
+                }
 
                 switch (_.websocket().send(buffer, opcode, false, true)) {
                     .backpressure => {

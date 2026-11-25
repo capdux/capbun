@@ -423,9 +423,10 @@ pub const YAML = struct {
 
 pub fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator) ParseError!Expr {
             bun.analytics.Features.yaml_parse = (bun.analytics.Features.yaml_parse + 1);
+            _ = (blk_catch_0: { break :blk_catch_0 ((source.checkParseableLen(log, "YAML document")) catch |__ce_0| { _ = &__ce_0; return error.SyntaxError; }); });
             var parser: Parser(.utf8) = .init(allocator, source.contents);
             _ = &parser;
-            const stream = (blk_catch_0: { break :blk_catch_0 ((parser.parse()) catch |e| { _ = &e; const res: Parser(.utf8).ParseResult = .fail(e, (&parser));
+            const stream = (blk_catch_1: { break :blk_catch_1 ((parser.parse()) catch |e| { _ = &e; const res: Parser(.utf8).ParseResult = .fail(e, (&parser));
             _ = try res.err.addToLog(source, log);
             return error.SyntaxError; }); });
             return (switch (stream.docs.items.len) {
@@ -687,10 +688,16 @@ pub fn TokenData(comptime encoding: Encoding) type {
     };
 }
 
+pub const ScalarStyle = union(enum) {
+    plain: bool,
+    block: void,
+    quoted: void,
+};
+
 pub fn TokenScalar(comptime encoding: Encoding) type {
     return struct {
         data: NodeScalar,
-        multiline: bool,
+        style: ScalarStyle,
         const NodeScalar = Parser(encoding).NodeScalar;
     };
 }
@@ -1113,10 +1120,10 @@ pub fn done(self: *@This()) Token(enc) {
                     _ = &scalar;
                     if ((scalar_str.len() == self.resolved_scalar_len)) {
                         _ = scalar_str.deinit();
-                        break :scalar .{ .multiline = self.multiline, .data = scalar };
+                        break :scalar .{ .style = .{ .plain = self.multiline }, .data = scalar };
                     }
                 }
-                break :scalar .{ .multiline = self.multiline, .data = .{ .string = scalar_str } };
+                break :scalar .{ .style = .{ .plain = self.multiline }, .data = .{ .string = scalar_str } };
 };
                 return Token(enc).scalar(.{ .start = self.start, .indent = self.line_indent, .line = self.line, .resolved = scalar });
         }
@@ -1523,10 +1530,10 @@ first = false;
                 }
                 var scalar: NodeScalar = scalar: {
                 if (((x or o) or hex)) {
-                    const unsigned = (blk_catch_1: { break :blk_catch_1 ((std.fmt.parseUnsigned(u64, parser.slice(start, end), 0)) catch |__ce_1| { _ = &__ce_1; return; }); });
+                    const unsigned = (blk_catch_2: { break :blk_catch_2 ((std.fmt.parseUnsigned(u64, parser.slice(start, end), 0)) catch |__ce_2| { _ = &__ce_2; return; }); });
                     break :scalar .{ .number = @floatFromInt(unsigned) };
                 }
-                const float = (blk_catch_2: { break :blk_catch_2 ((bun.jsc.wtf.parseDouble(parser.slice(start, end))) catch |__ce_2| { _ = &__ce_2; return; }); });
+                const float = (blk_catch_3: { break :blk_catch_3 ((bun.jsc.wtf.parseDouble(parser.slice(start, end))) catch |__ce_3| { _ = &__ce_3; return; }); });
                 break :scalar .{ .number = float };
 };
                 _ = &scalar;
@@ -1588,7 +1595,7 @@ if ((self.text.items.len != 0)) {
 
 },
 }
-                return Token(enc).scalar(.{ .start = self.start, .indent = self.content_indent, .line = self.line, .resolved = .{ .data = .{ .string = .{ .list = self.text } }, .multiline = true } });
+                return Token(enc).scalar(.{ .start = self.start, .indent = self.content_indent, .line = self.line, .resolved = .{ .data = .{ .string = .{ .list = self.text } }, .style = .block } });
         }
 
 pub fn append(self: *@This(), c: enc.unit()) AppendError!void {
@@ -2613,13 +2620,19 @@ pub fn parseBlockIndented(self: *@This(), n: Indent, indicator_line: Line, indic
                             if ((value_tag != null)) {
                                 switch (self.token.data) {
 .scalar => |s| {
-const ch = self.input[@as(usize, @intCast(self.token.start.cast()))];
-                                if ((((ch != 39) and (ch != 34)) and (!s.multiline))) {
+switch (s.style) {
+.plain => |multiline| {
+if ((!multiline)) {
                                     self.pos = self.token.start;
                                     self.line = self.token.line;
                                     self.line_indent = self.token.indent;
                                     _ = try self.scan(.{});
                                 }
+},
+else => {
+
+},
+}
 },
 else => {
 
@@ -3061,7 +3074,10 @@ pub fn scanPlainScalar(self: *@This(), opts: ScanOptions) ScanPlainScalarError!T
                 sw_12: while (true) {
                     switch (sw_v_12) {
 0 => {
-return ctx.done();
+if ((!self.isEof())) {
+                        return error.UnexpectedCharacter;
+                    }
+                    return ctx.done();
 },
 '-' => {
 if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
@@ -3361,7 +3377,10 @@ pub fn scanBlockHeader(self: *@This()) ScanBlockHeaderError!ScanBlockHeaderResul
                 sw_13: while (true) {
                     switch (sw_v_13) {
 0 => {
-return ScanBlockHeaderResult{ .indent = ((indent_indicator) orelse (.default)), .chomp = ((chomp) orelse (.default)) };
+if ((!self.isEof())) {
+                        return error.UnexpectedCharacter;
+                    }
+                    return ScanBlockHeaderResult{ .indent = ((indent_indicator) orelse (.default)), .chomp = ((chomp) orelse (.default)) };
 },
 49...57 => |digit| {
 if ((indent_indicator != null)) {
@@ -3396,6 +3415,9 @@ _ = self.inc(1);
                     if ((self.next() == 35)) {
                         _ = self.inc(1);
                         while ((!self.isBCharOrEof())) {
+                            if ((self.next() == 0)) {
+                                return error.UnexpectedCharacter;
+                            }
                             _ = self.inc(1);
                         }
                     }
@@ -3443,7 +3465,10 @@ pub fn scanAutoIndentedLiteralScalar(self: *@This(), indent_indicator: Indent.In
                 first_sw: while (true) {
                     switch (first_ch) {
 0 => {
-if ((explicit_indent == null)) {
+if ((!self.isEof())) {
+                        return error.UnexpectedCharacter;
+                    }
+                    if ((explicit_indent == null)) {
                         ctx.content_indent = self.line_indent;
                     }
                     return ctx.done();
@@ -3513,7 +3538,10 @@ ctx.content_indent = ((explicit_indent) orelse (self.line_indent));
                 lit_sw: while (true) {
                     switch (lit_ch) {
 0 => {
-return ctx.done();
+if ((!self.isEof())) {
+                        return error.UnexpectedCharacter;
+                    }
+                    return ctx.done();
 },
 13 => {
 if ((self.peek(1) == 10)) {
@@ -3711,7 +3739,7 @@ nl = false;
                         sw_v_14 = self.next();
                         continue :sw_14;
                     }
-                    return Token(enc).scalar(.{ .start = start, .indent = scalar_indent, .line = scalar_line, .resolved = .{ .multiline = (self.line != scalar_line), .data = .{ .string = .{ .list = text } } } });
+                    return Token(enc).scalar(.{ .start = start, .indent = scalar_indent, .line = scalar_line, .resolved = .{ .style = .quoted, .data = .{ .string = .{ .list = text } } } });
 },
 else => |c| {
 nl = false;
@@ -3797,7 +3825,7 @@ nl = false;
 '"' => {
 nl = false;
                     _ = self.inc(1);
-                    return Token(enc).scalar(.{ .start = start, .indent = scalar_indent, .line = scalar_line, .resolved = .{ .multiline = (self.line != scalar_line), .data = .{ .string = .{ .list = text } } } });
+                    return Token(enc).scalar(.{ .start = start, .indent = scalar_indent, .line = scalar_line, .resolved = .{ .style = .quoted, .data = .{ .string = .{ .list = text } } } });
 },
 '\\' => {
 nl = false;
@@ -3970,11 +3998,11 @@ return error.UnexpectedCharacter;
 .utf8 => {
 var buf: [4]u8 = undefined;
                 _ = &buf;
-                const enc_len = (blk_catch_3: { break :blk_catch_3 ((std.unicode.utf8Encode(cp_u21, (&buf))) catch |__ce_3| { _ = &__ce_3; return error.UnexpectedCharacter; }); });
+                const enc_len = (blk_catch_4: { break :blk_catch_4 ((std.unicode.utf8Encode(cp_u21, (&buf))) catch |__ce_4| { _ = &__ce_4; return error.UnexpectedCharacter; }); });
                 _ = try text.appendSlice(buf[0..enc_len]);
 },
 .utf16 => {
-const enc_len = (blk_catch_4: { break :blk_catch_4 ((std.unicode.utf16CodepointSequenceLength(cp_u21)) catch |__ce_4| { _ = &__ce_4; return error.UnexpectedCharacter; }); });
+const enc_len = (blk_catch_5: { break :blk_catch_5 ((std.unicode.utf16CodepointSequenceLength(cp_u21)) catch |__ce_5| { _ = &__ce_5; return error.UnexpectedCharacter; }); });
                 switch (enc_len) {
 1 => {
 _ = try text.append(@intCast(cp_u21));
@@ -4133,7 +4161,10 @@ pub fn scan(self: *@This(), opts: ScanOptions) ScanError!void {
                 scan_sw: while (true) {
                     switch (scan_ch) {
 0 => {
-const start = self.pos;
+if ((!self.isEof())) {
+                        return error.UnexpectedCharacter;
+                    }
+                    const start = self.pos;
                     self.token = Token(enc).eof(.{ .start = start, .indent = self.line_indent, .line = self.line });
                     break :scan_sw;
 },
@@ -4303,6 +4334,9 @@ return error.UnexpectedCharacter;
 }
                     _ = self.inc(1);
                     while ((!self.isBCharOrEof())) {
+                        if ((self.next() == 0)) {
+                            return error.UnexpectedCharacter;
+                        }
                         _ = self.inc(1);
                     }
                     scan_ch = self.next();
@@ -4913,7 +4947,7 @@ const G = ast.G;
 pub fn parse(comptime encoding: Encoding, allocator: std.mem.Allocator, input: []const encoding.unit()) Parser(encoding).ParseResult {
         var parser: Parser(encoding) = .init(allocator, input);
         _ = &parser;
-        const stream = (blk_catch_5: { break :blk_catch_5 ((parser.parse()) catch |e| { _ = &e; return Parser(encoding).ParseResult.fail(e, (&parser)); }); });
+        const stream = (blk_catch_6: { break :blk_catch_6 ((parser.parse()) catch |e| { _ = &e; return Parser(encoding).ParseResult.fail(e, (&parser)); }); });
         return Parser(encoding).ParseResult.success(stream, (&parser));
 }
 

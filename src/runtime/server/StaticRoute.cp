@@ -1,4 +1,5 @@
 import bun from "bun";
+import HTTPStatusText from "./HTTPStatusText.cp";
 const jsc = bun.jsc;
 const api = bun.schema.api;
 const AnyServer = jsc.API.AnyServer;
@@ -214,7 +215,12 @@ pub struct InitFromBytesOptions {
 
     fn renderMetadataAndEnd(*_, resp: AnyResponse) {
         _.renderMetadata(resp);
-        resp.writeHeaderInt("Content-Length", _.cached_blob_size);
+        // 304: no synthesized Content-Length (RFC 9110 §8.6 only allows the
+        // 200's length; `from_js` already stripped the handler's).
+        if (_.status_code != 304) {
+            const size = if (HTTPStatusText.isNullBody(_.status_code)) 0 else _.cached_blob_size;
+            resp.writeHeaderInt("Content-Length", size);
+        }
         resp.endWithoutBody(resp.shouldCloseConnection());
     }
 
@@ -295,6 +301,18 @@ pub struct InitFromBytesOptions {
 
     fn doRenderBlobCorked(*_, resp: AnyResponse, did_finish: *bool) {
         _.renderMetadata(resp);
+        if (HTTPStatusText.isNullBody(_.status_code)) {
+            // 304: tryEnd would write Content-Length: 0 (RFC 9110 §8.6 forbids
+            // any but the 200's length); writeMark keeps Date.
+            if (_.status_code == 304) {
+                resp.writeMark();
+                resp.endWithoutBody(resp.shouldCloseConnection());
+                did_finish.* = true;
+            } else {
+                did_finish.* = resp.tryEnd("", 0, resp.shouldCloseConnection());
+            }
+            return;
+        }
         _.renderBytes(resp, did_finish);
     }
 

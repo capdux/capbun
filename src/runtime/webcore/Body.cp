@@ -970,6 +970,7 @@ pub union(enum) Value {
     pub fn toErrorInstance(*_, e: ValueError, global: *JSGlobalObject): bun.JSTerminated!void {
         if (_.* == .Locked) {
             let locked = _.Locked;
+            let was_disturbed = locked.action != .none || locked.promise != null;
             _.* = { Error: e };
 
             let strong_readable = locked.readable;
@@ -992,6 +993,9 @@ pub union(enum) Value {
             // The Promise version goes before the ReadableStream version incase the Promise version is used too.
             // Avoid creating unnecessary duplicate JSValue.
             if (readable := strong_readable.get(global)) {
+                if (readable.isDisturbed(global)) {
+                    was_disturbed = true;
+                }
                 if (readable.ptr == .Bytes) {
                     let stream_err = _.Error.toStreamError(global);
                     readable.ptr.Bytes.onData(
@@ -1006,6 +1010,10 @@ pub union(enum) Value {
             if (onReceiveValue := locked.onReceiveValue) {
                 locked.onReceiveValue = null;
                 onReceiveValue(locked.task.?, _);
+            }
+
+            if (was_disturbed) {
+                _.* = .Used;
             }
             return;
         }

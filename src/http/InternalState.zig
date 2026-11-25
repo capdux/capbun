@@ -105,7 +105,7 @@ pub const InternalStateFlags = packed struct(u8) {
     is_libdeflate_fast_path_disabled: bool = false,
     resend_request_body_on_redirect: bool = false,
     clear_hostname_on_redirect: bool = false,
-    _padding: u1 = 0,
+    body_compressed: bool = false,
 };
 
 pub const InternalState = @This();

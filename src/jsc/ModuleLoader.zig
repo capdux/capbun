@@ -405,8 +405,7 @@ var ast_scope = js_ast.ASTMemoryAllocator.Scope{  };
         defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
         const current_arena = arena_.?;
         const allocator = current_arena.allocator();
-        var fd: ?FD = null;
-        _ = &fd;
+        const fd: ?FD = null;
         var package_json: ?*PackageJSON = null;
         _ = &package_json;
         {
@@ -417,7 +416,6 @@ var ast_scope = js_ast.ASTMemoryAllocator.Scope{  };
             const indexOfFn = @TypeOf(jsc_vm.bun_watcher).indexOf;
             if (indexOfFn(jsc_vm.bun_watcher, hash)) |index| {
                 _ = &index;
-                fd = jsc_vm.bun_watcher.watchlist().items(.fd)[@as(usize, @intCast(index))].unwrapValid();
                 package_json = jsc_vm.bun_watcher.watchlist().items(.package_json)[@as(usize, @intCast(index))];
             }
         }
@@ -483,8 +481,16 @@ var maybe_result = jsc_vm.transpiler.parseMaybeReturnFileOnly(parse_options, nul
                 if (jsc_vm.isWatcherEnabled()) {
                     if (input_file_fd.isValid()) {
                         if ((((!is_node_override) and std.fs.path.isAbsolute(path.text)) and (!strings.contains(path.text, "node_modules")))) {
-                            should_close_input_file_fd = false;
-                            _ = jsc_vm.bun_watcher.addFile(input_file_fd, path.text, hash, loader, .invalid, package_json, true);
+                            switch (jsc_vm.bun_watcher.addFile(input_file_fd, path.text, hash, loader, .invalid, package_json, true)) {
+.result => |ownership| {
+if ((ownership == .watcher)) {
+                                should_close_input_file_fd = false;
+                            }
+},
+.err => {
+
+},
+}
                         }
                     }
                 }
@@ -502,8 +508,16 @@ var maybe_result = jsc_vm.transpiler.parseMaybeReturnFileOnly(parse_options, nul
             if (jsc_vm.isWatcherEnabled()) {
                 if (input_file_fd.isValid()) {
                     if ((((!is_node_override) and std.fs.path.isAbsolute(path.text)) and (!strings.contains(path.text, "node_modules")))) {
-                        should_close_input_file_fd = false;
-                        _ = jsc_vm.bun_watcher.addFile(input_file_fd, path.text, hash, loader, .invalid, package_json, true);
+                        switch (jsc_vm.bun_watcher.addFile(input_file_fd, path.text, hash, loader, .invalid, package_json, true)) {
+.result => |ownership| {
+if ((ownership == .watcher)) {
+                            should_close_input_file_fd = false;
+                        }
+},
+.err => {
+
+},
+}
                     }
                 }
             }
@@ -747,15 +761,17 @@ break :brk fd;
 };
                     const hash = bun.Watcher.getHash(path.text);
                     switch (jsc_vm.bun_watcher.addFile(input_fd, path.text, hash, loader, .invalid, null, true)) {
+.result => |ownership| {
+if (((ownership != .watcher) and input_fd.isValid())) {
+                        _ = input_fd.close();
+                    }
+},
 .err => {
 if (comptime Environment.isMac) {
                         if (input_fd.isValid()) {
                             _ = input_fd.close();
                         }
                     }
-},
-.result => {
-
 },
 }
                 }

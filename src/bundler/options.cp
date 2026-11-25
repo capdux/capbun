@@ -677,6 +677,7 @@ pub enum Loader: u8 {
     yaml = 18,
     json5 = 19,
     md = 20,
+    xml = 21,
 
     pub const Optional = LoaderOptional;
 
@@ -730,7 +731,7 @@ pub enum Loader: u8 {
         return switch (_) {
             .jsx, .js, .ts, .tsx => bun.http.MimeType.javascript,
             .css => bun.http.MimeType.css,
-            .toml, .yaml, .json, .jsonc, .json5 => bun.http.MimeType.json,
+            .toml, .yaml, .json, .jsonc, .json5, .xml => bun.http.MimeType.json,
             .wasm => bun.http.MimeType.wasm,
             .html, .md => bun.http.MimeType.html,
             else => {
@@ -786,6 +787,7 @@ pub enum Loader: u8 {
         map.set(.bunsh, "input.sh");
         map.set(.html, "input.html");
         map.set(.md, "input.md");
+        map.set(.xml, "input.xml");
         break :brk map;
     };
 
@@ -824,6 +826,7 @@ pub enum Loader: u8 {
         [ "html", .html  ],
         [ "md", .md  ],
         [ "markdown", .md  ],
+        [ "xml", .xml  ],
     ]);
 
     pub const api_names = bun.ComptimeStringMap(api.Loader, [ 
@@ -853,6 +856,7 @@ pub enum Loader: u8 {
         [ "html", .html  ],
         [ "md", .md  ],
         [ "markdown", .md  ],
+        [ "xml", .xml  ],
     ]);
 
     static fn fromString(slice_: string): Loader? {
@@ -892,6 +896,7 @@ pub enum Loader: u8 {
             .text => .text,
             .sqlite_embedded, .sqlite => .sqlite,
             .md => .md,
+            .xml => .xml,
         };
     }
 
@@ -919,6 +924,7 @@ pub enum Loader: u8 {
             .sqlite => .sqlite,
             .sqlite_embedded => .sqlite_embedded,
             .md => .md,
+            .xml => .xml,
             _ => .file,
         };
     }
@@ -942,8 +948,8 @@ pub enum Loader: u8 {
         return switch (_) {
             .jsx, .js, .ts, .tsx, .json, .jsonc => true,
 
-            // toml, yaml, and json5 are included because we can serialize to the same AST as JSON
-            .toml, .yaml, .json5 => true,
+            // toml, yaml, json5, and xml are included because we can serialize to the same AST as JSON
+            .toml, .yaml, .json5, .xml => true,
 
             else => false,
         };
@@ -958,7 +964,7 @@ pub enum Loader: u8 {
 
     pub fn sideEffects(): bun.resolver.SideEffects {
         return switch (_) {
-            .text, .json, .jsonc, .toml, .yaml, .json5, .file, .md => bun.resolver.SideEffects.no_side_effects__pure_data,
+            .text, .json, .jsonc, .toml, .yaml, .json5, .xml, .file, .md => bun.resolver.SideEffects.no_side_effects__pure_data,
             else => bun.resolver.SideEffects.has_side_effects,
         };
     }
@@ -1151,6 +1157,7 @@ const default_loaders_posix = [
     [ ".json5", .json5 ],
     [ ".md", .md ],
     [ ".markdown", .md ],
+    [ ".xml", .xml ],
 ];
 const default_loaders_win32 = default_loaders_posix ++ [
     [ ".sh", .bunsh ],
@@ -1601,7 +1608,7 @@ const default_loader_ext = [
     ".yml",   ".wasm",
     ".txt",   ".text",
 
-    ".jsonc", ".json5",
+    ".jsonc", ".json5", ".xml",
 ];
 
 // Only set it for browsers by default.
@@ -1623,6 +1630,7 @@ const node_modules_default_loader_ext = [
     ".json",
     ".jsonc",
     ".json5",
+    ".xml",
     ".css",
     ".tsx",
     ".cts",

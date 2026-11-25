@@ -5,6 +5,8 @@ import _HTTPStatusText from "./HTTPStatusText.zig";
 import _HTMLBundle from "./HTMLBundle.zig";
 import _StaticRoute from "./StaticRoute.zig";
 import _FileRouteMod from "./FileRoute.zig";
+import _DirectoryRouteMod from "./DirectoryRoute.zig";
+import _DevErrorPageMod from "./DevErrorPage.zig";
 import _FileResponseStream from "./FileResponseStream.zig";
 import _RangeRequest from "./RangeRequest.zig";
 import _ServerConfig from "./ServerConfig.zig";
@@ -118,6 +120,8 @@ pub fn writeStatus(comptime ssl: bool, resp_ptr: (*uws.NewApp(ssl).Response)?, s
 // TODO: rename to StaticBlobRoute? the html bundle is sometimes a static route
 pub const StaticRoute = _StaticRoute;
 pub const FileRoute = _FileRouteMod.FileRoute;
+pub const DirectoryRoute = _DirectoryRouteMod.DirectoryRoute;
+pub const DevErrorPage = _DevErrorPageMod.DevErrorPage;
 pub const FileResponseStream = _FileResponseStream;
 pub const RangeRequest = _RangeRequest;
 
@@ -153,6 +157,8 @@ pub union(enum) AnyRoute {
     static: *StaticRoute,
     /// Serve a file from disk
     file: *FileRoute,
+    /// Serve a directory tree from disk
+    directory: *DirectoryRoute,
     /// Bundle an HTML import
     /// import html from "./index.html";
     /// "/": html,
@@ -168,6 +174,7 @@ pub union(enum) AnyRoute {
         return switch (_) {
             .static => |static_route| static_route.memoryCost(),
             .file => |file_route| file_route.memoryCost(),
+            .directory => |dir_route| dir_route.memoryCost(),
             .html => |html_bundle_route| html_bundle_route.data.memoryCost(),
             .framework_router => @sizeOf(bun.bake.Framework.FileSystemRouterType),
         };
@@ -177,6 +184,7 @@ pub union(enum) AnyRoute {
         switch (_) {
             .static => |static_route| static_route.server = server,
             .file => |file_route| file_route.server = server,
+            .directory => |dir_route| dir_route.setServer(server),
             .html => |html_bundle_route| html_bundle_route.server = server,
             .framework_router => {}, // DevServer contains .server field
         }
@@ -186,6 +194,7 @@ pub union(enum) AnyRoute {
         switch (_) {
             .static => |static_route| static_route.deref(),
             .file => |file_route| file_route.deref(),
+            .directory => |dir_route| dir_route.deref(),
             .html => |html_bundle_route| html_bundle_route.deref(),
             .framework_router => {}, // not reference counted
         }
@@ -195,6 +204,7 @@ pub union(enum) AnyRoute {
         switch (_) {
             .static => |static_route| static_route.ref(),
             .file => |file_route| file_route.ref(),
+            .directory => |dir_route| dir_route.ref(),
             .html => |html_bundle_route| html_bundle_route.ref(),
             .framework_router => {}, // not reference counted
         }
@@ -362,15 +372,26 @@ pub union(enum) AnyRoute {
                 let alloc = init_ctx.js_string_allocations;
                 const relative_root = alloc.track(dir);
 
-                let style: FrameworkRouter.Style = .nextjs_pages;
-                if (style_val := argument.get(global, "style")?) {
-                    style = FrameworkRouter.Style.fromJS(style_val, global)?;
-                }
-                let _guard_style = OptDeinitGuard<FrameworkRouter.Style>{ ptr: unsafe { &style } };
-
                 if (!bun.strings.endsWith(path, "/*")) {
                     return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
                 }
+
+                const style_val_opt = argument.get(global, "style")?;
+                if (style_val_opt == null) {
+                    if (bun.strings.indexOfChar(path, ':') != null) {
+                        return global.throwInvalidArguments("Directory routes do not support :parameters; use a fixed prefix ending in `/*`", .{});
+                    }
+                    if (bun.strings.contains(path, "//")) {
+                        return global.throwInvalidArguments("Directory route paths cannot contain empty segments", .{});
+                    }
+                    const url_prefix: []const u8 = if (path.len == 2) "/" else path[0 .. path.len - 1];
+                    const stat_cache = (argument.getBooleanLoose(global, "statCache")?) ?? true;
+                    const route = DirectoryRoute.create(global, relative_root, url_prefix, stat_cache)?;
+                    return .{ .directory = route };
+                }
+
+                let style = FrameworkRouter.Style.fromJS(style_val_opt.?, global)?;
+                let _guard_style = OptDeinitGuard<FrameworkRouter.Style>{ ptr: unsafe { &style } };
 
                 init_ctx.framework_router_list.append(.{
                     .root = relative_root,
@@ -414,6 +435,7 @@ const _Ptrs = struct {
     pub const ServerWebSocketPtr = *_SelfMod.ServerWebSocket;
     pub const StaticRoutePtr = *_SelfMod.StaticRoute;
     pub const FileRoutePtr = *_SelfMod.FileRoute;
+    pub const DirectoryRoutePtr = *_SelfMod.DirectoryRoute;
     pub const HTMLBundleRoutePtr = *HTMLBundle.Route;
     pub const TranspilerPtr = *_SelfMod.Transpiler;
 };
@@ -1735,6 +1757,9 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             httplog("finalize", .{});
             _.js_value.finalize();
             _.deinitIfWeCan();
+            if (_.flags.deinit_scheduled && _.vm.isShuttingDown()) {
+                _.deinit();
+            }
         }
 
         pub fn activeSocketsCount(): u32 {
@@ -1902,6 +1927,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
             _.flags.deinit_scheduled = true;
             httplog("scheduleDeinit", .{});
+
+            if (_.vm.isShuttingDown()) {
+                // No more ticks; `finalize()` frees via `deinit_scheduled` instead.
+                return;
+            }
 
             if (!_.flags.terminated) {
                 // App.close can cause finalizers to run.
@@ -3048,6 +3078,10 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         .file => |file_route| {
                             ServerConfig.applyStaticRoute(any_server, ssl_enabled, _.app.?, _Ptrs.FileRoutePtr, file_route, entry.path, entry.method);
                             if (comptime has_h3) if (h3_app := _.h3_app) ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.FileRoutePtr, file_route, entry.path, entry.method);
+                        },
+                        .directory => |dir_route| {
+                            ServerConfig.applyStaticRoute(any_server, ssl_enabled, _.app.?, _Ptrs.DirectoryRoutePtr, dir_route, entry.path, entry.method);
+                            if (comptime has_h3) if (h3_app := _.h3_app) ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.DirectoryRoutePtr, dir_route, entry.path, entry.method);
                         },
                         .html => |html_bundle_route| {
                             ServerConfig.applyStaticRoute(any_server, ssl_enabled, _.app.?, _Ptrs.HTMLBundleRoutePtr, html_bundle_route.data, entry.path, entry.method);

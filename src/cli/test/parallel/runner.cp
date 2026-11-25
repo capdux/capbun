@@ -246,6 +246,21 @@ pub fn runAsCoordinator(
         std.sort.pdq(PathString, sorted, empty_ctx, PathStringLt.lt);
     }
 
+    let costs: ([]const u64)? = null;
+    let ranges: ([]FileRange)? = null;
+    if (*t := reporter.timings) {
+        if (!t.isEmpty() && !ctx.test_options.randomize) {
+            const r_slice = t.partition(sorted, K, arena_alloc);
+            for (r of r_slice) {
+                if (r.hi > r.lo) {
+                    t.sortSlowestFirst(sorted[r.lo..r.hi]);
+                }
+            }
+            costs = t.costs(sorted, arena_alloc);
+            ranges = r_slice;
+        }
+    }
+
     let workers = allocator.alloc(Worker, K)?;
 
     let scale_up_after_ms: i64 = default_scale_up_after_ms;
@@ -259,6 +274,7 @@ pub fn runAsCoordinator(
         vm: vm,
         reporter: reporter,
         files: sorted,
+        costs: costs,
         cwd: bun.fs.FileSystem.instance.top_level_dir,
         argv: argv,
         envps: envps,
@@ -281,7 +297,7 @@ pub fn runAsCoordinator(
         workers[i_w] = Worker{
             coord: &mut coord,
             idx: idx,
-            range: FileRange{ lo: idx * N / K, hi: (idx + 1) * N / K },
+            range: if (r_slice := ranges) r_slice[i_w] else FileRange{ lo: idx * N / K, hi: (idx + 1) * N / K },
             out: Worker.WorkerPipe{ role: .stdout, worker: &workers[i_w] },
             err: Worker.WorkerPipe{ role: .stderr, worker: &workers[i_w] },
         };
@@ -315,7 +331,7 @@ fn buildWorkerArgv(arena_alloc: std.mem.Allocator, ctx: Command.Context): !@Fiel
     argv.append(arena_alloc, (bun.selfExePath() catch return error.SelfExePathFailed).ptr)?;
     argv.append(arena_alloc, "test")?;
     argv.append(arena_alloc, "--test-worker")?;
-    argv.append(arena_alloc, "--isolate")?;
+    if (opts.isolate) argv.append(arena_alloc, "--isolate")?;
 
     argv.append(arena_alloc, printZ(arena_alloc, "--timeout={d}", .{opts.default_timeout_ms})?)?;
     if (opts.run_todo) argv.append(arena_alloc, "--todo")?;

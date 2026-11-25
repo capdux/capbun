@@ -42,6 +42,7 @@ pub import MarkdownObject from "./api/MarkdownObject.zig";
 pub import TOMLObject from "./api/TOMLObject.zig";
 pub import UnsafeObject from "./api/UnsafeObject.zig";
 pub import JSON5Object from "./api/JSON5Object.zig";
+pub import XMLObject from "./api/XMLObject.zig";
 pub import YAMLObject from "./api/YAMLObject.zig";
 pub import Timer from "./timer/Timer.zig";
 pub import FFIObject from "./ffi/FFIObject.zig";

@@ -33,6 +33,7 @@ const strings = bun.strings;
 const BabyList = bun.collections.BabyList;
 const JSON5 = bun.interchange.json5.JSON5Parser;
 const TOML = bun.interchange.toml.TOML;
+const XML = bun.interchange.xml;
 const YAML = bun.interchange.yaml.YAML;
 
 const js_ast = bun.ast;
@@ -506,6 +507,14 @@ fn getAST(
             let temp_log = bun.logger.Log.init(allocator);
             const _temp_log_guard = TempLogCloneGuard{ temp: unsafe { &temp_log }, log: log };
             const root = JSON5.parse(source, &temp_log, allocator)?;
+            return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
+        },
+        .xml => {
+            let trace = bun.perf.trace("Bundler.ParseXML");
+            const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
+            let temp_log = bun.logger.Log.init(allocator);
+            const _temp_log_guard = TempLogCloneGuard{ temp: unsafe { &temp_log }, log: log };
+            const root = XML.parse(source, &temp_log, allocator, XML.Options{ compact: true, encoding: .File }) catch return error.ParserError;
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
         },
         .text => {

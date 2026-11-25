@@ -103,6 +103,11 @@ pub fn canBeInlinedFromPropertyAccess(client: Expr): bool {
         .e_spread => false,
 
         .e_missing => false,
+        // `[[a?.b]][0]?.[0].c` must not become `a?.b.c`: inlining would
+        // splice this chain onto the parent's `?.` continuation.
+        .e_dot => |e| e.optional_chain == null,
+        .e_index => |e| e.optional_chain == null,
+        .e_call => |e| e.optional_chain == null,
         else => true,
     };
 }

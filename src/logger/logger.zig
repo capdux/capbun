@@ -1253,6 +1253,14 @@ pub const Source = struct {
     identifier_name: []const u8 = "",
     index: Index = Index.source(0),
 
+pub fn checkParseableLen(self: Source, log: *Log, what: []const u8) !void {
+            if ((self.contents.len <= MAX_PARSEABLE_LEN)) {
+                return;
+            }
+            _ = (blk_catch_1: { break :blk_catch_1 ((log.addErrorFmt((&self), Loc.Empty, bun.default_allocator, "{s} is too large to parse (2 GiB maximum)", .{ what })) catch |__ce_1| { _ = &__ce_1;  }); });
+            return error.SyntaxError;
+    }
+
 pub fn fmtIdentifier(self: Source) bun.fmt.FormatValidIdentifier {
             return (if (@typeInfo(@TypeOf(self.path)) == .@"enum" or @typeInfo(@TypeOf(self.path)) == .@"union") @tagName(self.path) else self.path.name).fmtIdentifier();
     }
@@ -1311,9 +1319,9 @@ pub fn textForRange(self: *const Source, r: Range) []const u8 {
 
 pub fn rangeOfOperatorBefore(self: Source, loc: Loc, op: []const u8) Range {
             const text = self.contents[0..loc.i()];
-            const index = strings.index(text, op);
-            if ((index >= 0)) {
-                return Range{ .loc = Loc{ .start = (loc.start + index) }, .len = (if (comptime @typeInfo(@TypeOf(op.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(op.len)) else cp_cast_int(i32, op.len)) };
+            if (strings.lastIndexOf(text, op)) |index| {
+                _ = &index;
+                return Range{ .loc = usize2Loc(index), .len = (if (comptime @typeInfo(@TypeOf(op.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(op.len)) else cp_cast_int(i32, op.len)) };
             }
             return Range{ .loc = loc };
     }
@@ -1411,6 +1419,7 @@ column_number = (column_number + 1);
             return null;
     }
     pub const ErrorPosition = SourceErrorPosition;
+    pub const MAX_PARSEABLE_LEN: usize = std.math.maxInt(i32);
 };
 
 const ImportKind = import_record.ImportKind;

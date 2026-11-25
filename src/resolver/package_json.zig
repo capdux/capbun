@@ -776,11 +776,17 @@ _ = ((r.log.addRangeWarningFmt((&json_source), json_source.rangeOfString(type_js
                     _ = &browser_prop;
                     switch (browser_prop.expr.data) {
 .e_object => |obj| {
-for (cp_mut_slice(&obj.properties.slice())) |*prop| {
+var key_spill: std.ArrayListUnmanaged(u8) = .{};
+                    _ = &key_spill;
+                    defer {
+                    _ = key_spill.deinit(allocator);
+                    }
+                    for (cp_mut_slice(&obj.properties.slice())) |*prop| {
                         _ = &prop;
                         const _key_str = (((((prop.*).key) orelse continue).asString(allocator)) orelse continue);
                         const value: js_ast.Expr = (((if (@typeInfo(@TypeOf((prop.*))) == .@"enum") @intFromEnum((prop.*)) else (prop.*).value)) orelse continue);
-                        const key = ((allocator.dupe(u8, r.fs.normalize(_key_str))) catch unreachable);
+                        const normalized_key = resolve_path.normalizeStringSpill((&key_spill), allocator, _key_str, true, .auto);
+                        const key = ((allocator.dupe(u8, normalized_key)) catch unreachable);
                         switch (value.data) {
 .e_string => |str| {
 _ = ((package_json.browser_map.put(key, ((str.string(allocator)) catch unreachable))) catch unreachable);

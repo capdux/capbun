@@ -664,7 +664,8 @@ fn VisitExprVisitors(
             const target = e_.target.unwrapInlined();
             const index = e_.index.unwrapInlined();
 
-            if (p.options.features.minify_syntax) {
+            // `[x][0] = v` writes into the temporary, not `x`.
+            if (p.options.features.minify_syntax && expr_in.assign_target == .none) {
                 if (number := index.data.@"as"(.e_number)) {
                     if (number.value >= 0 &&
                         number.value < @as(f64, @as(comptime_float, std.math.maxInt(usize))) &&
@@ -683,21 +684,29 @@ fn VisitExprVisitors(
                                 }
                             }
                         } else if (array := target.data.@"as"(.e_array)) {
-                            // [x][0] -> x
-                            if (array.items.len == 1 && number.value == 0) {
-                                const inlined = target.data.e_array.items.at(0).*;
-                                if (inlined.canBeInlinedFromPropertyAccess())
-                                    return inlined;
-                            }
-
-                            // ['a', 'b', 'c'][1] -> 'b'
                             const int: usize = @intFromFloat(number.value);
-                            if (int < array.items.len && p.exprCanBeRemovedIfUnused(&target)) {
-                                const inlined = target.data.e_array.items.at(int).*;
+                            // [x][0] -> x
+                            // ['a', 'b', 'c'][1] -> 'b'
+                            const inlined_opt: Expr? = if (array.items.len == 1 && int == 0)
+                                target.data.e_array.items.at(0).*
+                            else if (int < array.items.len && p.exprCanBeRemovedIfUnused(&target))
+                                target.data.e_array.items.at(int).*
+                            else
+                                null;
+                            if (inlined := inlined_opt) {
                                 // ['a', , 'c'][1] -> undefined
                                 if (inlined.data == .e_missing) return p.newExpr(E.Undefined{}, inlined.loc);
-                                if (Environment.allow_assert) assert(inlined.canBeInlinedFromPropertyAccess());
-                                return inlined;
+                                if (inlined.canBeInlinedFromPropertyAccess()) {
+                                    // "[obj.m][0]()" => "(0, obj.m)()"
+                                    if (is_call_target && inlined.hasValueForThisInCall()) {
+                                        return Expr.joinWithComma(
+                                            p.newExpr(E.Number{ value: 0 }, expr.loc),
+                                            inlined,
+                                            p.allocator,
+                                        );
+                                    }
+                                    return inlined;
+                                }
                             }
                         }
                     }
@@ -708,7 +717,8 @@ fn VisitExprVisitors(
             // though this is a run-time error, we make it a compile-time error when
             // bundling because scope hoisting means these will no longer be run-time
             // errors.
-            if ((expr_in.assign_target != .none || is_delete_target) &&
+            if (p.options.bundle &&
+                (expr_in.assign_target != .none || is_delete_target) &&
                 std.meta.activeTag(e_.target.data) == .e_identifier &&
                 p.symbols.items[e_.target.data.e_identifier.ref.innerIndex()].kind == .@"import")
             {

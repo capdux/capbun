@@ -296,6 +296,7 @@ pub const Loader = enum(u8) {
     yaml = 18,
     json5 = 19,
     md = 20,
+    xml = 21,
     pub fn get(__cp_s: []const u8) ?@This() { return @This().fromString(__cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return @This().fromString(__cp_s); }
@@ -346,7 +347,7 @@ pub fn toMimeType(self: Loader, paths: []const []const u8) bun.http.MimeType {
             return (switch (self) {
 .jsx, .js, .ts, .tsx => bun.http.MimeType.javascript,
 .css => bun.http.MimeType.css,
-.toml, .yaml, .json, .jsonc, .json5 => bun.http.MimeType.json,
+.toml, .yaml, .json, .jsonc, .json5, .xml => bun.http.MimeType.json,
 .wasm => bun.http.MimeType.wasm,
 .html, .md => bun.http.MimeType.html,
 else => {
@@ -426,6 +427,7 @@ pub fn toAPI(loader: Loader) api.Loader {
 .text => .text,
 .sqlite_embedded, .sqlite => .sqlite,
 .md => .md,
+.xml => .xml,
 });
     }
 
@@ -453,6 +455,7 @@ pub fn fromAPI(loader: api.Loader) Loader {
 .sqlite => .sqlite,
 .sqlite_embedded => .sqlite_embedded,
 .md => .md,
+.xml => .xml,
 else => .file,
 });
     }
@@ -475,7 +478,7 @@ else => false,
 pub fn isJavaScriptLikeOrJSON(self: Loader) bool {
             return (switch (self) {
 .jsx, .js, .ts, .tsx, .json, .jsonc => true,
-.toml, .yaml, .json5 => true,
+.toml, .yaml, .json5, .xml => true,
 else => false,
 });
     }
@@ -490,7 +493,7 @@ pub fn forFileName(filename: []const u8, obj: anytype) ?Loader {
 
 pub fn sideEffects(self: Loader) bun.resolver.SideEffects {
             return (switch (self) {
-.text, .json, .jsonc, .toml, .yaml, .json5, .file, .md => bun.resolver.SideEffects.no_side_effects__pure_data,
+.text, .json, .jsonc, .toml, .yaml, .json5, .xml, .file, .md => bun.resolver.SideEffects.no_side_effects__pure_data,
 else => bun.resolver.SideEffects.has_side_effects,
 });
     }
@@ -556,14 +559,15 @@ pub fn fromMimeType(mime_type: bun.http.MimeType) Loader {
             _ = map.set(.bunsh, "input.sh");
             _ = map.set(.html, "input.html");
             _ = map.set(.md, "input.md");
+            _ = map.set(.xml, "input.xml");
             break :brk map;
     };
     
     pub const fromJS = options_jsc.loaderFromJS;
     
-    pub const names = bun.ComptimeStringMap(Loader, .{ .{ "js", .js }, .{ "mjs", .js }, .{ "cjs", .js }, .{ "cts", .ts }, .{ "mts", .ts }, .{ "jsx", .jsx }, .{ "ts", .ts }, .{ "tsx", .tsx }, .{ "css", .css }, .{ "file", .file }, .{ "json", .json }, .{ "jsonc", .jsonc }, .{ "toml", .toml }, .{ "yaml", .yaml }, .{ "json5", .json5 }, .{ "wasm", .wasm }, .{ "napi", .napi }, .{ "node", .napi }, .{ "dataurl", .dataurl }, .{ "base64", .base64 }, .{ "txt", .text }, .{ "text", .text }, .{ "sh", .bunsh }, .{ "sqlite", .sqlite }, .{ "sqlite_embedded", .sqlite_embedded }, .{ "html", .html }, .{ "md", .md }, .{ "markdown", .md } });
+    pub const names = bun.ComptimeStringMap(Loader, .{ .{ "js", .js }, .{ "mjs", .js }, .{ "cjs", .js }, .{ "cts", .ts }, .{ "mts", .ts }, .{ "jsx", .jsx }, .{ "ts", .ts }, .{ "tsx", .tsx }, .{ "css", .css }, .{ "file", .file }, .{ "json", .json }, .{ "jsonc", .jsonc }, .{ "toml", .toml }, .{ "yaml", .yaml }, .{ "json5", .json5 }, .{ "wasm", .wasm }, .{ "napi", .napi }, .{ "node", .napi }, .{ "dataurl", .dataurl }, .{ "base64", .base64 }, .{ "txt", .text }, .{ "text", .text }, .{ "sh", .bunsh }, .{ "sqlite", .sqlite }, .{ "sqlite_embedded", .sqlite_embedded }, .{ "html", .html }, .{ "md", .md }, .{ "markdown", .md }, .{ "xml", .xml } });
     
-    pub const api_names = bun.ComptimeStringMap(api.Loader, .{ .{ "js", .js }, .{ "mjs", .js }, .{ "cjs", .js }, .{ "cts", .ts }, .{ "mts", .ts }, .{ "jsx", .jsx }, .{ "ts", .ts }, .{ "tsx", .tsx }, .{ "css", .css }, .{ "file", .file }, .{ "json", .json }, .{ "jsonc", .json }, .{ "toml", .toml }, .{ "yaml", .yaml }, .{ "json5", .json5 }, .{ "wasm", .wasm }, .{ "node", .napi }, .{ "dataurl", .dataurl }, .{ "base64", .base64 }, .{ "txt", .text }, .{ "text", .text }, .{ "sh", .file }, .{ "sqlite", .sqlite }, .{ "html", .html }, .{ "md", .md }, .{ "markdown", .md } });
+    pub const api_names = bun.ComptimeStringMap(api.Loader, .{ .{ "js", .js }, .{ "mjs", .js }, .{ "cjs", .js }, .{ "cts", .ts }, .{ "mts", .ts }, .{ "jsx", .jsx }, .{ "ts", .ts }, .{ "tsx", .tsx }, .{ "css", .css }, .{ "file", .file }, .{ "json", .json }, .{ "jsonc", .json }, .{ "toml", .toml }, .{ "yaml", .yaml }, .{ "json5", .json5 }, .{ "wasm", .wasm }, .{ "node", .napi }, .{ "dataurl", .dataurl }, .{ "base64", .base64 }, .{ "txt", .text }, .{ "text", .text }, .{ "sh", .file }, .{ "sqlite", .sqlite }, .{ "html", .html }, .{ "md", .md }, .{ "markdown", .md }, .{ "xml", .xml } });
 };
 
 pub const SourceMapOption = enum {
@@ -1840,14 +1844,14 @@ const MacroRemap = package_json_pkg.MacroMap;
 const PackageJSON = package_json_pkg.PackageJSON;
 const ConditionsMap = package_json_pkg.ESModule.ConditionsMap;
 pub const GetLoaderAndVirtualSourceErr = error{BlobNotFound};
-const default_loaders_posix = .{ .{ ".jsx", .jsx }, .{ ".json", .json }, .{ ".js", .jsx }, .{ ".mjs", .js }, .{ ".cjs", .js }, .{ ".css", .css }, .{ ".ts", .ts }, .{ ".tsx", .tsx }, .{ ".mts", .ts }, .{ ".cts", .ts }, .{ ".toml", .toml }, .{ ".yaml", .yaml }, .{ ".yml", .yaml }, .{ ".wasm", .wasm }, .{ ".node", .napi }, .{ ".txt", .text }, .{ ".text", .text }, .{ ".html", .html }, .{ ".jsonc", .jsonc }, .{ ".json5", .json5 }, .{ ".md", .md }, .{ ".markdown", .md } };
+const default_loaders_posix = .{ .{ ".jsx", .jsx }, .{ ".json", .json }, .{ ".js", .jsx }, .{ ".mjs", .js }, .{ ".cjs", .js }, .{ ".css", .css }, .{ ".ts", .ts }, .{ ".tsx", .tsx }, .{ ".mts", .ts }, .{ ".cts", .ts }, .{ ".toml", .toml }, .{ ".yaml", .yaml }, .{ ".yml", .yaml }, .{ ".wasm", .wasm }, .{ ".node", .napi }, .{ ".txt", .text }, .{ ".text", .text }, .{ ".html", .html }, .{ ".jsonc", .jsonc }, .{ ".json5", .json5 }, .{ ".md", .md }, .{ ".markdown", .md }, .{ ".xml", .xml } };
 const default_loaders_win32 = (default_loaders_posix ++ .{ .{ ".sh", .bunsh } });
 const default_loaders = (if (Environment.isWindows) default_loaders_win32 else default_loaders_posix);
 pub const defaultLoaders = bun.ComptimeStringMap(Loader, default_loaders);
 const default_loader_ext_bun = .{ ".node", ".html" };
-const default_loader_ext = .{ ".jsx", ".json", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".mts", ".cts", ".toml", ".yaml", ".yml", ".wasm", ".txt", ".text", ".jsonc", ".json5" };
+const default_loader_ext = .{ ".jsx", ".json", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".mts", ".cts", ".toml", ".yaml", ".yml", ".wasm", ".txt", ".text", ".jsonc", ".json5", ".xml" };
 const default_loader_ext_browser = .{ ".html" };
-const node_modules_default_loader_ext = .{ ".jsx", ".js", ".cjs", ".mjs", ".ts", ".mts", ".toml", ".yaml", ".yml", ".txt", ".json", ".jsonc", ".json5", ".css", ".tsx", ".cts", ".wasm", ".text", ".html" };
+const node_modules_default_loader_ext = .{ ".jsx", ".js", ".cjs", ".mjs", ".ts", ".mts", ".toml", ".yaml", ".yml", ".txt", ".json", ".jsonc", ".json5", ".xml", ".css", ".tsx", ".cts", ".wasm", ".text", ".html" };
 const _nm_esm = _BundleOptionsDefaults.NodeModules.ModuleExtensionOrder;
 const _nm_default = BundleOptions.Defaults.NodeModules.ExtensionOrder;
 const _esm_ext = BundleOptions.Defaults.ModuleExtensionOrder;

@@ -71,6 +71,9 @@ pub const Handler = struct {
     flags: HandlerFlags = .{},
 
 pub fn runErrorCallback(self: Handler, vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) void {
+            if (globalObject.hasException()) {
+                return;
+            }
             const onError = self.onError;
             if ((!onError.isEmptyOrUndefinedOrNull())) {
                 _ = (blk_catch_0: { break :blk_catch_0 ((onError.call(globalObject, .js_undefined, (&.{ error_value }))) catch |e| { _ = &e; break :blk_catch_0 self.globalObject.reportActiveExceptionAsUnhandled(e); }); });

@@ -59,6 +59,16 @@ pub const SSLWrapperHandshakeState = enum(u2) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const SSLWrapperTraffic = enum {
+    idle,
+    running,
+    rerun_requested,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const SSLFreeGuard = struct {
     ssl: ?*BoringSSL.SSL = null,
     __cp_dropped: bool = false,
@@ -145,6 +155,7 @@ pub fn SSLWrapper(comptime T: type) type {
     flags: SSLWrapperFlags = .{},
     renegotiation_count: u8 = 0,
     renegotiation_window_start_ms: u64 = 0,
+    traffic: SSLWrapperTraffic = .idle,
 
 pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers) !This {
             _ = bun.BoringSSL.load();
@@ -535,11 +546,30 @@ pub fn handleWriting(self: *@This(), buffer: *[BUFFER_SIZE]u8) void {
     }
 
 pub fn handleTraffic(self: *@This()) void {
+            if ((self.traffic != .idle)) {
+                _ = log("handleTraffic re-entered, flushing and deferring to the outer pass", .{});
+                var buffer: [BUFFER_SIZE]u8 = undefined;
+                _ = &buffer;
+                _ = self.handleWriting((&buffer));
+                self.traffic = .rerun_requested;
+                return;
+            }
+            while (true) {
+                self.traffic = .running;
+                _ = self.trafficPass();
+                if ((self.traffic != .rerun_requested)) {
+                    break;
+                }
+            }
+            self.traffic = .idle;
+    }
+
+pub fn trafficPass(self: *@This()) void {
             if (self.updateHandshakeState()) {
                 var buffer: [BUFFER_SIZE]u8 = undefined;
                 _ = &buffer;
                 _ = self.handleWriting((&buffer));
-                while ((self.hasPendingRead() and self.handleReading((&buffer)))) {
+                while ((((self.traffic == .running) and self.hasPendingRead()) and self.handleReading((&buffer)))) {
                     _ = self.handleWriting((&buffer));
                 }
             }

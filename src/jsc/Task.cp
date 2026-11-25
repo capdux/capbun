@@ -75,6 +75,7 @@ const CppTask = jsc.CppTask;
 const EventLoop = jsc.EventLoop;
 const ManagedTask = jsc.ManagedTask;
 const PosixSignalTask = jsc.PosixSignalTask;
+const MemoryPressureTask = bun.api.node.memory_pressure.MemoryPressureTask;
 const HotReloadTask = jsc.hot_reloader.HotReloader.Task;
 const StreamPending = jsc.WebCore.streams.Result.Pending;
 
@@ -178,6 +179,7 @@ pub const Task = TaggedPointerUnion(.{
     Open,
     PollPendingModulesTask,
     PosixSignalTask,
+    MemoryPressureTask,
     ProcessWaiterThreadTask,
     Read,
     Readdir,
@@ -617,6 +619,9 @@ pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(PosixSignalTask)) => {
                 PosixSignalTask.runFromJSThread(@intCast(task.asUintptr()), global);
+            },
+            @field(Task.Tag, @typeName(MemoryPressureTask)) => {
+                MemoryPressureTask.runFromJSThread(@intCast(task.asUintptr()), global);
             },
             @field(Task.Tag, @typeName(NapiFinalizerTask)) => {
                 let task_ptr: *NapiFinalizerTask = task.get(NapiFinalizerTask).?;

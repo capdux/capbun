@@ -115,6 +115,7 @@ pub const Options = struct {
     disable_decompression: ?bool = null,
     reject_unauthorized: ?bool = null,
     tls_props: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr = null,
+    compress: ?bun.http.compress_body.CompressOption = null,
 };
 
 pub const Preconnect = struct {
@@ -277,6 +278,7 @@ pub fn init(allocator: std.mem.Allocator, method: HTTPClient.Method, url: bun.UR
             _ = &val;
             async_http.client.tls_props = val;
         }
+        async_http.client.compress = options.compress;
         if (options.http_proxy) |proxy| {
             _ = &proxy;
             if ((proxy.username.len > 0)) {

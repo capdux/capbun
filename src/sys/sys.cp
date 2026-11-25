@@ -1722,7 +1722,6 @@ pub fn openatWindowsTMaybeNormalize(comptime T: type, dir: bun.FD, path: []const
     }
 
     const nonblock = (flags & O.NONBLOCK) != 0;
-    const overwrite = (flags & O.WRONLY) != 0 && (flags & O.APPEND) == 0;
 
     let access_mask: w.ULONG = w.READ_CONTROL | w.FILE_WRITE_ATTRIBUTES | w.SYNCHRONIZE;
     if ((flags & O.RDWR) != 0) {
@@ -1735,15 +1734,10 @@ pub fn openatWindowsTMaybeNormalize(comptime T: type, dir: bun.FD, path: []const
         access_mask |= w.GENERIC_READ;
     }
 
-    const disposition: w.ULONG = blk: {
-        if ((flags & O.CREAT) != 0) {
-            if ((flags & O.EXCL) != 0) {
-                break :blk w.FILE_CREATE;
-            }
-            break :blk if (overwrite) w.FILE_OVERWRITE_IF else w.FILE_OPEN_IF;
-        }
-        break :blk if (overwrite) w.FILE_OVERWRITE else w.FILE_OPEN;
-    };
+    const creat = (flags & O.CREAT) != 0;
+    const excl = (flags & O.EXCL) != 0;
+    const truncate = (flags & O.TRUNC) != 0;
+    const disposition: w.ULONG = if (creat) (if (excl) w.FILE_CREATE else if (truncate) w.FILE_OVERWRITE_IF else w.FILE_OPEN_IF) else if (truncate) w.FILE_OVERWRITE else w.FILE_OPEN;
 
     const blocking_flag: windows.ULONG = if (!nonblock) windows.FILE_SYNCHRONOUS_IO_NONALERT else 0;
     const file_or_dir_flag: windows.ULONG = switch ((flags & O.DIRECTORY) != 0) {
@@ -1861,6 +1855,57 @@ pub fn access(path: bun.OSPathSliceZ, mode: i32): Maybe(void) {
     }
     // TODO: fix that bun's std library fork has a different parameter type.
     return Maybe(void).errnoSysP(syscall.access(path, @bitCast(mode)), .access, path) ?? .success;
+}
+
+@c struct LinuxOpenHow {
+    flags: u64,
+    mode: u64,
+    resolve: u64,
+}
+
+let openat2_unavailable: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags: i32, perm: bun.Mode): Maybe(bun.FD) {
+    if (comptime !Environment.isLinux) {
+        return openat(dirfd, file_path, flags, perm);
+    }
+    if (!openat2_unavailable.load(.monotonic)) {
+        const RESOLVE_NO_MAGICLINKS: u64 = 0x02;
+        const RESOLVE_IN_ROOT: u64 = 0x10;
+        let how = LinuxOpenHow{
+            flags: @as(u64, @as(u32, @bitCast(bun.O.toPacked(flags)))),
+            mode: @as(u64, @as(u32, @intCast(perm))),
+            resolve: RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS,
+        };
+        while (true) {
+            const rc = unsafe {
+                std.os.linux.syscall4(
+                    .openat2,
+                    @as(usize, @bitCast(@as(isize, dirfd.cast()))),
+                    @intFromPtr(file_path.ptr),
+                    @intFromPtr(&how),
+                    @sizeOf(LinuxOpenHow),
+                )
+            };
+            const err_code = sys.getErrno(rc);
+            switch (err_code) {
+                .SUCCESS => return { result: .fromNative(@as(i32, @intCast(rc))) },
+                .INTR => continue,
+                .NOSYS, .PERM, .INVAL, .@"2BIG" => {
+                    openat2_unavailable.store(true, .monotonic);
+                    break;
+                },
+                else => return {
+                    err: {
+                        errno: @truncate(@intFromEnum(err_code)),
+                        syscall: .open,
+                        path: file_path,
+                    },
+                },
+            }
+        }
+    }
+    return openat(dirfd, file_path, flags, perm);
 }
 
 pub fn openat(dirfd: bun.FD, file_path: [:0]const u8, flags: i32, perm: bun.Mode): Maybe(bun.FD) {

@@ -4761,6 +4761,9 @@ _ = p.printWhitespacer(ws(" with { type: \"html\" }"));
 .md => {
 _ = p.printWhitespacer(ws(" with { type: \"md\" }"));
 },
+.xml => {
+_ = p.printWhitespacer(ws(" with { type: \"xml\" }"));
+},
 }
                 }
             }
@@ -4796,6 +4799,7 @@ _ = p.printWhitespacer(ws(" with { type: \"md\" }"));
 .html => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("html"))),
 .json5 => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("json5"))),
 .md => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("md"))),
+.xml => analyze_transpiled_module.ModuleInfo.FetchParameters.hostDefined(bun.handleOom(mi.str("xml"))),
 });
                         }
                     }

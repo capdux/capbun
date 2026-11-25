@@ -258,6 +258,48 @@ pub fn generateChunksInParallel(
             c.source_maps.quoted_contents_tasks.len = 0;
         }
 
+        // A part that failed to print (e.g. the recursion guard tripped on a
+        // deeply nested AST) must fail the build instead of joining the chunk
+        // as silently truncated output. Dev server excluded: its callers turn
+        // any `Err` here into an OOM panic (see `finishFromBakeDevServer`),
+        // so unprintable parts keep the old dropped-code behavior there.
+        if (!is_dev_server) {
+            let had_print_error = false;
+            // Without code splitting a failing file is printed once per chunk
+            // that includes it; report each file once.
+            let reported_sources = AutoBitSet.initEmpty(c.allocator(), c.parse_graph.input_files.len)?;
+            defer reported_sources.deinit(c.allocator());
+            for (chunk of chunks) {
+                for (compile_result of chunk.compile_results_for_chunk) {
+                    const message: string = switch (compile_result) {
+                        .javascript => |js| switch (js.result) {
+                            .err => |e| if (e == error.StackOverflow)
+                                "Maximum call stack size exceeded while generating code for this file"
+                            else
+                                std.fmt.allocPrint(c.allocator(), "Failed to generate code for this file ({s})", .{@errorName(e)}) catch "Failed to generate code for this file",
+                            else => continue,
+                        },
+                        .css => |css| switch (css.result) {
+                            .err => |e| std.fmt.allocPrint(c.allocator(), "Failed to generate CSS for this file ({s})", .{@errorName(e)}) catch "Failed to generate CSS for this file",
+                            else => continue,
+                        },
+                        else => continue,
+                    };
+                    had_print_error = true;
+                    const source_index = compile_result.sourceIndex();
+                    const source: (*const Logger.Source)? = if (source_index != Index.invalid.get()) brk: {
+                        if (reported_sources.isSet(source_index)) continue;
+                        reported_sources.set(source_index);
+                        break :brk &c.parse_graph.input_files.items(.source)[source_index];
+                    } else null;
+                    c.log.addError(source, Logger.Loc.Empty, message) catch {};
+                }
+            }
+            if (had_print_error) {
+                return error.PrintError;
+            }
+        }
+
         // For dev server, only post-process CSS + HTML chunks.
         const chunks_to_do = if (is_dev_server) chunks[1..] else chunks;
         if (!is_dev_server || chunks_to_do.len > 0) {

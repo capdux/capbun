@@ -419,6 +419,45 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                 _ = c.allocator().free(c.source_maps.quoted_contents_tasks);
                 c.source_maps.quoted_contents_tasks.len = 0;
             }
+            if ((!is_dev_server)) {
+                var had_print_error = false;
+                _ = &had_print_error;
+                var reported_sources = try AutoBitSet.initEmpty(c.allocator(), c.parse_graph.input_files.len);
+                _ = &reported_sources;
+                defer {
+                _ = reported_sources.deinit(c.allocator());
+                }
+                for (cp_iter_slice(chunks)) |chunk| {
+                    _ = &chunk;
+                    for (cp_iter_slice(chunk.compile_results_for_chunk)) |compile_result| {
+                        _ = &compile_result;
+                        const message: []const u8 = (switch (compile_result) {
+.javascript => |js| (switch (js.result) {
+.err => |e| (if ((e == error.StackOverflow)) "Maximum call stack size exceeded while generating code for this file" else (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(c.allocator(), "Failed to generate code for this file ({s})", .{ @errorName(e) })) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 "Failed to generate code for this file"; }); })),
+else => continue,
+}),
+.css => |css| (switch (css.result) {
+.err => |e| (blk_catch_1: { break :blk_catch_1 ((std.fmt.allocPrint(c.allocator(), "Failed to generate CSS for this file ({s})", .{ @errorName(e) })) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 "Failed to generate CSS for this file"; }); }),
+else => continue,
+}),
+else => continue,
+});
+                        had_print_error = true;
+                        const source_index = compile_result.sourceIndex();
+                        const source: ?*const Logger.Source = (if ((source_index != Index.invalid.get())) brk: {
+                        if (reported_sources.isSet(source_index)) {
+                            continue;
+                        }
+                        _ = reported_sources.set(source_index);
+                        break :brk (&c.parse_graph.input_files.items(.source)[@as(usize, @intCast(source_index))]);
+} else null);
+                        _ = (blk_catch_2: { break :blk_catch_2 ((c.log.addError(source, Logger.Loc.Empty, message)) catch |__ce_2| { _ = &__ce_2;  }); });
+                    }
+                }
+                if (had_print_error) {
+                    return error.PrintError;
+                }
+            }
             const chunks_to_do = (if (is_dev_server) chunks[1..] else chunks);
             if (((!is_dev_server) or (chunks_to_do.len > 0))) {
                 _ = bun.assert((chunks_to_do.len > 0));
@@ -525,7 +564,7 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                     if (x.template) |template| {
                         _ = &template;
                         const name = (if (@typeInfo(@TypeOf(x)) == .@"enum" or @typeInfo(@TypeOf(x)) == .@"union") @tagName(x) else x.name);
-                        _ = (blk_catch_0: { break :blk_catch_0 ((c.log.addMsg(.{ .kind = .note, .data = .{ .text = try std.fmt.allocPrint(bun.default_allocator, (name ++ " naming is '{s}', consider adding '[hash]' to make filenames unique"), .{ template }) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+                        _ = (blk_catch_3: { break :blk_catch_3 ((c.log.addMsg(.{ .kind = .note, .data = .{ .text = try std.fmt.allocPrint(bun.default_allocator, (name ++ " naming is '{s}', consider adding '[hash]' to make filenames unique"), .{ template }) } })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
                     }
                 }
                 return error.DuplicateOutputPath;
@@ -544,8 +583,8 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                 if ((((ch.*).unique_key.len > 0) and ((ch.*).final_rel_path.len > 0))) {
                     const public_path = (if ((ch.*).flags.is_browser_chunk_from_server_build) b.transpilerForTarget(.browser).options.public_path else c.options.public_path);
                     const normalizer = bun.bundle_v2.cheapPrefixNormalizer(public_path, (ch.*).final_rel_path);
-                    const resolved = (blk_catch_1: { break :blk_catch_1 ((std.fmt.allocPrint(c.allocator(), "{s}{s}", .{ normalizer[0], normalizer[1] })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
-                    _ = (blk_catch_2: { break :blk_catch_2 ((unique_key_to_path.put((ch.*).unique_key, resolved)) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                    const resolved = (blk_catch_4: { break :blk_catch_4 ((std.fmt.allocPrint(c.allocator(), "{s}{s}", .{ normalizer[0], normalizer[1] })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                    _ = (blk_catch_5: { break :blk_catch_5 ((unique_key_to_path.put((ch.*).unique_key, resolved)) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                 }
             }
             for (cp_mut_slice(&chunks)) |*chunk| {
@@ -565,21 +604,21 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                 {
                     var string_index: i32 = 0;
                     _ = &string_index;
-                    const __end_9 = mi.strings_lens.items.len;
-                    while (string_index < __end_9) : (string_index += 1) {
+                    const __end_11 = mi.strings_lens.items.len;
+                    while (string_index < __end_11) : (string_index += 1) {
                         const slen = mi.strings_lens.items[@as(usize, @intCast(string_index))];
                         const len: usize = @as(usize, @intCast(slen));
                         const s = mi.strings_buf.items[offset..][0..len];
                         if (unique_key_to_path.get(s)) |resolved_path| {
                             _ = &resolved_path;
-                            _ = (blk_catch_3: { break :blk_catch_3 ((replacements.append(c.allocator(), ModuleInfoReplacement{ .old_id = @enumFromInt(@as(u32, @intCast(string_index))), .resolved_path = resolved_path })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+                            _ = (blk_catch_6: { break :blk_catch_6 ((replacements.append(c.allocator(), ModuleInfoReplacement{ .old_id = @enumFromInt(@as(u32, @intCast(string_index))), .resolved_path = resolved_path })) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
                         }
                         offset = (offset + len);
                     }
                 }
                 for (replacements.items) |rep| {
                     _ = &rep;
-                    const new_id = (blk_catch_4: { break :blk_catch_4 ((mi.str(rep.resolved_path)) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                    const new_id = (blk_catch_7: { break :blk_catch_7 ((mi.str(rep.resolved_path)) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
                     _ = mi.replaceStringID(rep.old_id, new_id);
                 }
                 (chunk.*).content.javascript.module_info_bytes = bun.js_printer.serializeModuleInfo(mi);
@@ -591,10 +630,10 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
             {
                 var chunk_idx: i32 = 0;
                 _ = &chunk_idx;
-                const __end_11 = chunks.len;
-                while (chunk_idx < __end_11) : (chunk_idx += 1) {
+                const __end_13 = chunks.len;
+                while (chunk_idx < __end_13) : (chunk_idx += 1) {
                     const chunk = (&chunks[@as(usize, @intCast(chunk_idx))]);
-                    chunk.metafile_chunk_json = (blk_catch_5: { break :blk_catch_5 ((LinkerContext.MetafileBuilder.generateChunkJson(bun.default_allocator, c, chunk, chunks)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 ""; }); });
+                    chunk.metafile_chunk_json = (blk_catch_8: { break :blk_catch_8 ((LinkerContext.MetafileBuilder.generateChunkJson(bun.default_allocator, c, chunk, chunks)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 ""; }); });
                 }
             }
         }
@@ -628,15 +667,15 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
             {
                 var ci: i32 = 0;
                 _ = &ci;
-                const __end_12 = chunks.len;
-                while (ci < __end_12) : (ci += 1) {
+                const __end_14 = chunks.len;
+                while (ci < __end_14) : (ci += 1) {
                     const chunk_item = (&chunks[@as(usize, @intCast(ci))]);
                     if ((chunk_item.content == .html)) {
                         continue;
                     }
                     var ds: usize = 0;
                     _ = &ds;
-                    scc[cp_cast_int(usize, ci)] = (blk_catch_6: { break :blk_catch_6 ((chunk_item.intermediate_output.codeStandalone(null, c.parse_graph, (&c.graph), c.options.public_path, chunk_item, chunks, (&ds), false, false, scc)) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); }).buffer;
+                    scc[cp_cast_int(usize, ci)] = (blk_catch_9: { break :blk_catch_9 ((chunk_item.intermediate_output.codeStandalone(null, c.parse_graph, (&c.graph), c.options.public_path, chunk_item, chunks, (&ds), false, false, scc)) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); }).buffer;
                 }
             }
         }
@@ -647,8 +686,8 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
             {
                 var chunk_index_in_chunks_list: i32 = 0;
                 _ = &chunk_index_in_chunks_list;
-                const __end_13 = chunks.len;
-                while (chunk_index_in_chunks_list < __end_13) : (chunk_index_in_chunks_list += 1) {
+                const __end_15 = chunks.len;
+                while (chunk_index_in_chunks_list < __end_15) : (chunk_index_in_chunks_list += 1) {
                     const chunk = (&chunks[@as(usize, @intCast(chunk_index_in_chunks_list))]);
                     if ((is_standalone and (chunk.content != .html))) {
                         _ = output_files.insertForChunk(options.OutputFile.init(.{ .data = .{ .buffer = .{ .data = &.{}, .allocator = bun.default_allocator } }, .hash = null, .loader = chunk.content.loader(), .input_path = "", .display_size = 0, .output_kind = .chunk, .input_loader = .js, .output_path = "", .is_executable = false, .source_map_index = null, .bytecode_index = null, .module_info_index = null, .side = .client, .entry_point_index = null, .referenced_css_chunks = &.{}, .bake_extra = .{} }));
@@ -658,7 +697,7 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                     _ = &display_size;
                     const public_path = (if (chunk.flags.is_browser_chunk_from_server_build) bundler.transpilerForTarget(.browser).options.public_path else c.options.public_path);
                     const _code_result = (if ((is_standalone and (chunk.content == .html))) chunk.intermediate_output.codeStandalone(null, c.parse_graph, (&c.graph), public_path, chunk, chunks, (&display_size), false, false, standalone_chunk_contents.?) else chunk.intermediate_output.code(null, c.parse_graph, (&c.graph), public_path, chunk, chunks, (&display_size), (c.resolver.opts.compile and (!chunk.flags.is_browser_chunk_from_server_build)), (chunk.content.sourcemap(c.options.source_maps) != .none)));
-                    var code_result = (blk_catch_7: { break :blk_catch_7 ((_code_result) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
+                    var code_result = (blk_catch_10: { break :blk_catch_10 ((_code_result) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
                     _ = &code_result;
                     var sourcemap_output_file: ?options.OutputFile = null;
                     _ = &sourcemap_output_file;
@@ -666,7 +705,7 @@ remaining_part_ranges[cp_cast_int(usize, 0)] = .{ .part_range = .{}, .i = 0, .ta
                     const sm_kind = chunk.content.sourcemap(c.options.source_maps);
                     switch (sm_kind) {
 .external, .linked => {
-const output_source_map = (blk_catch_8: { break :blk_catch_8 ((chunk.output_source_map.finalize(bun.default_allocator, code_result.shifts)) catch |__ce_8| { _ = &__ce_8; @panic("Failed to allocate memory for external source map"); }); });
+const output_source_map = (blk_catch_11: { break :blk_catch_11 ((chunk.output_source_map.finalize(bun.default_allocator, code_result.shifts)) catch |__ce_11| { _ = &__ce_11; @panic("Failed to allocate memory for external source map"); }); });
                     var source_map_final_rel_path = bun.handleOom(bun.default_allocator.alloc(u8, (chunk.final_rel_path.len + ".map".len)));
                     _ = &source_map_final_rel_path;
                     _ = bun.copy(u8, source_map_final_rel_path, chunk.final_rel_path);
@@ -677,7 +716,7 @@ const output_source_map = (blk_catch_8: { break :blk_catch_8 ((chunk.output_sour
                         const b = norm[1];
                         const source_map_start: []const u8 = "//# sourceMappingURL=";
                         const total_len = ((((code_result.buffer.len + source_map_start.len) + a.len) + b.len) + "\n".len);
-                        var buf = (blk_catch_9: { break :blk_catch_9 ((std.array_list.Managed(u8).initCapacity(Chunk.IntermediateOutput.allocatorForSize(total_len), total_len)) catch |__ce_9| { _ = &__ce_9; @panic("Failed to allocate memory for output file with inline source map"); }); });
+                        var buf = (blk_catch_12: { break :blk_catch_12 ((std.array_list.Managed(u8).initCapacity(Chunk.IntermediateOutput.allocatorForSize(total_len), total_len)) catch |__ce_12| { _ = &__ce_12; @panic("Failed to allocate memory for output file with inline source map"); }); });
                         _ = &buf;
                         _ = buf.appendSliceAssumeCapacity(code_result.buffer);
                         _ = buf.appendSliceAssumeCapacity(source_map_start);
@@ -690,7 +729,7 @@ const output_source_map = (blk_catch_8: { break :blk_catch_8 ((chunk.output_sour
                     sourcemap_output_file = options.OutputFile.init(.{ .data = .{ .buffer = .{ .data = output_source_map, .allocator = bun.default_allocator } }, .hash = null, .loader = .json, .input_loader = .file, .output_path = source_map_final_rel_path, .output_kind = .sourcemap, .input_path = try strings.concat(bun.default_allocator, (&.{ input_path, ".map" })), .side = null, .entry_point_index = null, .is_executable = false });
 },
 .@"inline" => {
-const output_source_map = (blk_catch_10: { break :blk_catch_10 ((chunk.output_source_map.finalize(bun.default_allocator, code_result.shifts)) catch |__ce_10| { _ = &__ce_10; @panic("Failed to allocate memory for external source map"); }); });
+const output_source_map = (blk_catch_13: { break :blk_catch_13 ((chunk.output_source_map.finalize(bun.default_allocator, code_result.shifts)) catch |__ce_13| { _ = &__ce_13; @panic("Failed to allocate memory for external source map"); }); });
                     var _guard_osm = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = output_source_map };
                     _ = &_guard_osm;
                     var ___guard_osm_moved = false; _ = &___guard_osm_moved;
@@ -698,7 +737,7 @@ const output_source_map = (blk_catch_10: { break :blk_catch_10 ((chunk.output_so
                     const encode_len = base64.encodeLen(output_source_map);
                     const source_map_start: []const u8 = "//# sourceMappingURL=data:application/json;base64,";
                     const total_len = (((code_result.buffer.len + source_map_start.len) + encode_len) + 1);
-                    var buf = (blk_catch_11: { break :blk_catch_11 ((std.array_list.Managed(u8).initCapacity(Chunk.IntermediateOutput.allocatorForSize(total_len), total_len)) catch |__ce_11| { _ = &__ce_11; @panic("Failed to allocate memory for output file with inline source map"); }); });
+                    var buf = (blk_catch_14: { break :blk_catch_14 ((std.array_list.Managed(u8).initCapacity(Chunk.IntermediateOutput.allocatorForSize(total_len), total_len)) catch |__ce_14| { _ = &__ce_14; @panic("Failed to allocate memory for output file with inline source map"); }); });
                     _ = &buf;
                     _ = buf.appendSliceAssumeCapacity(code_result.buffer);
                     _ = buf.appendSliceAssumeCapacity(source_map_start);
@@ -749,7 +788,7 @@ else => .server,
                                 (fdpath[chunk.final_rel_path.len..][0..bun.bytecode_extension.len]).* = bun.bytecode_extension.*;
                                 break :brk options.OutputFile.init(.{ .output_path = bun.handleOom(bun.default_allocator.dupe(u8, source_provider_url_str.slice())), .input_path = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, ("{s}" ++ bun.bytecode_extension), .{ chunk.final_rel_path })), .input_loader = .js, .hash = (if ((chunk.template.placeholder.hash != null)) bun.hash(bytecode) else null), .output_kind = .bytecode, .loader = .file, .size = @as(u32, @truncate(bytecode.len)), .display_size = @as(u32, @truncate(bytecode.len)), .data = .{ .buffer = .{ .data = bytecode, .allocator = cached_bytecode.allocator() } }, .side = side, .entry_point_index = null, .is_executable = false });
                             } else {
-                                _ = (blk_catch_12: { break :blk_catch_12 ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to generate bytecode for {s}", .{ chunk.final_rel_path })) catch |e| { _ = &e; break :blk_catch_12 bun.handleOom(e); }); });
+                                _ = (blk_catch_15: { break :blk_catch_15 ((c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to generate bytecode for {s}", .{ chunk.final_rel_path })) catch |e| { _ = &e; break :blk_catch_15 bun.handleOom(e); }); });
                             }
                         }
                     }

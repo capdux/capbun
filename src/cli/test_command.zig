@@ -68,6 +68,7 @@ pub const ChangedFilesFilter = @import("./test/ChangedFilesFilter.zig");
 pub const DotEnv = @import("../dotenv/env_loader.zig");
 pub const ParallelRunner = @import("./test/ParallelRunner.zig");
 pub const Scanner = @import("./test/Scanner.zig");
+pub const Timings = @import("./test/Timings.zig");
 pub const bun_test = @import("../test_runner/bun_test.zig");
 pub const options = @import("../bundler/options.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
@@ -312,7 +313,12 @@ pub fn begin(self: *RunAllTestsContext) void {
                     const __end_2 = (files.len - 1);
                     while (i < __end_2) : (i += 1) {
                         const file_name = files[@as(usize, @intCast(i))];
+                        const started = bun.milliTimestamp();
                         _ = (blk_catch_1: { break :blk_catch_1 ((TestCommand.run(reporter, vm, file_name.slice(), .{ .first = (isolate or (i == 0)), .last = isolate })) catch |e| { _ = &e; break :blk_catch_1 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
+                        if (reporter.timings) |*t| {
+                            _ = &t;
+                            _ = (t.*).recordSince(file_name.slice(), started);
+                        }
                         reporter.jest.default_timeout_override = std.math.maxInt(u32);
                         _ = Global.mimalloc_cleanup(false);
                         if (isolate) {
@@ -322,7 +328,13 @@ pub fn begin(self: *RunAllTestsContext) void {
                     }
                 }
             }
-            _ = (blk_catch_2: { break :blk_catch_2 ((TestCommand.run(reporter, vm, files[@as(usize, @intCast((files.len - 1)))].slice(), .{ .first = (isolate or (files.len == 1)), .last = true })) catch |e| { _ = &e; break :blk_catch_2 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
+            const last_file = files[@as(usize, @intCast((files.len - 1)))];
+            const last_started = bun.milliTimestamp();
+            _ = (blk_catch_2: { break :blk_catch_2 ((TestCommand.run(reporter, vm, last_file.slice(), .{ .first = (isolate or (files.len == 1)), .last = true })) catch |e| { _ = &e; break :blk_catch_2 @as(void, handleTopLevelTestErrorBeforeJavaScriptStart(e)); }); });
+            if (reporter.timings) |*t| {
+                _ = &t;
+                _ = (t.*).recordSince(last_file.slice(), last_started);
+            }
     }
 };
 
@@ -360,6 +372,18 @@ pub const JunitPropertiesList = struct {
     commit: []const u8,
 };
 
+pub const JunitFailure = struct {
+    name: std.ArrayListUnmanaged(u8) = .{},
+    message: std.ArrayListUnmanaged(u8) = .{},
+    body: std.ArrayListUnmanaged(u8) = .{},
+
+pub fn deinit(self: *JunitFailure, allocator: std.mem.Allocator) void {
+            _ = self.name.deinit(allocator);
+            _ = self.message.deinit(allocator);
+            _ = self.body.deinit(allocator);
+    }
+};
+
 pub const JunitReporter = struct {
     contents: std.ArrayListUnmanaged(u8) = .{},
     total_metrics: Metrics = .{},
@@ -370,6 +394,7 @@ pub const JunitReporter = struct {
     properties_list_to_repeat_in_every_test_suite: ?[]const u8 = null,
     suite_stack: std.ArrayListUnmanaged(SuiteInfo) = .{},
     current_depth: u32 = 0,
+    last_failure: ?JunitFailure = null,
     hostname_value: ?[]const u8 = null,
 
 pub fn getHostname(self: *JunitReporter) ?[]const u8 {
@@ -421,6 +446,130 @@ pub fn deinit(self: *JunitReporter) void {
                     _ = bun.default_allocator.free(properties);
                 }
             }
+            if (self.last_failure) |*f| {
+                _ = &f;
+                _ = (f.*).deinit(bun.default_allocator);
+                self.last_failure = null;
+            }
+    }
+
+pub fn clearLastFailure(self: *JunitReporter) void {
+            if (self.last_failure) |*f| {
+                _ = &f;
+                _ = (f.*).deinit(bun.default_allocator);
+                self.last_failure = null;
+            }
+    }
+
+pub fn recordFailure(self: *JunitReporter, exception: *jsc.ZigException) void {
+            const allocator = bun.default_allocator;
+            if ((self.last_failure == null)) {
+                self.last_failure = JunitFailure{  };
+            }
+            const failure = (&self.last_failure.?);
+            const name_utf8 = (if (@typeInfo(@TypeOf(exception)) == .@"enum" or @typeInfo(@TypeOf(exception)) == .@"union") @tagName(exception) else exception.name).toUTF8(allocator);
+            var _name_guard = DeinitGuard(@TypeOf(name_utf8)){ .val = name_utf8 };
+            _ = &_name_guard;
+            var ___name_guard_moved = false; _ = &___name_guard_moved;
+            defer if (!___name_guard_moved) { ___name_guard_moved = true; const __T = @TypeOf(_name_guard); if (@typeInfo(__T) == .optional) { if (_name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _name_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _name_guard; _drop_val.__cp_deinit(); } };
+            const raw_message = exception.message.toUTF8(allocator);
+            var _msg_guard = DeinitGuard(@TypeOf(raw_message)){ .val = raw_message };
+            _ = &_msg_guard;
+            var ___msg_guard_moved = false; _ = &___msg_guard_moved;
+            defer if (!___msg_guard_moved) { ___msg_guard_moved = true; const __T = @TypeOf(_msg_guard); if (@typeInfo(__T) == .optional) { if (_msg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _msg_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _msg_guard; _drop_val.__cp_deinit(); } };
+            var message: std.ArrayListUnmanaged(u8) = .{};
+            _ = &message;
+            var _msg_list_guard = DeinitGuard(std.ArrayListUnmanaged(u8)){ .ptr = (&message), .alloc = allocator };
+            _ = &_msg_list_guard;
+            var ___msg_list_guard_moved = false; _ = &___msg_list_guard_moved;
+            defer if (!___msg_list_guard_moved) { ___msg_list_guard_moved = true; const __T = @TypeOf(_msg_list_guard); if (@typeInfo(__T) == .optional) { if (_msg_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _msg_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _msg_list_guard; _drop_val.__cp_deinit(); } };
+            _ = bun.handleOom(pushStrippingAnsi((&message), allocator, raw_message.slice()));
+            const name_slice = name_utf8.slice();
+            const is_assertion = (strings.hasPrefixComptime(message.items, "expect(") and ((name_slice.len == 0) or strings.eqlComptime(name_slice, "Error")));
+            if ((failure.name.items.len == 0)) {
+                if (is_assertion) {
+                    _ = bun.handleOom(failure.name.appendSlice(allocator, "AssertionError"));
+                } else {
+                    _ = bun.handleOom(failure.name.appendSlice(allocator, name_slice));
+                }
+            }
+            if ((failure.message.items.len == 0)) {
+                _ = bun.handleOom(failure.message.appendSlice(allocator, message.items));
+            }
+            const body = (&failure.body);
+            if ((body.items.len > 0)) {
+                _ = bun.handleOom(body.append(allocator, 10));
+            }
+            const header: []const u8 = (if (is_assertion) "AssertionError" else name_slice);
+            if (((header.len == 0) and (message.items.len == 0))) {
+                _ = bun.handleOom(body.appendSlice(allocator, "error"));
+            } else {
+                if ((header.len == 0)) {
+                    _ = bun.handleOom(body.appendSlice(allocator, message.items));
+                } else {
+                    if ((message.items.len == 0)) {
+                        _ = bun.handleOom(body.appendSlice(allocator, header));
+                    } else {
+                        _ = bun.handleOom(body.appendSlice(allocator, header));
+                        _ = bun.handleOom(body.appendSlice(allocator, ": "));
+                        _ = bun.handleOom(body.appendSlice(allocator, message.items));
+                    }
+                }
+            }
+            _ = bun.handleOom(body.append(allocator, 10));
+            const dir = bun.fs.FileSystem.instance.top_level_dir;
+            const body_writer = body.writer(allocator);
+            for (cp_iter_slice(exception.stack.frames())) |frame| {
+                _ = &frame;
+                const source_url = frame.source_url.toUTF8(allocator);
+                var _src_guard = DeinitGuard(@TypeOf(source_url)){ .val = source_url };
+                _ = &_src_guard;
+                var ___src_guard_moved = false; _ = &___src_guard_moved;
+                defer if (!___src_guard_moved) { ___src_guard_moved = true; const __T = @TypeOf(_src_guard); if (@typeInfo(__T) == .optional) { if (_src_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_guard; _drop_val.__cp_deinit(); } };
+                const file = bun.path.relative(dir, source_url.slice());
+                const func = frame.function_name.toUTF8(allocator);
+                var _func_guard = DeinitGuard(@TypeOf(func)){ .val = func };
+                _ = &_func_guard;
+                var ___func_guard_moved = false; _ = &___func_guard_moved;
+                defer if (!___func_guard_moved) { ___func_guard_moved = true; const __T = @TypeOf(_func_guard); if (@typeInfo(__T) == .optional) { if (_func_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _func_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _func_guard; _drop_val.__cp_deinit(); } };
+                if (((file.len == 0) and (func.slice().len == 0))) {
+                    continue;
+                }
+                _ = bun.handleOom(body.appendSlice(allocator, "      at "));
+                if ((func.slice().len > 0)) {
+                    _ = bun.handleOom(body_writer.print("{f} (", .{ frame.nameFormatter(false) }));
+                }
+                const file_start = body.items.len;
+                _ = bun.handleOom(body.appendSlice(allocator, file));
+                if (comptime Environment.isWindows) {
+                    for (cp_mut_slice(&body.items[file_start..])) |*b| {
+                        _ = &b;
+                        if (((b.*) == 92)) {
+                            (b.*) = 47;
+                        }
+                    }
+                }
+                const pos = frame.position;
+                if ((pos.line.isValid() and pos.column.isValid())) {
+                    _ = bun.handleOom(body_writer.print(":{d}:{d}", .{ pos.line.oneBased(), pos.column.oneBased() }));
+                } else {
+                    if (pos.line.isValid()) {
+                        _ = bun.handleOom(body_writer.print(":{d}", .{ pos.line.oneBased() }));
+                    }
+                }
+                if ((func.slice().len > 0)) {
+                    _ = bun.handleOom(body.append(allocator, 41));
+                }
+                _ = bun.handleOom(body.append(allocator, 10));
+            }
+    }
+
+pub fn recordFailureCb(ctx: ?*anyopaque, exception: *jsc.ZigException) void {
+            const reporter: *JunitReporter = (blk: {
+            break :blk @ptrCast(@alignCast(ctx.?));
+
+});
+            _ = reporter.recordFailure(exception);
     }
 
 pub fn generatePropertiesList(self: *JunitReporter) !void {
@@ -629,7 +778,39 @@ if ((self.suite_stack.items.len > 0)) {
             }
             _ = try self.contents.appendSlice(bun.default_allocator, ">\n");
             _ = try self.contents.appendSlice(bun.default_allocator, indent);
-            _ = try self.contents.appendSlice(bun.default_allocator, "  <failure type=\"AssertionError\" />\n");
+            var type_name: []const u8 = "Error";
+            _ = &type_name;
+            if (self.last_failure) |f| {
+                _ = &f;
+                if ((f.name.items.len > 0)) {
+                    type_name = f.name.items;
+                }
+            }
+            _ = try self.contents.appendSlice(bun.default_allocator, "  <failure type=\"");
+            _ = try escapeXml(type_name, self.contents.writer(bun.default_allocator));
+            _ = try self.contents.appendSlice(bun.default_allocator, "\"");
+            if (self.last_failure) |f| {
+                _ = &f;
+                if ((f.message.items.len > 0)) {
+                    _ = try self.contents.appendSlice(bun.default_allocator, " message=\"");
+                    _ = try escapeXml(f.message.items, self.contents.writer(bun.default_allocator));
+                    _ = try self.contents.appendSlice(bun.default_allocator, "\"");
+                }
+            }
+            var has_body = false;
+            _ = &has_body;
+            if (self.last_failure) |f| {
+                _ = &f;
+                if ((f.body.items.len > 0)) {
+                    has_body = true;
+                    _ = try self.contents.appendSlice(bun.default_allocator, ">");
+                    _ = try escapeXml(f.body.items, self.contents.writer(bun.default_allocator));
+                    _ = try self.contents.appendSlice(bun.default_allocator, "</failure>\n");
+                }
+            }
+            if ((!has_body)) {
+                _ = try self.contents.appendSlice(bun.default_allocator, " />\n");
+            }
             _ = try self.contents.appendSlice(bun.default_allocator, indent);
             _ = try self.contents.appendSlice(bun.default_allocator, "</testcase>\n");
 },
@@ -699,7 +880,7 @@ if ((self.suite_stack.items.len > 0)) {
             }
             _ = try self.contents.appendSlice(bun.default_allocator, ">\n");
             _ = try self.contents.appendSlice(bun.default_allocator, indent);
-            _ = try self.contents.appendSlice(bun.default_allocator, "  <failure type=\"TimeoutError\" />\n");
+            _ = try self.contents.appendSlice(bun.default_allocator, "  <failure type=\"TimeoutError\" message=\"test timed out\" />\n");
             _ = try self.contents.appendSlice(bun.default_allocator, indent);
             _ = try self.contents.appendSlice(bun.default_allocator, "</testcase>\n");
 },
@@ -707,6 +888,7 @@ if ((self.suite_stack.items.len > 0)) {
 _ = unreachable;
 },
 }
+            _ = self.clearLastFailure();
     }
 
 pub fn writeToFile(self: *JunitReporter, path: []const u8) !void {
@@ -772,6 +954,7 @@ pub const CommandLineReporter = struct {
     skips_to_repeat_buf: std.ArrayListUnmanaged(u8) = .{},
     todos_to_repeat_buf: std.ArrayListUnmanaged(u8) = .{},
     reporters: CommandLineReporters = .{},
+    timings: ?Timings = null,
 
 pub fn handleUpdateCount(self: *CommandLineReporter, _: *TestRunner.Callback, _: u32, _: u32) void {
         _ = self;
@@ -1049,9 +1232,9 @@ pub fn maybePrintJunitLine(comptime status: bun_test.Execution.Result, buntest: 
                                     _ = &name;
                                     if ((name.len > 0)) {
                                         if ((initial_length != concatenated_describe_scopes.items.len)) {
-                                            _ = bun.handleOom(concatenated_describe_scopes.appendSlice(" &gt; "));
+                                            _ = bun.handleOom(concatenated_describe_scopes.appendSlice(" > "));
                                         }
-                                        _ = bun.handleOom(escapeXml(name, concatenated_describe_scopes.writer()));
+                                        _ = bun.handleOom(concatenated_describe_scopes.appendSlice(name));
                                     }
                                 }
                             }
@@ -1212,6 +1395,15 @@ pub fn writeJUnitReportIfNeeded(self: *CommandLineReporter) void {
                     }
                     _ = (blk_catch_36: { break :blk_catch_36 ((junit.writeToFile(outfile)) catch |__ce_36| { _ = &__ce_36;  }); });
                 }
+            }
+    }
+
+pub fn writeTimingsIfNeeded(self: *CommandLineReporter, only_measured: bool) void {
+            if (self.timings) |*t| {
+                _ = &t;
+                _ = (t.*).write(only_measured);
+                _ = (t.*).deinit();
+                self.timings = null;
             }
     }
 
@@ -1571,6 +1763,7 @@ pub fn exec(ctx: Command.Context) !void {
             reporter.repeat_count = @max(ctx.test_options.repeat_count, 1);
             jest.Jest.runner = (&reporter.jest);
             reporter.jest.test_options = (&ctx.test_options);
+            reporter.timings = (if ((ctx.test_options.test_worker or (ctx.test_options.timings_files.len == 0))) null else Timings.load(ctx.test_options.timings_files));
             if (ctx.test_options.reporters.junit) {
                 reporter.reporters.junit = JunitReporter.init();
             }
@@ -1648,7 +1841,7 @@ pub fn exec(ctx: Command.Context) !void {
                 const file_or_dirnames = ctx.positionals[1..];
                 for (cp_iter_slice(file_or_dirnames)) |arg| {
                     _ = &arg;
-                    _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_14: { const __disc_14 = e; _ = &__disc_14; if ((!cp_has_ok_val(__disc_14) and !cp_is_null_val(__disc_14))) { const __err_v_14 = cp_unwrap_err_val(__disc_14); _ = &__err_v_14; if (cp_match_tag(__err_v_14, .OutOfMemory)) {  break :__sw_blk_14 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_14) and !cp_is_null_val(__disc_14))) { const __err_v_14 = cp_unwrap_err_val(__disc_14); _ = &__err_v_14; if (cp_match_tag(__err_v_14, .DoesNotExist)) {  break :__sw_blk_14 cp_val((if ((file_or_dirnames.len == 1)) blk: {
+                    _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  break :__sw_blk_16 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .DoesNotExist)) {  break :__sw_blk_16 cp_val((if ((file_or_dirnames.len == 1)) blk: {
                     if (Output.isAIAgent()) {
                         _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                     } else {
@@ -1669,8 +1862,8 @@ pub fn exec(ctx: Command.Context) !void {
                 {
                     var ni: i32 = 0;
                     _ = &ni;
-                    const __end_15 = filter_names.len;
-                    while (ni < __end_15) : (ni += 1) {
+                    const __end_17 = filter_names.len;
+                    while (ni < __end_17) : (ni += 1) {
                         const to_normalize = try ctx.allocator.dupe(u8, filter_names[@as(usize, @intCast(ni))]);
                         _ = bun.path.posixToPlatformInPlace(u8, to_normalize);
                         normalized[cp_cast_int(usize, ni)] = to_normalize;
@@ -1689,14 +1882,14 @@ pub fn exec(ctx: Command.Context) !void {
                 }
                 break :brk scanner.fs.top_level_dir;
 };
-                _ = (blk_catch_60: { break :blk_catch_60 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_60 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  break :__sw_blk_16 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .DoesNotExist)) {  if (Output.isAIAgent()) {
+                _ = (blk_catch_60: { break :blk_catch_60 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_60 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  break :__sw_blk_18 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .DoesNotExist)) {  if (Output.isAIAgent()) {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                 } else {
                     _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f}", .{ bun.fmt.quote(dir_to_scan) });
                 }
                 vm.exit_handler.exit_code = 1;
                 vm.is_shutting_down = true;
-                break :__sw_blk_16 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
+                break :__sw_blk_18 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
             }
             const all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
             var _guard_test_files = FreeGuard(@TypeOf(all_test_files)){ .allocator = ctx.allocator, .slice = all_test_files };
@@ -1739,17 +1932,25 @@ pub fn exec(ctx: Command.Context) !void {
             if (ctx.test_options.shard) |shard| {
                 _ = &shard;
                 if ((test_files.len > 0)) {
-                    const empty_sort_ctx: void = undefined;
-                    _ = std.sort.pdq(PathString, test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
                     var write: usize = 0;
                     _ = &write;
-                    var i: usize = 0;
-                    _ = &i;
-                    while ((i < test_files.len)) : (i = (i + 1)) {
-                        const file = test_files[@as(usize, @intCast(i))];
-                        if (((@as(u32, @intCast(i)) % shard.count) == (shard.index - 1))) {
-                            test_files[cp_cast_int(usize, write)] = file;
-                            write = (write + 1);
+                    if (reporter.timings) |*t| {
+                        _ = &t;
+                        if ((!(t.*).isEmpty())) {
+                            write = (t.*).selectShard(test_files, shard);
+                        }
+                    }
+                    if (((write == 0) and ((reporter.timings == null) or reporter.timings.?.isEmpty()))) {
+                        const empty_sort_ctx: void = undefined;
+                        _ = std.sort.pdq(PathString, test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
+                        var i: usize = 0;
+                        _ = &i;
+                        while ((i < test_files.len)) : (i = (i + 1)) {
+                            const file = test_files[@as(usize, @intCast(i))];
+                            if (((@as(u32, @intCast(i)) % shard.count) == (shard.index - 1))) {
+                                test_files[cp_cast_int(usize, write)] = file;
+                                write = (write + 1);
+                            }
                         }
                     }
                     _ = Output.prettyError("<r><d>--shard={d}/{d}:<r> running {d}/{d} test file{s}\n", .{ shard.index, shard.count, write, test_files.len, (if ((test_files.len == 1)) "" else "s") });
@@ -1980,6 +2181,9 @@ else => {
             _ = Output.prettyError("\n", .{});
             _ = Output.flush();
             _ = reporter.writeJUnitReportIfNeeded();
+            if ((ctx.test_options.update_timings and ((test_files.len > 0) or (ctx.test_options.shard != null)))) {
+                _ = reporter.writeTimingsIfNeeded((ctx.test_options.shard != null));
+            }
             if ((vm.hot_reload == .watch)) {
                 _ = vm.runWithAPILock(jsc.VirtualMachine, vm, runEventLoopForWatch);
             }
@@ -2074,6 +2278,9 @@ _ = vm.unhandledRejection(vm.global, promise.result(vm.global.vm()), promise.toJ
                     _ = reporter.printSummary();
                     _ = Output.prettyError("\nBailed out after {d} failure{s}<r>\n", .{ reporter.jest.bail, (if ((reporter.jest.bail == 1)) "" else "s") });
                     _ = reporter.writeJUnitReportIfNeeded();
+                    if (reporter.jest.test_options.update_timings) {
+                        _ = reporter.writeTimingsIfNeeded((reporter.jest.test_options.shard != null));
+                    }
                     vm.exit_handler.exit_code = 1;
                     vm.is_shutting_down = true;
                     _ = vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
@@ -2187,8 +2394,18 @@ else => unreachable,
             _ = try writer.writeAll(escaped);
             last = (i + 1);
 },
+9, 10, 13 => {
+if ((i > last)) {
+                _ = try writer.writeAll(str[last..i]);
+            }
+            _ = try writer.print("&#{d};", .{ c });
+            last = (i + 1);
+},
 0...31 => {
-_ = try writer.print("&#{d};", .{ c });
+if ((i > last)) {
+                _ = try writer.writeAll(str[last..i]);
+            }
+            last = (i + 1);
 },
 else => {
 
@@ -2225,6 +2442,25 @@ inline else => |enable_ansi_colors_stderr| {
 _ = ((writer.print((comptime fmtStatusTextLine(status, enable_ansi_colors_stderr)), .{})) catch unreachable);
 },
 }
+}
+
+pub fn pushStrippingAnsi(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, input: []const u8) !void {
+        var i: usize = 0;
+        _ = &i;
+        while ((i < input.len)) {
+            if ((((input[@as(usize, @intCast(i))] == 27) and ((i + 1) < input.len)) and (input[@as(usize, @intCast((i + 1)))] == 91))) {
+                i = (i + 2);
+                while (((i < input.len) and (!((input[@as(usize, @intCast(i))] >= 64) and (input[@as(usize, @intCast(i))] <= 126))))) {
+                    i = (i + 1);
+                }
+                if ((i < input.len)) {
+                    i = (i + 1);
+                }
+                continue;
+            }
+            _ = try out.append(allocator, input[@as(usize, @intCast(i))]);
+            i = (i + 1);
+        }
 }
 
 pub export fn BunTest__shouldGenerateCodeCoverage(test_name_str: bun.String) callconv(.c) bool {

@@ -588,6 +588,8 @@ onUnhandledRejection: OnUnhandledRejection = defaultOnUnhandledRejection,
 onUnhandledRejectionCtx: ?*anyopaque = null,
 onUnhandledRejectionExceptionList: ?*ExceptionList = null,
 unhandled_error_counter: usize = 0,
+on_print_error_zig_exception: ?OnPrintErrorZigException = null,
+on_print_error_zig_exception_ctx: ?*anyopaque = null,
 is_handling_uncaught_exception: bool = false,
 exit_on_uncaught_exception: bool = false,
 modules: ModuleLoader.AsyncModule.Queue = .{},
@@ -888,6 +890,7 @@ pub var synthetic_allocation_limit: usize = std.math.maxInt(u32);
 pub var string_allocation_limit: usize = std.math.maxInt(u32);
 pub const OnUnhandledRejection = *const fn (*VirtualMachine, *JSGlobalObject, JSValue) void;
 pub const OnException = *const fn (*ZigException) void;
+pub const OnPrintErrorZigException = *const fn(ctx: ?*anyopaque, exception: *ZigException) void;
 pub threadlocal var is_bundler_thread_for_bytecode_cache: bool = false;
 pub threadlocal var is_main_thread_vm: bool = false;
 pub const MacroMap = std.AutoArrayHashMap(i32, jsc.C.JSObjectRef);
@@ -2042,6 +2045,9 @@ pub fn fetchWithoutOnLoadPlugins(jsc_vm: *VirtualMachine, globalObject: *JSGloba
 pub fn normalizeSpecifierForResolution(specifier_: []const u8, query_string: *[]const u8) []const u8 {
         var specifier = specifier_;
         _ = &specifier;
+        if (strings.hasPrefixComptime(specifier, "data:")) {
+            return specifier;
+        }
         if (strings.indexOfChar(specifier, 63)) |i| {
             _ = &i;
             query_string.* = specifier[i..];
@@ -3272,10 +3278,10 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
             _ = &frame_i;
             while ((frame_i < frames.len)) : (frame_i = (frame_i + 1)) {
                 const frame = (&frames[@as(usize, @intCast(frame_i))]);
-                if (((blk: {
+                if ((((blk: {
                 break :blk (@intFromPtr(frame) == @intFromPtr(top));
 
-}) or frame.position.isInvalid())) {
+}) or frame.remapped) or frame.position.isInvalid())) {
                     continue;
                 }
                 const source_url = frame.source_url.toUTF8(bun.default_allocator);
@@ -3350,6 +3356,10 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
             if (client.debugger) |*debugger| {
                 _ = &debugger;
                 _ = (debugger.*).lifecycle_reporter_agent.reportError(exception);
+            }
+            if (client.on_print_error_zig_exception) |cb| {
+                _ = &cb;
+                _ = cb(client.on_print_error_zig_exception_ctx, exception);
             }
         }
         var _gh_guard = GithubAnnotationGuard{ .exception = exception, .active = (allow_side_effects and Output.is_github_action) };

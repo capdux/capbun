@@ -510,6 +510,10 @@ pub struct Printer {
         return _.writeIndent();
     }
 
+    fn writeScratchbuf(*_, start: usize, end: usize): PrintErr!void {
+        return _.writeStr(_.scratchbuf.items[start..end]);
+    }
+
     /// Writes a delimiter character, followed by whitespace (depending on the `minify` option).
     /// If `ws_before` is true, then whitespace is also written before the delimiter.
     fn delim(*_, delim_: u8, ws_before: bool): PrintErr!void {

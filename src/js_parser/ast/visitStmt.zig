@@ -764,7 +764,7 @@ pub fn s_expr(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.SExpr) !vo
             defer {
             p.stmt_expr_value = .{ .e_missing = .{} };
             }
-            const is_top_level = (p.current_scope == p.module_scope);
+            const is_top_level = ((p.current_scope == p.module_scope) and (!p.is_inside_single_stmt_body));
             if (p.shouldUnwrapCommonJSToESM()) {
                 p.commonjs_named_exports_needs_conversion = (if (is_top_level) std.math.maxInt(u32) else p.commonjs_named_exports_needs_conversion);
             }

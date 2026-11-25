@@ -12,7 +12,6 @@ import {
   tempDirWithFiles,
   tmpdirSync,
 } from "harness";
-import { isAscii } from "node:buffer";
 import fs, {
   closeSync,
   constants,
@@ -474,6 +473,52 @@ it("writeFileSync NOT in append SHOULD truncate the file", () => {
   }
 });
 
+// On Windows `fs.writeFileSync(path, ...)` opens via bun_sys::openat
+// (NtCreateFile), so this exercises the O_CREAT/O_EXCL/O_TRUNC -> create
+// disposition mapping in openat_windows_impl directly. On POSIX it is the
+// plain openat(2) flag behavior. Every row matches Node.
+describe("writeFileSync numeric open-flag matrix", () => {
+  const { O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_TRUNC, O_APPEND } = constants;
+
+  type Outcome = "ZZ23456789" | "ZZ" | "0123456789ZZ" | "ENOENT" | "EEXIST";
+  const cases: [number, string, { exists: Outcome; missing: Outcome }][] = [
+    // access | disposition flags ...           label                          over existing   over missing
+    [O_WRONLY, "WRONLY", { exists: "ZZ23456789", missing: "ENOENT" }],
+    [O_WRONLY | O_CREAT, "WRONLY|CREAT", { exists: "ZZ23456789", missing: "ZZ" }],
+    [O_WRONLY | O_TRUNC, "WRONLY|TRUNC", { exists: "ZZ", missing: "ENOENT" }],
+    [O_WRONLY | O_CREAT | O_TRUNC, "WRONLY|CREAT|TRUNC", { exists: "ZZ", missing: "ZZ" }],
+    [O_WRONLY | O_CREAT | O_EXCL, "WRONLY|CREAT|EXCL", { exists: "EEXIST", missing: "ZZ" }],
+    [O_WRONLY | O_CREAT | O_EXCL | O_TRUNC, "WRONLY|CREAT|EXCL|TRUNC", { exists: "EEXIST", missing: "ZZ" }],
+    [O_RDWR, "RDWR", { exists: "ZZ23456789", missing: "ENOENT" }],
+    [O_RDWR | O_CREAT, "RDWR|CREAT", { exists: "ZZ23456789", missing: "ZZ" }],
+    [O_RDWR | O_TRUNC, "RDWR|TRUNC", { exists: "ZZ", missing: "ENOENT" }],
+    [O_RDWR | O_CREAT | O_TRUNC, "RDWR|CREAT|TRUNC", { exists: "ZZ", missing: "ZZ" }],
+    [O_RDWR | O_CREAT | O_EXCL, "RDWR|CREAT|EXCL", { exists: "EEXIST", missing: "ZZ" }],
+    [O_RDWR | O_CREAT | O_EXCL | O_TRUNC, "RDWR|CREAT|EXCL|TRUNC", { exists: "EEXIST", missing: "ZZ" }],
+    [O_WRONLY | O_APPEND, "WRONLY|APPEND", { exists: "0123456789ZZ", missing: "ENOENT" }],
+    [O_WRONLY | O_CREAT | O_APPEND, "WRONLY|CREAT|APPEND", { exists: "0123456789ZZ", missing: "ZZ" }],
+    [O_WRONLY | O_APPEND | O_TRUNC, "WRONLY|APPEND|TRUNC", { exists: "ZZ", missing: "ENOENT" }],
+    [O_WRONLY | O_CREAT | O_APPEND | O_TRUNC, "WRONLY|CREAT|APPEND|TRUNC", { exists: "ZZ", missing: "ZZ" }],
+  ];
+
+  function probe(flag: number, seeded: boolean): string {
+    using dir = tempDir("wf-flag-matrix", seeded ? { "f.txt": "0123456789" } : {});
+    const p = join(String(dir), "f.txt");
+    try {
+      writeFileSync(p, "ZZ", { flag });
+      return readFileSync(p, "utf8");
+    } catch (e: any) {
+      return e.code;
+    }
+  }
+
+  for (const [flag, name, expected] of cases) {
+    it(`${name} (O_${name.replace(/\|/g, " | O_")})`, () => {
+      expect({ exists: probe(flag, true), missing: probe(flag, false) }).toEqual(expected);
+    });
+  }
+});
+
 describe("copyFileSync", () => {
   it("should work for files < 128 KB", () => {
     const tempdir = tmpdirTestMkdir();
@@ -874,6 +919,51 @@ describe("promises.readFile", async () => {
       "out": "asci",
     },
     {
+      "encoding": "base64",
+      "text": "utf16 🍇 🍈 🍉 🍊 🍋",
+      "correct": {
+        "type": "Buffer",
+        "data": [186, 215, 245, 232, 97, 200, 36],
+      },
+      "out": "utf16GHIJA==",
+    },
+    {
+      "encoding": "base64",
+      "text": "👍",
+      "correct": {
+        "type": "Buffer",
+        "data": [],
+      },
+      "out": "",
+    },
+    {
+      "encoding": "base64url",
+      "text": "ascii",
+      "correct": {
+        "type": "Buffer",
+        "data": [106, 199, 34],
+      },
+      "out": "asci",
+    },
+    {
+      "encoding": "base64url",
+      "text": "utf16 🍇 🍈 🍉 🍊 🍋",
+      "correct": {
+        "type": "Buffer",
+        "data": [186, 215, 245, 232, 97, 200, 36],
+      },
+      "out": "utf16GHIJA",
+    },
+    {
+      "encoding": "base64url",
+      "text": "👍",
+      "correct": {
+        "type": "Buffer",
+        "data": [],
+      },
+      "out": "",
+    },
+    {
       "encoding": "hex",
       "text": "ascii",
       "correct": {
@@ -904,19 +994,8 @@ describe("promises.readFile", async () => {
 
   it("& fs.promises.writefile encodes & decodes", async () => {
     const results = [];
-    for (let encoding of [
-      "utf8",
-      "utf-8",
-      "utf16le",
-      "latin1",
-      "binary",
-      "base64",
-      /* TODO: "base64url", */ "hex",
-    ] as const) {
+    for (let encoding of ["utf8", "utf-8", "utf16le", "latin1", "binary", "base64", "base64url", "hex"] as const) {
       for (let text of ["ascii", "utf16 🍇 🍈 🍉 🍊 🍋", "👍"]) {
-        if (encoding === "base64" && !isAscii(Buffer.from(text)))
-          // TODO: output does not match Node.js, and it's not a problem with readFile specifically.
-          continue;
         const correct = Buffer.from(text, encoding);
         const outfile = join(
           tmpdir(),

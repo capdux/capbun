@@ -1,5 +1,10 @@
 import WorkPoolMod from "../threading/work_pool.zig";
 import BufferMod from "../runtime/node/buffer.zig";
+import libc_check from "./libc_check.zig";
+
+comptime {
+    * = libc_check;
+}
 
 type OpaquePtr = *!?;
 type NullableU8MultiPtr = ([*]u8)?;

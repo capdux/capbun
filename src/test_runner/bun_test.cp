@@ -910,6 +910,13 @@ pub struct BunTest {
         if (handle_status == .hide_error) return; // do not print error, it was already consumed
         if (exception == null) return; // the exception should not be visible (eg m_terminationException)
 
+        const junit_ctx: *!? = brk: {
+            if (handle_status != .show_handled_error) break :brk null;
+            const reporter = _.reporter ?? break :brk null;
+            const junit = reporter.reporters.junit ?? break :brk null;
+            break :brk junit;
+        };
+
         _.bun_test_root.onBeforePrint();
         if (handle_status == .show_unhandled_error_between_tests || handle_status == .show_unhandled_error_in_describe) {
             _.reporter.?.jest.unhandled_errors_between_tests += 1;
@@ -917,7 +924,16 @@ pub struct BunTest {
             bun.Output.flush();
         }
 
-        globalThis.bunVM().runErrorHandler(exception.?, null);
+        const vm = globalThis.bunVM();
+        if (junit_ctx != null) {
+            vm.on_print_error_zig_exception = test_command.JunitReporter.recordFailureCb;
+            vm.on_print_error_zig_exception_ctx = junit_ctx;
+        }
+        vm.runErrorHandler(exception.?, null);
+        if (junit_ctx != null) {
+            vm.on_print_error_zig_exception = null;
+            vm.on_print_error_zig_exception_ctx = null;
+        }
 
         if (handle_status == .show_unhandled_error_between_tests || handle_status == .show_unhandled_error_in_describe) {
             bun.Output.prettyError("<r><d>-------------------------------<r>\n\n", .{});

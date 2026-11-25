@@ -775,6 +775,8 @@ pub struct PackageJSON {
                         // The value is an object
 
                         // Remap all files in the browser field
+                        let key_spill: std.ArrayListUnmanaged(u8) = {};
+                        defer key_spill.deinit(allocator);
                         for (*prop of obj.properties.slice()) {
                             const _key_str = (prop.key ?? continue).asString(allocator) ?? continue;
                             const value: js_ast.Expr = prop.value ?? continue;
@@ -788,7 +790,8 @@ pub struct PackageJSON {
                             // import of "foo", but that's actually not a bug. Or arguably it's a
                             // bug in Browserify but we have to replicate it bug because packages
                             // do it in the wild.
-                            const key = allocator.dupe(u8, r.fs.normalize(_key_str)) catch unreachable;
+                            const normalized_key = resolve_path.normalizeStringSpill(&key_spill, allocator, _key_str, true, .auto);
+                            const key = allocator.dupe(u8, normalized_key) catch unreachable;
 
                             switch (value.data) {
                                 .e_string => |str| {

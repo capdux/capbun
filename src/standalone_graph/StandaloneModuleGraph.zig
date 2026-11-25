@@ -906,7 +906,7 @@ else => .none,
 pub fn inject(bytes: []const u8, self_exe: [:0]const u8, inject_options: InjectOptions, target: *const CompileTarget) bun.FD {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const ts_u64: u64 = @bitCast(std.time.milliTimestamp());
+            const ts_u64: u64 = bun.fastRandom();
             var zname: [:0]const u8 = (blk_catch_0: { break :blk_catch_0 ((bun.fs.FileSystem.tmpname("bun-build", (&buf), ts_u64)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r><d>:<r> failed to get temporary file name: {s}", .{ @errorName(e) });
             return bun.invalid_fd; }); });
             _ = &zname;
@@ -1088,7 +1088,12 @@ var input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, b
             _ = &_guard_pe;
             var ___guard_pe_moved = false; _ = &___guard_pe_moved;
             defer if (!___guard_pe_moved) { ___guard_pe_moved = true; const __T = @TypeOf(_guard_pe); if (@typeInfo(__T) == .optional) { if (_guard_pe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pe; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_10: { break :blk_catch_10 ((pe_file.addBunSection(bytes, .strip_always)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error adding Bun section to PE file: {}", .{ e });
+            if (inject_options.hide_console) {
+                _ = (blk_catch_10: { break :blk_catch_10 ((pe_file.setSubsystem(bun.pe.IMAGE_SUBSYSTEM_WINDOWS_GUI)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error setting PE subsystem: {}", .{ e });
+                _ = cleanupTempFile(zname, cloned_executable_fd);
+                return bun.invalid_fd; }); });
+            }
+            _ = (blk_catch_11: { break :blk_catch_11 ((pe_file.addBunSection(bytes, .strip_always)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error adding Bun section to PE file: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
             switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
@@ -1104,9 +1109,19 @@ else => {
             var file = bun.sys.File{ .handle = cloned_executable_fd };
             _ = &file;
             const writer = file.writer();
-            _ = (blk_catch_11: { break :blk_catch_11 ((pe_file.write(writer)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing PE file: {}", .{ e });
+            _ = (blk_catch_12: { break :blk_catch_12 ((pe_file.write(writer)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing PE file: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
+            switch (Syscall.ftruncate(cloned_executable_fd, (if (comptime @typeInfo(@TypeOf(pe_file.len())) == .@"enum") cp_cast_int(i64, @intFromEnum(pe_file.len())) else cp_cast_int(i64, pe_file.len())))) {
+.err => |e| {
+_ = Output.prettyErrorln("Error truncating PE file: {f}", .{ e });
+            _ = cleanupTempFile(zname, cloned_executable_fd);
+            return bun.invalid_fd;
+},
+.result => {
+
+},
+}
             if (comptime (!Environment.isWindows)) {
                 _ = bun.c.fchmod(cloned_executable_fd.native(), 511);
             }
@@ -1125,7 +1140,7 @@ var input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, b
             _ = &_guard_input;
             var ___guard_input_moved = false; _ = &___guard_input_moved;
             defer if (!___guard_input_moved) { ___guard_input_moved = true; const __T = @TypeOf(_guard_input); if (@typeInfo(__T) == .optional) { if (_guard_input) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_input.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_input; _drop_val.__cp_deinit(); } };
-            var elf_file = (blk_catch_12: { break :blk_catch_12 ((bun.elf.ElfFile.init(bun.default_allocator, input_result.bytes.items)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error initializing ELF file: {}", .{ e });
+            var elf_file = (blk_catch_13: { break :blk_catch_13 ((bun.elf.ElfFile.init(bun.default_allocator, input_result.bytes.items)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error initializing ELF file: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
             _ = &elf_file;
@@ -1134,7 +1149,7 @@ var input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, b
             var ___guard_elf_moved = false; _ = &___guard_elf_moved;
             defer if (!___guard_elf_moved) { ___guard_elf_moved = true; const __T = @TypeOf(_guard_elf); if (@typeInfo(__T) == .optional) { if (_guard_elf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_elf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_elf; _drop_val.__cp_deinit(); } };
             _ = elf_file.normalizeInterpreter();
-            _ = (blk_catch_13: { break :blk_catch_13 ((elf_file.writeBunSection(bytes)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing .bun section to ELF: {}", .{ e });
+            _ = (blk_catch_14: { break :blk_catch_14 ((elf_file.writeBunSection(bytes)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing .bun section to ELF: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
             switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
@@ -1158,7 +1173,16 @@ _ = Output.prettyErrorln("Error writing ELF file: {f}", .{ e });
 
 },
 }
-            _ = Syscall.ftruncate(cloned_executable_fd, (if (comptime @typeInfo(@TypeOf(elf_file.data.items.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(elf_file.data.items.len)) else cp_cast_int(i64, elf_file.data.items.len)));
+            switch (Syscall.ftruncate(cloned_executable_fd, (if (comptime @typeInfo(@TypeOf(elf_file.data.items.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(elf_file.data.items.len)) else cp_cast_int(i64, elf_file.data.items.len)))) {
+.err => |e| {
+_ = Output.prettyErrorln("Error truncating ELF file: {f}", .{ e });
+            _ = cleanupTempFile(zname, cloned_executable_fd);
+            return bun.invalid_fd;
+},
+.result => {
+
+},
+}
             if (comptime (!Environment.isWindows)) {
                 _ = bun.c.fchmod(cloned_executable_fd.native(), 511);
             }
@@ -1168,7 +1192,7 @@ else => {
 var total_byte_count: usize = undefined;
             _ = &total_byte_count;
             if (Environment.isWindows) {
-                const end_offset = (blk_catch_14: { break :blk_catch_14 ((Syscall.setFileOffsetToEndWindows(cloned_executable_fd).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r><d>:<r> failed to seek to end of temporary file\n{}", .{ e });
+                const end_offset = (blk_catch_15: { break :blk_catch_15 ((Syscall.setFileOffsetToEndWindows(cloned_executable_fd).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r><d>:<r> failed to seek to end of temporary file\n{}", .{ e });
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd; }); });
                 total_byte_count = ((bytes.len + 8) + end_offset);
@@ -1218,17 +1242,17 @@ _ = Output.prettyErrorln("<r><red>error<r><d>:<r> failed to write to temporary f
 },
 }
             if ((Environment.isWindows and inject_options.hide_console)) {
-                _ = (blk_catch_15: { break :blk_catch_15 ((bun.windows.editWin32BinarySubsystem(.{ .handle = cloned_executable_fd }, .windows_gui)) catch |e| { _ = &e; _ = Output.err(e, "failed to disable console on executable", &.{});
+                _ = (blk_catch_16: { break :blk_catch_16 ((bun.windows.editWin32BinarySubsystem(.{ .handle = cloned_executable_fd }, .windows_gui)) catch |e| { _ = &e; _ = Output.err(e, "failed to disable console on executable", &.{});
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd; }); });
             }
             if ((Environment.isWindows and ((((((inject_options.icon != null) or (inject_options.title != null)) or (inject_options.publisher != null)) or (inject_options.version != null)) or (inject_options.description != null)) or (inject_options.copyright != null)))) {
                 var zname_buf: bun.OSPathBuffer = undefined;
                 _ = &zname_buf;
-                const zname_w = (blk_catch_16: { break :blk_catch_16 ((bun.strings.toWPathNormalized((&zname_buf), zname)) catch |e| { _ = &e; _ = Output.err(e, "failed to resolve executable path", &.{});
+                const zname_w = (blk_catch_17: { break :blk_catch_17 ((bun.strings.toWPathNormalized((&zname_buf), zname)) catch |e| { _ = &e; _ = Output.err(e, "failed to resolve executable path", &.{});
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd; }); });
-                _ = (blk_catch_17: { break :blk_catch_17 ((bun.windows.rescle.setWindowsMetadata(zname_w.ptr, inject_options.icon, inject_options.title, inject_options.publisher, inject_options.version, inject_options.description, inject_options.copyright)) catch |e| { _ = &e; _ = Output.err(e, "failed to set Windows metadata on executable", &.{});
+                _ = (blk_catch_18: { break :blk_catch_18 ((bun.windows.rescle.setWindowsMetadata(zname_w.ptr, inject_options.icon, inject_options.title, inject_options.publisher, inject_options.version, inject_options.description, inject_options.copyright)) catch |e| { _ = &e; _ = Output.err(e, "failed to set Windows metadata on executable", &.{});
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd; }); });
             }
@@ -1247,14 +1271,14 @@ pub fn download(allocator: std.mem.Allocator, target: *const CompileTarget, env:
             if (needs_download) {
                 var target_mut = target.*;
                 _ = &target_mut;
-                _ = (blk_catch_18: { break :blk_catch_18 ((target_mut.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; __sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .TargetNotFound)) {  _ = Output.errGeneric("Does this target and version of Bun exist?\n\n404 downloading {} from npm registry", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .NetworkError)) {  _ = Output.errGeneric("Failed to download cross-compilation target.\n\nNetwork error downloading {} from npm registry", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .InvalidResponse)) {  _ = Output.errGeneric("Failed to verify the integrity of the downloaded tarball.\n\nThe downloaded content for {} appears to be corrupted", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .ExtractionFailed)) {  _ = Output.errGeneric("Failed to extract the downloaded tarball.\n\nCould not extract executable for {}", .{ target.* }); break :__sw_blk_5; } } {  _ = Output.errGeneric("Failed to download {}: {s}", .{ target.*, @errorName(e) }); break :__sw_blk_5; }  }
+                _ = (blk_catch_19: { break :blk_catch_19 ((target_mut.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; __sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .TargetNotFound)) {  _ = Output.errGeneric("Does this target and version of Bun exist?\n\n404 downloading {} from npm registry", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .NetworkError)) {  _ = Output.errGeneric("Failed to download cross-compilation target.\n\nNetwork error downloading {} from npm registry", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .InvalidResponse)) {  _ = Output.errGeneric("Failed to verify the integrity of the downloaded tarball.\n\nThe downloaded content for {} appears to be corrupted", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .ExtractionFailed)) {  _ = Output.errGeneric("Failed to extract the downloaded tarball.\n\nCould not extract executable for {}", .{ target.* }); break :__sw_blk_5; } } {  _ = Output.errGeneric("Failed to download {}: {s}", .{ target.*, @errorName(e) }); break :__sw_blk_5; }  }
                 return error.DownloadFailed; }); });
             }
             return try allocator.dupeZ(u8, dest_z);
     }
 
 pub fn toExecutable(target: *const CompileTarget, allocator: std.mem.Allocator, output_files: []const bun.options.OutputFile, root_dir: std.fs.Dir, module_prefix: []const u8, outfile: []const u8, env: *bun.DotEnv.Loader, output_format: bun.options.Format, windows_options: bun.options.WindowsOptions, compile_exec_argv: []const u8, self_exe_path: ?[]const u8, flags: StandaloneFlags) !StandaloneCompileResult {
-            const bytes = (blk_catch_19: { break :blk_catch_19 ((toBytes(allocator, module_prefix, output_files, output_format, compile_exec_argv, flags)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("failed to generate module graph bytes: {s}", .{ @errorName(e) }); }); });
+            const bytes = (blk_catch_20: { break :blk_catch_20 ((toBytes(allocator, module_prefix, output_files, output_format, compile_exec_argv, flags)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("failed to generate module graph bytes: {s}", .{ @errorName(e) }); }); });
             if ((bytes.len == 0)) {
                 return StandaloneCompileResult.fail(.no_output_files);
             }
@@ -1267,7 +1291,7 @@ pub fn toExecutable(target: *const CompileTarget, allocator: std.mem.Allocator, 
             const self_exe = (if ((self_exe_path != null)) brk: {
             free_self_exe = true;
             break :brk bun.handleOom(allocator.dupeZ(u8, self_exe_path.?));
-} else (if (target.isDefault()) (blk_catch_20: { break :blk_catch_20 ((bun.selfExePath()) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("failed to get self executable path: {s}", .{ @errorName(e) }); }); }) else blk: {
+} else (if (target.isDefault()) (blk_catch_21: { break :blk_catch_21 ((bun.selfExePath()) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("failed to get self executable path: {s}", .{ @errorName(e) }); }); }) else blk: {
             var exe_path_buf: bun.PathBuffer = undefined;
             _ = &exe_path_buf;
             const version_str = bun.handleOom(std.fmt.allocPrintSentinel(allocator, "{f}", .{ target }, 0));
@@ -1279,7 +1303,7 @@ pub fn toExecutable(target: *const CompileTarget, allocator: std.mem.Allocator, 
             _ = &needs_download;
             const dest_z = target.exePath((&exe_path_buf), version_str, env, (&needs_download));
             if (needs_download) {
-                _ = (blk_catch_21: { break :blk_catch_21 ((target.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; return (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .TargetNotFound)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Target platform '{f}' is not available for download. Check if this version of Bun supports this target.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .NetworkError)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Network error downloading executable for '{f}'. Check your internet connection and proxy settings.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .InvalidResponse)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Downloaded file for '{f}' appears to be corrupted. Please try again.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .ExtractionFailed)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Failed to extract executable for '{f}'. The download may be incomplete.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .UnsupportedTarget)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Target '{f}' is not supported", .{ target })); } } {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Failed to download '{f}': {s}", .{ target, @errorName(e) })); }  unreachable; }); }); });
+                _ = (blk_catch_22: { break :blk_catch_22 ((target.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; return (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .TargetNotFound)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Target platform '{f}' is not available for download. Check if this version of Bun supports this target.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .NetworkError)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Network error downloading executable for '{f}'. Check your internet connection and proxy settings.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .InvalidResponse)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Downloaded file for '{f}' appears to be corrupted. Please try again.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .ExtractionFailed)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Failed to extract executable for '{f}'. The download may be incomplete.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .UnsupportedTarget)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Target '{f}' is not supported", .{ target })); } } {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Failed to download '{f}': {s}", .{ target, @errorName(e) })); }  unreachable; }); }); });
             }
             free_self_exe = true;
             break :blk bun.handleOom(allocator.dupeZ(u8, dest_z));
@@ -1301,10 +1325,10 @@ pub fn toExecutable(target: *const CompileTarget, allocator: std.mem.Allocator, 
             if (Environment.isWindows) {
                 var temp_buf: bun.PathBuffer = undefined;
                 _ = &temp_buf;
-                const temp_path = (blk_catch_22: { break :blk_catch_22 ((bun.getFdPath(fd, (&temp_buf))) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("Failed to get temp file path: {s}", .{ @errorName(e) }); }); });
+                const temp_path = (blk_catch_23: { break :blk_catch_23 ((bun.getFdPath(fd, (&temp_buf))) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("Failed to get temp file path: {s}", .{ @errorName(e) }); }); });
                 var cwd_buf: bun.PathBuffer = undefined;
                 _ = &cwd_buf;
-                const cwd_path = (blk_catch_23: { break :blk_catch_23 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("Failed to get current directory: {s}", .{ @errorName(e) }); }); });
+                const cwd_path = (blk_catch_24: { break :blk_catch_24 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("Failed to get current directory: {s}", .{ @errorName(e) }); }); });
                 const dest_path = (if (std.fs.path.isAbsolute(outfile)) outfile else bun.path.joinAbsString(cwd_path, (&.{ outfile }), .auto));
                 var temp_buf_w: bun.OSPathBuffer = undefined;
                 _ = &temp_buf_w;
@@ -1334,17 +1358,17 @@ pub fn toExecutable(target: *const CompileTarget, allocator: std.mem.Allocator, 
                     }
                 }
                 if (((((((windows_options.icon != null) or (windows_options.title != null)) or (windows_options.publisher != null)) or (windows_options.version != null)) or (windows_options.description != null)) or (windows_options.copyright != null))) {
-                    _ = (blk_catch_24: { break :blk_catch_24 ((bun.windows.rescle.setWindowsMetadata(dest_buf_u16[0..dest_w.len :0].ptr, windows_options.icon, windows_options.title, windows_options.publisher, windows_options.version, windows_options.description, windows_options.copyright)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("Failed to set Windows metadata: {s}", .{ @errorName(e) }); }); });
+                    _ = (blk_catch_25: { break :blk_catch_25 ((bun.windows.rescle.setWindowsMetadata(dest_buf_u16[0..dest_w.len :0].ptr, windows_options.icon, windows_options.title, windows_options.publisher, windows_options.version, windows_options.description, windows_options.copyright)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("Failed to set Windows metadata: {s}", .{ @errorName(e) }); }); });
                 }
                 return .success;
             }
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const temp_location = (blk_catch_25: { break :blk_catch_25 ((bun.getFdPath(fd, (&buf))) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("failed to get path for fd: {s}", .{ @errorName(e) }); }); });
-            const temp_posix = (blk_catch_26: { break :blk_catch_26 ((std.posix.toPosixPath(temp_location)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("path too long: {s}", .{ @errorName(e) }); }); });
+            const temp_location = (blk_catch_26: { break :blk_catch_26 ((bun.getFdPath(fd, (&buf))) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("failed to get path for fd: {s}", .{ @errorName(e) }); }); });
+            const temp_posix = (blk_catch_27: { break :blk_catch_27 ((std.posix.toPosixPath(temp_location)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("path too long: {s}", .{ @errorName(e) }); }); });
             const outfile_basename = std.fs.path.basename(outfile);
-            const outfile_posix = (blk_catch_27: { break :blk_catch_27 ((std.posix.toPosixPath(outfile_basename)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("outfile name too long: {s}", .{ @errorName(e) }); }); });
-            _ = (blk_catch_28: { break :blk_catch_28 ((bun.sys.moveFileZWithHandle(fd, bun.FD.cwd(), bun.sliceTo((&temp_posix), 0), .fromStdDir(root_dir), bun.sliceTo((&outfile_posix), 0))) catch |e| { _ = &e; _ = fd.close();
+            const outfile_posix = (blk_catch_28: { break :blk_catch_28 ((std.posix.toPosixPath(outfile_basename)) catch |e| { _ = &e; return StandaloneCompileResult.failFmt("outfile name too long: {s}", .{ @errorName(e) }); }); });
+            _ = (blk_catch_29: { break :blk_catch_29 ((bun.sys.moveFileZWithHandle(fd, bun.FD.cwd(), bun.sliceTo((&temp_posix), 0), .fromStdDir(root_dir), bun.sliceTo((&outfile_posix), 0))) catch |e| { _ = &e; _ = fd.close();
             fd = bun.invalid_fd;
             _ = Syscall.unlink((&temp_posix));
             if (((e == error.IsDir) or (e == error.EISDIR))) {
@@ -1499,7 +1523,7 @@ pub fn serializeJsonSourceMapForStandalone(header_list: *std.array_list.Managed(
             _ = &_guard_ast_store;
             var ___guard_ast_store_moved = false; _ = &___guard_ast_store_moved;
             defer if (!___guard_ast_store_moved) { ___guard_ast_store_moved = true; const __T = @TypeOf(_guard_ast_store); if (@typeInfo(__T) == .optional) { if (_guard_ast_store) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ast_store.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ast_store; _drop_val.__cp_deinit(); } };
-            var json = (blk_catch_29: { break :blk_catch_29 ((bun.json.parse((&json_src), (&log), arena_alloc, false)) catch |__ce_29| { _ = &__ce_29; return error.InvalidSourceMap; }); });
+            var json = (blk_catch_30: { break :blk_catch_30 ((bun.json.parse((&json_src), (&log), arena_alloc, false)) catch |__ce_30| { _ = &__ce_30; return error.InvalidSourceMap; }); });
             _ = &json;
             const mappings_str_opt = json.get("mappings");
             if ((mappings_str_opt == null)) {
@@ -1535,7 +1559,7 @@ return error.InvalidSourceMap;
                 return error.InvalidSourceMap;
             }
             const map_vlq: []const u8 = mappings_str.data.e_string.slice(arena_alloc);
-            const map_blob = (blk_catch_30: { break :blk_catch_30 ((SourceMap.InternalSourceMap.fromVLQ(arena_alloc, map_vlq, 0)) catch |__ce_30| { _ = &__ce_30; return error.InvalidSourceMap; }); });
+            const map_blob = (blk_catch_31: { break :blk_catch_31 ((SourceMap.InternalSourceMap.fromVLQ(arena_alloc, map_vlq, 0)) catch |__ce_31| { _ = &__ce_31; return error.InvalidSourceMap; }); });
             const map_blob_len_u32 = ((std.math.cast(u32, map_blob.len)) orelse { return error.SourceMapTooLarge; });
             _ = try out.writeInt(u32, sources_paths.items.len, .little);
             _ = try out.writeInt(u32, map_blob_len_u32, .little);

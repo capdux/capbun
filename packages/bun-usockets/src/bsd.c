@@ -635,6 +635,21 @@ LIBUS_SOCKET_DESCRIPTOR bsd_create_socket(int domain, int type, int protocol, in
     }
 
     return apple_no_sigpipe(created_fd);
+#elif defined(_WIN32)
+    /* Plain socket() returns an inheritable handle, so any child spawned with
+     * bInheritHandles=TRUE (e.g. node:child_process stdio) would duplicate it
+     * and keep listen sockets alive after the parent exits. */
+    created_fd = WSASocketW(domain, type, protocol, NULL, 0,
+                            WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+
+    if (UNLIKELY(created_fd == INVALID_SOCKET)) {
+        if (err != NULL) {
+            *err = WSAGetLastError();
+        }
+        return LIBUS_SOCKET_ERROR;
+    }
+
+    return bsd_set_nonblocking(created_fd);
 #else
     do {
         created_fd = socket(domain, type, protocol);
@@ -766,6 +781,12 @@ LIBUS_SOCKET_DESCRIPTOR bsd_accept_socket(LIBUS_SOCKET_DESCRIPTOR fd, struct bsd
 
         break;
     }
+
+#ifdef _WIN32
+    /* accept() returns an inheritable handle regardless of the listening
+     * socket's flags; keep it out of spawned children. */
+    SetHandleInformation((HANDLE) accepted_fd, HANDLE_FLAG_INHERIT, 0);
+#endif
 
     internal_finalize_bsd_addr(addr);
 
@@ -1396,17 +1417,19 @@ LIBUS_SOCKET_DESCRIPTOR bsd_create_udp_socket(const char *host, int port, int op
 
 #if defined(__linux__)
     /* Linux suppresses ICMP errors (port unreachable, host unreachable, TTL
-     * exceeded, etc.) on unconnected UDP sockets by default. Enabling
-     * IP_RECVERR/IPV6_RECVERR surfaces them as errors on the next send/recv,
-     * rather than silently dropping them. Matches libuv. */
+     * exceeded, etc.) on unconnected UDP sockets by default. Opt-in only:
+     * on a shared unconnected socket (the HTTP/3 fetch client) it also makes
+     * a queued ICMP fail the next send to a different, live peer. */
+    if (options & LIBUS_UDP_LINUX_RECVERR) {
 #ifdef IP_RECVERR
-    setsockopt(listenFd, IPPROTO_IP, IP_RECVERR, &enabled, sizeof(enabled));
+        setsockopt(listenFd, IPPROTO_IP, IP_RECVERR, &enabled, sizeof(enabled));
 #endif
 #ifdef IPV6_RECVERR
-    if (listenAddr->ai_family == AF_INET6) {
-        setsockopt(listenFd, IPPROTO_IPV6, IPV6_RECVERR, &enabled, sizeof(enabled));
-    }
+        if (listenAddr->ai_family == AF_INET6) {
+            setsockopt(listenFd, IPPROTO_IPV6, IPV6_RECVERR, &enabled, sizeof(enabled));
+        }
 #endif
+    }
 #endif
 
     /* We bind here as well */
@@ -1638,6 +1661,12 @@ LIBUS_SOCKET_DESCRIPTOR bsd_create_connect_socket(struct sockaddr_storage *addr,
 
     if (rc != 0) {
         bsd_close_socket(fd);
+#ifdef _WIN32
+        /* bsd_do_connect_raw returned the WSA error; re-arm it so the caller's
+         * WSAGetLastError() observes the connect failure rather than whatever
+         * closesocket() left behind. */
+        WSASetLastError(rc);
+#endif
         return LIBUS_SOCKET_ERROR;
     }
     return fd;
@@ -1652,8 +1681,12 @@ static LIBUS_SOCKET_DESCRIPTOR internal_bsd_create_connect_socket_unix(const cha
 
     win32_set_nonblocking(fd);
 
-    if (bsd_do_connect_raw(fd, (struct sockaddr *)server_address, addrlen) != 0) {
+    int rc = bsd_do_connect_raw(fd, (struct sockaddr *)server_address, addrlen);
+    if (rc != 0) {
         bsd_close_socket(fd);
+#ifdef _WIN32
+        WSASetLastError(rc);
+#endif
         return LIBUS_SOCKET_ERROR;
     }
 

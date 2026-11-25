@@ -100,6 +100,7 @@ const analytics = @import("bun").analytics;
 const Method = @import("../../http_types/Method.zig").Method;
 const DataURL = @import("../../resolver/data_url.zig").DataURL;
 pub const FetchTaskletMod = @import("./fetch/FetchTasklet.zig");
+pub const fetch_compress_body = @import("./fetch/compress_body.zig");
 const ServerConfig = @import("../server/ServerConfig.zig").ServerConfig;
 pub const UrlMod = @import("../../url/url.zig");
 pub const URLType = enum {
@@ -437,6 +438,8 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         _ = &disable_keepalive;
         var disable_decompression = false;
         _ = &disable_decompression;
+        var compress: ?fetch_compress_body.CompressOption = null;
+        _ = &compress;
         var verbose: http.HTTPVerboseLevel = (if (vm.log.level.atLeast(.debug)) .headers else .none);
         _ = &verbose;
         if ((verbose == .none)) {
@@ -608,6 +611,25 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                         disable_decompression = (decompression_value.to(i32) == 0);
                         break;
                     }
+                }
+            }
+            if (globalThis.hasException()) {
+                return JSValue.zero;
+            }
+        }
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
+        for (cp_iter_slice(decompress_objs)) |obj| {
+            _ = &obj;
+            if ((obj == JSValue.zero)) {
+                continue;
+            }
+            if (try obj.get(globalThis, "compress")) |compress_value| {
+                _ = &compress_value;
+                if ((!compress_value.isUndefined())) {
+                    compress = try fetch_compress_body.fromJS(globalThis, compress_value);
+                    break;
                 }
             }
             if (globalThis.hasException()) {
@@ -1226,7 +1248,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
 },
 .result => |fd| fd,
 });
-            if (((proxy == null) and bun.http.SendFile.isEligible(url))) {
+            if ((((proxy == null) and (compress == null)) and bun.http.SendFile.isEligible(url))) {
                 _ = use_sendfile: {
                 const stat: bun.Stat = (switch (bun.sys.fstat(opened_fd)) {
 .result => |result| result,
@@ -1276,6 +1298,22 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
 
 };
         }
+        if (compress) |compress_opt| {
+            _ = &compress_opt;
+            if (((body == .AnyBlob) and (!url.isS3()))) {
+                const already_has_encoding = (if (headers) |h| (h.getContentEncoding() != null) else false);
+                if (((!already_has_encoding) and (body.slice().len > 0))) {
+                    if ((headers == null)) {
+                        headers = Headers{ .allocator = allocator };
+                    }
+                    _ = (blk_catch_17: { break :blk_catch_17 ((headers.?.append("Content-Encoding", compress_opt.encoding.headerValue())) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
+                } else {
+                    compress = null;
+                }
+            } else {
+                compress = null;
+            }
+        }
         if (url.isS3()) {
             var credentialsWithOptions = s3.S3CredentialsWithOptions{ .credentials = globalThis.bunVM().transpiler.env.getS3Credentials(), .options = .{}, .acl = null, .storage_class = null };
             _ = &credentialsWithOptions;
@@ -1315,7 +1353,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if ((method == .POST)) {
                 method = .PUT;
             }
-            var result = (blk_catch_17: { break :blk_catch_17 ((credentialsWithOptions.credentials.signRequest(.{ .path = url.s3Path(), .method = method }, false, null)) catch |sign_err| { _ = &sign_err; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, s3.getJSSignError(sign_err, globalThis)); }); });
+            var result = (blk_catch_18: { break :blk_catch_18 ((credentialsWithOptions.credentials.signRequest(.{ .path = url.s3Path(), .method = method }, false, null)) catch |sign_err| { _ = &sign_err; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, s3.getJSSignError(sign_err, globalThis)); }); });
             _ = &result;
             defer {
             _ = result.deinit();
@@ -1373,7 +1411,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         }
         break :brk 0;
 };
-        _ = (blk_catch_18: { break :blk_catch_18 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = http_body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_18 bun.handleOom(e); }); });
+        _ = (blk_catch_19: { break :blk_catch_19 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = http_body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .compress = compress, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
         if (Environment.isDebug) {
             if (body.store()) |store| {
                 _ = &store;

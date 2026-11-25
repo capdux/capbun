@@ -238,7 +238,14 @@ export @root struct ClientSession {
         if (!_.preface_sent) encode.writePreface(_);
 
         _.rearmTimeout();
-        const request = client.buildRequest(client.state.original_request_body.len());
+        client.compressBodyForSend(false) catch (e) {
+            _.streams.swapRemove(stream.id);
+            stream.deinit();
+            client.h2 = null;
+            client.failFromH2(e);
+            return;
+        };
+        const request = client.buildRequest(client.bodyLenForSend());
         encode.writeRequest(_, client, stream, request) catch (e) {
             _.encoder_poisoned = true;
             _.streams.swapRemove(stream.id);

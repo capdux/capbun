@@ -396,7 +396,8 @@ pub fn AstMaybe(
                                     prop.key != null &&
                                     prop.key.?.data == .e_string &&
                                     prop.key.?.data.e_string.eql(string, name) &&
-                                    !bun.strings.eqlComptime(name, "__proto__"))
+                                    !bun.strings.eqlComptime(name, "__proto__") &&
+                                    prop.value.?.canBeInlinedFromPropertyAccess())
                                 {
                                     return prop.value.?;
                                 }

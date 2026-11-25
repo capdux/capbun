@@ -824,32 +824,28 @@ pub fn deinit(self: *ExportRenamer) void {
     }
 
 pub fn nextRenamedName(self: *ExportRenamer, input: []const u8) []const u8 {
-            var entry = ((self.used.getOrPut(input)) catch unreachable);
-            _ = &entry;
-            var tries: u32 = 1;
-            _ = &tries;
-            if (entry.found_existing) {
-                while (true) {
-                    _ = self.string_buffer.reset();
-                    var writer = self.string_buffer.writer();
-                    _ = &writer;
-                    _ = ((writer.print("{s}{d}", .{ input, tries })) catch unreachable);
-                    tries = (tries + 1);
-                    const attempt = self.string_buffer.slice();
-                    entry = ((self.used.getOrPut(attempt)) catch unreachable);
-                    if ((!entry.found_existing)) {
-                        const to_use = ((self.string_buffer.allocator.dupe(u8, attempt)) catch unreachable);
-                        entry.key_ptr.* = to_use;
-                        entry.value_ptr.* = tries;
-                        entry = ((self.used.getOrPut(input)) catch unreachable);
-                        entry.value_ptr.* = tries;
-                        return to_use;
-                    }
-                }
-            } else {
-                entry.value_ptr.* = tries;
+            const entry = ((self.used.getOrPut(input)) catch unreachable);
+            if ((!entry.found_existing)) {
+                entry.value_ptr.* = 1;
+                return entry.key_ptr.*;
             }
-            return entry.key_ptr.*;
+            var tries: u32 = entry.value_ptr.*;
+            _ = &tries;
+            while (true) {
+                _ = self.string_buffer.reset();
+                var writer = self.string_buffer.writer();
+                _ = &writer;
+                _ = ((writer.print("{s}{d}", .{ input, tries })) catch unreachable);
+                tries = (tries + 1);
+                const attempt = self.string_buffer.slice();
+                if (self.used.contains(attempt)) {
+                    continue;
+                }
+                const to_use = ((self.string_buffer.allocator.dupe(u8, attempt)) catch unreachable);
+                _ = ((self.used.put(to_use, 1)) catch unreachable);
+                ((self.used.getPtr(input)).?).* = tries;
+                return to_use;
+            }
     }
 
 pub fn nextMinifiedName(self: *ExportRenamer, allocator: std.mem.Allocator) ![]const u8 {

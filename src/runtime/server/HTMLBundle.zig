@@ -477,7 +477,7 @@ pub fn onPluginsResolved(self: *Route, plugins: ?*jsc.API.JSBundler.Plugin) !voi
                 config.force_node_env = .development;
                 config.jsx.development = true;
             }
-            config.source_map = .linked;
+            config.source_map = (if (is_development) .linked else .none);
             const completion_task = try bun.BundleV2.createAndScheduleCompletionTask(config, plugins, global, vm.eventLoop(), bun.default_allocator);
             completion_task.started_at_ns = bun.getRoughTickCount(.allow_mocked_time).ns();
             completion_task.html_build_task = self;

@@ -6,6 +6,7 @@ comptime {
     * = process.getTitle;
     * = process.setTitle;
     * = parse_args_mod;
+    * = memory_pressure;
     if (Environment.isWindows) {
         * = uv_signal_windows_mod;
     }
@@ -21,6 +22,7 @@ pub import crypto from "./node/node_crypto_binding.zig";
 pub import os from "./node/node_os.zig";
 /// node:process
 pub import process from "./node/node_process.zig";
+pub import memory_pressure from "./node/memory_pressure.zig";
 pub import validators from "./node/util/validators.zig";
 import nodejs_error_code from "./node/nodejs_error_code.zig";
 pub const ErrorCode = nodejs_error_code.Code;

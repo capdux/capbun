@@ -151,10 +151,14 @@ struct RunAllTestsContext {
         if (files.len > 1) {
             for (i of 0..(files.len - 1)) {
                 const file_name = files[i];
+                const started = bun.milliTimestamp();
                 TestCommand.run(reporter, vm, file_name.slice(), {
                     first: isolate || i == 0,
                     last: isolate,
                 }) catch e => handleTopLevelTestErrorBeforeJavaScriptStart(e);
+                if (*t := reporter.timings) {
+                    t.recordSince(file_name.slice(), started);
+                }
                 reporter.jest.default_timeout_override = std.math.maxInt(u32);
                 Global.mimalloc_cleanup(false);
                 if (isolate) {
@@ -164,10 +168,15 @@ struct RunAllTestsContext {
             }
         }
 
-        TestCommand.run(reporter, vm, files[files.len - 1].slice(), {
+        const last_file = files[files.len - 1];
+        const last_started = bun.milliTimestamp();
+        TestCommand.run(reporter, vm, last_file.slice(), {
             first: isolate || files.len == 1,
             last: true,
         }) catch e => handleTopLevelTestErrorBeforeJavaScriptStart(e);
+        if (*t := reporter.timings) {
+            t.recordSince(last_file.slice(), last_started);
+        }
     }
 }
 
@@ -200,9 +209,22 @@ pub fn escapeXml(str: string, writer: auto)! {
                 writer.writeAll(escaped)?;
                 last = i + 1;
             },
-            0..=0x1f => {
-                // Escape all control characters
+            '\t', '\n', '\r' => {
+                // Valid XML 1.0 Char. Emit as a numeric reference so the literal
+                // byte survives attribute-value normalisation (XML 1.0 §3.3.3).
+                if (i > last) {
+                    writer.writeAll(str[last..i])?;
+                }
                 writer.print("&#{d};", .{c})?;
+                last = i + 1;
+            },
+            0..=0x1f => {
+                // Any other C0 control character is not a valid XML 1.0 Char and
+                // cannot be represented even as a numeric reference, so drop it.
+                if (i > last) {
+                    writer.writeAll(str[last..i])?;
+                }
+                last = i + 1;
             },
             else => {},
         }
@@ -273,6 +295,36 @@ struct JunitPropertiesList {
     commit: string,
 }
 
+pub struct JunitFailure {
+    name: std.ArrayListUnmanaged(u8) = {},
+    message: std.ArrayListUnmanaged(u8) = {},
+    body: std.ArrayListUnmanaged(u8) = {},
+
+    pub fn deinit(*_, allocator: std.mem.Allocator) {
+        _.name.deinit(allocator);
+        _.message.deinit(allocator);
+        _.body.deinit(allocator);
+    }
+}
+
+fn pushStrippingAnsi(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, input: []const u8)! {
+    let i: usize = 0;
+    while (i < input.len) {
+        if (input[i] == 0x1b && i + 1 < input.len && input[i + 1] == '[') {
+            i += 2;
+            while (i < input.len && !(input[i] >= 0x40 && input[i] <= 0x7e)) {
+                i += 1;
+            }
+            if (i < input.len) {
+                i += 1;
+            }
+            continue;
+        }
+        out.append(allocator, input[i])?;
+        i += 1;
+    }
+}
+
 // Remaining TODOs:
 // - Add stdout/stderr to the JUnit report
 // - Add timestamp field to the JUnit report
@@ -287,6 +339,8 @@ pub struct JunitReporter {
 
     suite_stack: std.ArrayListUnmanaged(SuiteInfo) = {},
     current_depth: u32 = 0,
+
+    last_failure: JunitFailure? = null,
 
     hostname_value: string? = null,
 
@@ -349,6 +403,106 @@ pub struct JunitReporter {
                 bun.default_allocator.free(properties);
             }
         }
+
+        if (*f := _.last_failure) {
+            f.deinit(bun.default_allocator);
+            _.last_failure = null;
+        }
+    }
+
+    pub fn clearLastFailure(*_) {
+        if (*f := _.last_failure) {
+            f.deinit(bun.default_allocator);
+            _.last_failure = null;
+        }
+    }
+
+    pub fn recordFailure(*_, exception: *jsc.ZigException) {
+        const allocator = bun.default_allocator;
+        if (_.last_failure == null) {
+            _.last_failure = JunitFailure{};
+        }
+        const failure = &_.last_failure.?;
+        const name_utf8 = exception.name.toUTF8(allocator);
+        const _name_guard = DeinitGuard<@TypeOf(name_utf8)>{ val: name_utf8 };
+        const raw_message = exception.message.toUTF8(allocator);
+        const _msg_guard = DeinitGuard<@TypeOf(raw_message)>{ val: raw_message };
+
+        let message: std.ArrayListUnmanaged(u8) = {};
+        const _msg_list_guard = DeinitGuard<std.ArrayListUnmanaged(u8)>{ ptr: &message, alloc: allocator };
+        bun.handleOom(pushStrippingAnsi(&message, allocator, raw_message.slice()));
+
+        const name_slice = name_utf8.slice();
+        const is_assertion = strings.hasPrefixComptime(message.items, "expect(") &&
+            (name_slice.len == 0 || strings.eqlComptime(name_slice, "Error"));
+
+        if (failure.name.items.len == 0) {
+            if (is_assertion) {
+                bun.handleOom(failure.name.appendSlice(allocator, "AssertionError"));
+            } else {
+                bun.handleOom(failure.name.appendSlice(allocator, name_slice));
+            }
+        }
+        if (failure.message.items.len == 0) {
+            bun.handleOom(failure.message.appendSlice(allocator, message.items));
+        }
+
+        const body = &failure.body;
+        if (body.items.len > 0) {
+            bun.handleOom(body.append(allocator, '\n'));
+        }
+        const header: []const u8 = if (is_assertion) "AssertionError" else name_slice;
+        if (header.len == 0 && message.items.len == 0) {
+            bun.handleOom(body.appendSlice(allocator, "error"));
+        } else if (header.len == 0) {
+            bun.handleOom(body.appendSlice(allocator, message.items));
+        } else if (message.items.len == 0) {
+            bun.handleOom(body.appendSlice(allocator, header));
+        } else {
+            bun.handleOom(body.appendSlice(allocator, header));
+            bun.handleOom(body.appendSlice(allocator, ": "));
+            bun.handleOom(body.appendSlice(allocator, message.items));
+        }
+        bun.handleOom(body.append(allocator, '\n'));
+
+        const dir = bun.fs.FileSystem.instance.top_level_dir;
+        const body_writer = body.writer(allocator);
+        for (frame of exception.stack.frames()) {
+            const source_url = frame.source_url.toUTF8(allocator);
+            const _src_guard = DeinitGuard<@TypeOf(source_url)>{ val: source_url };
+            const file = bun.path.relative(dir, source_url.slice());
+            const func = frame.function_name.toUTF8(allocator);
+            const _func_guard = DeinitGuard<@TypeOf(func)>{ val: func };
+            if (file.len == 0 && func.slice().len == 0) {
+                continue;
+            }
+            bun.handleOom(body.appendSlice(allocator, "      at "));
+            if (func.slice().len > 0) {
+                bun.handleOom(body_writer.print("{f} (", .{frame.nameFormatter(false)}));
+            }
+            const file_start = body.items.len;
+            bun.handleOom(body.appendSlice(allocator, file));
+            if (comptime Environment.isWindows) {
+                for (*b of body.items[file_start..]) {
+                    if (b == '\\') b = '/';
+                }
+            }
+            const pos = frame.position;
+            if (pos.line.isValid() && pos.column.isValid()) {
+                bun.handleOom(body_writer.print(":{d}:{d}", .{ pos.line.oneBased(), pos.column.oneBased() }));
+            } else if (pos.line.isValid()) {
+                bun.handleOom(body_writer.print(":{d}", .{pos.line.oneBased()}));
+            }
+            if (func.slice().len > 0) {
+                bun.handleOom(body.append(allocator, ')'));
+            }
+            bun.handleOom(body.append(allocator, '\n'));
+        }
+    }
+
+    pub static fn recordFailureCb(ctx: *!?, exception: *jsc.ZigException) {
+        const reporter: *JunitReporter = unsafe { @ptrCast(@alignCast(ctx.?)) };
+        reporter.recordFailure(exception);
     }
 
     fn generatePropertiesList(*_)! {
@@ -591,15 +745,36 @@ pub struct JunitReporter {
                 if (_.suite_stack.items.len > 0) {
                     _.suite_stack.items[_.suite_stack.items.len - 1].metrics.failures += 1;
                 }
-                // TODO: add the failure message
-                // if (failure_message) |msg| {
-                //     try this.contents.appendSlice(bun.default_allocator, " message=\"");
-                //     try escapeXml(msg, this.contents.writer(bun.default_allocator));
-                //     try this.contents.appendSlice(bun.default_allocator, "\"");
-                // }
                 _.contents.appendSlice(bun.default_allocator, ">\n")?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
-                _.contents.appendSlice(bun.default_allocator, "  <failure type=\"AssertionError\" />\n")?;
+                let type_name: []const u8 = "Error";
+                if (f := _.last_failure) {
+                    if (f.name.items.len > 0) {
+                        type_name = f.name.items;
+                    }
+                }
+                _.contents.appendSlice(bun.default_allocator, "  <failure type=\"")?;
+                escapeXml(type_name, _.contents.writer(bun.default_allocator))?;
+                _.contents.appendSlice(bun.default_allocator, "\"")?;
+                if (f := _.last_failure) {
+                    if (f.message.items.len > 0) {
+                        _.contents.appendSlice(bun.default_allocator, " message=\"")?;
+                        escapeXml(f.message.items, _.contents.writer(bun.default_allocator))?;
+                        _.contents.appendSlice(bun.default_allocator, "\"")?;
+                    }
+                }
+                let has_body = false;
+                if (f := _.last_failure) {
+                    if (f.body.items.len > 0) {
+                        has_body = true;
+                        _.contents.appendSlice(bun.default_allocator, ">")?;
+                        escapeXml(f.body.items, _.contents.writer(bun.default_allocator))?;
+                        _.contents.appendSlice(bun.default_allocator, "</failure>\n")?;
+                    }
+                }
+                if (!has_body) {
+                    _.contents.appendSlice(bun.default_allocator, " />\n")?;
+                }
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.appendSlice(bun.default_allocator, "</testcase>\n")?;
             },
@@ -680,12 +855,13 @@ pub struct JunitReporter {
                 }
                 _.contents.appendSlice(bun.default_allocator, ">\n")?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
-                _.contents.appendSlice(bun.default_allocator, "  <failure type=\"TimeoutError\" />\n")?;
+                _.contents.appendSlice(bun.default_allocator, "  <failure type=\"TimeoutError\" message=\"test timed out\" />\n")?;
                 _.contents.appendSlice(bun.default_allocator, indent)?;
                 _.contents.appendSlice(bun.default_allocator, "</testcase>\n")?;
             },
             .pending => unreachable,
         }
+        _.clearLastFailure();
     }
 
     fn writeToFile(*_, path: string)! {
@@ -755,6 +931,7 @@ pub struct CommandLineReporter {
     todos_to_repeat_buf: std.ArrayListUnmanaged(u8) = {},
 
     reporters: CommandLineReporters = {},
+    timings: Timings? = null,
 
     const DotColorMap = std.EnumMap(TestRunner.Test.Status, string);
     const dots: DotColorMap = brk: {
@@ -1026,10 +1203,11 @@ pub struct CommandLineReporter {
                             if (name := scope.base.name) {
                                 if (name.len > 0) {
                                     if (initial_length != concatenated_describe_scopes.items.len) {
-                                        bun.handleOom(concatenated_describe_scopes.appendSlice(" &gt; "));
+                                        bun.handleOom(concatenated_describe_scopes.appendSlice(" > "));
                                     }
 
-                                    bun.handleOom(escapeXml(name, concatenated_describe_scopes.writer()));
+                                    // writeTestCase escapes class_name once; do not pre-escape here.
+                                    bun.handleOom(concatenated_describe_scopes.appendSlice(name));
                                 }
                             }
                         }
@@ -1173,6 +1351,14 @@ pub struct CommandLineReporter {
                 }
                 junit.writeToFile(outfile) catch {};
             }
+        }
+    }
+
+    fn writeTimingsIfNeeded(*_, only_measured: bool) {
+        if (*t := _.timings) {
+            t.write(only_measured);
+            t.deinit();
+            _.timings = null;
         }
     }
 
@@ -1636,6 +1822,10 @@ pub struct TestCommand {
         reporter.repeat_count = @max(ctx.test_options.repeat_count, 1);
         jest.Jest.runner = &reporter.jest;
         reporter.jest.test_options = &ctx.test_options;
+        reporter.timings = if (ctx.test_options.test_worker || ctx.test_options.timings_files.len == 0)
+            null
+        else
+            Timings.load(ctx.test_options.timings_files);
 
         if (ctx.test_options.reporters.junit) {
             reporter.reporters.junit = JunitReporter.init();
@@ -1868,16 +2058,23 @@ pub struct TestCommand {
         // printing a confusing "running 0/0 test files".
         if (shard := ctx.test_options.shard) {
             if (test_files.len > 0) {
-                const empty_sort_ctx: void = undefined;
-                std.sort.pdq(PathString, test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
-
                 let write: usize = 0;
-                let i: usize = 0;
-                while (i < test_files.len) : (i += 1) {
-                    const file = test_files[i];
-                    if (@as(u32, @intCast(i)) % shard.count == shard.index - 1) {
-                        test_files[write] = file;
-                        write += 1;
+                if (*t := reporter.timings) {
+                    if (!t.isEmpty()) {
+                        write = t.selectShard(test_files, shard);
+                    }
+                }
+                if (write == 0 && (reporter.timings == null || reporter.timings.?.isEmpty())) {
+                    const empty_sort_ctx: void = undefined;
+                    std.sort.pdq(PathString, test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
+
+                    let i: usize = 0;
+                    while (i < test_files.len) : (i += 1) {
+                        const file = test_files[i];
+                        if (@as(u32, @intCast(i)) % shard.count == shard.index - 1) {
+                            test_files[write] = file;
+                            write += 1;
+                        }
                     }
                 }
 
@@ -2183,6 +2380,9 @@ pub struct TestCommand {
         Output.flush();
 
         reporter.writeJUnitReportIfNeeded();
+        if (ctx.test_options.update_timings && (test_files.len > 0 || ctx.test_options.shard != null)) {
+            reporter.writeTimingsIfNeeded(ctx.test_options.shard != null);
+        }
 
         if (vm.hot_reload == .watch) {
             vm.runWithAPILock(jsc.VirtualMachine, vm, runEventLoopForWatch);
@@ -2296,6 +2496,9 @@ pub struct TestCommand {
                         reporter.printSummary();
                         Output.prettyError("\nBailed out after {d} failure{s}<r>\n", .{ reporter.jest.bail, if (reporter.jest.bail == 1) "" else "s" });
                         reporter.writeJUnitReportIfNeeded();
+                        if (reporter.jest.test_options.update_timings) {
+                            reporter.writeTimingsIfNeeded(reporter.jest.test_options.shard != null);
+                        }
 
                         vm.exit_handler.exit_code = 1;
                         vm.is_shutting_down = true;
@@ -2384,6 +2587,7 @@ import ChangedFilesFilter from "./test/ChangedFilesFilter.zig";
 import DotEnv from "../dotenv/env_loader.zig";
 import ParallelRunner from "./test/ParallelRunner.zig";
 import Scanner from "./test/Scanner.zig";
+import Timings from "./test/Timings.zig";
 import bun_test from "../test_runner/bun_test.zig";
 import options from "../bundler/options.zig";
 import resolve_path from "../paths/resolve_path.zig";

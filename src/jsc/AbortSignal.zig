@@ -201,6 +201,10 @@ pub fn abortReason(self: *AbortSignal) JSValue {
             return WebCore__AbortSignal__abortReason(self);
     }
 
+pub fn jsReason(self: *AbortSignal, global: *jsc.JSGlobalObject) JSValue {
+            return WebCore__AbortSignal__jsReason(self, global);
+    }
+
 pub fn reasonIfAborted(self: *AbortSignal, global: *jsc.JSGlobalObject) ?AbortReasonImpl {
             var reason: u8 = 0;
             _ = &reason;

@@ -1714,11 +1714,19 @@ const should_copy_for_bundling = code.loader.shouldCopyForBundling();
 .result => |fd| fd,
 .err => break :add_watchers,
 }) else bun.invalid_fd);
-                if ((watcher.addFile(fd, load.path, bun.Watcher.getHash(load.path), code.loader, bun.invalid_fd, null, true).asErr() != null)) {
-                    if (fd.isValid()) {
-                        _ = fd.close();
-                    }
+                break :add_watchers (switch (watcher.addFile(fd, load.path, bun.Watcher.getHash(load.path), code.loader, bun.invalid_fd, null, true)) {
+.result => |ownership| {
+if (((ownership != .watcher) and fd.isValid())) {
+                    _ = fd.close();
                 }
+},
+.err => {
+if (fd.isValid()) {
+                    _ = fd.close();
+                }
+},
+});
+
 };
             }
 },

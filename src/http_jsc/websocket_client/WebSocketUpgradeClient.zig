@@ -798,11 +798,7 @@ pub fn cancel(client: *HTTPClient) callconv(.c) void {
                 _ = client.deref();
             }
             const had_socket_ref = (client.tcp.ext(HTTPClient) != null);
-            if (comptime ssl) {
-                _ = client.tcp.close(.normal);
-            } else {
-                _ = client.tcp.close(.failure);
-            }
+            _ = client.tcp.close(.failure);
             if (had_socket_ref) {
                 _ = client.tcp.detach();
                 _ = client.deref();
@@ -813,11 +809,7 @@ pub fn fail(self: *@This(), code: ErrorCode) void {
             _ = log("onFail: {s}", .{ @tagName(code) });
             _ = jsc.markBinding(@src());
             _ = self.dispatchAbruptClose(code);
-            if (comptime ssl) {
-                _ = self.tcp.close(.normal);
-            } else {
-                _ = self.tcp.close(.failure);
-            }
+            _ = self.tcp.close(.failure);
     }
 
 pub fn dispatchAbruptClose(self: *@This(), code: ErrorCode) void {

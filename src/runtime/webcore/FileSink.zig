@@ -252,12 +252,11 @@ pub fn onWrite(self: *FileSink, amount: usize, status: io.WriteStatus) void {
                 self.pending.result = .{ .owned = self.pending.consumed };
             }
             _ = self.runPending();
-            const ended_and_done = (self.done and (status == .end_of_file));
-            if ((self.done and (status == .drained))) {
-                _ = self.writer.end();
-            } else {
-                if ((ended_and_done and (!has_pending_data))) {
+            if ((self.done and (!self.writer.hasPendingData()))) {
+                if ((status == .end_of_file)) {
                     _ = self.writer.close();
+                } else {
+                    _ = self.writer.end();
                 }
             }
         }
@@ -438,17 +437,29 @@ pub fn onAutoFlush(self: *FileSink) bool {
         defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
         const amount_buffered = self.writer.outgoing.size();
         const flush_res = self.writer.flush();
-        if (((flush_res == .err) or (flush_res == .done))) {
+        if ((flush_res == .err)) {
             _ = self.updateRef(false);
+            self.done = true;
+            if ((self.pending.state == .pending)) {
+                self.pending.result = .{ .err = flush_res.err };
+            }
+            _ = self.writer.end();
             _ = self.runPendingLater();
+            self.auto_flusher.registered = false;
+            return false;
         } else {
-            if ((flush_res == .wrote)) {
-                if ((flush_res.wrote == amount_buffered)) {
-                    _ = self.updateRef(false);
-                    _ = self.runPendingLater();
-                }
+            if ((flush_res == .done)) {
+                _ = self.updateRef(false);
+                _ = self.runPendingLater();
             } else {
-                return true;
+                if ((flush_res == .wrote)) {
+                    if ((flush_res.wrote == amount_buffered)) {
+                        _ = self.updateRef(false);
+                        _ = self.runPendingLater();
+                    }
+                } else {
+                    return true;
+                }
             }
         }
         const is_registered = (!self.writer.hasPendingData());
@@ -469,7 +480,11 @@ pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys
         if (self.done) {
             return .initResult(JSValue.js_undefined);
         }
+        const had_buffered_data = self.writer.hasPendingData();
         const rc = self.writer.flush();
+        if ((had_buffered_data and (!self.writer.hasPendingData()))) {
+            _ = self.updateRef(false);
+        }
         if ((rc == .done)) {
             self.written = (self.written + @as(usize, @truncate(rc.done)));
         } else {
@@ -491,8 +506,6 @@ pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys
 }
 
 pub fn finalize(self: *FileSink) void {
-        _ = self.readable_stream.deinit();
-        _ = self.pending.deinit();
         _ = self.js_sink_ref.deinit();
         _ = self.deref();
 }
@@ -600,12 +613,26 @@ pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue
             return .{ .result = JSValue.jsNumber(self.written) };
         }
         const flush_result = self.writer.flush();
+        const has_pending = (self.pending.state == .pending);
         if ((flush_result == .done)) {
             _ = self.updateRef(false);
             _ = self.writer.end();
+            if (has_pending) {
+                const promise = self.pending.promise(globalThis);
+                _ = self.runPendingLater();
+                return .{ .result = promise.toJS() };
+            }
             return .{ .result = JSValue.jsNumber(flush_result.done) };
         } else {
             if ((flush_result == .err)) {
+                self.done = true;
+                if (has_pending) {
+                    self.pending.result = .{ .err = flush_result.err };
+                    const promise_result = self.pending.promise(globalThis);
+                    _ = self.writer.end();
+                    _ = self.runPendingLater();
+                    return .{ .result = promise_result.toJS() };
+                }
                 _ = self.writer.close();
                 return .{ .err = flush_result.err };
             } else {
@@ -622,6 +649,11 @@ pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue
                     return .{ .result = promise_result.toJS() };
                 } else {
                     _ = self.writer.end();
+                    if (has_pending) {
+                        const promise = self.pending.promise(globalThis);
+                        _ = self.runPendingLater();
+                        return .{ .result = promise.toJS() };
+                    }
                     return .{ .result = JSValue.jsNumber(flush_result.wrote) };
                 }
             }

@@ -29,6 +29,11 @@ pub @value class Handler {
     flags: HandlerFlags = .{};
 
     pub fn runErrorCallback(vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) {
+        // Termination raised inside the preceding callback.call() cannot be
+        // cleared; entering JS again trips executeCallImpl's assertNoException.
+        if (globalObject.hasException()) {
+            return;
+        }
         const onError = _.onError;
         if (!onError.isEmptyOrUndefinedOrNull()) {
             * = onError.call(globalObject, .js_undefined, &.{error_value}) catch e =>

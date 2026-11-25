@@ -128,6 +128,7 @@ const noUnify: readonly string[] = [
   // baseline ISA namespace exists for image_resize → HWY_EXPORT can't find
   // N_AVX2/N_AVX3/etc. variants.
   "src/jsc/bindings/image_resize.cpp",
+  "src/jsc/bindings/highway_xml.cpp",
   // Declares its own minimal CGRect/kCFStringEncodingUTF8/kCFNumberDoubleType
   // so it doesn't pull a CoreGraphics load command; bundled with files that
   // include the real CF headers those names become ambiguous.

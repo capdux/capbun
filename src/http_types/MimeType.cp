@@ -409,7 +409,7 @@ pub fn byExtension(ext_without_leading_dot: string): MimeType {
 }
 
 pub fn byExtensionNoDefault(ext_without_leading_dot: string): MimeType? {
-    if (entry := extensions.get(ext_without_leading_dot)) {
+    if (entry := extensions.getASCIIICaseInsensitive(ext_without_leading_dot)) {
         return Compact.from(entry).toMimeType();
     }
 

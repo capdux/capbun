@@ -18,6 +18,7 @@ import { Method } from "../../http_types/Method.zig";
 import { DataURL } from "../../resolver/data_url.zig";
 import FetchTaskletMod from "./fetch/FetchTasklet.zig";
 pub const FetchTasklet = FetchTaskletMod.FetchTasklet;
+import * as fetch_compress_body from "./fetch/compress_body.cp";
 import { ServerConfig } from "../server/ServerConfig.zig";
 import UrlMod from "../../url/url.zig";
 const PercentEncoding = UrlMod.PercentEncoding;
@@ -346,6 +347,7 @@ fn fetchImpl(
     let disable_timeout = false;
     let disable_keepalive = false;
     let disable_decompression = false;
+    let compress: fetch_compress_body.CompressOption? = null;
     let verbose: http.HTTPVerboseLevel = if (vm.log.level.atLeast(.debug)) .headers else .none;
     if (verbose == .none) {
         verbose = vm.getVerboseFetch();
@@ -469,6 +471,19 @@ fn fetchImpl(
                 break;
             } else if (decompression_value.isNumber()) {
                 disable_decompression = decompression_value.to(i32) == 0;
+                break;
+            }
+        }
+        if (globalThis.hasException()) return JSValue.zero;
+    }
+    if (globalThis.hasException()) return JSValue.zero;
+
+    // compress: boolean | string | { encoding, level? }
+    for (obj of decompress_objs) {
+        if (obj == JSValue.zero) continue;
+        if (compress_value := obj.get(globalThis, "compress")?) {
+            if (!compress_value.isUndefined()) {
+                compress = fetch_compress_body.fromJS(globalThis, compress_value)?;
                 break;
             }
         }
@@ -978,7 +993,7 @@ fn fetchImpl(
                 .result fd => fd,
             };
 
-            if (proxy == null && bun.http.SendFile.isEligible(url)) {
+            if (proxy == null && compress == null && bun.http.SendFile.isEligible(url)) {
                 use_sendfile: {
                     const stat: bun.Stat = switch (bun.sys.fstat(opened_fd)) {
                         .result result => result,
@@ -1051,6 +1066,22 @@ fn fetchImpl(
                     http_body = .{ .AnyBlob = body.AnyBlob };
                 },
             }
+        }
+    }
+
+    if (compress_opt := compress) {
+        if (body == .AnyBlob && !url.isS3()) {
+            const already_has_encoding = if (h := headers) (h.getContentEncoding() != null) else false;
+            if (!already_has_encoding && body.slice().len > 0) {
+                if (headers == null) {
+                    headers = Headers { .allocator = allocator };
+                }
+                headers.?.append("Content-Encoding", compress_opt.encoding.headerValue()) catch e => bun.handleOom(e);
+            } else {
+                compress = null;
+            }
+        } else {
+            compress = null;
         }
     }
 
@@ -1197,6 +1228,7 @@ fn fetchImpl(
             .force_http2 = force_http2,
             .force_http3 = force_http3,
             .force_http1 = force_http1,
+            .compress = compress,
             .check_server_identity = if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis),
             .unix_socket_path = unix_socket_path,
         },

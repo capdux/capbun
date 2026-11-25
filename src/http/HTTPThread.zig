@@ -206,10 +206,23 @@ pub fn put(self: *HeapRequestBodyBuffer) void {
 
 pub const LibdeflateState = struct {
     decompressor: *bun.libdeflate.Decompressor = undefined,
+    compressor: ?*bun.libdeflate.Compressor = null,
     shared_buffer: [524288]u8 = undefined,
+
+pub fn compressorMut(self: *LibdeflateState) *bun.libdeflate.Compressor {
+            if ((self.compressor == null)) {
+                self.compressor = ((bun.libdeflate.Compressor.alloc(6)) orelse (bun.outOfMemory()));
+            }
+            return self.compressor.?;
+    }
 
 pub fn release(self: *LibdeflateState) void {
             _ = self.decompressor.deinit();
+            if (self.compressor) |c| {
+                _ = &c;
+                _ = c.deinit();
+                self.compressor = null;
+            }
             _ = bun.TrivialDeinit(LibdeflateState)(self);
     }
 

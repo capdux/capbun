@@ -772,7 +772,7 @@ pub struct LinkerContext {
                     const loader = loaders[record.source_index.get()];
 
                     switch (loader) {
-                        .jsx, .js, .ts, .tsx, .napi, .sqlite, .json, .jsonc, .json5, .yaml, .html, .sqlite_embedded, .md => {
+                        .jsx, .js, .ts, .tsx, .napi, .sqlite, .json, .jsonc, .json5, .yaml, .html, .sqlite_embedded, .md, .xml => {
                             log.addErrorFmt(
                                 source,
                                 record.range.loc,

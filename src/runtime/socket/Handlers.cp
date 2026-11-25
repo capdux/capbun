@@ -168,6 +168,11 @@ pub struct HandlersScope {
         }
 
         const globalObject = _.globalObject;
+        // Termination raised inside the preceding callback.call() cannot be
+        // cleared; entering JS again trips executeCallImpl's assertNoException.
+        if (globalObject.hasException()) {
+            return false;
+        }
         const onError = _.onError;
 
         if (onError == .zero) {

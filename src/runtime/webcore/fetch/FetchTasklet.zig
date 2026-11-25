@@ -300,6 +300,7 @@ pub const FetchTaskletOptions = struct {
     force_http2: bool = false,
     force_http3: bool = false,
     force_http1: bool = false,
+    compress: ?bun.http.compress_body.CompressOption = null,
 };
 
 pub fn DeinitGuard(comptime T: type) type {
@@ -857,11 +858,14 @@ pub fn onBodyReceived(self: *FetchTasklet) !void {
                         return;
                     }
                 }
+                var body = response.getBodyValue();
+                _ = &body;
+                if ((body.* != .Locked)) {
+                    return;
+                }
                 _guard_buf.active = false;
                 if ((!self.result.has_more)) {
                     const managed_bytes = self.scheduled_response_buffer.list.toManaged(default_allocator);
-                    var body = response.getBodyValue();
-                    _ = &body;
                     var old = body.*;
                     _ = &old;
                     const body_value = Body.Value{ .InternalBlob = .{ .bytes = managed_bytes } };
@@ -1299,7 +1303,7 @@ pub fn get(allocator: Allocator, globalThis: *jsc.JSGlobalObject, fetch_options:
             } else {
                 fetch_tasklet.signals.cert_errors = null;
             }
-            (fetch_tasklet.http.?).* = HttpAsyncHTTP.init(default_allocator, fetch_options.method, url, fetch_options.headers.entries, fetch_options.headers.buf.items, (&fetch_tasklet.response_buffer), fetch_tasklet.request_body.slice(), HttpHTTPClientResult.Callback.New(*FetchTasklet, FetchTasklet.callback).init(fetch_tasklet), fetch_options.redirect_type, .{ .http_proxy = proxy, .proxy_headers = fetch_options.proxy_headers, .hostname = fetch_options.hostname, .signals = fetch_tasklet.signals, .unix_socket_path = fetch_options.unix_socket_path, .disable_timeout = fetch_options.disable_timeout, .disable_keepalive = fetch_options.disable_keepalive, .disable_decompression = fetch_options.disable_decompression, .reject_unauthorized = fetch_options.reject_unauthorized, .verbose = fetch_options.verbose, .tls_props = fetch_options.ssl_config });
+            (fetch_tasklet.http.?).* = HttpAsyncHTTP.init(default_allocator, fetch_options.method, url, fetch_options.headers.entries, fetch_options.headers.buf.items, (&fetch_tasklet.response_buffer), fetch_tasklet.request_body.slice(), HttpHTTPClientResult.Callback.New(*FetchTasklet, FetchTasklet.callback).init(fetch_tasklet), fetch_options.redirect_type, .{ .http_proxy = proxy, .proxy_headers = fetch_options.proxy_headers, .hostname = fetch_options.hostname, .signals = fetch_tasklet.signals, .unix_socket_path = fetch_options.unix_socket_path, .disable_timeout = fetch_options.disable_timeout, .disable_keepalive = fetch_options.disable_keepalive, .disable_decompression = fetch_options.disable_decompression, .reject_unauthorized = fetch_options.reject_unauthorized, .verbose = fetch_options.verbose, .tls_props = fetch_options.ssl_config, .compress = fetch_options.compress });
             const isStream = (fetch_tasklet.request_body == .ReadableStream);
             fetch_tasklet.http.?.client.flags.is_streaming_request_body = isStream;
             fetch_tasklet.http.?.client.flags.force_http2 = fetch_options.force_http2;

@@ -515,7 +515,17 @@ pub struct FFI {
 
         const SymbolsMapT = bun.StringArrayHashMapUnmanaged(Function);
         let symbols = SymbolsMapT{};
-        if (val := generateSymbols(global, bun.default_allocator, &symbols, obj) catch jsc.JSValue.zero) {
+        const sym_res = generateSymbols(global, bun.default_allocator, &symbols, obj) catch e => {
+            for (key of symbols.keys()) {
+                allocator.free(unsafe { @constCast(key) });
+            }
+            for (*function_ of symbols.values()) {
+                function_.arg_types.deinit(allocator);
+            }
+            symbols.clearAndFree(allocator);
+            return e;
+        };
+        if (val := sym_res) {
             // an error while validating symbols
             for (key of symbols.keys()) {
                 allocator.free(unsafe { @constCast(key) });

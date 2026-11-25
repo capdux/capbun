@@ -126,6 +126,11 @@ enum {
      * Safe for HTTP/TLS where the client always sends first; do not use for protocols where
      * the server sends the first bytes. */
     LIBUS_LISTEN_DEFER_ACCEPT = 64,
+    /* Enable IP_RECVERR on a UDP socket so ICMP errors land on the error
+     * queue for on_recv_error to drain. Off by default: on a shared
+     * unconnected socket it also makes the next send fail for a datagram
+     * bound to a different, live peer. */
+    LIBUS_UDP_LINUX_RECVERR = 128,
 };
 
 /* Library types publicly available */
@@ -438,6 +443,13 @@ struct ssl_ctx_st *us_ssl_ctx_from_options(
 void us_internal_ssl_ctx_up_ref(struct ssl_ctx_st *ssl_ctx);
 void us_internal_ssl_ctx_unref(struct ssl_ctx_st *ssl_ctx);
 long us_ssl_ctx_live_count(void);
+/* Per-SSL session sink: each resumable session reaching the new-session
+ * callback is SSL_SESSION_up_ref'd and handed to on_new_session (which takes
+ * ownership of that reference). on_free(owner) runs once on SSL_free. */
+void us_ssl_set_session_sink(struct ssl_st *ssl, void *owner,
+                             void (*on_new_session)(void *, struct ssl_session_st *),
+                             void (*on_free)(void *));
+void *us_ssl_get_session_sink_owner(struct ssl_st *ssl);
 
 /* Public interfaces for loops */
 

@@ -2182,7 +2182,7 @@ pub struct BundleV2 {
                     else
                         bun.invalid_fd;
 
-                    if (watcher.addFile(
+                    switch (watcher.addFile(
                         fd,
                         load.path,
                         bun.Watcher.getHash(load.path),
@@ -2190,8 +2190,13 @@ pub struct BundleV2 {
                         bun.invalid_fd,
                         null,
                         true,
-                    ).asErr() != null) {
-                        if (fd.isValid()) fd.close();
+                    )) {
+                        .result => |ownership| {
+                            if (ownership != .watcher && fd.isValid()) fd.close();
+                        },
+                        .err => {
+                            if (fd.isValid()) fd.close();
+                        },
                     }
                 }
             },

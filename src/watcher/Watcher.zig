@@ -81,6 +81,15 @@ pub const WatchItemKind = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const FdOwnership = enum {
+    watcher,
+    caller,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const WatchEventOp = packed struct(u8) {
     delete: bool = false,
     metadata: bool = false,
@@ -479,7 +488,7 @@ return .{ .err = e.withPath(file_path) };
         return .{ .result = @as(WatchItemIndex, @truncate((self.watchlist.len - 1))) };
 }
 
-pub fn appendFileMaybeLock(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*PackageJSON, comptime clone_file_path: bool, comptime lock: bool) bun.sys.Maybe(void) {
+pub fn appendFileMaybeLock(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*PackageJSON, comptime clone_file_path: bool, comptime lock: bool) bun.sys.Maybe(FdOwnership) {
         if (comptime lock) {
             _ = self.mutex.lock();
         }
@@ -533,14 +542,14 @@ return .{ .err = e.withPath(file_path) };
             const cwd_len_with_slash = (if ((self.cwd[@as(usize, @intCast((self.cwd.len - 1)))] == 47)) self.cwd.len else (self.cwd.len + 1));
             _ = log("<d>Added <b>{s}<r><d> to watch list.<r>", .{ (if (((file_path.len > cwd_len_with_slash) and bun.strings.startsWith(file_path, self.cwd))) file_path[cwd_len_with_slash..] else file_path) });
         }
-        return .success;
+        return .{ .result = .watcher };
 }
 
 pub inline fn isEligibleDirectory(self: *Watcher, dir: []const u8) bool {
         return (strings.contains(dir, self.fs.top_level_dir) and (!strings.contains(dir, "node_modules")));
 }
 
-pub fn appendFile(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*PackageJSON, comptime clone_file_path: bool) bun.sys.Maybe(void) {
+pub fn appendFile(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*PackageJSON, comptime clone_file_path: bool) bun.sys.Maybe(FdOwnership) {
         return self.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, true);
 }
 
@@ -586,15 +595,9 @@ return false;
         }
         const res = self.addFile(fd, file_path, hash, loader, bun.invalid_fd, null, true);
         switch (res) {
-.result => {
-if (((comptime Environment.isKqueue) and fd.isValid())) {
-            _ = self.mutex.lock();
-            const maybe_idx = Watcher.indexOf(self, hash);
-            const stored_fd = (if ((maybe_idx != null)) self.watchlist.items(.fd)[@as(usize, @intCast(maybe_idx.?))] else bun.invalid_fd);
-            _ = self.mutex.unlock();
-            if (((maybe_idx != null) and (stored_fd.native() != fd.native()))) {
-                _ = fd.close();
-            }
+.result => |ownership| {
+if (((ownership == .caller) and fd.isValid())) {
+            _ = fd.close();
         }
         return true;
 },
@@ -607,7 +610,7 @@ if (fd.isValid()) {
 }
 }
 
-pub fn addFile(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*PackageJSON, comptime clone_file_path: bool) bun.sys.Maybe(void) {
+pub fn addFile(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType, loader: options.Loader, dir_fd: bun.FD, package_json: ?*PackageJSON, comptime clone_file_path: bool) bun.sys.Maybe(FdOwnership) {
         _ = self.mutex.lock();
         var _lock_guard = MutexUnlockGuard{ .mutex = (&self.mutex) };
         _ = &_lock_guard;
@@ -615,14 +618,17 @@ pub fn addFile(self: *Watcher, fd: bun.FD, file_path: []const u8, hash: HashType
         defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
         if (Watcher.indexOf(self, hash)) |index| {
             _ = &index;
-            if (comptime FeatureFlags.atomic_file_watcher) {
-                if (fd.isValid()) {
-                    var fds = self.watchlist.items(.fd);
-                    _ = &fds;
+            var ownership: FdOwnership = .caller;
+            _ = &ownership;
+            if (((comptime FeatureFlags.atomic_file_watcher) and fd.isValid())) {
+                var fds = self.watchlist.items(.fd);
+                _ = &fds;
+                if ((!fds[@as(usize, @intCast(index))].isValid())) {
                     fds[cp_cast_int(usize, index)] = fd;
+                    ownership = .watcher;
                 }
             }
-            return .success;
+            return .{ .result = ownership };
         }
         return self.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, false);
 }

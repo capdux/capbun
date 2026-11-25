@@ -43,6 +43,7 @@ import { BuildError, assert } from "./error.ts";
 import { writeIfChanged } from "./fs.ts";
 import type { Ninja } from "./ninja.ts";
 import { quote, quoteArgs } from "./shell.ts";
+import { generateXmlByteClass } from "./xmlByteClass.ts";
 
 /**
  * Codegen outputs that land in `src/` instead of `codegenDir`. The zig
@@ -285,6 +286,10 @@ export function emitCodegen(n: Ninja, cfg: Config, sources: Sources): CodegenOut
   };
 
   const ctx: Ctx = { n, cfg, sources, o, dirStamp };
+
+  const xmlByteClass = generateXmlByteClass(cfg);
+  o.all.push(xmlByteClass.h);
+  o.cppHeaders.push(xmlByteClass.h);
 
   emitBunError(ctx);
   emitFallbackDecoder(ctx);

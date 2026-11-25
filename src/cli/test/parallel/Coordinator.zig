@@ -124,6 +124,7 @@ pub const Coordinator = struct {
     junit_fragments: std.ArrayListUnmanaged(string) = .empty,
     coverage_fragments: std.ArrayListUnmanaged(string) = .empty,
     last_header_idx: ?u32 = null,
+    costs: ?[]const u64 = null,
     frame: Frame = .{},
     parallel_limit: u32,
     scale_up_after_ms: i64,
@@ -156,14 +157,27 @@ pub fn hasUndispatchedFiles(self: Coordinator) bool {
 pub fn findStealVictim(self: *Coordinator) ?*Worker {
             var victim: ?*Worker = null;
             _ = &victim;
-            var most: u32 = 0;
+            var most: u64 = 0;
             _ = &most;
             const workers = self.workers;
             var i: usize = 0;
             _ = &i;
             while ((i < workers.len)) : (i = (i + 1)) {
-                if ((workers[@as(usize, @intCast(i))].range.len() > most)) {
-                    most = workers[@as(usize, @intCast(i))].range.len();
+                const r = workers[@as(usize, @intCast(i))].range;
+                var n: u64 = 0;
+                _ = &n;
+                if (self.costs) |c| {
+                    _ = &c;
+                    var j: u32 = r.lo;
+                    _ = &j;
+                    while ((j < r.hi)) : (j = (j + 1)) {
+                        n = (n + c[@as(usize, @intCast(j))]);
+                    }
+                } else {
+                    n = (if (comptime @typeInfo(@TypeOf(r.len())) == .@"enum") cp_cast_int(u64, @intFromEnum(r.len())) else cp_cast_int(u64, r.len()));
+                }
+                if ((n > most)) {
+                    most = n;
                     victim = (&workers[@as(usize, @intCast(i))]);
                 }
             }
@@ -270,12 +284,19 @@ pub fn assignWork(self: *Coordinator, w: *Worker) void {
             }
             if (self.findStealVictim()) |v| {
                 _ = &v;
-                if (v.range.stealBackHalf()) |stolen| {
-                    _ = &stolen;
-                    w.range = stolen;
-                    if (w.range.popFront()) |idx| {
+                if ((self.costs != null)) {
+                    if (v.range.popFront()) |idx| {
                         _ = &idx;
                         return w.dispatch(idx, self.files[@as(usize, @intCast(idx))].slice());
+                    }
+                } else {
+                    if (v.range.stealBackHalf()) |stolen| {
+                        _ = &stolen;
+                        w.range = stolen;
+                        if (w.range.popFront()) |idx| {
+                            _ = &idx;
+                            return w.dispatch(idx, self.files[@as(usize, @intCast(idx))].slice());
+                        }
                     }
                 }
             }
@@ -318,6 +339,13 @@ pub fn breakDots(self: *Coordinator) void {
             if (self.last_printed_dot) {
                 _ = (blk_catch_3: { break :blk_catch_3 ((Output.errorWriter().writeByte(10)) catch |__ce_3| { _ = &__ce_3;  }); });
                 self.last_printed_dot = false;
+            }
+    }
+
+pub fn recordTiming(self: *Coordinator, file_idx: u32, dispatched_at: i64) void {
+            if (self.reporter.timings) |*t| {
+                _ = &t;
+                _ = (t.*).recordSince(self.files[@as(usize, @intCast(file_idx))].slice(), dispatched_at);
             }
     }
 
@@ -394,6 +422,7 @@ var nums: [9]u32 = undefined;
             summary.skipped_because_label = (summary.skipped_because_label + skipped_label);
             summary.files = (summary.files + files);
             self.reporter.jest.unhandled_errors_between_tests = (self.reporter.jest.unhandled_errors_between_tests + unhandled);
+            _ = self.recordTiming(idx, w.dispatched_at);
             w.inflight = null;
             self.files_done = (self.files_done + 1);
             if (((self.bail > 0) and (summary.fail >= self.bail))) {
@@ -448,6 +477,7 @@ pub fn reapWorker(self: *Coordinator, w: *Worker, status: bun.spawn.Status) void
                 if ((w.ipc.corrupt_frame and (!panicked))) {
                     _ = self.accountCrash(idx, "worker killed: corrupt IPC frame, something wrote to fd 3");
                 } else {
+                    _ = self.recordTiming(idx, w.dispatched_at);
                     var status_buf: [32]u8 = undefined;
                     _ = &status_buf;
                     var msg_buf: [64]u8 = undefined;

@@ -519,14 +519,14 @@ export class TimerObjectInternals {
 
         if (_.flags.has_accessed_primitive) {
             const map = vm.timer.maps.get(kind);
-            if (map.orderedRemove(_.id)) {
+            if (map.swapRemove(_.id)) {
                 const allocated_bytes = map.capacity() * @sizeOf(TimeoutMap.Data);
                 const used_bytes = map.count() * @sizeOf(TimeoutMap.Data);
                 if (allocated_bytes - used_bytes > 256 * 1024) {
                     map.shrinkAndFree(bun.default_allocator, map.count() + 8);
                 }
             } else if (kind == .setInterval) {
-                * = vm.timer.maps.setTimeout.orderedRemove(_.id);
+                * = vm.timer.maps.setTimeout.swapRemove(_.id);
             }
         }
 

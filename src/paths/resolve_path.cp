@@ -24,10 +24,11 @@ pub struct FreeGuard<T> {
 };
 
 @tls let parser_join_input_buffer: [4096]u8 = undefined;
-@tls let parser_buffer: [1024]u8 = undefined;
+const PARSER_BUFFER_LEN: usize = 1024;
+@tls let parser_buffer: [PARSER_BUFFER_LEN]u8 = undefined;
 pub @tls let join_buf: [4096]u8 = undefined;
 pub fn z(input: []const u8, output: *bun.PathBuffer) [:0]const u8 {
-    if (input.len > bun.MAX_PATH_BYTES) {
+    if (input.len >= bun.MAX_PATH_BYTES) {
         if (comptime bun.Environment.allow_assert) @panic("path too long");
         return "";
     }
@@ -1075,6 +1076,23 @@ pub enum Platform {
 
 pub fn normalizeString(str: []const u8, comptime allow_above_root: bool, comptime platform: Platform) []u8 {
     return normalizeStringBuf(str, &parser_buffer, allow_above_root, platform, false);
+}
+
+pub fn normalizeStringSpill(
+    spill: *std.ArrayListUnmanaged(u8),
+    allocator: std.mem.Allocator,
+    str: []const u8,
+    comptime allow_above_root: bool,
+    comptime platform: Platform,
+): []const u8 {
+    const needed = str.len + 1;
+    if (needed <= PARSER_BUFFER_LEN) {
+        return normalizeString(str, allow_above_root, platform);
+    }
+    if (spill.items.len < needed) {
+        bun.handleOom(spill.resize(allocator, needed));
+    }
+    return normalizeStringBuf(str, spill.items, allow_above_root, platform, false);
 }
 pub fn normalizeStringZ(str: []const u8, comptime allow_above_root: bool, comptime platform: Platform) [:0]u8 {
     const normalized = normalizeStringBuf(str, &parser_buffer, allow_above_root, platform, false);

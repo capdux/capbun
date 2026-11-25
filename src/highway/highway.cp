@@ -68,6 +68,22 @@ extern fn highway_fill_with_skip_mask(
     skip_mask: bool,
 );
 
+extern fn highway_xml_index_chunk(
+    input: [*]const u8!,
+    len: usize,
+    base_offset: usize,
+    out_indices: [*]u32!,
+    inout_state: [*]u64!,
+): usize;
+
+extern fn highway_xml_index16_chunk(
+    input: [*]const u16!,
+    len: usize,
+    base_offset: usize,
+    out_indices: [*]u32!,
+    inout_state: [*]u64!,
+): usize;
+
 /// Count frequencies of [a-zA-Z0-9_$] characters in a string
 /// Updates the provided frequency array with counts (adds delta for each occurrence)
 pub fn scanCharFrequency(text: string, freqs: *[64]i32, delta: i32) {
@@ -324,4 +340,14 @@ pub fn indexOfSpaceOrNewlineOrNonASCII(haystack: string): usize? {
     }
 
     return result;
+}
+
+pub fn xmlStructuralIndexChunk(input: []const u8, base_offset: usize, out_indices: []u32, state: *[3]u64): usize {
+    if (input.len == 0) return 0;
+    return unsafe { highway_xml_index_chunk(input.ptr, input.len, base_offset, out_indices.ptr, state as [*]u64!) };
+}
+
+pub fn xmlStructuralIndex16Chunk(input: []const u16, base_offset: usize, out_indices: []u32, state: *[3]u64): usize {
+    if (input.len == 0) return 0;
+    return unsafe { highway_xml_index16_chunk(input.ptr, input.len, base_offset, out_indices.ptr, state as [*]u64!) };
 }

@@ -119,6 +119,7 @@ static int us_sni_ex_idx = -1;
 static int us_ctx_cache_ex_idx = -1;
 static int us_ssl_reneg_state_idx = -1;
 static int us_ssl_listener_ex_idx = -1;
+static int us_ssl_session_sink_idx = -1;
 #ifdef _WIN32
 static INIT_ONCE us_ex_idx_once = INIT_ONCE_STATIC_INIT;
 #else
@@ -146,6 +147,29 @@ static void us_ssl_reneg_state_free(void *parent, void *ptr, CRYPTO_EX_DATA *ad,
   us_free(ptr);
 }
 
+struct us_ssl_session_sink_t {
+  void *owner;
+  void (*on_new_session)(void *owner, SSL_SESSION *session);
+  void (*on_free)(void *owner);
+};
+static void us_ssl_session_sink_free(void *parent, void *ptr, CRYPTO_EX_DATA *ad,
+                                     int index, long argl, void *argp) {
+  (void)parent; (void)ad; (void)index; (void)argl; (void)argp;
+  if (!ptr) return;
+  struct us_ssl_session_sink_t *sink = ptr;
+  if (sink->on_free) sink->on_free(sink->owner);
+  us_free(sink);
+}
+static int us_ssl_new_session_cb(SSL *ssl, SSL_SESSION *session) {
+  if (us_ssl_session_sink_idx < 0) return 0;
+  struct us_ssl_session_sink_t *sink = SSL_get_ex_data(ssl, us_ssl_session_sink_idx);
+  if (sink && sink->on_new_session) {
+    SSL_SESSION_up_ref(session);
+    sink->on_new_session(sink->owner, session);
+  }
+  return 0;
+}
+
 /* Defined in Zig (`SSLContextCache.zig`): tombstones the cache entry on
  * SSL_CTX refcount→0 so the per-VM weak SSL_CTX cache learns the pointer is
  * dead without holding a ref of its own. */
@@ -158,6 +182,7 @@ static void us_ex_idx_init(void) {
   us_ctx_cache_ex_idx = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, bun_ssl_ctx_cache_on_free);
   us_ssl_reneg_state_idx = SSL_get_ex_new_index(0, NULL, NULL, NULL, us_ssl_reneg_state_free);
   us_ssl_listener_ex_idx = SSL_get_ex_new_index(0, NULL, NULL, NULL, NULL);
+  us_ssl_session_sink_idx = SSL_get_ex_new_index(0, NULL, NULL, NULL, us_ssl_session_sink_free);
 }
 
 #ifdef _WIN32
@@ -184,6 +209,32 @@ static inline int us_ssl_ctx_ex_idx(void) {
 int us_ssl_ctx_cache_ex_idx(void) {
   us_ex_idx_ensure();
   return us_ctx_cache_ex_idx;
+}
+
+void us_ssl_set_session_sink(SSL *ssl, void *owner,
+                             void (*on_new_session)(void *, SSL_SESSION *),
+                             void (*on_free)(void *)) {
+  us_ex_idx_ensure();
+  struct us_ssl_session_sink_t *sink = us_malloc(sizeof(*sink));
+  if (!sink) {
+    if (on_free) on_free(owner);
+    return;
+  }
+  sink->owner = owner;
+  sink->on_new_session = on_new_session;
+  sink->on_free = on_free;
+  struct us_ssl_session_sink_t *old = SSL_get_ex_data(ssl, us_ssl_session_sink_idx);
+  SSL_set_ex_data(ssl, us_ssl_session_sink_idx, sink);
+  if (old) {
+    if (old->on_free) old->on_free(old->owner);
+    us_free(old);
+  }
+}
+
+void *us_ssl_get_session_sink_owner(SSL *ssl) {
+  if (us_ssl_session_sink_idx < 0) return NULL;
+  struct us_ssl_session_sink_t *sink = SSL_get_ex_data(ssl, us_ssl_session_sink_idx);
+  return sink ? sink->owner : NULL;
 }
 
 static inline void us_reneg_policy(SSL *ssl, uint32_t *limit, uint32_t *window) {
@@ -608,6 +659,9 @@ SSL_CTX *us_ssl_ctx_build_raw(struct us_bun_socket_context_options_t options,
   if (options.secure_options) {
     SSL_CTX_set_options(ssl_context, options.secure_options);
   }
+
+  SSL_CTX_set_session_cache_mode(ssl_context, SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL);
+  SSL_CTX_sess_set_new_cb(ssl_context, us_ssl_new_session_cb);
 
   return ssl_context;
 }

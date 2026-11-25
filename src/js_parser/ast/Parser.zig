@@ -280,6 +280,7 @@ pub fn parse(self: *Parser) !js_ast.Result {
     }
 
 pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaque, *TSXParser, []js_ast.Part) anyerror!void) !void {
+            _ = try self.source.checkParseableLen(self.log, "File");
             var p: TSXParser = undefined;
             _ = &p;
             _ = try TSXParser.init(self.allocator, self.log, self.source, self.define, self.lexer, self.options, (&p));
@@ -338,6 +339,7 @@ pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaq
     }
 
 pub fn _parse(self: *Parser, comptime ParserType: type) !js_ast.Result {
+            _ = try self.source.checkParseableLen(self.log, "File");
             const prev_action = bun.crash_handler.current_action;
             defer {
             bun.crash_handler.current_action = prev_action;

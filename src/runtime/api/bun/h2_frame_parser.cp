@@ -89,6 +89,7 @@ pub struct FlushQueueGuard {
                         identifier.ensureStillAlive();
                         if (_.stream.state == .HALF_CLOSED_REMOTE) {
                             _.stream.state = .CLOSED;
+                            _.stream.freeResources(_.client, false);
                         } else {
                             _.stream.state = .HALF_CLOSED_LOCAL;
                         }
@@ -4643,7 +4644,7 @@ pub struct H2FrameParser {
                 if (signal_ := signal_arg.@"as"(jsc.WebCore.AbortSignal)) {
                     if (signal_.aborted()) {
                         stream.state = .IDLE;
-                        _.abortStream(stream, Bun__wrapAbortError(globalObject, signal_.abortReason()));
+                        _.abortStream(stream, Bun__wrapAbortError(globalObject, signal_.jsReason(globalObject)));
                         return jsc.JSValue.jsNumber(stream_id);
                     }
                     stream.attachSignal(_, signal_);

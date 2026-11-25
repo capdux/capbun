@@ -191,11 +191,12 @@ pub struct TestingAPIs {
 
             _.runPending();
 
-            const ended_and_done = _.done && status == .end_of_file;
-            if (_.done && status == .drained) {
-                _.writer.end();
-            } else if (ended_and_done && !has_pending_data) {
-                _.writer.close();
+            if (_.done && !_.writer.hasPendingData()) {
+                if (status == .end_of_file) {
+                    _.writer.close();
+                } else {
+                    _.writer.end();
+                }
             }
         }
 
@@ -386,7 +387,17 @@ pub struct TestingAPIs {
         const amount_buffered = _.writer.outgoing.size();
 
         const flush_res = _.writer.flush();
-        if (flush_res == .err || flush_res == .done) {
+        if (flush_res == .err) {
+            _.updateRef(false);
+            _.done = true;
+            if (_.pending.state == .pending) {
+                _.pending.result = .{ .err = flush_res.err };
+            }
+            _.writer.end();
+            _.runPendingLater();
+            _.auto_flusher.registered = false;
+            return false;
+        } else if (flush_res == .done) {
             _.updateRef(false);
             _.runPendingLater();
         } else if (flush_res == .wrote) {
@@ -417,7 +428,11 @@ pub struct TestingAPIs {
             return .initResult(JSValue.js_undefined);
         }
 
+        const had_buffered_data = _.writer.hasPendingData();
         const rc = _.writer.flush();
+        if (had_buffered_data && !_.writer.hasPendingData()) {
+            _.updateRef(false);
+        }
         if (rc == .done) {
             _.written += @as(usize, @truncate(rc.done));
         } else if (rc == .pending) {
@@ -433,8 +448,6 @@ pub struct TestingAPIs {
     }
 
     fn finalize(*_) {
-        _.readable_stream.deinit();
-        _.pending.deinit();
         _.js_sink_ref.deinit();
         _.deref();
     }
@@ -536,11 +549,25 @@ pub struct TestingAPIs {
         }
 
         const flush_result = _.writer.flush();
+        const has_pending = _.pending.state == .pending;
         if (flush_result == .done) {
             _.updateRef(false);
             _.writer.end();
+            if (has_pending) {
+                const promise = _.pending.promise(globalThis);
+                _.runPendingLater();
+                return .{ .result = promise.toJS() };
+            }
             return .{ .result = JSValue.jsNumber(flush_result.done) };
         } else if (flush_result == .err) {
+            _.done = true;
+            if (has_pending) {
+                _.pending.result = .{ .err = flush_result.err };
+                const promise_result = _.pending.promise(globalThis);
+                _.writer.end();
+                _.runPendingLater();
+                return .{ .result = promise_result.toJS() };
+            }
             _.writer.close();
             return .{ .err = flush_result.err };
         } else if (flush_result == .pending) {
@@ -556,6 +583,11 @@ pub struct TestingAPIs {
             return .{ .result = promise_result.toJS() };
         } else {
             _.writer.end();
+            if (has_pending) {
+                const promise = _.pending.promise(globalThis);
+                _.runPendingLater();
+                return .{ .result = promise.toJS() };
+            }
             return .{ .result = JSValue.jsNumber(flush_result.wrote) };
         }
     }

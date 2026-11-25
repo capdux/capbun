@@ -178,7 +178,13 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
                 return globalThis.throwInvalidArgumentType("color", "format", "string");
             }
 
-            break :brk args[1].toEnumFromMap(globalThis, "format", OutputColorFormat, OutputColorFormatMap)?;
+            if (fmt := OutputColorFormatMap.fromJS(globalThis, args[1])?) {
+                break :brk fmt;
+            }
+            return globalThis.throwInvalidArguments(
+                "format must be one of '[r,g,b,a]', '[rgb]', '[rgba]', '{r,g,b}', '{rgb}', '{rgba}', 'ansi_256', 'ansi-256', 'ansi_16', 'ansi-16', 'ansi_16m', 'ansi-16m', 'ansi-24bit', 'ansi-truecolor', 'ansi', 'ansi256', 'css', 'hex', 'HEX', 'hsl', 'lab', 'number', 'rgb' or 'rgba'",
+                .{},
+            );
         }
 
         break :brk OutputColorFormat.css;

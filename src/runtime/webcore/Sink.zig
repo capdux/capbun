@@ -433,7 +433,6 @@ pub fn detach(self: *@This(), globalThis: *JSGlobalObject) void {
             }
             _ = self.sink.signal.clear();
             const value = @as(JSValue, @enumFromInt(@as(jsc.JSValue.backing_int, @bitCast(@intFromPtr(ptr)))));
-            _ = value.unprotect();
             _ = (blk_catch_1: { break :blk_catch_1 ((detachPtr(globalThis, value)) catch |__ce_1| { _ = &__ce_1;  }); });
     }
 

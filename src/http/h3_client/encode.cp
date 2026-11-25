@@ -13,7 +13,8 @@ struct FreeGuard<T> { slice: []T, alloc: std.mem.Allocator, ~init() { _.alloc.fr
 
 pub fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Stream): ! {
     if (client := stream.client) {
-        const request = client.buildRequest(client.state.original_request_body.len());
+        client.compressBodyForSend(false)?;
+        const request = client.buildRequest(client.bodyLenForSend());
         if (client.verbose != .none) {
             HTTPClient.printRequest(
                 .http3,

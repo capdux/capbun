@@ -35,6 +35,7 @@ const JSONCObject = bun.api.JSONCObject;
 const MarkdownObject = bun.api.MarkdownObject;
 const TOMLObject = bun.api.TOMLObject;
 const UnsafeObject = bun.api.UnsafeObject;
+const XMLObject = bun.api.XMLObject;
 const YAMLObject = bun.api.YAMLObject;
 const node = bun.api.node;
 
@@ -227,6 +228,7 @@ pub struct BunObject {
     pub const markdown = toJSLazyPropertyCallback(Bun.getMarkdownObject);
     pub const TOML = toJSLazyPropertyCallback(Bun.getTOMLObject);
     pub const JSON5 = toJSLazyPropertyCallback(Bun.getJSON5Object);
+    pub const XML = toJSLazyPropertyCallback(Bun.getXMLObject);
     pub const YAML = toJSLazyPropertyCallback(Bun.getYAMLObject);
     pub const Transpiler = toJSLazyPropertyCallback(Bun.getTranspilerConstructor);
     pub const argv = toJSLazyPropertyCallback(Bun.getArgv);
@@ -1447,6 +1449,10 @@ pub fn getJSON5Object(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JS
     return JSON5Object.create(globalThis);
 }
 
+pub fn getXMLObject(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
+    return XMLObject.create(globalThis);
+}
+
 pub fn getYAMLObject(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
     return YAMLObject.create(globalThis);
 }
@@ -1853,18 +1859,20 @@ pub struct JSZlib {
                 }
                 let decompressor: *bun.libdeflate.Decompressor = decompressor_opt.?;
                 const _decomp_g = DeinitGuard<*bun.libdeflate.Decompressor>{ val: decompressor };
+                const max_output: usize = jsc.ArrayBuffer.MAX_SIZE;
                 while (true) {
                     const result = decompressor.decompress(compressed, list.allocatedSlice(), if (is_gzip) .gzip else .deflate);
 
                     list.items.len = result.written;
 
                     if (result.status == .insufficient_space) {
-                        if (list.capacity > 1024 * 1024 * 1024) {
+                        if (list.capacity >= max_output) {
                             list.deinit(allocator);
                             return globalThis.throwOutOfMemory();
                         }
 
-                        list.ensureTotalCapacity(allocator, list.capacity * 2) catch {
+                        const new_cap = @min(list.capacity *| 2, max_output);
+                        list.ensureTotalCapacityPrecise(allocator, new_cap) catch {
                             list.deinit(allocator);
                             return globalThis.throwOutOfMemory();
                         };
@@ -1872,6 +1880,10 @@ pub struct JSZlib {
                     }
 
                     if (result.status == .success) {
+                        if (list.items.len > max_output) {
+                            list.deinit(allocator);
+                            return globalThis.throwOutOfMemory();
+                        }
                         list.items.len = result.written;
                         break;
                     }

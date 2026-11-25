@@ -42,6 +42,8 @@ pub const BUN_DEBUG_ENABLE_RESTORE_FROM_TRANSPILER_CACHE = New(kind.boolean, "BU
 /// to return true without mutating `/etc/NIXOS` on the shared rootfs. Used by
 /// `test/regression/issue/29290.test.ts` to exercise the Nix-host branch.
 pub const BUN_DEBUG_FORCE_NIX_HOST = New(kind.boolean, "BUN_DEBUG_FORCE_NIX_HOST", BoolCtorOptions{ default: false });
+/// Testing hook for #15753: enable the glibc-addon pre-dlopen check on glibc hosts.
+pub const BUN_INTERNAL_NAPI_FORCE_MUSL_CHECK = New(kind.boolean, "BUN_INTERNAL_NAPI_FORCE_MUSL_CHECK", BoolCtorOptions{ default: false });
 pub const BUN_DEBUG_HASH_RANDOM_SEED = New(kind.unsigned, "BUN_DEBUG_HASH_RANDOM_SEED", UnsignedCtorOptions{ deser: UnsignedDeserOpts{ error_handling: .not_set } });
 pub const BUN_DEBUG_QUIET_LOGS = New(kind.boolean, "BUN_DEBUG_QUIET_LOGS", BoolCtorOptions{});
 pub const BUN_DEBUG_TEST_TEXT_LOCKFILE = New(kind.boolean, "BUN_DEBUG_TEST_TEXT_LOCKFILE", BoolCtorOptions{ default: false });
@@ -159,6 +161,7 @@ pub static struct feature_flag {
     pub const BUN_FEATURE_FLAG_DISABLE_ISOLATION_SOURCE_CACHE = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_ISOLATION_SOURCE_CACHE");
     pub const BUN_FEATURE_FLAG_DISABLE_DNS_CACHE = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_DNS_CACHE");
     pub const BUN_FEATURE_FLAG_DISABLE_DNS_CACHE_LIBINFO = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_DNS_CACHE_LIBINFO");
+    pub const BUN_FEATURE_FLAG_DISABLE_FETCH_TLS_SESSION_CACHE = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_FETCH_TLS_SESSION_CACHE");
     pub const BUN_FEATURE_FLAG_DISABLE_INSTALL_INDEX = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_INSTALL_INDEX");
     pub const BUN_FEATURE_FLAG_DISABLE_STREAMING_INSTALL = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_STREAMING_INSTALL");
     pub const BUN_FEATURE_FLAG_DISABLE_IO_POOL = newFeatureFlag("BUN_FEATURE_FLAG_DISABLE_IO_POOL");

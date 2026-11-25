@@ -410,6 +410,7 @@ pub fn exportAll() void {
     pub const markdown = toJSLazyPropertyCallback(Bun.getMarkdownObject);
     pub const TOML = toJSLazyPropertyCallback(Bun.getTOMLObject);
     pub const JSON5 = toJSLazyPropertyCallback(Bun.getJSON5Object);
+    pub const XML = toJSLazyPropertyCallback(Bun.getXMLObject);
     pub const YAML = toJSLazyPropertyCallback(Bun.getYAMLObject);
     pub const Transpiler = toJSLazyPropertyCallback(Bun.getTranspilerConstructor);
     pub const argv = toJSLazyPropertyCallback(Bun.getArgv);
@@ -695,19 +696,25 @@ const decompressor_opt = bun.libdeflate.Decompressor.alloc();
             _ = &_decomp_g;
             var ___decomp_g_moved = false; _ = &___decomp_g_moved;
             defer if (!___decomp_g_moved) { ___decomp_g_moved = true; const __T = @TypeOf(_decomp_g); if (@typeInfo(__T) == .optional) { if (_decomp_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _decomp_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _decomp_g; _drop_val.__cp_deinit(); } };
+            const max_output: usize = jsc.ArrayBuffer.MAX_SIZE;
             while (true) {
                 const result = decompressor.decompress(compressed, list.allocatedSlice(), (if (is_gzip) .gzip else .deflate));
                 list.items.len = result.written;
                 if ((result.status == .insufficient_space)) {
-                    if ((list.capacity > ((1024 * 1024) * 1024))) {
+                    if ((list.capacity >= max_output)) {
                         _ = list.deinit(allocator);
                         return globalThis.throwOutOfMemory();
                     }
-                    _ = (blk_catch_2: { break :blk_catch_2 ((list.ensureTotalCapacity(allocator, (list.capacity * 2))) catch |__ce_2| { _ = &__ce_2; _ = list.deinit(allocator);
+                    const new_cap = @min((list.capacity *| 2), max_output);
+                    _ = (blk_catch_2: { break :blk_catch_2 ((list.ensureTotalCapacityPrecise(allocator, new_cap)) catch |__ce_2| { _ = &__ce_2; _ = list.deinit(allocator);
                     return globalThis.throwOutOfMemory(); }); });
                     continue;
                 }
                 if ((result.status == .success)) {
+                    if ((list.items.len > max_output)) {
+                        _ = list.deinit(allocator);
+                        return globalThis.throwOutOfMemory();
+                    }
                     list.items.len = result.written;
                     break;
                 }
@@ -1046,6 +1053,7 @@ const JSONCObject = bun.api.JSONCObject;
 const MarkdownObject = bun.api.MarkdownObject;
 const TOMLObject = bun.api.TOMLObject;
 const UnsafeObject = bun.api.UnsafeObject;
+const XMLObject = bun.api.XMLObject;
 const YAMLObject = bun.api.YAMLObject;
 const node = bun.api.node;
 const jsc = bun.jsc;
@@ -2048,6 +2056,10 @@ pub fn getTOMLObject(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSVa
 
 pub fn getJSON5Object(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
         return JSON5Object.create(globalThis);
+}
+
+pub fn getXMLObject(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
+        return XMLObject.create(globalThis);
 }
 
 pub fn getYAMLObject(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {

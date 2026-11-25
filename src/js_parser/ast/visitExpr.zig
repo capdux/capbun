@@ -521,7 +521,7 @@ const index = p.visitExpr(e_.index);
 }
             const target = e_.target.unwrapInlined();
             const index = e_.index.unwrapInlined();
-            if (p.options.features.minify_syntax) {
+            if ((p.options.features.minify_syntax and (expr_in.assign_target == .none))) {
                 if (index.data.@"as"(.e_number)) |number| {
                     _ = &number;
                     if (((((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) >= 0) and ((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) < @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum" and (@typeInfo(@TypeOf(std.math.maxInt(usize))) == .int or @typeInfo(@TypeOf(std.math.maxInt(usize))) == .comptime_int)) @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize))))))) and (@mod((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value), 1) == 0))) {
@@ -540,29 +540,26 @@ const index = p.visitExpr(e_.index);
                         } else {
                             if (target.data.@"as"(.e_array)) |array| {
                                 _ = &array;
-                                if (((array.items.len == 1) and ((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value) == 0))) {
-                                    const inlined = (target.data.e_array.items.at(0)).*;
-                                    if (inlined.canBeInlinedFromPropertyAccess()) {
-                                        return inlined;
-                                    }
-                                }
                                 const int: usize = @intFromFloat((if (@typeInfo(@TypeOf(number)) == .@"enum") @intFromEnum(number) else number.value));
-                                if (((int < array.items.len) and p.exprCanBeRemovedIfUnused((&target)))) {
-                                    const inlined = (target.data.e_array.items.at(int)).*;
+                                const inlined_opt: ?Expr = (if (((array.items.len == 1) and (int == 0))) (target.data.e_array.items.at(0)).* else (if (((int < array.items.len) and p.exprCanBeRemovedIfUnused((&target)))) (target.data.e_array.items.at(int)).* else null));
+                                if (inlined_opt) |inlined| {
+                                    _ = &inlined;
                                     if ((inlined.data == .e_missing)) {
                                         return p.newExpr(E.Undefined, inlined.loc);
                                     }
-                                    if (Environment.allow_assert) {
-                                        _ = assert(inlined.canBeInlinedFromPropertyAccess());
+                                    if (inlined.canBeInlinedFromPropertyAccess()) {
+                                        if ((is_call_target and inlined.hasValueForThisInCall())) {
+                                            return Expr.joinWithComma(p.newExpr(E.Number{ .value = 0 }, expr.loc), inlined, p.allocator);
+                                        }
+                                        return inlined;
                                     }
-                                    return inlined;
                                 }
                             }
                         }
                     }
                 }
             }
-            if (((((expr_in.assign_target != .none) or is_delete_target) and (std.meta.activeTag(e_.target.data) == .e_identifier)) and (p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].kind == .@"import"))) {
+            if ((((p.options.bundle and ((expr_in.assign_target != .none) or is_delete_target)) and (std.meta.activeTag(e_.target.data) == .e_identifier)) and (p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].kind == .@"import"))) {
                 const r = js_lexer.rangeOfIdentifier(p.source, e_.target.loc);
                 _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot assign to property on import \"{s}\"", .{ p.symbols.items[@as(usize, @intCast(e_.target.data.e_identifier.ref.innerIndex()))].original_name })) catch unreachable);
             }

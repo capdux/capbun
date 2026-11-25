@@ -228,6 +228,9 @@ pub fn callErrorHandler(self: *Handlers, thisValue: JSValue, args: *const [2]JSV
             return false;
         }
         const globalObject = self.globalObject;
+        if (globalObject.hasException()) {
+            return false;
+        }
         const onError = self.onError;
         if ((onError == .zero)) {
             _ = vm.uncaughtException(globalObject, args[1], false);

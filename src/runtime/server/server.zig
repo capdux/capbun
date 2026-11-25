@@ -79,6 +79,8 @@ pub const _HTTPStatusText = @import("./HTTPStatusText.zig");
 pub const _HTMLBundle = @import("./HTMLBundle.zig");
 pub const _StaticRoute = @import("./StaticRoute.zig");
 pub const _FileRouteMod = @import("./FileRoute.zig");
+pub const _DirectoryRouteMod = @import("./DirectoryRoute.zig");
+pub const _DevErrorPageMod = @import("./DevErrorPage.zig");
 pub const _FileResponseStream = @import("./FileResponseStream.zig");
 pub const _RangeRequest = @import("./RangeRequest.zig");
 pub const _ServerConfig = @import("./ServerConfig.zig");
@@ -294,6 +296,7 @@ pub const _ServerInitContext = struct {
 pub const AnyRoute = union(enum) {
     static: *StaticRoute,
     file: *FileRoute,
+    directory: *DirectoryRoute,
     html: bun.ptr.RefPtr(HTMLBundle.Route),
     framework_router: bun.bake.FrameworkRouter.Type.Index,
 
@@ -301,6 +304,7 @@ pub fn memoryCost(self: AnyRoute) usize {
             return (switch (self) {
 .static => |static_route| static_route.memoryCost(),
 .file => |file_route| file_route.memoryCost(),
+.directory => |dir_route| dir_route.memoryCost(),
 .html => |html_bundle_route| html_bundle_route.data.memoryCost(),
 .framework_router => @sizeOf(bun.bake.Framework.FileSystemRouterType),
 });
@@ -313,6 +317,9 @@ static_route.server = server;
 },
 .file => |file_route| {
 file_route.server = server;
+},
+.directory => |dir_route| {
+_ = dir_route.setServer(server);
 },
 .html => |html_bundle_route| {
 html_bundle_route.server = server;
@@ -331,6 +338,9 @@ _ = static_route.deref();
 .file => |file_route| {
 _ = file_route.deref();
 },
+.directory => |dir_route| {
+_ = dir_route.deref();
+},
 .html => |html_bundle_route| {
 _ = html_bundle_route.deref();
 },
@@ -347,6 +357,9 @@ _ = static_route.ref();
 },
 .file => |file_route| {
 _ = file_route.ref();
+},
+.directory => |dir_route| {
+_ = dir_route.ref();
 },
 .html => |html_bundle_route| {
 _ = html_bundle_route.ref();
@@ -530,12 +543,24 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
                     var alloc = init_ctx.js_string_allocations;
                     _ = &alloc;
                     const relative_root = alloc.track(dir);
-                    var style: FrameworkRouter.Style = .nextjs_pages;
-                    _ = &style;
-                    if (try argument.get(global, "style")) |style_val| {
-                        _ = &style_val;
-                        style = try FrameworkRouter.Style.fromJS(style_val, global);
+                    if ((!bun.strings.endsWith(path, "/*"))) {
+                        return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
                     }
+                    const style_val_opt = try argument.get(global, "style");
+                    if ((style_val_opt == null)) {
+                        if ((bun.strings.indexOfChar(path, 58) != null)) {
+                            return global.throwInvalidArguments("Directory routes do not support :parameters; use a fixed prefix ending in `/*`", .{});
+                        }
+                        if (bun.strings.contains(path, "//")) {
+                            return global.throwInvalidArguments("Directory route paths cannot contain empty segments", .{});
+                        }
+                        const url_prefix: []const u8 = (if ((path.len == 2)) "/" else path[0..(path.len - 1)]);
+                        const stat_cache = ((try argument.getBooleanLoose(global, "statCache")) orelse (true));
+                        const route = try DirectoryRoute.create(global, relative_root, url_prefix, stat_cache);
+                        return .{ .directory = route };
+                    }
+                    var style = try FrameworkRouter.Style.fromJS(style_val_opt.?, global);
+                    _ = &style;
                     var _guard_style = OptDeinitGuard(FrameworkRouter.Style){ .ptr = (blk: {
                     break :blk (&style);
 
@@ -543,9 +568,6 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
                     _ = &_guard_style;
                     var ___guard_style_moved = false; _ = &___guard_style_moved;
                     defer if (!___guard_style_moved) { ___guard_style_moved = true; const __T = @TypeOf(_guard_style); if (@typeInfo(__T) == .optional) { if (_guard_style) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_style.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_style; _drop_val.__cp_deinit(); } };
-                    if ((!bun.strings.endsWith(path, "/*"))) {
-                        return global.throwInvalidArguments("To mount a directory, make sure the path ends in `/*`", .{});
-                    }
                     _ = try init_ctx.framework_router_list.append(.{ .root = relative_root, .style = style, .prefix = (if ((path.len == 2)) "/" else path[0..(path.len - 2)]), .entry_client = "bun-framework-react/client.tsx", .entry_server = "bun-framework-react/server.tsx", .ignore_underscores = true, .ignore_dirs = (&.{ "node_modules", ".git" }), .extensions = (&.{ ".tsx", ".jsx" }), .allow_layouts = true });
                     _guard_style.ptr = null;
                     const limit = std.math.maxInt(@typeInfo(FrameworkRouter.Type.Index).@"enum".tag_type);
@@ -1405,6 +1427,8 @@ pub const HTTPStatusText = _HTTPStatusText;
 pub const HTMLBundle = _HTMLBundle;
 pub const StaticRoute = _StaticRoute;
 pub const FileRoute = _FileRouteMod.FileRoute;
+pub const DirectoryRoute = _DirectoryRouteMod.DirectoryRoute;
+pub const DevErrorPage = _DevErrorPageMod.DevErrorPage;
 pub const FileResponseStream = _FileResponseStream;
 pub const RangeRequest = _RangeRequest;
 pub const ServerConfig = _ServerConfig;
@@ -1414,6 +1438,7 @@ const _Ptrs = struct {
     pub const ServerWebSocketPtr = *_SelfMod.ServerWebSocket;
     pub const StaticRoutePtr = *_SelfMod.StaticRoute;
     pub const FileRoutePtr = *_SelfMod.FileRoute;
+    pub const DirectoryRoutePtr = *_SelfMod.DirectoryRoute;
     pub const HTMLBundleRoutePtr = *HTMLBundle.Route;
     pub const TranspilerPtr = *_SelfMod.Transpiler;
 };
@@ -2512,6 +2537,9 @@ pub fn finalize(self: *@This()) void {
             _ = httplog("finalize", .{});
             _ = self.js_value.finalize();
             _ = self.deinitIfWeCan();
+            if ((self.flags.deinit_scheduled and self.vm.isShuttingDown())) {
+                _ = self.deinit();
+            }
     }
 
 pub fn activeSocketsCount(self: @This()) u32 {
@@ -2654,6 +2682,9 @@ pub fn scheduleDeinit(self: *@This()) void {
             }
             self.flags.deinit_scheduled = true;
             _ = httplog("scheduleDeinit", .{});
+            if (self.vm.isShuttingDown()) {
+                return;
+            }
             if ((!self.flags.terminated)) {
                 self.flags.terminated = true;
                 const task = ((bun.default_allocator.create(jsc.AnyTask)) catch unreachable);
@@ -3636,6 +3667,15 @@ _ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, _Ptrs.Fil
                         if (self.h3_app) |h3_app| {
                             _ = &h3_app;
                             _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.FileRoutePtr, file_route, (entry.*).path, (entry.*).method);
+                        }
+                    }
+},
+.directory => |dir_route| {
+_ = ServerConfig.applyStaticRoute(any_server, ssl_enabled, self.app.?, _Ptrs.DirectoryRoutePtr, dir_route, (entry.*).path, (entry.*).method);
+                    if (comptime has_h3) {
+                        if (self.h3_app) |h3_app| {
+                            _ = &h3_app;
+                            _ = ServerConfig.applyStaticRouteH3(any_server, h3_app, _Ptrs.DirectoryRoutePtr, dir_route, (entry.*).path, (entry.*).method);
                         }
                     }
 },

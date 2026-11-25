@@ -232,16 +232,25 @@ pub union(enum) Lazy {
         _.event_loop = jsc.EventLoopHandle.init(_.parent().globalThis.bunVM().eventLoop());
 
         if (was_lazy) {
-            * = _.parent().incrementCount();
-            _.waiting_for_onReaderDone = true;
+            const need_io_ref = if (Environment.isWindows) true else pollable;
+            if (need_io_ref) {
+                * = _.parent().incrementCount();
+                _.waiting_for_onReaderDone = true;
+            }
             if (offset := _.start_offset) {
                 const start_res = _.reader.startFileOffset(_.fd, pollable, offset);
                 if (start_res == .err) {
+                    if (need_io_ref) {
+                        _.waiting_for_onReaderDone = false;
+                    }
                     return .{ .err = start_res.err };
                 }
             } else {
                 const start_res = _.reader.start(_.fd, pollable);
                 if (start_res == .err) {
+                    if (need_io_ref) {
+                        _.waiting_for_onReaderDone = false;
+                    }
                     return .{ .err = start_res.err };
                 }
             }

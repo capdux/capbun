@@ -373,6 +373,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             }
         }
 
+        /// Disconnect the upstream source: JSController -> detachPtr; ByteStream -> clear its SinkHandle.
         pub fn detach(*_, globalThis: *JSGlobalObject) {
             if (comptime !@hasField(SinkType, "signal"))
                 return;
@@ -382,7 +383,6 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                 return;
             _.sink.signal.clear();
             const value = @as(JSValue, @enumFromInt(@as(jsc.JSValue.backing_int, @bitCast(@intFromPtr(ptr)))));
-            value.unprotect();
             detachPtr(globalThis, value) catch {};
         }
 

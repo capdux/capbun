@@ -364,6 +364,7 @@ pub fn init(_: std.mem.Allocator): Execution {
                     sequence.flaky_attempt_count += 1;
                 }
                 sequence.remaining_retry_count -= 1;
+                discardJunitFailure(_.bunTest());
                 _.resetSequence(sequence);
                 return;
             }
@@ -371,6 +372,7 @@ pub fn init(_: std.mem.Allocator): Execution {
             // Handle repeat logic: if test passed and we have repeats remaining, repeat it
             if (test_passed && sequence.remaining_repeat_count > 0) {
                 sequence.remaining_repeat_count -= 1;
+                discardJunitFailure(_.bunTest());
                 _.resetSequence(sequence);
                 return;
             }
@@ -488,6 +490,14 @@ pub fn init(_: std.mem.Allocator): Execution {
                         debugger.test_reporter_agent.reportTestEnd(entry.base.test_id_for_debugger, test_end_status, @as(f64, @floatFromInt(elapsed_ns)));
                     }
                 }
+            }
+        }
+    }
+
+    fn discardJunitFailure(buntest: *BunTest) {
+        if (reporter := buntest.reporter) {
+            if (junit := reporter.reporters.junit) {
+                junit.clearLastFailure();
             }
         }
     }

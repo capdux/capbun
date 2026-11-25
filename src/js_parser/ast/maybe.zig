@@ -308,7 +308,7 @@ if (comptime FeatureFlags.inline_properties_in_transpiler) {
                     if (p.options.features.minify_syntax) {
                         if (((((obj.properties.len == 1) and (!identifier_opts.is_delete_target)) and (identifier_opts.assign_target == .none)) and (!identifier_opts.is_call_target))) {
                             const prop: G.Property = obj.properties.ptr[0];
-                            if ((((((((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) != null) and (prop.flags.count() == 0)) and (prop.key != null)) and (prop.key.?.data == .e_string)) and prop.key.?.data.e_string.eql(string, name)) and (!bun.strings.eqlComptime(name, "__proto__")))) {
+                            if (((((((((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value) != null) and (prop.flags.count() == 0)) and (prop.key != null)) and (prop.key.?.data == .e_string)) and prop.key.?.data.e_string.eql(string, name)) and (!bun.strings.eqlComptime(name, "__proto__"))) and (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.canBeInlinedFromPropertyAccess())) {
                                 return (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
                             }
                         }

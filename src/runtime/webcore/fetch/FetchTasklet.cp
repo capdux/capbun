@@ -106,6 +106,7 @@ pub struct FetchTaskletOptions {
     force_http2: bool = false,
     force_http3: bool = false,
     force_http1: bool = false,
+    compress: bun.http.compress_body.CompressOption? = null,
 }
 
 struct DeinitGuard<T> {
@@ -612,10 +613,13 @@ export class FetchTasklet {
                 }
             }
 
+            let body = response.getBodyValue();
+            if (body.* != .Locked) {
+                return;
+            }
             _guard_buf.active = false;
             if (!_.result.has_more) {
                 const managed_bytes = _.scheduled_response_buffer.list.toManaged(default_allocator);
-                let body = response.getBodyValue();
                 let old = body.*;
                 const body_value = Body.Value{
                     .InternalBlob = .{
@@ -1226,6 +1230,7 @@ export class FetchTasklet {
                 .reject_unauthorized = fetch_options.reject_unauthorized,
                 .verbose = fetch_options.verbose,
                 .tls_props = fetch_options.ssl_config,
+                .compress = fetch_options.compress,
             },
         );
 

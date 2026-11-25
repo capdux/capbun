@@ -1451,26 +1451,31 @@ node_api_create_external_string_latin1(napi_env env,
 {
     // https://nodejs.org/api/n-api.html#node_api_create_external_string_latin1
     NAPI_PREAMBLE(env);
-    NAPI_CHECK_ARG(env, str);
+    // Node's CHECK_NEW_STRING_ARGS: str may be null when length is 0.
+    NAPI_RETURN_EARLY_IF_FALSE(env, length == 0 || str != nullptr, napi_invalid_arg);
     NAPI_CHECK_ARG(env, result);
+    NAPI_RETURN_EARLY_IF_FALSE(env, length == NAPI_AUTO_LENGTH || length <= INT_MAX, napi_invalid_arg);
 
     length = length == NAPI_AUTO_LENGTH ? strlen(str) : length;
-    // WTF::ExternalStringImpl does not allow creating empty strings, so we have this limitation for now.
-    NAPI_RETURN_EARLY_IF_FALSE(env, length > 0, napi_invalid_arg);
+    Zig::GlobalObject* globalObject = toJS(env);
+    if (copied) {
+        *copied = false;
+    }
+    if (length == 0) {
+        *result = toNapi(JSC::jsEmptyString(JSC::getVM(globalObject)), globalObject);
+        env->doFinalizer(finalize_callback, str, finalize_hint);
+        return napi_set_last_error(env, napi_ok);
+    }
+
     Ref<WTF::ExternalStringImpl> impl = WTF::ExternalStringImpl::create({ reinterpret_cast<const Latin1Character*>(str), static_cast<unsigned int>(length) }, finalize_hint, [finalize_callback, env](void* hint, void* str, unsigned length) {
         NAPI_LOG("latin1 string finalizer");
         env->doFinalizer(finalize_callback, str, hint);
     });
-    Zig::GlobalObject* globalObject = toJS(env);
 
     JSString* out = JSC::jsString(JSC::getVM(globalObject), WTF::String(WTF::move(impl)));
     ensureStillAliveHere(out);
     *result = toNapi(out, globalObject);
     ensureStillAliveHere(out);
-
-    if (copied) {
-        *copied = false;
-    }
 
     NAPI_RETURN_SUCCESS(env);
 }
@@ -1486,18 +1491,26 @@ node_api_create_external_string_utf16(napi_env env,
 {
     // https://nodejs.org/api/n-api.html#node_api_create_external_string_utf16
     NAPI_PREAMBLE(env);
-    NAPI_CHECK_ARG(env, str);
+    // Node's CHECK_NEW_STRING_ARGS: str may be null when length is 0.
+    NAPI_RETURN_EARLY_IF_FALSE(env, length == 0 || str != nullptr, napi_invalid_arg);
     NAPI_CHECK_ARG(env, result);
+    NAPI_RETURN_EARLY_IF_FALSE(env, length == NAPI_AUTO_LENGTH || length <= INT_MAX, napi_invalid_arg);
 
     length = length == NAPI_AUTO_LENGTH ? std::char_traits<char16_t>::length(str) : length;
-    // WTF::ExternalStringImpl does not allow creating empty strings, so we have this limitation for now.
-    NAPI_RETURN_EARLY_IF_FALSE(env, length > 0, napi_invalid_arg);
+    Zig::GlobalObject* globalObject = toJS(env);
+    if (copied) {
+        *copied = false;
+    }
+    if (length == 0) {
+        *result = toNapi(JSC::jsEmptyString(JSC::getVM(globalObject)), globalObject);
+        env->doFinalizer(finalize_callback, str, finalize_hint);
+        return napi_set_last_error(env, napi_ok);
+    }
 
     Ref<WTF::ExternalStringImpl> impl = WTF::ExternalStringImpl::create({ reinterpret_cast<const char16_t*>(str), static_cast<unsigned int>(length) }, finalize_hint, [finalize_callback, env](void* hint, void* str, unsigned length) {
         NAPI_LOG("utf16 string finalizer");
         env->doFinalizer(finalize_callback, str, hint);
     });
-    Zig::GlobalObject* globalObject = toJS(env);
 
     JSString* out = JSC::jsString(JSC::getVM(globalObject), WTF::String(WTF::move(impl)));
     ensureStillAliveHere(out);

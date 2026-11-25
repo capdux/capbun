@@ -1324,6 +1324,39 @@ pub fn formatJSONStringUTF8(text: []const u8, opts: JSONFormatterUTF8Options) JS
         return JSONFormatterUTF8{ .input = text, .opts = opts };
 }
 
+pub fn substituteNamed(allocator: std.mem.Allocator, template: []const u8, args: []const [2][]const u8) ![]u8 {
+        var out = try std.ArrayListUnmanaged(u8).initCapacity(allocator, template.len);
+        _ = &out;
+        errdefer {
+        _ = out.deinit(allocator);
+        }
+        var remaining: []const u8 = template;
+        _ = &remaining;
+        while (strings.indexOf(remaining, "{[")) |start| {
+            _ = try out.appendSlice(allocator, remaining[0..start]);
+            const after = remaining[(start + 2)..];
+            var matched = false;
+            _ = &matched;
+            for (cp_iter_slice(args)) |pair| {
+                _ = &pair;
+                const name = pair[0];
+                const value = pair[1];
+                if ((strings.startsWith(after, name) and strings.startsWith(after[name.len..], "]s}"))) {
+                    _ = try out.appendSlice(allocator, value);
+                    remaining = after[(name.len + 3)..];
+                    matched = true;
+                    break;
+                }
+            }
+            if ((!matched)) {
+                _ = try out.appendSlice(allocator, "{[");
+                remaining = after;
+            }
+        }
+        _ = try out.appendSlice(allocator, remaining);
+        return out.toOwnedSlice(allocator);
+}
+
 pub fn getSharedBuffer() []u8 {
         if (shared_temp_buffer_ptr) |existing| {
             _ = &existing;

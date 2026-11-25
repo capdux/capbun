@@ -343,6 +343,7 @@ pub fn __cp_deinit(self: *FlushQueueGuard) void {
                             _ = identifier.ensureStillAlive();
                             if ((self.stream.state == .HALF_CLOSED_REMOTE)) {
                                 self.stream.state = .CLOSED;
+                                _ = self.stream.freeResources(self.client, false);
                             } else {
                                 self.stream.state = .HALF_CLOSED_LOCAL;
                             }
@@ -4148,7 +4149,7 @@ else => .none,
                         _ = &signal_;
                         if (signal_.aborted()) {
                             stream.state = .IDLE;
-                            _ = self.abortStream(stream, Bun__wrapAbortError(globalObject, signal_.abortReason()));
+                            _ = self.abortStream(stream, Bun__wrapAbortError(globalObject, signal_.jsReason(globalObject)));
                             return jsc.JSValue.jsNumber(stream_id);
                         }
                         _ = stream.attachSignal(self, signal_);

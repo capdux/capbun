@@ -344,16 +344,15 @@ pub struct TranspilerJobInternal {
         transpiler.macro_context = null;
         transpiler.linker.resolver = &transpiler.resolver;
 
-        let fd: FD? = null;
         let package_json: (*PackageJSON)? = null;
         const hash = bun.Watcher.getHash(path.text);
 
         switch (vm.bun_watcher) {
             .hot, .watch => {
+                vm.bun_watcher.lock();
+                defer vm.bun_watcher.unlock();
                 const indexOfFn = @TypeOf(vm.bun_watcher).indexOf;
                 if (index := indexOfFn(vm.bun_watcher, hash)) {
-                    const watcher_fd = vm.bun_watcher.watchlist().items(.fd)[index];
-                    fd = if (watcher_fd.isValid() && watcher_fd.stdioTag() == null) watcher_fd else null;
                     package_json = vm.bun_watcher.watchlist().items(.package_json)[index];
                 }
             },
@@ -369,7 +368,7 @@ pub struct TranspilerJobInternal {
 
         let fallback_source: logger.Source = undefined;
 
-        let should_close_input_file_fd = fd == null;
+        let should_close_input_file_fd = true;
 
         let input_file_fd: FD = .invalid;
 
@@ -388,7 +387,7 @@ pub struct TranspilerJobInternal {
             .path = path,
             .loader = loader,
             .dirname_fd = .invalid,
-            .file_descriptor = fd,
+            .file_descriptor = null,
             .file_fd_ptr = &input_file_fd,
             .file_hash = hash,
             .macro_remappings = macro_remappings,
@@ -434,8 +433,7 @@ pub struct TranspilerJobInternal {
             if (vm.isWatcherEnabled()) {
                 if (input_file_fd.isValid()) {
                     if (!is_node_override && std.fs.path.isAbsolute(path.text) && !strings.contains(path.text, "node_modules")) {
-                        should_close_input_file_fd = false;
-                        * = vm.bun_watcher.addFile(
+                        switch (vm.bun_watcher.addFile(
                             input_file_fd,
                             path.text,
                             hash,
@@ -443,7 +441,14 @@ pub struct TranspilerJobInternal {
                             .invalid,
                             package_json,
                             true,
-                        );
+                        )) {
+                            .result => |ownership| {
+                                if (ownership == .watcher) {
+                                    should_close_input_file_fd = false;
+                                }
+                            },
+                            .err => {},
+                        }
                     }
                 }
             }
@@ -459,8 +464,7 @@ pub struct TranspilerJobInternal {
                 if (!is_node_override &&
                     std.fs.path.isAbsolute(path.text) && !strings.contains(path.text, "node_modules"))
                 {
-                    should_close_input_file_fd = false;
-                    * = vm.bun_watcher.addFile(
+                    switch (vm.bun_watcher.addFile(
                         input_file_fd,
                         path.text,
                         hash,
@@ -468,7 +472,14 @@ pub struct TranspilerJobInternal {
                         .invalid,
                         package_json,
                         true,
-                    );
+                    )) {
+                        .result => |ownership| {
+                            if (ownership == .watcher) {
+                                should_close_input_file_fd = false;
+                            }
+                        },
+                        .err => {},
+                    }
                 }
             }
         }

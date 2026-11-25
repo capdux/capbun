@@ -380,19 +380,13 @@ pub struct TokenList {
 
         // Slice off leading and trailing whitespace if there are at least two tokens.
         // If there is only one token, we must preserve it. e.g. `--foo: ;` is valid.
-        // PERF(alloc): this feels like a common codepath, idk how I feel about reallocating a new array just to slice off whitespace.
         if (tokens.items.len >= 2) {
-            let slice = tokens.items[0..];
-            if (tokens.items.len > 0 && tokens.items[0].isWhitespace()) {
-                slice = slice[1..];
+            if (tokens.items[tokens.items.len - 1].isWhitespace()) {
+                * = tokens.pop();
             }
-            if (tokens.items.len > 0 && tokens.items[tokens.items.len - 1].isWhitespace()) {
-                slice = slice[0 .. slice.len - 1];
+            if (tokens.items[0].isWhitespace()) {
+                * = tokens.orderedRemove(0);
             }
-            let newlist: ArrayList(TokenOrValue) = .{};
-            newlist.insertSlice(input.allocator(), 0, slice) catch unreachable;
-            tokens.deinit(input.allocator());
-            return { result: TokenList{ .v = newlist } };
         }
 
         return { result: { v: tokens } };

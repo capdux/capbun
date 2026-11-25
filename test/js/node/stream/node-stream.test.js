@@ -386,6 +386,41 @@ it("Readable.fromWeb", async () => {
   expect(Buffer.concat(chunks).toString()).toBe("Hello World!\n");
 });
 
+// fromWeb assigns stream.$bunNativePtr on the node Readable. When user code grafts
+// ReadableStream.prototype into the node stream prototype chain, that put used to
+// reach ReadableStream's private custom setter with the Readable as the receiver,
+// writing a JSValue through a type-confused pointer into the Readable's own
+// property storage (observable below as a clobbered Symbol(kCapture) slot).
+it("Readable.fromWeb with ReadableStream.prototype grafted into the prototype chain", async () => {
+  await using proc = Bun.spawn({
+    cmd: [
+      bunExe(),
+      "-e",
+      `
+        const { Readable } = require("node:stream");
+        const { EventEmitter } = require("node:events");
+        const snap = o => Object.fromEntries(Reflect.ownKeys(o).map(k => [String(k), Object.prototype.toString.call(o[k])]));
+        const before = snap(Readable.fromWeb(new Response("x").body));
+        Object.setPrototypeOf(EventEmitter.prototype, ReadableStream.prototype);
+        const stream = Readable.fromWeb(new Response("y").body);
+        const after = snap(stream);
+        for (const key in before) {
+          if (before[key] !== after[key]) throw new Error("clobbered own slot " + key + ": " + before[key] + " -> " + after[key]);
+        }
+        const chunks = [];
+        for await (const chunk of stream) chunks.push(chunk);
+        console.log("read:" + Buffer.concat(chunks).toString());
+      `,
+    ],
+    env: bunEnv,
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+  expect(stdout).toBe("read:y\n");
+  expect(exitCode).toBe(0);
+});
+
 it("#9242.5 Stream has constructor", () => {
   const s = new Stream({});
   expect(s.constructor).toBe(Stream);
@@ -567,3 +602,66 @@ for (const size of [0x10, 0xffff, 0x10000, 0x1f000, 0x20000, 0x20010, 0x7ffff, 0
     await Promise.all([close_resolvers.promise, readable_resolvers.promise]);
   });
 }
+
+// Upstream: nodejs/node#62986 (fixes nodejs/node#56269, oven-sh/bun#34588) —
+// non-object-mode Writable.toWeb must size chunks in bytes so desiredSize
+// reflects the byte-based highWaterMark.
+it("Writable.toWeb desiredSize is byte-based for non-object-mode writables", () => {
+  const writable = new Writable({
+    highWaterMark: 1024,
+    write(chunk, encoding, callback) {
+      // hold the write in flight so the chunk stays queued
+    },
+  });
+
+  const writer = Writable.toWeb(writable).getWriter();
+  expect(writer.desiredSize).toBe(1024);
+  void writer.write(new Uint8Array(64 * 1024));
+  // 1024 - 65536; without byte sizing this would be 1023.
+  expect(writer.desiredSize).toBe(1024 - 64 * 1024);
+});
+
+it("pipeTo into Writable.toWeb applies backpressure instead of buffering the whole source (#34588)", async () => {
+  const TOTAL = 20;
+  let writes = 0;
+  let writeArrived = Promise.withResolvers();
+  const writable = new Writable({
+    highWaterMark: 1024,
+    write(chunk, encoding, callback) {
+      writes++;
+      writeArrived.resolve(callback);
+    },
+  });
+
+  let pulled = 0;
+  const chunk = new Uint8Array(64 * 1024);
+  const source = new ReadableStream(
+    {
+      pull(controller) {
+        pulled++;
+        if (pulled > TOTAL) return controller.close();
+        controller.enqueue(chunk.slice());
+      },
+    },
+    { highWaterMark: 1, size: c => c.byteLength },
+  );
+
+  const pipe = source.pipeTo(Writable.toWeb(writable));
+
+  // Hold the first write in flight and let pending microtasks drain; with
+  // backpressure the source is only a few chunks ahead, without it the
+  // whole source (TOTAL + 1 pulls) is buffered while the sink is blocked.
+  const firstCallback = await writeArrived.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  expect(pulled).toBeLessThanOrEqual(4);
+
+  writeArrived = Promise.withResolvers();
+  firstCallback();
+  while (writes < TOTAL) {
+    const callback = await writeArrived.promise;
+    writeArrived = Promise.withResolvers();
+    callback();
+  }
+  await pipe;
+  expect(writes).toBe(TOTAL);
+});

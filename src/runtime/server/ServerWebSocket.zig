@@ -391,6 +391,9 @@ pub fn onClose(self: *ServerWebSocket, _ws: uws.AnyWebSocket, code: i32, message
         if (vm.isShuttingDown()) {
             return;
         }
+        if (handler.globalObject.hasException()) {
+            return;
+        }
         if ((!handler.onClose.isEmptyOrUndefinedOrNull())) {
             const globalObject = handler.globalObject;
             const loop = vm.eventLoop();
@@ -948,6 +951,11 @@ pub fn pong(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: 
         return self.sendPing(globalThis, callframe, "pong", .pong);
 }
 
+pub fn throwControlFrameTooLarge(self: ServerWebSocket, globalThis: *jsc.JSGlobalObject, len: usize) bun.JSError {
+    _ = self;
+        return globalThis.throwRangeError("The data size must not be greater than {d} bytes. Received {d} bytes.", .{ MAX_CONTROL_FRAME_PAYLOAD, len });
+}
+
 pub inline fn sendPing(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, comptime name: []const u8, comptime opcode: uws.Opcode) bun.JSError!JSValue {
         const args = callframe.arguments_old(2);
         if (self.isClosed()) {
@@ -960,6 +968,9 @@ pub inline fn sendPing(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, 
                 if (value.asArrayBuffer(globalThis)) |data| {
                     _ = &data;
                     const buffer = data.slice();
+                    if ((buffer.len > MAX_CONTROL_FRAME_PAYLOAD)) {
+                        return self.throwControlFrameTooLarge(globalThis, buffer.len);
+                    }
                     switch (self.websocket().send(buffer, opcode, false, true)) {
 .backpressure => {
 _ = log("{s}() backpressure ({d} bytes)", .{ name, buffer.len });
@@ -987,6 +998,9 @@ _ = log("{s}() dropped ({d} bytes)", .{ name, buffer.len });
                         var ___str_guard_moved = false; _ = &___str_guard_moved;
                         defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
                         const buffer = string_value.slice();
+                        if ((buffer.len > MAX_CONTROL_FRAME_PAYLOAD)) {
+                            return self.throwControlFrameTooLarge(globalThis, buffer.len);
+                        }
                         switch (self.websocket().send(buffer, opcode, false, true)) {
 .backpressure => {
 _ = log("{s}() backpressure ({d} bytes)", .{ name, buffer.len });
@@ -1233,6 +1247,7 @@ pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 const @"new" = bun.TrivialNew(ServerWebSocket);
+const MAX_CONTROL_FRAME_PAYLOAD: usize = 125;
 const Output = bun.Output;
 const uws = bun.uws;
 const WebSocketServer = bun.api.server.WebSocketServerContext;

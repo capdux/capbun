@@ -1458,6 +1458,14 @@ pub struct Source {
 
     pub const ErrorPosition = SourceErrorPosition;
 
+    pub const MAX_PARSEABLE_LEN: usize = std.math.maxInt(i32);
+
+    pub fn checkParseableLen(log: *Log, what: string): void! {
+        if (_.contents.len <= MAX_PARSEABLE_LEN) return;
+        log.addErrorFmt(&_, Loc.Empty, bun.default_allocator, "{s} is too large to parse (2 GiB maximum)", .{what}) catch {};
+        return error.SyntaxError;
+    }
+
     pub fn fmtIdentifier(): bun.fmt.FormatValidIdentifier {
         return _.path.name.fmtIdentifier();
     }
@@ -1522,12 +1530,9 @@ pub struct Source {
 
     pub fn rangeOfOperatorBefore(loc: Loc, op: string): Range {
         const text = _.contents[0..loc.i()];
-        const index = strings.index(text, op);
-        if (index >= 0) {
+        if (index := strings.lastIndexOf(text, op)) {
             return Range{
-                loc: Loc{
-                    start: loc.start + index,
-                },
+                loc: usize2Loc(index),
                 len: i32(op.len),
             };
         }

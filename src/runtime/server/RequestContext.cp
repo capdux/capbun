@@ -1,5 +1,7 @@
 import bun from "bun";
 import runtime_mod from "../../js_parser/runtime.zig";
+import _DevErrorPageMod from "./DevErrorPage.zig";
+const DevErrorPage = _DevErrorPageMod.DevErrorPage;
 
 /// Q: Why is this needed?
 /// A: The dev server needs to attach its own callback when the request is
@@ -582,6 +584,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             exceptions: []Api.JsException,
             comptime fmt: string,
             args: anytype,) {
+            * = err;
             if (!_.flags.has_written_status) {
                 _.flags.has_written_status = true;
                 if (resp := _.resp) {
@@ -590,36 +593,19 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 }
             }
 
-            const fallback_container = arena_allocator.create(Api.FallbackMessageContainer) catch unreachable;
-            const _guard_fb = DestroyGuard<@TypeOf(fallback_container)>{ alloc: arena_allocator, ptr: fallback_container };
-            fallback_container.* = Api.FallbackMessageContainer{
-                .message = std.fmt.allocPrint(arena_allocator, comptime Output.prettyFmt(fmt, false), args) catch unreachable,
-                .router = null,
-                .reason = .fetch_event_handler,
-                .cwd = VirtualMachine.get().transpiler.fs.top_level_dir,
-                .problems = Api.Problems{
-                    .code = @as(u16, @truncate(@intFromError(err))),
-                    .name = @errorName(err),
-                    .exceptions = exceptions,
-                    .build = log.toAPI(arena_allocator) catch unreachable,
-                },
-            };
-
+            const msg = std.fmt.allocPrint(arena_allocator, comptime Output.prettyFmt(fmt, false), args) catch unreachable;
             if (comptime fmt.len > 0) Output.prettyErrorln(fmt, args);
             Output.flush();
 
             // Explicitly use `this.allocator` and *not* the arena
-            let bb = std.array_list.Managed(u8).init(_.allocator);
-            const bb_writer = bb.writer();
-
-            Fallback.renderBackend(
-                arena_allocator,
-                fallback_container,
-                @TypeOf(bb_writer),
-                bb_writer,
-            ) catch unreachable;
-            if (_.resp == null || _.resp.?.tryEnd(bb.items, bb.items.len, _.shouldCloseConnection())) {
-                bb.clearAndFree();
+            const bb = bun.handleOom((DevErrorPage{
+                message: msg,
+                cwd: VirtualMachine.get().transpiler.fs.top_level_dir,
+                exceptions: exceptions,
+                log: log,
+            }).render(_.allocator));
+            if (_.resp == null || _.resp.?.tryEnd(bb, bb.len, _.shouldCloseConnection())) {
+                _.allocator.free(bb);
                 _.detachResponse();
                 _.endRequestStreamingAndDrain();
                 _.finalizeWithoutDeinit();
@@ -628,7 +614,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
 
             _.flags.has_marked_pending = true;
-            _.response_buf_owned = std.ArrayListUnmanaged(u8){ .items = bb.items, .capacity = bb.capacity };
+            _.response_buf_owned = std.ArrayListUnmanaged(u8){ .items = bb, .capacity = bb.len };
 
             if (resp := _.resp) {
                 resp.onWritable(_, onWritableCompleteResponseBuffer);
@@ -1067,7 +1053,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             const stat_size: Blob.SizeType = @intCast(@max(stat.size, 0));
             _.blob.Blob.size = if (is_regular) stat_size else @min(original_size, stat_size);
 
-            _.flags.needs_content_length = true;
+            _.flags.needs_content_length = is_regular;
             _.sendfile = .{
                 .remain = _.blob.Blob.offset + original_size,
                 .offset = _.blob.Blob.offset,
@@ -1188,6 +1174,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 return;
             }
 
+            if (response := _.response_weakref.get()) {
+                if (HTTPStatusText.isNullBody(response.statusCode())) {
+                    _.doRenderNullBodyStatus();
+                    return;
+                }
+            }
             _.doRenderBlob();
         }
 
@@ -1939,38 +1931,16 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                             }
 
                             const allocator = req.allocator;
-                            const fallback_container = bun.handleOom(allocator.create(Api.FallbackMessageContainer));
-                            const _guard_fb = DestroyGuard<@TypeOf(fallback_container)>{ alloc: allocator, ptr: fallback_container };
-
-                            // Create error message for the stream rejection
-                            fallback_container.* = Api.FallbackMessageContainer{
-                                .message = "Stream error during server-side rendering",
-                                .router = null,
-                                .reason = .fetch_event_handler,
-                                .cwd = server.vm.transpiler.fs.top_level_dir,
-                                .problems = Api.Problems{
-                                    .code = 500,
-                                    .name = "StreamError",
-                                    .exceptions = exception_list.items,
-                                    .build = .{
-                                        .msgs = &.{},
-                                    },
-                                },
-                            };
-
-                            let bb = std.array_list.Managed(u8).init(allocator);
-                            const _guard_bb = ClearAndFreeGuard<@TypeOf(&bb)>{ ptr: &bb };
-                            const bb_writer = bb.writer();
-
-                            Fallback.renderBackend(
-                                allocator,
-                                fallback_container,
-                                @TypeOf(bb_writer),
-                                bb_writer,
-                            ) catch unreachable;
+                            const bb = bun.handleOom((DevErrorPage{
+                                message: "Stream error during server-side rendering",
+                                cwd: server.vm.transpiler.fs.top_level_dir,
+                                exceptions: exception_list.items,
+                                log: null,
+                            }).render(allocator));
+                            defer allocator.free(bb);
 
                             if (resp := req.resp) {
-                                * = resp.write(bb.items);
+                                * = resp.write(bb);
                             }
 
                             req.endStream(req.shouldCloseConnection());
@@ -2045,7 +2015,13 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                             .Invalid => {
                                 _.response_body_readable_stream_ref.deinit();
                                 // Stream is invalid, render empty body
-                                _.doRenderBlob();
+                                if (response := _.response_weakref.get()) {
+                if (HTTPStatusText.isNullBody(response.statusCode())) {
+                    _.doRenderNullBodyStatus();
+                    return;
+                }
+            }
+            _.doRenderBlob();
                                 return;
                             },
                             // toBlobIfPossible will typically convert .Blob streams, or .File streams into a Blob object, but cannot always.
@@ -2078,7 +2054,13 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                                     let byte_list = bs.drain();
                                     _.blob = .fromArrayList(byte_list.moveToListManaged(bun.default_allocator));
                                     _.response_body_readable_stream_ref.deinit();
-                                    _.doRenderBlob();
+                                    if (response := _.response_weakref.get()) {
+                if (HTTPStatusText.isNullBody(response.statusCode())) {
+                    _.doRenderNullBodyStatus();
+                    return;
+                }
+            }
+            _.doRenderBlob();
                                     return;
                                 }
                                 _.ref();
@@ -2128,6 +2110,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 else => {},
             }
 
+            if (response := _.response_weakref.get()) {
+                if (HTTPStatusText.isNullBody(response.statusCode())) {
+                    _.doRenderNullBodyStatus();
+                    return;
+                }
+            }
             _.doRenderBlob();
         }
 
@@ -2178,6 +2166,46 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
         fn doRenderBlobCorked(*_) {
             _.renderMetadata();
+            _.renderBytes();
+        }
+
+        fn doRenderNullBodyStatus(*_) {
+            if (_.flags.has_abort_handler) {
+                if (resp := _.resp) {
+                    resp.runCorkedWithType(_, doRenderNullBodyStatusCorked);
+                }
+            } else {
+                _.doRenderNullBodyStatusCorked();
+            }
+        }
+
+        fn doRenderNullBodyStatusCorked(*_) {
+            let status: u16 = 200;
+            let app_content_length: u64? = null;
+            if (response := _.response_weakref.get()) {
+                status = response.statusCode();
+                if (status == 304) {
+                    if (headers := response.getInitHeaders()) {
+                        if (cl := headers.fastGet(.ContentLength)) {
+                            app_content_length = std.fmt.parseInt(u64, cl, 10) catch null;
+                        }
+                    }
+                }
+            }
+
+            _.renderMetadata();
+
+            if (status == 304) {
+                if (resp := _.resp) {
+                    if (len := app_content_length) {
+                        resp.writeHeaderInt("content-length", len);
+                    }
+                    // endWithoutBody skips writeMark(); keep Date as tryEnd did.
+                    resp.writeMark();
+                    _.endWithoutBody(_.shouldCloseConnection());
+                    return;
+                }
+            }
             _.renderBytes();
         }
 

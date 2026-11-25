@@ -1111,6 +1111,12 @@ export interface FileOverride {
 
 export const fileOverrides: FileOverride[] = [
   {
+    file: "src/jsc/bindings/highway_xml.cpp",
+    extraFlags: ["-O2"],
+    when: c => c.debug,
+    desc: "The XML structural-index kernel must be optimized even in debug builds.",
+  },
+  {
     file: "src/jsc/bindings/workaround-missing-symbols.cpp",
     // -fwhole-program-vtables requires -flto; disabling one requires
     // disabling the other or clang errors.

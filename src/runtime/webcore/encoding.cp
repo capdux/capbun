@@ -380,7 +380,7 @@ pub fn encodeIntoFrom8(input: []const u8, to: []u8, comptime encoding: Encoding)
 }
 
 pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, comptime encoding: Encoding, comptime allow_partial_write: bool): usize! {
-    if (len == 0)
+    if (len == 0 || to_len == 0)
         return 0;
 
     switch (encoding) {

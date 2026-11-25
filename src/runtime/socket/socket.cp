@@ -165,6 +165,23 @@ pub struct SSLErrClearGuard {
     }
 }
 
+fn readErrorFromCloseCode(code: c_int): bun.sys.Error {
+    if (!Environment.isWindows) {
+        return bun.sys.Error.fromCodeInt(code, .read);
+    }
+    const raw: u32 = @intCast(if (code < 0) -code else code);
+    let errno: bun.sys.SystemErrno = .ECONNRESET;
+    if (mapped := bun.sys.SystemErrno.init(raw)) {
+        if (mapped != .ECONNABORTED) {
+            errno = mapped;
+        }
+    }
+    return .{
+        .errno = @intFromEnum(errno),
+        .syscall = .read,
+    };
+}
+
 pub fn NewSocket(comptime ssl: bool): type {
     return struct {
         const This = @This();
@@ -337,7 +354,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             log("handleError", .{});
             const h = _.getHandlers();
             let vm = h.vm;
-            if (vm.isShuttingDown()) {
+            if (vm.scriptExecutionStatus() != .running) {
                 return;
             }
             const _scope_guard = HandlersScopeGuard<This, @TypeOf(h.enter())>{ socket: _, scope: h.enter() };
@@ -355,7 +372,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             if (callback == .zero) return;
 
             let vm = h.vm;
-            if (vm.isShuttingDown()) {
+            if (vm.scriptExecutionStatus() != .running) {
                 return;
             }
             _.ref();
@@ -411,15 +428,46 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             const vm = h.vm;
             _.poll_ref.unrefOnNextTick(vm);
-            if (vm.isShuttingDown()) {
+            if (vm.scriptExecutionStatus() != .running) {
                 return;
             }
 
             bun.assert(errno >= 0);
-            let errno_: c_int = if (errno == @intFromEnum(bun.sys.SystemErrno.ENOENT)) @intFromEnum(bun.sys.SystemErrno.ENOENT) else @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
-            const code_ = if (errno == @intFromEnum(bun.sys.SystemErrno.ENOENT)) bun.String.static("ENOENT") else bun.String.static("ECONNREFUSED");
-            if (Environment.isWindows && errno_ == @intFromEnum(bun.sys.SystemErrno.ENOENT)) errno_ = @intFromEnum(bun.sys.SystemErrno.UV_ENOENT);
-            if (Environment.isWindows && errno_ == @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)) errno_ = @intFromEnum(bun.sys.SystemErrno.UV_ECONNREFUSED);
+            let normalized_errno = errno;
+            if (Environment.isWindows && errno >= 10000) {
+                normalized_errno = if (mapped := bun.sys.SystemErrno.init(@intCast(errno))) @intFromEnum(mapped) else @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
+            }
+            let errno_: c_int = switch (normalized_errno) {
+                @intFromEnum(bun.sys.SystemErrno.ENOENT),
+                @intFromEnum(bun.sys.SystemErrno.ENOTSOCK),
+                @intFromEnum(bun.sys.SystemErrno.EACCES),
+                @intFromEnum(bun.sys.SystemErrno.EINVAL),
+                @intFromEnum(bun.sys.SystemErrno.EADDRINUSE),
+                @intFromEnum(bun.sys.SystemErrno.EADDRNOTAVAIL),
+                @intFromEnum(bun.sys.SystemErrno.ECONNRESET),
+                @intFromEnum(bun.sys.SystemErrno.ETIMEDOUT),
+                @intFromEnum(bun.sys.SystemErrno.ENETUNREACH),
+                @intFromEnum(bun.sys.SystemErrno.EHOSTUNREACH),
+                @intFromEnum(bun.sys.SystemErrno.EAFNOSUPPORT) => normalized_errno,
+                else => @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED),
+            };
+            const code_ = if (sys_e := bun.sys.SystemErrno.init(@intCast(errno_))) bun.String.static(@tagName(sys_e)) else bun.String.static("ECONNREFUSED");
+            if (Environment.isWindows) {
+                errno_ = switch (errno_) {
+                    @intFromEnum(bun.sys.SystemErrno.ENOENT) => @intFromEnum(bun.sys.SystemErrno.UV_ENOENT),
+                    @intFromEnum(bun.sys.SystemErrno.EACCES) => @intFromEnum(bun.sys.SystemErrno.UV_EACCES),
+                    @intFromEnum(bun.sys.SystemErrno.EINVAL) => @intFromEnum(bun.sys.SystemErrno.UV_EINVAL),
+                    @intFromEnum(bun.sys.SystemErrno.EADDRINUSE) => @intFromEnum(bun.sys.SystemErrno.UV_EADDRINUSE),
+                    @intFromEnum(bun.sys.SystemErrno.EADDRNOTAVAIL) => @intFromEnum(bun.sys.SystemErrno.UV_EADDRNOTAVAIL),
+                    @intFromEnum(bun.sys.SystemErrno.ECONNRESET) => @intFromEnum(bun.sys.SystemErrno.UV_ECONNRESET),
+                    @intFromEnum(bun.sys.SystemErrno.ETIMEDOUT) => @intFromEnum(bun.sys.SystemErrno.UV_ETIMEDOUT),
+                    @intFromEnum(bun.sys.SystemErrno.ENETUNREACH) => @intFromEnum(bun.sys.SystemErrno.UV_ENETUNREACH),
+                    @intFromEnum(bun.sys.SystemErrno.EHOSTUNREACH) => @intFromEnum(bun.sys.SystemErrno.UV_EHOSTUNREACH),
+                    @intFromEnum(bun.sys.SystemErrno.EAFNOSUPPORT) => @intFromEnum(bun.sys.SystemErrno.UV_EAFNOSUPPORT),
+                    @intFromEnum(bun.sys.SystemErrno.ENOTSOCK) => @intFromEnum(bun.sys.SystemErrno.UV_ENOTSOCK),
+                    else => @intFromEnum(bun.sys.SystemErrno.UV_ECONNREFUSED),
+                };
+            }
 
             const callback = h.onConnectError;
             const globalObject = h.globalObject;
@@ -568,6 +616,9 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
 
             const h = _.getHandlers();
+            if (h.vm.scriptExecutionStatus() != .running) {
+                return;
+            }
             const callback = h.onOpen;
             const handshake_callback = h.onHandshake;
 
@@ -576,6 +627,9 @@ pub fn NewSocket(comptime ssl: bool): type {
 
             _.markActive();
             h.resolvePromise(this_value) catch {};
+            if (globalObject.hasException()) {
+                return;
+            }
 
             if (comptime ssl) {
                 if (callback == .zero || handshake_callback == .zero) return;
@@ -811,7 +865,14 @@ pub fn NewSocket(comptime ssl: bool): type {
             if (callback == .zero)
                 return;
 
-            if (vm.isShuttingDown()) {
+            if (vm.scriptExecutionStatus() != .running) {
+                return;
+            }
+
+            // An earlier callback in this dispatch may have left a termination
+            // pending — onOpen's error branch closes the socket from
+            // markInactive(), landing here. Entering JS trips assertNoException().
+            if (h.globalObject.hasException()) {
                 return;
             }
 
@@ -820,8 +881,8 @@ pub fn NewSocket(comptime ssl: bool): type {
             const globalObject = h.globalObject;
             const this_value = _.getThisValue(globalObject);
             let js_error: JSValue = .js_undefined;
-            if (code != 0) {
-                js_error = bun.sys.Error.fromCodeInt(code, .read).toJS(globalObject)?;
+            if (code > 2) {
+                js_error = readErrorFromCloseCode(code).toJS(globalObject)?;
             }
 
             * = callback.call(globalObject, this_value, &.{

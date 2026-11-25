@@ -454,11 +454,8 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const had_tunnel = ws.proxy_tunnel != null;
             ws.clearData();
 
-            if (comptime ssl) {
-                ws.tcp.close(.normal);
-            } else {
-                ws.tcp.close(.failure);
-            }
+            // Failure still sends close_notify best-effort but never waits for the peer's reply.
+            ws.tcp.close(.failure);
 
             if (had_tunnel) {
                 ws.dispatchAbruptClose(ErrorCode.ended);
@@ -1548,11 +1545,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             }
 
             if (!ws.tcp.isClosed()) {
-                if (comptime ssl) {
-                    ws.tcp.close(.normal);
-                } else {
-                    ws.tcp.close(.failure);
-                }
+                ws.tcp.close(.failure);
             }
         }
 

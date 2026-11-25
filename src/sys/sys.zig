@@ -450,6 +450,12 @@ pub const NtCreateFileOptions = struct {
     sharing_mode: w.ULONG = FILE_SHARE,
 };
 
+const LinuxOpenHow = extern struct {
+    flags: u64,
+    mode: u64,
+    resolve: u64,
+};
+
 pub const AndroidSigactionHandler = extern union {
     handler: OptAndroidSigactionHandlerFn,
     sigaction: OptAndroidSigactionFn,
@@ -774,6 +780,7 @@ var linux_kernel_cached = std.atomic.Value(LinuxKernel).init(.unknown);
 const empty_cstr_slice: [:0]const u8 = "";
 pub const mkdirat = (if (Environment.isWindows) mkdiratW else mkdiratPosix);
 const fnctl_int = (if (Environment.isLinux) usize else c_int);
+var openat2_unavailable: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 pub const max_count = (switch (builtin.os.tag) {
 .linux => 2147479552,
 .macos, .ios, .watchos, .tvos => std.math.maxInt(i32),
@@ -1664,7 +1671,6 @@ pub fn openatWindowsTMaybeNormalize(comptime T: type, dir: bun.FD, path: []const
             return openDirAtWindowsT(T, dir, path, windows_options);
         }
         const nonblock = ((flags & O.NONBLOCK) != 0);
-        const overwrite = (((flags & O.WRONLY) != 0) and ((flags & O.APPEND) == 0));
         var access_mask: w.ULONG = ((w.READ_CONTROL | w.FILE_WRITE_ATTRIBUTES) | w.SYNCHRONIZE);
         _ = &access_mask;
         if (((flags & O.RDWR) != 0)) {
@@ -1680,15 +1686,10 @@ pub fn openatWindowsTMaybeNormalize(comptime T: type, dir: bun.FD, path: []const
                 }
             }
         }
-        const disposition: w.ULONG = blk: {
-        if (((flags & O.CREAT) != 0)) {
-            if (((flags & O.EXCL) != 0)) {
-                break :blk w.FILE_CREATE;
-            }
-            break :blk (if (overwrite) w.FILE_OVERWRITE_IF else w.FILE_OPEN_IF);
-        }
-        break :blk (if (overwrite) w.FILE_OVERWRITE else w.FILE_OPEN);
-};
+        const creat = ((flags & O.CREAT) != 0);
+        const excl = ((flags & O.EXCL) != 0);
+        const truncate = ((flags & O.TRUNC) != 0);
+        const disposition: w.ULONG = (if (creat) (if (excl) w.FILE_CREATE else (if (truncate) w.FILE_OVERWRITE_IF else w.FILE_OPEN_IF)) else (if (truncate) w.FILE_OVERWRITE else w.FILE_OPEN));
         const blocking_flag: windows.ULONG = (if ((!nonblock)) windows.FILE_SYNCHRONOUS_IO_NONALERT else 0);
         const file_or_dir_flag: windows.ULONG = (switch (((flags & O.DIRECTORY) != 0)) {
 true => windows.FILE_DIRECTORY_FILE,
@@ -1787,6 +1788,41 @@ pub fn access(path: bun.OSPathSliceZ, mode: i32) Maybe(void) {
             }
         }
         return ((Maybe(void).errnoSysP(syscall.access(path, @bitCast(mode)), .access, path)) orelse (.success));
+}
+
+pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags: i32, perm: bun.Mode) Maybe(bun.FD) {
+        if (comptime (!Environment.isLinux)) {
+            return openat(dirfd, file_path, flags, perm);
+        }
+        if ((!openat2_unavailable.load(.monotonic))) {
+            const RESOLVE_NO_MAGICLINKS: u64 = 2;
+            const RESOLVE_IN_ROOT: u64 = 16;
+            var how = LinuxOpenHow{ .flags = (if (comptime @typeInfo(@TypeOf(@as(u32, @bitCast(bun.O.toPacked(flags))))) == .@"enum") cp_cast_int(u64, @intFromEnum(@as(u32, @bitCast(bun.O.toPacked(flags))))) else cp_cast_int(u64, @as(u32, @bitCast(bun.O.toPacked(flags))))), .mode = (if (comptime @typeInfo(@TypeOf(@as(u32, @intCast(perm)))) == .@"enum") cp_cast_int(u64, @intFromEnum(@as(u32, @intCast(perm)))) else cp_cast_int(u64, @as(u32, @intCast(perm)))), .resolve = (RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS) };
+            _ = &how;
+            while (true) {
+                const rc = (blk: {
+                break :blk std.os.linux.syscall4(.openat2, @as(usize, @bitCast((if (comptime @typeInfo(@TypeOf(dirfd.cast())) == .@"enum") cp_cast_int(isize, @intFromEnum(dirfd.cast())) else cp_cast_int(isize, dirfd.cast())))), @intFromPtr(file_path.ptr), @intFromPtr((&how)), @sizeOf(LinuxOpenHow));
+
+});
+                const err_code = sys.getErrno(rc);
+                switch (err_code) {
+.SUCCESS => {
+return .{ .result = .fromNative(@as(i32, @intCast(rc))) };
+},
+.INTR => {
+_ = continue;
+},
+.NOSYS, .PERM, .INVAL, .@"2BIG" => {
+_ = openat2_unavailable.store(true, .monotonic);
+                break;
+},
+else => {
+return .{ .err = .{ .errno = @truncate(@intFromEnum(err_code)), .syscall = .open, .path = file_path } };
+},
+}
+            }
+        }
+        return openat(dirfd, file_path, flags, perm);
 }
 
 pub fn openat(dirfd: bun.FD, file_path: [:0]const u8, flags: i32, perm: bun.Mode) Maybe(bun.FD) {

@@ -719,7 +719,7 @@ pub fn scanCSSImports(self: *LinkerContext, file_source_index: u32, file_import_
                         const source = (&sources[@as(usize, @intCast(file_source_index))]);
                         const loader = loaders[@as(usize, @intCast((record.*).source_index.get()))];
                         switch (loader) {
-.jsx, .js, .ts, .tsx, .napi, .sqlite, .json, .jsonc, .json5, .yaml, .html, .sqlite_embedded, .md => {
+.jsx, .js, .ts, .tsx, .napi, .sqlite, .json, .jsonc, .json5, .yaml, .html, .sqlite_embedded, .md, .xml => {
 _ = (blk_catch_3: { break :blk_catch_3 ((log.addErrorFmt(source, (record.*).range.loc, self.allocator(), "Cannot import a \".{s}\" file into a CSS file", .{ @tagName(loader) })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
 },
 .css, .file, .toml, .wasm, .base64, .dataurl, .text, .bunsh => {

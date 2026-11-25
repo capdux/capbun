@@ -857,31 +857,29 @@ pub struct ExportRenamer {
     }
 
     fn nextRenamedName(*_, input: []const u8): string {
-        let entry = _.used.getOrPut(input) catch unreachable;
-        let tries: u32 = 1;
-        if (entry.found_existing) {
-            while (true) {
-                _.string_buffer.reset();
-                let writer = _.string_buffer.writer();
-                writer.print("{s}{d}", .{ input, tries }) catch unreachable;
-                tries += 1;
-                const attempt = _.string_buffer.slice();
-                entry = _.used.getOrPut(attempt) catch unreachable;
-                if (!entry.found_existing) {
-                    const to_use = _.string_buffer.allocator.dupe(u8, attempt) catch unreachable;
-                    entry.key_ptr.* = to_use;
-                    entry.value_ptr.* = tries;
-
-                    entry = _.used.getOrPut(input) catch unreachable;
-                    entry.value_ptr.* = tries;
-                    return to_use;
-                }
-            }
-        } else {
-            entry.value_ptr.* = tries;
+        const entry = _.used.getOrPut(input) catch unreachable;
+        if (!entry.found_existing) {
+            entry.value_ptr.* = 1;
+            return entry.key_ptr.*;
         }
 
-        return entry.key_ptr.*;
+        // Resume from the last suffix handed out for this prefix so N collisions
+        // on the same name stay O(N) total (see `NumberScope.findUnusedName`).
+        let tries: u32 = entry.value_ptr.*;
+        while (true) {
+            _.string_buffer.reset();
+            let writer = _.string_buffer.writer();
+            writer.print("{s}{d}", .{ input, tries }) catch unreachable;
+            tries += 1;
+            const attempt = _.string_buffer.slice();
+            if (_.used.contains(attempt)) {
+                continue;
+            }
+            const to_use = _.string_buffer.allocator.dupe(u8, attempt) catch unreachable;
+            _.used.put(to_use, 1) catch unreachable;
+            _.used.getPtr(input).?.* = tries;
+            return to_use;
+        }
     }
 
     fn nextMinifiedName(*_, allocator: std.mem.Allocator): string! {

@@ -275,6 +275,7 @@ pub struct Parser {
     }
 
     fn analyze(*_, context: *!, callback: *const fn (*!, *TSXParser, []js_ast.Part) anyerror!void)! {
+        _.source.checkParseableLen(_.log, "File")?;
         let p: TSXParser = undefined;
         TSXParser.init(_.allocator, _.log, _.source, _.define, _.lexer, _.options, &p)?;
 
@@ -335,6 +336,7 @@ pub struct Parser {
     }
 
     fn _parse(*_, comptime ParserType: type): js_ast.Result! {
+        _.source.checkParseableLen(_.log, "File")?;
         const prev_action = bun.crash_handler.current_action;
         defer bun.crash_handler.current_action = prev_action;
         bun.crash_handler.current_action = { parse: _.source.path.text };

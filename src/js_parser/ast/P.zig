@@ -620,6 +620,7 @@ pub fn NewParser_(comptime parser_feature__typescript: bool, comptime parser_fea
     module_scope: *js_ast.Scope = undefined,
     module_scope_directive_loc: logger.Loc = .{},
     is_control_flow_dead: bool = false,
+    is_inside_single_stmt_body: bool = false,
     is_revisit_for_substitution: bool = false,
     method_call_must_be_replaced_with_undefined: bool = false,
     has_non_local_export_declare_inside_namespace: bool = false,
@@ -1221,7 +1222,7 @@ pub fn handleIdentifier(p: *P, loc: logger.Loc, ident: E.Identifier, original_na
                     return replacement;
                 }
             }
-            if ((((opts.assign_target != .none) or opts.is_delete_target) and (p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].kind == .@"import"))) {
+            if (((p.options.bundle and ((opts.assign_target != .none) or opts.is_delete_target)) and (p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].kind == .@"import"))) {
                 const r = js_lexer.rangeOfIdentifier(p.source, loc);
                 _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot assign to import \"{s}\"", .{ p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].original_name })) catch unreachable);
             }

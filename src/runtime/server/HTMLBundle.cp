@@ -411,7 +411,8 @@ pub struct Route {
             config.force_node_env = .development;
             config.jsx.development = true;
         }
-        config.source_map = .linked;
+        // Production defaults to no sourcemaps so original sources are not served publicly.
+        config.source_map = if (is_development) .linked else .none;
 
         const completion_task = bun.BundleV2.createAndScheduleCompletionTask(
             config,

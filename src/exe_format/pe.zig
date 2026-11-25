@@ -602,8 +602,19 @@ pub fn getBunSectionLength(self: PEFile) !u64 {
             return error.BunSectionNotFound;
     }
 
+pub fn setSubsystem(self: *PEFile, subsystem: u16) !void {
+            var opt = try self.getOptionalHeader();
+            _ = &opt;
+            opt.subsystem = subsystem;
+            _ = try self.writeOptionalHeader(opt);
+    }
+
 pub fn write(self: PEFile, writer: anytype) !void {
             _ = try writer.writeAll(self.data.items);
+    }
+
+pub fn len(self: PEFile) usize {
+            return self.data.items.len;
     }
 
 pub fn validate(self: PEFile) !void {
@@ -712,6 +723,7 @@ const IMAGE_SCN_MEM_WRITE: u32 = 2147483648;
 const IMAGE_SCN_MEM_EXECUTE: u32 = 536870912;
 const IMAGE_DIRECTORY_ENTRY_SECURITY: usize = 4;
 const IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY: u16 = 128;
+pub const IMAGE_SUBSYSTEM_WINDOWS_GUI: u16 = 2;
 const BUN_SECTION_NAME: [8]u8 = .{ 46, 98, 117, 110, 0, 0, 0, 0 };
 pub const BUN_COMPILED_SECTION_NAME = ".bun";
 

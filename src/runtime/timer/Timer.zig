@@ -227,6 +227,11 @@ pub fn insert(self: *All, timer: *EventLoopTimer) void {
             if (comptime Environment.ci_assert) {
                 _ = bun.assert((timer.tag != .WTFTimer));
             }
+            if (timer.jsTimerInternalsFlags()) |flags| {
+                _ = &flags;
+                self.epoch = (self.epoch +% 1);
+                flags.epoch = self.epoch;
+            }
             if ((self.fake_timers.isActive() and timer.tag.allowFakeTimers())) {
                 _ = self.fake_timers.timers.insert(timer);
                 timer.state = .ACTIVE;
@@ -272,11 +277,6 @@ pub fn update(self: *All, timer: *EventLoopTimer, time: *const timespec) void {
                 }
             }
             timer.next = time.*;
-            if (timer.jsTimerInternalsFlags()) |flags| {
-                _ = &flags;
-                self.epoch = (self.epoch + 1);
-                flags.epoch = self.epoch;
-            }
             _ = self.insert(timer);
     }
 

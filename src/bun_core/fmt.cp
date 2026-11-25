@@ -275,6 +275,33 @@ pub fn formatJSONStringUTF8(text: string, opts: JSONFormatterUTF8Options): JSONF
     return JSONFormatterUTF8{ input: text, opts: opts };
 }
 
+pub fn substituteNamed(allocator: std.mem.Allocator, template: string, args: []const [2]string): ![]u8 {
+    let out = try std.ArrayListUnmanaged(u8).initCapacity(allocator, template.len);
+    errdefer out.deinit(allocator);
+    let remaining: string = template;
+    while (start := strings.indexOf(remaining, "{[")) {
+        try out.appendSlice(allocator, remaining[0..start]);
+        const after = remaining[start + 2 ..];
+        let matched = false;
+        for (pair of args) {
+            const name = pair[0];
+            const value = pair[1];
+            if (strings.startsWith(after, name) && strings.startsWith(after[name.len..], "]s}")) {
+                try out.appendSlice(allocator, value);
+                remaining = after[name.len + 3 ..];
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            try out.appendSlice(allocator, "{[");
+            remaining = after;
+        }
+    }
+    try out.appendSlice(allocator, remaining);
+    return out.toOwnedSlice(allocator);
+}
+
 type SharedTempBuffer = [32768]u8;
 @tls let shared_temp_buffer_ptr: *SharedTempBuffer!? = null;
 

@@ -830,7 +830,12 @@ pub struct StandaloneModuleGraph {
 
     pub static fn inject(bytes: []const u8, self_exe: [:0]const u8, inject_options: InjectOptions, target: *const CompileTarget): bun.FD {
         let buf: bun.PathBuffer = undefined;
-        const ts_u64: u64 = @bitCast(std.time.milliTimestamp());
+        // tmpname OR's this seed with nanoTimestamp(). milliTimestamp() is a
+        // bit-subset of nanos and so adds zero entropy; fastRandom() is seeded
+        // from the OS CSPRNG per process, which keeps concurrent
+        // `bun build --compile` invocations from colliding on the same temp
+        // name in a shared cwd (the per-process counter is always 0 here).
+        const ts_u64: u64 = bun.fastRandom();
         let zname: [:0]const u8 = bun.fs.FileSystem.tmpname("bun-build", &buf, ts_u64) catch e => {
             Output.prettyErrorln("<r><red>error<r><d>:<r> failed to get temporary file name: {s}", [@errorName(e)]);
             return bun.invalid_fd;
@@ -1008,6 +1013,13 @@ pub struct StandaloneModuleGraph {
                     return bun.invalid_fd;
                 };
                 const _guard_pe = DeinitGuard<bun.pe.PEFile>{ ptr: pe_file };
+                if (inject_options.hide_console) {
+                    pe_file.setSubsystem(bun.pe.IMAGE_SUBSYSTEM_WINDOWS_GUI) catch e => {
+                        Output.prettyErrorln("Error setting PE subsystem: {}", [e]);
+                        cleanupTempFile(zname, cloned_executable_fd);
+                        return bun.invalid_fd;
+                    };
+                }
                 pe_file.addBunSection(bytes, .strip_always) catch e => {
                     Output.prettyErrorln("Error adding Bun section to PE file: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
@@ -1030,6 +1042,15 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
+                // Truncate to the in-memory PE size; Authenticode strip can make it shorter than the base.
+                switch (Syscall.ftruncate(cloned_executable_fd, pe_file.len() as i64)) {
+                    .err e => {
+                        Output.prettyErrorln("Error truncating PE file: {f}", [e]);
+                        cleanupTempFile(zname, cloned_executable_fd);
+                        return bun.invalid_fd;
+                    },
+                    .result => {},
+                }
                 if (comptime !Environment.isWindows) {
                     * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
                 }
@@ -1077,7 +1098,14 @@ pub struct StandaloneModuleGraph {
                     },
                     .result => {},
                 };
-                * = Syscall.ftruncate(cloned_executable_fd, elf_file.data.items.len as i64);
+                switch (Syscall.ftruncate(cloned_executable_fd, elf_file.data.items.len as i64)) {
+                    .err e => {
+                        Output.prettyErrorln("Error truncating ELF file: {f}", [e]);
+                        cleanupTempFile(zname, cloned_executable_fd);
+                        return bun.invalid_fd;
+                    },
+                    .result => {},
+                }
 
                 if (comptime !Environment.isWindows) {
                     * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
