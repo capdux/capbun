@@ -413,6 +413,7 @@ struct us_bun_socket_context_options_t {
     int request_cert;
     unsigned int client_renegotiation_limit;
     unsigned int client_renegotiation_window;
+    int allow_partial_trust_chain;
 };
 
 enum create_bun_socket_error_t {

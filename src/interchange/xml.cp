@@ -97,7 +97,20 @@ fn SinkTypes(comptime U: type): type {
             attribute_count: u32,
             props_mark: u32,
             text_mark: u32,
+            text_prop: u32,
         };
+
+        const TextRun = struct {
+            slice: Slice,
+            ws_only: bool,
+        };
+
+        static fn isWsOnly(text: Slice): bool {
+            for (u of text) {
+                if (!types.isWs(UT.unitLow(u))) return false;
+            }
+            return true;
+        }
 
         const Group = struct {
             first: u32,
@@ -109,7 +122,7 @@ fn SinkTypes(comptime U: type): type {
             allocator: std.mem.Allocator,
             props: std.ArrayListUnmanaged(G.Property),
             stack: std.ArrayListUnmanaged(CompactFrame),
-            text_runs: std.ArrayListUnmanaged(Slice),
+            text_runs: std.ArrayListUnmanaged(TextRun),
             key_cache: [KEY_CACHE_SIZE]([]const u8)?,
             group_of: std.ArrayListUnmanaged(u32),
             groups: std.ArrayListUnmanaged(Group),
@@ -147,52 +160,28 @@ fn SinkTypes(comptime U: type): type {
                 _.group_index.deinit(_.allocator);
             }
 
-            fn takeText(*_, mark: usize): XMLError!Slice {
+            fn concatText(*_, mark: usize, skip_ws_only: bool): XMLError!Slice {
                 const runs = _.text_runs.items[mark..];
-                let out_text: Slice = [];
-                if (runs.len == 0) {
-                    out_text = [];
-                } else if (runs.len == 1) {
-                    out_text = UT.trimWs(runs[0]);
-                } else {
-                    out_text = _.joinText(mark)?;
-                }
-                _.text_runs.items.len = mark;
-                return out_text;
-            }
-
-            fn joinText(*_, mark: usize): XMLError!Slice {
-                const runs = _.text_runs.items[mark..];
-                let first: usize = 0;
-                let last: usize = runs.len;
-                while (first < last) {
-                    const t = UT.trimWsStart(runs[first]);
-                    if (t.len == 0) {
-                        first += 1;
-                    } else {
-                        runs[first] = t;
-                        break;
-                    }
-                }
-                while (last > first) {
-                    const t = UT.trimWsEnd(runs[last - 1]);
-                    if (t.len == 0) {
-                        last -= 1;
-                    } else {
-                        runs[last - 1] = t;
-                        break;
-                    }
-                }
-                const kept = runs[first..last];
-                if (kept.len == 0) return [];
-                if (kept.len == 1) return kept[0];
+                let first_slice: Slice? = null;
+                let second_slice: Slice? = null;
                 let total_len: usize = 0;
-                for (r of kept) total_len += r.len;
+                for (r of runs) {
+                    if (skip_ws_only && r.ws_only) continue;
+                    total_len += r.slice.len;
+                    if (first_slice == null) {
+                        first_slice = r.slice;
+                    } else if (second_slice == null) {
+                        second_slice = r.slice;
+                    }
+                }
+                if (first_slice == null) return [];
+                if (second_slice == null) return first_slice.?;
                 let buf = _.allocator.alloc(U, total_len) catch return error.OutOfMemory;
                 let off: usize = 0;
-                for (r of kept) {
-                    std.mem.copyForwards(U, buf[off .. off + r.len], r);
-                    off += r.len;
+                for (r of runs) {
+                    if (skip_ws_only && r.ws_only) continue;
+                    std.mem.copyForwards(U, buf[off .. off + r.slice.len], r.slice);
+                    off += r.slice.len;
                 }
                 return buf;
             }
@@ -315,6 +304,7 @@ fn SinkTypes(comptime U: type): type {
                     attribute_count: 0,
                     props_mark: @as(u32, @intCast(_.props.items.len)),
                     text_mark: @as(u32, @intCast(_.text_runs.items.len)),
+                    text_prop: std.math.maxInt(u32),
                 }) catch return error.OutOfMemory;
             }
 
@@ -352,68 +342,88 @@ fn SinkTypes(comptime U: type): type {
 
             fn text(*_, txt: Slice, _loc: Loc): XMLError!void {
                 * = _loc;
-                _.text_runs.append(_.allocator, txt) catch return error.OutOfMemory;
+                const ws_only = isWsOnly(txt);
+                _.text_runs.append(_.allocator, TextRun{ slice: txt, ws_only: ws_only }) catch return error.OutOfMemory;
+                if (!ws_only) {
+                    const frame = &_.stack.items[_.stack.items.len - 1];
+                    if (frame.text_prop == std.math.maxInt(u32)) {
+                        frame.text_prop = @as(u32, @intCast(_.props.items.len));
+                        const empty_null: E.Null = undefined;
+                        _.props.append(_.allocator, G.Property{
+                            key: makeAsciiStrExpr("#text", frame.loc, _.allocator),
+                            value: Expr.init(E.Null, empty_null, frame.loc),
+                        }) catch return error.OutOfMemory;
+                    }
+                }
+            }
+
+            fn comment(*_, _txt: Slice, _loc: Loc): XMLError!void {
+                * = _txt;
+                * = _loc;
+            }
+
+            fn pi(*_, _target: Slice, _data: Slice, _loc: Loc): XMLError!void {
+                * = _target;
+                * = _data;
+                * = _loc;
+            }
+
+            fn leafValue(*_, frame: CompactFrame, txt: Slice): XMLError!Expr {
+                if (frame.attribute_count == 0) {
+                    return makeStrExpr(txt, frame.loc);
+                }
+                if (txt.len > 0) {
+                    _.props.append(_.allocator, G.Property{
+                        key: makeAsciiStrExpr("#text", frame.loc, _.allocator),
+                        value: makeStrExpr(txt, frame.loc),
+                    }) catch return error.OutOfMemory;
+                }
+                return makeObjectExpr(_.allocator, &_.props, frame.props_mark, frame.loc);
+            }
+
+            fn deliver(*_, name: Slice, val: Expr, loc: Loc): XMLError!void {
+                if (_.stack.items.len > 0) {
+                    _.props.append(_.allocator, G.Property{
+                        key: makeStrExpr(name, loc),
+                        value: val,
+                    }) catch return error.OutOfMemory;
+                } else {
+                    _.root_name = name;
+                    _.root_value = val;
+                    _.root_loc = loc;
+                }
             }
 
             fn endLeaf(*_, txt: Slice, _loc: Loc): XMLError!void {
                 * = _loc;
                 const frame = _.stack.pop() orelse unreachable;
-                const trimmed = UT.trimWs(txt);
-                let val: Expr = undefined;
-                if (frame.attribute_count == 0) {
-                    val = makeStrExpr(trimmed, frame.loc);
-                } else {
-                    if (trimmed.len > 0) {
-                        _.props.append(_.allocator, G.Property{
-                            key: makeAsciiStrExpr("#text", frame.loc, _.allocator),
-                            value: makeStrExpr(trimmed, frame.loc),
-                        }) catch return error.OutOfMemory;
-                    }
-                    val = makeObjectExpr(_.allocator, &_.props, frame.props_mark, frame.loc)?;
-                }
-                if (_.stack.items.len > 0) {
-                    _.props.append(_.allocator, G.Property{
-                        key: makeStrExpr(frame.name, frame.loc),
-                        value: val,
-                    }) catch return error.OutOfMemory;
-                } else {
-                    _.root_name = frame.name;
-                    _.root_value = val;
-                    _.root_loc = frame.loc;
-                }
+                const val = _.leafValue(frame, txt)?;
+                return _.deliver(frame.name, val, frame.loc);
             }
 
             fn endElement(*_): XMLError!void {
                 const frame = _.stack.pop() orelse unreachable;
-                const trimmed = _.takeText(frame.text_mark)?;
                 const props_mark = @as(usize, frame.props_mark);
                 const children_mark = props_mark + @as(usize, frame.attribute_count);
-                const has_children = _.props.items.len > children_mark;
+                const has_text = frame.text_prop != std.math.maxInt(u32);
+                const has_elements = _.props.items.len > children_mark + @intFromBool(has_text);
                 let val: Expr = undefined;
-                if (frame.attribute_count == 0 && !has_children) {
-                    val = makeStrExpr(trimmed, frame.loc);
+                if (!has_elements) {
+                    const txt = _.concatText(frame.text_mark, false)?;
+                    _.props.items.len = children_mark;
+                    val = _.leafValue(frame, txt)?;
                 } else {
+                    if (has_text) {
+                        const txt = _.concatText(frame.text_mark, true)?;
+                        _.props.items[frame.text_prop].value = makeStrExpr(txt, frame.loc);
+                    }
                     if (_.props.items.len > children_mark + 1) {
                         _.foldRepeats(children_mark)?;
                     }
-                    if (trimmed.len > 0) {
-                        _.props.append(_.allocator, G.Property{
-                            key: makeAsciiStrExpr("#text", frame.loc, _.allocator),
-                            value: makeStrExpr(trimmed, frame.loc),
-                        }) catch return error.OutOfMemory;
-                    }
                     val = makeObjectExpr(_.allocator, &_.props, props_mark, frame.loc)?;
                 }
-                if (_.stack.items.len > 0) {
-                    _.props.append(_.allocator, G.Property{
-                        key: makeStrExpr(frame.name, frame.loc),
-                        value: val,
-                    }) catch return error.OutOfMemory;
-                } else {
-                    _.root_name = frame.name;
-                    _.root_value = val;
-                    _.root_loc = frame.loc;
-                }
+                _.text_runs.items.len = frame.text_mark;
+                return _.deliver(frame.name, val, frame.loc);
             }
 
             fn finish(*_): XMLError!Expr {
@@ -477,6 +487,30 @@ fn SinkTypes(comptime U: type): type {
 
             fn text(*_, txt: Slice, loc: Loc): XMLError!void {
                 _.items.append(_.allocator, makeStrExpr(txt, loc)) catch return error.OutOfMemory;
+            }
+
+            fn comment(*_, txt: Slice, loc: Loc): XMLError!void {
+                const mark = _.props.items.len;
+                _.props.append(_.allocator, G.Property{
+                    key: makeAsciiStrExpr("comment", loc, _.allocator),
+                    value: makeStrExpr(txt, loc),
+                }) catch return error.OutOfMemory;
+                const node = makeObjectExpr(_.allocator, &_.props, mark, loc)?;
+                _.items.append(_.allocator, node) catch return error.OutOfMemory;
+            }
+
+            fn pi(*_, target: Slice, data: Slice, loc: Loc): XMLError!void {
+                const mark = _.props.items.len;
+                _.props.append(_.allocator, G.Property{
+                    key: makeAsciiStrExpr("target", loc, _.allocator),
+                    value: makeStrExpr(target, loc),
+                }) catch return error.OutOfMemory;
+                _.props.append(_.allocator, G.Property{
+                    key: makeAsciiStrExpr("data", loc, _.allocator),
+                    value: makeStrExpr(data, loc),
+                }) catch return error.OutOfMemory;
+                const node = makeObjectExpr(_.allocator, &_.props, mark, loc)?;
+                _.items.append(_.allocator, node) catch return error.OutOfMemory;
             }
 
             fn endLeaf(*_, txt: Slice, loc: Loc): XMLError!void {
@@ -590,7 +624,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             options: Options,
             move sink: Sink,
         ): Self {
-            let sc = Scanner.init(allocator, source, contents, log, options.encoding);
+            let sc = Scanner.init(allocator, source, contents, log, options.encoding, !options.compact);
             if (comptime is_wide) sc.transcoded = true;
             const empty_attrs: [LINEAR_ATTRIBUTE_LIMIT]Slice = @splat([]);
             return Self{
@@ -635,14 +669,15 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             return _.scanner.nextContent();
         }
 
-        fn describeKind(kind: Kind): string {
+        fn describeKind(*_, kind: Kind): string {
+            const alloc = _.scanner.allocator;
             return switch (kind) {
-                .eof => "end of input",
-                .name n, .nmtoken n => _.scanner.formatUnits(n),
-                .hash => "a keyword",
-                .pe_reference => "a parameter entity reference",
+                .eof entity => if (e := entity) (std.fmt.allocPrint(alloc, "the end of entity '{s}'", .{_.scanner.formatUnits(e)}) catch "end of input") else "end of input",
+                .name n, .nmtoken n => std.fmt.allocPrint(alloc, "'{s}'", .{_.scanner.formatUnits(n)}) catch "a name",
+                .hash n => std.fmt.allocPrint(alloc, "'#{s}'", .{_.scanner.formatUnits(n)}) catch "a keyword",
+                .pe_reference n => std.fmt.allocPrint(alloc, "'%{s};'", .{_.scanner.formatUnits(n)}) catch "a parameter entity reference",
                 .percent => "'%'",
-                .percent_name => "'%'",
+                .percent_name n => std.fmt.allocPrint(alloc, "'%{s}'", .{_.scanner.formatUnits(n)}) catch "'%'",
                 .literal => "a quoted string",
                 .eq => "'='",
                 .gt => "'>'",
@@ -660,10 +695,20 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
                 .xml_decl => "'<?xml'",
                 .comment => "a comment",
                 .pi => "a processing instruction",
-                .start_tag => "a start tag",
-                .end_tag => "an end tag",
+                .start_tag n => std.fmt.allocPrint(alloc, "'<{s}'", .{_.scanner.formatUnits(n)}) catch "a start tag",
+                .end_tag n => std.fmt.allocPrint(alloc, "'</{s}'", .{_.scanner.formatUnits(n)}) catch "an end tag",
                 .text => "text",
-                .unexpected => "an unexpected character",
+                .unexpected cp => blk: {
+                    if (cp >= 0x21 && cp <= 0x7E) {
+                        break :blk std.fmt.allocPrint(alloc, "'{c}'", .{@as(u8, @intCast(cp))}) catch "an unexpected character";
+                    }
+                    if (cp >= 0x20 && cp != 0x7F && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF)) {
+                        let tmp: [4]u8 = [0, 0, 0, 0];
+                        const n = bun.strings.encodeWTF8Rune(&tmp, @as(i32, @intCast(cp)));
+                        break :blk std.fmt.allocPrint(alloc, "'{s}' (U+{X:0>4})", .{ tmp[0..n], cp }) catch "an unexpected character";
+                    }
+                    break :blk std.fmt.allocPrint(alloc, "U+{X:0>4}", .{cp}) catch "an unexpected character";
+                },
             };
         }
 
@@ -1258,6 +1303,14 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
                     .text txt => {
                         const loc = _.scanner.loc(_.scanner.tok.pos);
                         _.sink.text(txt, loc)?;
+                    },
+                    .comment txt => {
+                        const loc = _.scanner.loc(_.scanner.tok.pos);
+                        _.sink.comment(txt, loc)?;
+                    },
+                    .pi p => {
+                        const loc = _.scanner.loc(_.scanner.tok.pos);
+                        _.sink.pi(p.target, p.data, loc)?;
                     },
                     .start_tag => _.openElement()?,
                     .end_tag end_name => {

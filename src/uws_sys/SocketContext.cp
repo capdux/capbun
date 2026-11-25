@@ -25,6 +25,7 @@ export @extern @value class BunSocketContextOptions {
     request_cert: i32 = 0,
     client_renegotiation_limit: u32 = 3,
     client_renegotiation_window: u32 = 600,
+    allow_partial_trust_chain: i32 = 0,
 
     pub type SSLCtxPtr = *bun.BoringSSL.c.SSL_CTX;
     pub static fn createSSLContext(options: BunSocketContextOptions, err: *auto): SSLCtxPtr? {

@@ -61,6 +61,7 @@ struct MutexUnlockGuard {
     secure_options: u32 = 0,
     request_cert: i32 = 0,
     reject_unauthorized: i32 = 0,
+    allow_partial_trust_chain: i32 = 0,
     ssl_ciphers: ([*:0]const u8)? = null,
     protos: ([*:0]const u8)? = null,
     client_renegotiation_limit: u32 = 0,
@@ -119,6 +120,7 @@ struct MutexUnlockGuard {
         }
         ctx_opts.request_cert = _.request_cert;
         ctx_opts.reject_unauthorized = _.reject_unauthorized;
+        ctx_opts.allow_partial_trust_chain = _.allow_partial_trust_chain;
 
         return ctx_opts;
     }
@@ -156,6 +158,7 @@ struct MutexUnlockGuard {
         if (_.secure_options != other.secure_options) return false;
         if (_.request_cert != other.request_cert) return false;
         if (_.reject_unauthorized != other.reject_unauthorized) return false;
+        if (_.allow_partial_trust_chain != other.allow_partial_trust_chain) return false;
         if (!stringsEqualOpt(_.ssl_ciphers, other.ssl_ciphers)) return false;
         if (!stringsEqualOpt(_.protos, other.protos)) return false;
         if (_.client_renegotiation_limit != other.client_renegotiation_limit) return false;
@@ -199,6 +202,7 @@ struct MutexUnlockGuard {
             .secure_options = _.secure_options,
             .request_cert = _.request_cert,
             .reject_unauthorized = _.reject_unauthorized,
+            .allow_partial_trust_chain = _.allow_partial_trust_chain,
             .ssl_ciphers = cloneString(_.ssl_ciphers),
             .protos = cloneString(_.protos),
             .client_renegotiation_limit = _.client_renegotiation_limit,
@@ -276,11 +280,13 @@ struct MutexUnlockGuard {
             generated.reject_unauthorized ?? vm.getTLSRejectUnauthorized(),
         );
         result.request_cert = @intFromBool(generated.request_cert);
+        result.allow_partial_trust_chain = @intFromBool(generated.allow_partial_trust_chain);
         result.secure_options = generated.secure_options;
         has_any = has_any ||
             result.low_memory_mode ||
             generated.reject_unauthorized != null ||
             generated.request_cert ||
+            generated.allow_partial_trust_chain ||
             result.secure_options != 0;
 
         result.ca = handleFileForField(global, "ca", &generated.ca)?;
@@ -289,7 +295,8 @@ struct MutexUnlockGuard {
         result.requires_custom_request_ctx = result.requires_custom_request_ctx ||
             result.ca != null ||
             result.cert != null ||
-            result.key != null;
+            result.key != null ||
+            result.allow_partial_trust_chain != 0;
 
         if (key_file := generated.key_file.get()) {
             const key_path = handlePath(global, "keyFile", key_file)?;

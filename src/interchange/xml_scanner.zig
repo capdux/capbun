@@ -191,12 +191,16 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         bracket_close: void,
         decl: DeclKind,
         xml_decl: void,
-        comment: void,
-        pi: void,
+        comment: Slice,
+        pi: Pi,
         start_tag: Slice,
         end_tag: Slice,
         text: Slice,
         unexpected: u32,
+    };
+    pub const Pi = struct {
+        target: Slice,
+        data: Slice,
     };
     pub const Token = struct {
         kind: Kind,
@@ -283,6 +287,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         idx: ?Idx,
         cursor: usize,
         latin1: bool,
+        keep_markup: bool,
         tok: Token,
         tag_degraded: bool,
         allocator: std.mem.Allocator,
@@ -290,8 +295,8 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         log: *bun.logger.Log,
         __cp_dropped: bool = false,
     
-    pub fn init(allocator: std.mem.Allocator, source: *const bun.logger.Source, contents: Slice, log: *bun.logger.Log, encoding: InputEncoding) Scanner {
-                return Scanner{ .src = contents, .pos = 0, .frame_id = 0, .frame_kind = .Document, .frame_entity_name = null, .frame_entity_is_pe = false, .frame_report_pos = 0, .suspended = .{}, .next_frame_id = 1, .entities = Entities.init(), .expanded_bytes = 0, .document_len = ((if (comptime @typeInfo(@TypeOf(contents.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(contents.len)) else cp_cast_int(u64, contents.len)) * @sizeOf(U)), .standalone = false, .has_external_subset = false, .saw_pe_reference = false, .saw_unread_pe = false, .transcoded = false, .saw_utf8_bom = false, .needs_utf16_declaration = false, .content_start = 0, .encoding = encoding, .idx = null, .cursor = 0, .latin1 = (encoding == .Latin1), .tok = Token{ .kind = .{ .eof = null }, .pos = 0, .frame = 0, .spaced = false }, .tag_degraded = false, .allocator = allocator, .source = source, .log = log };
+    pub fn init(allocator: std.mem.Allocator, source: *const bun.logger.Source, contents: Slice, log: *bun.logger.Log, encoding: InputEncoding, keep_markup: bool) Scanner {
+                return Scanner{ .src = contents, .pos = 0, .frame_id = 0, .frame_kind = .Document, .frame_entity_name = null, .frame_entity_is_pe = false, .frame_report_pos = 0, .suspended = .{}, .next_frame_id = 1, .entities = Entities.init(), .expanded_bytes = 0, .document_len = ((if (comptime @typeInfo(@TypeOf(contents.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(contents.len)) else cp_cast_int(u64, contents.len)) * @sizeOf(U)), .standalone = false, .has_external_subset = false, .saw_pe_reference = false, .saw_unread_pe = false, .transcoded = false, .saw_utf8_bom = false, .needs_utf16_declaration = false, .content_start = 0, .encoding = encoding, .idx = null, .cursor = 0, .latin1 = (encoding == .Latin1), .keep_markup = keep_markup, .tok = Token{ .kind = .{ .eof = null }, .pos = 0, .frame = 0, .spaced = false }, .tag_degraded = false, .allocator = allocator, .source = source, .log = log };
         }
     
     pub fn __cp_deinit(self: *@This()) void {
@@ -1136,7 +1141,37 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 }
         }
     
-    pub fn scanComment(self: *@This(), start_pos: usize) XMLError!void {
+    pub fn kept(self: *@This(), start: usize, end: usize) Slice {
+                if ((!self.keep_markup)) {
+                    return &.{};
+                }
+                const raw = self.src[start..end];
+                if ((self.frame_kind != .Document)) {
+                    return raw;
+                }
+                if ((UT.findAscii(raw, "\r") == null)) {
+                    return raw;
+                }
+                var out: std.ArrayListUnmanaged(U) = .{};
+                _ = &out;
+                _ = (blk_catch_25: { break :blk_catch_25 ((out.ensureTotalCapacity(self.allocator, raw.len)) catch |__ce_25| { _ = &__ce_25; return raw; }); });
+                var i: usize = 0;
+                _ = &i;
+                while ((i < raw.len)) : (i = (i + 1)) {
+                    if ((UT.unitLow(raw[@as(usize, @intCast(i))]) == 13)) {
+                        _ = out.appendAssumeCapacity(UT.unitAscii(10));
+                        if ((((i + 1) < raw.len) and (UT.unitLow(raw[@as(usize, @intCast((i + 1)))]) == 10))) {
+                            i = (i + 1);
+                        }
+                    } else {
+                        _ = out.appendAssumeCapacity(raw[@as(usize, @intCast(i))]);
+                    }
+                }
+                return out.items;
+        }
+    
+    pub fn scanComment(self: *@This(), start_pos: usize) XMLError!Slice {
+                const body_start = self.pos;
                 const rel = UT.findAscii(self.src[self.pos..], "--");
                 const dashes: ?usize = (if (rel) |i| (self.pos + i) else null);
                 _ = try self.skipDropped(((dashes) orelse (self.src.len)));
@@ -1144,36 +1179,40 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     _ = &d;
                     if ((self.peekAt((d + 2)) == 62)) {
                         self.pos = (d + 3);
-                        return;
+                        return self.kept(body_start, d);
                     }
                     return self.errMsg(self.here(), "'--' is not allowed inside a comment");
                 }
                 return self.errMsg(start_pos, "Unterminated comment");
         }
     
-    pub fn scanPi(self: *@This(), start_pos: usize) XMLError!bool {
+    pub fn scanPi(self: *@This(), start_pos: usize) XMLError!?Pi {
                 const at_document_start = (self.inDocument() and (start_pos == self.content_start));
                 const target = try self.scanName("Expected a processing instruction target after '<?' but found");
                 if ((UT.eqAscii(target, "xml") and at_document_start)) {
-                    return true;
+                    return null;
                 }
                 if (UT.eqAsciiIgnoreCase(target, "xml")) {
                     return self.errMsg(start_pos, "'<?xml' is reserved for the XML declaration, which is only allowed at the very start of the document");
                 }
                 if (self.hasPrefix("?>")) {
                     self.pos = (self.pos + 2);
-                    return false;
+                    return .{ .target = target, .data = &.{} };
                 }
                 if ((!types.isWs(self.peek()))) {
                     return self.errHere("Expected whitespace or '?>' after the processing instruction target but found");
                 }
+                while (((!self.atEnd()) and types.isWs(self.peek()))) {
+                    self.pos = (self.pos + 1);
+                }
+                const data_start = self.pos;
                 const rel = UT.findAscii(self.src[self.pos..], "?>");
                 const close: ?usize = (if (rel) |i| (self.pos + i) else null);
                 _ = try self.skipDropped(((close) orelse (self.src.len)));
                 if (close) |end| {
                     _ = &end;
                     self.pos = (end + 2);
-                    return false;
+                    return .{ .target = target, .data = self.kept(data_start, end) };
                 }
                 return self.errMsg(start_pos, "Unterminated processing instruction");
         }
@@ -1184,14 +1223,14 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 const limit = ((close) orelse (self.src.len));
                 while (true) {
                     const stop = @min(self.nextStop(STOP_SKIPPED), limit);
-                    _ = (blk_catch_25: { break :blk_catch_25 ((out.appendSlice(self.allocator, self.src[self.pos..stop])) catch |__ce_25| { _ = &__ce_25; return error.OutOfMemory; }); });
+                    _ = (blk_catch_26: { break :blk_catch_26 ((out.appendSlice(self.allocator, self.src[self.pos..stop])) catch |__ce_26| { _ = &__ce_26; return error.OutOfMemory; }); });
                     self.pos = stop;
                     if ((stop >= limit)) {
                         break;
                     }
                     const c = self.peek();
                     if (((c == 13) and self.inDocument())) {
-                        _ = (blk_catch_26: { break :blk_catch_26 ((out.append(self.allocator, UT.unitAscii(10))) catch |__ce_26| { _ = &__ce_26; return error.OutOfMemory; }); });
+                        _ = (blk_catch_27: { break :blk_catch_27 ((out.append(self.allocator, UT.unitAscii(10))) catch |__ce_27| { _ = &__ce_27; return error.OutOfMemory; }); });
                         self.pos = (self.pos + 1);
                         if ((self.peek() == 10)) {
                             self.pos = (self.pos + 1);
@@ -1200,7 +1239,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         if ((((c < 32) and (!types.isWs(c))) or ((c >= 128) and (!self.latin1)))) {
                             return self.errAtEntry(c);
                         } else {
-                            _ = (blk_catch_27: { break :blk_catch_27 ((out.append(self.allocator, self.unit())) catch |__ce_27| { _ = &__ce_27; return error.OutOfMemory; }); });
+                            _ = (blk_catch_28: { break :blk_catch_28 ((out.append(self.allocator, self.unit())) catch |__ce_28| { _ = &__ce_28; return error.OutOfMemory; }); });
                             self.pos = (self.pos + 1);
                         }
                     }
@@ -1236,18 +1275,17 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         continue;
                     }
                     if ((c == 60)) {
-                        if ((!self.inDocument())) {
-                            self.tag_degraded = false;
-                        } else {
+                        if (self.inDocument()) {
                             self.tag_degraded = false;
                         }
                         const nxt = self.peekAt((self.pos + 1));
                         if ((nxt == 63)) {
                             self.pos = (self.pos + 2);
-                            if (try self.scanPi(cur_pos)) {
-                                kind = .xml_decl;
+                            if (try self.scanPi(cur_pos)) |pi_res| {
+                                _ = &pi_res;
+                                kind = .{ .pi = pi_res };
                             } else {
-                                kind = .pi;
+                                kind = .xml_decl;
                             }
                             break;
                         }
@@ -1260,8 +1298,8 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         if ((nxt == 33)) {
                             if (self.hasPrefix("<!--")) {
                                 self.pos = (self.pos + 4);
-                                _ = try self.scanComment(cur_pos);
-                                kind = .comment;
+                                const body = try self.scanComment(cur_pos);
+                                kind = .{ .comment = body };
                                 break;
                             }
                             if (self.hasPrefix("<!DOCTYPE")) {
@@ -1509,7 +1547,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         self.pos = stop;
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_28: { break :blk_catch_28 (((b.*).appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_28| { _ = &__ce_28; return error.OutOfMemory; }); });
+                            _ = (blk_catch_29: { break :blk_catch_29 (((b.*).appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_29| { _ = &__ce_29; return error.OutOfMemory; }); });
                             start = self.pos;
                         }
                     }
@@ -1535,10 +1573,36 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         }
                         const cur_pos = self.here();
                         const nxt = self.peekAt((self.pos + 1));
-                        if (((nxt == 33) and self.hasPrefix("<!--"))) {
-                            _ = try materialize(self.allocator, self.src, start, self.pos, (&buf));
-                            self.pos = (self.pos + 4);
-                            _ = try self.scanComment(cur_pos);
+                        if (((nxt == 63) or ((nxt == 33) and self.hasPrefix("<!--")))) {
+                            if ((!self.keep_markup)) {
+                                _ = try materialize(self.allocator, self.src, start, self.pos, (&buf));
+                            } else {
+                                const has_text = (if (buf) |b| ((b.items.len > 0) or (self.pos > start)) else (self.pos > start));
+                                if (has_text) {
+                                    _ = try self.finishText(start, buf, text_pos);
+                                    return;
+                                }
+                            }
+                            const frame = self.frame_id;
+                            var kind: Kind = .{ .eof = null };
+                            _ = &kind;
+                            if ((nxt == 63)) {
+                                self.pos = (self.pos + 2);
+                                if (try self.scanPi(cur_pos)) |pi_res| {
+                                    _ = &pi_res;
+                                    kind = .{ .pi = pi_res };
+                                } else {
+                                    _ = unreachable;
+                                }
+                            } else {
+                                self.pos = (self.pos + 4);
+                                const body = try self.scanComment(cur_pos);
+                                kind = .{ .comment = body };
+                            }
+                            if (self.keep_markup) {
+                                self.tok = Token{ .kind = kind, .pos = cur_pos, .frame = frame, .spaced = false };
+                                return;
+                            }
                             start = self.pos;
                             continue;
                         }
@@ -1546,14 +1610,6 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                             const b = try materialize(self.allocator, self.src, start, self.pos, (&buf));
                             self.pos = (self.pos + 9);
                             _ = try self.scanCdata(cur_pos, b);
-                            start = self.pos;
-                            continue;
-                        }
-                        if ((nxt == 63)) {
-                            _ = try materialize(self.allocator, self.src, start, self.pos, (&buf));
-                            self.pos = (self.pos + 2);
-                            const is_xml_decl = try self.scanPi(cur_pos);
-                            _ = bun.debugAssert((!is_xml_decl));
                             start = self.pos;
                             continue;
                         }
@@ -1591,7 +1647,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                             const res = try self.resolveGeneralEntity(name, ref_pos, false);
                             switch (res) {
     .byte => |byte| {
-    _ = (blk_catch_29: { break :blk_catch_29 ((b.append(self.allocator, UT.unitAscii(byte))) catch |__ce_29| { _ = &__ce_29; return error.OutOfMemory; }); });
+    _ = (blk_catch_30: { break :blk_catch_30 ((b.append(self.allocator, UT.unitAscii(byte))) catch |__ce_30| { _ = &__ce_30; return error.OutOfMemory; }); });
     },
     .text => |text| {
     _ = try self.pushFrame(text, .Content, name, false, ref_pos);
@@ -1611,7 +1667,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         }
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_30: { break :blk_catch_30 (((b.*).append(self.allocator, self.unit())) catch |__ce_30| { _ = &__ce_30; return error.OutOfMemory; }); });
+                            _ = (blk_catch_31: { break :blk_catch_31 (((b.*).append(self.allocator, self.unit())) catch |__ce_31| { _ = &__ce_31; return error.OutOfMemory; }); });
                             start = (self.pos + 1);
                         }
                         self.pos = (self.pos + 1);
@@ -1619,7 +1675,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     }
                     if (((c == 13) and (self.frame_kind == .Document))) {
                         const b = try materialize(self.allocator, self.src, start, self.pos, (&buf));
-                        _ = (blk_catch_31: { break :blk_catch_31 ((b.append(self.allocator, UT.unitAscii(10))) catch |__ce_31| { _ = &__ce_31; return error.OutOfMemory; }); });
+                        _ = (blk_catch_32: { break :blk_catch_32 ((b.append(self.allocator, UT.unitAscii(10))) catch |__ce_32| { _ = &__ce_32; return error.OutOfMemory; }); });
                         self.pos = (self.pos + 1);
                         if ((self.peek() == 10)) {
                             self.pos = (self.pos + 1);
@@ -1630,7 +1686,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     if (((c == 13) or ((c >= 128) and self.latin1))) {
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_32: { break :blk_catch_32 (((b.*).append(self.allocator, self.unit())) catch |__ce_32| { _ = &__ce_32; return error.OutOfMemory; }); });
+                            _ = (blk_catch_33: { break :blk_catch_33 (((b.*).append(self.allocator, self.unit())) catch |__ce_33| { _ = &__ce_33; return error.OutOfMemory; }); });
                             start = (self.pos + 1);
                         }
                         self.pos = (self.pos + 1);
@@ -1647,7 +1703,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     _ = &mut_b;
                     var b = mut_b;
                     _ = &b;
-                    _ = (blk_catch_33: { break :blk_catch_33 ((b.appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_33| { _ = &__ce_33; return error.OutOfMemory; }); });
+                    _ = (blk_catch_34: { break :blk_catch_34 ((b.appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_34| { _ = &__ce_34; return error.OutOfMemory; }); });
                     text = b.items;
                 } else {
                     text = self.src[start..self.pos];

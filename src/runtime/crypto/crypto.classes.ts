@@ -42,6 +42,7 @@ export default [
     proto: {
       getRandomValues: {
         fn: "getRandomValues",
+        length: 1,
         // https://discord.com/channels/876711213126520882/1276103693665828894/1276133319033229363
         // https://discord.com/channels/876711213126520882/1276103693665828894/1276127092047609919
         // DOMJIT: {
@@ -52,7 +53,7 @@ export default [
       },
       randomUUID: {
         fn: "randomUUID",
-        length: 1,
+        length: 0,
         DOMJIT: {
           returns: "JSString",
           "pure": false,

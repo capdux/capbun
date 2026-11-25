@@ -62,7 +62,7 @@ void CryptoAlgorithm::generateKey(const CryptoAlgorithmParameters&, bool, Crypto
     exceptionCallback(NotSupportedError, ""_s);
 }
 
-void CryptoAlgorithm::deriveBits(const CryptoAlgorithmParameters&, Ref<CryptoKey>&&, size_t, VectorCallback&&, ExceptionCallback&& exceptionCallback, ScriptExecutionContext&, WorkQueue&)
+void CryptoAlgorithm::deriveBits(const CryptoAlgorithmParameters&, Ref<CryptoKey>&&, std::optional<size_t>, VectorCallback&&, ExceptionCallback&& exceptionCallback, ScriptExecutionContext&, WorkQueue&)
 {
     exceptionCallback(NotSupportedError, ""_s);
 }
@@ -100,6 +100,19 @@ void CryptoAlgorithm::decapsulate(Ref<CryptoKey>&&, Vector<uint8_t>&&, VectorCal
 ExceptionOr<std::optional<size_t>> CryptoAlgorithm::getKeyLength(const CryptoAlgorithmParameters&)
 {
     return Exception { NotSupportedError };
+}
+
+std::optional<Vector<uint8_t>> CryptoAlgorithm::extractDerivedBits(std::optional<size_t> length, Vector<uint8_t>&& secret)
+{
+    if (!length)
+        return WTF::move(secret);
+    auto lengthInBytes = (*length + 7) / 8;
+    if (lengthInBytes > secret.size())
+        return std::nullopt;
+    secret.shrink(lengthInBytes);
+    if (auto remainder = *length % 8)
+        secret.last() &= static_cast<uint8_t>(0xFF << (8 - remainder));
+    return WTF::move(secret);
 }
 
 template<typename ResultCallbackType, typename OperationType>

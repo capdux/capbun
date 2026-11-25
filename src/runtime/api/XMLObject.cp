@@ -46,10 +46,10 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
 
     let compact = true;
     if (!options_val.isUndefinedOrNull()) {
-        if (!options_val.isObject() || options_val.isArray()) {
+        if (!options_val.isObject() || options_val.isArray() || options_val.isCallable()) {
             return global.throwInvalidArguments("XML.parse options must be an object", {});
         }
-        if (c_val := options_val.getBooleanLoose(global, "compact")?) {
+        if (c_val := options_val.getBooleanStrict(global, "compact")?) {
             compact = c_val;
         }
     }
@@ -65,25 +65,29 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
     let log = logger.Log.init(bun.default_allocator);
     const log_guard = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
-    let is_bytes = false;
-    let blob_or_str = (jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value))?;
     let root_expr: Expr = undefined;
+    const is_binary_input = input_value.isObject() && (input_value.as(jsc.WebCore.Blob) != null || input_value.asArrayBuffer(global) != null);
 
-    if (*input := blob_or_str) {
-        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
-        is_bytes = true;
-        const input_bytes = input.slice();
-        if (input_bytes.len > std.math.maxInt(i32)) {
-            return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+    if (is_binary_input) {
+        let blob_or_str = (jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value))?;
+        if (*input := blob_or_str) {
+            const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
+            const input_bytes = input.slice();
+            if (input_bytes.len > std.math.maxInt(i32)) {
+                return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+            }
+            const source = &logger.Source.initPathString("input.xml", input_bytes);
+            root_expr = xml.parse(source, &log, allocator, xml.Options{
+                compact: compact,
+                encoding: .Bytes,
+            }) catch e => {
+                return handleParseError(global, &log, e);
+            };
+            return exprToJS(root_expr, global);
         }
-        const source = &logger.Source.initPathString("input.xml", input_bytes);
-        root_expr = xml.parse(source, &log, allocator, xml.Options{
-            compact: compact,
-            encoding: .Bytes,
-        }) catch e => {
-            return handleParseError(global, &log, e);
-        };
-    } else {
+    }
+
+    {
         let str = input_value.toBunString(global)?;
         const str_guard = DerefGuard<bun.String>{ ptr: unsafe { &str } };
         if (str.isUTF16()) {
@@ -185,6 +189,8 @@ fn isNode(global: *jsc.JSGlobalObject, value: JSValue): bun.JSError!bool {
     if (!name_val.isString()) return false;
     if ((value.get(global, "children"))? != null) return true;
     if ((value.get(global, "attributes"))? != null) return true;
+    if (value.hasOwnPropertyValue(global, bun.String.static("children").toJS(global)?)?) return true;
+    if (value.hasOwnPropertyValue(global, bun.String.static("attributes").toJS(global)?)?) return true;
     return false;
 }
 
@@ -284,7 +290,7 @@ struct Stringifier {
     fn stringifyNodeInner(*_, global: *jsc.JSGlobalObject, node: JSValue): StringifyError!void {
         const name_val = node.get(global, "name")?;
         if (name_val == null || !name_val.?.isString()) {
-            return global.throw("XML.stringify: element children must be strings or { name, attributes, children } nodes with a string name", {});
+            return global.throw("XML.stringify: element children must be strings, { name, attributes, children } elements, { comment } or { target, data }", {});
         }
         let name = name_val.?.toBunString(global)?;
         const name_guard = DerefGuard<bun.String>{ ptr: unsafe { &name } };
@@ -354,6 +360,10 @@ struct Stringifier {
             if (child.isNull() || skipped(child)) continue;
             if (pretty) _.newline();
             if (child.isObject() && !child.isArray() && !child.isDate()) {
+                const child_name = child.get(global, "name")?;
+                if (child_name == null && _.stringifyMarkup(global, child)?) {
+                    continue;
+                }
                 _.stringifyNode(global, child)?;
             } else if (child.isArray()) {
                 return global.throw("XML.stringify: a node's children cannot contain arrays", {});
@@ -374,6 +384,89 @@ struct Stringifier {
             _.newline();
         }
         _.appendEndTag(name);
+    }
+
+    fn stringifyMarkup(*_, global: *jsc.JSGlobalObject, child: JSValue): StringifyError!bool {
+        if (comment := child.get(global, "comment")?) {
+            if ((child.get(global, "target"))? != null) {
+                return global.throw("XML.stringify: a child with both 'comment' and 'target' is neither a comment nor a processing instruction", {});
+            }
+            if (!comment.isString()) {
+                return global.throw("XML.stringify: a comment node's 'comment' must be a string", {});
+            }
+            let text = comment.toBunString(global)?;
+            const text_guard = DerefGuard<bun.String>{ ptr: unsafe { &text } };
+            const len = text.length();
+            let i: usize = 0;
+            let prev_dash = false;
+            while (i < len) {
+                const pair = codePointAt(&text, i);
+                const cp = pair[0];
+                const w = pair[1];
+                i += w;
+                if (!xml.isXmlChar(cp)) {
+                    return global.throw("XML.stringify: XML cannot represent the character U+{X:0>4}", .{cp});
+                }
+                if (cp == 0x2D && (prev_dash || i == len)) {
+                    return global.throw("XML.stringify: a comment cannot contain '--' or end with '-'", {});
+                }
+                prev_dash = cp == 0x2D;
+            }
+            _.builder.append(.latin1, "<!--");
+            _.builder.append(.string, text);
+            _.builder.append(.latin1, "-->");
+            return true;
+        }
+        if (target_val := child.get(global, "target")?) {
+            if (!target_val.isString()) {
+                return global.throw("XML.stringify: a processing instruction's 'target' must be a string", {});
+            }
+            let target = target_val.toBunString(global)?;
+            const target_guard = DerefGuard<bun.String>{ ptr: unsafe { &target } };
+            _.checkName(global, &target, "processing instruction target")?;
+            if (target.length() == 3) {
+                const c0 = target.charAt(0) | 0x20;
+                const c1 = target.charAt(1) | 0x20;
+                const c2 = target.charAt(2) | 0x20;
+                if (c0 == 'x' && c1 == 'm' && c2 == 'l') {
+                    return global.throw("XML.stringify: 'xml' is reserved and cannot be a processing instruction target", {});
+                }
+            }
+            _.builder.append(.latin1, "<?");
+            _.builder.append(.string, target);
+            if (data_val := child.get(global, "data")?) {
+                if (!data_val.isNull()) {
+                    if (!data_val.isString()) {
+                        return global.throw("XML.stringify: a processing instruction's 'data' must be a string", {});
+                    }
+                    let data = data_val.toBunString(global)?;
+                    const data_guard = DerefGuard<bun.String>{ ptr: unsafe { &data } };
+                    const len = data.length();
+                    if (len > 0) {
+                        let i: usize = 0;
+                        let prev_q = false;
+                        while (i < len) {
+                            const pair = codePointAt(&data, i);
+                            const cp = pair[0];
+                            const w = pair[1];
+                            i += w;
+                            if (!xml.isXmlChar(cp)) {
+                                return global.throw("XML.stringify: XML cannot represent the character U+{X:0>4}", .{cp});
+                            }
+                            if (prev_q && cp == 0x3E) {
+                                return global.throw("XML.stringify: processing instruction data cannot contain '?>'", {});
+                            }
+                            prev_q = cp == 0x3F;
+                        }
+                        _.builder.append(.lchar, ' ');
+                        _.builder.append(.string, data);
+                    }
+                }
+            }
+            _.builder.append(.latin1, "?>");
+            return true;
+        }
+        return false;
     }
 
     fn stringifyCompactDocument(*_, global: *jsc.JSGlobalObject, document: JSValue): StringifyError!void {
@@ -512,7 +605,7 @@ struct Stringifier {
                         else => {},
                     }
                 } else if (key.hasPrefixComptime("#")) {
-                    return global.throw("XML.stringify: unknown key starting with '#' (text content is \"#text\")", {});
+                    return global.throw("XML.stringify: unknown key (keys starting with '#' are reserved; text content is \"#text\")", {});
                 } else if (hasOutput(global, child)?) {
                     has_elements = true;
                 }
@@ -582,7 +675,9 @@ struct Stringifier {
             i += width;
         }
         if (!valid) {
-            return global.throw("XML.stringify: invalid XML {s} name", .{what});
+            const s = name.toUTF8(bun.default_allocator);
+            defer s.deinit();
+            return global.throw("XML.stringify: '{s}' is not a valid XML {s} name", .{ s.slice(), what });
         }
     }
 

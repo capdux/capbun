@@ -288,3 +288,25 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 4. **仅对非 Rust-only 的 Linux/Windows/跨平台运行时修复吸收**：
    - 跳过 Cargo/clippy/Windows Rust stub crate 搬家 commit；对真正影响 Windows/Linux/跨平台运行时行为与内存安全的修复全部等价吸收。
 
+
+---
+
+## 十四、 上游 Rust Bun 版本持续跟进、吸收与发布标准流程（SOP）
+
+为保证后续新版本（`bun-v1.4.6` 及以后）能沿用当前已验证的“三路并行 + 逐版锁定”方法持续吸收并发布同版本号 CP-Bun，执行以下标准步骤：
+
+1. **配套脚本**：`scripts/upstream_sync.py`（配合 `scripts/zig2cp_prep.py`、`scripts/cpc_brief.py`）
+   - `python3 scripts/upstream_sync.py plan <from_tag> <to_tag>`：切换 `../bun-ref` 至目标版本，过滤 `ci:`/`docs:`/`test:`/`bun check`/`bun lint`/`bun fmt` 等非运行时噪声，按目录统计受影响模块与净 Commit 列表。
+   - `python3 scripts/upstream_sync.py sync-tests <to_tag>`：将 `test/` 与 `packages/bun-types/` 与上游目标版本 `rsync --delete` 对齐。
+   - `python3 scripts/upstream_sync.py verify <cp_files...>`：批量运行 `cpc_brief.py -n 8` 四项硬门禁，并执行 `bun run zig:check`（5/5 语义校验）。
+   - `python3 scripts/upstream_sync.py tag <cp-vX.Y.Z-sync>`：排除 `*.zig.map` 后原子提交并打标。
+
+2. **三路并行吸收分工**
+   - **Subagent 1**：`src/install/`、`src/cli/`、`src/resolver/`、`src/sys/`、`src/io/`、`src/glob/`、`src/semver/`。
+   - **Subagent 2**：`src/bundler/`、`src/js_parser/`、`src/js_printer/`、`src/css/`、`src/sourcemap/`、`src/ast/`、`src/bake/`。
+   - **主智能体**：`test/` 与 `packages/bun-types/` 同步、`http/http2/http3/usockets/ws/tls/sql/jsc/webcore/sqlite`、`scripts/build/deps/*`、`patches/*`，以及统一 `bun run zig:check` 跨模块编译收敛。
+   - **硬性纪律**：吸收期内子智能体**严禁**运行 `bun bd` / `bun bd test`（仅跑 `cpc_brief.py`）；全仓语义通过 `zig:check` 后再由主智能体串行执行 `bun bd` 构建与分域测试验证。
+
+3. **发布同版本号 CP-Bun 流程**
+   - 完成 `cp-vX.Y.Z-sync` 打标后，运行 `bun bd -p 'Bun.version'` 验证链接与启动；
+   - 分域回归核心测试集（`xml`、`yaml`、`sqlite`、`http2`、`tls`、`webcrypto`、`diagnostics_channel`、`bundler`、`install`），修复残余回归后执行最终 `git commit` 与版本标签发布。

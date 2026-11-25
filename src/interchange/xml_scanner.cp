@@ -50,13 +50,15 @@ pub fn ScannerTypes(comptime U: type): type {
             bracket_close: void,
             decl: DeclKind,
             xml_decl: void,
-            comment: void,
-            pi: void,
+            comment: Slice,
+            pi: Pi,
             start_tag: Slice,
             end_tag: Slice,
             text: Slice,
             unexpected: u32,
         };
+
+        pub const Pi = struct { target: Slice, data: Slice };
 
         pub const Token = struct {
             kind: Kind,
@@ -195,6 +197,7 @@ pub fn ScannerTypes(comptime U: type): type {
             idx: Idx?,
             cursor: usize,
             latin1: bool,
+            keep_markup: bool,
             tok: Token,
             tag_degraded: bool,
 
@@ -208,6 +211,7 @@ pub fn ScannerTypes(comptime U: type): type {
                 contents: Slice,
                 log: *bun.logger.Log,
                 encoding: InputEncoding,
+                keep_markup: bool,
             ): Scanner {
                 return Scanner{
                     src: contents,
@@ -234,6 +238,7 @@ pub fn ScannerTypes(comptime U: type): type {
                     idx: null,
                     cursor: 0,
                     latin1: encoding == .Latin1,
+                    keep_markup: keep_markup,
                     tok: Token{ kind: .{ .eof = null }, pos: 0, frame: 0, spaced: false },
                     tag_degraded: false,
                     allocator: allocator,
@@ -991,42 +996,68 @@ pub fn ScannerTypes(comptime U: type): type {
                 }
             }
 
-            fn scanComment(*_, start_pos: usize): XMLError!void {
+            fn kept(*_, start: usize, end: usize): Slice {
+                if (!_.keep_markup) return [];
+                const raw = _.src[start..end];
+                if (_.frame_kind != .Document) return raw;
+                if (UT.findAscii(raw, "\r") == null) return raw;
+                let out: std.ArrayListUnmanaged(U) = .{};
+                out.ensureTotalCapacity(_.allocator, raw.len) catch return raw;
+                let i: usize = 0;
+                while (i < raw.len) : (i += 1) {
+                    if (UT.unitLow(raw[i]) == '\r') {
+                        out.appendAssumeCapacity(UT.unitAscii('\n'));
+                        if (i + 1 < raw.len && UT.unitLow(raw[i + 1]) == '\n') {
+                            i += 1;
+                        }
+                    } else {
+                        out.appendAssumeCapacity(raw[i]);
+                    }
+                }
+                return out.items;
+            }
+
+            fn scanComment(*_, start_pos: usize): XMLError!Slice {
+                const body_start = _.pos;
                 const rel = UT.findAscii(_.src[_.pos..], "--");
                 const dashes: usize? = if (i := rel) _.pos + i else null;
                 _.skipDropped(dashes ?? _.src.len)?;
                 if (d := dashes) {
                     if (_.peekAt(d + 2) == '>') {
                         _.pos = d + 3;
-                        return;
+                        return _.kept(body_start, d);
                     }
                     return _.errMsg(_.here(), "'--' is not allowed inside a comment");
                 }
                 return _.errMsg(start_pos, "Unterminated comment");
             }
 
-            fn scanPi(*_, start_pos: usize): XMLError!bool {
+            fn scanPi(*_, start_pos: usize): XMLError!Pi? {
                 const at_document_start = _.inDocument() && start_pos == _.content_start;
                 const target = _.scanName("Expected a processing instruction target after '<?' but found")?;
                 if (UT.eqAscii(target, "xml") && at_document_start) {
-                    return true;
+                    return null;
                 }
                 if (UT.eqAsciiIgnoreCase(target, "xml")) {
                     return _.errMsg(start_pos, "'<?xml' is reserved for the XML declaration, which is only allowed at the very start of the document");
                 }
                 if (_.hasPrefix("?>")) {
                     _.pos += 2;
-                    return false;
+                    return .{ target: target, data: [] };
                 }
                 if (!types.isWs(_.peek())) {
                     return _.errHere("Expected whitespace or '?>' after the processing instruction target but found");
                 }
+                while (!_.atEnd() && types.isWs(_.peek())) {
+                    _.pos += 1;
+                }
+                const data_start = _.pos;
                 const rel = UT.findAscii(_.src[_.pos..], "?>");
                 const close: usize? = if (i := rel) _.pos + i else null;
                 _.skipDropped(close ?? _.src.len)?;
                 if (end := close) {
                     _.pos = end + 2;
-                    return false;
+                    return .{ target: target, data: _.kept(data_start, end) };
                 }
                 return _.errMsg(start_pos, "Unterminated processing instruction");
             }
@@ -1080,14 +1111,14 @@ pub fn ScannerTypes(comptime U: type): type {
                         continue;
                     }
                     if (c == '<') {
-                        if (!_.inDocument()) _.tag_degraded = false else _.tag_degraded = false;
+                        if (_.inDocument()) _.tag_degraded = false;
                         const nxt = _.peekAt(_.pos + 1);
                         if (nxt == '?') {
                             _.pos += 2;
-                            if (_.scanPi(cur_pos)?) {
-                                kind = .xml_decl;
+                            if (pi_res := _.scanPi(cur_pos)?) {
+                                kind = .{ .pi = pi_res };
                             } else {
-                                kind = .pi;
+                                kind = .xml_decl;
                             }
                             break;
                         }
@@ -1100,8 +1131,8 @@ pub fn ScannerTypes(comptime U: type): type {
                         if (nxt == '!') {
                             if (_.hasPrefix("<!--")) {
                                 _.pos += 4;
-                                _.scanComment(cur_pos)?;
-                                kind = .comment;
+                                const body = _.scanComment(cur_pos)?;
+                                kind = .{ .comment = body };
                                 break;
                             }
                             if (_.hasPrefix("<!DOCTYPE")) {
@@ -1309,10 +1340,34 @@ pub fn ScannerTypes(comptime U: type): type {
                         if (_.inDocument()) _.tag_degraded = false;
                         const cur_pos = _.here();
                         const nxt = _.peekAt(_.pos + 1);
-                        if (nxt == '!' && _.hasPrefix("<!--")) {
-                            * = materialize(_.allocator, _.src, start, _.pos, &buf)?;
-                            _.pos += 4;
-                            _.scanComment(cur_pos)?;
+                        if (nxt == '?' || (nxt == '!' && _.hasPrefix("<!--"))) {
+                            if (!_.keep_markup) {
+                                * = materialize(_.allocator, _.src, start, _.pos, &buf)?;
+                            } else {
+                                const has_text = if (b := buf) (b.items.len > 0 || _.pos > start) else (_.pos > start);
+                                if (has_text) {
+                                    _.finishText(start, buf, text_pos)?;
+                                    return;
+                                }
+                            }
+                            const frame = _.frame_id;
+                            let kind: Kind = .{ .eof = null };
+                            if (nxt == '?') {
+                                _.pos += 2;
+                                if (pi_res := _.scanPi(cur_pos)?) {
+                                    kind = .{ .pi = pi_res };
+                                } else {
+                                    unreachable;
+                                }
+                            } else {
+                                _.pos += 4;
+                                const body = _.scanComment(cur_pos)?;
+                                kind = .{ .comment = body };
+                            }
+                            if (_.keep_markup) {
+                                _.tok = Token{ kind: kind, pos: cur_pos, frame: frame, spaced: false };
+                                return;
+                            }
                             start = _.pos;
                             continue;
                         }
@@ -1320,14 +1375,6 @@ pub fn ScannerTypes(comptime U: type): type {
                             const b = materialize(_.allocator, _.src, start, _.pos, &buf)?;
                             _.pos += 9;
                             _.scanCdata(cur_pos, b)?;
-                            start = _.pos;
-                            continue;
-                        }
-                        if (nxt == '?') {
-                            * = materialize(_.allocator, _.src, start, _.pos, &buf)?;
-                            _.pos += 2;
-                            const is_xml_decl = _.scanPi(cur_pos)?;
-                            bun.debugAssert(!is_xml_decl);
                             start = _.pos;
                             continue;
                         }

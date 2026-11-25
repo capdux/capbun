@@ -181,6 +181,16 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
             _ = list.appendSliceAssumeCapacity(items);
             return Expr.init(E.Array, E.Array{ .items = bun.BabyList(Expr).moveFromList((&list)) }, loc);
     }
+
+pub fn isWsOnly(text: Slice) bool {
+            for (cp_iter_slice(text)) |u| {
+                _ = &u;
+                if ((!types.isWs(UT.unitLow(u)))) {
+                    return false;
+                }
+            }
+            return true;
+    }
     const Slice = []const U;
     const CompactFrame = struct {
         name: Slice,
@@ -188,6 +198,11 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
         attribute_count: u32,
         props_mark: u32,
         text_mark: u32,
+        text_prop: u32,
+    };
+    const TextRun = struct {
+        slice: Slice,
+        ws_only: bool,
     };
     const Group = struct {
         first: u32,
@@ -198,7 +213,7 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
         allocator: std.mem.Allocator,
         props: std.ArrayListUnmanaged(G.Property),
         stack: std.ArrayListUnmanaged(CompactFrame),
-        text_runs: std.ArrayListUnmanaged(Slice),
+        text_runs: std.ArrayListUnmanaged(TextRun),
         key_cache: [KEY_CACHE_SIZE]?[]const u8,
         group_of: std.ArrayListUnmanaged(u32),
         groups: std.ArrayListUnmanaged(Group),
@@ -227,68 +242,45 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
                 _ = self.group_index.deinit(self.allocator);
         }
     
-    pub fn takeText(self: *@This(), mark: usize) XMLError!Slice {
+    pub fn concatText(self: *@This(), mark: usize, skip_ws_only: bool) XMLError!Slice {
                 const runs = self.text_runs.items[mark..];
-                var out_text: Slice = &.{};
-                _ = &out_text;
-                if ((runs.len == 0)) {
-                    out_text = &.{};
-                } else {
-                    if ((runs.len == 1)) {
-                        out_text = UT.trimWs(runs[0]);
-                    } else {
-                        out_text = try self.joinText(mark);
-                    }
-                }
-                self.text_runs.items.len = mark;
-                return out_text;
-        }
-    
-    pub fn joinText(self: *@This(), mark: usize) XMLError!Slice {
-                const runs = self.text_runs.items[mark..];
-                var first: usize = 0;
-                _ = &first;
-                var last: usize = runs.len;
-                _ = &last;
-                while ((first < last)) {
-                    const t = UT.trimWsStart(runs[@as(usize, @intCast(first))]);
-                    if ((t.len == 0)) {
-                        first = (first + 1);
-                    } else {
-                        runs[cp_cast_int(usize, first)] = t;
-                        break;
-                    }
-                }
-                while ((last > first)) {
-                    const t = UT.trimWsEnd(runs[@as(usize, @intCast((last - 1)))]);
-                    if ((t.len == 0)) {
-                        last = (last - 1);
-                    } else {
-                        runs[cp_cast_int(usize, (last - 1))] = t;
-                        break;
-                    }
-                }
-                const kept = runs[first..last];
-                if ((kept.len == 0)) {
-                    return &.{};
-                }
-                if ((kept.len == 1)) {
-                    return kept[0];
-                }
+                var first_slice: ?Slice = null;
+                _ = &first_slice;
+                var second_slice: ?Slice = null;
+                _ = &second_slice;
                 var total_len: usize = 0;
                 _ = &total_len;
-                for (cp_iter_slice(kept)) |r| {
+                for (cp_iter_slice(runs)) |r| {
                     _ = &r;
-                    total_len = (total_len + r.len);
+                    if ((skip_ws_only and r.ws_only)) {
+                        continue;
+                    }
+                    total_len = (total_len + r.slice.len);
+                    if ((first_slice == null)) {
+                        first_slice = r.slice;
+                    } else {
+                        if ((second_slice == null)) {
+                            second_slice = r.slice;
+                        }
+                    }
+                }
+                if ((first_slice == null)) {
+                    return &.{};
+                }
+                if ((second_slice == null)) {
+                    return first_slice.?;
                 }
                 var buf = (blk_catch_0: { break :blk_catch_0 ((self.allocator.alloc(U, total_len)) catch |__ce_0| { _ = &__ce_0; return error.OutOfMemory; }); });
                 _ = &buf;
                 var off: usize = 0;
                 _ = &off;
-                for (cp_iter_slice(kept)) |r| {
+                for (cp_iter_slice(runs)) |r| {
                     _ = &r;
-                    _ = std.mem.copyForwards(U, buf[off..(off + r.len)], r);
-                    off = (off + r.len);
+                    if ((skip_ws_only and r.ws_only)) {
+                        continue;
+                    }
+                    _ = std.mem.copyForwards(U, buf[off..(off + r.slice.len)], r.slice);
+                    off = (off + r.slice.len);
                 }
                 return buf;
         }
@@ -418,7 +410,7 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
         }
     
     pub fn beginElement(self: *@This(), name: Slice, loc: Loc) XMLError!void {
-                _ = (blk_catch_8: { break :blk_catch_8 ((self.stack.append(self.allocator, CompactFrame{ .name = name, .loc = loc, .attribute_count = 0, .props_mark = @as(u32, @intCast(self.props.items.len)), .text_mark = @as(u32, @intCast(self.text_runs.items.len)) })) catch |__ce_8| { _ = &__ce_8; return error.OutOfMemory; }); });
+                _ = (blk_catch_8: { break :blk_catch_8 ((self.stack.append(self.allocator, CompactFrame{ .name = name, .loc = loc, .attribute_count = 0, .props_mark = @as(u32, @intCast(self.props.items.len)), .text_mark = @as(u32, @intCast(self.text_runs.items.len)), .text_prop = std.math.maxInt(u32) })) catch |__ce_8| { _ = &__ce_8; return error.OutOfMemory; }); });
         }
     
     pub fn attribute(self: *@This(), name: Slice, value: Slice) XMLError!void {
@@ -453,65 +445,89 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
     
     pub fn text(self: *@This(), txt: Slice, _loc: Loc) XMLError!void {
                 _ = &_loc;
-                _ = (blk_catch_11: { break :blk_catch_11 ((self.text_runs.append(self.allocator, txt)) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
+                const ws_only = isWsOnly(txt);
+                _ = (blk_catch_11: { break :blk_catch_11 ((self.text_runs.append(self.allocator, TextRun{ .slice = txt, .ws_only = ws_only })) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
+                if ((!ws_only)) {
+                    const frame = (&self.stack.items[@as(usize, @intCast((self.stack.items.len - 1)))]);
+                    if ((frame.text_prop == std.math.maxInt(u32))) {
+                        frame.text_prop = @as(u32, @intCast(self.props.items.len));
+                        const empty_null: E.Null = undefined;
+                        _ = (blk_catch_12: { break :blk_catch_12 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("#text", frame.loc, self.allocator), .value = Expr.init(E.Null, empty_null, frame.loc) })) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
+                    }
+                }
+        }
+    
+    pub fn comment(self: *@This(), _txt: Slice, _loc: Loc) XMLError!void {
+            _ = self;
+                _ = &_txt;
+                _ = &_loc;
+        }
+    
+    pub fn pi(self: *@This(), _target: Slice, _data: Slice, _loc: Loc) XMLError!void {
+            _ = self;
+                _ = &_target;
+                _ = &_data;
+                _ = &_loc;
+        }
+    
+    pub fn leafValue(self: *@This(), frame: CompactFrame, txt: Slice) XMLError!Expr {
+                if ((frame.attribute_count == 0)) {
+                    return makeStrExpr(txt, frame.loc);
+                }
+                if ((txt.len > 0)) {
+                    _ = (blk_catch_13: { break :blk_catch_13 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("#text", frame.loc, self.allocator), .value = makeStrExpr(txt, frame.loc) })) catch |__ce_13| { _ = &__ce_13; return error.OutOfMemory; }); });
+                }
+                return makeObjectExpr(self.allocator, (&self.props), frame.props_mark, frame.loc);
+        }
+    
+    pub fn deliver(self: *@This(), name: Slice, val: Expr, loc: Loc) XMLError!void {
+                if ((self.stack.items.len > 0)) {
+                    _ = (blk_catch_14: { break :blk_catch_14 ((self.props.append(self.allocator, G.Property{ .key = makeStrExpr(name, loc), .value = val })) catch |__ce_14| { _ = &__ce_14; return error.OutOfMemory; }); });
+                } else {
+                    self.root_name = name;
+                    self.root_value = val;
+                    self.root_loc = loc;
+                }
         }
     
     pub fn endLeaf(self: *@This(), txt: Slice, _loc: Loc) XMLError!void {
                 _ = &_loc;
                 const frame = ((self.stack.pop()) orelse (unreachable));
-                const trimmed = UT.trimWs(txt);
-                var val: Expr = undefined;
-                _ = &val;
-                if ((frame.attribute_count == 0)) {
-                    val = makeStrExpr(trimmed, frame.loc);
-                } else {
-                    if ((trimmed.len > 0)) {
-                        _ = (blk_catch_12: { break :blk_catch_12 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("#text", frame.loc, self.allocator), .value = makeStrExpr(trimmed, frame.loc) })) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
-                    }
-                    val = try makeObjectExpr(self.allocator, (&self.props), frame.props_mark, frame.loc);
-                }
-                if ((self.stack.items.len > 0)) {
-                    _ = (blk_catch_13: { break :blk_catch_13 ((self.props.append(self.allocator, G.Property{ .key = makeStrExpr((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), frame.loc), .value = val })) catch |__ce_13| { _ = &__ce_13; return error.OutOfMemory; }); });
-                } else {
-                    self.root_name = (if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name);
-                    self.root_value = val;
-                    self.root_loc = frame.loc;
-                }
+                const val = try self.leafValue(frame, txt);
+                return self.deliver((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), val, frame.loc);
         }
     
     pub fn endElement(self: *@This()) XMLError!void {
                 const frame = ((self.stack.pop()) orelse (unreachable));
-                const trimmed = try self.takeText(frame.text_mark);
                 const props_mark = (if (comptime @typeInfo(@TypeOf(frame.props_mark)) == .@"enum") cp_cast_int(usize, @intFromEnum(frame.props_mark)) else cp_cast_int(usize, frame.props_mark));
                 const children_mark = (props_mark + (if (comptime @typeInfo(@TypeOf(frame.attribute_count)) == .@"enum") cp_cast_int(usize, @intFromEnum(frame.attribute_count)) else cp_cast_int(usize, frame.attribute_count)));
-                const has_children = (self.props.items.len > children_mark);
+                const has_text = (frame.text_prop != std.math.maxInt(u32));
+                const has_elements = (self.props.items.len > (children_mark + @intFromBool(has_text)));
                 var val: Expr = undefined;
                 _ = &val;
-                if (((frame.attribute_count == 0) and (!has_children))) {
-                    val = makeStrExpr(trimmed, frame.loc);
+                if ((!has_elements)) {
+                    const txt = try self.concatText(frame.text_mark, false);
+                    self.props.items.len = children_mark;
+                    val = try self.leafValue(frame, txt);
                 } else {
+                    if (has_text) {
+                        const txt = try self.concatText(frame.text_mark, true);
+                        (if (@typeInfo(@TypeOf(self.props.items[@as(usize, @intCast(frame.text_prop))])) == .@"enum") @intFromEnum(self.props.items[@as(usize, @intCast(frame.text_prop))]) else self.props.items[@as(usize, @intCast(frame.text_prop))].value) = makeStrExpr(txt, frame.loc);
+                    }
                     if ((self.props.items.len > (children_mark + 1))) {
                         _ = try self.foldRepeats(children_mark);
                     }
-                    if ((trimmed.len > 0)) {
-                        _ = (blk_catch_14: { break :blk_catch_14 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("#text", frame.loc, self.allocator), .value = makeStrExpr(trimmed, frame.loc) })) catch |__ce_14| { _ = &__ce_14; return error.OutOfMemory; }); });
-                    }
                     val = try makeObjectExpr(self.allocator, (&self.props), props_mark, frame.loc);
                 }
-                if ((self.stack.items.len > 0)) {
-                    _ = (blk_catch_15: { break :blk_catch_15 ((self.props.append(self.allocator, G.Property{ .key = makeStrExpr((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), frame.loc), .value = val })) catch |__ce_15| { _ = &__ce_15; return error.OutOfMemory; }); });
-                } else {
-                    self.root_name = (if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name);
-                    self.root_value = val;
-                    self.root_loc = frame.loc;
-                }
+                self.text_runs.items.len = frame.text_mark;
+                return self.deliver((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), val, frame.loc);
         }
     
     pub fn finish(self: *@This()) XMLError!Expr {
                 const name = ((self.root_name) orelse (unreachable));
                 const val = ((self.root_value) orelse (unreachable));
                 const mark = self.props.items.len;
-                _ = (blk_catch_16: { break :blk_catch_16 ((self.props.append(self.allocator, G.Property{ .key = makeStrExpr(name, self.root_loc), .value = val })) catch |__ce_16| { _ = &__ce_16; return error.OutOfMemory; }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((self.props.append(self.allocator, G.Property{ .key = makeStrExpr(name, self.root_loc), .value = val })) catch |__ce_15| { _ = &__ce_15; return error.OutOfMemory; }); });
                 return makeObjectExpr(self.allocator, (&self.props), mark, self.root_loc);
         }
     };
@@ -554,9 +570,24 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
                 _ = (blk_catch_2: { break :blk_catch_2 ((self.items.append(self.allocator, makeStrExpr(txt, loc))) catch |__ce_2| { _ = &__ce_2; return error.OutOfMemory; }); });
         }
     
+    pub fn comment(self: *@This(), txt: Slice, loc: Loc) XMLError!void {
+                const mark = self.props.items.len;
+                _ = (blk_catch_3: { break :blk_catch_3 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("comment", loc, self.allocator), .value = makeStrExpr(txt, loc) })) catch |__ce_3| { _ = &__ce_3; return error.OutOfMemory; }); });
+                const node = try makeObjectExpr(self.allocator, (&self.props), mark, loc);
+                _ = (blk_catch_4: { break :blk_catch_4 ((self.items.append(self.allocator, node)) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
+        }
+    
+    pub fn pi(self: *@This(), target: Slice, data: Slice, loc: Loc) XMLError!void {
+                const mark = self.props.items.len;
+                _ = (blk_catch_5: { break :blk_catch_5 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("target", loc, self.allocator), .value = makeStrExpr(target, loc) })) catch |__ce_5| { _ = &__ce_5; return error.OutOfMemory; }); });
+                _ = (blk_catch_6: { break :blk_catch_6 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("data", loc, self.allocator), .value = makeStrExpr(data, loc) })) catch |__ce_6| { _ = &__ce_6; return error.OutOfMemory; }); });
+                const node = try makeObjectExpr(self.allocator, (&self.props), mark, loc);
+                _ = (blk_catch_7: { break :blk_catch_7 ((self.items.append(self.allocator, node)) catch |__ce_7| { _ = &__ce_7; return error.OutOfMemory; }); });
+        }
+    
     pub fn endLeaf(self: *@This(), txt: Slice, loc: Loc) XMLError!void {
                 if ((txt.len > 0)) {
-                    _ = (blk_catch_3: { break :blk_catch_3 ((self.items.append(self.allocator, makeStrExpr(txt, loc))) catch |__ce_3| { _ = &__ce_3; return error.OutOfMemory; }); });
+                    _ = (blk_catch_8: { break :blk_catch_8 ((self.items.append(self.allocator, makeStrExpr(txt, loc))) catch |__ce_8| { _ = &__ce_8; return error.OutOfMemory; }); });
                 }
                 return self.endElement();
         }
@@ -568,12 +599,12 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
                 const children = try makeArrayExpr(self.allocator, children_slice, frame.loc);
                 self.items.items.len = frame.children_mark;
                 const mark = self.props.items.len;
-                _ = (blk_catch_4: { break :blk_catch_4 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("name", frame.loc, self.allocator), .value = makeStrExpr((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), frame.loc) })) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
-                _ = (blk_catch_5: { break :blk_catch_5 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("attributes", frame.loc, self.allocator), .value = attributes })) catch |__ce_5| { _ = &__ce_5; return error.OutOfMemory; }); });
-                _ = (blk_catch_6: { break :blk_catch_6 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("children", frame.loc, self.allocator), .value = children })) catch |__ce_6| { _ = &__ce_6; return error.OutOfMemory; }); });
+                _ = (blk_catch_9: { break :blk_catch_9 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("name", frame.loc, self.allocator), .value = makeStrExpr((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), frame.loc) })) catch |__ce_9| { _ = &__ce_9; return error.OutOfMemory; }); });
+                _ = (blk_catch_10: { break :blk_catch_10 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("attributes", frame.loc, self.allocator), .value = attributes })) catch |__ce_10| { _ = &__ce_10; return error.OutOfMemory; }); });
+                _ = (blk_catch_11: { break :blk_catch_11 ((self.props.append(self.allocator, G.Property{ .key = makeAsciiStrExpr("children", frame.loc, self.allocator), .value = children })) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
                 const node = try makeObjectExpr(self.allocator, (&self.props), mark, frame.loc);
                 if ((self.stack.items.len > 0)) {
-                    _ = (blk_catch_7: { break :blk_catch_7 ((self.items.append(self.allocator, node)) catch |__ce_7| { _ = &__ce_7; return error.OutOfMemory; }); });
+                    _ = (blk_catch_12: { break :blk_catch_12 ((self.items.append(self.allocator, node)) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
                 } else {
                     self.root = node;
                 }
@@ -608,7 +639,7 @@ pub fn ParserType(comptime U: type, comptime Sink: type) type {
 pub fn init(source: *const bun.logger.Source, contents: Slice, log: *bun.logger.Log, allocator: std.mem.Allocator, options: Options, sink: Sink) Self {
         var __sink_moved = false; _ = &__sink_moved;
         defer if (!__sink_moved) { __sink_moved = true; const __T = @TypeOf(sink); if (@typeInfo(__T) == .optional) { if (sink) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sink.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sink; _drop_val.__cp_deinit(); } };
-            var sc = Scanner.init(allocator, source, contents, log, options.encoding);
+            var sc = Scanner.init(allocator, source, contents, log, options.encoding, (!options.compact));
             _ = &sc;
             if (comptime is_wide) {
                 sc.transcoded = true;
@@ -650,14 +681,15 @@ pub fn advanceContent(self: *@This()) XMLError!void {
             return self.scanner.nextContent();
     }
 
-pub fn describeKind(self: *const @This(), kind: Kind) []const u8 {
+pub fn describeKind(self: *@This(), kind: Kind) []const u8 {
+            const alloc = self.scanner.allocator;
             return (switch (kind) {
-.eof => "end of input",
-.name, .nmtoken => |n| self.scanner.formatUnits(n),
-.hash => "a keyword",
-.pe_reference => "a parameter entity reference",
+.eof => |entity| (if (entity) |e| (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(alloc, "the end of entity '{s}'", .{ self.scanner.formatUnits(e) })) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 "end of input"; }); }) else "end of input"),
+.name, .nmtoken => |n| (blk_catch_1: { break :blk_catch_1 ((std.fmt.allocPrint(alloc, "'{s}'", .{ self.scanner.formatUnits(n) })) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 "a name"; }); }),
+.hash => |n| (blk_catch_2: { break :blk_catch_2 ((std.fmt.allocPrint(alloc, "'#{s}'", .{ self.scanner.formatUnits(n) })) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 "a keyword"; }); }),
+.pe_reference => |n| (blk_catch_3: { break :blk_catch_3 ((std.fmt.allocPrint(alloc, "'%{s};'", .{ self.scanner.formatUnits(n) })) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 "a parameter entity reference"; }); }),
 .percent => "'%'",
-.percent_name => "'%'",
+.percent_name => |n| (blk_catch_4: { break :blk_catch_4 ((std.fmt.allocPrint(alloc, "'%{s}'", .{ self.scanner.formatUnits(n) })) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 "'%'"; }); }),
 .literal => "a quoted string",
 .eq => "'='",
 .gt => "'>'",
@@ -675,10 +707,21 @@ pub fn describeKind(self: *const @This(), kind: Kind) []const u8 {
 .xml_decl => "'<?xml'",
 .comment => "a comment",
 .pi => "a processing instruction",
-.start_tag => "a start tag",
-.end_tag => "an end tag",
+.start_tag => |n| (blk_catch_5: { break :blk_catch_5 ((std.fmt.allocPrint(alloc, "'<{s}'", .{ self.scanner.formatUnits(n) })) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 "a start tag"; }); }),
+.end_tag => |n| (blk_catch_6: { break :blk_catch_6 ((std.fmt.allocPrint(alloc, "'</{s}'", .{ self.scanner.formatUnits(n) })) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 "an end tag"; }); }),
 .text => "text",
-.unexpected => "an unexpected character",
+.unexpected => |cp| blk: {
+            if (((cp >= 33) and (cp <= 126))) {
+                break :blk (blk_catch_7: { break :blk_catch_7 ((std.fmt.allocPrint(alloc, "'{c}'", .{ @as(u8, @intCast(cp)) })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 "an unexpected character"; }); });
+            }
+            if (((((cp >= 32) and (cp != 127)) and (cp <= 1114111)) and (!((cp >= 55296) and (cp <= 57343))))) {
+                var tmp: [4]u8 = .{ 0, 0, 0, 0 };
+                _ = &tmp;
+                const n = bun.strings.encodeWTF8Rune((&tmp), @as(i32, @intCast(cp)));
+                break :blk (blk_catch_8: { break :blk_catch_8 ((std.fmt.allocPrint(alloc, "'{s}' (U+{X:0>4})", .{ tmp[0..n], cp })) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 "an unexpected character"; }); });
+            }
+            break :blk (blk_catch_9: { break :blk_catch_9 ((std.fmt.allocPrint(alloc, "U+{X:0>4}", .{ cp })) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 "an unexpected character"; }); });
+},
 });
     }
 
@@ -1276,7 +1319,7 @@ return self.unexpected("#REQUIRED, #IMPLIED, #FIXED or a quoted default value");
 },
 }
                 if (self.processingDeclarations()) {
-                    const gop = (blk_catch_0: { break :blk_catch_0 ((self.attlists.getOrPut(self.scanner.allocator, element)) catch |__ce_0| { _ = &__ce_0; return error.OutOfMemory; }); });
+                    const gop = (blk_catch_10: { break :blk_catch_10 ((self.attlists.getOrPut(self.scanner.allocator, element)) catch |__ce_10| { _ = &__ce_10; return error.OutOfMemory; }); });
                     if ((!gop.found_existing)) {
                         gop.value_ptr.* = AttList.init();
                     }
@@ -1365,7 +1408,7 @@ return self.unexpected("a quoted entity value, SYSTEM or PUBLIC");
             const frame = try self.expectGt("'>' to end the entity declaration");
             if (self.processingDeclarations()) {
                 const table = (if (parameter) (&self.scanner.entities.parameter) else (&self.scanner.entities.general));
-                const gop = (blk_catch_1: { break :blk_catch_1 ((table.getOrPut(self.scanner.allocator, name)) catch |__ce_1| { _ = &__ce_1; return error.OutOfMemory; }); });
+                const gop = (blk_catch_11: { break :blk_catch_11 ((table.getOrPut(self.scanner.allocator, name)) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
                 if ((!gop.found_existing)) {
                     gop.value_ptr.* = val;
                 }
@@ -1402,6 +1445,14 @@ pub fn parseTree(self: *@This()) XMLError!void {
 const loc = self.scanner.loc(self.scanner.tok.pos);
                 _ = try self.sink.text(txt, loc);
 },
+.comment => |txt| {
+const loc = self.scanner.loc(self.scanner.tok.pos);
+                _ = try self.sink.comment(txt, loc);
+},
+.pi => |p| {
+const loc = self.scanner.loc(self.scanner.tok.pos);
+                _ = try self.sink.pi(p.target, p.data, loc);
+},
 .start_tag => {
 _ = try self.openElement();
 },
@@ -1435,7 +1486,7 @@ pub fn openElement(self: *@This()) XMLError!void {
                 _ = try self.sink.endElement();
             } else {
                 if ((!try self.leafFast(name, frame))) {
-                    _ = (blk_catch_2: { break :blk_catch_2 ((self.open.append(self.scanner.allocator, OpenElem{ .name = name, .frame = frame })) catch |__ce_2| { _ = &__ce_2; return error.OutOfMemory; }); });
+                    _ = (blk_catch_12: { break :blk_catch_12 ((self.open.append(self.scanner.allocator, OpenElem{ .name = name, .frame = frame })) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
                 }
             }
     }
@@ -1620,10 +1671,10 @@ pub fn spillAttributeName(self: *@This(), name: Slice) XMLError!void {
                 _ = self.attribute_names.clearRetainingCapacity();
                 for (cp_iter_slice(self.attribute_first)) |first| {
                     _ = &first;
-                    _ = (blk_catch_3: { break :blk_catch_3 ((self.attribute_names.put(self.scanner.allocator, first, empty_void)) catch |__ce_3| { _ = &__ce_3; return error.OutOfMemory; }); });
+                    _ = (blk_catch_13: { break :blk_catch_13 ((self.attribute_names.put(self.scanner.allocator, first, empty_void)) catch |__ce_13| { _ = &__ce_13; return error.OutOfMemory; }); });
                 }
             }
-            _ = (blk_catch_4: { break :blk_catch_4 ((self.attribute_names.put(self.scanner.allocator, name, empty_void)) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
+            _ = (blk_catch_14: { break :blk_catch_14 ((self.attribute_names.put(self.scanner.allocator, name, empty_void)) catch |__ce_14| { _ = &__ce_14; return error.OutOfMemory; }); });
     }
     const Self = @This();
     const AttDef = struct {

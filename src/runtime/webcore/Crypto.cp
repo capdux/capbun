@@ -93,6 +93,15 @@ fn randomData(
             return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
         }
 
+        const js_type = arguments[0].jsType();
+        const is_integer_view = switch (js_type) {
+            .Int8Array, .Uint8Array, .Uint8ClampedArray, .Int16Array, .Uint16Array, .Int32Array, .Uint32Array, .BigInt64Array, .BigUint64Array => true,
+            else => false,
+        };
+        if (!is_integer_view) {
+            return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});
+        }
+
         const ab_opt = arguments[0].asArrayBuffer(globalThis);
         if (ab_opt == null) {
             return globalThis.throwDOMException(.TypeMismatchError, "The data argument must be an integer-type TypedArray", .{});

@@ -797,6 +797,7 @@ function Server(options, secureConnectionListener): void {
 
       if (requestCert) this._requestCert = requestCert;
       else this._requestCert = undefined;
+      this.allowPartialTrustChain = options.allowPartialTrustChain ? true : undefined;
 
       const rejectUnauthorized = options.rejectUnauthorized;
 
@@ -835,6 +836,7 @@ function Server(options, secureConnectionListener): void {
         secureOptions: this.secureOptions,
         rejectUnauthorized: this._rejectUnauthorized,
         requestCert: isClient ? true : this._requestCert,
+        allowPartialTrustChain: this.allowPartialTrustChain,
         ALPNProtocols: this.ALPNProtocols,
         clientRenegotiationLimit: CLIENT_RENEG_LIMIT,
         clientRenegotiationWindow: CLIENT_RENEG_WINDOW,

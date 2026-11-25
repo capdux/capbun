@@ -51,6 +51,11 @@ export const SSLConfig = b.dictionary(
       default: false,
       internalName: "request_cert",
     },
+    allowPartialTrustChain: {
+      type: b.bool,
+      default: false,
+      internalName: "allow_partial_trust_chain",
+    },
     ca: SSLConfigFile,
     cert: SSLConfigFile,
     key: SSLConfigFile,

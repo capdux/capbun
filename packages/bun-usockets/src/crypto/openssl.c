@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdatomic.h>
 #include <time.h>
+#include <openssl/x509v3.h>
 
 /* These are in sni_tree.cpp */
 void *sni_new();
@@ -505,6 +506,22 @@ static int us_x509_verify_chain(X509_STORE_CTX *ctx) {
 
 static int us_x509_verify_chain_cb(X509_STORE_CTX *ctx, void *arg) {
   (void)arg;
+  SSL *ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+  int purpose = (ssl && SSL_is_server(ssl)) ? X509_PURPOSE_SSL_CLIENT : X509_PURPOSE_SSL_SERVER;
+  X509 *leaf = X509_STORE_CTX_get0_cert(ctx);
+  if (leaf) {
+    uint32_t flags = X509_get_extension_flags(leaf);
+    if ((flags & EXFLAG_SI) && !(flags & EXFLAG_SS) && X509_check_purpose(leaf, purpose, 0) == 1) {
+      STACK_OF(X509) *same_subject = X509_STORE_CTX_get1_certs(ctx, X509_get_subject_name(leaf));
+      for (size_t i = 0; i < sk_X509_num(same_subject); i++) {
+        if (X509_cmp(sk_X509_value(same_subject, i), leaf) == 0) {
+          X509_VERIFY_PARAM_set_flags(X509_STORE_CTX_get0_param(ctx), X509_V_FLAG_PARTIAL_CHAIN);
+          break;
+        }
+      }
+      sk_X509_pop_free(same_subject, X509_free);
+    }
+  }
   return us_x509_verify_chain(ctx);
 }
 
@@ -679,6 +696,14 @@ SSL_CTX *us_ssl_ctx_build_raw(struct us_bun_socket_context_options_t options,
 
   if (options.secure_options) {
     SSL_CTX_set_options(ssl_context, options.secure_options);
+  }
+
+  if (options.allow_partial_trust_chain) {
+    X509_STORE *partial_store = SSL_CTX_get_cert_store(ssl_context);
+    if (partial_store) {
+      X509_STORE_set_flags(partial_store, X509_V_FLAG_PARTIAL_CHAIN);
+    }
+    X509_VERIFY_PARAM_set_flags(SSL_CTX_get0_param(ssl_context), X509_V_FLAG_PARTIAL_CHAIN);
   }
 
   SSL_CTX_set_session_cache_mode(ssl_context, SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL);

@@ -219,11 +219,17 @@ extern "C" double WTF__parseES5Date(const Latin1Character* string, size_t length
 }
 
 namespace Bun {
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
+
 String base64URLEncodeToString(Vector<uint8_t> data)
 {
     auto size = data.size();
     size_t encodedLength = ((size * 4) + 2) / 3;
     if (!encodedLength)
+        return String();
+
+    // String::createUninitialized CRASH()es above String::MaxLength.
+    if (encodedLength > std::min(Bun__stringSyntheticAllocationLimit, static_cast<size_t>(String::MaxLength))) [[unlikely]]
         return String();
 
     std::span<Latin1Character> ptr;

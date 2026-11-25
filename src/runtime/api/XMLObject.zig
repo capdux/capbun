@@ -207,7 +207,7 @@ pub fn stringifyNode(self: *Stringifier, global: *jsc.JSGlobalObject, node: JSVa
 pub fn stringifyNodeInner(self: *Stringifier, global: *jsc.JSGlobalObject, node: JSValue) StringifyError!void {
             const name_val = try node.get(global, "name");
             if (((name_val == null) or (!name_val.?.isString()))) {
-                return global.throw("XML.stringify: element children must be strings or { name, attributes, children } nodes with a string name", .{});
+                return global.throw("XML.stringify: element children must be strings, { name, attributes, children } elements, { comment } or { target, data }", .{});
             }
             var name = try name_val.?.toBunString(global);
             _ = &name;
@@ -309,6 +309,10 @@ var t = mut_t;
                     _ = self.newline();
                 }
                 if (((child.isObject() and (!child.isArray())) and (!child.isDate()))) {
+                    const child_name = try child.get(global, "name");
+                    if (((child_name == null) and try self.stringifyMarkup(global, child))) {
+                        continue;
+                    }
                     _ = try self.stringifyNode(global, child);
                 } else {
                     if (child.isArray()) {
@@ -340,6 +344,117 @@ var t = mut_t;
                 _ = self.newline();
             }
             _ = self.appendEndTag(name);
+    }
+
+pub fn stringifyMarkup(self: *Stringifier, global: *jsc.JSGlobalObject, child: JSValue) StringifyError!bool {
+            if (try child.get(global, "comment")) |comment| {
+                _ = &comment;
+                if ((try child.get(global, "target") != null)) {
+                    return global.throw("XML.stringify: a child with both 'comment' and 'target' is neither a comment nor a processing instruction", .{});
+                }
+                if ((!comment.isString())) {
+                    return global.throw("XML.stringify: a comment node's 'comment' must be a string", .{});
+                }
+                var text = try comment.toBunString(global);
+                _ = &text;
+                var text_guard = DerefGuard(bun.String){ .ptr = (blk: {
+                break :blk (&text);
+
+}) };
+                _ = &text_guard;
+                var __text_guard_moved = false; _ = &__text_guard_moved;
+                defer if (!__text_guard_moved) { __text_guard_moved = true; const __T = @TypeOf(text_guard); if (@typeInfo(__T) == .optional) { if (text_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { text_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = text_guard; _drop_val.__cp_deinit(); } };
+                const len = text.length();
+                var i: usize = 0;
+                _ = &i;
+                var prev_dash = false;
+                _ = &prev_dash;
+                while ((i < len)) {
+                    const pair = codePointAt((&text), i);
+                    const cp = pair[0];
+                    const w = pair[1];
+                    i = (i + w);
+                    if ((!xml.isXmlChar(cp))) {
+                        return global.throw("XML.stringify: XML cannot represent the character U+{X:0>4}", .{ cp });
+                    }
+                    if (((cp == 45) and (prev_dash or (i == len)))) {
+                        return global.throw("XML.stringify: a comment cannot contain '--' or end with '-'", .{});
+                    }
+                    prev_dash = (cp == 45);
+                }
+                _ = self.builder.append(.latin1, "<!--");
+                _ = self.builder.append(.string, text);
+                _ = self.builder.append(.latin1, "-->");
+                return true;
+            }
+            if (try child.get(global, "target")) |target_val| {
+                _ = &target_val;
+                if ((!target_val.isString())) {
+                    return global.throw("XML.stringify: a processing instruction's 'target' must be a string", .{});
+                }
+                var target = try target_val.toBunString(global);
+                _ = &target;
+                var target_guard = DerefGuard(bun.String){ .ptr = (blk: {
+                break :blk (&target);
+
+}) };
+                _ = &target_guard;
+                var __target_guard_moved = false; _ = &__target_guard_moved;
+                defer if (!__target_guard_moved) { __target_guard_moved = true; const __T = @TypeOf(target_guard); if (@typeInfo(__T) == .optional) { if (target_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { target_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = target_guard; _drop_val.__cp_deinit(); } };
+                _ = try self.checkName(global, (&target), "processing instruction target");
+                if ((target.length() == 3)) {
+                    const c0 = (target.charAt(0) | 32);
+                    const c1 = (target.charAt(1) | 32);
+                    const c2 = (target.charAt(2) | 32);
+                    if ((((c0 == 120) and (c1 == 109)) and (c2 == 108))) {
+                        return global.throw("XML.stringify: 'xml' is reserved and cannot be a processing instruction target", .{});
+                    }
+                }
+                _ = self.builder.append(.latin1, "<?");
+                _ = self.builder.append(.string, target);
+                if (try child.get(global, "data")) |data_val| {
+                    _ = &data_val;
+                    if ((!data_val.isNull())) {
+                        if ((!data_val.isString())) {
+                            return global.throw("XML.stringify: a processing instruction's 'data' must be a string", .{});
+                        }
+                        var data = try data_val.toBunString(global);
+                        _ = &data;
+                        var data_guard = DerefGuard(bun.String){ .ptr = (blk: {
+                        break :blk (&data);
+
+}) };
+                        _ = &data_guard;
+                        var __data_guard_moved = false; _ = &__data_guard_moved;
+                        defer if (!__data_guard_moved) { __data_guard_moved = true; const __T = @TypeOf(data_guard); if (@typeInfo(__T) == .optional) { if (data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = data_guard; _drop_val.__cp_deinit(); } };
+                        const len = data.length();
+                        if ((len > 0)) {
+                            var i: usize = 0;
+                            _ = &i;
+                            var prev_q = false;
+                            _ = &prev_q;
+                            while ((i < len)) {
+                                const pair = codePointAt((&data), i);
+                                const cp = pair[0];
+                                const w = pair[1];
+                                i = (i + w);
+                                if ((!xml.isXmlChar(cp))) {
+                                    return global.throw("XML.stringify: XML cannot represent the character U+{X:0>4}", .{ cp });
+                                }
+                                if ((prev_q and (cp == 62))) {
+                                    return global.throw("XML.stringify: processing instruction data cannot contain '?>'", .{});
+                                }
+                                prev_q = (cp == 63);
+                            }
+                            _ = self.builder.append(.lchar, 32);
+                            _ = self.builder.append(.string, data);
+                        }
+                    }
+                }
+                _ = self.builder.append(.latin1, "?>");
+                return true;
+            }
+            return false;
     }
 
 pub fn stringifyCompactDocument(self: *Stringifier, global: *jsc.JSGlobalObject, document: JSValue) StringifyError!void {
@@ -559,7 +674,7 @@ else => {
 }
                         } else {
                             if (key.hasPrefixComptime("#")) {
-                                return global.throw("XML.stringify: unknown key starting with '#' (text content is \"#text\")", .{});
+                                return global.throw("XML.stringify: unknown key (keys starting with '#' are reserved; text content is \"#text\")", .{});
                             } else {
                                 if (try Stringifier.hasOutput(global, child)) {
                                     has_elements = true;
@@ -660,7 +775,11 @@ pub fn checkName(self: *Stringifier, global: *jsc.JSGlobalObject, name: *const b
                 i = (i + width);
             }
             if ((!valid)) {
-                return global.throw("XML.stringify: invalid XML {s} name", .{ what });
+                const s = name.toUTF8(bun.default_allocator);
+                defer {
+                _ = s.deinit();
+                }
+                return global.throw("XML.stringify: '{s}' is not a valid XML {s} name", .{ s.slice(), what });
             }
     }
 
@@ -789,10 +908,10 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         var compact = true;
         _ = &compact;
         if ((!options_val.isUndefinedOrNull())) {
-            if (((!options_val.isObject()) or options_val.isArray())) {
+            if ((((!options_val.isObject()) or options_val.isArray()) or options_val.isCallable())) {
                 return global.throwInvalidArguments("XML.parse options must be an object", .{});
             }
-            if (try options_val.getBooleanLoose(global, "compact")) |c_val| {
+            if (try options_val.getBooleanStrict(global, "compact")) |c_val| {
                 _ = &c_val;
                 compact = c_val;
             }
@@ -819,29 +938,31 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         _ = &log_guard;
         var __log_guard_moved = false; _ = &__log_guard_moved;
         defer if (!__log_guard_moved) { __log_guard_moved = true; const __T = @TypeOf(log_guard); if (@typeInfo(__T) == .optional) { if (log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = log_guard; _drop_val.__cp_deinit(); } };
-        var is_bytes = false;
-        _ = &is_bytes;
-        var blob_or_str = try jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value);
-        _ = &blob_or_str;
         var root_expr: Expr = undefined;
         _ = &root_expr;
-        if (blob_or_str) |*input| {
-            _ = &input;
-            var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
-            break :blk (&(input.*));
+        const is_binary_input = (input_value.isObject() and ((input_value.as(jsc.WebCore.Blob) != null) or (input_value.asArrayBuffer(global) != null)));
+        if (is_binary_input) {
+            var blob_or_str = try jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value);
+            _ = &blob_or_str;
+            if (blob_or_str) |*input| {
+                _ = &input;
+                var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+                break :blk (&(input.*));
 
 }) };
-            _ = &input_guard;
-            var __input_guard_moved = false; _ = &__input_guard_moved;
-            defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-            is_bytes = true;
-            const input_bytes = (input.*).slice();
-            if ((input_bytes.len > std.math.maxInt(i32))) {
-                return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+                _ = &input_guard;
+                var __input_guard_moved = false; _ = &__input_guard_moved;
+                defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
+                const input_bytes = (input.*).slice();
+                if ((input_bytes.len > std.math.maxInt(i32))) {
+                    return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+                }
+                const source = (&logger.Source.initPathString("input.xml", input_bytes));
+                root_expr = (blk_catch_1: { break :blk_catch_1 ((xml.parse(source, (&log), allocator, xml.Options{ .compact = compact, .encoding = .Bytes })) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
+                return exprToJS(root_expr, global);
             }
-            const source = (&logger.Source.initPathString("input.xml", input_bytes));
-            root_expr = (blk_catch_1: { break :blk_catch_1 ((xml.parse(source, (&log), allocator, xml.Options{ .compact = compact, .encoding = .Bytes })) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
-        } else {
+        }
+        {
             var str = try input_value.toBunString(global);
             _ = &str;
             var str_guard = DerefGuard(bun.String){ .ptr = (blk: {
@@ -950,6 +1071,12 @@ pub fn isNode(global: *jsc.JSGlobalObject, value: JSValue) bun.JSError!bool {
             return true;
         }
         if ((try value.get(global, "attributes") != null)) {
+            return true;
+        }
+        if (try value.hasOwnPropertyValue(global, try bun.String.static("children").toJS(global))) {
+            return true;
+        }
+        if (try value.hasOwnPropertyValue(global, try bun.String.static("attributes").toJS(global))) {
             return true;
         }
         return false;

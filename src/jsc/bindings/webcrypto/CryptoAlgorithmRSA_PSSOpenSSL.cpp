@@ -31,8 +31,20 @@
 #include "CryptoAlgorithmRsaPssParams.h"
 #include "CryptoKeyRSA.h"
 #include "OpenSSLUtilities.h"
+#include <limits>
 
 namespace WebCore {
+
+// saltLength is a WebIDL unsigned long, but EVP_PKEY_CTX_set_rsa_pss_saltlen() takes an
+// int and gives negative values a meaning: RSA_PSS_SALTLEN_DIGEST (-1) and
+// RSA_PSS_SALTLEN_AUTO (-2), which on verify accepts a signature made with any salt
+// length. A value that does not fit in an int fails here instead of becoming one of them.
+static int setSaltLength(EVP_PKEY_CTX* ctx, size_t saltLength)
+{
+    if (saltLength > static_cast<size_t>(std::numeric_limits<int>::max()))
+        return 0;
+    return EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx, static_cast<int>(saltLength));
+}
 
 static ExceptionOr<Vector<uint8_t>> signWithMD(const CryptoAlgorithmRsaPssParams& parameters, const CryptoKeyRSA& key, const Vector<uint8_t>& data, const EVP_MD* md)
 {
@@ -55,7 +67,7 @@ static ExceptionOr<Vector<uint8_t>> signWithMD(const CryptoAlgorithmRsaPssParams
         return Exception { OperationError };
 
     if (padding == RSA_PKCS1_PSS_PADDING) {
-        if (EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx.get(), parameters.saltLength) <= 0)
+        if (setSaltLength(ctx.get(), parameters.saltLength) <= 0)
             return Exception { OperationError };
     }
 
@@ -120,7 +132,7 @@ static ExceptionOr<bool> verifyWithMD(const CryptoAlgorithmRsaPssParams& paramet
         return Exception { OperationError };
 
     if (padding == RSA_PKCS1_PSS_PADDING) {
-        if (EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx.get(), parameters.saltLength) <= 0)
+        if (setSaltLength(ctx.get(), parameters.saltLength) <= 0)
             return Exception { OperationError };
     }
 
