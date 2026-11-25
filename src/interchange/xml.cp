@@ -41,12 +41,6 @@ fn SinkTypes(comptime U: type): type {
         const Slice = []const U;
 
         static fn makeStrExpr(units: Slice, loc: Loc): Expr {
-            if (comptime is_wide) {
-                return Expr.init(E.String, E.String{
-                    data: std.mem.sliceAsBytes(units),
-                    is_utf16: true,
-                }, loc);
-            }
             return Expr.init(E.String, E.String.init(units), loc);
         }
 
@@ -330,10 +324,11 @@ fn SinkTypes(comptime U: type): type {
                     key_bytes = UT.unitBytes(joined);
                     _.key_cache[slot] = key_bytes;
                 }
-                const key_expr = Expr.init(E.String, E.String{
-                    data: key_bytes,
-                    is_utf16: is_wide,
-                }, loc);
+                const key_units: Slice = if (comptime is_wide)
+                    unsafe { @as([*]const U, @ptrCast(key_bytes.ptr))[0 .. key_bytes.len / @sizeOf(U)] }
+                else
+                    key_bytes;
+                const key_expr = makeStrExpr(key_units, loc);
                 _.props.append(_.allocator, G.Property{
                     key: key_expr,
                     value: makeStrExpr(value, loc),
@@ -1369,7 +1364,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             if (!UT.nameEq(end_name, name)) {
                 const s1 = _.scanner.formatUnits(name);
                 const s2 = _.scanner.formatUnits(end_name);
-                return _.scanner.errFmt(cur_pos, "Expected closing tag \\</{s}> but found \\</{s}>", .{ s1, s2 });
+                return _.scanner.errFmt(cur_pos, "Expected closing tag </{s}> but found </{s}>", .{ s1, s2 });
             }
             if (end_frame != frame) {
                 return _.scanner.errNamed(cur_pos, "Element", name, " must start and end within the same entity");

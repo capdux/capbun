@@ -120,7 +120,7 @@ interface CppSQL {
   isInTransaction(handle: TODO): boolean;
   loadExtension(handle: TODO, name: string, entryPoint: string): void;
   serialize(handle: TODO, name: string): Buffer;
-  deserialize(serialized: NodeJS.TypedArray | ArrayBufferLike, openFlags: number, deserializeFlags: number): TODO;
+  deserialize(serialized: NodeJS.TypedArray | ArrayBufferLike, openFlags: number, deserializeFlags: number, finalizationTarget?: Database): TODO;
   fcntl(handle: TODO, ...args: TODO[]): TODO;
   close(handle: TODO, throwOnError: boolean): void;
   setCustomSQLite(path: string): void;
@@ -351,7 +351,7 @@ class Database implements SqliteTypes.Database {
   ) {
     if (typeof filenameGiven === "undefined") {
     } else if (typeof filenameGiven !== "string") {
-      if (isTypedArray(filenameGiven)) {
+      if (isTypedArray(filenameGiven) || filenameGiven instanceof ArrayBuffer) {
         let deserializeFlags = 0;
         if (options && typeof options === "object") {
           if (options.strict) {
@@ -367,7 +367,7 @@ class Database implements SqliteTypes.Database {
           }
         }
 
-        this.#handle = Database.#deserialize(filenameGiven, this.#internalFlags, deserializeFlags);
+        this.#handle = Database.#deserialize(filenameGiven, this.#internalFlags, deserializeFlags, this);
         this.filename = ":memory:";
 
         return;
@@ -379,35 +379,34 @@ class Database implements SqliteTypes.Database {
     var filename = typeof filenameGiven === "string" ? filenameGiven.trim() : ":memory:";
     var flags = constants.SQLITE_OPEN_READWRITE | constants.SQLITE_OPEN_CREATE;
     if (typeof options === "object" && options) {
-      flags = 0;
-
-      if (options.readonly) {
-        flags = constants.SQLITE_OPEN_READONLY;
-      }
-
       if ("readOnly" in options) throw new TypeError('Misspelled option "readOnly" should be "readonly"');
 
-      if (options.create) {
+      const readonly = options.readonly === undefined ? undefined : Boolean(options.readonly);
+      const create = options.create === undefined ? undefined : Boolean(options.create);
+      const readwrite = options.readwrite === undefined ? undefined : Boolean(options.readwrite);
+
+      const isReadOnly = readonly === true || readwrite === false;
+      const isWriteOrCreate = create === true || readwrite === true;
+      if (isReadOnly && isWriteOrCreate) {
+        throw new TypeError(
+          'A read-only database ("readonly: true" or "readwrite: false") cannot have "create: true" or "readwrite: true"',
+        );
+      }
+
+      if (isReadOnly) {
+        flags = constants.SQLITE_OPEN_READONLY;
+      } else if (create === true || (create === undefined && readwrite === undefined)) {
         flags = constants.SQLITE_OPEN_READWRITE | constants.SQLITE_OPEN_CREATE;
+      } else {
+        flags = constants.SQLITE_OPEN_READWRITE;
       }
 
-      if (options.readwrite) {
-        flags |= constants.SQLITE_OPEN_READWRITE;
+      if (options.safeIntegers) {
+        this.#internalFlags |= kSafeIntegersFlag;
       }
 
-      if ("strict" in options || "safeIntegers" in options) {
-        if (options.safeIntegers) {
-          this.#internalFlags |= kSafeIntegersFlag;
-        }
-
-        if (options.strict) {
-          this.#internalFlags |= kStrictFlag;
-        }
-
-        // If they only set strict: true, reset it back.
-        if (flags === 0) {
-          flags = constants.SQLITE_OPEN_READWRITE | constants.SQLITE_OPEN_CREATE;
-        }
+      if (options.strict) {
+        this.#internalFlags |= kStrictFlag;
       }
     } else if (typeof options === "number") {
       flags = options;
@@ -446,14 +445,22 @@ class Database implements SqliteTypes.Database {
     return SQL.serialize(this.#handle, optionalName || "main");
   }
 
-  static #deserialize(serialized: NodeJS.TypedArray | ArrayBufferLike, openFlags: number, deserializeFlags: number) {
-    return SQL.deserialize(serialized, openFlags, deserializeFlags);
+  static #deserialize(
+    serialized: NodeJS.TypedArray | ArrayBufferLike,
+    openFlags: number,
+    deserializeFlags: number,
+    finalizationTarget?: Database,
+  ) {
+    return SQL.deserialize(serialized, openFlags, deserializeFlags, finalizationTarget);
   }
 
   static deserialize(
     serialized: NodeJS.TypedArray | ArrayBufferLike,
     options: boolean | { readonly?: boolean; strict?: boolean; safeIntegers?: boolean } = false,
   ) {
+    if (!isTypedArray(serialized) && !(serialized instanceof ArrayBuffer)) {
+      throw new TypeError(`Expected 'serialized' to be a TypedArray or ArrayBuffer, got '${typeof serialized}'`);
+    }
     if (typeof options === "boolean") {
       // Maintain backward compatibility with existing API
       return new Database(serialized, { readonly: options });
@@ -630,7 +637,14 @@ const wrapTransaction = (fn, db, { begin, commit, rollback, savepoint, release, 
     try {
       before.run();
       const result = fn.$apply(this, args);
-      after.run();
+      if (result instanceof Promise && Bun.peek.status(result) === "rejected") {
+        if (db.inTransaction) {
+          undo.run();
+          if (undo !== rollback) after.run();
+        }
+      } else {
+        after.run();
+      }
       return result;
     } catch (ex) {
       if (db.inTransaction) {

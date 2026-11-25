@@ -812,6 +812,7 @@ pub const Stream = struct {
     isWaitingMoreHeaders: bool = false,
     headerBlockSize: usize = 0,
     headerBlockCount: usize = 0,
+    headerBlockBuffer: std.ArrayListUnmanaged(u8) = .{},
     padding: ?u8 = null,
     paddingStrategy: PaddingStrategy = .none,
     rstCode: u32 = 0,
@@ -1052,6 +1053,8 @@ pub fn cleanQueue(self: *Stream, client: *H2FrameParser, comptime finalizing: bo
 pub fn freeResources(self: *Stream, client: *H2FrameParser, comptime finalizing: bool) void {
             _ = self.detachContext();
             _ = self.cleanQueue(client, finalizing);
+            _ = self.headerBlockBuffer.deinit(bun.default_allocator);
+            self.headerBlockBuffer = .{};
             if (self.signal) |signal| {
                 _ = &signal;
                 self.signal = null;
@@ -2260,13 +2263,34 @@ pub fn handleContinuationFrame(self: *H2FrameParser, frame: FrameHeader, data: [
                 _ = &content;
                 const payload = content.data;
                 _ = self.readBuffer.reset();
-                if (try self.decodeHeaderBlock(payload[0..payload.len], stream, frame.flags)) |_sv_2410| {
+                _ = bun.handleOom(stream.headerBlockBuffer.appendSlice(bun.default_allocator, payload));
+                const end_headers = ((frame.flags & @intFromEnum(HeadersFrameFlags.END_HEADERS)) != 0);
+                stream.isWaitingMoreHeaders = (!end_headers);
+                if ((!end_headers)) {
+                    return content.end;
+                }
+                const owned_block = bun.handleOom(stream.headerBlockBuffer.toOwnedSlice(bun.default_allocator));
+                defer {
+                _ = bun.default_allocator.free(owned_block);
+                }
+                const combined_flags: u8 = (if (stream.endAfterHeaders) (frame.flags | @intFromEnum(HeadersFrameFlags.END_STREAM)) else frame.flags);
+                if (try self.decodeHeaderBlock(owned_block, stream, combined_flags)) |_sv_2410| {
                     _ = &_sv_2410;
                     stream = _sv_2410;
                 } else {
                     return content.end;
                 }
-                stream.isWaitingMoreHeaders = ((frame.flags & @intFromEnum(HeadersFrameFlags.END_HEADERS)) == 0);
+                if ((stream.endAfterHeaders and (stream.state != .CLOSED))) {
+                    const identifier = stream.getIdentifier();
+                    _ = identifier.ensureStillAlive();
+                    if ((stream.state == .HALF_CLOSED_LOCAL)) {
+                        stream.state = .CLOSED;
+                        _ = stream.freeResources(self, false);
+                    } else {
+                        stream.state = .HALF_CLOSED_REMOTE;
+                    }
+                    _ = self.dispatchWithExtra(.onStreamEnd, identifier, jsc.JSValue.jsNumber(@intFromEnum(stream.state)));
+                }
                 return content.end;
             }
             return data.len;
@@ -2322,25 +2346,31 @@ pub fn handleHeadersFrame(self: *H2FrameParser, frame: FrameHeader, data: []cons
                 stream.endAfterHeaders = ((frame.flags & @intFromEnum(HeadersFrameFlags.END_STREAM)) != 0);
                 stream.headerBlockSize = 0;
                 stream.headerBlockCount = 0;
+                const end_headers = ((frame.flags & @intFromEnum(HeadersFrameFlags.END_HEADERS)) != 0);
+                if ((!end_headers)) {
+                    stream.isWaitingMoreHeaders = true;
+                    _ = stream.headerBlockBuffer.clearRetainingCapacity();
+                    _ = bun.handleOom(stream.headerBlockBuffer.appendSlice(bun.default_allocator, payload[offset..end]));
+                    if (stream.endAfterHeaders) {
+                        stream.state = .HALF_CLOSED_REMOTE;
+                    }
+                    return content.end;
+                }
                 if (try self.decodeHeaderBlock(payload[offset..end], stream, frame.flags)) |_sv_2491| {
                     _ = &_sv_2491;
                     stream = _sv_2491;
                 } else {
                     return content.end;
                 }
-                stream.isWaitingMoreHeaders = ((frame.flags & @intFromEnum(HeadersFrameFlags.END_HEADERS)) == 0);
-                if (stream.endAfterHeaders) {
+                stream.isWaitingMoreHeaders = false;
+                if ((stream.endAfterHeaders and (stream.state != .CLOSED))) {
                     const identifier = stream.getIdentifier();
                     _ = identifier.ensureStillAlive();
-                    if (stream.isWaitingMoreHeaders) {
-                        stream.state = .HALF_CLOSED_REMOTE;
+                    if ((stream.state == .HALF_CLOSED_LOCAL)) {
+                        stream.state = .CLOSED;
+                        _ = stream.freeResources(self, false);
                     } else {
-                        if ((stream.state == .HALF_CLOSED_LOCAL)) {
-                            stream.state = .CLOSED;
-                            _ = stream.freeResources(self, false);
-                        } else {
-                            stream.state = .HALF_CLOSED_REMOTE;
-                        }
+                        stream.state = .HALF_CLOSED_REMOTE;
                     }
                     _ = self.dispatchWithExtra(.onStreamEnd, identifier, jsc.JSValue.jsNumber(@intFromEnum(stream.state)));
                 }

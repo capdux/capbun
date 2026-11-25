@@ -366,21 +366,19 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         }
     
     pub fn errFmt(self: *@This(), pos: usize, comptime fmt: []const u8, args: anytype) XMLError {
-                _ = (blk_catch_1: { break :blk_catch_1 ((self.log.addErrorFmt(self.source, self.loc(pos), self.allocator, fmt, args)) catch |__ce_1| { _ = &__ce_1; return error.OutOfMemory; }); });
+                const msg = (blk_catch_1: { break :blk_catch_1 ((std.fmt.allocPrint(self.allocator, fmt, args)) catch |__ce_1| { _ = &__ce_1; return error.OutOfMemory; }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((self.log.addRangeError(self.source, bun.logger.Range{ .loc = self.loc(pos) }, msg)) catch |__ce_2| { _ = &__ce_2; return error.OutOfMemory; }); });
                 return error.SyntaxError;
         }
     
-    pub fn formatUnits(self: *const @This(), units: Slice) []const u8 {
+    pub fn formatUnits(self: *@This(), units: Slice) []const u8 {
                 if (comptime is_wide) {
-                    var list = std.array_list.Managed(u8).init(self.allocator);
-                    _ = &list;
-                    list = (blk_catch_2: { break :blk_catch_2 ((bun.strings.convertUTF16ToUTF8(list, units)) catch |__ce_2| { _ = &__ce_2; return ""; }); });
-                    return list.items;
+                    return (blk_catch_3: { break :blk_catch_3 ((bun.strings.toUTF8AllocWithType(self.allocator, units)) catch |__ce_3| { _ = &__ce_3; return ""; }); });
                 }
                 if ((!self.latin1)) {
                     return UT.unitBytes(units);
                 }
-                var out = (blk_catch_3: { break :blk_catch_3 ((self.allocator.alloc(u8, (units.len * 2))) catch |__ce_3| { _ = &__ce_3; return ""; }); });
+                var out = (blk_catch_4: { break :blk_catch_4 ((self.allocator.alloc(u8, (units.len * 2))) catch |__ce_4| { _ = &__ce_4; return ""; }); });
                 _ = &out;
                 var n: usize = 0;
                 _ = &n;
@@ -553,7 +551,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     return self.errMsg(ref_pos, "Entity expansion exceeds the amplification limit");
                 }
                 const report_pos = (if (self.inDocument()) ref_pos else self.frame_report_pos);
-                _ = (blk_catch_4: { break :blk_catch_4 ((self.suspended.append(self.allocator, Frame{ .src = self.src, .pos = self.pos, .id = self.frame_id, .kind = self.frame_kind, .entity_name = self.frame_entity_name, .entity_is_pe = self.frame_entity_is_pe, .report_pos = self.frame_report_pos })) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
+                _ = (blk_catch_5: { break :blk_catch_5 ((self.suspended.append(self.allocator, Frame{ .src = self.src, .pos = self.pos, .id = self.frame_id, .kind = self.frame_kind, .entity_name = self.frame_entity_name, .entity_is_pe = self.frame_entity_is_pe, .report_pos = self.frame_report_pos })) catch |__ce_5| { _ = &__ce_5; return error.OutOfMemory; }); });
                 self.src = text;
                 self.pos = 0;
                 self.frame_id = self.next_frame_id;
@@ -595,9 +593,9 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         }
     
     pub fn pushReference(allocator: std.mem.Allocator, buf: *std.ArrayListUnmanaged(U), name: Slice) XMLError!void {
-                _ = (blk_catch_5: { break :blk_catch_5 ((buf.append(allocator, UT.unitAscii(38))) catch |__ce_5| { _ = &__ce_5; return error.OutOfMemory; }); });
-                _ = (blk_catch_6: { break :blk_catch_6 ((buf.appendSlice(allocator, name)) catch |__ce_6| { _ = &__ce_6; return error.OutOfMemory; }); });
-                _ = (blk_catch_7: { break :blk_catch_7 ((buf.append(allocator, UT.unitAscii(59))) catch |__ce_7| { _ = &__ce_7; return error.OutOfMemory; }); });
+                _ = (blk_catch_6: { break :blk_catch_6 ((buf.append(allocator, UT.unitAscii(38))) catch |__ce_6| { _ = &__ce_6; return error.OutOfMemory; }); });
+                _ = (blk_catch_7: { break :blk_catch_7 ((buf.appendSlice(allocator, name)) catch |__ce_7| { _ = &__ce_7; return error.OutOfMemory; }); });
+                _ = (blk_catch_8: { break :blk_catch_8 ((buf.append(allocator, UT.unitAscii(59))) catch |__ce_8| { _ = &__ce_8; return error.OutOfMemory; }); });
         }
     
     pub fn includeParameterEntity(self: *@This(), name: Slice, ref_pos: usize) XMLError!void {
@@ -677,7 +675,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     return self.errMsg(payload.len, "UTF-16 input has an odd number of bytes");
                 }
                 const pair_count = (payload.len / 2);
-                var units = (blk_catch_8: { break :blk_catch_8 ((self.allocator.alloc(u16, pair_count)) catch |__ce_8| { _ = &__ce_8; return error.OutOfMemory; }); });
+                var units = (blk_catch_9: { break :blk_catch_9 ((self.allocator.alloc(u16, pair_count)) catch |__ce_9| { _ = &__ce_9; return error.OutOfMemory; }); });
                 _ = &units;
                 var i: usize = 0;
                 _ = &i;
@@ -687,7 +685,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     units[cp_cast_int(usize, i)] = (if (big_endian) (cp_shl((if (comptime @typeInfo(@TypeOf(b0)) == .@"enum") cp_cast_int(u16, @intFromEnum(b0)) else cp_cast_int(u16, b0)), 8) | (if (comptime @typeInfo(@TypeOf(b1)) == .@"enum") cp_cast_int(u16, @intFromEnum(b1)) else cp_cast_int(u16, b1))) else (cp_shl((if (comptime @typeInfo(@TypeOf(b1)) == .@"enum") cp_cast_int(u16, @intFromEnum(b1)) else cp_cast_int(u16, b1)), 8) | (if (comptime @typeInfo(@TypeOf(b0)) == .@"enum") cp_cast_int(u16, @intFromEnum(b0)) else cp_cast_int(u16, b0))));
                 }
                 const max_utf8 = ((pair_count * 3) + 1);
-                var utf8 = (blk_catch_9: { break :blk_catch_9 ((self.allocator.alloc(u8, max_utf8)) catch |__ce_9| { _ = &__ce_9; return error.OutOfMemory; }); });
+                var utf8 = (blk_catch_10: { break :blk_catch_10 ((self.allocator.alloc(u8, max_utf8)) catch |__ce_10| { _ = &__ce_10; return error.OutOfMemory; }); });
                 _ = &utf8;
                 const res = bun.simdutf.simdutf__convert_utf16le_to_utf8_with_errors(units.ptr, pair_count, utf8.ptr);
                 if ((!res.isSuccessful())) {
@@ -734,7 +732,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         return self.errNamed(pos, "Document has a UTF-8 byte-order mark but declares encoding", name, "");
                     }
                     const rest_bytes = UT.unitBytes(self.src[self.pos..]);
-                    const converted = (blk_catch_10: { break :blk_catch_10 ((bun.strings.toUTF8FromLatin1(self.allocator, rest_bytes)) catch |__ce_10| { _ = &__ce_10; return error.OutOfMemory; }); });
+                    const converted = (blk_catch_11: { break :blk_catch_11 ((bun.strings.toUTF8FromLatin1(self.allocator, rest_bytes)) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
                     if (converted) |list| {
                         _ = &list;
                         self.src = list.items;
@@ -883,11 +881,11 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
     pub fn pushCodePoint(self: @This(), buf: *std.ArrayListUnmanaged(U), cp: u32) XMLError!void {
                 if (comptime is_wide) {
                     if ((cp < 65536)) {
-                        _ = (blk_catch_11: { break :blk_catch_11 ((buf.append(self.allocator, @as(U, @intCast(cp)))) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
+                        _ = (blk_catch_12: { break :blk_catch_12 ((buf.append(self.allocator, @as(U, @intCast(cp)))) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
                     } else {
                         const v = (cp - 65536);
-                        _ = (blk_catch_12: { break :blk_catch_12 ((buf.append(self.allocator, @as(U, @intCast((55296 + cp_shr(v, 10)))))) catch |__ce_12| { _ = &__ce_12; return error.OutOfMemory; }); });
-                        _ = (blk_catch_13: { break :blk_catch_13 ((buf.append(self.allocator, @as(U, @intCast((56320 + (v & 1023)))))) catch |__ce_13| { _ = &__ce_13; return error.OutOfMemory; }); });
+                        _ = (blk_catch_13: { break :blk_catch_13 ((buf.append(self.allocator, @as(U, @intCast((55296 + cp_shr(v, 10)))))) catch |__ce_13| { _ = &__ce_13; return error.OutOfMemory; }); });
+                        _ = (blk_catch_14: { break :blk_catch_14 ((buf.append(self.allocator, @as(U, @intCast((56320 + (v & 1023)))))) catch |__ce_14| { _ = &__ce_14; return error.OutOfMemory; }); });
                     }
                     return;
                 }
@@ -895,20 +893,20 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     if ((cp > 255)) {
                         return error.NeedsWiderEncoding;
                     }
-                    _ = (blk_catch_14: { break :blk_catch_14 ((buf.append(self.allocator, @as(U, @intCast(cp)))) catch |__ce_14| { _ = &__ce_14; return error.OutOfMemory; }); });
+                    _ = (blk_catch_15: { break :blk_catch_15 ((buf.append(self.allocator, @as(U, @intCast(cp)))) catch |__ce_15| { _ = &__ce_15; return error.OutOfMemory; }); });
                     return;
                 }
                 var tmp: [4]u8 = .{ 0, 0, 0, 0 };
                 _ = &tmp;
                 const n = bun.strings.encodeWTF8Rune((&tmp), @as(i32, @intCast(cp)));
-                _ = (blk_catch_15: { break :blk_catch_15 ((buf.appendSlice(self.allocator, tmp[0..n])) catch |__ce_15| { _ = &__ce_15; return error.OutOfMemory; }); });
+                _ = (blk_catch_16: { break :blk_catch_16 ((buf.appendSlice(self.allocator, tmp[0..n])) catch |__ce_16| { _ = &__ce_16; return error.OutOfMemory; }); });
         }
     
     pub fn materialize(allocator: std.mem.Allocator, src: Slice, start: usize, end: usize, buf: *?std.ArrayListUnmanaged(U)) XMLError!*std.ArrayListUnmanaged(U) {
                 if ((buf.* == null)) {
                     var b: std.ArrayListUnmanaged(U) = .{};
                     _ = &b;
-                    _ = (blk_catch_16: { break :blk_catch_16 ((b.ensureTotalCapacity(allocator, ((end - start) + 32))) catch |__ce_16| { _ = &__ce_16; return error.OutOfMemory; }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((b.ensureTotalCapacity(allocator, ((end - start) + 32))) catch |__ce_17| { _ = &__ce_17; return error.OutOfMemory; }); });
                     _ = b.appendSliceAssumeCapacity(src[start..end]);
                     buf.* = b;
                 }
@@ -973,7 +971,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     if ((stop != self.pos)) {
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_17: { break :blk_catch_17 (((b.*).appendSlice(self.allocator, self.src[self.pos..stop])) catch |__ce_17| { _ = &__ce_17; return error.OutOfMemory; }); });
+                            _ = (blk_catch_18: { break :blk_catch_18 (((b.*).appendSlice(self.allocator, self.src[self.pos..stop])) catch |__ce_18| { _ = &__ce_18; return error.OutOfMemory; }); });
                         }
                         self.pos = stop;
                     }
@@ -1007,7 +1005,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                             const res = try self.resolveGeneralEntity(name, ref_pos, true);
                             switch (res) {
     .byte => |byte| {
-    _ = (blk_catch_18: { break :blk_catch_18 ((b.append(self.allocator, UT.unitAscii(byte))) catch |__ce_18| { _ = &__ce_18; return error.OutOfMemory; }); });
+    _ = (blk_catch_19: { break :blk_catch_19 ((b.append(self.allocator, UT.unitAscii(byte))) catch |__ce_19| { _ = &__ce_19; return error.OutOfMemory; }); });
     },
     .text => |text| {
     _ = try self.pushFrame(text, .Literal, name, false, ref_pos);
@@ -1020,7 +1018,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     } else {
                         if (((c == 13) and self.inDocument())) {
                             const b = try materialize(self.allocator, self.src, start, self.pos, (&buf));
-                            _ = (blk_catch_19: { break :blk_catch_19 ((b.append(self.allocator, UT.unitAscii(32))) catch |__ce_19| { _ = &__ce_19; return error.OutOfMemory; }); });
+                            _ = (blk_catch_20: { break :blk_catch_20 ((b.append(self.allocator, UT.unitAscii(32))) catch |__ce_20| { _ = &__ce_20; return error.OutOfMemory; }); });
                             self.pos = (self.pos + 1);
                             if ((self.peek() == 10)) {
                                 self.pos = (self.pos + 1);
@@ -1028,7 +1026,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         } else {
                             if ((((c == 9) or (c == 10)) or (c == 13))) {
                                 const b = try materialize(self.allocator, self.src, start, self.pos, (&buf));
-                                _ = (blk_catch_20: { break :blk_catch_20 ((b.append(self.allocator, UT.unitAscii(32))) catch |__ce_20| { _ = &__ce_20; return error.OutOfMemory; }); });
+                                _ = (blk_catch_21: { break :blk_catch_21 ((b.append(self.allocator, UT.unitAscii(32))) catch |__ce_21| { _ = &__ce_21; return error.OutOfMemory; }); });
                                 self.pos = (self.pos + 1);
                             } else {
                                 if (((c < 32) or ((c >= 128) and (!self.latin1)))) {
@@ -1039,7 +1037,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                                     }
                                     if (buf) |*b| {
                                         _ = &b;
-                                        _ = (blk_catch_21: { break :blk_catch_21 (((b.*).append(self.allocator, self.unit())) catch |__ce_21| { _ = &__ce_21; return error.OutOfMemory; }); });
+                                        _ = (blk_catch_22: { break :blk_catch_22 (((b.*).append(self.allocator, self.unit())) catch |__ce_22| { _ = &__ce_22; return error.OutOfMemory; }); });
                                     }
                                     self.pos = (self.pos + 1);
                                 }
@@ -1055,7 +1053,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 const open_pos = self.here();
                 var buf: std.ArrayListUnmanaged(U) = .{};
                 _ = &buf;
-                _ = (blk_catch_22: { break :blk_catch_22 ((buf.ensureTotalCapacity(self.allocator, 32)) catch |__ce_22| { _ = &__ce_22; return error.OutOfMemory; }); });
+                _ = (blk_catch_23: { break :blk_catch_23 ((buf.ensureTotalCapacity(self.allocator, 32)) catch |__ce_23| { _ = &__ce_23; return error.OutOfMemory; }); });
                 while (true) {
                     if (self.atEnd()) {
                         if ((self.frame_id != literal_frame)) {
@@ -1104,7 +1102,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                             }
                         } else {
                             if (((c == 13) and self.inDocument())) {
-                                _ = (blk_catch_23: { break :blk_catch_23 ((buf.append(self.allocator, UT.unitAscii(10))) catch |__ce_23| { _ = &__ce_23; return error.OutOfMemory; }); });
+                                _ = (blk_catch_24: { break :blk_catch_24 ((buf.append(self.allocator, UT.unitAscii(10))) catch |__ce_24| { _ = &__ce_24; return error.OutOfMemory; }); });
                                 self.pos = (self.pos + 1);
                                 if ((self.peek() == 10)) {
                                     self.pos = (self.pos + 1);
@@ -1117,7 +1115,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                                         _ = self.sawGtInLiteral();
                                     }
                                     const len = (if ((c >= 128)) try self.checkNonAsciiChar() else 1);
-                                    _ = (blk_catch_24: { break :blk_catch_24 ((buf.appendSlice(self.allocator, self.src[self.pos..(self.pos + len)])) catch |__ce_24| { _ = &__ce_24; return error.OutOfMemory; }); });
+                                    _ = (blk_catch_25: { break :blk_catch_25 ((buf.appendSlice(self.allocator, self.src[self.pos..(self.pos + len)])) catch |__ce_25| { _ = &__ce_25; return error.OutOfMemory; }); });
                                     self.pos = (self.pos + len);
                                 }
                             }
@@ -1154,7 +1152,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 }
                 var out: std.ArrayListUnmanaged(U) = .{};
                 _ = &out;
-                _ = (blk_catch_25: { break :blk_catch_25 ((out.ensureTotalCapacity(self.allocator, raw.len)) catch |__ce_25| { _ = &__ce_25; return raw; }); });
+                _ = (blk_catch_26: { break :blk_catch_26 ((out.ensureTotalCapacity(self.allocator, raw.len)) catch |__ce_26| { _ = &__ce_26; return raw; }); });
                 var i: usize = 0;
                 _ = &i;
                 while ((i < raw.len)) : (i = (i + 1)) {
@@ -1223,14 +1221,14 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 const limit = ((close) orelse (self.src.len));
                 while (true) {
                     const stop = @min(self.nextStop(STOP_SKIPPED), limit);
-                    _ = (blk_catch_26: { break :blk_catch_26 ((out.appendSlice(self.allocator, self.src[self.pos..stop])) catch |__ce_26| { _ = &__ce_26; return error.OutOfMemory; }); });
+                    _ = (blk_catch_27: { break :blk_catch_27 ((out.appendSlice(self.allocator, self.src[self.pos..stop])) catch |__ce_27| { _ = &__ce_27; return error.OutOfMemory; }); });
                     self.pos = stop;
                     if ((stop >= limit)) {
                         break;
                     }
                     const c = self.peek();
                     if (((c == 13) and self.inDocument())) {
-                        _ = (blk_catch_27: { break :blk_catch_27 ((out.append(self.allocator, UT.unitAscii(10))) catch |__ce_27| { _ = &__ce_27; return error.OutOfMemory; }); });
+                        _ = (blk_catch_28: { break :blk_catch_28 ((out.append(self.allocator, UT.unitAscii(10))) catch |__ce_28| { _ = &__ce_28; return error.OutOfMemory; }); });
                         self.pos = (self.pos + 1);
                         if ((self.peek() == 10)) {
                             self.pos = (self.pos + 1);
@@ -1239,7 +1237,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         if ((((c < 32) and (!types.isWs(c))) or ((c >= 128) and (!self.latin1)))) {
                             return self.errAtEntry(c);
                         } else {
-                            _ = (blk_catch_28: { break :blk_catch_28 ((out.append(self.allocator, self.unit())) catch |__ce_28| { _ = &__ce_28; return error.OutOfMemory; }); });
+                            _ = (blk_catch_29: { break :blk_catch_29 ((out.append(self.allocator, self.unit())) catch |__ce_29| { _ = &__ce_29; return error.OutOfMemory; }); });
                             self.pos = (self.pos + 1);
                         }
                     }
@@ -1547,7 +1545,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         self.pos = stop;
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_29: { break :blk_catch_29 (((b.*).appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_29| { _ = &__ce_29; return error.OutOfMemory; }); });
+                            _ = (blk_catch_30: { break :blk_catch_30 (((b.*).appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_30| { _ = &__ce_30; return error.OutOfMemory; }); });
                             start = self.pos;
                         }
                     }
@@ -1647,7 +1645,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                             const res = try self.resolveGeneralEntity(name, ref_pos, false);
                             switch (res) {
     .byte => |byte| {
-    _ = (blk_catch_30: { break :blk_catch_30 ((b.append(self.allocator, UT.unitAscii(byte))) catch |__ce_30| { _ = &__ce_30; return error.OutOfMemory; }); });
+    _ = (blk_catch_31: { break :blk_catch_31 ((b.append(self.allocator, UT.unitAscii(byte))) catch |__ce_31| { _ = &__ce_31; return error.OutOfMemory; }); });
     },
     .text => |text| {
     _ = try self.pushFrame(text, .Content, name, false, ref_pos);
@@ -1667,7 +1665,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         }
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_31: { break :blk_catch_31 (((b.*).append(self.allocator, self.unit())) catch |__ce_31| { _ = &__ce_31; return error.OutOfMemory; }); });
+                            _ = (blk_catch_32: { break :blk_catch_32 (((b.*).append(self.allocator, self.unit())) catch |__ce_32| { _ = &__ce_32; return error.OutOfMemory; }); });
                             start = (self.pos + 1);
                         }
                         self.pos = (self.pos + 1);
@@ -1675,7 +1673,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     }
                     if (((c == 13) and (self.frame_kind == .Document))) {
                         const b = try materialize(self.allocator, self.src, start, self.pos, (&buf));
-                        _ = (blk_catch_32: { break :blk_catch_32 ((b.append(self.allocator, UT.unitAscii(10))) catch |__ce_32| { _ = &__ce_32; return error.OutOfMemory; }); });
+                        _ = (blk_catch_33: { break :blk_catch_33 ((b.append(self.allocator, UT.unitAscii(10))) catch |__ce_33| { _ = &__ce_33; return error.OutOfMemory; }); });
                         self.pos = (self.pos + 1);
                         if ((self.peek() == 10)) {
                             self.pos = (self.pos + 1);
@@ -1686,7 +1684,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     if (((c == 13) or ((c >= 128) and self.latin1))) {
                         if (buf) |*b| {
                             _ = &b;
-                            _ = (blk_catch_33: { break :blk_catch_33 (((b.*).append(self.allocator, self.unit())) catch |__ce_33| { _ = &__ce_33; return error.OutOfMemory; }); });
+                            _ = (blk_catch_34: { break :blk_catch_34 (((b.*).append(self.allocator, self.unit())) catch |__ce_34| { _ = &__ce_34; return error.OutOfMemory; }); });
                             start = (self.pos + 1);
                         }
                         self.pos = (self.pos + 1);
@@ -1703,7 +1701,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     _ = &mut_b;
                     var b = mut_b;
                     _ = &b;
-                    _ = (blk_catch_34: { break :blk_catch_34 ((b.appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_34| { _ = &__ce_34; return error.OutOfMemory; }); });
+                    _ = (blk_catch_35: { break :blk_catch_35 ((b.appendSlice(self.allocator, self.src[start..self.pos])) catch |__ce_35| { _ = &__ce_35; return error.OutOfMemory; }); });
                     text = b.items;
                 } else {
                     text = self.src[start..self.pos];

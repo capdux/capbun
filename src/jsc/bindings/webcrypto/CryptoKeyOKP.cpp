@@ -88,6 +88,13 @@ RefPtr<CryptoKeyOKP> CryptoKeyOKP::create(CryptoAlgorithmIdentifier identifier, 
         return nullptr;
     }
 
+    if (curve == NamedCurve::Ed25519 && type == CryptoKeyType::Private) {
+        KeyMaterial seed(std::span { platformKey.begin(), 32 });
+        auto derived = ed25519PrivateFromSeed(WTF::move(seed));
+        if (derived.size() != 64 || memcmp(derived.begin() + 32, platformKey.begin() + 32, 32) != 0)
+            return nullptr;
+    }
+
     return adoptRef(*new CryptoKeyOKP(identifier, curve, type, WTF::move(platformKey), extractable, usages));
 }
 

@@ -755,17 +755,13 @@ static void initializeColumnNames(JSC::JSGlobalObject* lexicalGlobalObject, JSSQ
             }
 
             size_t len = strlen(name);
-            if (len == 0) {
-                anyHoles = true;
-                break;
-            }
 
             // When joining multiple tables, the same column names can appear multiple times
             // columnNames de-dupes property names internally
             // We can't have two properties with the same name, so we use validColumns to track this.
             auto preCount = columnNames->size();
             columnNames->add(
-                Identifier::fromString(vm, WTF::String::fromUTF8({ name, len })));
+                len == 0 ? vm.propertyNames->emptyIdentifier : Identifier::fromString(vm, WTF::String::fromUTF8({ name, len })));
             auto curCount = columnNames->size();
 
             if (preCount != curCount) {
@@ -815,10 +811,7 @@ static void initializeColumnNames(JSC::JSGlobalObject* lexicalGlobalObject, JSSQ
             break;
 
         size_t len = strlen(name);
-        if (len == 0)
-            break;
-
-        const auto key = Identifier::fromString(vm, WTF::String::fromUTF8({ name, len }));
+        const auto key = len == 0 ? vm.propertyNames->emptyIdentifier : Identifier::fromString(vm, WTF::String::fromUTF8({ name, len }));
 
         JSC::JSValue primitive = JSC::jsUndefined();
         auto decl = sqlite3_column_decltype(stmt, i);
@@ -929,7 +922,8 @@ static inline bool rebindValue(JSC::JSGlobalObject* lexicalGlobalObject, sqlite3
         }
 
     } else if (JSC::JSArrayBufferView* buffer = dynamicDowncast<JSC::JSArrayBufferView>(value)) {
-        CHECK_BIND(sqlite3_bind_blob(stmt, i, buffer->vector(), buffer->byteLength(), SQLITE_TRANSIENT));
+        const void* ptr = buffer->vector();
+        CHECK_BIND(sqlite3_bind_blob64(stmt, i, ptr ? ptr : "", buffer->byteLength(), SQLITE_TRANSIENT));
     } else {
         throwException(lexicalGlobalObject, scope, createTypeError(lexicalGlobalObject, "Binding expected string, TypedArray, boolean, number, bigint or null"_s));
         return false;
@@ -1205,10 +1199,13 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementDeserialize, (JSC::JSGlobalObject * lexic
 
     JSValue thisValue = callFrame->thisValue();
     JSSQLStatementConstructor* thisObject = dynamicDowncast<JSSQLStatementConstructor>(thisValue.getObject());
-    JSC::JSArrayBufferView* array = dynamicDowncast<JSC::JSArrayBufferView>(callFrame->argument(0));
+    JSValue arg0 = callFrame->argument(0);
+    JSC::JSArrayBufferView* array = dynamicDowncast<JSC::JSArrayBufferView>(arg0);
+    JSC::JSArrayBuffer* arrayBuffer = array ? nullptr : dynamicDowncast<JSC::JSArrayBuffer>(arg0);
+    JSValue finalizationTarget = callFrame->argument(3);
     unsigned int deserializeFlags = SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_RESIZEABLE;
     unsigned int openFlags = DEFAULT_SQLITE_FLAGS;
-    JSC::EnsureStillAliveScope ensureAliveArray(array);
+    JSC::EnsureStillAliveScope ensureAliveArray(arg0);
 
     if (callFrame->argumentCount() > 1) {
         openFlags |= callFrame->argument(1).toInt32(lexicalGlobalObject);
@@ -1229,13 +1226,17 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementDeserialize, (JSC::JSGlobalObject * lexic
         return {};
     }
 
-    if (!array) [[unlikely]] {
-        throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Expected Uint8Array or Buffer"_s));
+    if (!array && !arrayBuffer) [[unlikely]] {
+        throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Expected Uint8Array, Buffer, or ArrayBuffer"_s));
         return {};
     }
 
-    if (array->isDetached()) [[unlikely]] {
+    if (array && array->isDetached()) [[unlikely]] {
         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "TypedArray is detached"_s));
+        return {};
+    }
+    if (arrayBuffer && arrayBuffer->impl()->isDetached()) [[unlikely]] {
+        throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "ArrayBuffer is detached"_s));
         return {};
     }
 
@@ -1248,8 +1249,8 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementDeserialize, (JSC::JSGlobalObject * lexic
 #endif
     Bun__initializeSQLite();
 
-    size_t byteLength = array->byteLength();
-    void* ptr = array->vector();
+    size_t byteLength = array ? array->byteLength() : arrayBuffer->impl()->byteLength();
+    void* ptr = array ? array->vector() : arrayBuffer->impl()->data();
     if (ptr == nullptr || byteLength == 0) [[unlikely]] {
         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "ArrayBuffer must not be empty"_s));
         return {};
@@ -1293,6 +1294,11 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementDeserialize, (JSC::JSGlobalObject * lexic
 
     auto count = databases().size();
     databases().append(new VersionSqlite3(db));
+    if (finalizationTarget.isObject()) {
+        vm.heap.addFinalizer(finalizationTarget.getObject(), [count](JSC::JSCell*) -> void {
+            databases()[count]->release();
+        });
+    }
     RELEASE_AND_RETURN(scope, JSValue::encode(jsNumber(count)));
 }
 
@@ -2611,29 +2617,15 @@ JSC_DEFINE_CUSTOM_GETTER(jsSqlStatementGetColumnNames, (JSGlobalObject * lexical
     auto scope = DECLARE_THROW_SCOPE(vm);
     CHECK_THIS
 
-    if (!castedThis->hasExecuted || castedThis->need_update()) {
-        initializeColumnNames(lexicalGlobalObject, castedThis);
+    CHECK_PREPARED
+    int count = sqlite3_column_count(castedThis->stmt);
+    JSC::JSArray* array = JSC::constructEmptyArray(lexicalGlobalObject, static_cast<ArrayAllocationProfile*>(nullptr), count > 0 ? static_cast<unsigned>(count) : 0);
+    RETURN_IF_EXCEPTION(scope, {});
+    for (int i = 0; i < count; i++) {
+        const char* name = sqlite3_column_name(castedThis->stmt, i);
+        auto* string = name ? jsString(vm, WTF::String::fromUTF8(name)) : jsEmptyString(vm);
         RETURN_IF_EXCEPTION(scope, {});
-    }
-    JSC::JSArray* array;
-    auto* columnNames = castedThis->columnNames.get();
-    if (columnNames->size() > 0) {
-        if (castedThis->_prototype) {
-            array = ownPropertyKeys(lexicalGlobalObject, castedThis->_prototype.get(), PropertyNameMode::Strings, DontEnumPropertiesMode::Exclude);
-            RETURN_IF_EXCEPTION(scope, {});
-        } else {
-            array = JSC::constructEmptyArray(lexicalGlobalObject, static_cast<ArrayAllocationProfile*>(nullptr), columnNames->size());
-            RETURN_IF_EXCEPTION(scope, {});
-            unsigned int i = 0;
-            for (const auto& column : *columnNames) {
-                auto* string = jsString(vm, column.string());
-                RETURN_IF_EXCEPTION(scope, {});
-                array->putDirectIndex(lexicalGlobalObject, i++, string);
-            }
-        }
-    } else {
-        array = JSC::constructEmptyArray(lexicalGlobalObject, static_cast<ArrayAllocationProfile*>(nullptr), 0);
-        RETURN_IF_EXCEPTION(scope, {});
+        array->putDirectIndex(lexicalGlobalObject, static_cast<unsigned>(i), string);
     }
     return JSC::JSValue::encode(array);
 }

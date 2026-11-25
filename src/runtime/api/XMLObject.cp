@@ -65,7 +65,6 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
     let log = logger.Log.init(bun.default_allocator);
     const log_guard = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
-    let root_expr: Expr = undefined;
     const is_binary_input = input_value.isObject() && (input_value.as(jsc.WebCore.Blob) != null || input_value.asArrayBuffer(global) != null);
 
     if (is_binary_input) {
@@ -77,7 +76,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
                 return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
             }
             const source = &logger.Source.initPathString("input.xml", input_bytes);
-            root_expr = xml.parse(source, &log, allocator, xml.Options{
+            const root_expr = xml.parse(source, &log, allocator, xml.Options{
                 compact: compact,
                 encoding: .Bytes,
             }) catch e => {
@@ -85,6 +84,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
             };
             return exprToJS(root_expr, global);
         }
+        return JSValue.js_undefined;
     }
 
     {
@@ -96,9 +96,10 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
                 return global.throwRangeError(@as(i64, @intCast(@min(units.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.length", .max = std.math.maxInt(i32) });
             }
             const source = &logger.Source.initPathString("input.xml", "");
-            root_expr = xml.parseUtf16(source, units, &log, allocator, compact) catch e => {
+            const root_expr = xml.parseUtf16(source, units, &log, allocator, compact) catch e => {
                 return handleParseError(global, &log, e);
             };
+            return exprToJS(root_expr, global);
         } else {
             const slice = str.toUTF8(allocator);
             defer slice.deinit();
@@ -107,16 +108,15 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
                 return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
             }
             const source = &logger.Source.initPathString("input.xml", input_bytes);
-            root_expr = xml.parse(source, &log, allocator, xml.Options{
+            const root_expr = xml.parse(source, &log, allocator, xml.Options{
                 compact: compact,
                 encoding: .Text,
             }) catch e => {
                 return handleParseError(global, &log, e);
             };
+            return exprToJS(root_expr, global);
         }
     }
-
-    return exprToJS(root_expr, global);
 }
 
 fn handleParseError(global: *jsc.JSGlobalObject, log: *logger.Log, e: xml.XMLError): bun.JSError!jsc.JSValue {

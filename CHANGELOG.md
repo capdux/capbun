@@ -2361,3 +2361,10 @@
 - Phase 3 第二十九批：全仓 FD 泄漏专项扫雷修复 4 个 `.cp` 模块及其生成的 `.zig`（`src/libarchive/libarchive.{cp,zig}`, `src/patch_jsc/testing.{cp,zig}`, `src/cli/{init_command,create_command}.{cp,zig}`）。
 
 - Phase 3 第三十批：修复 `src/uws/uws.{cp,zig}` `BUN__warn__extra_ca_load_failed` 警告未刷新输出问题。
+
+## 2026-11-26 Batch 1 测试收敛提交
+- `src/runtime/api/bun/h2_frame_parser.cp` (.zig)
+- `src/runtime/api/XMLObject.cp` (.zig), `src/interchange/xml.cp` (.zig), `src/interchange/xml_scanner.cp` (.zig), `src/jsc/bindings/bindings.cpp`
+- `src/jsc/bindings/webcrypto/CryptoKeyOKP.cpp`
+- `src/js/bun/sqlite.ts`, `src/jsc/bindings/sqlite/JSSQLStatement.cpp`, `src/jsc/bindings/sqlite/sqlite3_error_codes.h`
+- `CP_PITFALLS.md`, `SESSION.md`, `CHANGELOG.md`

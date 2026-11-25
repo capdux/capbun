@@ -134,9 +134,6 @@ pub fn SinkTypes(comptime U: type) type {
         return struct {
 
 pub fn makeStrExpr(units: Slice, loc: Loc) Expr {
-            if (comptime is_wide) {
-                return Expr.init(E.String, E.String{ .data = std.mem.sliceAsBytes(units), .is_utf16 = true }, loc);
-            }
             return Expr.init(E.String, E.String.init(units), loc);
     }
 
@@ -439,7 +436,11 @@ pub fn isWsOnly(text: Slice) bool {
                     key_bytes = UT.unitBytes(joined);
                     self.key_cache[cp_cast_int(usize, slot)] = key_bytes;
                 }
-                const key_expr = Expr.init(E.String, E.String{ .data = key_bytes, .is_utf16 = is_wide }, loc);
+                const key_units: Slice = (if (comptime is_wide) (blk: {
+                break :blk @as([*]const U, @alignCast(@ptrCast(key_bytes.ptr)))[0..(key_bytes.len / @sizeOf(U))];
+    
+    }) else key_bytes);
+                const key_expr = makeStrExpr(key_units, loc);
                 _ = (blk_catch_10: { break :blk_catch_10 ((self.props.append(self.allocator, G.Property{ .key = key_expr, .value = makeStrExpr(value, loc) })) catch |__ce_10| { _ = &__ce_10; return error.OutOfMemory; }); });
         }
     
@@ -1515,7 +1516,7 @@ pub fn closeElement(self: *@This(), name: Slice, frame: u32, end_name: Slice, cu
             if ((!UT.nameEq(end_name, name))) {
                 const s1 = self.scanner.formatUnits(name);
                 const s2 = self.scanner.formatUnits(end_name);
-                return self.scanner.errFmt(cur_pos, "Expected closing tag \\</{s}> but found \\</{s}>", .{ s1, s2 });
+                return self.scanner.errFmt(cur_pos, "Expected closing tag </{s}> but found </{s}>", .{ s1, s2 });
             }
             if ((end_frame != frame)) {
                 return self.scanner.errNamed(cur_pos, "Element", name, " must start and end within the same entity");

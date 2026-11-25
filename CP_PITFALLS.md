@@ -106,7 +106,10 @@
 - ③ **静态零违例**：0 `zig {}` 逃逸、0 `var`、0 `.@"0"`/`.@"1"`、0 `*anyopaque`/`?*anyopaque`；
 - ④ **代码膨胀率**：`<stem>.cp` 总行数 $\le 1.20\times$ `<stem>_.zig` 原始行数。
 
-- **多参 `.exec(...)` 被截断**：`cpc` 会将任意 `Obj.exec(a, b, ...)` 误按 `RegExp.exec(str)` 截断为单参；改用 `const fn_exec = Obj.exec; fn_exec(a, b, ...)`。
+- **多参 `.exec(...)` / 自定义 `.slice(...)` / `std.mem.sort(..., {}, ...)`（2026-11-26 已修复）**：`cpc` 现已正确保留多参 `Command.exec(a, b, c)`、自定义结构体 `.slice(arg)`（不再误转数组切片），并规范化 `std.mem.sort` / `std.sort.*` 空上下文 `{}`。
+- **值接收者返回 `&_.field` 静态拦截（`E0228`）**：省略 `*_` 的只读值接收者方法若返回 `&_.field`（悬垂栈指针），`cpc` 现会静态报 `E0228` 并提示改为 `*_`。
+- **`cpc fix` 新增 `E0133` 与 `W0134` 自动修复**：值位置 `if (cond) .{...}` 缺失 `else` 自动补全 `else @as(void, undefined)`（`E0133`）；`switch` 字符半开区间 `'0'..'9'` 自动告警并修复为闭区间 `'0'..='9'`（`W0134`）。
+- **零开销 ABI 尺寸守护内置宏**：`@assertLayout(Type, size[, align])` 与 `@cAbiCheck(LocalType, CType)`，在编译期生成 `comptime @sizeOf/@alignOf @compileError` 断言防静默 ABI 错位。
 - **`struct` 命名空间级静态可变变量**：写 `static let x: T = ...;`（无 `static` 会成为实例字段）。
 
 - **带显式类型标注的 `@intFromFloat`/`@bitCast` 被丢弃**：`const x: T = @intFromFloat(...)` / `@bitCast(...)` 会被 `cpc` 静默丢弃；改写为 `const x = @as(T, @intFromFloat(...))`。

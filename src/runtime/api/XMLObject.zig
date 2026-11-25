@@ -938,8 +938,6 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         _ = &log_guard;
         var __log_guard_moved = false; _ = &__log_guard_moved;
         defer if (!__log_guard_moved) { __log_guard_moved = true; const __T = @TypeOf(log_guard); if (@typeInfo(__T) == .optional) { if (log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = log_guard; _drop_val.__cp_deinit(); } };
-        var root_expr: Expr = undefined;
-        _ = &root_expr;
         const is_binary_input = (input_value.isObject() and ((input_value.as(jsc.WebCore.Blob) != null) or (input_value.asArrayBuffer(global) != null)));
         if (is_binary_input) {
             var blob_or_str = try jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value);
@@ -958,9 +956,10 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
                     return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
                 }
                 const source = (&logger.Source.initPathString("input.xml", input_bytes));
-                root_expr = (blk_catch_1: { break :blk_catch_1 ((xml.parse(source, (&log), allocator, xml.Options{ .compact = compact, .encoding = .Bytes })) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
+                const root_expr = (blk_catch_1: { break :blk_catch_1 ((xml.parse(source, (&log), allocator, xml.Options{ .compact = compact, .encoding = .Bytes })) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
                 return exprToJS(root_expr, global);
             }
+            return JSValue.js_undefined;
         }
         {
             var str = try input_value.toBunString(global);
@@ -978,7 +977,8 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
                     return global.throwRangeError(@as(i64, @intCast(@min(units.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.length", .max = std.math.maxInt(i32) });
                 }
                 const source = (&logger.Source.initPathString("input.xml", ""));
-                root_expr = (blk_catch_2: { break :blk_catch_2 ((xml.parseUtf16(source, units, (&log), allocator, compact)) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
+                const root_expr = (blk_catch_2: { break :blk_catch_2 ((xml.parseUtf16(source, units, (&log), allocator, compact)) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
+                return exprToJS(root_expr, global);
             } else {
                 const slice = str.toUTF8(allocator);
                 defer {
@@ -989,10 +989,10 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
                     return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
                 }
                 const source = (&logger.Source.initPathString("input.xml", input_bytes));
-                root_expr = (blk_catch_3: { break :blk_catch_3 ((xml.parse(source, (&log), allocator, xml.Options{ .compact = compact, .encoding = .Text })) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
+                const root_expr = (blk_catch_3: { break :blk_catch_3 ((xml.parse(source, (&log), allocator, xml.Options{ .compact = compact, .encoding = .Text })) catch |e| { _ = &e; return handleParseError(global, (&log), e); }); });
+                return exprToJS(root_expr, global);
             }
         }
-        return exprToJS(root_expr, global);
 }
 
 pub fn handleParseError(global: *jsc.JSGlobalObject, log: *logger.Log, e: xml.XMLError) bun.JSError!jsc.JSValue {

@@ -306,15 +306,14 @@ pub fn ScannerTypes(comptime U: type): type {
             }
 
             fn errFmt(*_, pos: usize, comptime fmt: string, args: auto): XMLError {
-                _.log.addErrorFmt(_.source, _.loc(pos), _.allocator, fmt, args) catch return error.OutOfMemory;
+                const msg = std.fmt.allocPrint(_.allocator, fmt, args) catch return error.OutOfMemory;
+                _.log.addRangeError(_.source, bun.logger.Range{ loc: _.loc(pos) }, msg) catch return error.OutOfMemory;
                 return error.SyntaxError;
             }
 
-            fn formatUnits(units: Slice): string {
+            fn formatUnits(*_, units: Slice): string {
                 if (comptime is_wide) {
-                    let list = std.array_list.Managed(u8).init(_.allocator);
-                    list = bun.strings.convertUTF16ToUTF8(list, units) catch return "";
-                    return list.items;
+                    return bun.strings.toUTF8AllocWithType(_.allocator, units) catch return "";
                 }
                 if (!_.latin1) {
                     return UT.unitBytes(units);

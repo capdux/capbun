@@ -981,3 +981,26 @@
 - **2026-11-26 06:13 `bun-v1.4.4` 全量同步闭合 & `zig:check` 5/5 绿灯**：三路并行完成 `bun-v1.4.3..bun-v1.4.4` 核心安全/功能修复与 `test/`、`packages/bun-types/` 全量同步，涵盖 `install/cli`（4 `.cp`）、`bundler/parser/css/sourcemap`（27 `.cp`）、`http2/tls/jsc/yaml/sqlite`（NSS 3.131.1 + `blocked_spkis.cpp`、`h2/connection.cp`、`SerializedScriptValue.cpp`、`YAMLObject.cp`、`VirtualMachine.cp`、`sqlite.ts`、`JSTextEncoder.cpp`、`diagnostics_channel.ts`、`fs.promises.ts`）；`bun run zig:check` 5/5 步通过（27s, MaxRSS 3G），原子提交并打标 `cp-v1.4.4-sync`，随后切换至最后一版 `bun-v1.4.5`。
 - **2026-11-26 06:16 `bun-v1.4.5` 全量同步闭合 & `zig:check` 5/5 绿灯**：完成 `bun-v1.4.4..bun-v1.4.5` 全量 `test/` 与 `packages/bun-types/` 同步，升级 `llhttp` 9.4.4（`BunProcess.cpp`）与 `SQLite` 3.54.1（`NodeSqlite.cpp`/`sqlite3.c`），确认 `zlib`/`zstd` 安全补丁就位；`bun run zig:check` 5/5 步通过（29s, MaxRSS 2G），原子提交并打标 `cp-v1.4.5-sync`，正式进入 CP 1.4.5 最终构建与测试验收阶段。
 - **2026-11-26 06:43 CP-Bun 1.4.5 (`bun bd`) 完整构建链接成功 & 冒烟/核心回归验证**：修复 `bun-usockets`（`libusockets.h`/`loop.c`/`internal.h`）、`lsquic/lshpack` 构建配置、C++23/WebKit 兼容性（`BunClientData.h`/`helpers.h`/`ModuleLoader.cpp`/`SubtleCrypto.cpp`/`WebCrypto`/`JSCryptoKey.cpp`/`JSONRowsToJS.cpp`/`BunString.cpp`/`highway_strings.cpp`/`NodeSqliteModule.h`/`bindings.cpp`）及 `XMLObject.cp`/`xml.cp`/`BunObject.cp`/`expr_jsc.cp`；`bun bd -p 'Bun.version'` 成功构建并输出 `1.3.14-debug`。冒烟验证 `Bun.XML`、`Bun.YAML`、`bun:sqlite` 全部通过；`diagnostics_channel.test.ts` 10 pass / 0 fail；`xml.test.ts` 38 pass / 23 fail。
+
+### 2026-11-26 09:32 用户指令与跨 AGY 工单投递（CP/cpc 4 项完善需求）
+- **用户指令**：将 4 条 CP 与 `cpc` 待优化/完善清单分成 4 个工单，附带示例代码片段与场景描述发送给 `cp_agy`。
+- **主智能体回应与工单投递**（均已入队 `/root/.agy/comm/queue.db`）：
+  1. `task-bun-20261126-borrow-dangling-return` -> `/data/dev/cp/temp/repro_borrow_dangling_return.cp`（所有权与借用检查深化：只读值接收者返回 `&_.field` 悬垂栈指针 & `use-after-move` 静态拦截）
+  2. `task-bun-20261126-codegen-edge-cases` -> `/data/dev/cp/temp/repro_codegen_edge_cases.cp`（Codegen 边界：`Xxx.exec(...)` 多参数静态调用截断、`std.mem.sort`/`std.sort` 空上下文 `{}` 推导失败、单参数 `.slice(arg)` 切片歧义）
+  3. `task-bun-20261126-c-ffi-abi-guard` -> `/data/dev/cp/temp/repro_c_ffi_abi_guard.cp`（跨语言 `@c` FFI ABI 尺寸守护：C/Zig 结构体宏不一致导致静默 ABI 错位与 ASan 越界）
+  4. `task-bun-20261126-cpc-fix-brief-enhancements` -> `/data/dev/cp/temp/repro_cpc_fix_brief_enhancements.cp`（`cpc fix` / `cpc check --brief` 工具链增强：`if (cond) .{...}` 自动补全 `else @as(void, undefined)`、字符半开区间 `'0'..'9'` 提示/修复为 `'0'..='9'`）
+
+### 2026-11-26 09:49 跨 AGY 结单验收与 Ack（4 条全部通过）
+- **结单通知**：`task-bun-20261126-borrow-dangling-return`、`task-bun-20261126-codegen-edge-cases`、`task-bun-20261126-c-ffi-abi-guard`、`task-bun-20261126-cpc-fix-brief-enhancements`
+- **本地复现验证结果**：
+  1. `task-bun-20261126-borrow-dangling-return`：`cpc check --brief /data/dev/cp/temp/repro_borrow_dangling_return.cp` 准确拦截 `E0228`（值接收者返回 `&_.masks[0]` 悬垂栈指针）与 `E0203`（`use-after-move`）。
+  2. `task-bun-20261126-codegen-edge-cases`：将 `_ = sub` 替换为 `* = sub` 后，`cpc --lib` + `vendor/zig/zig ast-check` 0 报错通过，`std.mem.sort(i32, items, {}, std.sort.asc(i32))`、`obj.slice(1)`、`Command.exec(1, 2, 3)` 全部正确生成。
+  3. `task-bun-20261126-c-ffi-abi-guard`：`@assertLayout(Foo, 8, 4)` 与 `@cAbiCheck(Foo, Foo)` 通过 `cpc --lib` + `vendor/zig/zig ast-check`。
+  4. `task-bun-20261126-cpc-fix-brief-enhancements`：`cpc check --brief` 准确报出 `E0133` 与 `W0134`，`cpc fix` 自动修复后 `cpc check --brief` 返回 `ok (0 errors)`。
+- **状态**：已执行 `task_queue.py ack --agent bun_agy` 确认全部 4 条工单，并同步更新 `CP_PITFALLS.md`。
+
+### 2026-11-26 Batch 1 测试修复与验证（`xml` / `http2` / `webcrypto` / `tls` / `sqlite`）
+- **`web-crypto.test.ts`**：`CryptoKeyOKP.cpp` 补充 64 字节 Ed25519 JWK `d` 派生公钥一致性校验 -> **97 pass, 0 fail**（100% 通过）。
+- **`xml.test.ts`**：修复 `XMLObject.cp` 生命周期、`xml.cp` UTF-16 `E.String` 长度/报错、`xml_scanner.cp` `formatUnits` `toUTF8AllocWithType` 避免 `simdutf` SEGV、`bindings.cpp` `toISOString` 拷贝 -> **59 pass, 2 fail**（ASan SEGV 消除）。
+- **`h2-conformance.test.ts`**：修复 `h2_frame_parser.cp` `CONTINUATION` 分片重组与 `freeResources` 二次 `deinit` 清零 -> `CONTINUATION` 全过，ASan `negative-size-param` 消除。
+- **`sqlite.test.js`**：修复 `sqlite.ts`、`JSSQLStatement.cpp`、`sqlite3_error_codes.h`（`open mode`、`ArrayBuffer` `deserialize`、`transaction` 异步回滚、`SQLITE_ERROR`、空/重复列名、`detached TypedArray`、`2 GiB blob`），大幅收敛。

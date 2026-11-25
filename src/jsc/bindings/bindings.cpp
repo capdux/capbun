@@ -5929,7 +5929,11 @@ extern "C" int JSC__JSValue__toISOString(JSC::JSGlobalObject* globalObject, Enco
 
     auto& vm = JSC::getVM(globalObject);
 
-    return static_cast<int>(Bun::toISOString(vm, thisDateObj->internalNumber(), buffer));
+    int len = static_cast<int>(Bun::toISOString(vm, thisDateObj->internalNumber(), buffer));
+    if (len > 0) {
+        memcpy(buf, buffer, std::min(len, 28));
+    }
+    return len;
 }
 
 extern "C" int JSC__JSValue__DateNowISOString(JSC::JSGlobalObject* globalObject, char* buf)
