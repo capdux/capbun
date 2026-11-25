@@ -207,6 +207,8 @@ pub fn from(fetch_headers_ref: ?*bun.webcore.FetchHeaders, allocator: std.mem.Al
         _ = &names;
         var values = sliced.items(.value);
         _ = &values;
+        _ = @memset(names, .{ .offset = 0, .length = 0 });
+        _ = @memset(values, .{ .offset = 0, .length = 0 });
         if (fetch_headers_ref) |headers_ref| {
             _ = &headers_ref;
             _ = headers_ref.copyTo(names.ptr, values.ptr, headers.buf.items.ptr);

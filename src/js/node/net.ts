@@ -615,14 +615,21 @@ const SocketHandlers2: SocketHandler<NonNullable<import("node:net").Socket["_han
     $debug("Bun.Socket connectError");
     let { self, req } = socket.data;
     socket[owner_symbol] = self;
-    req!.oncomplete(error.errno, self._handle, req, true, true);
     socket.data.req = undefined;
+    // doConnect dispatches this synchronously when connect()/bind() fails at
+    // the syscall; surface it as kConnectTcp/Pipe's return value (callers'
+    // Node-derived `if (err)` expects that) instead of re-entering oncomplete.
+    if (req!.dispatching) {
+      req.errno = error.errno || UV_ECANCELED;
+      return;
+    }
+    req!.oncomplete(error.errno, self._handle, req, true, true);
   },
 };
 
 function kConnectTcp(self, addressType, req, address, port) {
   $debug("SocketHandle.kConnectTcp", addressType, address, port);
-  const promise = doConnect(self._handle, {
+  return kConnectDispatch(self, req, {
     hostname: address,
     port,
     ipv6Only: addressType === 6,
@@ -631,16 +638,11 @@ function kConnectTcp(self, addressType, req, address, port) {
     data: { self, req },
     socket: self[khandlers],
   });
-  promise.catch(_reason => {
-    // eat this so there's no unhandledRejection
-    // we already catch this in connectError and error
-  });
-  return 0;
 }
 
 function kConnectPipe(self, req, address) {
   $debug("SocketHandle.kConnectPipe");
-  const promise = doConnect(self._handle, {
+  return kConnectDispatch(self, req, {
     hostname: address,
     unix: address,
     allowHalfOpen: self.allowHalfOpen,
@@ -648,10 +650,24 @@ function kConnectPipe(self, req, address) {
     data: { self, req },
     socket: self[khandlers],
   });
+}
+
+function kConnectDispatch(self, req, opts) {
+  // Node's TCPWrap returns errno for sync uv_*_connect failure and defers
+  // oncomplete; doConnect instead fires connectError inside this call. Bracket
+  // it so connectError hands the errno back here instead of re-entering.
+  req.dispatching = true;
+  const promise = doConnect(self._handle, opts);
+  req.dispatching = false;
   promise.catch(_reason => {
     // eat this so there's no unhandledRejection
     // we already catch this in connectError and error
   });
+  const errno = req.errno;
+  if (errno !== undefined) {
+    req.errno = undefined;
+    return errno;
+  }
   return 0;
 }
 
@@ -1914,7 +1930,15 @@ function internalConnectMultiple(context, canceled?) {
     ArrayPrototypePush.$call(context.errors, ex);
 
     self.emit("connectionAttemptFailed", address, port, addressType, ex);
-    internalConnectMultiple(context);
+    // A listener may destroy() on that event; same guard as afterConnectMultiple.
+    if (self.connecting) internalConnectMultiple(context);
+    return;
+  }
+
+  // The if(err) above covers sync failure; this catches a sync open or a
+  // destroy() from a 'connectionAttempt' listener. Arming the timer now
+  // would capture a stale handle and overwrite the next attempt's kTimeout.
+  if (!self.connecting || context.current !== current + 1) {
     return;
   }
 
@@ -1927,6 +1951,10 @@ function internalConnectMultiple(context, canceled?) {
 }
 
 function internalConnectMultipleTimeout(context, req, handle) {
+  // Socket._destroy can't reach the per-context timer, so destroy() mid-attempt
+  // leaves this armed; don't emit a spurious timeout or re-close the handle.
+  if (!context.socket.connecting) return;
+
   $debug("connect/multiple: connection to %s:%s timed out", req.address, req.port);
   context.socket.emit("connectionAttemptTimeout", req.address, req.port, req.addressType);
 

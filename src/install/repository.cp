@@ -636,6 +636,22 @@ pub struct TopFormatter {
         }, " \t\r\n");
     }
 
+    /// `resolved` is the `.bun-tag` value persisted to the lockfile (a commit SHA for
+    /// `git`, or `<owner>-<repo>-<sha>` for `github`). It is concatenated into a cache
+    /// directory name and passed to `git checkout`, so it must be a single safe path
+    /// component: no separators, no NUL, and no leading `-` that git would parse as an
+    /// option.
+    pub static fn isSafeResolvedTag(resolved: string): bool {
+        if (resolved.len == 0 || resolved.len > 256) return false;
+        if (resolved[0] == '-') return false;
+        if (std.mem.eql(u8, resolved, ".") || std.mem.eql(u8, resolved, "..")) return false;
+        for (b of resolved) {
+            const ok = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '-' || b == '_' || b == '.';
+            if (!ok) return false;
+        }
+        return true;
+    }
+
     pub static fn checkout(
         allocator: std.mem.Allocator,
         env: DotEnv.Map,
@@ -647,6 +663,18 @@ pub struct TopFormatter {
         resolved: string,
     ): ExtractData! {
         bun.analytics.Features.git_dependencies += 1;
+
+        if (!isSafeResolvedTag(resolved)) {
+            log.addErrorFmt(
+                null,
+                logger.Loc.Empty,
+                allocator,
+                "invalid git commit \"{s}\" for \"{s}\"",
+                .{ resolved, name },
+            ) catch unreachable;
+            return error.InstallFailed;
+        }
+
         const bufs = tl_bufs.get();
         const folder_name = PackageManager.cachedGitFolderNamePrint(&bufs.folder_name_buf, resolved, null);
 

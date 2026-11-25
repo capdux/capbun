@@ -520,6 +520,7 @@ pub const ParseTaskPtrHolder = struct {
 pub const BundleV2 = struct {
     transpiler: *Transpiler,
     client_transpiler: ?*Transpiler,
+    owns_client_transpiler: bool = false,
     ssr_transpiler: *Transpiler,
     framework: ?bake.Framework,
     graph: Graph,
@@ -597,6 +598,7 @@ pub fn initializeClientTranspiler(self: *BundleV2) !*Transpiler {
             ct.resolver.opts = ct.options;
             ct.resolver.env_loader = ct.env;
             self.client_transpiler = ct;
+            self.owns_client_transpiler = true;
             return ct;
     }
 
@@ -1474,6 +1476,11 @@ pub fn generateFromCLI(transpiler: *Transpiler, alloc: std.mem.Allocator, event_
             var bundle = try BundleV2.init(transpiler, null, alloc, event_loop, enable_reloading, null, .init());
             _ = &bundle;
             bundle.unique_key = generateUniqueKey();
+            defer {
+            if ((!enable_reloading)) {
+                _ = bundle.deinitWithoutFreeingArena();
+            }
+            }
             if (bundle.transpiler.log.hasErrors()) {
                 return error.BuildFailed;
             }
@@ -1526,6 +1533,9 @@ pub fn generateFromBakeProductionCLI(entry_points: bake.production.EntryPointMap
             var bundle = try BundleV2.init(server_transpiler, bake_options, alloc, event_loop, false, null, .init());
             _ = &bundle;
             bundle.unique_key = generateUniqueKey();
+            defer {
+            _ = bundle.deinitWithoutFreeingArena();
+            }
             if (bundle.transpiler.log.hasErrors()) {
                 return error.BuildFailed;
             }
@@ -1925,6 +1935,16 @@ pub fn deinitWithoutFreeingArena(self: *BundleV2) void {
                 _ = bun.default_allocator.free(free);
             }
             _ = self.free_list.clearAndFree();
+            if (self.owns_client_transpiler) {
+                if (self.client_transpiler) |ct| {
+                    _ = &ct;
+                    if (ct.macro_context) |*mc| {
+                        _ = &mc;
+                        _ = (mc.*).macros.deinit();
+                        ct.macro_context = null;
+                    }
+                }
+            }
     }
 
 pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !BuildResult {

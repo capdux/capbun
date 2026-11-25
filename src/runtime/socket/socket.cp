@@ -74,7 +74,14 @@ pub struct HandlersScopeGuard<T, S> {
     socket: *T!,
     scope: S,
     ~init() {
-        if (_.scope.exit()) {
+        _.scope.exitEventLoop();
+        // `upgradeTLS` can transfer client-mode handlers to the raw TLS twin
+        // from inside a callback, leaving `socket.handlers` null; the twin
+        // frees them, so skip `markInactive` to avoid a double-free.
+        if (unsafe { _.socket.handlers == null }) {
+            return;
+        }
+        if (_.scope.markInactive()) {
             unsafe { _.socket.handlers = null; }
         }
     }

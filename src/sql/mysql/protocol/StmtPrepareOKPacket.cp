@@ -18,6 +18,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
         }
 
         _.statement_id = reader.int(u32)?;
+        if (_.statement_id == 0) return error.InvalidPrepareOKPacket;
         _.num_columns = reader.int(u16)?;
         _.num_params = reader.int(u16)?;
         * = reader.int(u8)?;

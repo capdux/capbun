@@ -746,7 +746,11 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                                 },
                             );
                     } else if (version.tag.isNPM()) {
-                        const name_str = mgr.lockfile.str(&name);
+                        // Owned copy: `getOrPutResolvedPackageWithFindResult` below appends to
+                        // `string_bytes` (and may reallocate it), and `name_str` is still read
+                        // afterwards on the fall-through path.
+                        const name_str = bun.handleOom(mgr.allocator.dupe(u8, mgr.lockfile.str(&name)));
+                        const _name_str_guard = FreeGuard<@TypeOf(name_str)>{ alloc: mgr.allocator, slice: name_str };
                         const task_id = Task.Id.forManifest(name_str);
 
                         if (comptime Environment.allow_assert) bun.assert(task_id.get() != 0);
@@ -2009,18 +2013,6 @@ fn getOrPutResolvedPackage(
 
 fn resolutionSatisfiesDependency(client: *PackageManager, resolution: Resolution, dependency: Dependency.Version): bool {
     const buf = client.lockfile.buffers.string_bytes.items;
-    if (resolution.tag == .npm && dependency.tag == .npm) {
-        return dependency.value.npm.version.satisfies(resolution.value.npm.version, buf, buf);
-    }
-
-    if (resolution.tag == .git && dependency.tag == .git) {
-        return resolution.value.git.eql(&dependency.value.git, buf, buf);
-    }
-
-    if (resolution.tag == .github && dependency.tag == .github) {
-        return resolution.value.github.eql(&dependency.value.github, buf, buf);
-    }
-
-    return false;
+    return resolution.satisfiesDependencyVersion(&dependency, buf, buf);
 }
 

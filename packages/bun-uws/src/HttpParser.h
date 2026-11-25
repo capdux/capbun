@@ -750,6 +750,12 @@ namespace uWS
                     /* Error: invalid chars in field name */
                     return HttpParserResult::error(HTTP_ERROR_400_BAD_REQUEST, HTTP_PARSER_ERROR_INVALID_HEADER_TOKEN);
                 }
+                /* RFC 9112 5.1: field-name is a non-empty token. An empty name would also
+                 * collide with the end-of-headers sentinel and hide later headers from the
+                 * Content-Length / Transfer-Encoding request-smuggling checks. */
+                if (headers->key.length() == 0) {
+                    return HttpParserResult::error(HTTP_ERROR_400_BAD_REQUEST, HTTP_PARSER_ERROR_INVALID_HEADER_TOKEN);
+                }
                 postPaddedBuffer++;
 
                 preliminaryValue = postPaddedBuffer;
@@ -948,7 +954,12 @@ namespace uWS
                     /* Go ahead and parse it (todo: better heuristics for emitting FIN to the app level) */
                     std::string_view dataToConsume(data, length);
                     for (auto chunk : uWS::ChunkIterator(&dataToConsume, &remainingStreamingBytes)) {
-                        dataHandler(user, chunk, chunk.length() == 0);
+                        void *returnedUser = dataHandler(user, chunk, chunk.length() == 0);
+                        if (returnedUser != user) {
+                            /* The data handler closed or shut down the socket; stop parsing
+                             * so we do not dispatch pipelined requests on a dead socket. */
+                            return HttpParserResult::success(consumedTotal, returnedUser);
+                        }
                     }
                     if (isParsingInvalidChunkedEncoding(remainingStreamingBytes)) [[unlikely]] {
                         // TODO: what happen if we already responded?
@@ -962,12 +973,16 @@ namespace uWS
             } else if (contentLengthStringLen) {
                 if constexpr (!ConsumeMinimally) {
                     unsigned int emittable = (unsigned int) std::min<uint64_t>(remainingStreamingBytes, length);
-                    dataHandler(user, std::string_view(data, emittable), emittable == remainingStreamingBytes);
+                    void *returnedUser = dataHandler(user, std::string_view(data, emittable), emittable == remainingStreamingBytes);
                     remainingStreamingBytes -= emittable;
 
                     data += emittable;
                     length -= emittable;
                     consumedTotal += emittable;
+
+                    if (returnedUser != user) {
+                        return HttpParserResult::success(consumedTotal, returnedUser);
+                    }
                 }
             } else if(isConnectRequest) {
                 // This only serves to mark that the connect request read all headers
@@ -979,7 +994,10 @@ namespace uWS
                 break;
             } else {
                 /* If we came here without a body; emit an empty data chunk to signal no data */
-                dataHandler(user, {}, true);
+                void *returnedUser = dataHandler(user, {}, true);
+                if (returnedUser != user) {
+                    return HttpParserResult::success(consumedTotal, returnedUser);
+                }
             }
 
             /* Consume minimally should break as easrly as possible */
@@ -1004,7 +1022,10 @@ public:
                  /* It's either chunked or with a content-length */
                 std::string_view dataToConsume(data, length);
                 for (auto chunk : uWS::ChunkIterator(&dataToConsume, &remainingStreamingBytes)) {
-                    dataHandler(user, chunk, chunk.length() == 0);
+                    void *returnedUser = dataHandler(user, chunk, chunk.length() == 0);
+                    if (returnedUser != user) {
+                        return HttpParserResult::success(0, returnedUser);
+                    }
                 }
                 if (isParsingInvalidChunkedEncoding(remainingStreamingBytes)) {
                     return HttpParserResult::error(HTTP_ERROR_400_BAD_REQUEST, HTTP_PARSER_ERROR_INVALID_CHUNKED_ENCODING);
@@ -1067,7 +1088,10 @@ public:
                         /* It's either chunked or with a content-length */
                         std::string_view dataToConsume(data, length);
                         for (auto chunk : uWS::ChunkIterator(&dataToConsume, &remainingStreamingBytes)) {
-                            dataHandler(user, chunk, chunk.length() == 0);
+                            void *returnedUser = dataHandler(user, chunk, chunk.length() == 0);
+                            if (returnedUser != user) {
+                                return HttpParserResult::success(0, returnedUser);
+                            }
                         }
                         if (isParsingInvalidChunkedEncoding(remainingStreamingBytes)) {
                             return HttpParserResult::error(HTTP_ERROR_400_BAD_REQUEST, HTTP_PARSER_ERROR_INVALID_CHUNKED_ENCODING);

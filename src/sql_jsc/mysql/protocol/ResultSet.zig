@@ -313,7 +313,7 @@ pub fn decodeText(self: *Row, allocator: std.mem.Allocator, comptime Context: ty
                 if (decodeLengthInt(reader.peek())) |result| {
                     _ = &result;
                     const column = self.columns[@as(usize, @intCast(index))];
-                    if (((if (@typeInfo(@TypeOf(result)) == .@"enum") @intFromEnum(result) else result.value) == 251)) {
+                    if (((result.bytes_read == 1) and ((if (@typeInfo(@TypeOf(result)) == .@"enum") @intFromEnum(result) else result.value) == 251))) {
                         _ = reader.skip(result.bytes_read);
                         {
                             value.* = SQLDataCell{ .tag = .@"null", .value = .{ .@"null" = 0 } };

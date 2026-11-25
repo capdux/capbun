@@ -146,7 +146,7 @@ pub fn encodeSlowPath(value: i32) VLQ {
         if ((value >= 0)) {
             vlq = cp_shl((if (comptime @typeInfo(@TypeOf(value)) == .@"enum") cp_cast_int(u32, @intFromEnum(value)) else cp_cast_int(u32, value)), 1);
         } else {
-            vlq = (cp_shl((if (comptime @typeInfo(@TypeOf((-value))) == .@"enum") cp_cast_int(u32, @intFromEnum((-value))) else cp_cast_int(u32, (-value))), 1) | 1);
+            vlq = (cp_shl((if (comptime @typeInfo(@TypeOf(@abs(value))) == .@"enum") cp_cast_int(u32, @intFromEnum(@abs(value))) else cp_cast_int(u32, @abs(value))), 1) | 1);
         }
         {
             var step: i32 = 0;

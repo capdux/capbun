@@ -546,7 +546,7 @@ else => error.InvalidBoolean,
 
 pub fn readVerbatimString(self: *ValkeyReader, allocator: std.mem.Allocator) RedisError!VerbatimString {
             const len = try self.readInteger();
-            if ((len < 0)) {
+            if (((len < 0) or (len > max_bulk_len))) {
                 return error.InvalidVerbatimString;
             }
             const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
@@ -609,6 +609,9 @@ pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, dep
                 const len = try self.readInteger();
                 if ((len < 0)) {
                     return RESPValue{ .BulkString = null };
+                }
+                if ((len > max_bulk_len)) {
+                    return error.InvalidBulkString;
                 }
                 const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
                 if (((self.pos + ulen) > self.buffer.len)) {
@@ -673,7 +676,7 @@ pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, dep
 .BlobError => {
 {
                 const len = try self.readInteger();
-                if ((len < 0)) {
+                if (((len < 0) or (len > max_bulk_len))) {
                     return error.InvalidBlobError;
                 }
                 const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
@@ -925,4 +928,5 @@ pub const valkeyErrorToJS = protocol_jsc.valkeyErrorToJS;
 const empty_resp_array: []RESPValue = &.{};
 const null_resp_value: RESPValue = .Null;
 const max_nesting_depth: usize = 128;
+const max_bulk_len: i64 = ((512 * 1024) * 1024);
 const subscription_push_message_map = bun.ComptimeStringMap(SubscriptionPushMessage, .{ .{ "message", .message }, .{ "subscribe", .subscribe }, .{ "unsubscribe", .unsubscribe } });

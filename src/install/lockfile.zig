@@ -1244,6 +1244,7 @@ pub fn cleanWithLogger(self: *Lockfile, manager: *PackageManager, updates: []Pac
         new_lf.trusted_dependencies = old_trusted_dependencies;
         new_lf.scripts = old_scripts;
         new_lf.meta_hash = old.meta_hash;
+        new_lf.text_lockfile_version = old.text_lockfile_version;
         {
             var builder = new_lf.stringBuilder();
             _ = &builder;

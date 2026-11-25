@@ -1265,6 +1265,7 @@ extern "C" napi_status napi_detach_arraybuffer(napi_env env,
 {
     NAPI_PREAMBLE(env);
     NAPI_CHECK_ENV_NOT_IN_GC(env);
+    NAPI_CHECK_ARG(env, arraybuffer);
     Zig::GlobalObject* globalObject = toJS(env);
     JSC::VM& vm = JSC::getVM(globalObject);
 
@@ -1533,6 +1534,7 @@ extern "C" JS_EXPORT napi_status node_api_create_buffer_from_arraybuffer(napi_en
 {
     NAPI_LOG_CURRENT_FUNCTION;
     NAPI_PREAMBLE_NO_THROW_SCOPE(env);
+    NAPI_CHECK_ARG(env, arraybuffer);
     NAPI_CHECK_ARG(env, result);
 
     JSC::JSArrayBuffer* jsArrayBuffer = dynamicDowncast<JSC::JSArrayBuffer>(toJS(arraybuffer));
@@ -2792,6 +2794,7 @@ extern "C" napi_status napi_new_instance(napi_env env, napi_value constructor,
 {
     NAPI_PREAMBLE(env);
     NAPI_CHECK_ARG(env, result);
+    NAPI_CHECK_ARG(env, constructor);
     NAPI_RETURN_EARLY_IF_FALSE(env, argc == 0 || argv, napi_invalid_arg);
     JSValue constructorValue = toJS(constructor);
     JSC::JSObject* constructorObject = constructorValue.getObject();
@@ -2817,6 +2820,8 @@ extern "C" napi_status napi_instanceof(napi_env env, napi_value object, napi_val
 {
     NAPI_PREAMBLE_NO_THROW_SCOPE(env);
     NAPI_CHECK_ARG(env, result);
+    NAPI_CHECK_ARG(env, object);
+    NAPI_CHECK_ARG(env, constructor);
 
     Zig::GlobalObject* globalObject = toJS(env);
 

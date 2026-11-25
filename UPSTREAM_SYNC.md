@@ -5,7 +5,13 @@
 
 | 阶段 | 上游区间 | 状态 | 说明 |
 | :--- | :--- | :--- | :--- |
-| Step 1 | `cp-v1.3.14-green` & `#30412` 坐标系 | **进行中** | 已建 `../bun-ref` 只读 worktree 与 `MODULE_MAP.md` |
-| Step 2 | `23427dbc12f..a215285063c` (935 commits) | 待推进 | 聚焦泄漏/UAF/竞态/边界/Win+Linux 运行时 Bugfix |
-| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | 待推进 | `consolidation-step-1..7` 路径映射更新 + 1.4.0 收口 |
+| Step 1 | `cp-v1.3.14-green` & `#30412` 坐标系 | **已完成** | 已建 `../bun-ref` 只读 worktree 与 `MODULE_MAP.md` (`1217/1295` 自动匹配) |
+| Step 2 | `23427dbc12f..a215285063c` (935 commits) | **Wave 1 完成** | 已筛选 356 条有效修复（193 高优）；Wave 1 已移植 50+ 项高危安全/泄漏/UAF/边界修复，生成 Wave 2 清单 `temp/wave2_plan.md` (91 条) |
+| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | 已完成只读审计 | `temp/audit_1097.md`（491 有效修复 / 141 高优，仅 2 处路径重命名） |
 | Step 4 | `bun-v1.4.0..bun-v1.4.5` (1501 commits) | 待推进 | 小步快跑逐版本吸收至 CP 1.4.5 |
+
+## Step 2 Wave 1 已吸收修复摘要（`23427dbc12f..a215285063c`）
+- **解析/构建/字符串**：`#31010` & `#31234` (`SemverQuery.cp`)、`#31861` (`VLQ.cp`)、`#31700` & `#31435` (`fmt.cp`)、`#31239` (`parseStmt.cp`)、`#31304`/`#31275`/`#31280`/`#31305` (`css/*`)、`#33102` (`ParseTask.cp`)、`#31264` (`immutable.cp`)、`#31221` (`HashedString.cp`)、`#32774` (`LineOffsetTable.cp`)、`#31177` (`vendor/mimalloc/src/threadlocal.c`)、`#30875` (`transpiler.cp`/`ThreadPool.cp`/`bundle_v2.cp`)
+- **HTTP/Socket/WebCore/Crypto/S3**：`#32669` (`URLPath.cp`)、`#32661` & `#32735` (`NodeHTTPResponse.cp`)、`#34423` (`HTTPThread.cp`/`dns.cp`)、`#32702` (`http.cp`/`Headers.cp`)、`#33326` & `#33006` (`bun-usockets`/`main.cp`/`main_test.cp`)、`#32660` (`node/net.ts`)、`#33388` (`Handlers.cp`/`socket.cp`)、`#31029` (`s3/client.cp`)、`#34078` (`bsd.c`)、`#31959` (`ssl_wrapper.cp`)、`#33242` (`AsyncHTTP.cp`)、`#32597` (`Sink.cp`/`RequestContext.cp`/`generate-jssink.ts`)、`#32120` & `#31129` & `#31221` (`bun-uws`)、`#30875` (`http`/`HTTPThread`/`AsyncHTTP`/`websocket_client`/`WebSocketUpgradeClient`)、`#31283` (`CryptoHasher.cp`)、`#32758` (`JSCipherPrototype.cpp`)、`#32747` (`AbortSignal`/`JSAbortController`)、`#32590` & `#31221` (`SerializedScriptValue.cpp`)
+- **SQL/SQLite/Valkey**：`#34186` (`JSSQLStatement.cpp`)、`#32464` & `#34436` & `#32769` & `#31606` & `#31175` & `#33179` & `#33238` & `#30875` & `#31221`（Postgres/MySQL 协议边界、TLS 握手防注入、日期范围校验、缓存复用）、`#31129` (`valkey_protocol.cp`)
+- **Install/Shell/Glob/Patch/Archive/Timer/JSC/NAPI/Zlib**：`#33565` (`BunProcess.cpp` Linux `set*id` 防死锁)、`#31306` (`patch.cp`)、`#34131` (`napi.cpp`/`napi.cp`)、`#34140` (`NodeVMSourceTextModule`/`JSWorker`/`JSFFIFunction`/`Blob.cp`)、`#33131` (`Timer.cp`/`WTFTimer.cp`/`FakeTimers.cp`)、`#33145` & `#31129` & `#31221` (`resolve_path.cp`/`GlobWalker.cp`/`matcher.cp`)、`#32986`/`#32617`/`#33186`/`#33269`/`#32754`/`#31367`/`#34351`/`#31602`/`#32182`/`#32848`/`#31221` (`PipeReader`/`rm`/`seq`/`pm_pkg`/`subproc`/`Expansion`/`macho`/`install`/`TarballStream`/`PackageManager`/`bin`/`repository`/`bun.lock`/`libarchive`)、`#34035` (`DevServerSourceProvider.h`)、`#31646` (`BunClientData`)、`#31624` (`NodeVMSourceTextModule`)、`#31789` (`FormatStackTraceForJS`)、`#32671` (`MarkdownObject.cp`)、`#30875` (`ManagedTask.cp`/`event_loop.cp`)、`#31221` (`node_zlib_binding.cp`/`NativeBrotli`/`NativeZlib`/`NativeZstd`)

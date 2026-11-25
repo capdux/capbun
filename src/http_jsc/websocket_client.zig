@@ -1664,6 +1664,11 @@ pub fn deinit(self: *@This()) void {
                 _ = d.deinit();
             }
             self.deflate = null;
+            if (self.initial_data_handler) |handler| {
+                _ = &handler;
+                self.initial_data_handler = null;
+                _ = handler.deinit();
+            }
             _ = bun.destroy(self);
     }
 

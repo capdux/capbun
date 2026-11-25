@@ -436,10 +436,15 @@ pub union(enum) CssColor {
         if (_ == .rgba) return _.deepClone(allocator);
 
         const kind_bits = kind.asBits();
-        if (kind_bits == ColorFallbackKind.RGB.asBits()) return _.toRGB(allocator).?;
-        if (kind_bits == ColorFallbackKind.P3.asBits()) return _.toP3(allocator).?;
-        if (kind_bits == ColorFallbackKind.LAB.asBits()) return _.toLAB(allocator).?;
-        bun.unreachablePanic("Expected RGBA, P3, LAB fallback. This is a bug in Bun.", .{});
+        const converted: CssColor? = if (kind_bits == ColorFallbackKind.RGB.asBits())
+            _.toRGB(allocator)
+        else if (kind_bits == ColorFallbackKind.P3.asBits())
+            _.toP3(allocator)
+        else if (kind_bits == ColorFallbackKind.LAB.asBits())
+            _.toLAB(allocator)
+        else
+            bun.unreachablePanic("Expected RGBA, P3, LAB fallback. This is a bug in Bun.", .{});
+        return converted ?? _.deepClone(allocator);
     }
 
     fn getFallbacks(*_, allocator: Allocator, targets: css.targets.Targets): css.SmallList(CssColor, 2) {
@@ -448,14 +453,19 @@ pub union(enum) CssColor {
         let res = SmallCssColorList{};
 
         if (fallbacks.rgb) {
-            res.appendAssumeCapacity(_.toRGB(allocator).?);
+            if (rgb := _.toRGB(allocator)) {
+                res.appendAssumeCapacity(rgb);
+            }
         }
         if (fallbacks.p3) {
-            res.appendAssumeCapacity(_.toP3(allocator).?);
+            if (p3 := _.toP3(allocator)) {
+                res.appendAssumeCapacity(p3);
+            }
         }
         if (fallbacks.lab) {
-            const foo = _.toLAB(allocator).?;
-            _.* = foo;
+            if (lab := _.toLAB(allocator)) {
+                _.* = lab;
+            }
         }
         return res;
     }

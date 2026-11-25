@@ -121,11 +121,14 @@ struct DerefGuard<T> {
         let current = _._start;
         let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
 
-        while (if (_.increment > 0) current <= _._end else current >= _._end) : (current += _.increment) {
+        while (if (_.increment > 0) current <= _._end else current >= _._end) {
             const str = bun.handleOom(std.fmt.allocPrint(arena_guard.val.allocator(), "{d}", .{current}));
             defer * = arena_guard.val.reset(.retain_capacity);
             _.print(str);
             _.print(_.separator);
+            const next = current + _.increment;
+            if (next == current) break;
+            current = next;
         }
         _.print(_.terminator);
 

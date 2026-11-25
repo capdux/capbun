@@ -1200,8 +1200,11 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
             assignment_result.ensureStillAlive();
 
-            // assert that it was updated
-            assert(!sink_signal.isDead());
+            // assignToStream stored the controller's encoded JSValue in
+            // signal.ptr. If the stream already finished synchronously inside the
+            // call, controller.end()/.close() detached the controller and cleared
+            // the signal again (`__controllerDetached`), so the signal may be
+            // legitimately dead here.
 
             if (comptime Environment.allow_assert) {
                 if (App.Response.hasResponded(resp)) {

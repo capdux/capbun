@@ -116,6 +116,19 @@ bool ScriptExecutionContext::postTaskTo(ScriptExecutionContextIdentifier identif
     return true;
 }
 
+bool ScriptExecutionContext::postTaskTo(ScriptExecutionContextIdentifier identifier, NOESCAPE const WTF::Function<void()>& betweenLookupAndEnqueue, Function<void(ScriptExecutionContext&)>&& task)
+{
+    Locker locker { allScriptExecutionContextsMapLock };
+    auto* context = allScriptExecutionContextsMap().get(identifier);
+
+    if (!context)
+        return false;
+
+    betweenLookupAndEnqueue();
+    context->postTaskConcurrently(WTF::move(task));
+    return true;
+}
+
 void ScriptExecutionContext::didCreateDestructionObserver(ContextDestructionObserver& observer)
 {
 #if ASSERT_ENABLED

@@ -679,6 +679,9 @@ pub extern fn napi_define_properties(env: napi_env, object: napi_value, property
     }
     const result = result_.?;
     const value = value_.get();
+    if (value == .zero) {
+        return env.invalidArg();
+    }
     result.* = value.jsType().isArray();
     return env.ok();
 }
@@ -693,6 +696,9 @@ pub extern fn napi_define_properties(env: napi_env, object: napi_value, property
     }
     const result = result_.?;
     const value = value_.get();
+    if (value == .zero) {
+        return env.invalidArg();
+    }
 
     if (!value.jsType().isArray()) {
         return env.setLastError(.array_expected);
@@ -713,6 +719,9 @@ pub extern fn napi_define_properties(env: napi_env, object: napi_value, property
     const result = result_.?;
     const lhs = lhs_.get();
     const rhs = rhs_.get();
+    if (lhs == .zero || rhs == .zero) {
+        return env.invalidArg();
+    }
     result.* = lhs.isStrictEqual(rhs, env.toJS()) catch return env.setLastError(.pending_exception);
     return env.ok();
 }
@@ -920,6 +929,9 @@ pub extern fn napi_throw_range_error(env: napi_env, code: [*c]const u8, msg: [*c
     const env = env_.?;
     env.checkGC();
     const value = value_.get();
+    if (value == .zero) {
+        return env.invalidArg();
+    }
     result.* = value.isAnyError();
     return env.ok();
 }
@@ -937,6 +949,9 @@ pub extern fn napi_get_and_clear_last_exception(env: napi_env, result: *napi_val
     }
     const result = result_.?;
     const value = value_.get();
+    if (value == .zero) {
+        return env.invalidArg();
+    }
     result.* = !value.isNumber() && value.jsTypeLoose() == .ArrayBuffer;
     return env.ok();
 }
@@ -1028,6 +1043,9 @@ pub extern fn napi_create_dataview(env: napi_env, length: usize, arraybuffer: na
     }
     const result = result_.?;
     const value = value_.get();
+    if (value == .zero) {
+        return env.invalidArg();
+    }
     result.* = !value.isEmptyOrUndefinedOrNull() && value.jsTypeLoose() == .DataView;
     return env.ok();
 }
@@ -1046,6 +1064,9 @@ pub extern fn napi_create_dataview(env: napi_env, length: usize, arraybuffer: na
     const env = env_.?;
     env.checkGC();
     const dataview = dataview_.get();
+    if (dataview == .zero) {
+        return env.invalidArg();
+    }
     const array_buffer_opt = dataview.asArrayBuffer(env.toJS());
     if (array_buffer_opt == null) { return env.setLastError(.object_expected); }
     const array_buffer = array_buffer_opt.?;
@@ -1171,6 +1192,9 @@ pub extern fn napi_adjust_external_memory(env: napi_env, change_in_bytes: i64, a
     }
     const is_date = is_date_.?;
     const value = value_.get();
+    if (value == .zero) {
+        return env.invalidArg();
+    }
     is_date.* = value.jsTypeLoose() == .JSDate;
     return env.ok();
 }

@@ -344,10 +344,18 @@ pub struct Context {
         const level = validators.validateInt32(globalThis, arguments[1], "level", {}, null, null)?;
         const memLevel = validators.validateInt32(globalThis, arguments[2], "memLevel", {}, null, null)?;
         const strategy = validators.validateInt32(globalThis, arguments[3], "strategy", {}, null, null)?;
-        const writeResultAb = arguments[4].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("writeResult", "TypedArray", arguments[4]);
-        const writeResult = writeResultAb.asU32().ptr;
+        const writeResult_value = arguments[4];
+        const writeResultAb = writeResult_value.asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value);
+        if (writeResultAb.typed_array_type != .Uint32Array) {
+            return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value);
+        }
+        const writeResult_slice = writeResultAb.asU32();
+        if (writeResult_slice.len < 2) {
+            return globalThis.ERR(.INVALID_ARG_VALUE, "writeResult must be a Uint32Array with at least 2 elements", .{}).throw();
+        }
+        const writeResult = writeResult_slice.ptr;
         const writeCallback = validators.validateFunction(globalThis, "writeCallback", arguments[5])?;
-        const dictionary: ([]u8)? = if (arguments[6].isUndefined()) null else (arguments[6].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("dictionary", "TypedArray", arguments[6])).byteSlice();
+        const dictionary: ([]u8)? = if (arguments[6].isUndefined()) null else (arguments[6].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("dictionary", "Buffer, TypedArray, or DataView", arguments[6])).byteSlice();
 
         _.write_result = writeResult;
         js.writeCallbackSetCached(this_value, globalThis, writeCallback.withAsyncContextIfNeeded(globalThis));

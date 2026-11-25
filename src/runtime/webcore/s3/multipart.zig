@@ -564,9 +564,12 @@ var slice: []const u8 = response.body.list.items;
             upload.uploadid_buffer = response.body;
             if (strings.indexOf(slice, "<UploadId>")) |start| {
                 _ = &start;
+                const value_start = (start + "<UploadId>".len);
                 if (strings.indexOf(slice, "</UploadId>")) |end| {
                     _ = &end;
-                    upload.upload_id = slice[(start + 10)..end];
+                    if ((end >= value_start)) {
+                        upload.upload_id = slice[value_start..end];
+                    }
                 }
             }
             if ((upload.upload_id.len == 0)) {

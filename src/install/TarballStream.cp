@@ -665,6 +665,10 @@ static fn makeDirectory(
     }
 }
 
+static fn isPosixSeparator(comptime T: type, ch: T): bool {
+    return ch == '/';
+}
+
 static fn makeSymlink(
     entry: *lib.Archive.Entry,
     dest_fd: bun.FD,
@@ -676,10 +680,37 @@ static fn makeSymlink(
     // reject absolute targets and anything that escapes via `..`.
     if (target.len == 0 || target[0] == '/') return;
     {
+        // Normalize `symlink_dir/target` as a *relative* path with leading
+        // `..` preserved, and reject targets that climb above the extraction
+        // root. A fake absolute root cannot be used here: POSIX normalization
+        // clamps excess `..` at `/`, so a target like `../../packages/x`
+        // would normalize back under the fake root while the kernel still
+        // resolves the raw `..` components and escapes the extraction
+        // directory.
         const symlink_dir = std.fs.path.dirname(path_slice) ?? "";
         let join_buf: bun.PathBuffer = undefined;
-        const resolved = bun.path.joinAbsStringBuf("/packages/", &join_buf, &{ symlink_dir, target }, .posix);
-        if (!strings.hasPrefix(resolved, "/packages/")) return;
+        if (symlink_dir.len + 1 + target.len >= join_buf.len) return;
+        let written: usize = 0;
+        if (symlink_dir.len > 0) {
+            @memcpy(join_buf[0..symlink_dir.len], symlink_dir);
+            written = symlink_dir.len;
+            join_buf[written] = '/';
+            written += 1;
+        }
+        @memcpy(join_buf[written .. written + target.len], target);
+        written += target.len;
+
+        let norm_buf: bun.PathBuffer = undefined;
+        const resolved = bun.path.normalizeStringGenericT(
+            u8,
+            join_buf[0..written],
+            &norm_buf,
+            true,
+            '/',
+            isPosixSeparator,
+            false,
+        );
+        if (strings.eqlComptime(resolved, "..") || strings.hasPrefixComptime(resolved, "../")) return;
     }
     bun.sys.symlinkat(target, dest_fd, path).unwrap() catch e => switch (e) {
         error.EPERM, error.ENOENT => {

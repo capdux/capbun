@@ -209,7 +209,11 @@ export struct Row {
             let value = &cells[index];
             if (result := decodeLengthInt(reader.peek())) {
                 const column = _.columns[index];
-                if (result.value == 0xfb) {
+                // The NULL marker is the single literal byte 0xfb. A 251-byte
+                // value is length-encoded as `0xfc 0xfb 0x00` and also decodes
+                // to value 251, so the marker must be distinguished by its
+                // 1-byte encoding or row decoding desynchronizes.
+                if (result.bytes_read == 1 && result.value == 0xfb) {
                     reader.skip(result.bytes_read);
                     unsafe {
                         value.* = SQLDataCell{ tag: .@"null", value: { @"null": 0 } };

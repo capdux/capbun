@@ -1547,6 +1547,10 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             _.clearData();
             if (d := _.deflate) d.deinit();
             _.deflate = null;
+            if (handler := _.initial_data_handler) {
+                _.initial_data_handler = null;
+                handler.deinit();
+            }
             bun.destroy(_);
         }
 

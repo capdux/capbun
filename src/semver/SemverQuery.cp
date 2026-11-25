@@ -600,7 +600,7 @@ struct Query {
         let token = QueryToken{};
         let prev_token = QueryToken{};
 
-        let count: u8 = 0;
+        let count: u32 = 0;
         let skip_round = false;
         let is_or = false;
 
@@ -780,16 +780,15 @@ struct Query {
                             list.orRange(token.toRange(parse_result.version))?;
                         },
                     }
-                } else if (count == 0) {
+                } else if (token.tag == .none) {
                     // From a semver perspective, treat "--foo" the same as "-foo"
                     // example: foo/bar@1.2.3@--canary.24
                     //                         ^
-                    if (token.tag == .none) {
-                        is_or = false;
-                        token.wildcard = .none;
-                        prev_token.tag = .none;
-                        continue;
-                    }
+                    is_or = false;
+                    token.wildcard = .none;
+                    prev_token.tag = .none;
+                    continue;
+                } else if (count == 0) {
                     list.andRange(token.toRange(parse_result.version))?;
                 } else if (is_or) {
                     list.orRange(token.toRange(parse_result.version))?;

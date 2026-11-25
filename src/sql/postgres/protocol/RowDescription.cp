@@ -26,15 +26,20 @@ pub struct FieldsErrGuard {
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
-        let remaining_bytes = reader.length()?;
-        remaining_bytes = remaining_bytes -| 4;
+        let remaining_bytes: usize = @intCast((reader.length()?) - 4);
+        if (remaining_bytes < 2) return err.InvalidMessage;
+        remaining_bytes -= 2;
 
-        const field_count: usize = @intCast(@max(reader.short()?, 0));
+        const field_count: usize = @intCast(reader.short()?);
+        if (field_count > remaining_bytes) return err.InvalidMessage;
         let fields_guard = FieldsErrGuard{
             fields: bun.default_allocator.alloc(FieldDescription, field_count)?,
         };
         while (fields_guard.initialized < field_count) {
-            fields_guard.fields[fields_guard.initialized].decodeInternal(Container, reader)?;
+            fields_guard.fields[fields_guard.initialized].decodeInternal(Container, reader) catch e => {
+                if (e == error.ShortRead) return err.InvalidMessage;
+                return e;
+            };
             fields_guard.initialized += 1;
         }
         unsafe {

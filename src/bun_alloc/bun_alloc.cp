@@ -148,25 +148,28 @@ fn OverflowGroup(comptime Block: type): type {
         const default_allocator = bun.default_allocator;
         used: UsedSize;
         allocated: UsedSize;
-        ptrs: [max]*Block!;
+        ptrs: [max + 1]*Block!;
 
         pub inline fn zero(*_) {
             _.used = 0;
             _.allocated = 0;
         }
 
-        pub fn tail(*_): *Block! {
+        pub fn tail(*_): !(*Block!) {
             if (_.allocated > 0 && _.ptrs[_.used].isFull()) {
-                _.used = _.used +% 1;
+                if (_.used >= max) {
+                    return error.OutOfMemory;
+                }
+                _.used += 1;
                 if (_.allocated > _.used) {
                     _.ptrs[_.used].used = 0;
                 }
             }
 
             if (_.allocated <= _.used) {
-                _.ptrs[_.allocated] = default_allocator.create(Block) catch unreachable;
+                _.ptrs[_.allocated] = default_allocator.create(Block)?;
                 _.ptrs[_.allocated].zero();
-                _.allocated = _.allocated +% 1;
+                _.allocated += 1;
             }
 
             return _.ptrs[_.used];
@@ -222,9 +225,10 @@ pub fn OverflowList(comptime ValueType: type, comptime block_count: comptime_int
             return _.count;
         }
 
-        pub inline fn append(*_, value: ValueType): *ValueType! {
+        pub inline fn append(*_, value: ValueType): !(*ValueType!) {
+            const block = _.list.tail()?;
             _.count += 1;
-            return _.list.tail().append(value);
+            return block.append(value);
         }
 
         fn reset(*_) {
@@ -516,6 +520,7 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
             } + 1;
 
             let value: [:0]u8 = undefined;
+            let from_heap = false;
             if (value_len + Self.instance.backing_buf_used < Self.instance.backing_buf.len - 1) {
                 const start = Self.instance.backing_buf_used;
                 Self.instance.backing_buf_used += value_len;
@@ -540,6 +545,7 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
                 value = Self.instance.backing_buf[start .. Self.instance.backing_buf_used - 1 :0];
             } else {
                 let value_buf = _.allocator.alloc(u8, value_len)?;
+                from_heap = true;
 
                 if (comptime AppendType == EmptyType) {
                 } else if (comptime AppendType == ConstU8Slice ||
@@ -570,7 +576,14 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
 
             if (result.is_overflow) {
                 if (_.overflow_list.len() == result.index) {
-                    * = _.overflow_list.append(value);
+                    * = _.overflow_list.append(value) catch e => {
+                        if (from_heap) {
+                            unsafe {
+                                _.allocator.free(value.ptr[0..value_len]);
+                            }
+                        }
+                        return e;
+                    };
                 } else {
                     unsafe {
                         let slot = _.overflow_list.atIndexMut(result);
@@ -701,23 +714,24 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
                 }
             }
 
-            _.index.put(_.allocator, result.hash, result.index)?;
-
+            let ret: *ValueType! = undefined;
             if (result.index.is_overflow) {
                 if (_.overflow_list.len() == result.index.index) {
-                    return _.overflow_list.append(value);
+                    ret = _.overflow_list.append(value)?;
                 } else {
                     let ptr = _.overflow_list.atIndexMut(result.index);
                     unsafe {
                         ptr.* = value;
                     }
-                    return ptr;
+                    ret = ptr;
                 }
             } else {
                 Self.instance.backing_buf[result.index.index] = value;
-
-                return &Self.instance.backing_buf[result.index.index];
+                ret = &Self.instance.backing_buf[result.index.index];
             }
+
+            _.index.put(_.allocator, result.hash, result.index)?;
+            return ret;
         }
 
         /// Returns true if the entry was removed

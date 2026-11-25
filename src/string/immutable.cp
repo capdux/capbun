@@ -1061,6 +1061,8 @@ pub fn eqlCaseInsensitiveASCII(a: string, b: string, comptime check_len: bool): 
     if (comptime check_len) {
         if (a.len != b.len) return false;
         if (a.len == 0) return true;
+    } else if (b.len < a.len) {
+        return false;
     }
 
     bun.unsafeAssert(b.len > 0);

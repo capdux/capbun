@@ -341,6 +341,9 @@ const from_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rena
 return e.withoutPath();
 },
 });
+                    if ((((abs_patch_dir.len + 1) + todir.len) >= (bun.MAX_PATH_BYTES - 2))) {
+                        return bun.sys.Error.fromCode(.NAMETOOLONG, .mkdir);
+                    }
                     const path_to_make = bun.path.joinZ((&.{ abs_patch_dir, todir }), .auto);
                     var nodefs = bun.api.node.fs.NodeFS{  };
                     _ = &nodefs;

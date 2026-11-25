@@ -914,10 +914,7 @@ pub fn installWithManager(
 
     // It's unnecessary work to re-save the lockfile if there are no changes
     const should_save_lockfile =
-        (load_result == .ok && ((load_result.ok.format == .binary && save_format == .text) ||
-
-            // make sure old versions are updated
-            load_result.ok.format == .text && save_format == .text && manager.lockfile.text_lockfile_version != TextLockfile.Version.current)) ||
+        (load_result == .ok && (load_result.ok.format == .binary && save_format == .text)) ||
 
         // check `save_lockfile` after checking if loaded from binary and save format is text
         // because `save_lockfile` is set to false for `--frozen-lockfile`

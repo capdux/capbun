@@ -154,7 +154,12 @@ pub fn SSLWrapper(comptime T: type): type {
 
         fn shutdown(*_, fast_shutdown: bool): bool {
             const ssl = _.ssl ?? return false;
-            if (_.flags.sent_ssl_shutdown || _.flags.fatal_error) return _.flags.received_ssl_shutdown;
+            if (_.flags.sent_ssl_shutdown || _.flags.fatal_error) {
+                if (fast_shutdown) {
+                    _.triggerCloseCallback();
+                }
+                return _.flags.received_ssl_shutdown;
+            }
 
             const ret = BoringSSL.SSL_shutdown(ssl);
             if (fast_shutdown) {

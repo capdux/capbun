@@ -1254,7 +1254,8 @@ fn runWithSourceCode(
         expected_tag: debug_original_variant_check,
     };
 
-    const will_close_file_descriptor = task.contents_or_fd == .fd &&
+    const opened_own_fd = task.contents_or_fd == .fd && !task.contents_or_fd.fd.file.isValid();
+    const will_close_file_descriptor = opened_own_fd &&
         entry.fd.isValid() &&
         entry.fd.stdioTag() == null &&
         worker.ctx.bun_watcher == null;

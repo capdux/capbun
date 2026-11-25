@@ -425,6 +425,7 @@ pub inline fn getonDependencyError(self: WakeHandler) OnDepErrFn {
 
 pub const Holder = struct {
     pub var ptr: *PackageManager = undefined;
+    pub var initialized: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 };
 
 pub const EnsureTempNodeGypScriptOnce_ = struct {
@@ -671,6 +672,12 @@ pub fn clearCachedItemsDependingOnLockfileBuffer(client: *PackageManager) void {
         client.root_package_id.id = null;
 }
 
+pub fn deinitCaches(client: *PackageManager) void {
+        _ = client.workspace_package_json_cache.map.deinit(client.allocator);
+        client.workspace_package_json_cache = .{};
+        client.update_requests = &.{};
+}
+
 pub fn crash(client: *PackageManager) noreturn {
         if ((client.options.log_level != .silent)) {
             _ = (blk_catch_6: { break :blk_catch_6 ((client.log.print(Output.errorWriter())) catch |__ce_6| { _ = &__ce_6;  }); });
@@ -731,8 +738,16 @@ pub inline fn cached_package_folder_name_buf() *bun.PathBuffer {
         return (&cached_package_folder_name_bufs.get().buf);
 }
 
+pub fn deinitCachesAtExit() callconv(.c) void {
+        if ((!Holder.initialized.load(.acquire))) {
+            return;
+        }
+        _ = Holder.ptr.deinitCaches();
+}
+
 pub fn allocatePackageManager() void {
         Holder.ptr = bun.handleOom(bun.default_allocator.create(PackageManager));
+        _ = bun.Global.addExitCallback((&deinitCachesAtExit));
 }
 
 pub fn get() *PackageManager {
@@ -1101,6 +1116,7 @@ else => null,
         }
         break :brk @truncate(@as(u64, @intCast(@max(std.time.timestamp(), 0))));
 };
+        _ = Holder.initialized.store(true, .release);
         return .{ manager, original_cwd_clone };
 }
 
@@ -1166,4 +1182,5 @@ _ = manager.lockfile.initEmpty(allocator);
         } else {
             _ = manager.lockfile.initEmpty(allocator);
         }
+        _ = Holder.initialized.store(true, .release);
 }

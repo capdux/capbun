@@ -451,6 +451,10 @@ struct ParseRenderer {
     }
 
     fn deinit(*_) {
+        for (entry of _.#stack.items) {
+            if (entry.detail.href.len > 0) bun.default_allocator.free(entry.detail.href);
+            if (entry.detail.title.len > 0) bun.default_allocator.free(entry.detail.title);
+        }
         _.#stack.deinit(bun.default_allocator);
         _.#heading_tracker.deinit(bun.default_allocator);
     }
@@ -678,9 +682,28 @@ struct ParseRenderer {
         const r: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
 
-        const array = JSValue.createEmptyArray(r.#globalObject, 0)?;
+        let owned_detail = detail;
+        if (detail.href.len > 0) {
+            owned_detail.href = bun.default_allocator.dupe(u8, detail.href) catch return r.#globalObject.throwOutOfMemory();
+        }
+        if (detail.title.len > 0) {
+            owned_detail.title = bun.default_allocator.dupe(u8, detail.title) catch {
+                if (detail.href.len > 0) bun.default_allocator.free(owned_detail.href);
+                return r.#globalObject.throwOutOfMemory();
+            };
+        }
+
+        const array = JSValue.createEmptyArray(r.#globalObject, 0) catch {
+            if (owned_detail.href.len > 0) bun.default_allocator.free(owned_detail.href);
+            if (owned_detail.title.len > 0) bun.default_allocator.free(owned_detail.title);
+            return error.OutOfMemory;
+        };
         r.#marked_args.append(array);
-        r.#stack.append(bun.default_allocator, { children: array, detail: detail })?;
+        r.#stack.append(bun.default_allocator, { children: array, detail: owned_detail }) catch {
+            if (owned_detail.href.len > 0) bun.default_allocator.free(owned_detail.href);
+            if (owned_detail.title.len > 0) bun.default_allocator.free(owned_detail.title);
+            return error.OutOfMemory;
+        };
     }
 
     static fn leaveSpanImpl(ptr: *!, span_type: md.SpanType): bun.JSError!void {
@@ -689,6 +712,10 @@ struct ParseRenderer {
 
         if (r.#stack.items.len <= 1) return;
         const entry = r.#stack.pop().?;
+        defer {
+            if (entry.detail.href.len > 0) bun.default_allocator.free(entry.detail.href);
+            if (entry.detail.title.len > 0) bun.default_allocator.free(entry.detail.title);
+        }
         const g = r.#globalObject;
 
         const tag_index = getSpanTypeTag(span_type);
@@ -904,6 +931,8 @@ struct JsCallbackRenderer {
     fn deinit(*_) {
         for (*entry of _.#stack.items) {
             entry.buffer.deinit(_.#allocator);
+            if (entry.detail.href.len > 0) _.#allocator.free(entry.detail.href);
+            if (entry.detail.title.len > 0) _.#allocator.free(entry.detail.title);
         }
         _.#stack.deinit(_.#allocator);
         _.#heading_tracker.deinit(_.#allocator);
@@ -936,6 +965,10 @@ struct JsCallbackRenderer {
         if (_.#stack.items.len <= 1) return; // don't pop root
         let entry = _.#stack.pop().?;
         const _g_entry_buf = DeinitWithAllocGuard<@TypeOf(entry.buffer)>{ ptr: &entry.buffer, alloc: _.#allocator };
+        defer {
+            if (entry.detail.href.len > 0) _.#allocator.free(entry.detail.href);
+            if (entry.detail.title.len > 0) _.#allocator.free(entry.detail.title);
+        }
 
         const children = entry.buffer.items;
 
@@ -1023,7 +1056,21 @@ struct JsCallbackRenderer {
     static fn enterSpanImpl(ptr: *!, unused_span: md.SpanType, detail: md.SpanDetail): bun.JSError!void {
         const r: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
         if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
-        r.#stack.append(r.#allocator, { detail: detail })?;
+        let owned_detail = detail;
+        if (detail.href.len > 0) {
+            owned_detail.href = r.#allocator.dupe(u8, detail.href) catch return r.#globalObject.throwOutOfMemory();
+        }
+        if (detail.title.len > 0) {
+            owned_detail.title = r.#allocator.dupe(u8, detail.title) catch {
+                if (detail.href.len > 0) r.#allocator.free(owned_detail.href);
+                return r.#globalObject.throwOutOfMemory();
+            };
+        }
+        r.#stack.append(r.#allocator, { detail: owned_detail }) catch {
+            if (owned_detail.href.len > 0) r.#allocator.free(owned_detail.href);
+            if (owned_detail.title.len > 0) r.#allocator.free(owned_detail.title);
+            return error.OutOfMemory;
+        };
     }
 
     static fn leaveSpanImpl(ptr: *!, span_type: md.SpanType): bun.JSError!void {

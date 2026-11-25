@@ -70,7 +70,8 @@ pub fn encodeSlowPath(value: i32): VLQ {
     if (value >= 0) {
         vlq = (value as u32) << 1;
     } else {
-        vlq = (((-value) as u32) << 1) | 1;
+        // Sign-magnitude: i32 min wraps to "-0" without panicking on negation in crash handler
+        vlq = (@as(u32, @abs(value)) << 1) | 1;
     }
 
     for (let step of 0..7) {

@@ -923,7 +923,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                     i += 2;
 
                     while (i < txt.len && txt[i] != '}') {
-                        if (txt[i] == 0x5C) {
+                        if (i + 1 < txt.len && txt[i] == 0x5C) {
                             i += 1;
                         }
                         i += 1;
@@ -984,6 +984,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
             return false;
         } else if (opts.redact_sensitive_information) {
             try_redact: {
+                if (i == 0) break :try_redact;
                 let inner: string = txt[1..i];
                 if (inner.len > 0 && inner[inner.len - 1] == char) {
                     inner = inner[0 .. inner.len - 1];
@@ -1110,7 +1111,9 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                         txt = txt[1..];
                     }
 
-                    if (txt.len > 0 && (txt[0] == '=' || txt[0] == ':')) {
+                    if (txt.len == 0) return;
+
+                    if (txt[0] == '=' || txt[0] == ':') {
                         writer.writeByte(txt[0])?;
                         txt = txt[1..];
                         while (txt.len > 0 && std.ascii.isWhitespace(txt[0])) {

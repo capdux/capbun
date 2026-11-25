@@ -6420,6 +6420,9 @@ pub inline fn fract(val: f32) f32 {
 pub fn f32_length_with_5_digits(n_input: f32) usize {
         var n = std.math.round((n_input * 100000.0));
         _ = &n;
+        if ((!std.math.isFinite(n))) {
+            return std.math.maxInt(usize);
+        }
         var count: usize = 0;
         _ = &count;
         var i: usize = 0;

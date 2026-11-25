@@ -341,7 +341,6 @@ pub enum QueryStatus: u8 {
         }
         let connection = connection_opt.?;
 
-        connection.poll_ref.ref(globalObject.bunVM());
         let query = arguments[1];
 
         if (!query.isObject()) {
@@ -395,6 +394,7 @@ pub enum QueryStatus: u8 {
 
                 return globalObject.throwOutOfMemory();
             };
+            connection.poll_ref.ref(globalObject.bunVM());
 
             _.thisValue.upgrade(globalObject);
             js.targetSetCached(this_value, globalObject, query);
@@ -424,6 +424,7 @@ pub enum QueryStatus: u8 {
             if (!connection.flags.use_unnamed_prepared_statements) {
                 const entry = connection.statements.getOrPut(bun.default_allocator, signature_hash) catch e => {
                     signature.deinit();
+                    _.deref();
                     return globalObject.throwError(e, "failed to allocate statement");
                 };
                 connection_entry_value = entry.value_ptr;
@@ -523,6 +524,11 @@ pub enum QueryStatus: u8 {
                             * = connection.statements.remove(signature_hash);
                         }
                         signature.deinit();
+                        if (stmt := _.statement) {
+                            _.statement = null;
+                            stmt.deref();
+                        }
+                        _.deref();
                         if (!globalObject.hasException()) {
                             return globalObject.throwValue(postgresErrorToJS(globalObject, "failed to flush", e));
                         }
@@ -564,7 +570,15 @@ pub enum QueryStatus: u8 {
             }
         }
 
-        connection.requests.writeItem(_) catch return globalObject.throwOutOfMemory();
+        connection.requests.writeItem(_) catch {
+            if (stmt := _.statement) {
+                _.statement = null;
+                stmt.deref();
+            }
+            _.deref();
+            return globalObject.throwOutOfMemory();
+        };
+        connection.poll_ref.ref(globalObject.bunVM());
         _.thisValue.upgrade(globalObject);
 
         js.targetSetCached(this_value, globalObject, query);

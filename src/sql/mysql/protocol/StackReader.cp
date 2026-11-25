@@ -24,7 +24,8 @@ const NewReader = NewReaderMod.NewReader;
     }
 
     pub static fn ensureCapacity(r: StackReader, length: usize): bool {
-        return r.buffer.len >= (unsafe { r.offset.* } + length);
+        const end = std.math.add(usize, unsafe { r.offset.* }, length) catch return false;
+        return r.buffer.len >= end;
     }
 
     pub static fn init(buffer: []const u8, offset: *usize, message_start: *usize): NewReader(StackReader) {

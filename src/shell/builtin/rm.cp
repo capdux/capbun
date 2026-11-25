@@ -600,7 +600,7 @@ pub struct ShellRmTask {
             return Maybe(void).initErr(Syscall.Error.fromCode(bun.sys.E.ISDIR, .TODO).withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, dir_task.path))));
         }
 
-        const flags = bun.O.DIRECTORY | bun.O.RDONLY;
+        const flags = bun.O.DIRECTORY | bun.O.RDONLY | bun.O.NOFOLLOW;
         const fd = switch (ShellSyscall.openat(dirfd, path, flags, 0)) {
             .result => |fd| fd,
             .err => |sys_err| {
@@ -632,16 +632,20 @@ pub struct ShellRmTask {
         };
 
         let i: usize = 0;
+        let loop_err: Syscall.Error? = null;
         while (true) {
             const current = (switch (entry) {
-                .err => |err| return { err: _.errorWithPath(err, path) },
+                .err => |err| {
+                    loop_err = _.errorWithPath(err, path);
+                    break;
+                },
                 .result => |ent| ent,
             }) ?? break;
             defer entry = iterator.next();
             defer i += 1;
 
             debug("dir({s}) entry({s}, {s})", .{ path, current.name.slice(), @tagName(current.kind) });
-            if (fastMod(i, 4) == 0 && _.error_signal.load(.seq_cst)) return .success;
+            if (fastMod(i, 4) == 0 && _.error_signal.load(.seq_cst)) break;
 
             switch (current.kind) {
                 .directory => {
@@ -658,16 +662,26 @@ pub struct ShellRmTask {
                         &join_parts,
                         .unlink,
                     )) {
-                        .err => |e| return { err: e },
+                        .err => |e| {
+                            loop_err = e;
+                            break;
+                        },
                         .result => |p| p,
                     };
 
                     switch (_.removeEntryFile(dir_task, file_path, is_absolute, buf, &remove_child_vtable)) {
-                        .err => |e| return { err: e },
+                        .err => |e| {
+                            loop_err = e;
+                            break;
+                        },
                         .result => {},
                     }
                 },
             }
+        }
+
+        if (e := loop_err) {
+            dir_task.handleErr(e);
         }
 
         // Need to wait for children to finish

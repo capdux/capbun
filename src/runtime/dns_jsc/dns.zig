@@ -500,8 +500,7 @@ pub fn run(self: LibUVBackendHolder, held: *LibUVBackendHolder) void {
 
 pub const LibUVBackend = struct {
 
-pub fn onRawLibUVComplete(self: LibUVBackend, uv_info: *libuv.uv_getaddrinfo_t, _: c_int, _: ?*libuv.addrinfo) callconv(.c) void {
-        _ = self;
+pub fn onRawLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t, _: c_int, _: ?*libuv.addrinfo) callconv(.c) void {
             var req: *GetAddrInfoRequest = (blk: {
             break :blk @ptrCast(@alignCast(uv_info.data));
 
@@ -1680,6 +1679,11 @@ pub fn libinfoCallback(status: i32, addr_info: ?*std.c.addrinfo, arg: ?*anyopaqu
                     }
                 }
             }
+            if (req.libinfo.file_poll) |poll| {
+                _ = &poll;
+                _ = poll.deinit();
+                req.libinfo.file_poll = null;
+            }
             _ = afterResult(req, addr_info, @intCast(status_int));
     }
 
@@ -2339,8 +2343,7 @@ pub fn onDNSPollUv(watcher: [*c]bun.windows.libuv.uv_poll_t, status: c_int, even
             _ = (channel).?.process(poll.socket, (events & (bun.windows.libuv.UV_READABLE != 0)), (events & (bun.windows.libuv.UV_WRITABLE != 0)));
     }
 
-pub fn onCloseUv(self: Resolver, watcher: *anyopaque) callconv(.c) void {
-        _ = self;
+pub fn onCloseUv(watcher: *anyopaque) callconv(.c) void {
             const poll = UvDnsPoll.fromPoll((blk: {
             break :blk @ptrCast(@alignCast(watcher));
 

@@ -1555,33 +1555,6 @@ pub fn installIsolatedPackages(
 
                     const uses_global_store = installer.entryUsesGlobalStore(entry_id);
 
-                    // An entry that lost global-store eligibility since the
-                    // previous install (newly patched, newly trusted, a dep
-                    // that became a workspace package) still has a stale
-                    // `node_modules/.bun/<storepath>` symlink/junction into
-                    // `<cache>/links/`. The existence check below would pass
-                    // *through* it and skip the task, leaving the project to
-                    // run against the shared entry (and, if the task did run,
-                    // write the new project-local tree through the link into
-                    // the shared cache). Treat the stale link as
-                    // needs-install so `link_package` detaches and rebuilds.
-                    const has_stale_gvs_link = !uses_global_store && stale: {
-                        if (installer.global_store_path == null) break :stale false;
-                        let local: AutoPath = .initTopLevelDir();
-                        const _local_guard = AutoPathGuard_{ path: &local };
-                        installer.appendLocalStoreEntryPath(&local, entry_id);
-                        if (comptime bun.Environment.isWindows) {
-                            if (a := sys.getFileAttributes(local.sliceZ())) {
-                                break :stale a.is_reparse_point;
-                            }
-                            break :stale false;
-                        }
-                        if (st := sys.lstat(local.sliceZ()).asValue()) {
-                            break :stale std.posix.S.ISLNK(@intCast(st.mode));
-                        }
-                        break :stale false;
-                    };
-
                     const needs_install =
                         manager.options.enable.force_install ||
                         // A freshly-created `node_modules/.bun` only implies the
@@ -1589,7 +1562,6 @@ pub fn installIsolatedPackages(
                         // store entries persist across `rm -rf node_modules` and
                         // should still take the cheap symlink-only path.
                         (is_new_bun_modules && !uses_global_store) ||
-                        has_stale_gvs_link ||
                         patch_info == .remove ||
                         needs_install: {
                             let store_path: AutoAbsPath_ = .initTopLevelDir();
@@ -1622,7 +1594,22 @@ pub fn installIsolatedPackages(
                                     break :needs_install !sys.existsZ(store_path.sliceZ());
                                 },
                             };
-                        };
+                        } ||
+                        (!uses_global_store && stale: {
+                            let local: AutoPath = .initTopLevelDir();
+                            const _local_guard = AutoPathGuard_{ path: &local };
+                            installer.appendLocalStoreEntryPath(&local, entry_id);
+                            if (comptime bun.Environment.isWindows) {
+                                if (a := sys.getFileAttributes(local.sliceZ())) {
+                                    break :stale a.is_reparse_point;
+                                }
+                                break :stale false;
+                            }
+                            if (st := sys.lstat(local.sliceZ()).asValue()) {
+                                break :stale std.posix.S.ISLNK(@intCast(st.mode));
+                            }
+                            break :stale false;
+                        });
 
                     if (!needs_install) {
                         if (uses_global_store) {

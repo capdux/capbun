@@ -276,6 +276,12 @@ pub fn clearCachedItemsDependingOnLockfileBuffer(client: *PackageManager) {
     client.root_package_id.id = null;
 }
 
+pub fn deinitCaches(client: *PackageManager) {
+    client.workspace_package_json_cache.map.deinit(client.allocator);
+    client.workspace_package_json_cache = .{};
+    client.update_requests = [];
+}
+
 pub fn crash(client: *PackageManager): noreturn {
     if (client.options.log_level != .silent) {
         client.log.print(Output.errorWriter()) catch {};
@@ -442,10 +448,17 @@ pub inline fn cached_package_folder_name_buf(): *bun.PathBuffer {
 
 struct Holder {
     static let ptr: *PackageManager = undefined;
+    static let initialized: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+}
+
+@c fn deinitCachesAtExit() {
+    if (!Holder.initialized.load(.acquire)) return;
+    Holder.ptr.deinitCaches();
 }
 
 pub fn allocatePackageManager() {
     Holder.ptr = bun.handleOom(bun.default_allocator.create(PackageManager));
+    bun.Global.addExitCallback(&deinitCachesAtExit);
 }
 
 pub fn get(): *PackageManager {
@@ -985,6 +998,7 @@ pub fn init(
 
         break :brk @truncate(@as(u64, @intCast(@max(std.time.timestamp(), 0))));
     };
+    Holder.initialized.store(true, .release);
     return .{
         manager,
         original_cwd_clone,
@@ -1119,6 +1133,7 @@ pub fn initWithRuntimeOnce(
     } else {
         manager.lockfile.initEmpty(allocator);
     }
+    Holder.initialized.store(true, .release);
 }
 let cwd_buf: bun.PathBuffer = undefined;
 let root_package_json_path_buf: bun.PathBuffer = undefined;

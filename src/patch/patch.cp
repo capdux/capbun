@@ -124,6 +124,9 @@ pub struct PatchFile {
                             .result p => p,
                             .err e => return e.withoutPath(),
                         };
+                        if (abs_patch_dir.len + 1 + todir.len >= bun.MAX_PATH_BYTES - 2) {
+                            return bun.sys.Error.fromCode(.NAMETOOLONG, .mkdir);
+                        }
                         const path_to_make = bun.path.joinZ(&[
                             abs_patch_dir,
                             todir,

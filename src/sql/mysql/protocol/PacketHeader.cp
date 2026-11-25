@@ -3,6 +3,10 @@
     sequence_id: u8,
 
     pub const size = 4;
+    /// The header's length field is 24 bits. A single packet's payload must be
+    /// strictly smaller than this; a length of exactly 0xFFFFFF signals a
+    /// multi-packet continuation.
+    pub const MAX_PAYLOAD_LENGTH: usize = 0xFF_FF_FF;
 
     pub static fn decode(bytes: []const u8): PacketHeader? {
         if (bytes.len < 4) return null;

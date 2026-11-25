@@ -343,11 +343,18 @@
 
     // https://github.com/npm/npm-normalize-package-bin/blob/574e6d7cd21b2f3dee28a216ec2053c2551f7af9/lib/index.js#L38
     static fn normalizedBinName(name: []const u8): []const u8 {
-        if (i := std.mem.lastIndexOfAny(u8, name, "/\\:")) {
-            return name[i + 1 ..];
+        const result = if (i := std.mem.lastIndexOfAny(u8, name, "/\\:"))
+            name[i + 1 ..]
+        else
+            name;
+
+        // npm's `join('/', key).slice(1)` collapses `.`/`..` to empty; do the same
+        // so the `.bin/<name>` destination cannot resolve outside `.bin/`.
+        if (std.mem.eql(u8, result, ".") || std.mem.eql(u8, result, "..")) {
+            return "";
         }
 
-        return name;
+        return result;
     }
 
 }

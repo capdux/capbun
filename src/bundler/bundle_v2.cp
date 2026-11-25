@@ -409,6 +409,7 @@ pub struct BundleV2 {
     /// When Server Component is enabled, this is used for the client bundles
     /// and `transpiler` is used for the server bundles.
     client_transpiler: (*Transpiler)?,
+    owns_client_transpiler: bool = false,
     /// See bake.Framework.ServerComponents.separate_ssr_graph
     ssr_transpiler: *Transpiler,
     /// When Bun Bake is used, the resolved framework is passed here
@@ -528,6 +529,7 @@ pub struct BundleV2 {
         ct.resolver.opts = ct.options;
         ct.resolver.env_loader = ct.env;
         _.client_transpiler = ct;
+        _.owns_client_transpiler = true;
         return ct;
     }
 
@@ -1769,6 +1771,7 @@ pub struct BundleV2 {
             .init(),
         )?;
         bundle.unique_key = generateUniqueKey();
+        defer if (!enable_reloading) bundle.deinitWithoutFreeingArena();
 
         if (bundle.transpiler.log.hasErrors()) {
             return error.BuildFailed;
@@ -1904,6 +1907,7 @@ pub struct BundleV2 {
             .init(),
         )?;
         bundle.unique_key = generateUniqueKey();
+        defer bundle.deinitWithoutFreeingArena();
 
         if (bundle.transpiler.log.hasErrors()) {
             return error.BuildFailed;
@@ -2423,6 +2427,15 @@ pub struct BundleV2 {
         }
 
         _.free_list.clearAndFree();
+
+        if (_.owns_client_transpiler) {
+            if (ct := _.client_transpiler) {
+                if (*mc := ct.macro_context) {
+                    mc.macros.deinit();
+                    ct.macro_context = null;
+                }
+            }
+        }
     }
 
     fn runFromJSInNewThread(

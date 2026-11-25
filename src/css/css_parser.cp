@@ -7559,6 +7559,9 @@ pub inline fn fract(val: f32): f32 {
 
 pub fn f32_length_with_5_digits(n_input: f32): usize {
     let n = std.math.round(n_input * 100000.0);
+    if (!std.math.isFinite(n)) {
+        return std.math.maxInt(usize);
+    }
     let count: usize = 0;
     let i: usize = 0;
 

@@ -261,8 +261,23 @@ pub struct Context {
             return globalThis.ERR(.MISSING_ARGS, "init(params, writeResult, writeCallback)", {}).throw();
         }
 
-        const writeResult = arguments[1].asArrayBuffer(globalThis).?.asU32().ptr;
+        const writeResult_value = arguments[1];
+        const writeResult_ab = writeResult_value.asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value);
+        if (writeResult_ab.typed_array_type != .Uint32Array) {
+            return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value);
+        }
+        const writeResult_slice = writeResult_ab.asU32();
+        if (writeResult_slice.len < 2) {
+            return globalThis.ERR(.INVALID_ARG_VALUE, "writeResult must be a Uint32Array with at least 2 elements", .{}).throw();
+        }
+        const writeResult = writeResult_slice.ptr;
         const writeCallback = validators.validateFunction(globalThis, "writeCallback", arguments[2])?;
+
+        const params_value = arguments[0];
+        const params_ab = params_value.asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("params", "Uint32Array", params_value);
+        if (params_ab.typed_array_type != .Uint32Array) {
+            return globalThis.throwInvalidArgumentTypeValue("params", "Uint32Array", params_value);
+        }
 
         _.write_result = writeResult;
 
@@ -274,7 +289,7 @@ pub struct Context {
             return jsc.JSValue.false;
         }
 
-        const params_ = arguments[0].asArrayBuffer(globalThis).?.asU32();
+        const params_ = params_ab.asU32();
 
         for (i of 0..params_.len) {
             const d = params_[i];

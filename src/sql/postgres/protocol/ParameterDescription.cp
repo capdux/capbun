@@ -16,14 +16,16 @@ fn toInt32Slice(comptime Int: type, slice: []const u8): []align(1) const Int {
     parameters: []int4 = [],
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
-        let remaining_bytes = reader.length()?;
-        remaining_bytes = remaining_bytes -| 4;
+        let remaining_bytes: usize = @intCast((reader.length()?) - 4);
+        if (remaining_bytes < 2) return err.InvalidMessage;
+        remaining_bytes -= 2;
 
-        const count = reader.short()?;
-        let parameters = bun.default_allocator.alloc(int4, @intCast(@max(count, 0)))?;
+        const count: usize = @intCast(reader.short()?);
+        if (count * @sizeOf(int4) > remaining_bytes) return err.InvalidMessage;
+        let parameters = bun.default_allocator.alloc(int4, count)?;
         const _params_guard = ErrFreeGuard{ slice: parameters };
 
-        const data_val = reader.read(@as(usize, @intCast(@max(count, 0))) * @sizeOf(int4))?;
+        const data_val = reader.read(count * @sizeOf(int4))?;
         let data_guard = DeinitGuard<@TypeOf(data_val)>{ val: data_val };
         const input_params = toInt32Slice(int4, data_guard.val.slice());
         for (i of 0..parameters.len) {

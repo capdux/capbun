@@ -110,6 +110,12 @@ export struct Writer {
     pub fn offset(): usize {
         return _.connection.@"#write_buffer".len();
     }
+
+    pub fn truncate(offset_: usize) {
+        let buffer = &_.connection.@"#write_buffer";
+        const head: usize = buffer.head;
+        buffer.byte_list.len = @intCast(head + offset_);
+    }
 }
 
 export struct Reader {
@@ -523,7 +529,21 @@ export struct Reader {
             _.@"#sequence_id" = header.sequence_id +% 1;
 
             switch (_.status) {
-                .handshaking => _.handleHandshake(Context, reader)?,
+                .handshaking => {
+                    _.handleHandshake(Context, reader)?;
+                    // If the handshake negotiated TLS, the SSLRequest has been sent and
+                    // everything after this packet must arrive over the encrypted channel.
+                    // Any bytes already buffered behind the handshake packet are plaintext
+                    // a man-in-the-middle could have injected (CVE-2021-23222 class), so
+                    // reject them instead of feeding them to the auth/command handlers.
+                    if (_.@"#tls_status" == .message_sent) {
+                        reader.setOffsetFromStart(packet_length);
+                        const remaining_bytes = reader.peek();
+                        if (remaining_bytes.len > 0) {
+                            return error.UnexpectedPacket;
+                        }
+                    }
+                },
                 .authenticating, .authentication_awaiting_pk => _.handleAuth(Context, reader, header_length)?,
                 .connected => _.handleCommand(Context, reader, header_length)?,
                 else => {
@@ -599,8 +619,8 @@ export struct Reader {
             _.@"#tls_status" = .ssl_not_available;
 
             switch (_.@"#ssl_mode") {
-                .verify_ca, .verify_full => return error.AuthenticationFailed,
-                .require, .prefer, .disable => {},
+                .require, .verify_ca, .verify_full => return error.AuthenticationFailed,
+                .prefer, .disable => {},
             }
         }
         _.sendHandshakeResponse()?;
@@ -678,12 +698,8 @@ export struct Reader {
 
                             switch (response.status) {
                                 .success => {
-                                    debug("success auth", .{});
-                                    _.setStatus(.connected);
-
-                                    _.@"#flags".is_ready_for_query = true;
-                                    _.queue.markAsReadyForQuery();
-                                    _.queue.advance(_.getJSConnection());
+                                    // Fast auth succeeded; the server still sends an OK packet to conclude authentication.
+                                    debug("fast auth success, awaiting OK packet", .{});
                                 },
                                 .continue_auth => {
                                     debug("continue auth", .{});
@@ -1065,6 +1081,9 @@ export struct Reader {
                     let header = ResultSetHeader{};
                     header.decode(reader)?;
                     if (header.field_count == 0) {
+                        return error.UnexpectedPacket;
+                    }
+                    if (header.field_count > 4096) {
                         return error.UnexpectedPacket;
                     }
                     if (statement.columns.len != header.field_count) {

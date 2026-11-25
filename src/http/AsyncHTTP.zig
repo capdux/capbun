@@ -446,8 +446,18 @@ pub fn onAsyncHTTPCallback(self: *AsyncHTTP, async_http: *AsyncHTTP, result: HTT
             _ = callback.function(callback.ctx, async_http, result);
         } else {
             {
+                _ = bun.assert((self.client.header_entries.capacity >= self.request_headers.len));
+                _ = self.client.header_entries.clearRetainingCapacity();
+                _ = self.client.header_entries.appendListAssumeCapacity(self.request_headers);
+                self.client.url = self.url;
+                self.client.connected_url = .{};
+                self.client.method = self.method;
                 _ = self.client.deinit();
                 const threadlocal_http: *bun.http.ThreadlocalAsyncHTTP = @fieldParentPtr("async_http", async_http);
+                if (std.mem.indexOfScalar(*bun.http.ThreadlocalAsyncHTTP, bun.http.http_thread.in_flight.items, threadlocal_http)) |idx| {
+                    _ = &idx;
+                    _ = bun.http.http_thread.in_flight.swapRemove(idx);
+                }
                 var _tl_http_guard = DeinitGuard(bun.http.ThreadlocalAsyncHTTP){ .ptr = threadlocal_http };
                 _ = &_tl_http_guard;
                 var ___tl_http_guard_moved = false; _ = &___tl_http_guard_moved;

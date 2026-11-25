@@ -298,6 +298,10 @@ pub struct Transpiler {
     }
 
     fn deinit(*_) {
+        if (*mc := _.macro_context) {
+            mc.macros.deinit();
+            _.macro_context = null;
+        }
         _.options.deinit(_.allocator);
         _.log.deinit();
         _.resolver.deinit();

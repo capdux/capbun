@@ -63,9 +63,17 @@ const callback_fields = [
 pub struct HandlersScope {
     handlers: *Handlers,
 
-    pub fn exit(_: *HandlersScope): bool {
+    pub fn exitEventLoop(_: *HandlersScope) {
         _.handlers.vm.eventLoop().exit();
+    }
+
+    pub fn markInactive(_: *HandlersScope): bool {
         return _.handlers.markInactive();
+    }
+
+    pub fn exit(_: *HandlersScope): bool {
+        _.exitEventLoop();
+        return _.markInactive();
     }
 }
 

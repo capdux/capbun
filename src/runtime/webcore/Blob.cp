@@ -1696,7 +1696,7 @@ struct _BlobCloneSigs {
 }
 pub const BlobStructuredCloneWriteBytes = @TypeOf(&_BlobCloneSigs.write_bytes);
 
-const serialization_version: u8 = 3;
+const serialization_version: u8 = 4;
 type StdIoReaderPtr = *std.Io.Reader;
 
 struct StructuredCloneWriter {
@@ -1767,6 +1767,13 @@ fn _onStructuredCloneSerialize(
     }
     writer.writeInt(u8, @intFromEnum(store_tag), .little)?;
 
+    if (store_tag == .file) {
+        // Version 4: a file-backed slice's window end. Written before
+        // resolveSize() so an unresolved blob stays max_size (unknown)
+        // on the wire and the receiver stats it locally, like v3.
+        writer.writeInt(u64, @intCast(blob.size), .little)?;
+    }
+
     blob.resolveSize();
     if (store := blob.store) {
         store.serialize(Writer, writer)?;
@@ -1803,6 +1810,10 @@ fn _onStructuredCloneDeserialize(
     const content_type_was_set: bool = (reader.readInt(u8, .little)?) != 0;
     const store_tag = reader.readEnum(BlobStore.SerializeTag, .little)?;
 
+    // Version 4: file-backed records carry the blob's own size so a sliced
+    // Bun.file() keeps its window's end. max_size means unknown.
+    let file_size: u64? = null;
+
     const blob: *Blob = switch (store_tag) {
         .bytes => bytes: {
             const bytes_len = reader.readInt(u32, .little)?;
@@ -1833,6 +1844,9 @@ fn _onStructuredCloneDeserialize(
             break :bytes Blob.new(b);
         },
         .file => file: {
+            if (version >= 4) {
+                file_size = reader.readInt(u64, .little)?;
+            }
             const pathlike_tag = reader.readEnum(jsc.Node.PathOrFileDescriptor.SerializeTag, .little)?;
 
             switch (pathlike_tag) {
@@ -1890,6 +1904,12 @@ fn _onStructuredCloneDeserialize(
     bun.assertf(blob.isHeapAllocated(), "expected blob to be heap-allocated", .{});
 
     blob.offset = @as(BlobSizeType, @truncate(offset));
+    if (size := file_size) {
+        // resolveSize() clamps this to the actual file size on first use.
+        if (size != Blob.max_size) {
+            blob.size = @as(BlobSizeType, @truncate(size));
+        }
+    }
     if (store := blob.store) {
         const store_size = store.size();
         if (store_size != Blob.max_size) {
@@ -2362,6 +2382,10 @@ pub struct BlobExternalSharedDescriptor {
         }
     }
 
+    static fn windowSize(current: Blob.SizeType, available: Blob.SizeType): Blob.SizeType {
+        return if (current == Blob.max_size) available else @min(current, available);
+    }
+
     fn resolveSize(*_) {
         if (store := _.store) {
             if (store.data == .bytes) {
@@ -2369,7 +2393,8 @@ pub struct BlobExternalSharedDescriptor {
                 const store_size = store.size();
                 if (store_size != Blob.max_size) {
                     _.offset = @min(store_size, offset);
-                    _.size = store_size - _.offset;
+                    const available = store_size - _.offset;
+                    _.size = Blob.windowSize(_.size, available);
                 }
                 return;
             } else if (store.data == .file) {
@@ -2382,7 +2407,8 @@ pub struct BlobExternalSharedDescriptor {
                     const offset = _.offset;
 
                     _.offset = @min(store_size, offset);
-                    _.size = store_size -| offset;
+                    const available = store_size - _.offset;
+                    _.size = Blob.windowSize(_.size, available);
                     return;
                 }
 

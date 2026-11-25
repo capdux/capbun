@@ -108,9 +108,10 @@ enum CountdownOverflowBehavior: u8 {
 
 export class All {
     last_id: i32 = 1;
-    lock: bun.Mutex = .{};
     thread_id: std.Thread.Id = undefined;
     timers: TimerHeap = .{ .context = std.mem.zeroes(void) };
+    wtf_timers: TimerHeap = .{ .context = std.mem.zeroes(void) };
+    wtf_lock: bun.Mutex = .{};
     active_timer_count: i32 = 0;
     uv_timer: @if (Environment.isWindows) uv.Timer else void = if (Environment.isWindows) std.mem.zeroes(uv.Timer) else {};
     warned_negative_number: bool = false;
@@ -132,14 +133,15 @@ export class All {
         };
     }
 
-    pub fn insert(_: *All, timer: *EventLoopTimer) {
-        _.lock.lock();
-        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
-        _.insertLockHeld(timer);
+    inline fn assertJSThread(_: *const All) {
+        if (comptime Environment.ci_assert) {
+            bun.assert(_.thread_id == std.Thread.getCurrentId());
+        }
     }
 
-    fn insertLockHeld(_: *All, timer: *EventLoopTimer) {
-        if (Environment.ci_assert) bun.assert(_.lock.tryLock() == false);
+    pub fn insert(_: *All, timer: *EventLoopTimer) {
+        _.assertJSThread();
+        if (comptime Environment.ci_assert) bun.assert(timer.tag != .WTFTimer);
         if (_.fake_timers.isActive() && timer.tag.allowFakeTimers()) {
             _.fake_timers.timers.insert(timer);
             timer.state = .ACTIVE;
@@ -156,13 +158,7 @@ export class All {
     }
 
     pub fn remove(_: *All, timer: *EventLoopTimer) {
-        _.lock.lock();
-        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
-        _.removeLockHeld(timer);
-    }
-
-    fn removeLockHeld(_: *All, timer: *EventLoopTimer) {
-        if (Environment.ci_assert) bun.assert(_.lock.tryLock() == false);
+        _.assertJSThread();
         switch (timer.in_heap) {
             .none => if (Environment.ci_assert) bun.assert(false),
             .regular => _.timers.remove(timer),
@@ -173,10 +169,9 @@ export class All {
     }
 
     pub fn update(_: *All, timer: *EventLoopTimer, time: *const timespec) {
-        _.lock.lock();
-        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
+        _.assertJSThread();
         if (timer.state == .ACTIVE) {
-            _.removeLockHeld(timer);
+            _.remove(timer);
         }
 
         if (Environment.ci_assert) {
@@ -191,7 +186,69 @@ export class All {
             flags.epoch = _.epoch;
         }
 
-        _.insertLockHeld(timer);
+        _.insert(timer);
+    }
+
+    pub fn wtfArm(_: *All, timer: *EventLoopTimer, time: *const timespec) {
+        if (comptime Environment.ci_assert) bun.assert(timer.tag == .WTFTimer);
+        {
+            _.wtf_lock.lock();
+            const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.wtf_lock } };
+            if (timer.state == .ACTIVE) {
+                _.wtf_timers.remove(timer);
+            }
+            if (Environment.ci_assert) {
+                if (&timer.next == time) {
+                    @panic("timer.next == time. For threadsafety reasons, time and timer.next must always be a different pointer.");
+                }
+            }
+            timer.next = time.*;
+            _.wtf_timers.insert(timer);
+            timer.state = .ACTIVE;
+        }
+        if (comptime Environment.isWindows) {
+            if (_.thread_id == std.Thread.getCurrentId()) {
+                _.ensureUVTimer(unsafe { @alignCast(@fieldParentPtr("timer", _)) });
+            }
+        }
+    }
+
+    pub fn wtfDisarm(_: *All, timer: *EventLoopTimer) {
+        if (comptime Environment.ci_assert) bun.assert(timer.tag == .WTFTimer);
+        _.wtf_lock.lock();
+        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.wtf_lock } };
+        if (timer.state == .ACTIVE) {
+            _.wtf_timers.remove(timer);
+            timer.state = .CANCELLED;
+        }
+    }
+
+    static inline fn soonest(a: timespec?, b: timespec?): timespec? {
+        if (a != null && b != null) {
+            return if (a.?.greater(&b.?)) b.? else a.?;
+        }
+        return a ?? b;
+    }
+
+    fn drainDueWTFTimers(_: *All, has_set_now: *bool, out_now: *timespec, vm: *VirtualMachine): timespec? {
+        while (true) {
+            let fired_timer: *EventLoopTimer = undefined;
+            {
+                _.wtf_lock.lock();
+                const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.wtf_lock } };
+                const min = _.wtf_timers.peek() ?? return null;
+                if (!has_set_now.*) {
+                    out_now.* = timespec.now(.force_real_time);
+                    has_set_now.* = true;
+                }
+                if (min.next.greater(out_now)) {
+                    return min.next;
+                }
+                fired_timer = _.wtf_timers.deleteMin().?;
+                fired_timer.state = .FIRED;
+            }
+            fired_timer.fire(out_now, vm);
+        }
     }
 
     fn ensureUVTimer(_: *All, vm: *VirtualMachine) {
@@ -201,11 +258,21 @@ export class All {
             _.uv_timer.unref();
         }
 
-        if (timer := _.timers.peek()) {
+        const reg_next: timespec? = if (t := _.timers.peek()) t.next else null;
+        let wtf_next: timespec? = null;
+        {
+            _.wtf_lock.lock();
+            const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.wtf_lock } };
+            if (t := _.wtf_timers.peek()) {
+                wtf_next = t.next;
+            }
+        }
+
+        if (next_ts := All.soonest(reg_next, wtf_next)) {
             uv.uv_update_time(vm.uvLoop());
             const now = timespec.now(.force_real_time);
-            const wait = if (timer.next.greater(&now))
-                timer.next.duration(&now)
+            const wait = if (next_ts.greater(&now))
+                next_ts.duration(&now)
             else
                 .{ .nsec = 0, .sec = 0 };
 
@@ -321,32 +388,25 @@ export class All {
             break :blk null;
         } else null;
 
-        let maybe_now: timespec? = null;
-        while (min := _.timers.peek()) {
-            if (maybe_now == null) {
-                maybe_now = timespec.now(.allow_mocked_time);
-            }
-            const now = maybe_now.?;
+        let now: timespec = undefined;
+        let has_set_now: bool = false;
+        const wtf_next = _.drainDueWTFTimers(&has_set_now, &now, vm);
+        const reg_next: timespec? = if (min := _.timers.peek()) min.next else null;
 
-            switch (now.order(&min.next)) {
-                .gt, .eq => {
-                    if (min.tag == .WTFTimer) {
-                        * = _.timers.deleteMin();
-                        min.fire(&now, vm);
-                        continue;
-                    }
-
-                    spec.* = .{ .nsec = 0, .sec = 0 };
-                    return true;
-                },
-                .lt => {
-                    spec.* = min.next.duration(&now);
-                    if (us := quic_us) {
-                        if (us >= 0) clampToQuic(spec, us);
-                    }
-                    return true;
-                },
+        if (next_ts := All.soonest(wtf_next, reg_next)) {
+            if (!has_set_now) {
+                now = timespec.now(.force_real_time);
+                has_set_now = true;
             }
+            if (next_ts.greater(&now)) {
+                spec.* = next_ts.duration(&now);
+                if (us := quic_us) {
+                    if (us >= 0) clampToQuic(spec, us);
+                }
+            } else {
+                spec.* = .{ .nsec = 0, .sec = 0 };
+            }
+            return true;
         }
 
         if (us := quic_us) {
@@ -370,12 +430,9 @@ export class All {
     }
 
     fn next(_: *All, has_set_now: *bool, out_now: *timespec): (*EventLoopTimer)? {
-        _.lock.lock();
-        const _lock_guard = LockGuard<bun.Mutex>{ ptr: unsafe { &_.lock } };
-
         if (timer := _.timers.peek()) {
             if (!has_set_now.*) {
-                out_now.* = timespec.now(.allow_mocked_time);
+                out_now.* = timespec.now(.force_real_time);
                 has_set_now.* = true;
             }
             if (timer.next.greater(out_now)) {
@@ -391,6 +448,7 @@ export class All {
     pub fn drainTimers(_: *All, vm: *VirtualMachine) {
         let now: timespec = undefined;
         let has_set_now: bool = false;
+        * = _.drainDueWTFTimers(&has_set_now, &now, vm);
 
         while (t := _.next(&has_set_now, &now)) {
             t.fire(&now, vm);

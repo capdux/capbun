@@ -542,6 +542,7 @@ if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
                     pos = (pos + 5);
                     continue;
                 }
+                return error.UnsupportedArrayFormat;
             } else {
                 _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"bool", .value = .{ .@"bool" = 0 } });
                 pos = (pos + 1);
@@ -558,6 +559,7 @@ if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
                     pos = (pos + 4);
                     continue;
                 }
+                return error.UnsupportedArrayFormat;
             } else {
                 _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"bool", .value = .{ .@"bool" = 1 } });
                 pos = (pos + 1);

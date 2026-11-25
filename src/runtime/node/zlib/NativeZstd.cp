@@ -264,7 +264,11 @@ pub struct Context {
         if (writeState_opt == null) return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
         const writeState = writeState_opt.?;
         if (writeState.typed_array_type != .Uint32Array) return globalThis.throwInvalidArgumentTypeValue("writeState", "Uint32Array", writeState_value);
-        _.write_result = writeState.asU32().ptr;
+        const writeState_slice = writeState.asU32();
+        if (writeState_slice.len < 2) {
+            return globalThis.ERR(.INVALID_ARG_VALUE, "writeState must be a Uint32Array with at least 2 elements", .{}).throw();
+        }
+        _.write_result = writeState_slice.ptr;
 
         const write_js_callback = validators.validateFunction(globalThis, "processCallback", processCallback_value)?;
         js.writeCallbackSetCached(this_value, globalThis, write_js_callback.withAsyncContextIfNeeded(globalThis));

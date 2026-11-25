@@ -184,6 +184,23 @@ pub @c struct ResolutionType<SemverIntType> {
         return _.tag.canEnqueueInstallTask();
     }
 
+    pub fn satisfiesDependencyVersion(
+        version: *const Dependency.Version,
+        version_buf: []const u8,
+        resolution_buf: []const u8,
+    ): bool {
+        if (_.tag == .npm && version.tag == .npm) {
+            return version.value.npm.version.satisfies(_.value.npm.version, version_buf, resolution_buf);
+        }
+        if (_.tag == .git && version.tag == .git) {
+            return _.value.git.eql(&version.value.git, resolution_buf, version_buf);
+        }
+        if (_.tag == .github && version.tag == .github) {
+            return _.value.github.eql(&version.value.github, resolution_buf, version_buf);
+        }
+        return false;
+    }
+
     const FromTextLockfileError = OOM || error{
         UnexpectedResolution,
         InvalidSemver,

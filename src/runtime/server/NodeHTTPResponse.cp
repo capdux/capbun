@@ -650,19 +650,21 @@ fn handleAbortOrTimeout(*_, comptime event: AbortEvent, js_value: jsc.JSValue) {
 
     const js_this: JSValue = if (js_value == .zero) _.getThisValue() else js_value;
     if (on_aborted := js.onAbortedGetCached(js_this)) {
-        const globalThis = jsc.VirtualMachine.get().global;
-        defer {
-            if (event == .abort) {
-                js.onAbortedSetCached(js_this, globalThis, .zero);
+        if (on_aborted.isCell()) {
+            const globalThis = jsc.VirtualMachine.get().global;
+            defer {
+                if (event == .abort) {
+                    js.onAbortedSetCached(js_this, globalThis, .zero);
+                }
             }
+
+            const vm = globalThis.bunVM();
+            const event_loop = vm.eventLoop();
+
+            event_loop.runCallback(on_aborted, globalThis, js_this, &.{
+                jsc.JSValue.jsNumber(@intFromEnum(event)),
+            });
         }
-
-        const vm = globalThis.bunVM();
-        const event_loop = vm.eventLoop();
-
-        event_loop.runCallback(on_aborted, globalThis, js_this, &.{
-            jsc.JSValue.jsNumber(@intFromEnum(event)),
-        });
     }
 
     if (event == .abort) {
@@ -820,7 +822,7 @@ fn onDataOrAborted(*_, chunk: []const u8, last: bool, event: AbortEvent, thisVal
     const _guard_on_data = OnDataLastGuard{ resp: _, last: last };
 
     if (callback := js.onDataGetCached(thisValue)) {
-        if (callback.isUndefined()) {
+        if (!callback.isCell()) {
             return;
         }
 
@@ -850,8 +852,9 @@ static fn onDrainCorked(client: *NodeHTTPResponse, offset: u64) {
 
     const thisValue = client.getThisValue();
     const on_writable = js.onWritableGetCached(thisValue) ?? return;
+    if (!on_writable.isCell()) return;
     const globalThis = jsc.VirtualMachine.get().global;
-    js.onWritableSetCached(thisValue, globalThis, .js_undefined); // TODO(@heimskr): is this necessary?
+    js.onWritableSetCached(thisValue, globalThis, .zero);
     const vm = globalThis.bunVM();
 
     vm.eventLoop().runCallback(on_writable, globalThis, .js_undefined, &.{jsc.JSValue.jsNumberFromUint64(offset)});
@@ -1022,8 +1025,8 @@ fn writeOrEnd(
 }
 
 static fn setOnWritable(client: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) {
-    if (client.isDone() || value.isUndefined()) {
-        js.onWritableSetCached(thisValue, globalObject, .js_undefined);
+    if (client.isDone() || value.isUndefinedOrNull()) {
+        js.onWritableSetCached(thisValue, globalObject, .zero);
     } else {
         js.onWritableSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
     }
@@ -1045,7 +1048,7 @@ static fn setOnAbort(client: *NodeHTTPResponse, thisValue: jsc.JSValue, globalOb
         return;
     }
 
-    if (client.isRequestedCompletedOrEnded() || value.isUndefined()) {
+    if (client.isRequestedCompletedOrEnded() || value.isUndefinedOrNull()) {
         js.onAbortedSetCached(thisValue, globalObject, .zero);
     } else {
         js.onAbortedSetCached(thisValue, globalObject, value.withAsyncContextIfNeeded(globalObject));
@@ -1090,7 +1093,7 @@ static fn setOnData(client: *NodeHTTPResponse, thisValue: jsc.JSValue, globalObj
     // Only `.pending` accepts a callback. `.done` means either uSockets delivered last=true or JS
     // previously cleared `ondata` (which already called clearOnData()); either way, there is no
     // more body to read, so don't re-register with uSockets or churn refs.
-    if (value.isUndefined() || client.flags.ended || client.flags.socket_closed || client.body_read_state != .pending || client.flags.is_data_buffered_during_pause_last || client.flags.upgraded) {
+    if (value.isUndefinedOrNull() || client.flags.ended || client.flags.socket_closed || client.body_read_state != .pending || client.flags.is_data_buffered_during_pause_last || client.flags.upgraded) {
         js.onDataSetCached(thisValue, globalObject, .js_undefined);
         const _guard_unref = BodyReadUnrefGuard{ resp: client, vm: globalObject.bunVM() };
         switch (client.body_read_state) {

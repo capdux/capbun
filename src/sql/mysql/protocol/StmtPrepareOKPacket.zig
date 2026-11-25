@@ -62,6 +62,9 @@ pub fn decodeInternal(self: *StmtPrepareOKPacket, comptime Context: type, reader
             return error.InvalidPrepareOKPacket;
         }
         self.statement_id = try reader.int(u32);
+        if ((self.statement_id == 0)) {
+            return error.InvalidPrepareOKPacket;
+        }
         self.num_columns = try reader.int(u16);
         self.num_params = try reader.int(u16);
         _ = try reader.int(u8);

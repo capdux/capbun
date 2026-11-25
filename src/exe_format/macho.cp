@@ -377,10 +377,19 @@ pub struct MachoFile {
             return err.InvalidObject;
         }
 
-        const size_diff = (aligned_size as i64) - (original_segsize as i64);
-        const num_of_new_pages = @divExact(size_diff, PAGE_SIZE as i64);
+        const prev_len = _.data.items.len;
+        const orig_off = std.math.cast(usize, original_fileoff) ?? return err.OffsetOutOfRange;
+        const orig_sz = std.math.cast(usize, original_segsize) ?? return err.OffsetOutOfRange;
+        const orig_bun_end = std.math.add(usize, orig_off, orig_sz) catch return err.OffsetOutOfRange;
+        const orig_data_end = std.math.cast(usize, original_data_end) ?? return err.OffsetOutOfRange;
+        if (orig_bun_end > prev_len || orig_data_end > orig_bun_end) {
+            return err.OffsetOutOfRange;
+        }
 
-        _.data.ensureUnusedCapacity((size_diff + num_of_new_pages * (HASH_SIZE as i64)) as usize)?;
+        const size_diff: u64 = std.math.sub(u64, aligned_size, original_segsize) catch return err.InvalidObject;
+        const num_of_new_pages = @divExact(size_diff, PAGE_SIZE);
+
+        _.data.ensureUnusedCapacity(std.math.cast(usize, size_diff + num_of_new_pages * HASH_SIZE) ?? return err.OffsetOutOfRange)?;
 
         const linkedit_idx = linkedit_seg_idx ?? return err.MissingLinkeditSegment;
 

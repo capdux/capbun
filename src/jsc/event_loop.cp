@@ -619,8 +619,25 @@ pub struct DeinitGuard<T> {
     }
 
     fn deinit(*_) {
+        while (task := _.tasks.readItem()) {
+            if (task.tag() == @field(Task.Tag, @typeName(ManagedTask))) {
+                const managed: *ManagedTask = task.get(ManagedTask).?;
+                if (cleanup := managed.cleanup) {
+                    if (ctx := managed.ctx) {
+                        cleanup(ctx);
+                    }
+                }
+                bun.default_allocator.destroy(managed);
+            }
+        }
         _.tasks.deinit();
+        for (task of _.immediate_tasks.items) {
+            task.deref();
+        }
         _.immediate_tasks.clearAndFree(bun.default_allocator);
+        for (task of _.next_immediate_tasks.items) {
+            task.deref();
+        }
         _.next_immediate_tasks.clearAndFree(bun.default_allocator);
     }
 }

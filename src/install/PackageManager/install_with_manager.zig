@@ -878,7 +878,7 @@ else => {
             _ = Global.crash();
         }
         const did_meta_hash_change = ((!manager.options.enable.frozen_lockfile) and (if (load_result.loadedFromTextLockfile()) (!try manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)) else try manager.lockfile.hasMetaHashChanged((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), @min(packages_len_before_install, manager.lockfile.packages.len))));
-        const should_save_lockfile = (((load_result == .ok) and (((load_result.ok.format == .binary) and (save_format == .text)) or (((load_result.ok.format == .text) and (save_format == .text)) and (manager.lockfile.text_lockfile_version != TextLockfile.Version.current)))) or (manager.options.do.save_lockfile and (((((did_meta_hash_change or had_any_diffs) or (manager.update_requests.len > 0)) or ((load_result == .ok) and (load_result.ok.serializer_result.packages_need_update or load_result.ok.serializer_result.migrated_from_lockb_v2))) or manager.lockfile.isEmpty()) or manager.options.enable.force_save_lockfile)));
+        const should_save_lockfile = (((load_result == .ok) and ((load_result.ok.format == .binary) and (save_format == .text))) or (manager.options.do.save_lockfile and (((((did_meta_hash_change or had_any_diffs) or (manager.update_requests.len > 0)) or ((load_result == .ok) and (load_result.ok.serializer_result.packages_need_update or load_result.ok.serializer_result.migrated_from_lockb_v2))) or manager.lockfile.isEmpty()) or manager.options.enable.force_save_lockfile)));
         if (should_save_lockfile) {
             _ = try manager.saveLockfile((&load_result), save_format, had_any_diffs, lockfile_before_install, packages_len_before_install, log_level);
         }

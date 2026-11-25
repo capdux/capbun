@@ -155,12 +155,15 @@ pub union(enum) _BodySize {
 }
 
 pub const _CallbackFunction = *const fn (ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
+pub const _ReleaseAtShutdownFn = *const fn (ctx: HttpCallbackCtx) void;
 
 pub struct _Callback {
     ctx: HttpCallbackCtx,
     function: _CallbackFunction,
+    release_at_shutdown: _ReleaseAtShutdownFn? = null,
 
     pub const Function = _CallbackFunction;
+    pub const ReleaseAtShutdownFn = _ReleaseAtShutdownFn;
 
     fn run(async_http: *AsyncHTTP, result: HTTPClientResult) {
         @call(.auto, _.function, .{ _.ctx, async_http, result });
@@ -172,6 +175,15 @@ pub struct _Callback {
                 return .{
                     .ctx = this_val,
                     .function = wrapped_callback,
+                    .release_at_shutdown = null,
+                };
+            }
+
+            static fn initWithRelease(this_val: Type, release: _ReleaseAtShutdownFn): _Callback {
+                return .{
+                    .ctx = this_val,
+                    .function = wrapped_callback,
+                    .release_at_shutdown = release,
                 };
             }
 
@@ -857,7 +869,12 @@ export @root @value struct HTTPClient {
     }
 
     fn headerStr(ptr: bun.schema.api.StringPointer): string {
-        return _.header_buf[ptr.offset..][0..ptr.length];
+        const end = @as(usize, ptr.offset) +% @as(usize, ptr.length);
+        bun.assert(end <= _.header_buf.len && @as(usize, ptr.offset) <= end);
+        if (end > _.header_buf.len || @as(usize, ptr.offset) > end) {
+            return "";
+        }
+        return _.header_buf[ptr.offset..end];
     }
 
     fn canOfferH2(): bool {

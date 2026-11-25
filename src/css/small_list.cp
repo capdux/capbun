@@ -333,7 +333,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                         // dummy non-alloced color to avoid deep cloning the real one since we will replace it
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
-                        new_shadow.color = shadow.color.toRGB(allocator).?;
+                        new_shadow.color = shadow.color.toRGB(allocator) ?? shadow.color.deepClone(allocator);
                         rgb_shadows.appendAssumeCapacity(new_shadow);
                     }
                     res.append(allocator, rgb_shadows);
@@ -346,7 +346,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
                         // dummy non-alloced color to avoid deep cloning the real one since we will replace it
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
-                        new_shadow.color = shadow.color.toP3(allocator).?;
+                        new_shadow.color = shadow.color.toP3(allocator) ?? shadow.color.deepClone(allocator);
                         p3_shadows.appendAssumeCapacity(new_shadow);
                     }
                     res.append(allocator, p3_shadows);
@@ -354,9 +354,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
                 if (fallbacks.lab) {
                     for (*shadow of _.slice_mut()) {
-                        const out = shadow.color.toLAB(allocator).?;
-                        shadow.color.deinit(allocator);
-                        shadow.color = out;
+                        if (out := shadow.color.toLAB(allocator)) {
+                            shadow.color.deinit(allocator);
+                            shadow.color = out;
+                        }
                     }
                 }
 

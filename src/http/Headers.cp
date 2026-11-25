@@ -179,6 +179,8 @@ export @root @value struct Headers {
         let sliced = headers.entries.slice();
         let names = sliced.items(.name);
         let values = sliced.items(.value);
+        @memset(names, { offset: 0, length: 0 });
+        @memset(values, { offset: 0, length: 0 });
         if (headers_ref := fetch_headers_ref) {
             headers_ref.copyTo(names.ptr, values.ptr, headers.buf.items.ptr);
         }

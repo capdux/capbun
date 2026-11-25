@@ -89,8 +89,14 @@ export @packed struct ColumnFlags {
         _.flags = ColumnFlags.fromInt(reader.int(u16)?);
         _.decimals = reader.int(u8)?;
 
-        _.name_or_index.deinit();
-        _.name_or_index = ColumnIdentifier.init(_.name)?;
+        const unchanged = switch (_.name_or_index) {
+            .name => |existing| std.mem.eql(u8, existing.slice(), _.name.slice()),
+            else => false,
+        };
+        if (!unchanged) {
+            _.name_or_index.deinit();
+            _.name_or_index = ColumnIdentifier.init(_.name)?;
+        }
 
         reader.skip(2);
     }

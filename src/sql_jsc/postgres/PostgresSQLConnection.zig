@@ -2087,7 +2087,11 @@ if ((self.authentication_state != .SASL)) {
         }
 },
 .Ok => {
-_ = debug("Authentication OK", .{});
+if ((self.authentication_state == .SASL)) {
+            _ = debug("AuthenticationOk before SASL exchange completed", .{});
+            return error.UnexpectedMessage;
+        }
+        _ = debug("Authentication OK", .{});
         _ = self.authentication_state.zero();
         self.authentication_state = .ok;
 },

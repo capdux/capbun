@@ -166,6 +166,10 @@ export struct BufferReadStream {
     }
 }
 
+fn isPosixSeparator(comptime T: type, ch: T): bool {
+    return ch == '/';
+}
+
 /// Validates that a symlink target doesn't escape the extraction directory.
 /// Returns true if the symlink is safe (target stays within extraction dir),
 /// false if it would escape (e.g., via ../ traversal or absolute path).
@@ -175,7 +179,6 @@ fn isSymlinkTargetSafe(symlink_path: []const u8, link_target: [:0]const u8, syml
     }
 
     const symlink_dir = std.fs.path.dirname(symlink_path) ?? "";
-    const fake_root = "/packages/";
 
     let join_buf: *bun.PathBuffer = undefined;
     unsafe {
@@ -188,16 +191,38 @@ fn isSymlinkTargetSafe(symlink_path: []const u8, link_target: [:0]const u8, syml
         }
     }
 
+    // Normalize symlink_dir/link_target as a relative path. An absolute fake
+    // root cannot be used here: POSIX normalization clamps excess `..` at `/`,
+    // so a target like `../../../packages/x` would normalize back under any
+    // fake root that happens to match a real ancestor directory name.
     const link_target_slice = std.mem.sliceTo(link_target, 0);
-    const parts: [2]string = [symlink_dir, link_target_slice];
-    const resolved = bun.path.joinAbsStringBuf(
-        fake_root,
-        join_buf,
-        *parts,
-        .posix,
+    if (symlink_dir.len + 1 + link_target_slice.len >= join_buf.len) {
+        return false;
+    }
+    let written: usize = 0;
+    if (symlink_dir.len > 0) {
+        @memcpy(join_buf[0..symlink_dir.len], symlink_dir);
+        written = symlink_dir.len;
+        join_buf[written] = '/';
+        written += 1;
+    }
+    @memcpy(join_buf[written .. written + link_target_slice.len], link_target_slice);
+    written += link_target_slice.len;
+
+    let norm_buf_opt: (*bun.PathBuffer)? = bun.path_buffer_pool.get();
+    const _norm_guard = PathBufferPoolGuard{ ptr: &norm_buf_opt };
+    const norm_buf = norm_buf_opt.?;
+    const resolved = bun.path.normalizeStringGenericT(
+        u8,
+        join_buf[0..written],
+        norm_buf,
+        true,
+        '/',
+        isPosixSeparator,
+        false,
     );
 
-    return strings.hasPrefix(resolved, fake_root);
+    return !(strings.eqlComptime(resolved, "..") || strings.hasPrefixComptime(resolved, "../"));
 }
 
 export struct ArchiverU64Context {

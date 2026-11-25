@@ -160,6 +160,13 @@ pub fn pwrite(self: Writer, data: []const u8, index: usize) AnyMySQLError.Error!
 pub fn offset(self: Writer) usize {
             return self.connection.@"#write_buffer".len();
     }
+
+pub fn truncate(self: Writer, offset_: usize) void {
+            var buffer = (&self.connection.@"#write_buffer");
+            _ = &buffer;
+            const head: usize = buffer.head;
+            buffer.byte_list.len = @intCast((head + offset_));
+    }
 };
 
 pub const Reader = struct {
@@ -542,6 +549,13 @@ pub fn processPackets(self: *MySQLConnection, comptime Context: type, reader: Ne
             switch (self.status) {
 .handshaking => {
 _ = try self.handleHandshake(Context, reader);
+            if ((self.@"#tls_status" == .message_sent)) {
+                _ = reader.setOffsetFromStart(packet_length);
+                const remaining_bytes = reader.peek();
+                if ((remaining_bytes.len > 0)) {
+                    return error.UnexpectedPacket;
+                }
+            }
 },
 .authenticating, .authentication_awaiting_pk => {
 _ = try self.handleAuth(Context, reader, header_length);
@@ -603,10 +617,10 @@ pub fn handleHandshake(self: *MySQLConnection, comptime Context: type, reader: N
         if ((self.@"#tls_status" != .none)) {
             self.@"#tls_status" = .ssl_not_available;
             switch (self.@"#ssl_mode") {
-.verify_ca, .verify_full => {
+.require, .verify_ca, .verify_full => {
 return error.AuthenticationFailed;
 },
-.require, .prefer, .disable => {
+.prefer, .disable => {
 
 },
 }
@@ -692,11 +706,7 @@ _ = reader.skip(1);
             defer if (!___guard_response_moved) { ___guard_response_moved = true; const __T = @TypeOf(_guard_response); if (@typeInfo(__T) == .optional) { if (_guard_response) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_response.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_response; _drop_val.__cp_deinit(); } };
             switch (response.status) {
 .success => {
-_ = debug("success auth", .{});
-            _ = self.setStatus(.connected);
-            self.@"#flags".is_ready_for_query = true;
-            _ = self.queue.markAsReadyForQuery();
-            _ = self.queue.advance(self.getJSConnection());
+_ = debug("fast auth success, awaiting OK packet", .{});
 },
 .continue_auth => {
 _ = debug("continue auth", .{});
@@ -1107,6 +1117,9 @@ const statement_opt = request.getStatement();
             _ = &header;
             _ = try header.decode(reader);
             if ((header.field_count == 0)) {
+                return error.UnexpectedPacket;
+            }
+            if ((header.field_count > 4096)) {
                 return error.UnexpectedPacket;
             }
             if ((statement.columns.len != header.field_count)) {

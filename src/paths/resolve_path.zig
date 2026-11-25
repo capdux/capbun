@@ -1347,6 +1347,40 @@ pub fn joinZ(_parts: anytype, comptime platform: Platform) [:0]const u8 {
         return joinZBuf((&join_buf), _parts, platform);
 }
 
+pub fn joinNeeded(parts: []const []const u8) usize {
+        var total: usize = 2;
+        _ = &total;
+        for (cp_iter_slice(parts)) |part| {
+            _ = &part;
+            if ((part.len != 0)) {
+                total = (total + (part.len + 1));
+            }
+        }
+        return total;
+}
+
+pub fn joinSpill(spill: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, parts: []const []const u8, comptime platform: Platform) ![]const u8 {
+        const needed = joinNeeded(parts);
+        if ((needed <= join_buf.len)) {
+            return join(parts, platform);
+        }
+        if ((spill.items.len < needed)) {
+            _ = try spill.resize(allocator, needed);
+        }
+        return joinStringBuf(spill.items, parts, platform);
+}
+
+pub fn joinZSpill(spill: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, parts: []const []const u8, comptime platform: Platform) ![:0]const u8 {
+        const needed = joinNeeded(parts);
+        if ((needed <= join_buf.len)) {
+            return joinZ(parts, platform);
+        }
+        if ((spill.items.len < needed)) {
+            _ = try spill.resize(allocator, needed);
+        }
+        return joinZBuf(spill.items, parts, platform);
+}
+
 pub fn joinZBuf(buf: []u8, _parts: anytype, comptime platform: Platform) [:0]const u8 {
         const joined = joinStringBuf(buf[0..(buf.len - 1)], _parts, platform);
         _ = assert(bun.isSliceInBuffer(joined, buf));

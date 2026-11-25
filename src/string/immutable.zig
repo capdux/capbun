@@ -1430,6 +1430,10 @@ pub fn eqlCaseInsensitiveASCII(a: []const u8, b: []const u8, comptime check_len:
             if ((a.len == 0)) {
                 return true;
             }
+        } else {
+            if ((b.len < a.len)) {
+                return false;
+            }
         }
         _ = bun.unsafeAssert((b.len > 0));
         _ = bun.unsafeAssert((a.len > 0));

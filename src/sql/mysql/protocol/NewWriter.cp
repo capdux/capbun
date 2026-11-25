@@ -27,6 +27,10 @@ pub fn NewWriterPacket(comptime WrappedWriter: type): type {
         pub fn end(*_): AnyMySQLError.Error!void {
             const new_offset = _.ctx.offset();
             const length = new_offset - _.offset - PacketHeader.size;
+            if (length >= PacketHeader.MAX_PAYLOAD_LENGTH) {
+                _.ctx.truncate(_.offset);
+                return AnyMySQLError.Error.Overflow;
+            }
             _.header.length = @intCast(length);
             debug("writing packet header: {d}", .{_.header.length});
             const encoded = _.header.encode();
@@ -35,18 +39,13 @@ pub fn NewWriterPacket(comptime WrappedWriter: type): type {
     };
 }
 
-pub fn NewWriterWrap(
-    comptime Context: type,
-    comptime offsetFn_: anytype,
-    comptime writeFunction_: anytype,
-    comptime pwriteFunction_: anytype,
-): type {
+pub fn NewWriterWrap(comptime Context: type, comptime offsetFn_: anytype, comptime writeFunction_: anytype, comptime pwriteFunction_: anytype, comptime truncateFn_: anytype): type {
     return struct {
         wrapped: Context,
-
         const writeFn = writeFunction_;
         const pwriteFn = pwriteFunction_;
         const offsetFn = offsetFn_;
+        const truncateFn = truncateFn_;
         pub const Ctx = Context;
 
         pub const is_wrapped = true;
@@ -86,6 +85,10 @@ pub fn NewWriterWrap(
 
         pub fn pwrite(data: []const u8, i: usize): AnyMySQLError.Error!void {
             pwriteFn(_.wrapped, data, i)?;
+        }
+
+        pub fn truncate(i: usize) {
+            truncateFn(_.wrapped, i);
         }
 
         pub fn int4(value: MySQLInt32): AnyMySQLError.Error!void {
@@ -135,7 +138,7 @@ pub fn NewWriter(comptime Context: type): type {
         return Context;
     }
 
-    return NewWriterWrap(Context, Context.offset, Context.write, Context.pwrite);
+    return NewWriterWrap(Context, Context.offset, Context.write, Context.pwrite, Context.truncate);
 }
 
 pub fn writeWrap(comptime Container: type, comptime writeFn: anytype): type {

@@ -1956,6 +1956,10 @@ pub struct DataCellsGuard<P, C> {
                         }
                     },
                     .Ok => {
+                        if (_.authentication_state == .SASL) {
+                            debug("AuthenticationOk before SASL exchange completed", .{});
+                            return err.UnexpectedMessage;
+                        }
                         debug("Authentication OK", .{});
                         _.authentication_state.zero();
                         _.authentication_state = .ok;

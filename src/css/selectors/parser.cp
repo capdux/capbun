@@ -3650,7 +3650,9 @@ fn parse_qualified_name_eplicit_namespace_helper(
     switch (t.*) {
         .ident => |local_name| return .{ .result = .{ .some = .{ namespace, local_name } } },
         .delim => |c| {
-            if (c == '*') {
+            // `*` is only a valid local name outside of attribute selectors;
+            // `[ns|*]` must fall through to the `invalid_qual_name_in_attr` error below.
+            if (c == '*' && !in_attr_selector) {
                 return .{ .result = .{ .some = .{ namespace, null } } };
             }
         },

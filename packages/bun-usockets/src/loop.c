@@ -73,6 +73,7 @@ void us_internal_loop_data_init(struct us_loop_t *loop, void (*wakeup_cb)(struct
     loop->data.sweep_timer_count = 0;
     loop->data.recv_buf = malloc(LIBUS_RECV_BUFFER_LENGTH + LIBUS_RECV_BUFFER_PADDING * 2);
     loop->data.send_buf = malloc(LIBUS_SEND_BUFFER_LENGTH);
+    if (!loop->data.recv_buf || !loop->data.send_buf) Bun__outOfMemory();
     loop->data.pre_cb = pre_cb;
     loop->data.post_cb = post_cb;
     loop->data.wakeup_async = us_internal_create_async(loop, 1, 0);
@@ -513,6 +514,14 @@ void us_internal_dispatch_ready_poll(struct us_poll_t *p, int error, int eof, in
                     } else {
                         struct us_poll_t* poll = &s->p;
                         us_poll_change(poll, loop, us_poll_events(poll) & LIBUS_SOCKET_WRITABLE);
+                        /* Already parked: a writable dispatch re-enabled READABLE on
+                         * this socket without knowing about the queue. It sits in
+                         * loop->data.low_prio_head, NOT in g->head_sockets, so the
+                         * group unlink below would cross-wire the two lists and the
+                         * counter bump would leak. */
+                        if (flags->low_prio_state == 1) {
+                            break;
+                        }
                         struct us_socket_group_t *g = s->group;
                         /* Queued sockets aren't in head_sockets while parked, so
                          * the group's emptiness check needs this counter to know

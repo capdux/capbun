@@ -17,7 +17,8 @@ const JSValue = jsc.JSValue;
 const debug = bun.Output.scoped(.Postgres, .visible);
 const max_parameters = std.math.maxInt(u16);
 
-pub const Queue = bun.LinearFifo(*PostgresSQLQuery, .Dynamic);
+type PostgresSQLQueryPtr = *PostgresSQLQuery;
+pub const Queue = bun.LinearFifo(PostgresSQLQueryPtr, .Dynamic);
 
 struct DerefGuard<T> {
     val: T,
@@ -370,9 +371,9 @@ pub fn onData(
             'W' => connection.on(.CopyBothResponse, Context, reader)?,
             else => {
                 debug("Unknown message: {c}", .{c});
-                const to_skip = reader.length()? -| 1;
+                const to_skip = (reader.length()?) - 4;
                 debug("to_skip: {d}", .{to_skip});
-                reader.skip(@intCast(@max(to_skip, 0)))?;
+                reader.skip(@intCast(to_skip))?;
             },
         }
     }

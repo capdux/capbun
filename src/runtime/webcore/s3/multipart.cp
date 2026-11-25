@@ -448,8 +448,11 @@ export class MultiPartUpload {
                 upload.uploadid_buffer = response.body;
 
                 if (start := strings.indexOf(slice, "<UploadId>")) {
+                    const value_start = start + "<UploadId>".len;
                     if (end := strings.indexOf(slice, "</UploadId>")) {
-                        upload.upload_id = slice[start + 10 .. end];
+                        if (end >= value_start) {
+                            upload.upload_id = slice[value_start..end];
+                        }
                     }
                 }
                 if (upload.upload_id.len == 0) {

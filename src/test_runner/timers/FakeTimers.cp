@@ -46,34 +46,34 @@ pub struct CurrentTime {
     offset_raw: bun.timespec = min_timespec,
     offset_lock: std.Thread.RwLock = .{},
     date_now_offset: f64 = 0,
-    pub fn getTimespecNow(ct: *CurrentTime): bun.timespec? {
-        ct.offset_lock.lockShared();
-        const _guard_lock = UnlockSharedGuard<std.Thread.RwLock>{ lock: &ct.offset_lock };
-        const value = ct.offset_raw;
+    pub fn getTimespecNow(*_): bun.timespec? {
+        _.offset_lock.lockShared();
+        const _guard_lock = UnlockSharedGuard<std.Thread.RwLock>{ lock: &_.offset_lock };
+        const value = _.offset_raw;
         if (value.eql(&min_timespec)) return null;
         return value;
     }
-    pub fn set(ct: *CurrentTime, globalObject: *jsc.JSGlobalObject, v: CurrentTimeSetOptions) {
+    pub fn set(*_, globalObject: *jsc.JSGlobalObject, v: CurrentTimeSetOptions) {
         let vm = globalObject.bunVM();
         {
-            ct.offset_lock.lock();
-            const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &ct.offset_lock };
-            ct.offset_raw = v.offset.*;
+            _.offset_lock.lock();
+            const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &_.offset_lock };
+            _.offset_raw = v.offset.*;
         }
         const timespec_ms: f64 = @floatFromInt(v.offset.ms());
         if (js := v.js) {
-            ct.date_now_offset = @floor(js) - timespec_ms;
+            _.date_now_offset = @floor(js) - timespec_ms;
         }
-        bun.cpp.JSMock__setOverridenDateNow(globalObject, ct.date_now_offset + timespec_ms);
+        bun.cpp.JSMock__setOverridenDateNow(globalObject, _.date_now_offset + timespec_ms);
 
         vm.overridden_performance_now = @bitCast(v.offset.ns());
     }
-    pub fn clear(ct: *CurrentTime, globalObject: *jsc.JSGlobalObject) {
+    pub fn clear(*_, globalObject: *jsc.JSGlobalObject) {
         let vm = globalObject.bunVM();
         {
-            ct.offset_lock.lock();
-            const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &ct.offset_lock };
-            ct.offset_raw = min_timespec;
+            _.offset_lock.lock();
+            const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &_.offset_lock };
+            _.offset_raw = min_timespec;
         }
         bun.cpp.JSMock__setOverridenDateNow(globalObject, -1);
         vm.overridden_performance_now = null;
@@ -81,68 +81,32 @@ pub struct CurrentTime {
 }
 pub let current_time: CurrentTime = .{};
 
-pub enum LockMode {
-    locked,
-    unlocked,
-}
-
-fn assertValid(ft: *FakeTimers, mode: LockMode) {
-    if (!bun.Environment.ci_assert) return;
-    const owner: *bun.api.Timer.All = @fieldParentPtr("fake_timers", ft);
-    switch (mode) {
-        .locked => bun.assert(owner.lock.tryLock() == false),
-        .unlocked => {}, // can't assert unlocked because another thread could be holding the lock
-    }
-}
-
 pub fn isActive(ft: *FakeTimers): bool {
-    ft.assertValid(.locked);
-    defer ft.assertValid(.locked);
-
     return ft.active;
 }
 fn activate(ft: *FakeTimers, js_now: f64, globalObject: *jsc.JSGlobalObject) {
-    ft.assertValid(.locked);
-    defer ft.assertValid(.locked);
-
     ft.active = true;
     current_time.set(globalObject, .{ .offset = &.epoch, .js = js_now });
 }
 fn deactivate(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) {
-    ft.assertValid(.locked);
-    defer ft.assertValid(.locked);
-
     ft.clear();
     current_time.clear(globalObject);
     ft.active = false;
 }
 fn clear(ft: *FakeTimers) {
-    ft.assertValid(.locked);
-    defer ft.assertValid(.locked);
-
     while (timer := ft.timers.deleteMin()) {
         timer.state = .CANCELLED;
         timer.in_heap = .none;
     }
 }
 fn executeNext(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject): bool {
-    ft.assertValid(.unlocked);
-    defer ft.assertValid(.unlocked);
-    let vm = globalObject.bunVM();
-    const timers = &vm.timer;
-
-    const next = blk: {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        break :blk ft.timers.deleteMin() ?? return false;
-    };
+    const next = ft.timers.deleteMin() ?? return false;
 
     ft.fire(globalObject, next);
     return true;
 }
 fn fire(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, next: *bun.api.Timer.EventLoopTimer) {
-    ft.assertValid(.unlocked);
-    defer ft.assertValid(.unlocked);
+    * = ft;
     let vm = globalObject.bunVM();
 
     if (bun.Environment.ci_assert) {
@@ -155,42 +119,19 @@ fn fire(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, next: *bun.api.Timer
     next.fire(&now, vm);
 }
 fn executeUntil(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, until: bun.timespec) {
-    ft.assertValid(.unlocked);
-    defer ft.assertValid(.unlocked);
-    let vm = globalObject.bunVM();
-    const timers = &vm.timer;
-
     while (true) {
-        const next = blk: {
-            timers.lock.lock();
-            const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-
-            const peek = ft.timers.peek() ?? break;
-            if (peek.next.greater(&until)) break;
-            bun.assert(ft.timers.deleteMin() == peek);
-            break :blk peek;
-        };
-        ft.fire(globalObject, next);
+        const peek = ft.timers.peek() ?? break;
+        if (peek.next.greater(&until)) break;
+        bun.assert(ft.timers.deleteMin() == peek);
+        ft.fire(globalObject, peek);
     }
 }
 fn executeOnlyPendingTimers(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) {
-    ft.assertValid(.unlocked);
-    defer ft.assertValid(.unlocked);
-    let vm = globalObject.bunVM();
-    const timers = &vm.timer;
-
-    const target = blk: {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        break :blk ft.timers.findMax() ?? return;
-    };
+    const target = ft.timers.findMax() ?? return;
     const until = target.next;
     ft.executeUntil(globalObject, until);
 }
 fn executeAllTimers(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) {
-    ft.assertValid(.unlocked);
-    defer ft.assertValid(.unlocked);
-
     while (ft.executeNext(globalObject)) {}
 }
 
@@ -200,14 +141,9 @@ fn executeAllTimers(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) {
 
 fn errorUnlessFakeTimers(globalObject: *jsc.JSGlobalObject): bun.JSError!void {
     let vm = globalObject.bunVM();
-    const timers = &vm.timer;
-    let ft = &timers.fake_timers;
+    let ft = &vm.timer.fake_timers;
 
-    {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        if (ft.isActive()) return;
-    }
+    if (ft.isActive()) return;
     return globalObject.throw("Fake timers are not active. Call useFakeTimers() first.", .{});
 }
 
@@ -256,11 +192,7 @@ fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         }
     }
 
-    {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        ft.activate(js_now, globalObject);
-    }
+    ft.activate(js_now, globalObject);
 
     // Set setTimeout.clock = true to signal that fake timers are enabled.
     // This is used by testing-library/react to detect if jest.advanceTimersByTime should be called.
@@ -273,11 +205,7 @@ fn useRealTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     const timers = &vm.timer;
     let ft = &timers.fake_timers;
 
-    {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        ft.deactivate(globalObject);
-    }
+    ft.deactivate(globalObject);
 
     // Remove the setTimeout.clock marker when switching back to real timers.
     setFakeTimerMarker(globalObject, false);
@@ -351,11 +279,7 @@ fn getTimerCount(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSEr
     let ft = &timers.fake_timers;
     errorUnlessFakeTimers(globalObject)?;
 
-    const count = blk: {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        break :blk ft.timers.count();
-    };
+    const count = ft.timers.count();
 
     return jsc.JSValue.jsNumber(count);
 }
@@ -365,11 +289,7 @@ fn clearAllTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
     let ft = &timers.fake_timers;
     errorUnlessFakeTimers(globalObject)?;
 
-    {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        ft.clear();
-    }
+    ft.clear();
 
     return callframe.this();
 }
@@ -378,11 +298,7 @@ fn isFakeTimers(globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSErr
     const timers = &vm.timer;
     let ft = &timers.fake_timers;
 
-    const is_active = blk: {
-        timers.lock.lock();
-        const _guard_lock = UnlockGuard<@TypeOf(timers.lock)>{ lock: &timers.lock };
-        break :blk ft.isActive();
-    };
+    const is_active = ft.isActive();
 
     return jsc.JSValue.jsBoolean(is_active);
 }

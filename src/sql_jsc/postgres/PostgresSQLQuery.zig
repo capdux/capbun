@@ -436,7 +436,6 @@ pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfra
         }
         var connection = connection_opt.?;
         _ = &connection;
-        _ = connection.poll_ref.ref(globalObject.bunVM());
         var query = arguments[1];
         _ = &query;
         if ((!query.isObject())) {
@@ -482,6 +481,7 @@ pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfra
             _ = bun.default_allocator.destroy(stmt);
             _ = self.deref();
             return globalObject.throwOutOfMemory(); }); });
+            _ = connection.poll_ref.ref(globalObject.bunVM());
             _ = self.thisValue.upgrade(globalObject);
             _ = js.targetSetCached(this_value, globalObject, query);
             if ((self.status == .running)) {
@@ -507,6 +507,7 @@ pub fn doRun(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfra
         const signature_hash: u64 = bun.hash((if (@typeInfo(@TypeOf(signature)) == .@"enum" or @typeInfo(@TypeOf(signature)) == .@"union") @tagName(signature) else signature.name));
         if ((!connection.flags.use_unnamed_prepared_statements)) {
             const entry = (blk_catch_7: { break :blk_catch_7 ((connection.statements.getOrPut(bun.default_allocator, signature_hash)) catch |e| { _ = &e; _ = signature.deinit();
+            _ = self.deref();
             return globalObject.throwError(e, "failed to allocate statement"); }); });
             connection_entry_value = entry.value_ptr;
             if (entry.found_existing) {
@@ -600,6 +601,12 @@ if (((!connection.hasQueryRunning()) or connection.canPipeline())) {
                         _ = connection.statements.remove(signature_hash);
                     }
                     _ = signature.deinit();
+                    if (self.statement) |stmt| {
+                        _ = &stmt;
+                        self.statement = null;
+                        _ = stmt.deref();
+                    }
+                    _ = self.deref();
                     if ((!globalObject.hasException())) {
                         return globalObject.throwValue(postgresErrorToJS(globalObject, "failed to flush", e));
                     }
@@ -633,7 +640,14 @@ if (((!connection.hasQueryRunning()) or connection.canPipeline())) {
             }
         }
 };
-        _ = (blk_catch_13: { break :blk_catch_13 ((connection.requests.writeItem(self)) catch |__ce_13| { _ = &__ce_13; return globalObject.throwOutOfMemory(); }); });
+        _ = (blk_catch_13: { break :blk_catch_13 ((connection.requests.writeItem(self)) catch |__ce_13| { _ = &__ce_13; if (self.statement) |stmt| {
+            _ = &stmt;
+            self.statement = null;
+            _ = stmt.deref();
+        }
+        _ = self.deref();
+        return globalObject.throwOutOfMemory(); }); });
+        _ = connection.poll_ref.ref(globalObject.bunVM());
         _ = self.thisValue.upgrade(globalObject);
         _ = js.targetSetCached(this_value, globalObject, query);
         if (did_write) {

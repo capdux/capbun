@@ -2285,6 +2285,9 @@ pub export fn napi_is_array(env_: napi_env, value_: napi_value, result_: ?*bool)
         }
         const result = result_.?;
         const value = value_.get();
+        if ((value == .zero)) {
+            return env.invalidArg();
+        }
         result.* = value.jsType().isArray();
         return env.ok();
 }
@@ -2300,6 +2303,9 @@ pub export fn napi_get_array_length(env_: napi_env, value_: napi_value, result_:
         }
         const result = result_.?;
         const value = value_.get();
+        if ((value == .zero)) {
+            return env.invalidArg();
+        }
         if ((!value.jsType().isArray())) {
             return env.setLastError(.array_expected);
         }
@@ -2319,6 +2325,9 @@ pub export fn napi_strict_equals(env_: napi_env, lhs_: napi_value, rhs_: napi_va
         const result = result_.?;
         const lhs = lhs_.get();
         const rhs = rhs_.get();
+        if (((lhs == .zero) or (rhs == .zero))) {
+            return env.invalidArg();
+        }
         result.* = (blk_catch_11: { break :blk_catch_11 ((lhs.isStrictEqual(rhs, env.toJS())) catch |__ce_11| { _ = &__ce_11; return env.setLastError(.pending_exception); }); });
         return env.ok();
 }
@@ -2525,6 +2534,9 @@ pub export fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool) c
         const env = env_.?;
         _ = env.checkGC();
         const value = value_.get();
+        if ((value == .zero)) {
+            return env.invalidArg();
+        }
         result.* = value.isAnyError();
         return env.ok();
 }
@@ -2545,6 +2557,9 @@ pub export fn napi_is_arraybuffer(env_: napi_env, value_: napi_value, result_: ?
         }
         const result = result_.?;
         const value = value_.get();
+        if ((value == .zero)) {
+            return env.invalidArg();
+        }
         result.* = ((!value.isNumber()) and (value.jsTypeLoose() == .ArrayBuffer));
         return env.ok();
 }
@@ -2642,6 +2657,9 @@ pub export fn napi_is_dataview(env_: napi_env, value_: napi_value, result_: ?*bo
         }
         const result = result_.?;
         const value = value_.get();
+        if ((value == .zero)) {
+            return env.invalidArg();
+        }
         result.* = ((!value.isEmptyOrUndefinedOrNull()) and (value.jsTypeLoose() == .DataView));
         return env.ok();
 }
@@ -2654,6 +2672,9 @@ pub export fn napi_get_dataview_info(env_: napi_env, dataview_: napi_value, mayb
         const env = env_.?;
         _ = env.checkGC();
         const dataview = dataview_.get();
+        if ((dataview == .zero)) {
+            return env.invalidArg();
+        }
         const array_buffer_opt = dataview.asArrayBuffer(env.toJS());
         if ((array_buffer_opt == null)) {
             return env.setLastError(.object_expected);
@@ -2797,6 +2818,9 @@ pub export fn napi_is_date(env_: napi_env, value_: napi_value, is_date_: ?*bool)
         }
         const is_date = is_date_.?;
         const value = value_.get();
+        if ((value == .zero)) {
+            return env.invalidArg();
+        }
         is_date.* = (value.jsTypeLoose() == .JSDate);
         return env.ok();
 }

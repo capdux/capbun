@@ -128,11 +128,11 @@ pub struct OverrideColors {
     color: css.css_values.color.CssColor,
 
     static fn parse(input: *css.Parser): Result(OverrideColors) {
-        const index = switch (css.CSSIntegerFns.parse(input)) {
+        const index_i32 = switch (css.CSSIntegerFns.parse(input)) {
             .result vv => vv,
             .err e => return { err: e },
         };
-        if (index < 0) return { err: input.newCustomError(css.ParserError.invalid_value) };
+        const index = std.math.cast(u16, index_i32) ?? return { err: input.newCustomError(css.ParserError.invalid_value) };
 
         const color = switch (css.CssColor.parse(input)) {
             .result vv => vv,
@@ -142,7 +142,7 @@ pub struct OverrideColors {
 
         return {
             result: OverrideColors{
-                index: @intCast(index),
+                index: index,
                 color: color,
             },
         };
@@ -173,8 +173,8 @@ pub union(enum) BasePalette {
 
     static fn parse(input: *css.Parser): Result(BasePalette) {
         if (i := input.tryParse(css.CSSIntegerFns.parse, {}).asValue()) {
-            if (i < 0) return { err: input.newCustomError(css.ParserError.invalid_value) };
-            return { result: { integer: @intCast(i) } };
+            const u16_i = std.math.cast(u16, i) ?? return { err: input.newCustomError(css.ParserError.invalid_value) };
+            return { result: { integer: u16_i } };
         }
 
         const location = input.currentSourceLocation();

@@ -666,7 +666,7 @@ pub fn highlightStringLit(comptime char: u8, writer: *std.Io.Writer, text_ptr: *
                         const curly_start = i;
                         i = (i + 2);
                         while (((i < txt.len) and (txt[@as(usize, @intCast(i))] != 125))) {
-                            if ((txt[@as(usize, @intCast(i))] == 92)) {
+                            if ((((i + 1) < txt.len) and (txt[@as(usize, @intCast(i))] == 92))) {
                                 i = (i + 1);
                             }
                             i = (i + 1);
@@ -713,6 +713,9 @@ pub fn highlightStringLit(comptime char: u8, writer: *std.Io.Writer, text_ptr: *
             } else {
                 if (opts.redact_sensitive_information) {
                     _ = try_redact: {
+                    if ((i == 0)) {
+                        break :try_redact;
+                    }
                     var inner: []const u8 = txt[1..i];
                     _ = &inner;
                     if (((inner.len > 0) and (inner[@as(usize, @intCast((inner.len - 1)))] == char))) {
@@ -831,7 +834,10 @@ else => {
                             _ = try writer.writeByte(txt[0]);
                             txt = txt[1..];
                         }
-                        if (((txt.len > 0) and ((txt[0] == 61) or (txt[0] == 58)))) {
+                        if ((txt.len == 0)) {
+                            return;
+                        }
+                        if (((txt[0] == 61) or (txt[0] == 58))) {
                             _ = try writer.writeByte(txt[0]);
                             txt = txt[1..];
                             while (((txt.len > 0) and std.ascii.isWhitespace(txt[0]))) {

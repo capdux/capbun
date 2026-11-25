@@ -1600,6 +1600,10 @@ if ((i >= pkg_info.len)) {
                 }
                 const integrity_str = integrity_str_opt.?;
                 pkg.@"meta".integrity = Integrity.parse(integrity_str);
+                if (((integrity_str.len > 0) and (!pkg.@"meta".integrity.tag.isSupported()))) {
+                    _ = try log.addWarning(source, integrity_expr.loc, "Unsupported or malformed integrity hash; ignoring");
+                    pkg.@"meta".integrity = Integrity{  };
+                }
 },
 .local_tarball, .remote_tarball => {
 if ((i < pkg_info.len)) {
@@ -1607,6 +1611,10 @@ if ((i < pkg_info.len)) {
                     if (integrity_expr.asString(allocator)) |integrity_str| {
                         _ = &integrity_str;
                         pkg.@"meta".integrity = Integrity.parse(integrity_str);
+                        if (((integrity_str.len > 0) and (!pkg.@"meta".integrity.tag.isSupported()))) {
+                            _ = try log.addWarning(source, integrity_expr.loc, "Unsupported or malformed integrity hash; ignoring");
+                            pkg.@"meta".integrity = Integrity{  };
+                        }
                         i = (i + 1);
                     }
                 }
@@ -1624,12 +1632,20 @@ if ((i >= pkg_info.len)) {
                     return error.InvalidPackageInfo;
                 }
                 const bun_tag_str = bun_tag_str_opt.?;
+                if ((!Repository.isSafeResolvedTag(bun_tag_str))) {
+                    _ = try log.addError(source, bun_tag.loc, "Invalid git dependency tag");
+                    return error.InvalidPackageInfo;
+                }
                 @field((if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value), @tagName(tag)).resolved = try string_buf.append(bun_tag_str);
                 if ((i < pkg_info.len)) {
                     const integrity_expr = pkg_info.at(i);
                     if (integrity_expr.asString(allocator)) |integrity_str| {
                         _ = &integrity_str;
                         pkg.@"meta".integrity = Integrity.parse(integrity_str);
+                        if (((integrity_str.len > 0) and (!pkg.@"meta".integrity.tag.isSupported()))) {
+                            _ = try log.addWarning(source, integrity_expr.loc, "Unsupported or malformed integrity hash; ignoring");
+                            pkg.@"meta".integrity = Integrity{  };
+                        }
                         i = (i + 1);
                     }
                 }
@@ -1677,7 +1693,7 @@ else => {
                 while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
                     const dep_id: DependencyID = @intCast(_dep_id);
                     const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                    const res_id_opt = pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items));
+                    const res_id_opt = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse (pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items))));
                     if ((res_id_opt == null)) {
                         if (dep.behavior.optional) {
                             continue;
@@ -1717,7 +1733,7 @@ else => {
                             const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items);
                             const workspace_node_modules = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint((&path_buf), "{s}/{s}", .{ workspace_name, dep_name })) catch |__ce_6| { _ = &__ce_6; _ = try log.addErrorFmt(source, root_pkg_exr.loc, allocator, "Workspace and dependency name too long: '{s}/{s}'", .{ workspace_name, dep_name });
                             return error.InvalidPackageInfo; }); });
-                            const res_id_opt = ((pkg_map.get(workspace_node_modules)) orelse (pkg_map.get(dep_name)));
+                            const res_id_opt = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse (((pkg_map.get(workspace_node_modules)) orelse (pkg_map.get(dep_name)))));
                             if ((res_id_opt == null)) {
                                 if (dep.behavior.optional) {
                                     continue;
@@ -1756,7 +1772,7 @@ else => {
                 while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
                     const dep_id: DependencyID = @intCast(_dep_id);
                     const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                    const res_id = (blk_catch_7: { break :blk_catch_7 ((pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {
+                    const res_id = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse ((blk_catch_7: { break :blk_catch_7 ((pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {
                         _ = try log.addError(source, key.loc, "Invalid package path");
                         return error.InvalidPackageKey;
                     } else {
@@ -1768,7 +1784,7 @@ else => {
                             return error.InvalidPackageInfo;
                         }
                     }
-                    return error.InvalidPackageInfo; }); });
+                    return error.InvalidPackageInfo; }); })));
                     _ = mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
                 }
             }
@@ -1778,6 +1794,52 @@ else => {
                 return error.InvalidPackagesObject;
             } }); });
         }
+}
+
+pub fn isDeferredPeer(dep: *const Dependency, string_buf: []const u8) bool {
+        if (((!dep.behavior.peer) or dep.behavior.optional)) {
+            return false;
+        }
+        if ((dep.version.tag == .npm)) {
+            const lit = dep.version.literal.slice(string_buf);
+            if (((lit.len == 0) or strings.eqlComptime(lit, "*"))) {
+                return false;
+            }
+        }
+        return true;
+}
+
+pub fn resolvePeerDepVersionBased(dep: *const Dependency, package_index: *const BinaryLockfile.PackageIndex.Map, overrides: *const BinaryLockfile.OverrideMap, pkg_resolutions: []const Resolution, string_buf: []const u8) ?PackageID {
+        const name_hash = (switch (dep.version.tag) {
+.dist_tag, .git, .github, .npm, .tarball, .workspace => String.Builder.stringHash(dep.realname().slice(string_buf)),
+else => dep.name_hash,
+});
+        const overridable = ((!dep.behavior.isWorkspace()) and ((dep.version.tag != .npm) or (!(if (@typeInfo(@TypeOf(dep.version)) == .@"enum") @intFromEnum(dep.version) else dep.version.value).npm.is_alias)));
+        if ((overridable and (overrides.get(name_hash) != null))) {
+            return null;
+        }
+        const entry = ((package_index.get(name_hash)) orelse { return null; });
+        const candidates: []const PackageID = (if ((entry == .id)) (blk: {
+        break :blk @as(*const [1]PackageID, @ptrCast(@alignCast(&(entry.id))))[0..1];
+
+}) else entry.ids.items);
+        for (cp_iter_slice(candidates)) |id| {
+            _ = &id;
+            if ((((if (comptime @typeInfo(@TypeOf(id)) == .@"enum") cp_cast_int(usize, @intFromEnum(id)) else cp_cast_int(usize, id)) < pkg_resolutions.len) and pkg_resolutions[@as(usize, @intCast(id))].satisfiesDependencyVersion((&dep.version), string_buf, string_buf))) {
+                return id;
+            }
+        }
+        if ((candidates.len > 0)) {
+            const first = candidates[0];
+            if (((if (comptime @typeInfo(@TypeOf(first)) == .@"enum") cp_cast_int(usize, @intFromEnum(first)) else cp_cast_int(usize, first)) < pkg_resolutions.len)) {
+                const res_tag = pkg_resolutions[@as(usize, @intCast(first))].tag;
+                const ver_tag = dep.version.tag;
+                if (((((res_tag == .npm) and (ver_tag == .npm)) or ((res_tag == .git) and (ver_tag == .git))) or ((res_tag == .github) and (ver_tag == .github)))) {
+                    return first;
+                }
+            }
+        }
+        return null;
 }
 
 pub fn mapDepToPkg(dep: *Dependency, dep_id: DependencyID, pkg_id: PackageID, lockfile: *BinaryLockfile, pkg_resolutions: []const Resolution) void {

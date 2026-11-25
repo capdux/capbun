@@ -305,6 +305,10 @@ struct PosixBufferedReader {
     }
 
     fn registerPoll(*_) {
+        * = _.registerPollWithStatus();
+    }
+
+    fn registerPollWithStatus(*_): bool {
         const poll = _.handle.getPoll() ?? brk: {
             if (_.handle == .fd && _.flags.pollable) {
                 const fd = _.handle.fd;
@@ -312,7 +316,7 @@ struct PosixBufferedReader {
                 break :brk _.handle.poll;
             }
 
-            return;
+            return true;
         };
         poll.owner.set(_);
 
@@ -322,8 +326,9 @@ struct PosixBufferedReader {
         switch (poll.registerWithFd(_.loop(), .readable, .dispatch, poll.fd)) {
             .err e => {
                 _.onError(e);
+                return false;
             },
-            .result => {},
+            .result => return true,
         }
     }
 
@@ -601,8 +606,8 @@ struct PosixBufferedReader {
                             if (e.isRetry()) {
                                 if (comptime file_type == .file) {
                                     bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
-                                } else {
-                                    _.registerPoll();
+                                } else if (!_.registerPollWithStatus()) {
+                                    return;
                                 }
 
                                 if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0)

@@ -1949,31 +1949,7 @@ _ = installer.startTask(entry_id);
 inline .npm, .git, .github, .local_tarball, .remote_tarball => |pkg_res_tag| {
 const patch_info = try installer.packagePatchInfo(pkg_name, pkg_name_hash, (&pkg_res));
                     const uses_global_store = installer.entryUsesGlobalStore(entry_id);
-                    const has_stale_gvs_link = ((!uses_global_store) and stale: {
-                    if ((installer.global_store_path == null)) {
-                        break :stale false;
-                    }
-                    var local: AutoPath = .initTopLevelDir();
-                    _ = &local;
-                    var _local_guard = AutoPathGuard_{ .path = (&local) };
-                    _ = &_local_guard;
-                    var ___local_guard_moved = false; _ = &___local_guard_moved;
-                    defer if (!___local_guard_moved) { ___local_guard_moved = true; const __T = @TypeOf(_local_guard); if (@typeInfo(__T) == .optional) { if (_local_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _local_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _local_guard; _drop_val.__cp_deinit(); } };
-                    _ = installer.appendLocalStoreEntryPath((&local), entry_id);
-                    if (comptime bun.Environment.isWindows) {
-                        if (sys.getFileAttributes(local.sliceZ())) |a| {
-                            _ = &a;
-                            break :stale a.is_reparse_point;
-                        }
-                        break :stale false;
-                    }
-                    if (sys.lstat(local.sliceZ()).asValue()) |st| {
-                        _ = &st;
-                        break :stale std.posix.S.ISLNK(@intCast(st.mode));
-                    }
-                    break :stale false;
-});
-                    const needs_install = ((((manager.options.enable.force_install or (is_new_bun_modules and (!uses_global_store))) or has_stale_gvs_link) or (patch_info == .remove)) or needs_install: {
+                    const needs_install = ((((manager.options.enable.force_install or (is_new_bun_modules and (!uses_global_store))) or (patch_info == .remove)) or needs_install: {
                     var store_path: AutoAbsPath_ = .initTopLevelDir();
                     _ = &store_path;
                     var _store_path_guard = AutoAbsPathGuard_{ .path = (&store_path) };
@@ -2004,7 +1980,27 @@ const patch_info = try installer.packagePatchInfo(pkg_name, pkg_name_hash, (&pkg
                     }
 },
 });
-});
+}) or ((!uses_global_store) and stale: {
+                    var local: AutoPath = .initTopLevelDir();
+                    _ = &local;
+                    var _local_guard = AutoPathGuard_{ .path = (&local) };
+                    _ = &_local_guard;
+                    var ___local_guard_moved = false; _ = &___local_guard_moved;
+                    defer if (!___local_guard_moved) { ___local_guard_moved = true; const __T = @TypeOf(_local_guard); if (@typeInfo(__T) == .optional) { if (_local_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _local_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _local_guard; _drop_val.__cp_deinit(); } };
+                    _ = installer.appendLocalStoreEntryPath((&local), entry_id);
+                    if (comptime bun.Environment.isWindows) {
+                        if (sys.getFileAttributes(local.sliceZ())) |a| {
+                            _ = &a;
+                            break :stale a.is_reparse_point;
+                        }
+                        break :stale false;
+                    }
+                    if (sys.lstat(local.sliceZ()).asValue()) |st| {
+                        _ = &st;
+                        break :stale std.posix.S.ISLNK(@intCast(st.mode));
+                    }
+                    break :stale false;
+}));
                     if ((!needs_install)) {
                         if (uses_global_store) {
                             switch (installer.linkProjectToGlobalStore(entry_id)) {

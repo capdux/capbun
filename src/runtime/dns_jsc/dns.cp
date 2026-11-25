@@ -1728,6 +1728,10 @@ pub struct internal {
                 }
             }
         }
+        if (poll := req.libinfo.file_poll) {
+            poll.deinit();
+            req.libinfo.file_poll = null;
+        }
         afterResult(req, addr_info, @intCast(status_int));
     }
 

@@ -735,10 +735,17 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 client.deref();
             }
 
+            const had_socket_ref = client.tcp.ext(HTTPClient) != null;
+
             if (comptime ssl) {
                 client.tcp.close(.normal);
             } else {
                 client.tcp.close(.failure);
+            }
+
+            if (had_socket_ref) {
+                client.tcp.detach();
+                client.deref();
             }
         }
 

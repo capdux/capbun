@@ -1449,6 +1449,10 @@ else => {
         }
 }
 
+pub fn windowSize(current: Blob.SizeType, available: Blob.SizeType) Blob.SizeType {
+        return (if ((current == Blob.max_size)) available else @min(current, available));
+}
+
 pub fn resolveSize(self: *Blob) void {
         if (self.store) |store| {
             _ = &store;
@@ -1457,7 +1461,8 @@ pub fn resolveSize(self: *Blob) void {
                 const store_size = store.size();
                 if ((store_size != Blob.max_size)) {
                     self.offset = @min(store_size, offset);
-                    self.size = (store_size - self.offset);
+                    const available = (store_size - self.offset);
+                    self.size = Blob.windowSize(self.size, available);
                 }
                 return;
             } else {
@@ -1469,7 +1474,8 @@ pub fn resolveSize(self: *Blob) void {
                         const store_size = store.data.file.max_size;
                         const offset = self.offset;
                         self.offset = @min(store_size, offset);
-                        self.size = (store_size -| offset);
+                        const available = (store_size - self.offset);
+                        self.size = Blob.windowSize(self.size, available);
                         return;
                     }
                     if (((store.data.file.seekable != null) and (store.data.file.seekable.? == false))) {
@@ -3300,7 +3306,7 @@ const WriteFileWaitFromLockedValueTask = write_file_mod.WriteFileWaitFromLockedV
 const debug = Output.scoped(.Blob, .visible);
 const write_permissions = 436;
 pub const BlobStructuredCloneWriteBytes = @TypeOf((&_BlobCloneSigs.write_bytes));
-const serialization_version: u8 = 3;
+const serialization_version: u8 = 4;
 pub const MmapFreeInterface = (if (Environment.isPosix) struct {
 
 pub fn alloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
@@ -4198,6 +4204,9 @@ pub fn _onStructuredCloneSerialize(blob: *Blob, comptime Writer: type, writer: W
             store_tag = (if ((store.data == .file)) .file else .bytes);
         }
         _ = try writer.writeInt(u8, @intFromEnum(store_tag), .little);
+        if ((store_tag == .file)) {
+            _ = try writer.writeInt(u64, @intCast(blob.size), .little);
+        }
         _ = blob.resolveSize();
         if (blob.store) |store| {
             _ = &store;
@@ -4232,6 +4241,8 @@ pub fn _onStructuredCloneDeserialize(globalThis: *JSGlobalObject, comptime Reade
         }
         const content_type_was_set: bool = (try reader.readInt(u8, .little) != 0);
         const store_tag = try reader.readEnum(BlobStore.SerializeTag, .little);
+        var file_size: ?u64 = null;
+        _ = &file_size;
         const blob: *Blob = (switch (store_tag) {
 .bytes => bytes: {
         const bytes_len = try reader.readInt(u32, .little);
@@ -4271,6 +4282,9 @@ else => {
         break :bytes Blob.new(b);
 },
 .file => file: {
+        if ((version >= 4)) {
+            file_size = try reader.readInt(u64, .little);
+        }
         const pathlike_tag = try reader.readEnum(jsc.Node.PathOrFileDescriptor.SerializeTag, .little);
         switch (pathlike_tag) {
 .fd => {
@@ -4317,6 +4331,12 @@ const path_len = try reader.readInt(u32, .little);
 };
         _ = bun.assertf(blob.isHeapAllocated(), "expected blob to be heap-allocated", .{});
         blob.offset = @as(BlobSizeType, @truncate(offset));
+        if (file_size) |size| {
+            _ = &size;
+            if ((size != Blob.max_size)) {
+                blob.size = @as(BlobSizeType, @truncate(size));
+            }
+        }
         if (blob.store) |store| {
             _ = &store;
             const store_size = store.size();

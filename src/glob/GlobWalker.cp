@@ -1011,7 +1011,7 @@ pub fn GlobWalker_(
     const count_fds = Accessor.count_fds && bun.Environment.isDebug;
 
     const stdJoin = if (!sentinel) std.fs.path.join else std.fs.path.joinZ;
-    const bunJoin = if (!sentinel) ResolvePath.join else ResolvePath.joinZ;
+    const bunJoin = if (!sentinel) ResolvePath.joinSpill else ResolvePath.joinZSpill;
     const MatchedPath = if (!sentinel) []const u8 else [:0]const u8;
     const MatchedMap = std.ArrayHashMapUnmanaged(BunString, void, MatchedMapCtx_(sentinel), true);
     const IterState = GlobWalkerIterState_(Accessor, MatchedPath);
@@ -1474,10 +1474,11 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                 return stdJoin(_.arena.allocator(), subdir_parts)?;
             }
 
-            const out = _.arena.allocator().dupe(u8, bunJoin(subdir_parts, .auto))?;
-            if (comptime sentinel) return out[0 .. out.len - 1 :0];
-
-            return out;
+            let spill: std.ArrayListUnmanaged(u8) = .{};
+            defer spill.deinit(bun.default_allocator);
+            const joined = bunJoin(&spill, bun.default_allocator, subdir_parts, .auto)?;
+            if (comptime sentinel) return _.arena.allocator().dupeZ(u8, joined)?;
+            return _.arena.allocator().dupe(u8, joined)?;
         }
 
         static inline fn startsWithDot(filepath: []const u8): bool {

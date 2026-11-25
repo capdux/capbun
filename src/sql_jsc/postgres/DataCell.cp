@@ -322,6 +322,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                         pos += 5;
                                         continue;
                                     }
+                                    return error.UnsupportedArrayFormat;
                                 } else {
                                     array.append(bun.default_allocator, SQLDataCell{ tag: .@"bool", value: { @"bool": 0 } })?;
                                     pos += 1;
@@ -336,6 +337,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                         pos += 4;
                                         continue;
                                     }
+                                    return error.UnsupportedArrayFormat;
                                 } else {
                                     array.append(bun.default_allocator, SQLDataCell{ tag: .@"bool", value: { @"bool": 1 } })?;
                                     pos += 1;

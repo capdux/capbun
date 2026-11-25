@@ -107,9 +107,10 @@ pub fn NewReaderWrap(
 
         pub fn length(): PostgresInt32! {
             const expected = _.int(PostgresInt32)?;
-            if (expected > -1) {
-                _.ensureCapacity(@intCast(expected -| 4))?;
+            if (expected < 4 || expected > std.math.maxInt(i32)) {
+                return err.InvalidMessageLength;
             }
+            _.ensureCapacity(@intCast(expected - 4))?;
 
             return expected;
         }

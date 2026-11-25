@@ -1,3 +1,6 @@
+extern fn JSC__JSValue__pinArrayBuffer(v: jsc.JSValue): bool;
+extern fn JSC__JSValue__unpinArrayBuffer(v: jsc.JSValue);
+
 struct DeinitGuard<T> {
     ptr: (*T!)? = null,
     ~init() {
@@ -115,7 +118,6 @@ pub fn CompressionStream(comptime T: type): type {
 
             if (arguments[1].isNull()) {
                 // just a flush
-                in_slice = null;
                 in_len = 0;
                 in_off = 0;
             } else {
@@ -127,7 +129,6 @@ pub fn CompressionStream(comptime T: type): type {
                 if (in_buf.byte_len < @as(usize, in_off) + @as(usize, in_len)) {
                     return globalThis.ERR(.OUT_OF_RANGE, "in_off + in_len ({d}) exceeds input buffer length ({d})", .{ @as(usize, in_off) + @as(usize, in_len), in_buf.byte_len }).throw();
                 }
-                in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
 
             const out_buf = arguments[4].asArrayBuffer(globalThis) ?? {
@@ -138,7 +139,6 @@ pub fn CompressionStream(comptime T: type): type {
             if (out_buf.byte_len < @as(usize, out_off) + @as(usize, out_len)) {
                 return globalThis.ERR(.OUT_OF_RANGE, "out_off + out_len ({d}) exceeds output buffer length ({d})", .{ @as(usize, out_off) + @as(usize, out_len), out_buf.byte_len }).throw();
             }
-            out = out_buf.byteSlice()[out_off..][0..out_len];
 
             if (stream.write_in_progress) {
                 return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
@@ -146,8 +146,33 @@ pub fn CompressionStream(comptime T: type): type {
             if (stream.pending_close) {
                 return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
             }
+
+            // Pin both buffers before mutating any state: materializing a
+            // FastTypedArray's backing store can fail on OOM, and failing here
+            // leaves nothing to unwind.
+            if (!arguments[1].isNull()) {
+                if (!unsafe { JSC__JSValue__pinArrayBuffer(arguments[1]) }) {
+                    return globalThis.throwOutOfMemory();
+                }
+                const pinned_in_buf = arguments[1].asArrayBuffer(globalThis).?;
+                in_slice = pinned_in_buf.byteSlice()[in_off..][0..in_len];
+            } else {
+                in_slice = null;
+            }
+            if (!unsafe { JSC__JSValue__pinArrayBuffer(arguments[4]) }) {
+                if (!arguments[1].isNull()) {
+                    unsafe { JSC__JSValue__unpinArrayBuffer(arguments[1]); }
+                }
+                return globalThis.throwOutOfMemory();
+            }
+            const pinned_out_buf = arguments[4].asArrayBuffer(globalThis).?;
+            out = pinned_out_buf.byteSlice()[out_off..][0..out_len];
+
             stream.write_in_progress = true;
             stream.ref();
+
+            T.js.pendingInputSetCached(this_value, globalThis, arguments[1]);
+            T.js.pendingOutputSetCached(this_value, globalThis, arguments[4]);
 
             stream.stream.setBuffers(in_slice, out);
             stream.stream.setFlush(i32(flush));
@@ -183,6 +208,19 @@ pub fn CompressionStream(comptime T: type): type {
             }
 
             this_value.ensureStillAlive();
+
+            if (pinned_in := T.js.pendingInputGetCached(this_value)) {
+                if (pinned_in.isCell()) {
+                    unsafe { JSC__JSValue__unpinArrayBuffer(pinned_in); }
+                }
+            }
+            if (pinned_out := T.js.pendingOutputGetCached(this_value)) {
+                if (pinned_out.isCell()) {
+                    unsafe { JSC__JSValue__unpinArrayBuffer(pinned_out); }
+                }
+            }
+            T.js.pendingInputSetCached(this_value, global, .zero);
+            T.js.pendingOutputSetCached(this_value, global, .zero);
 
             if (!(checkError(stream, global, this_value))) {
                 return;

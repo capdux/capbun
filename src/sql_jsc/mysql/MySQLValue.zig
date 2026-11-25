@@ -193,12 +193,20 @@ pub fn toJS(self: ValueDateTime, globalObject: *JSC.JSGlobalObject) JSValue {
             return JSValue.fromDateNumber(globalObject, self.toJSTimestamp());
     }
 
+pub fn checkRange(ts: i64, globalObject: *JSC.JSGlobalObject) AnyMySQLError.Error!void {
+            const MAX_DATETIME_UNIX_TIMESTAMP: i64 = 253402300799;
+            if (((ts < 0) or (ts > MAX_DATETIME_UNIX_TIMESTAMP))) {
+                return globalObject.throwInvalidArguments("MySQL DATE/DATETIME value must be between 1970-01-01T00:00:00Z and 9999-12-31T23:59:59Z", .{});
+            }
+    }
+
 pub fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject) !@This() {
             if (value.isDate()) {
                 const total_ms = value.getUnixTimestamp();
                 const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
                 const ts_f: f64 = @floatFromInt(ts);
                 const ms: u32 = @intFromFloat((total_ms - (ts_f * 1000)));
+                _ = try checkRange(ts, globalObject);
                 return ValueDateTime.fromUnixTimestamp(ts, (ms * 1000));
             }
             if (value.isNumber()) {
@@ -206,6 +214,7 @@ pub fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject) !@This() {
                 const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
                 const ts_f: f64 = @floatFromInt(ts);
                 const ms: u32 = @intFromFloat((total_ms - (ts_f * 1000)));
+                _ = try checkRange(ts, globalObject);
                 return ValueDateTime.fromUnixTimestamp(ts, (ms * 1000));
             }
             return globalObject.throwInvalidArguments("Expected a date or number", .{});
@@ -220,12 +229,20 @@ pub const ValueTime = struct {
     seconds: u8 = 0,
     microseconds: u32 = 0,
 
+pub fn checkRange(ts: i64, globalObject: *JSC.JSGlobalObject) AnyMySQLError.Error!void {
+            const MAX_TIME_SECONDS: i64 = (((if (comptime @typeInfo(@TypeOf(std.math.maxInt(u32))) == .@"enum") cp_cast_int(i64, @intFromEnum(std.math.maxInt(u32))) else cp_cast_int(i64, std.math.maxInt(u32))) * 86400) + 86399);
+            if (((ts < 0) or (ts > MAX_TIME_SECONDS))) {
+                return globalObject.throwInvalidArguments("MySQL TIME value is out of range", .{});
+            }
+    }
+
 pub fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject) !@This() {
             if (value.isDate()) {
                 const total_ms = value.getUnixTimestamp();
                 const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
                 const ts_f: f64 = @floatFromInt(ts);
                 const ms: u32 = @intFromFloat((total_ms - (ts_f * 1000)));
+                _ = try checkRange(ts, globalObject);
                 return ValueTime.fromUnixTimestamp(ts, (ms * 1000));
             } else {
                 if (value.isNumber()) {
@@ -233,6 +250,7 @@ pub fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject) !@This() {
                     const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
                     const ts_f: f64 = @floatFromInt(ts);
                     const ms: u32 = @intFromFloat((total_ms - (ts_f * 1000)));
+                    _ = try checkRange(ts, globalObject);
                     return ValueTime.fromUnixTimestamp(ts, (ms * 1000));
                 } else {
                     return globalObject.throwInvalidArguments("Expected a date or number", .{});

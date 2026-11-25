@@ -414,10 +414,18 @@ pub fn init(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         const level = try validators.validateInt32(globalThis, arguments[1], "level", .{}, null, null);
         const memLevel = try validators.validateInt32(globalThis, arguments[2], "memLevel", .{}, null, null);
         const strategy = try validators.validateInt32(globalThis, arguments[3], "strategy", .{}, null, null);
-        const writeResultAb = ((arguments[4].asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("writeResult", "TypedArray", arguments[4]); });
-        const writeResult = writeResultAb.asU32().ptr;
+        const writeResult_value = arguments[4];
+        const writeResultAb = ((writeResult_value.asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value); });
+        if ((writeResultAb.typed_array_type != .Uint32Array)) {
+            return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value);
+        }
+        const writeResult_slice = writeResultAb.asU32();
+        if ((writeResult_slice.len < 2)) {
+            return globalThis.ERR(.INVALID_ARG_VALUE, "writeResult must be a Uint32Array with at least 2 elements", .{}).throw();
+        }
+        const writeResult = writeResult_slice.ptr;
         const writeCallback = try validators.validateFunction(globalThis, "writeCallback", arguments[5]);
-        const dictionary: ?[]u8 = (if (arguments[6].isUndefined()) null else ((arguments[6].asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("dictionary", "TypedArray", arguments[6]); }).byteSlice());
+        const dictionary: ?[]u8 = (if (arguments[6].isUndefined()) null else ((arguments[6].asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("dictionary", "Buffer, TypedArray, or DataView", arguments[6]); }).byteSlice());
         self.write_result = writeResult;
         _ = js.writeCallbackSetCached(this_value, globalThis, writeCallback.withAsyncContextIfNeeded(globalThis));
         if ((dictionary != null)) {

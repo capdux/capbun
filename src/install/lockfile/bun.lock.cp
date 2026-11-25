@@ -1928,6 +1928,10 @@ pub fn parseIntoBinaryLockfile(
                     const integrity_str = integrity_str_opt.?;
 
                     pkg.@"meta".integrity = Integrity.parse(integrity_str);
+                    if (integrity_str.len > 0 && !pkg.@"meta".integrity.tag.isSupported()) {
+                        log.addWarning(source, integrity_expr.loc, "Unsupported or malformed integrity hash; ignoring")?;
+                        pkg.@"meta".integrity = Integrity{};
+                    }
                 },
                 .local_tarball, .remote_tarball => {
                     // integrity is optional for tarball deps (backward compat)
@@ -1935,6 +1939,10 @@ pub fn parseIntoBinaryLockfile(
                         const integrity_expr = pkg_info.at(i);
                         if (integrity_str := integrity_expr.asString(allocator)) {
                             pkg.@"meta".integrity = Integrity.parse(integrity_str);
+                            if (integrity_str.len > 0 && !pkg.@"meta".integrity.tag.isSupported()) {
+                                log.addWarning(source, integrity_expr.loc, "Unsupported or malformed integrity hash; ignoring")?;
+                                pkg.@"meta".integrity = Integrity{};
+                            }
                             i += 1;
                         }
                     }
@@ -1956,6 +1964,11 @@ pub fn parseIntoBinaryLockfile(
                     }
                     const bun_tag_str = bun_tag_str_opt.?;
 
+                    if (!Repository.isSafeResolvedTag(bun_tag_str)) {
+                        log.addError(source, bun_tag.loc, "Invalid git dependency tag")?;
+                        return error.InvalidPackageInfo;
+                    }
+
                     @field(res.value, @tagName(tag)).resolved = string_buf.append(bun_tag_str)?;
 
                     // Optional integrity hash (added to pin tarball content)
@@ -1963,6 +1976,10 @@ pub fn parseIntoBinaryLockfile(
                         const integrity_expr = pkg_info.at(i);
                         if (integrity_str := integrity_expr.asString(allocator)) {
                             pkg.@"meta".integrity = Integrity.parse(integrity_str);
+                            if (integrity_str.len > 0 && !pkg.@"meta".integrity.tag.isSupported()) {
+                                log.addWarning(source, integrity_expr.loc, "Unsupported or malformed integrity hash; ignoring")?;
+                                pkg.@"meta".integrity = Integrity{};
+                            }
                             i += 1;
                         }
                     }
@@ -2011,7 +2028,10 @@ pub fn parseIntoBinaryLockfile(
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 
-                const res_id_opt = pkg_map.get(dep.name.slice(lockfile.buffers.string_bytes.items));
+                const res_id_opt = (if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items))
+                    resolvePeerDepVersionBased(dep, &lockfile.package_index, &lockfile.overrides, pkg_resolutions, lockfile.buffers.string_bytes.items)
+                else
+                    null) ?? pkg_map.get(dep.name.slice(lockfile.buffers.string_bytes.items));
                 if (res_id_opt == null) {
                     if (dep.behavior.optional) {
                         continue;
@@ -2056,7 +2076,10 @@ pub fn parseIntoBinaryLockfile(
                         return error.InvalidPackageInfo;
                     };
 
-                    const res_id_opt = pkg_map.get(workspace_node_modules) ?? pkg_map.get(dep_name);
+                    const res_id_opt = (if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items))
+                        resolvePeerDepVersionBased(dep, &lockfile.package_index, &lockfile.overrides, pkg_resolutions, lockfile.buffers.string_bytes.items)
+                    else
+                        null) ?? pkg_map.get(workspace_node_modules) ?? pkg_map.get(dep_name);
                     if (res_id_opt == null) {
                         if (dep.behavior.optional) {
                             continue;
@@ -2104,7 +2127,10 @@ pub fn parseIntoBinaryLockfile(
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 
-                const res_id = pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch e => {
+                const res_id = (if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items))
+                    resolvePeerDepVersionBased(dep, &lockfile.package_index, &lockfile.overrides, pkg_resolutions, lockfile.buffers.string_bytes.items)
+                else
+                    null) ?? (pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch e => {
                     if (e == error.InvalidPackageKey) {
                         log.addError(source, key.loc, "Invalid package path")?;
                         return error.InvalidPackageKey;
@@ -2116,7 +2142,7 @@ pub fn parseIntoBinaryLockfile(
                         return error.InvalidPackageInfo;
                     }
                     return error.InvalidPackageInfo;
-                };
+                });
 
                 mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
             }
@@ -2130,6 +2156,61 @@ pub fn parseIntoBinaryLockfile(
             }
         };
     }
+}
+
+fn isDeferredPeer(dep: *const Dependency, string_buf: string): bool {
+    if (!dep.behavior.peer || dep.behavior.optional) return false;
+    if (dep.version.tag == .npm) {
+        const lit = dep.version.literal.slice(string_buf);
+        if (lit.len == 0 || strings.eqlComptime(lit, "*")) return false;
+    }
+    return true;
+}
+
+fn resolvePeerDepVersionBased(
+    dep: *const Dependency,
+    package_index: *const BinaryLockfile.PackageIndex.Map,
+    overrides: *const BinaryLockfile.OverrideMap,
+    pkg_resolutions: []const Resolution,
+    string_buf: string,
+): PackageID? {
+    const name_hash = switch (dep.version.tag) {
+        .dist_tag, .git, .github, .npm, .tarball, .workspace => String.Builder.stringHash(dep.realname().slice(string_buf)),
+        else => dep.name_hash,
+    };
+
+    const overridable = !dep.behavior.isWorkspace() && (dep.version.tag != .npm || !dep.version.value.npm.is_alias);
+    if (overridable && overrides.get(name_hash) != null) {
+        return null;
+    }
+
+    const entry = package_index.get(name_hash) ?? return null;
+    const candidates: []const PackageID = if (entry == .id)
+        unsafe { @as(*const [1]PackageID, &entry.id)[0..1] }
+    else
+        entry.ids.items;
+
+    for (id of candidates) {
+        if ((id as usize) < pkg_resolutions.len && pkg_resolutions[id].satisfiesDependencyVersion(&dep.version, string_buf, string_buf)) {
+            return id;
+        }
+    }
+
+    if (candidates.len > 0) {
+        const first = candidates[0];
+        if ((first as usize) < pkg_resolutions.len) {
+            const res_tag = pkg_resolutions[first].tag;
+            const ver_tag = dep.version.tag;
+            if ((res_tag == .npm && ver_tag == .npm) ||
+                (res_tag == .git && ver_tag == .git) ||
+                (res_tag == .github && ver_tag == .github))
+            {
+                return first;
+            }
+        }
+    }
+
+    return null;
 }
 
 fn mapDepToPkg(dep: *Dependency, dep_id: DependencyID, pkg_id: PackageID, lockfile: *BinaryLockfile, pkg_resolutions: []const Resolution) {

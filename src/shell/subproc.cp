@@ -1097,19 +1097,25 @@ pub struct ShellSubprocess {
         }
 
         if (subprocess.stdout == .pipe) {
-            if (e := subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) {
+            const pipe = subprocess.stdout.pipe;
+            pipe.ref();
+            const _pipe_guard = DerefGuard<PipeReader>{ ptr: pipe };
+            if (e := pipe.start(subprocess, event_loop).asErr()) {
                 const sys_err = e.toShellSystemError();
                 * = subprocess.tryKill(@intFromEnum(bun.SignalCode.SIGTERM));
                 subprocess.abortAfterFailedStart();
                 return { err: { sys: sys_err } };
             }
             if (!spawn_args.lazy && subprocess.stdout == .pipe) {
-                subprocess.stdout.pipe.readAll();
+                pipe.readAll();
             }
         }
 
         if (subprocess.stderr == .pipe) {
-            if (e := subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) {
+            const pipe = subprocess.stderr.pipe;
+            pipe.ref();
+            const _pipe_guard = DerefGuard<PipeReader>{ ptr: pipe };
+            if (e := pipe.start(subprocess, event_loop).asErr()) {
                 const sys_err = e.toShellSystemError();
                 * = subprocess.tryKill(@intFromEnum(bun.SignalCode.SIGTERM));
                 subprocess.abortAfterFailedStart();
@@ -1117,7 +1123,7 @@ pub struct ShellSubprocess {
             }
 
             if (!spawn_args.lazy && subprocess.stderr == .pipe) {
-                subprocess.stderr.pipe.readAll();
+                pipe.readAll();
             }
         }
 
@@ -1250,6 +1256,9 @@ pub struct PipeReader {
                 return { err: e };
             },
             .result => {
+                if (_.state == .err) {
+                    return .success;
+                }
                 if (comptime Environment.isPosix) {
                     // TODO: are these flags correct
                     const poll = _.reader.handle.poll;
@@ -1271,18 +1280,7 @@ pub struct PipeReader {
 
         reader.captured_writer.doWrite(chunk);
 
-        const should_continue = has_more != .eof;
-
-        if (should_continue) {
-            if (bun.Environment.isPosix) reader.reader.registerPoll() else switch (reader.reader.startWithCurrentPipe()) {
-                .err => |e| {
-                    Output.panic("TODO: implement error handling in Bun Shell PipeReader.onReadChunk\n{f}", .{e});
-                },
-                else => {},
-            }
-        }
-
-        return should_continue;
+        return has_more != .eof;
     }
 
     fn onReaderDone(*_) {
@@ -1308,7 +1306,6 @@ pub struct PipeReader {
     ): Yield {
         if (!_.isDone()) return .suspended;
         unsafe { log("signalDoneToCmd ({x}: {s}) isDone={}", .{ @intFromPtr(_), @tagName(_.out_type), _.isDone() }); }
-        if (bun.Environment.allow_assert) assert(_.process != null);
         if (proc := _.process) {
             const cmd = proc.cmd_parent;
             if (e := _.captured_writer.err) {

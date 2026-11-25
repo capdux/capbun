@@ -120,9 +120,17 @@ pub fn __cp_deinit(self: *@This()) void {
 pub const HandlersScope = struct {
     handlers: *Handlers,
 
-pub fn exit(self: *HandlersScope) bool {
+pub fn exitEventLoop(self: *HandlersScope) void {
             _ = self.handlers.vm.eventLoop().exit();
+    }
+
+pub fn markInactive(self: *HandlersScope) bool {
             return self.handlers.markInactive();
+    }
+
+pub fn exit(self: *HandlersScope) bool {
+            _ = self.exitEventLoop();
+            return self.markInactive();
     }
 };
 

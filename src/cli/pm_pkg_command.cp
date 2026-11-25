@@ -530,7 +530,7 @@ pub struct PmPkgCommand {
 
     static fn parseKeyPath(allocator: std.mem.Allocator, key: []const u8): !std.array_list.Managed(string) {
         let path_parts = std.array_list.Managed(string).init(allocator);
-        let _parts_guard = StringListCleanupGuard{ allocator: allocator, list: &path_parts };
+        let _parts_guard = DeinitGuard<std.array_list.Managed(string)>{ ptr: &path_parts };
 
         let parts = std.mem.tokenizeScalar(u8, key, '.');
 
@@ -540,8 +540,7 @@ pub struct PmPkgCommand {
 
                 if (first_bracket > 0) {
                     const prop_name = part[0..first_bracket];
-                    const prop_copy = allocator.dupe(u8, prop_name)?;
-                    path_parts.append(prop_copy)?;
+                    path_parts.append(prop_name)?;
                     remaining_part = part[first_bracket..];
                 }
 
@@ -556,19 +555,17 @@ pub struct PmPkgCommand {
                         return error.InvalidPath;
                     }
 
-                    const index_copy = allocator.dupe(u8, index_str)?;
-                    path_parts.append(index_copy)?;
+                    path_parts.append(index_str)?;
 
                     remaining_part = remaining_part[actual_bracket_end + 1 ..];
                     if (remaining_part.len == 0) break;
                 }
             } else {
-                const part_copy = allocator.dupe(u8, part)?;
-                path_parts.append(part_copy)?;
+                path_parts.append(part)?;
             }
         }
 
-        _parts_guard.list = null;
+        _parts_guard.ptr = null;
         return path_parts;
     }
 
@@ -603,7 +600,7 @@ pub struct PmPkgCommand {
         let path_parts = parseKeyPath(allocator, key) catch e => {
             return e;
         };
-        const _parts_guard = StringListCleanupGuard{ allocator: allocator, list: &path_parts };
+        const _parts_guard = DeinitGuard<std.array_list.Managed(string)>{ ptr: &path_parts };
 
         if (path_parts.items.len == 0) {
             return error.EmptyKey;
@@ -613,8 +610,6 @@ pub struct PmPkgCommand {
             const expr = parseValue(allocator, value, parse_json)?;
 
             root.data.e_object.put(allocator, path_parts.items[0], expr)?;
-
-            path_parts.items[0] = "";
             return;
         }
 
@@ -659,8 +654,6 @@ pub struct PmPkgCommand {
             const expr = parseValue(allocator, value, parse_json)?;
 
             root.data.e_object.put(allocator, current_key, expr)?;
-
-            path[0] = "";
             return;
         }
 
@@ -669,8 +662,6 @@ pub struct PmPkgCommand {
             const new_obj = js_ast.Expr.init(js_ast.E.Object, js_ast.E.Object{}, logger.Loc.Empty);
 
             root.data.e_object.put(allocator, current_key, new_obj)?;
-
-            path[0] = "";
             nested_obj = root.get(current_key);
         }
 

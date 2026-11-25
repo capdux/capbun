@@ -70,6 +70,10 @@ pub fn parse(possibly_encoded_pathname_: string): !URLPath {
         decoded_pathname = @as(string, possibly_encoded_pathname[0..PercentEncoding.decodeFaultTolerant(@TypeOf(writer), writer, clone, *needs_redirect, true)?]);
     }
 
+    if (decoded_pathname.len == 0) {
+        decoded_pathname = "/";
+    }
+
     let question_mark_i: i16 = -1;
     let period_i: i16 = -1;
 
@@ -118,9 +122,11 @@ pub fn parse(possibly_encoded_pathname_: string): !URLPath {
     else
         "";
 
-    let path = if (question_mark_i < 0) decoded_pathname[1..] else decoded_pathname[1..@as(usize, @intCast(question_mark_i))];
+    const path_end: usize = if (question_mark_i < 0) decoded_pathname.len else @as(usize, @intCast(question_mark_i));
+    let path = decoded_pathname[@min(1, path_end)..path_end];
 
-    let first_segment = decoded_pathname[1..@min(@as(usize, @intCast(first_segment_end)), decoded_pathname.len)];
+    const first_segment_end_u = @min(@as(usize, @intCast(first_segment_end)), decoded_pathname.len);
+    let first_segment = decoded_pathname[@min(1, first_segment_end_u)..first_segment_end_u];
     let is_source_map = strings.eqlComptime(extname, "map");
     let backup_extname: string = extname;
     if (is_source_map && path.len > ".map".len) {

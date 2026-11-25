@@ -249,6 +249,16 @@ pub struct Worker_ {
 
     fn deinit(*_) {
         if (_.has_created) {
+            if (*mc := _.data.transpiler.macro_context) {
+                mc.macros.deinit();
+                _.data.transpiler.macro_context = null;
+            }
+            if (*other := _.data.other_transpiler) {
+                if (*mc := other.macro_context) {
+                    mc.macros.deinit();
+                    other.macro_context = null;
+                }
+            }
             _.heap.deinit();
         }
 

@@ -84,8 +84,17 @@ export @root struct LineOffsetTable {
         let remaining = contents;
         while (remaining.len > 0) {
             const len_ = strings.wtf8ByteSequenceLengthWithInvalid(remaining[0]);
-            const c = unsafe { strings.decodeWTF8RuneT(remaining.ptr[0..4], len_, i32, 0) };
-            const cp_len = len_ as usize;
+            // `len_` is the lead byte's *declared* width; a source whose final bytes are
+            // a truncated multibyte sequence declares more bytes than remain, so every
+            // slice below (decode, SIMD-skip offset, advance) must use the clamped width.
+            const cp_len = @min(len_ as usize, remaining.len);
+            const c = if (len_ == 1)
+                remaining[0] as i32
+            else blk: {
+                let cp_bytes: [4]u8 = [0, 0, 0, 0];
+                @memcpy(cp_bytes[0..cp_len], remaining[0..cp_len]);
+                break :blk strings.decodeWTF8RuneT(cp_bytes[0..4], len_, i32, 0);
+            };
 
             if (column == 0) {
                 line_byte_offset = unsafe { (@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr)) } as u32;
@@ -107,7 +116,7 @@ export @root struct LineOffsetTable {
             } else {
                 switch (c) {
                     14...127 => {
-                        if (j := strings.indexOfNewlineOrNonASCIICheckStart(remaining, len_ as u32, false)) {
+                        if (j := strings.indexOfNewlineOrNonASCIICheckStart(remaining, cp_len as u32, false)) {
                             column += j as i32;
                             remaining = remaining[j..];
                         } else {

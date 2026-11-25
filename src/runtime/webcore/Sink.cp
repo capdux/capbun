@@ -361,6 +361,18 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             inst.sink.finalize();
         }
 
+        @callconv(.c)
+        pub static fn controllerDetached(ptr: *!, controller: JSValue) {
+            let inst: *ThisSink = unsafe { @ptrCast(@alignCast(ptr)) };
+            if (comptime @hasField(SinkType, "signal")) {
+                if (s_ptr := inst.sink.signal.ptr) {
+                    if (@intFromPtr(s_ptr) == @as(usize, @bitCast(@intFromEnum(controller)))) {
+                        inst.sink.signal.clear();
+                    }
+                }
+            }
+        }
+
         pub fn detach(*_, globalThis: *JSGlobalObject) {
             if (comptime !@hasField(SinkType, "signal"))
                 return;
@@ -636,6 +648,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         comptime {
             if (Environment.export_cpp_apis) {
                 @export(&finalize, .{ .name = abi_name ++ "__finalize" });
+                @export(&controllerDetached, .{ .name = abi_name ++ "__controllerDetached" });
                 @export(&jsWrite, .{ .name = abi_name ++ "__write" });
                 @export(&jsGetInternalFd, .{ .name = abi_name ++ "__getInternalFd" });
                 @export(&close, .{ .name = abi_name ++ "__close" });

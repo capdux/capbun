@@ -36,10 +36,10 @@ const empty_val = HashedString{
     static fn Eql(a: HashedString, comptime Other: type, other: Other): bool {
         switch (comptime Other) {
             HashedString, *HashedString, *const HashedString => {
-                return ((@max(a.hash, other.hash) > 0 && a.hash == other.hash) || (a.ptr == other.ptr)) && a.len == other.len;
+                return a.len == other.len && (a.ptr == other.ptr || (@max(a.hash, other.hash) > 0 && a.hash == other.hash && std.mem.eql(u8, a.str(), other.str())));
             },
             else => {
-                return @as(usize, a.len) == other.len && @as(u32, @truncate(bun.hash(other[0..other.len]))) == a.hash;
+                return @as(usize, a.len) == other.len && @as(u32, @truncate(bun.hash(other[0..other.len]))) == a.hash && std.mem.eql(u8, a.str(), other[0..other.len]);
             },
         }
     }

@@ -466,8 +466,20 @@ export @root @value struct AsyncHTTP {
             callback.function(callback.ctx, async_http, result);
         } else {
             {
+                // Restore pre-redirect state before client.deinit() frees client.redirect:
+                // on a retried request, the JS-thread copy must not hold dangling borrows
+                // into freed redirect memory or stripped cross-origin auth headers.
+                bun.assert(_.client.header_entries.capacity >= _.request_headers.len);
+                _.client.header_entries.clearRetainingCapacity();
+                _.client.header_entries.appendListAssumeCapacity(_.request_headers);
+                _.client.url = _.url;
+                _.client.connected_url = .{};
+                _.client.method = _.method;
                 _.client.deinit();
                 const threadlocal_http: *bun.http.ThreadlocalAsyncHTTP = @fieldParentPtr("async_http", async_http);
+                if (idx := std.mem.indexOfScalar(*bun.http.ThreadlocalAsyncHTTP, bun.http.http_thread.in_flight.items, threadlocal_http)) {
+                    * = bun.http.http_thread.in_flight.swapRemove(idx);
+                }
                 const _tl_http_guard = DeinitGuard<bun.http.ThreadlocalAsyncHTTP>{ ptr: threadlocal_http };
                 bun.Output.scoped(.AsyncHTTP, .visible)("onAsyncHTTPCallback: {D}", [_.elapsed]);
                 callback.function(callback.ctx, async_http, result);

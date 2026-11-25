@@ -171,6 +171,7 @@ export @root @value struct HTTPThread {
     timer: std.time.Timer,
     lazy_libdeflater: *LibdeflateState? = null,
     lazy_request_body_buffer: *HeapRequestBodyBuffer? = null,
+    in_flight: std.ArrayListUnmanaged(*bun.http.ThreadlocalAsyncHTTP) = {},
 
     fn deflater(*_): *LibdeflateState {
         if (_.lazy_libdeflater == null) {
@@ -554,7 +555,7 @@ export @root @value struct HTTPThread {
             const _pending_guard = DeinitWithAllocGuard<@TypeOf(pending)>{ ptr: &pending, alloc: bun.default_allocator };
             for (http of pending.items) {
                 if (http.client.signals.get(.aborted) || active < max) {
-                    HTTPThread.startQueuedTask(http);
+                    _.startQueuedTask(http);
                     active = bun.http.AsyncHTTP.active_requests_count.load(.monotonic);
                 } else {
                     bun.handleOom(_.deferred_tasks.append(bun.default_allocator, http));
@@ -567,19 +568,51 @@ export @root @value struct HTTPThread {
                 bun.handleOom(_.deferred_tasks.append(bun.default_allocator, http));
                 continue;
             }
-            HTTPThread.startQueuedTask(http);
+            _.startQueuedTask(http);
             active = bun.http.AsyncHTTP.active_requests_count.load(.monotonic);
         }
     }
 
-    static fn startQueuedTask(http: *AsyncHTTP) {
+    fn startQueuedTask(*_, http: *AsyncHTTP) {
         let cloned = bun.http.ThreadlocalAsyncHTTP.new({
             async_http: http.*,
         });
+        bun.handleOom(_.in_flight.append(bun.default_allocator, cloned));
         cloned.async_http.real = http;
         cloned.async_http.next = null;
         cloned.async_http.task.node.next = null;
         cloned.async_http.onStart();
+    }
+
+    fn deallocInFlightForExit(*_) {
+        for (tl of _.in_flight.items) {
+            let client = &tl.async_http.client;
+            const release = client.result_callback;
+            if (client.redirect.len > 0) {
+                bun.http.default_allocator.free(client.redirect);
+                client.redirect = "";
+            }
+            if (client.prev_redirect.len > 0) {
+                bun.http.default_allocator.free(client.prev_redirect);
+                client.prev_redirect = "";
+            }
+            if (tunnel := client.proxy_tunnel) {
+                client.proxy_tunnel = null;
+                tunnel.detachAndDeref();
+            }
+            if (ctx := client.custom_ssl_ctx) {
+                ctx.deref();
+                client.custom_ssl_ctx = null;
+            }
+            client.state.body_out_str = null;
+            client.state.reset(bun.http.default_allocator);
+            if (f := release.release_at_shutdown) {
+                f(release.ctx);
+            }
+            tl.deinit();
+        }
+        _.in_flight.deinit(bun.default_allocator);
+        _.in_flight = .{};
     }
 
     fn processEvents(*_): noreturn {
@@ -590,11 +623,25 @@ export @root @value struct HTTPThread {
         }
 
         while (true) {
+            if (shutdown_requested.load(.acquire)) {
+                _.deallocInFlightForExit();
+                {
+                    shutdown_done_mutex.lock();
+                    defer shutdown_done_mutex.unlock();
+                    shutdown_done = true;
+                    shutdown_done_cond.broadcast();
+                }
+                while (true) {
+                    std.Thread.sleep(std.time.ns_per_hour);
+                }
+            }
+
             _.drainEvents();
 
             _.loop.loop.inc();
             _.loop.loop.tick();
             _.loop.loop.dec();
+            _.loop.onAfterEventLoop();
         }
     }
 
@@ -664,4 +711,48 @@ export @root @value struct HTTPThread {
             _.loop.loop.wakeup();
         }
     }
+}
+
+pub const ShutdownReclaimDropFn = *const fn (*!?) void;
+
+struct ShutdownReclaim {
+    ctx: *!?,
+    drop_fn: ShutdownReclaimDropFn,
+}
+
+let shutdown_requested = std.atomic.Value(bool).init(false);
+let shutdown_done_mutex = std.Thread.Mutex{};
+let shutdown_done_cond = std.Thread.Condition{};
+let shutdown_done = false;
+let shutdown_reclaims_mutex = std.Thread.Mutex{};
+let shutdown_reclaims: std.ArrayListUnmanaged(ShutdownReclaim) = .empty;
+
+pub fn deferShutdownReclaim(ctx: *!?, drop_fn: ShutdownReclaimDropFn) {
+    shutdown_reclaims_mutex.lock();
+    defer shutdown_reclaims_mutex.unlock();
+    bun.handleOom(shutdown_reclaims.append(bun.default_allocator, { ctx: ctx, drop_fn: drop_fn }));
+}
+
+pub fn shutdownForExit() {
+    if (!bun.http.http_thread.has_awoken.load(.acquire)) return;
+    shutdown_requested.store(true, .release);
+    bun.http.http_thread.wakeup();
+    {
+        shutdown_done_mutex.lock();
+        defer shutdown_done_mutex.unlock();
+        if (!shutdown_done) {
+            shutdown_done_cond.timedWait(&shutdown_done_mutex, std.time.ns_per_s) catch {};
+        }
+    }
+    let items: std.ArrayListUnmanaged(ShutdownReclaim) = .empty;
+    {
+        shutdown_reclaims_mutex.lock();
+        defer shutdown_reclaims_mutex.unlock();
+        items = shutdown_reclaims;
+        shutdown_reclaims = .empty;
+    }
+    for (r of items.items) {
+        r.drop_fn(r.ctx);
+    }
+    items.deinit(bun.default_allocator);
 }

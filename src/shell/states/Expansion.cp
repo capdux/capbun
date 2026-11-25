@@ -706,20 +706,21 @@ pub struct ShellGlobTask {
             assert(_.child_state == .glob);
         }
 
-        if (e := task.err) {
-            switch (e) {
-                .syscall => {
-                    _.base.throw(&bun.shell.ShellErr.newSys(task.err.?.syscall));
-                },
-                .unknown errtag => {
-                    _.base.throw(&bun.shell.ShellErr{
-                        .custom = bun.handleOom(_.base.allocator().dupe(u8, @errorName(errtag))),
-                    });
-                },
+        let walk_err = brk: {
+            if (e := task.err) {
+                if (e == .syscall) {
+                    const errno = e.syscall.getErrno();
+                    if (errno == .NOENT || errno == .NOTDIR) {
+                        log("{f} glob walk failed: {f}", .{ _, e.syscall });
+                        break :brk null;
+                    }
+                }
+                break :brk e;
             }
-        }
+            break :brk null;
+        };
 
-        if (task.result.items.len == 0) {
+        if (task.result.items.len == 0 || walk_err != null) {
             if (_.parent.ptr.is(Assigns) || (_.parent.ptr.is(Cmd) && _.parent.ptr.@"as"(Cmd).state == .expanding_assigns)) {
                 _.pushCurrentOut();
                 _.child_state.glob.walker.deinit(true);
@@ -728,12 +729,27 @@ pub struct ShellGlobTask {
                 return .{ .expansion = _ };
             }
 
-            const msg = bun.handleOom(std.fmt.allocPrint(_.base.allocator(), "no matches found: {s}", .{_.child_state.glob.walker.pattern}));
-            _.state = .{
-                .@"err" = bun.shell.ShellErr{
-                    .custom = msg,
-                },
-            };
+            if (e := walk_err) {
+                switch (e) {
+                    .syscall => |sys_err| {
+                        _.state = .{ .@"err" = bun.shell.ShellErr.newSys(sys_err) };
+                    },
+                    .unknown => |errtag| {
+                        _.state = .{
+                            .@"err" = bun.shell.ShellErr{
+                                .custom = bun.handleOom(_.base.allocator().dupe(u8, @errorName(errtag))),
+                            },
+                        };
+                    },
+                }
+            } else {
+                const msg = bun.handleOom(std.fmt.allocPrint(_.base.allocator(), "no matches found: {s}", .{_.child_state.glob.walker.pattern}));
+                _.state = .{
+                    .@"err" = bun.shell.ShellErr{
+                        .custom = msg,
+                    },
+                };
+            }
             _.child_state.glob.walker.deinit(true);
             _.child_state = .idle;
             return .{ .expansion = _ };

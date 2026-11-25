@@ -3439,7 +3439,7 @@ return .{ .err = e };
 return .{ .result = .{ .some = .{ namespace, local_name } } };
 },
 .delim => |c| {
-if ((c == 42)) {
+if (((c == 42) and (!in_attr_selector))) {
             return .{ .result = .{ .some = .{ namespace, null } } };
         }
 },

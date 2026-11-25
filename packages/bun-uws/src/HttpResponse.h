@@ -257,7 +257,9 @@ public:
 
         /* Note: OpenSSL can be used here to speed this up somewhat */
         char secWebSocketAccept[29] = {};
-        WebSocketHandshake::generate(secWebSocketKey.data(), secWebSocketAccept);
+        char secWebSocketKeyBuffer[24] = {};
+        secWebSocketKey.copy(secWebSocketKeyBuffer, 24);
+        WebSocketHandshake::generate(secWebSocketKeyBuffer, secWebSocketAccept);
 
         writeStatus("101 Switching Protocols")
             ->writeHeader("Upgrade", "websocket")
@@ -693,7 +695,7 @@ public:
     HttpResponse *onWritable(void* userData, HttpResponseData<SSL>::OnWritableCallback handler) {
         HttpResponseData<SSL> *httpResponseData = getHttpResponseData();
 
-        httpResponseData->userData = userData;
+        httpResponseData->writableUserData = userData;
         httpResponseData->onWritable = handler;
         return this;
     }
@@ -703,6 +705,7 @@ public:
         HttpResponseData<SSL> *httpResponseData = getHttpResponseData();
 
         httpResponseData->onWritable = nullptr;
+        httpResponseData->writableUserData = nullptr;
         return this;
     }
 
@@ -727,6 +730,7 @@ public:
         HttpResponseData<SSL> *httpResponseData = getHttpResponseData();
 
         httpResponseData->onWritable = nullptr;
+        httpResponseData->writableUserData = nullptr;
         httpResponseData->onAborted = nullptr;
         httpResponseData->onTimeout = nullptr;
 

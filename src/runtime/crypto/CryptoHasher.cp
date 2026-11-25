@@ -571,7 +571,7 @@ struct CryptoHasherZig {
 
     static fn hashByName(globalThis: *JSGlobalObject, algorithm: ZigString, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.Node.StringOrBuffer?): (jsc.JSValue?) ! bun.JSError {
         inline for (item of CryptoHasherZig.algo_map) {
-            if (bun.strings.eqlComptime(algorithm.slice(), item.name)) {
+            if (algorithm.eqlComptime(item.name)) {
                 return hashByNameInner(globalThis, item.T, input, output)?;
             }
         }
@@ -655,7 +655,7 @@ struct CryptoHasherZig {
 
     static fn constructor(algorithm: ZigString): (*CryptoHasher)? {
         inline for (item of CryptoHasherZig.algo_map) {
-            if (bun.strings.eqlComptime(algorithm.slice(), item.name)) {
+            if (algorithm.eqlComptime(item.name)) {
                 return CryptoHasher.new(.{ .zig = .{
                     .algorithm = @field(EVP.Algorithm, item.name),
                     .state = bun.new(item.T, item.T.init(.{})),

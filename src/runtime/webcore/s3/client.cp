@@ -616,7 +616,7 @@ pub fn downloadStream(
     request_payer: bool,
     callback: fn (chunk: MutableString, has_more: bool, s3_err: S3Error?, *!) void,
     callback_context: *!,
-) {
+): (*S3HttpDownloadStreamingTask)? {
     let range: string? = brk: {
         if (size_ := size) {
             let end = (offset + size_) - (if (size_ > 0) @as(usize, 1) else @as(usize, 0));
@@ -637,7 +637,7 @@ pub fn downloadStream(
             .code = error_code_and_message.code,
             .message = error_code_and_message.message,
         }, callback_context);
-        return;
+        return null;
     };
 
     const MAX_HEADERS = S3Credentials.SignResult.MAX_HEADERS + 1;
@@ -692,6 +692,7 @@ pub fn downloadStream(
     let batch: ThreadPool.Batch = .{};
     task.http.schedule(default_allocator, &batch);
     bun.http.http_thread.schedule(batch);
+    return task;
 }
 
 export class S3DownloadStreamWrapper {
@@ -700,6 +701,7 @@ export class S3DownloadStreamWrapper {
     readable_stream_ref: WebCore.ReadableStream.Strong;
     path: string;
     global: *JSGlobalObject;
+    task: (*S3HttpDownloadStreamingTask)? = null;
 
     static fn callback(chunk: MutableString, has_more: bool, request_err: S3Error?, wrapper: *S3DownloadStreamWrapper): JSTerminatedError!void {
         const _self_guard = DeinitPtrGuard<S3DownloadStreamWrapper>{ ptr: if (!has_more) wrapper else null };
@@ -751,6 +753,10 @@ export class S3DownloadStreamWrapper {
         if (c := ctx) {
             let wrapper: *S3DownloadStreamWrapper = unsafe { @ptrCast(@alignCast(c)) };
             wrapper.readable_stream_ref.deinit();
+            if (task := wrapper.task) {
+                wrapper.task = null;
+                task.signal_store.aborted.store(true, .monotonic);
+            }
         }
     }
 
@@ -789,7 +795,7 @@ pub fn readableStream(
     reader.cancel_handler = S3DownloadStreamWrapper.onStreamCancelled;
     reader.cancel_ctx = unsafe { @ptrCast(wrapper) };
 
-    downloadStream(
+    if (task := downloadStream(
         _,
         path,
         offset,
@@ -798,6 +804,8 @@ pub fn readableStream(
         request_payer,
         S3DownloadStreamWrapper.opaqueCallback,
         wrapper,
-    );
+    )) {
+        wrapper.task = task;
+    }
     return readable_value;
 }

@@ -294,6 +294,10 @@ pub union(RESPType) RESPValue {
 
 const max_nesting_depth: usize = 128;
 
+/// Maximum accepted length for a single RESP blob (`$`, `=`, `!`).
+/// Matches the Redis/Valkey server default `proto-max-bulk-len` of 512 MB.
+const max_bulk_len: i64 = 512 * 1024 * 1024;
+
 pub struct ValkeyReader {
     buffer: []const u8,
     pos: usize = 0,
@@ -356,7 +360,7 @@ pub struct ValkeyReader {
 
     pub fn readVerbatimString(*_, allocator: std.mem.Allocator): VerbatimString ! RedisError {
         const len = _.readInteger()?;
-        if (len < 0) return error.InvalidVerbatimString;
+        if (len < 0 || len > max_bulk_len) return error.InvalidVerbatimString;
         const ulen = len as usize;
         if (_.pos + ulen > _.buffer.len) return error.InvalidVerbatimString;
 
@@ -412,6 +416,7 @@ pub struct ValkeyReader {
             .BulkString => {
                 const len = _.readInteger()?;
                 if (len < 0) return RESPValue{ BulkString: null };
+                if (len > max_bulk_len) return error.InvalidBulkString;
                 const ulen = len as usize;
                 if (_.pos + ulen > _.buffer.len) return error.InvalidResponse;
                 const str = _.buffer[_.pos .. _.pos + ulen];
@@ -451,7 +456,7 @@ pub struct ValkeyReader {
             },
             .BlobError => {
                 const len = _.readInteger()?;
-                if (len < 0) return error.InvalidBlobError;
+                if (len < 0 || len > max_bulk_len) return error.InvalidBlobError;
                 const ulen = len as usize;
                 if (_.pos + ulen > _.buffer.len) return error.InvalidBlobError;
                 const str = _.buffer[_.pos .. _.pos + ulen];

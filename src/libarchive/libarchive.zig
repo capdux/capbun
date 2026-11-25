@@ -699,12 +699,15 @@ const strings = bun.strings;
 var EMPTY_PLUCKERS: [0]ArchiverPlucker = undefined;
 const EMPTY_PLUCKERS_SLICE: []ArchiverPlucker = EMPTY_PLUCKERS[0..0];
 
+pub fn isPosixSeparator(comptime T: type, ch: T) bool {
+        return (ch == 47);
+}
+
 pub fn isSymlinkTargetSafe(symlink_path: []const u8, link_target: [:0]const u8, symlink_join_buf: *?*bun.PathBuffer) bool {
         if (((link_target.len > 0) and (link_target[0] == 47))) {
             return false;
         }
         const symlink_dir = ((std.fs.path.dirname(symlink_path)) orelse (""));
-        const fake_root: []const u8 = "/packages/";
         var join_buf: *bun.PathBuffer = undefined;
         _ = &join_buf;
         {
@@ -718,7 +721,26 @@ pub fn isSymlinkTargetSafe(symlink_path: []const u8, link_target: [:0]const u8, 
             }
         }
         const link_target_slice = std.mem.sliceTo(link_target, 0);
-        const parts: [2][]const u8 = .{ symlink_dir, link_target_slice };
-        const resolved = bun.path.joinAbsStringBuf(fake_root, join_buf, (&parts), .posix);
-        return strings.hasPrefix(resolved, fake_root);
+        if ((((symlink_dir.len + 1) + link_target_slice.len) >= join_buf.len)) {
+            return false;
+        }
+        var written: usize = 0;
+        _ = &written;
+        if ((symlink_dir.len > 0)) {
+            _ = @memcpy(join_buf[0..symlink_dir.len], symlink_dir);
+            written = symlink_dir.len;
+            join_buf[cp_cast_int(usize, written)] = 47;
+            written = (written + 1);
+        }
+        _ = @memcpy(join_buf[written..(written + link_target_slice.len)], link_target_slice);
+        written = (written + link_target_slice.len);
+        var norm_buf_opt: ?*bun.PathBuffer = bun.path_buffer_pool.get();
+        _ = &norm_buf_opt;
+        var _norm_guard = PathBufferPoolGuard{ .ptr = (&norm_buf_opt) };
+        _ = &_norm_guard;
+        var ___norm_guard_moved = false; _ = &___norm_guard_moved;
+        defer if (!___norm_guard_moved) { ___norm_guard_moved = true; const __T = @TypeOf(_norm_guard); if (@typeInfo(__T) == .optional) { if (_norm_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _norm_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _norm_guard; _drop_val.__cp_deinit(); } };
+        const norm_buf = norm_buf_opt.?;
+        const resolved = bun.path.normalizeStringGenericT(u8, join_buf[0..written], norm_buf, true, 47, isPosixSeparator, false);
+        return (!(strings.eqlComptime(resolved, "..") or strings.hasPrefixComptime(resolved, "../")));
 }

@@ -5,6 +5,7 @@
 #include "ErrorCode.h"
 #include "JSDOMExceptionHandling.h"
 
+#include "wtf/HashSet.h"
 #include "wtf/Scope.h"
 
 #include "JavaScriptCore/BuiltinNames.h"
@@ -316,10 +317,13 @@ JSValue NodeVMSourceTextModule::link(JSGlobalObject* globalObject, JSArray* spec
 {
     const unsigned length = specifiers->getArrayLength();
 
-    ASSERT(length == moduleNatives->getArrayLength());
-
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
+
+    if (length != moduleNatives->getArrayLength()) {
+        Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, "moduleNatives"_s, moduleNatives, "must have the same length as \"specifiers\""_str);
+        return {};
+    }
 
     if (m_status != Status::Unlinked) {
         throwError(globalObject, scope, ErrorCode::ERR_VM_MODULE_STATUS, "Module must be unlinked before linking"_s);
@@ -336,14 +340,21 @@ JSValue NodeVMSourceTextModule::link(JSGlobalObject* globalObject, JSArray* spec
             JSValue moduleNativeValue = moduleNatives->getDirectIndex(globalObject, i);
             RETURN_IF_EXCEPTION(scope, {});
 
-            ASSERT(specifierValue.isString());
-            ASSERT(moduleNativeValue.isObject());
+            // getDirectIndex returns an empty JSValue for holes; empty passes
+            // isCell() with a null cell, so it must be rejected before any use.
+            if (specifierValue.isEmpty() || !specifierValue.isString()) {
+                Bun::ERR::INVALID_ARG_TYPE(scope, globalObject, "specifiers"_str, "Array<string>"_str, specifierValue.isEmpty() ? jsUndefined() : specifierValue);
+                return {};
+            }
 
             WTF::String specifier = specifierValue.toWTFString(globalObject);
             RETURN_IF_EXCEPTION(scope, {});
-            JSObject* moduleNative = moduleNativeValue.getObject();
-            RETURN_IF_EXCEPTION(scope, {});
-            AbstractModuleRecord* resolvedRecord = uncheckedDowncast<NodeVMModule>(moduleNative)->moduleRecord(globalObject);
+            NodeVMModule* moduleNative = moduleNativeValue.isEmpty() ? nullptr : dynamicDowncast<NodeVMModule>(moduleNativeValue);
+            if (!moduleNative) {
+                Bun::ERR::INVALID_THIS(scope, globalObject, "Module"_s);
+                return {};
+            }
+            AbstractModuleRecord* resolvedRecord = moduleNative->moduleRecord(globalObject);
             RETURN_IF_EXCEPTION(scope, {});
 
             // innerModuleLinking asserts every visited cyclic record is past
@@ -391,6 +402,46 @@ JSValue NodeVMSourceTextModule::link(JSGlobalObject* globalObject, JSArray* spec
     return jsUndefined();
 }
 
+// JSC's record->link() walks the whole dependency graph via innerModuleLinking,
+// which calls JSModuleLoader::getImportedModule() for every request of every
+// reachable record and asserts the request is present in that record's
+// loadedModules() (populated by setImportedModule() during link()). When a
+// module is linked *and evaluated* from inside the linker callback of a cyclic
+// graph, instantiate() can run while a dependency is still mid-link(): its
+// loadedModules() is empty, so getImportedModule() would dereference end() —
+// an assert in debug, a segfault in release. Pre-walk the graph the same way
+// and throw a catchable ERR_VM_MODULE_LINK_FAILURE (matching Node) instead.
+//
+// The walk is iterative (an explicit worklist) rather than recursive: a deep
+// linear import chain has graph depth proportional to its length, and we must
+// not add an unguarded native recursion that would overflow the stack before
+// record->link()'s own isSafeToRecurse() guard throws a catchable RangeError.
+static bool isModuleGraphLinked(AbstractModuleRecord* root, String& missingSpecifier)
+{
+    WTF::HashSet<AbstractModuleRecord*> visited;
+    WTF::Vector<AbstractModuleRecord*, 16> worklist;
+    worklist.append(root);
+
+    while (!worklist.isEmpty()) {
+        AbstractModuleRecord* record = worklist.takeLast();
+        if (!visited.add(record).isNewEntry)
+            continue;
+
+        const auto& loaded = record->loadedModules();
+        for (const auto& request : record->requestedModules()) {
+            auto iter = loaded.find(JSC::ModuleMapKey { request.m_specifier.impl(), request.type() });
+            if (iter == loaded.end()) {
+                missingSpecifier = request.m_specifier.string();
+                return false;
+            }
+            if (AbstractModuleRecord* dependency = iter->value.m_module.get())
+                worklist.append(dependency);
+        }
+    }
+
+    return true;
+}
+
 JSValue NodeVMSourceTextModule::instantiate(JSGlobalObject* globalObject)
 {
     VM& vm = globalObject->vm();
@@ -404,6 +455,12 @@ JSValue NodeVMSourceTextModule::instantiate(JSGlobalObject* globalObject)
     RETURN_IF_EXCEPTION(scope, {});
     if (nodeVmGlobalObject)
         globalObject = nodeVmGlobalObject;
+
+    String missingSpecifier;
+    if (!isModuleGraphLinked(record, missingSpecifier)) {
+        throwError(globalObject, scope, ErrorCode::ERR_VM_MODULE_LINK_FAILURE, makeString("request for '"_s, missingSpecifier, "' is not in cache"_s));
+        return {};
+    }
 
     record->link(globalObject, nullptr);
     RETURN_IF_EXCEPTION(scope, {});

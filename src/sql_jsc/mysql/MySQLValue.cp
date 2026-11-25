@@ -264,12 +264,20 @@ pub struct ValueDateTime {
         return JSValue.fromDateNumber(globalObject, _.toJSTimestamp());
     }
 
+    static fn checkRange(ts: i64, globalObject: *JSC.JSGlobalObject): AnyMySQLError.Error!void {
+        const MAX_DATETIME_UNIX_TIMESTAMP: i64 = 253_402_300_799;
+        if (ts < 0 || ts > MAX_DATETIME_UNIX_TIMESTAMP) {
+            return globalObject.throwInvalidArguments("MySQL DATE/DATETIME value must be between 1970-01-01T00:00:00Z and 9999-12-31T23:59:59Z", .{});
+        }
+    }
+
     pub static fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject): @This()! {
         if (value.isDate()) {
             const total_ms = value.getUnixTimestamp();
             const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
             const ts_f: f64 = @floatFromInt(ts);
             const ms: u32 = @intFromFloat(total_ms - (ts_f * 1000));
+            checkRange(ts, globalObject)?;
             return ValueDateTime.fromUnixTimestamp(ts, ms * 1000);
         }
         if (value.isNumber()) {
@@ -277,6 +285,7 @@ pub struct ValueDateTime {
             const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
             const ts_f: f64 = @floatFromInt(ts);
             const ms: u32 = @intFromFloat(total_ms - (ts_f * 1000));
+            checkRange(ts, globalObject)?;
             return ValueDateTime.fromUnixTimestamp(ts, ms * 1000);
         }
         return globalObject.throwInvalidArguments("Expected a date or number", .{});
@@ -291,18 +300,27 @@ pub struct ValueTime {
     seconds: u8 = 0,
     microseconds: u32 = 0,
 
+    static fn checkRange(ts: i64, globalObject: *JSC.JSGlobalObject): AnyMySQLError.Error!void {
+        const MAX_TIME_SECONDS: i64 = @as(i64, std.math.maxInt(u32)) * 86400 + 86399;
+        if (ts < 0 || ts > MAX_TIME_SECONDS) {
+            return globalObject.throwInvalidArguments("MySQL TIME value is out of range", .{});
+        }
+    }
+
     pub static fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject): @This()! {
         if (value.isDate()) {
             const total_ms = value.getUnixTimestamp();
             const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
             const ts_f: f64 = @floatFromInt(ts);
             const ms: u32 = @intFromFloat(total_ms - (ts_f * 1000));
+            checkRange(ts, globalObject)?;
             return ValueTime.fromUnixTimestamp(ts, ms * 1000);
         } else if (value.isNumber()) {
             const total_ms = value.asNumber();
             const ts: i64 = @intFromFloat(@divFloor(total_ms, 1000));
             const ts_f: f64 = @floatFromInt(ts);
             const ms: u32 = @intFromFloat(total_ms - (ts_f * 1000));
+            checkRange(ts, globalObject)?;
             return ValueTime.fromUnixTimestamp(ts, ms * 1000);
         } else {
             return globalObject.throwInvalidArguments("Expected a date or number", .{});

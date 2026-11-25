@@ -295,3 +295,7 @@ pub export fn Bun__panic(msg: [*]const u8, len: usize) callconv(.c) noreturn {
             _ = Output.panic("{s}", .{ msg[0..len] });
         }
 }
+
+pub export fn Bun__outOfMemory() callconv(.c) noreturn {
+        _ = bun.outOfMemory();
+}

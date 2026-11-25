@@ -41,3 +41,4 @@ pub fn encode(self: PacketHeader) [4]u8 {
         return .{ @intCast((self.length & 255)), @intCast((cp_shr(self.length, 8) & 255)), @intCast((cp_shr(self.length, 16) & 255)), self.sequence_id };
 }
 pub const size = 4;
+pub const MAX_PAYLOAD_LENGTH: usize = 16777215;

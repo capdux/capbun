@@ -83,6 +83,8 @@ pub fn main() {
     }
 }
 
+@export @c fn Bun__outOfMemory(): noreturn { _bun.outOfMemory(); }
+
 struct OutputFlushGuard {
     ~init() {
         Output.flush();

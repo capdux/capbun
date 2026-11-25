@@ -221,11 +221,8 @@ pub struct overrides {
     pub const mem = OverridesMem;
 }
 
-@export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
-    unsafe {
-        Output.panic("{s}", .{msg[0..len]});
-    }
-}
+@export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn { unsafe { Output.panic("{s}", .{msg[0..len]}); } }
+@export @c fn Bun__outOfMemory(): noreturn { bun.outOfMemory(); }
 
 comptime {
     * = bun.bake.production.BakeProdResolve;

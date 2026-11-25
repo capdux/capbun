@@ -21,6 +21,7 @@
 #include "libusockets.h"
 #include <string.h>
 #include <stdatomic.h>
+#include <time.h>
 
 /* These are in sni_tree.cpp */
 void *sni_new();
@@ -280,12 +281,15 @@ static struct loop_ssl_data *ssl_set_loop_data(struct us_socket_t *s) {
 void us_internal_init_loop_ssl_data(struct us_loop_t *loop) {
   if (!loop->data.ssl_data) {
     struct loop_ssl_data *loop_ssl_data = us_calloc(1, sizeof(struct loop_ssl_data));
+    if (!loop_ssl_data) Bun__outOfMemory();
     loop_ssl_data->ssl_read_output =
         us_malloc(LIBUS_RECV_BUFFER_LENGTH + LIBUS_RECV_BUFFER_PADDING * 2);
+    if (!loop_ssl_data->ssl_read_output) Bun__outOfMemory();
 
     OPENSSL_init_ssl(0, NULL);
 
     loop_ssl_data->shared_biom = BIO_meth_new(BIO_TYPE_MEM, "µS BIO");
+    if (!loop_ssl_data->shared_biom) Bun__outOfMemory();
     BIO_meth_set_create(loop_ssl_data->shared_biom, BIO_s_custom_create);
     BIO_meth_set_write(loop_ssl_data->shared_biom, BIO_s_custom_write);
     BIO_meth_set_read(loop_ssl_data->shared_biom, BIO_s_custom_read);
@@ -293,6 +297,7 @@ void us_internal_init_loop_ssl_data(struct us_loop_t *loop) {
 
     loop_ssl_data->shared_rbio = BIO_new(loop_ssl_data->shared_biom);
     loop_ssl_data->shared_wbio = BIO_new(loop_ssl_data->shared_biom);
+    if (!loop_ssl_data->shared_rbio || !loop_ssl_data->shared_wbio) Bun__outOfMemory();
     BIO_set_data(loop_ssl_data->shared_rbio, loop_ssl_data);
     BIO_set_data(loop_ssl_data->shared_wbio, loop_ssl_data);
 
@@ -308,6 +313,7 @@ void us_internal_free_loop_ssl_data(struct us_loop_t *loop) {
     BIO_free(loop_ssl_data->shared_wbio);
     BIO_meth_free(loop_ssl_data->shared_biom);
     us_free(loop_ssl_data);
+    loop->data.ssl_data = 0;
   }
 }
 
@@ -799,7 +805,36 @@ static inline int ssl_gone(struct us_socket_t *s) {
 }
 
 static int ssl_renegotiate(struct us_socket_t *s) {
+  /* Server-forced renegotiation (HelloRequest -> SSL_ERROR_WANT_RENEGOTIATE).
+   * Enforce the per-context policy (default 3 per 600s, Node's
+   * CLIENT_RENEG_LIMIT/CLIENT_RENEG_WINDOW) before re-entering a full
+   * handshake — otherwise a malicious server can pin a core with
+   * back-to-back renegotiations. limit == 0 disables renegotiation; window
+   * == 0 means the per-connection counter never resets. Returning 0 makes
+   * the caller treat this as SSL_ERROR_SSL and close the connection. */
+  uint32_t limit, window;
+  us_reneg_policy(s_ssl(s), &limit, &window);
+  struct us_ssl_reneg_state_t *st = us_reneg_state(s_ssl(s));
   s->ssl_handshake_state = HANDSHAKE_RENEGOTIATION_PENDING;
+  if (!st) {
+    ssl_trigger_handshake(s, 0);
+    return 0;
+  }
+  /* Wall-clock time can step backwards (NTP, manual adjustment); the
+   * unsigned subtraction below would underflow and reset the window every
+   * time. Only treat the window as elapsed when time has moved forward. */
+  uint64_t now_ms = (uint64_t)time(NULL) * 1000;
+  if (st->count == 0 ||
+      (window && now_ms >= st->window_start_ms &&
+       now_ms - st->window_start_ms >= (uint64_t)window * 1000)) {
+    st->window_start_ms = now_ms;
+    st->count = 0;
+  }
+  if (st->count >= limit) {
+    ssl_trigger_handshake(s, 0);
+    return 0;
+  }
+  st->count++;
   if (!SSL_renegotiate(s_ssl(s))) {
     ssl_trigger_handshake(s, 0);
     return 0;

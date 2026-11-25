@@ -1208,125 +1208,95 @@ pub fn ParseStmt(
                             const stmt = p.parseStmt(&nestedOpts)?;
                             return p.s(S.Label{ name: _name, stmt: stmt }, loc);
                         }
+
+                        if (is_typescript_enabled) {
+                            if (ts_stmt := js_lexer.TypescriptStmtKeyword.List.get(name)) {
+                                switch (ts_stmt) {
+                                    .ts_stmt_type => {
+                                        if (p.lexer.token == .t_identifier && !p.lexer.has_newline_before) {
+                                            // "type Foo = any"
+                                            let stmtOpts = ParseStatementOptions{ is_module_scope: opts.is_module_scope };
+                                            p.skipTypeScriptTypeStmt(&stmtOpts)?;
+                                            return p.s(S.TypeScript{}, loc);
+                                        }
+                                    },
+                                    .ts_stmt_namespace, .ts_stmt_module => {
+                                        if (!p.lexer.has_newline_before &&
+                                            (opts.is_module_scope || opts.is_namespace_scope) &&
+                                            (p.lexer.token == .t_identifier || (p.lexer.token == .t_string_literal && opts.is_typescript_declare)))
+                                        {
+                                            return p.parseTypeScriptNamespaceStmt(loc, opts);
+                                        }
+                                    },
+                                    .ts_stmt_interface => {
+                                        let stmtOpts = ParseStatementOptions{ is_module_scope: opts.is_module_scope };
+
+                                        p.skipTypeScriptInterfaceStmt(&stmtOpts)?;
+                                        return p.s(S.TypeScript{}, loc);
+                                    },
+                                    .ts_stmt_abstract => {
+                                        if (p.lexer.token == .t_class || opts.ts_decorators != null) {
+                                            return p.parseClassStmt(loc, opts)?;
+                                        }
+                                    },
+                                    .ts_stmt_global => {
+                                        if (opts.is_namespace_scope && opts.is_typescript_declare && p.lexer.token == .t_open_brace) {
+                                            p.lexer.next()?;
+                                            * = p.parseStmtsUpTo(.t_close_brace, opts)?;
+                                            p.lexer.next()?;
+                                            return p.s(S.TypeScript{}, loc);
+                                        }
+                                    },
+                                    .ts_stmt_declare => {
+                                        opts.lexical_decl = .allow_all;
+                                        opts.is_typescript_declare = true;
+
+                                        if (opts.ts_decorators != null && p.lexer.token != .t_class && !p.lexer.isContextualKeyword("abstract")) {
+                                            p.lexer.expected(.t_class)?;
+                                        }
+
+                                        if (p.lexer.isContextualKeyword("global")) {
+                                            p.lexer.next()?;
+                                            p.lexer.expect(.t_open_brace)?;
+                                            * = p.parseStmtsUpTo(.t_close_brace, opts)?;
+                                            p.lexer.next()?;
+                                            return p.s(S.TypeScript{}, loc);
+                                        }
+
+                                        const stmt = p.parseStmt(opts)?;
+                                        if (decs := opts.ts_decorators) {
+                                            p.discardScopesUpTo(decs.scope_index);
+                                        }
+
+                                        if (opts.is_namespace_scope && opts.is_export) {
+                                            let decls: G.Decl.List = {};
+                                            switch (stmt.data) {
+                                                .s_local => |local| {
+                                                    let _decls = ListManaged(G.Decl).initCapacity(p.allocator, local.decls.len)?;
+                                                    for (decl of local.decls.slice()) {
+                                                        extractDeclsForBinding(decl.binding, &_decls)?;
+                                                    }
+                                                    decls = .moveFromList(&_decls);
+                                                },
+                                                else => {},
+                                            }
+
+                                            if (decls.len > 0) {
+                                                return p.s(S.Local{
+                                                    kind: .k_var,
+                                                    is_export: true,
+                                                    decls: decls,
+                                                }, loc);
+                                            }
+                                        }
+
+                                        return p.s(S.TypeScript{}, loc);
+                                    },
+                                }
+                            }
+                        }
                     },
                     else => {},
-                }
-
-                if (is_typescript_enabled) {
-                    if (ts_stmt := js_lexer.TypescriptStmtKeyword.List.get(name)) {
-                        switch (ts_stmt) {
-                            .ts_stmt_type => {
-                                if (p.lexer.token == .t_identifier && !p.lexer.has_newline_before) {
-                                    // "type Foo = any"
-                                    let stmtOpts = ParseStatementOptions{ is_module_scope: opts.is_module_scope };
-                                    p.skipTypeScriptTypeStmt(&stmtOpts)?;
-                                    return p.s(S.TypeScript{}, loc);
-                                }
-                            },
-                            .ts_stmt_namespace, .ts_stmt_module => {
-                                // "namespace Foo {}"
-                                // "module Foo {}"
-                                // "declare module 'fs' {}"
-                                // "declare module 'fs';"
-                                if (!p.lexer.has_newline_before &&
-                                    (opts.is_module_scope || opts.is_namespace_scope) &&
-                                    (p.lexer.token == .t_identifier || (p.lexer.token == .t_string_literal && opts.is_typescript_declare)))
-                                {
-                                    return p.parseTypeScriptNamespaceStmt(loc, opts);
-                                }
-                            },
-                            .ts_stmt_interface => {
-                                // "interface Foo {}"
-                                let stmtOpts = ParseStatementOptions{ is_module_scope: opts.is_module_scope };
-
-                                p.skipTypeScriptInterfaceStmt(&stmtOpts)?;
-                                return p.s(S.TypeScript{}, loc);
-                            },
-                            .ts_stmt_abstract => {
-                                if (p.lexer.token == .t_class || opts.ts_decorators != null) {
-                                    return p.parseClassStmt(loc, opts)?;
-                                }
-                            },
-                            .ts_stmt_global => {
-                                // "declare module 'fs' { global { namespace NodeJS {} } }"
-                                if (opts.is_namespace_scope && opts.is_typescript_declare && p.lexer.token == .t_open_brace) {
-                                    p.lexer.next()?;
-                                    * = p.parseStmtsUpTo(.t_close_brace, opts)?;
-                                    p.lexer.next()?;
-                                    return p.s(S.TypeScript{}, loc);
-                                }
-                            },
-                            .ts_stmt_declare => {
-                                opts.lexical_decl = .allow_all;
-                                opts.is_typescript_declare = true;
-
-                                // "@decorator declare class Foo {}"
-                                // "@decorator declare abstract class Foo {}"
-                                if (opts.ts_decorators != null && p.lexer.token != .t_class && !p.lexer.isContextualKeyword("abstract")) {
-                                    p.lexer.expected(.t_class)?;
-                                }
-
-                                // "declare global { ... }"
-                                if (p.lexer.isContextualKeyword("global")) {
-                                    p.lexer.next()?;
-                                    p.lexer.expect(.t_open_brace)?;
-                                    * = p.parseStmtsUpTo(.t_close_brace, opts)?;
-                                    p.lexer.next()?;
-                                    return p.s(S.TypeScript{}, loc);
-                                }
-
-                                // "declare const x: any"
-                                const stmt = p.parseStmt(opts)?;
-                                if (decs := opts.ts_decorators) {
-                                    p.discardScopesUpTo(decs.scope_index);
-                                }
-
-                                // Unlike almost all uses of "declare", statements that use
-                                // "export declare" with "var/let/const" inside a namespace affect
-                                // code generation. They cause any declared bindings to be
-                                // considered exports of the namespace. Identifier references to
-                                // those names must be converted into property accesses off the
-                                // namespace object:
-                                //
-                                //   namespace ns {
-                                //     export declare const x
-                                //     export function y() { return x }
-                                //   }
-                                //
-                                //   (ns as any).x = 1
-                                //   console.log(ns.y())
-                                //
-                                // In this example, "return x" must be replaced with "return ns.x".
-                                // This is handled by replacing each "export declare" statement
-                                // inside a namespace with an "export var" statement containing all
-                                // of the declared bindings. That "export var" statement will later
-                                // cause identifiers to be transformed into property accesses.
-                                if (opts.is_namespace_scope && opts.is_export) {
-                                    let decls: G.Decl.List = {};
-                                    switch (stmt.data) {
-                                        .s_local => |local| {
-                                            let _decls = ListManaged(G.Decl).initCapacity(p.allocator, local.decls.len)?;
-                                            for (decl of local.decls.slice()) {
-                                                extractDeclsForBinding(decl.binding, &_decls)?;
-                                            }
-                                            decls = .moveFromList(&_decls);
-                                        },
-                                        else => {},
-                                    }
-
-                                    if (decls.len > 0) {
-                                        return p.s(S.Local{
-                                            kind: .k_var,
-                                            is_export: true,
-                                            decls: decls,
-                                        }, loc);
-                                    }
-                                }
-
-                                return p.s(S.TypeScript{}, loc);
-                            },
-                        }
-                    }
                 }
             }
             // Output.print("\n\nmVALUE {s}:{s}\n", .{ expr, name });

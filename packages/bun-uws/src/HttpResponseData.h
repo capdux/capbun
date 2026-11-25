@@ -68,7 +68,7 @@ struct HttpResponseData : AsyncSocketData<SSL>, HttpParser {
         onWritable = [](uWS::HttpResponse<SSL>*, uint64_t, void*) {return true;};
 
         /* Run borrowed onWritable */
-        bool ret = borrowedOnWritable(response, offset, userData);
+        bool ret = borrowedOnWritable(response, offset, writableUserData);
 
         /* If we still have onWritable (the placeholder) then move back the real one */
         if (onWritable) {
@@ -92,6 +92,7 @@ struct HttpResponseData : AsyncSocketData<SSL>, HttpParser {
 
     /* Shared context pointer */
     void* userData = nullptr;
+    void* writableUserData = nullptr;
     void* socketData = nullptr;
 
     /* Per socket event handlers */

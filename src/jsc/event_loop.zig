@@ -659,8 +659,29 @@ pub fn unrefConcurrently(self: *EventLoop) void {
 }
 
 pub fn deinit(self: *EventLoop) void {
+        while (self.tasks.readItem()) |task| {
+            if ((task.tag() == @field(Task.Tag, @typeName(ManagedTask)))) {
+                const managed: *ManagedTask = (task.get(ManagedTask)).?;
+                if (managed.cleanup) |cleanup| {
+                    _ = &cleanup;
+                    if (managed.ctx) |ctx| {
+                        _ = &ctx;
+                        _ = cleanup(ctx);
+                    }
+                }
+                _ = bun.default_allocator.destroy(managed);
+            }
+        }
         _ = self.tasks.deinit();
+        for (self.immediate_tasks.items) |task| {
+            _ = &task;
+            _ = task.deref();
+        }
         _ = self.immediate_tasks.clearAndFree(bun.default_allocator);
+        for (self.next_immediate_tasks.items) |task| {
+            _ = &task;
+            _ = task.deref();
+        }
         _ = self.next_immediate_tasks.clearAndFree(bun.default_allocator);
 }
 pub const WTFTimerPtr = ?*Timer.WTFTimer;
