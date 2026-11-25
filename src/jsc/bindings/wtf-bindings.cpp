@@ -107,7 +107,7 @@ extern "C" void Bun__atexit(void (*func)(void));
 extern "C" volatile sig_atomic_t bun_stdio_modified[3];
 #endif
 
-extern "C" int Bun__ttySetMode(int fd, int mode)
+extern "C" int Bun__ttySetMode(int fd, int mode, int drain)
 {
 #if !OS(WINDOWS)
     struct termios tmp;
@@ -183,8 +183,11 @@ extern "C" int Bun__ttySetMode(int fd, int mode)
         bun_stdio_modified[fd] = 1;
     }
 
-    /* Apply changes after draining */
-    rc = uv__tcsetattr(fd, TCSADRAIN, &tmp);
+    // TCSADRAIN matches libuv on real ttys. It must never be used on a PTY
+    // master: draining waits on the slave's write lock, and a child blocked
+    // in write() holds that lock until the master's owner (this caller)
+    // reads the master, so the two deadlock. Those callers pass drain == 0.
+    rc = uv__tcsetattr(fd, drain ? TCSADRAIN : TCSANOW, &tmp);
     if (rc == 0) {
         current_tty_mode = mode;
     }

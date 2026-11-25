@@ -421,7 +421,7 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
             return globalObject.throw("Expected context to be a string, Buffer or TypedArray", .{});
         }
     }
-    let _sb_guard = DeinitGuard<jsc.Node.StringOrBuffer?>{ ptr: unsafe { &context_sb } };
+    defer if (context_sb != null) context_sb.?.deinit();
     let context_ptr: ([*c]const u8)? = null;
     let context_len: usize = 0;
     let use_context: c_int = 0;
@@ -441,7 +441,7 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
     const ssl_ptr = ssl_ptr_opt.?;
 
     const result = unsafe {
-        BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, context_ptr, context_len, use_context)
+        BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, if (p := context_ptr) p else null, context_len, use_context)
     };
     if (result != 1) {
         return globalObject.throwValue(getSSLException(globalObject, "Failed to export keying material"));

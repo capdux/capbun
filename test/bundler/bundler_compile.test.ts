@@ -943,4 +943,69 @@ const server = serve({
     const result = await Bun.$`./app`.cwd(dir).env(bunEnv).nothrow();
     expect(result.stdout.toString().trim()).toBe("IT WORKS");
   }, 30_000);
+
+  test("compile --compile-executable-path rejects a template shorter than the executable-format header", async () => {
+    using dir = tempDir("compile-template-short-header", {
+      "entry.js": `console.log(1);`,
+      "tiny": "WRONG-STUB-FALLBACK",
+    });
+    const cwd = String(dir);
+
+    const machHeader = (ncmds: number, sizeofcmds: number) => {
+      const b = Buffer.alloc(32);
+      b.writeUInt32LE(0xfeedfacf, 0);
+      b.writeInt32LE(0x01000007, 4);
+      b.writeInt32LE(3, 8);
+      b.writeInt32LE(2, 12);
+      b.writeUInt32LE(ncmds, 16);
+      b.writeUInt32LE(sizeofcmds, 20);
+      return b;
+    };
+
+    await Bun.write(join(cwd, "badcmds"), Buffer.concat([machHeader(2, 10000), Buffer.alloc(8)]));
+
+    const lc = Buffer.alloc(8);
+    lc.writeUInt32LE(0x19, 0);
+    lc.writeUInt32LE(8, 4);
+    await Bun.write(join(cwd, "shortseg"), Buffer.concat([machHeader(1, 8), lc]));
+
+    const run = async (target: string, template: string) => {
+      await using proc = Bun.spawn({
+        cmd: [
+          bunExe(),
+          "build",
+          "--compile",
+          `--target=${target}`,
+          "--compile-executable-path",
+          join(cwd, template),
+          join(cwd, "entry.js"),
+          "--outfile",
+          join(cwd, `out-${template}`),
+        ],
+        env: bunEnv,
+        cwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+      return { stdout, stderr, exitCode };
+    };
+
+    for (const [target, template, wantErr, outName] of [
+      ["bun-darwin-x64", "tiny", "InvalidObject", "out-tiny"],
+      ["bun-darwin-x64", "badcmds", "InvalidObject", "out-badcmds"],
+      ["bun-darwin-x64", "shortseg", "InvalidObject", "out-shortseg"],
+      ["bun-linux-x64", "tiny", "InvalidElfFile", "out-tiny"],
+      ["bun-windows-x64", "tiny", "InvalidPEFile", "out-tiny.exe"],
+    ] as const) {
+      const { stderr, exitCode } = await run(target, template);
+      expect({ target, template, stderr }).toEqual({
+        target,
+        template,
+        stderr: expect.stringContaining(wantErr),
+      });
+      expect(await Bun.file(join(cwd, outName)).exists()).toBe(false);
+      expect(exitCode).toBe(1);
+    }
+  }, 60_000);
 });

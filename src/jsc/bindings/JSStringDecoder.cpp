@@ -591,9 +591,10 @@ JSC::EncodedJSValue JSStringDecoderConstructor::construct(JSC::JSGlobalObject* l
     // This is a hack to make express' body-parser work
     // It does something weird with the prototype
     // Not exactly a subclass
-    if (constructor != newTarget && callFrame->thisValue().isObject()) {
+    JSValue thisObjValue = callFrame->thisValue().toThis(lexicalGlobalObject, JSC::ECMAMode::strict());
+    if (constructor != newTarget && thisObjValue.isObject()) {
         auto clientData = WebCore::clientData(vm);
-        JSObject* thisObject = asObject(callFrame->thisValue());
+        JSObject* thisObject = asObject(thisObjValue);
 
         thisObject->putDirect(vm, clientData->builtinNames().decodePrivateName(), jsObject, JSC::PropertyAttribute::DontEnum | 0);
         thisObject->putDirect(vm, clientData->builtinNames().encodingPublicName(), convertEnumerationToJS<BufferEncodingType>(*lexicalGlobalObject, encoding), JSC::PropertyAttribute::DontEnum | 0);

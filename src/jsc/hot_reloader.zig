@@ -410,7 +410,8 @@ pub fn enableHotModuleReloading(ctx: *Ctx, entry_path: ?[]const u8) void {
                 ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(WatcherPtr, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.?);
             }
             clear_screen = (!ctx.transpiler.env.hasSetNoClearTerminalOnReload((!Output.enable_ansi_colors_stdout)));
-            _ = (blk_catch_5: { break :blk_catch_5 ((reloader.getContext().start()) catch |__ce_5| { _ = &__ce_5; @panic("Failed to start File Watcher"); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((reloader.getContext().start()) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+            break :blk_catch_5 Output.panic("Failed to start File Watcher: {s}", .{ @errorName(e) }); }); });
     }
 
 pub fn putTombstone(self: *@This(), key: []const u8, value: *bun.fs.FileSystem.RealFS.EntriesOption) void {

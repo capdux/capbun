@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { bunEnv, bunExe, isWindows } from "harness";
+import { bunEnv, bunExe, isWindows, tempDir } from "harness";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // Helper to enable echo on a terminal (echo is disabled by default to avoid duplication)
 function enableEcho(terminal: Bun.Terminal) {
@@ -367,6 +369,62 @@ describe("Bun.Terminal", () => {
       // Still 0
       expect(terminal.inputFlags).toBe(0);
     });
+
+    // setRawMode used to apply termios with TCSADRAIN on the PTY master.
+    // Draining waits on the slave's write lock, and a child blocked in
+    // write() on a full PTY holds that lock until the master's owner (the
+    // very JS thread calling setRawMode) reads the master, freezing the
+    // whole runtime.
+    test.skipIf(isWindows)(
+      "does not deadlock while the child is blocked writing to a full PTY",
+      async () => {
+        using dir = tempDir("terminal-setrawmode-deadlock", {});
+        const pidFile = join(String(dir), "child.pid");
+        const script = `
+          const fs = require("node:fs");
+          const proc = Bun.spawn(["head", "-c", "200000", "/dev/zero"], {
+            terminal: { cols: 80, rows: 24, data() {} },
+          });
+          fs.writeFileSync(process.env.PID_FILE, String(proc.pid));
+          const t0 = Date.now();
+          while (Date.now() - t0 < 500) {}
+          proc.terminal.setRawMode(true);
+          console.log("RETURNED");
+          proc.kill("SIGKILL");
+          await proc.exited;
+          process.exit(0);
+        `;
+        await using proc = Bun.spawn({
+          cmd: [bunExe(), "-e", script],
+          env: { ...bunEnv, PID_FILE: pidFile },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+
+        let setRawModeDeadlocked = false;
+        const watchdog = setTimeout(() => {
+          setRawModeDeadlocked = true;
+          try {
+            const childPid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+            if (childPid > 0) {
+              process.kill(-childPid, "SIGKILL");
+            }
+          } catch {}
+          proc.kill("SIGKILL");
+        }, 10_000);
+
+        const [stdout, , exitCode] = await Promise.all([
+          proc.stdout.text(),
+          proc.stderr.text(),
+          proc.exited,
+        ]).finally(() => clearTimeout(watchdog));
+
+        expect(setRawModeDeadlocked).toBe(false);
+        expect(stdout).toBe("RETURNED\n");
+        expect(exitCode).toBe(0);
+      },
+      20_000,
+    );
   });
 
   describe("close", () => {

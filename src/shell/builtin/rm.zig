@@ -1116,15 +1116,28 @@ if (self.opts.recursive) {
 },
 .result => |cwd| cwd,
 });
+                var join_spill: std.ArrayListUnmanaged(u8) = .empty;
+                _ = &join_spill;
+                defer {
+                _ = join_spill.deinit(bun.default_allocator);
+                }
+                var normalize_buf: std.ArrayListUnmanaged(u8) = .empty;
+                _ = &normalize_buf;
+                defer {
+                _ = normalize_buf.deinit(bun.default_allocator);
+                }
                 for (cp_iter_slice(filepath_args)) |filepath| {
                     _ = &filepath;
                     const path = filepath[0..bun.len(filepath)];
                     const join_parts: [2][]const u8 = .{ cwd[0..cwd.len], path };
-                    const resolved_path = (if (ResolvePath.Platform.auto.isAbsolute(path)) path else bun.path.join((&join_parts), .auto));
+                    const resolved_path: []const u8 = (if (ResolvePath.Platform.auto.isAbsolute(path)) path else bun.handleOom(ResolvePath.joinSpill((&join_spill), bun.default_allocator, (&join_parts), .auto)));
                     var is_root = false;
                     _ = &is_root;
                     {
-                        const normalized = bun.path.normalizeString(resolved_path, false, .auto);
+                        if ((normalize_buf.items.len <= resolved_path.len)) {
+                            _ = bun.handleOom(normalize_buf.resize(bun.default_allocator, (resolved_path.len + 1)));
+                        }
+                        const normalized = ResolvePath.normalizeStringBuf(resolved_path, normalize_buf.items, false, .auto, false);
                         const dirname = ResolvePath.dirname(normalized, .auto);
                         is_root = std.mem.eql(u8, dirname, "");
                     }

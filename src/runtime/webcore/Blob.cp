@@ -1219,9 +1219,9 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
 pub fn writeDestinationFromJS(globalThis: *JSGlobalObject, args: *jsc.CallFrame.ArgumentsSlice): JSError!PathOrBlob {
     const path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, args)?;
     if (path_or_blob == .blob) {
-        validateWritableBlob(globalThis, &path_or_blob.blob) catch |e| {
-            let mut_pob = path_or_blob;
-            mut_pob.deinit();
+        validateWritableBlob(globalThis, &path_or_blob.blob) catch e => {
+            let mut_blob = path_or_blob.blob;
+            mut_blob.deinit();
             return e;
         };
     }

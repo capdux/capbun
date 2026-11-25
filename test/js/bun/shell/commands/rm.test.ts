@@ -6,7 +6,7 @@
  */
 import { $ } from "bun";
 import { beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { tempDirWithFiles } from "harness";
+import { bunEnv, bunExe, isWindows, tempDir, tempDirWithFiles } from "harness";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "path";
 import { createTestBuilder, sortedShellOutput } from "../util";
@@ -171,3 +171,56 @@ function packagejson() {
   "version": "0.0.0"
 }`;
 }
+
+test("operands longer than the path scratch buffers are reported, not a crash", async () => {
+  using dir = tempDir("rm-long-operand", { "short.txt": "" });
+  const long = Buffer.alloc(1100, "a").toString();
+  const longer = Buffer.alloc(8192, "b").toString();
+  const absolute = path.join(String(dir), long);
+  const upToRoot = Buffer.alloc(6000, "../").toString();
+
+  const fixture = /* ts */ `
+    import { $ } from "bun";
+    import { existsSync } from "node:fs";
+    $.nothrow();
+    const { LONG, LONGER, ABSOLUTE, UP_TO_ROOT } = process.env;
+    const run = async (...args: string[]) => {
+      const { exitCode, stderr } = await $\`rm \${args}\`.quiet();
+      return { exitCode, stderr: stderr.toString() };
+    };
+    const results = {
+      relative: await run(LONG!),
+      absolute: await run(ABSOLUTE!),
+      overJoinBuffer: await run(LONGER!),
+      mixed: { ...(await run(LONG!, "short.txt")), shortRemoved: !existsSync("short.txt") },
+      upToRoot: UP_TO_ROOT ? await run(UP_TO_ROOT) : undefined,
+    };
+    console.log(JSON.stringify(results));
+  `;
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "-e", fixture],
+    env: {
+      ...bunEnv,
+      LONG: long,
+      LONGER: longer,
+      ABSOLUTE: absolute,
+      ...(isWindows ? {} : { UP_TO_ROOT: upToRoot }),
+    },
+    cwd: String(dir),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect(stderr).toBe("");
+
+  const tooLong = (operand: string) =>
+    isWindows ? expect.stringMatching(/^rm: /) : `rm: ${operand}: File name too long\n`;
+  expect(JSON.parse(stdout)).toEqual({
+    relative: { exitCode: 1, stderr: tooLong(long) },
+    absolute: { exitCode: 1, stderr: tooLong(absolute) },
+    overJoinBuffer: { exitCode: 1, stderr: tooLong(longer) },
+    mixed: { exitCode: 1, stderr: tooLong(long), shortRemoved: true },
+    ...(isWindows ? {} : { upToRoot: { exitCode: 1, stderr: 'rm: "/" may not be removed\n' } }),
+  });
+  expect(exitCode).toBe(0);
+});

@@ -570,7 +570,7 @@ pub struct Printer {
         };
 
         env_loader.loadProcess()?;
-        env_loader.load(entries_option.entries, [], .production, false)?;
+        env_loader.load(bun.DotEnv.DirEntryKeys.fromDirEntry(entries_option.entries), [], .production, false)?;
         let log = logger.Log.init(allocator);
         options.load(
             allocator,

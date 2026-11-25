@@ -2324,7 +2324,8 @@ pub fn relativeWindowsT(comptime T: type, from_path: []const T, to: []const T, b
     // the common path parts
     const outLen = out.len;
     if (outLen > 0) {
-        const sliceSize = toEnd - toStart;
+        // JS `String.prototype.slice(toStart, toEnd)` yields "" when toStart > toEnd.
+        const sliceSize = toEnd -| toStart;
         bufSize = outLen;
         if (sliceSize > 0) {
             bufOffset = bufSize;
@@ -2337,10 +2338,12 @@ pub fn relativeWindowsT(comptime T: type, from_path: []const T, to: []const T, b
         return .{ result: buf[0..bufSize :0] };
     }
 
-    if (toOrig[toStart] == CHAR_BACKWARD_SLASH) {
+    // JS `charCodeAt` returns NaN past the end, which never equals '\'.
+    if (toStart < toOrigLen && toOrig[toStart] == CHAR_BACKWARD_SLASH) {
         toStart += 1;
     }
-    return .{ result: toOrig[toStart..toEnd :0] };
+    const clampedStart = @min(toStart, toEnd);
+    return .{ result: toOrig[clampedStart..toEnd :0] };
 }
 
 pub fn relativePosixJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, from_path: []const T, to: []const T, buf: []T, buf2: []T, buf3: []T): bun.JSError!jsc.JSValue {

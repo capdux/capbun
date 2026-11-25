@@ -3897,20 +3897,32 @@ fn windowsProcessDlopen(str: *bun.String): *!? {
     }
 
     let buf: bun.WPathBuffer = undefined;
-    const data = switch (str.encoding()) {
-        .utf8 => bun.strings.convertUTF8toUTF16InBuffer(&buf, str.utf8()),
+    const cap = buf.len - 1;
+    const len_opt: usize? = switch (str.encoding()) {
+        .utf8 => if (converted := bun.strings.tryConvertUTF8toUTF16InBuffer(buf[0..cap], str.utf8())) converted.len else null,
         .utf16 => brk: {
-            @memcpy(buf[0..str.length()], str.utf16());
-            break :brk buf[0..str.length()];
+            const src = str.utf16();
+            if (src.len > cap) break :brk null;
+            @memcpy(buf[0..src.len], src);
+            break :brk src.len;
         },
         .latin1 => brk: {
-            bun.strings.copyU8IntoU16(&buf, str.latin1());
-            break :brk buf[0..str.length()];
+            const src = str.latin1();
+            if (src.len > cap) break :brk null;
+            bun.strings.copyU8IntoU16(buf[0..src.len], src);
+            break :brk src.len;
         },
     };
-    buf[data.len] = 0;
+    let len: usize = 0;
+    if (l := len_opt) {
+        len = l;
+    } else {
+        kernel32_2.SetLastError(@intFromEnum(Win32Error.FILENAME_EXCED_RANGE));
+        return null;
+    }
+    buf[len] = 0;
     const LOAD_WITH_ALTERED_SEARCH_PATH = 0x00000008;
-    return bun.windows.kernel32.LoadLibraryExW(buf[0..data.len :0].ptr, null, LOAD_WITH_ALTERED_SEARCH_PATH);
+    return bun.windows.kernel32.LoadLibraryExW(buf[0..len :0].ptr, null, LOAD_WITH_ALTERED_SEARCH_PATH);
 }
 
 pub const windows_enable_stdio_inheritance = externs.windows_enable_stdio_inheritance;
@@ -4095,6 +4107,9 @@ struct kernel32_2 {
         lpBuffer: ([*]WCHAR)?,
         nSize: DWORD,
     ): DWORD;
+
+    @callconv("winapi")
+    static extern fn SetLastError(dwErrCode: DWORD);
 }
 pub err GetEnvironmentStringsError { OutOfMemory }
 

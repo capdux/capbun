@@ -120,6 +120,16 @@ fn nodeModulesFolderForDependencyID(iterator: *Lockfile.Tree.Iterator(.node_modu
 pub type IdPair = [DependencyID, PackageID];
 pub type PkgInfoResult = [PackageID, Lockfile.Tree.Iterator(.node_modules).Next];
 
+fn printResolutionLabel(
+    label: *std.array_list.Managed(u8),
+    resolution: *const Resolution,
+    strbuf: []const u8,
+): []const u8 {
+    label.clearRetainingCapacity();
+    bun.handleOom(label.writer().print("{f}", .{resolution.fmt(strbuf, .posix)}));
+    return label.items;
+}
+
 fn pkgInfoForNameAndVersion(
     lockfile: *Lockfile,
     iterator: *Lockfile.Tree.Iterator(.node_modules),
@@ -135,7 +145,8 @@ fn pkgInfoForNameAndVersion(
 
     const strbuf = lockfile.buffers.string_bytes.items;
 
-    let buf: [1024]u8 = undefined;
+    let resolution_label = std.array_list.Managed(u8).init(lockfile.allocator);
+    defer resolution_label.deinit();
     const dependencies = lockfile.buffers.dependencies.items;
 
     let dep_idx: usize = 0;
@@ -146,7 +157,7 @@ fn pkgInfoForNameAndVersion(
         if (pkg_id == invalid_package_id) continue;
         const pkg = lockfile.packages.get(pkg_id);
         if (v := version) {
-            const label = std.fmt.bufPrint(buf[0..], "{f}", .{ pkg.resolution.fmt(strbuf, .posix)}) catch @panic("Resolution name too long");
+            const label = printResolutionLabel(&resolution_label, &pkg.resolution, strbuf);
             if (std.mem.eql(u8, label, v)) {
                 bun.handleOom(pairs.append(.{ @as(DependencyID, @truncate(dep_idx)), pkg_id }));
             }
@@ -343,7 +354,8 @@ pub fn doPatchCommit(
     const _guard_root_nm = CloseGuard<*std.fs.Dir!>{ ptr: &root_node_modules };
 
     let iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
-    let resolution_buf: [1024]u8 = undefined;
+    let resolution_label_buf = std.array_list.Managed(u8).init(manager.allocator);
+    defer resolution_label_buf.deinit();
     const cache_pack = switch (arg_kind) {
         .path => result: {
             const package_json_source: *const logger.Source = &brk: {
@@ -395,7 +407,7 @@ pub fn doPatchCommit(
                 .ids ids => brk: {
                     for (id of ids.items) {
                         const pkg = lockfile.packages.get(id);
-                        const resolution_label = std.fmt.bufPrint(&resolution_buf, "{f}", .{ pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix)}) catch unreachable;
+                        const resolution_label = printResolutionLabel(&resolution_label_buf, &pkg.resolution, lockfile.buffers.string_bytes.items);
                         if (std.mem.eql(u8, resolution_label, version)) {
                             break :brk pkg;
                         }
@@ -450,7 +462,7 @@ pub fn doPatchCommit(
     const pkg: Package = cache_pack[3];
 
     const name = pkg.name.slice(lockfile.buffers.string_bytes.items);
-    const resolution_label = std.fmt.bufPrint(&resolution_buf, "{s}@{f}", .{ name, pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix) }) catch unreachable;
+    const patch_key = bun.handleOom(std.fmt.allocPrint(manager.allocator, "{s}@{f}", .{ name, pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix) }));
 
     let patchfile_contents = brk: {
         const new_folder = changes_dir;
@@ -505,7 +517,7 @@ pub fn doPatchCommit(
         // If the package was already patched then it might have a ".bun-tag-XXXXXXXX"
         // we need to rename this out and back too.
         const bun_patch_tag: [:0]const u8? = has_bun_patch_tag: {
-            const name_and_version_hash = String.Builder.stringHash(resolution_label);
+            const name_and_version_hash = String.Builder.stringHash(patch_key);
             const patch_tag = patch_tag: {
                 if (patchdep := lockfile.patched_dependencies.get(name_and_version_hash)) {
                     if (hash := patchdep.patchfileHash()) {
@@ -665,8 +677,9 @@ pub fn doPatchCommit(
         Global.crash();
     }
 
-    @memcpy(resolution_buf[resolution_label.len .. resolution_label.len + ".patch".len], ".patch");
-    let patch_filename: []const u8 = resolution_buf[0 .. resolution_label.len + ".patch".len];
+    const unescaped_patch_filename = bun.handleOom(std.fmt.allocPrint(manager.allocator, "{s}.patch", .{patch_key}));
+    defer manager.allocator.free(unescaped_patch_filename);
+    let patch_filename: []const u8 = unescaped_patch_filename;
     let deinit = false;
     if (escaped := escapePatchFilename(manager.allocator, patch_filename)) {
         deinit = true;
@@ -701,7 +714,6 @@ pub fn doPatchCommit(
         Global.crash();
     }
 
-    const patch_key = bun.handleOom(std.fmt.allocPrint(manager.allocator, "{s}", .{ resolution_label}));
     const patchfile_path = bun.handleOom(manager.allocator.dupe(u8, path_in_patches_dir));
     * = bun.sys.unlink(bun.path.joinZ(&[changes_dir, ".bun-patch-tag"], .auto));
 
@@ -783,7 +795,6 @@ pub fn preparePatch(manager: *PackageManager)! {
 
     let folder_path_buf: bun.PathBuffer = undefined;
     let iterator = Lockfile.Tree.Iterator(.node_modules).init(manager.lockfile);
-    let resolution_buf: [1024]u8 = undefined;
 
     let win_normalizer: bun.PathBuffer = undefined;
 
@@ -852,9 +863,11 @@ pub fn preparePatch(manager: *PackageManager)! {
             const actual_package = switch (pkg_idx_opt.?) {
                 .id id => lockfile.packages.get(id),
                 .ids ids => id: {
+                    let resolution_label_buf = std.array_list.Managed(u8).init(manager.allocator);
+                    defer resolution_label_buf.deinit();
                     for (id of ids.items) {
                         const pkg = lockfile.packages.get(id);
-                        const resolution_label = std.fmt.bufPrint(&resolution_buf, "{f}", .{ pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix)}) catch unreachable;
+                        const resolution_label = printResolutionLabel(&resolution_label_buf, &pkg.resolution, lockfile.buffers.string_bytes.items);
                         if (std.mem.eql(u8, resolution_label, version)) {
                             break :id pkg;
                         }

@@ -7,8 +7,8 @@
 | :--- | :--- | :--- | :--- |
 | Step 1 | `cp-v1.3.14-green` & `#30412` 坐标系 | **已完成** | 已建 `../bun-ref` 只读 worktree 与 `MODULE_MAP.md` (`1217/1295` 自动匹配) |
 | Step 2 | `23427dbc12f..a215285063c` (935 commits) | **已完成** | 已筛选 356 条有效修复；Wave 1 + Wave 2 + Wave 3 已完成全部高/中优安全、泄漏、UAF、边界与 Windows/Linux 修复移植，并通过 `zig:check` 5/5 全绿校验 |
-| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | **Wave 1 已提交** | 已完成 `http/fetch/h2`、`net/tls/usockets/server/sql`、`bundler/parser/css`、`valkey`、`WaitGroup`、`bun.lock`、`WorkspaceMap`、`Sink`、`c-bindings` 及其上游测试吸收；Wave 2 (`node_compat`/`shell`/`spawn`/`sys`/`ffi`) 并发推进中 |
-| Step 4 | `bun-v1.4.0..bun-v1.4.5` (1501 commits) | 待推进 | 小步快跑逐版本吸收至 CP 1.4.5 |
+| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | **已完成** | Wave 1 (`88f8a506fb9`) + Wave 2（`node_compat`/`napi`/`v8`/`shell`/`spawn`/`sys`/`ffi`/`install`/`pm`/`jsc`/`mock`/`Chunk.cp` 及其上游测试）全部吸收并通过 `zig:check` 5/5 全绿校验 |
+| Step 4 | `bun-v1.4.0..bun-v1.4.5` (1196 commits) | **即将启动** | `temp/audit_145.md`（408 有效修复 / 131 高优安全修复，无大规模 crate 目录搬迁） |
 
 ## Step 2 Wave 1 已吸收修复摘要（`23427dbc12f..a215285063c`）
 - **解析/构建/字符串**：`#31010` & `#31234` (`SemverQuery.cp`)、`#31861` (`VLQ.cp`)、`#31700` & `#31435` (`fmt.cp`)、`#31239` (`parseStmt.cp`)、`#31304`/`#31275`/`#31280`/`#31305` (`css/*`)、`#33102` (`ParseTask.cp`)、`#31264` (`immutable.cp`)、`#31221` (`HashedString.cp`)、`#32774` (`LineOffsetTable.cp`)、`#31177` (`vendor/mimalloc/src/threadlocal.c`)、`#30875` (`transpiler.cp`/`ThreadPool.cp`/`bundle_v2.cp`)

@@ -1778,6 +1778,8 @@ pub extern "c" fn GetEnvironmentStringsW() callconv(.winapi) ?LPWSTR;
 pub extern "c" fn FreeEnvironmentStringsW(penv: LPWSTR) callconv(.winapi) BOOL;
 
 pub extern "c" fn GetEnvironmentVariableW(lpName: ?LPCWSTR, lpBuffer: ?[*]WCHAR, nSize: DWORD) callconv(.winapi) DWORD;
+
+pub extern "c" fn SetLastError(dwErrCode: DWORD) callconv(.winapi) void;
 };
 
 pub const CloseHandleGuard = struct {
@@ -2473,20 +2475,38 @@ pub fn windowsProcessDlopen(str: *bun.String) callconv(.c) ?*anyopaque {
         }
         var buf: bun.WPathBuffer = undefined;
         _ = &buf;
-        const data = (switch (str.encoding()) {
-.utf8 => bun.strings.convertUTF8toUTF16InBuffer((&buf), str.utf8()),
+        const cap = (buf.len - 1);
+        const len_opt: ?usize = (switch (str.encoding()) {
+.utf8 => (if (bun.strings.tryConvertUTF8toUTF16InBuffer(buf[0..cap], str.utf8())) |converted| converted.len else null),
 .utf16 => brk: {
-        _ = @memcpy(buf[0..str.length()], str.utf16());
-        break :brk buf[0..str.length()];
+        const src = str.utf16();
+        if ((src.len > cap)) {
+            break :brk null;
+        }
+        _ = @memcpy(buf[0..src.len], src);
+        break :brk src.len;
 },
 .latin1 => brk: {
-        _ = bun.strings.copyU8IntoU16((&buf), str.latin1());
-        break :brk buf[0..str.length()];
+        const src = str.latin1();
+        if ((src.len > cap)) {
+            break :brk null;
+        }
+        _ = bun.strings.copyU8IntoU16(buf[0..src.len], src);
+        break :brk src.len;
 },
 });
-        buf[cp_cast_int(usize, data.len)] = 0;
+        var len: usize = 0;
+        _ = &len;
+        if (len_opt) |l| {
+            _ = &l;
+            len = l;
+        } else {
+            _ = kernel32_2.SetLastError(@intFromEnum(Win32Error.FILENAME_EXCED_RANGE));
+            return null;
+        }
+        buf[cp_cast_int(usize, len)] = 0;
         const LOAD_WITH_ALTERED_SEARCH_PATH: i32 = 8;
-        return bun.windows.kernel32.LoadLibraryExW(buf[0..data.len :0].ptr, null, LOAD_WITH_ALTERED_SEARCH_PATH);
+        return bun.windows.kernel32.LoadLibraryExW(buf[0..len :0].ptr, null, LOAD_WITH_ALTERED_SEARCH_PATH);
 }
 
 pub fn deleteOpenedFile(fd: bun.FD) Maybe(void) {

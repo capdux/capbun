@@ -2058,7 +2058,7 @@ pub fn relativeWindowsT(comptime T: type, from_path: []const T, to: []const T, b
         }
         const outLen = out.len;
         if ((outLen > 0)) {
-            const sliceSize = (toEnd - toStart);
+            const sliceSize = (toEnd -| toStart);
             bufSize = outLen;
             if ((sliceSize > 0)) {
                 bufOffset = bufSize;
@@ -2069,10 +2069,11 @@ pub fn relativeWindowsT(comptime T: type, from_path: []const T, to: []const T, b
             buf[cp_cast_int(usize, bufSize)] = asT(T, 0);
             return .{ .result = buf[0..bufSize :0] };
         }
-        if ((toOrig[@as(usize, @intCast(toStart))] == CHAR_BACKWARD_SLASH)) {
+        if (((toStart < toOrigLen) and (toOrig[@as(usize, @intCast(toStart))] == CHAR_BACKWARD_SLASH))) {
             toStart = (toStart + 1);
         }
-        return .{ .result = toOrig[toStart..toEnd :0] };
+        const clampedStart = @min(toStart, toEnd);
+        return .{ .result = toOrig[clampedStart..toEnd :0] };
 }
 
 pub fn relativePosixJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, from_path: []const T, to: []const T, buf: []T, buf2: []T, buf3: []T) bun.JSError!jsc.JSValue {

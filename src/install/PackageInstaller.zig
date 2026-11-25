@@ -689,6 +689,11 @@ pub fn getPatchfileHash(patchfile_path: []const u8) ?u64 {
             _ = &patchfile_path;
     }
 
+pub fn printPackageVersion(buf: []u8, spill: *std.array_list.Managed(u8), comptime fmt: []const u8, args: anytype) []const u8 {
+            return (blk_catch_4: { break :blk_catch_4 ((std.fmt.bufPrint(buf, fmt, args)) catch |__ce_4| { _ = &__ce_4; _ = bun.handleOom(spill.writer().print(fmt, args));
+            return spill.items; }); });
+    }
+
 pub fn installPackageWithNameAndResolution(self: *PackageInstaller, dependency_id: DependencyID, package_id: PackageID, log_level: Options.LogLevel, pkg_name: String, resolution: *const Resolution, comptime needs_verify: bool, comptime is_pending_package_install: bool) void {
             const alias = (if (@typeInfo(@TypeOf(self.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))])) == .@"enum" or @typeInfo(@TypeOf(self.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))])) == .@"union") @tagName(self.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))]) else self.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))].name);
             const destination_dir_subpath: [:0]u8 = brk: {
@@ -700,13 +705,18 @@ pub fn installPackageWithNameAndResolution(self: *PackageInstaller, dependency_i
             const pkg_name_hash = self.pkg_name_hashes[@as(usize, @intCast(package_id))];
             var resolution_buf: [512]u8 = undefined;
             _ = &resolution_buf;
+            var resolution_spill = std.array_list.Managed(u8).init(self.lockfile.allocator);
+            _ = &resolution_spill;
+            defer {
+            _ = resolution_spill.deinit();
+            }
             const package_version = (if ((resolution.tag == .workspace)) brk: {
             if (self.manager.lockfile.workspace_versions.get(pkg_name_hash)) |workspace_version| {
                 _ = &workspace_version;
-                break :brk ((std.fmt.bufPrint((&resolution_buf), "{f}", .{ workspace_version.fmt(self.lockfile.buffers.string_bytes.items) })) catch unreachable);
+                break :brk PackageInstaller.printPackageVersion((&resolution_buf), (&resolution_spill), "{f}", .{ workspace_version.fmt(self.lockfile.buffers.string_bytes.items) });
             }
             break :brk "";
-} else ((std.fmt.bufPrint((&resolution_buf), "{f}", .{ resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) })) catch unreachable));
+} else PackageInstaller.printPackageVersion((&resolution_buf), (&resolution_spill), "{f}", .{ resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) }));
             const patch_info = brk: {
             if (((self.manager.lockfile.patched_dependencies.entries.len == 0) and (self.manager.patched_dependencies_to_remove.entries.len == 0))) {
                 break :brk .{ null, null, null, false };
@@ -855,7 +865,7 @@ const url = self.manager.allocGitHubURL((&(if (@typeInfo(@TypeOf(resolution)) ==
                     var ___guard_url_moved = false; _ = &___guard_url_moved;
                     defer if (!___guard_url_moved) { ___guard_url_moved = true; const __T = @TypeOf(_guard_url); if (@typeInfo(__T) == .optional) { if (_guard_url) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_url.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_url; _drop_val.__cp_deinit(); } };
                     _ = (&_guard_url);
-                    _ = (blk_catch_7: { break :blk_catch_7 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, url, context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = (blk_catch_6: { break :blk_catch_6 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, url, context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
@@ -871,7 +881,7 @@ const url = self.manager.allocGitHubURL((&(if (@typeInfo(@TypeOf(resolution)) ==
 _ = self.manager.enqueueTarballForReading(dependency_id, package_id, alias.slice(self.lockfile.buffers.string_bytes.items), resolution, context);
 },
 .remote_tarball => {
-_ = (blk_catch_8: { break :blk_catch_8 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).remote_tarball.slice(self.lockfile.buffers.string_bytes.items), context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+_ = (blk_catch_7: { break :blk_catch_7 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).remote_tarball.slice(self.lockfile.buffers.string_bytes.items), context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
@@ -889,7 +899,7 @@ if (comptime Environment.isDebug) {
                             _ = Output.debugWarn("package {s}@{f} missing tarball_url", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
                         }
                     }
-                    _ = (blk_catch_9: { break :blk_catch_9 ((self.manager.enqueuePackageForDownload(@TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.slice(self.lockfile.buffers.string_bytes.items), context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = (blk_catch_8: { break :blk_catch_8 ((self.manager.enqueuePackageForDownload(@TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.slice(self.lockfile.buffers.string_bytes.items), context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
@@ -921,10 +931,10 @@ if (comptime Environment.allow_assert) {
                     }
                 }
                 if (((!is_pending_package_install) and (!self.canInstallPackageForTree(self.lockfile.buffers.trees.items, self.current_tree_id)))) {
-                    _ = (blk_catch_10: { break :blk_catch_10 ((self.trees[@as(usize, @intCast(self.current_tree_id))].pending_installs.append(self.manager.allocator, .{ .dependency_id = dependency_id, .tree_id = self.current_tree_id, .path = bun.handleOom(self.node_modules.path.clone()) })) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                    _ = (blk_catch_9: { break :blk_catch_9 ((self.trees[@as(usize, @intCast(self.current_tree_id))].pending_installs.append(self.manager.allocator, .{ .dependency_id = dependency_id, .tree_id = self.current_tree_id, .path = bun.handleOom(self.node_modules.path.clone()) })) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
                     return;
                 }
-                var destination_dir = (blk_catch_11: { break :blk_catch_11 ((self.node_modules.makeAndOpenDir(self.root_node_modules_folder)) catch |e| { _ = &e; if ((log_level != .silent)) {
+                var destination_dir = (blk_catch_10: { break :blk_catch_10 ((self.node_modules.makeAndOpenDir(self.root_node_modules_folder)) catch |e| { _ = &e; if ((log_level != .silent)) {
                     _ = Output.err(e, "Failed to open node_modules folder for <r><red>{s}<r> in {f}", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), bun.fmt.fmtPath(u8, self.node_modules.path.items, .{}) });
                 }
                 self.summary.fail = (self.summary.fail + 1);
@@ -943,7 +953,7 @@ if (comptime Environment.allow_assert) {
 else => result: {
                 if (((resolution.tag == .root) or ((resolution.tag == .folder) and (!self.lockfile.isWorkspaceTreeId(self.current_tree_id))))) {
                     const dirname = ((std.fs.path.dirname(self.node_modules.path.items)) orelse (self.node_modules.path.items));
-                    installer.cache_dir = (blk_catch_12: { break :blk_catch_12 ((self.root_node_modules_folder.openDir(dirname, .{ .iterate = true, .access_sub_paths = true })) catch |e| { _ = &e; break :result .fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
+                    installer.cache_dir = (blk_catch_11: { break :blk_catch_11 ((self.root_node_modules_folder.openDir(dirname, .{ .iterate = true, .access_sub_paths = true })) catch |e| { _ = &e; break :result .fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
                     const result = (if ((resolution.tag == .root)) installer.installFromLink(self.skip_delete, destination_dir) else installer.install(self.skip_delete, destination_dir, installer.getInstallMethod(), resolution.tag));
                     if ((result.isFail() and ((result.failure.err == error.ENOENT) or (result.failure.err == error.FileNotFound)))) {
                         break :result .success;
@@ -998,12 +1008,12 @@ const is_duplicate = self.successfully_installed.isSet(package_id);
                     }
                     if (self.enqueueLifecycleScripts(alias.slice(self.lockfile.buffers.string_bytes.items), log_level, (&folder_path), package_id, dep.behavior.optional, resolution)) {
                         if (is_trusted_through_update_request) {
-                            _ = (blk_catch_13: { break :blk_catch_13 ((self.manager.trusted_deps_to_add_to_package_json.append(self.manager.allocator, bun.handleOom(self.manager.allocator.dupe(u8, alias.slice(self.lockfile.buffers.string_bytes.items))))) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
+                            _ = (blk_catch_12: { break :blk_catch_12 ((self.manager.trusted_deps_to_add_to_package_json.append(self.manager.allocator, bun.handleOom(self.manager.allocator.dupe(u8, alias.slice(self.lockfile.buffers.string_bytes.items))))) catch |e| { _ = &e; break :blk_catch_12 bun.handleOom(e); }); });
                             if ((self.lockfile.trusted_dependencies == null)) {
                                 self.lockfile.trusted_dependencies = .{};
                             }
                             const void_val: void = undefined;
-                            _ = (blk_catch_14: { break :blk_catch_14 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, void_val)) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });
+                            _ = (blk_catch_13: { break :blk_catch_13 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, void_val)) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
                         }
                     }
 };
@@ -1050,15 +1060,15 @@ if (comptime Environment.allow_assert) {
                     if ((cause.err == error.AccessDenied)) {
                         if ((!NodeModulesOkSingleton.node_modules_is_ok)) {
                             if ((!Environment.isWindows)) {
-                                const stat = (blk_catch_17: { break :blk_catch_17 ((bun.sys.fstat(.fromStdDir((blk_catch_15: { break :blk_catch_15 ((lazy_package_dir.getDir()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
+                                const stat = (blk_catch_16: { break :blk_catch_16 ((bun.sys.fstat(.fromStdDir((blk_catch_14: { break :blk_catch_14 ((lazy_package_dir.getDir()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                                 if (Environment.isDebug) {
                                     _ = Output.err(e, "Failed to stat node_modules", .{});
                                 }
-                                break :blk_catch_15 Global.exit(1); }); }))).unwrap()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
+                                break :blk_catch_14 Global.exit(1); }); }))).unwrap()) catch |e| { _ = &e; _ = Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{ @TypeOf(self.names[@as(usize, @intCast(package_id))]).slice((&self.names[@as(usize, @intCast(package_id))]), self.lockfile.buffers.string_bytes.items) });
                                 if (Environment.isDebug) {
                                     _ = Output.err(e, "Failed to stat node_modules", .{});
                                 }
-                                break :blk_catch_17 Global.exit(1); }); });
+                                break :blk_catch_16 Global.exit(1); }); });
                                 const is_writable = (if ((stat.uid == bun.c.getuid())) ((stat.mode & bun.S.IWUSR) != 0) else (if ((stat.gid == bun.c.getgid())) ((stat.mode & bun.S.IWGRP) != 0) else ((stat.mode & bun.S.IWOTH) != 0)));
                                 if ((!is_writable)) {
                                     _ = Output.err("EACCES", "Permission denied while writing packages into node_modules.", .{});
@@ -1134,14 +1144,14 @@ if (comptime Environment.allow_assert) {
                     }
                     if (self.enqueueLifecycleScripts(alias.slice(self.lockfile.buffers.string_bytes.items), log_level, (&folder_path), package_id, dep.behavior.optional, resolution)) {
                         if (is_trusted_through_update_request) {
-                            _ = (blk_catch_18: { break :blk_catch_18 ((self.manager.trusted_deps_to_add_to_package_json.append(self.manager.allocator, bun.handleOom(self.manager.allocator.dupe(u8, alias.slice(self.lockfile.buffers.string_bytes.items))))) catch |e| { _ = &e; break :blk_catch_18 bun.handleOom(e); }); });
+                            _ = (blk_catch_17: { break :blk_catch_17 ((self.manager.trusted_deps_to_add_to_package_json.append(self.manager.allocator, bun.handleOom(self.manager.allocator.dupe(u8, alias.slice(self.lockfile.buffers.string_bytes.items))))) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
                         }
                         if (add_to_lockfile) {
                             if ((self.lockfile.trusted_dependencies == null)) {
                                 self.lockfile.trusted_dependencies = .{};
                             }
                             const void_val: void = undefined;
-                            _ = (blk_catch_19: { break :blk_catch_19 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, void_val)) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
+                            _ = (blk_catch_18: { break :blk_catch_18 ((self.lockfile.trusted_dependencies.?.put(self.manager.allocator, truncated_dep_name_hash, void_val)) catch |e| { _ = &e; break :blk_catch_18 bun.handleOom(e); }); });
                         }
                     }
 };
@@ -1157,7 +1167,7 @@ pub fn failWithInvalidUrl(self: *PackageInstaller, comptime is_pending_package_i
 pub fn enqueueLifecycleScripts(self: *PackageInstaller, folder_name: []const u8, log_level: Options.LogLevel, package_path: *AutoAbsPath, package_id: PackageID, optional: bool, resolution: *const Resolution) bool {
             var scripts: Package.Scripts = self.lockfile.packages.items(.scripts)[@as(usize, @intCast(package_id))];
             _ = &scripts;
-            const scripts_list = (blk_catch_20: { break :blk_catch_20 ((scripts.getList(self.manager.log, self.lockfile, package_path, folder_name, resolution)) catch |e| { _ = &e; if ((log_level != .silent)) {
+            const scripts_list = (blk_catch_19: { break :blk_catch_19 ((scripts.getList(self.manager.log, self.lockfile, package_path, folder_name, resolution)) catch |e| { _ = &e; if ((log_level != .silent)) {
                 const fmt: []const u8 = "\n<r><red>error:<r> failed to enqueue lifecycle scripts for <b>{s}<r>: {s}\n";
                 if (log_level.showProgress()) {
                     if (Output.enable_ansi_colors_stderr) {
@@ -1185,7 +1195,7 @@ pub fn enqueueLifecycleScripts(self: *PackageInstaller, folder_name: []const u8,
                     _ = self.manager.setNodeName(scripts_node, scripts_list.?.package_name, PackageManager.ProgressStrings.script_emoji, true);
                     _ = scripts_node.setEstimatedTotalItems((scripts_node.unprotected_estimated_total_items + scripts_list.?.total));
                 }
-                _ = (blk_catch_21: { break :blk_catch_21 ((self.pending_lifecycle_scripts.append(self.manager.allocator, .{ .list = scripts_list.?, .tree_id = self.current_tree_id, .optional = optional })) catch |e| { _ = &e; break :blk_catch_21 bun.handleOom(e); }); });
+                _ = (blk_catch_20: { break :blk_catch_20 ((self.pending_lifecycle_scripts.append(self.manager.allocator, .{ .list = scripts_list.?, .tree_id = self.current_tree_id, .optional = optional })) catch |e| { _ = &e; break :blk_catch_20 bun.handleOom(e); }); });
                 return true;
             }
             return false;
@@ -1224,7 +1234,7 @@ pub fn directoryExistsAt(self: NodeModulesFolder_, root_node_modules_dir: std.fs
             if (((file_path.len + (self.path.items.len * 2)) < bun.MAX_PATH_BYTES)) {
                 return self.directoryExistsAtWithoutOpeningDirectories(root_node_modules_dir, file_path);
             }
-            const dir = FD.fromStdDir((blk_catch_22: { break :blk_catch_22 ((self.openDir(root_node_modules_dir)) catch |__ce_22| { _ = &__ce_22; return false; }); }));
+            const dir = FD.fromStdDir((blk_catch_21: { break :blk_catch_21 ((self.openDir(root_node_modules_dir)) catch |__ce_21| { _ = &__ce_21; return false; }); }));
             var _guard_dir = ValCloseGuard(FD){ .val = dir };
             _ = &_guard_dir;
             var ___guard_dir_moved = false; _ = &___guard_dir_moved;

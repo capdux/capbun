@@ -4034,9 +4034,9 @@ if (destination_blob.isS3()) {
 pub fn writeDestinationFromJS(globalThis: *JSGlobalObject, args: *jsc.CallFrame.ArgumentsSlice) JSError!PathOrBlob {
         const path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, args);
         if ((path_or_blob == .blob)) {
-            _ = (blk_catch_24: { break :blk_catch_24 ((validateWritableBlob(globalThis, (&path_or_blob.blob))) catch |e| { _ = &e; var mut_pob = path_or_blob;
-            _ = &mut_pob;
-            _ = mut_pob.deinit();
+            _ = (blk_catch_24: { break :blk_catch_24 ((validateWritableBlob(globalThis, (&path_or_blob.blob))) catch |e| { _ = &e; var mut_blob = path_or_blob.blob;
+            _ = &mut_blob;
+            _ = mut_blob.deinit();
             return e; }); });
         }
         return path_or_blob;

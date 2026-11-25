@@ -67,10 +67,16 @@ struct ChannelWindowsHandlers<Self> {
     static fn onRead(ch: *Self, data: []const u8) {
         ch.ingest(data);
     }
-    static fn onError(ch: *Self, _: bun.sys.E) {
-        // Mirror the POSIX onClose path: detach the transport before
-        // signalling done so the owner can tell EOF apart from a
-        // protocol error (where the pipe is still attached).
+    static fn onError(ch: *Self, err: bun.sys.E) {
+        // libuv frames this pipe itself (ipc=1), so bytes the peer writes
+        // straight to fd 3 fail its frame-header check and surface here as a
+        // read error instead of reaching `ingest`; report it the way `ingest`
+        // reports a bad frame, before detaching. EOF is the peer closing its
+        // end: mirror the POSIX onClose path and detach first so it reads as
+        // a clean close.
+        if (err != .EOF) {
+            ch.markCorrupt();
+        }
         if (p := ch.backend.pipe) {
             ch.backend.pipe = null;
             p.closeAndDestroy();
@@ -97,6 +103,7 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
         /// Outgoing bytes the kernel didn't accept yet.
         out: std.ArrayListUnmanaged(u8) = .empty,
         done: bool = false,
+        corrupt_frame: bool = false,
 
         backend: Backend = {},
         const Backend = if (Environment.isWindows) WindowsBackend else PosixBackend;
@@ -322,7 +329,7 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
             while (_.in.items.len - head >= 5) {
                 const len = std.mem.readInt(u32, _.in.items[head..][0..4], .little);
                 if (len > Frame.max_payload) {
-                    _.markDone();
+                    _.markCorrupt();
                     return;
                 }
                 if (_.in.items.len - head < @as(usize, 5) + len) break;
@@ -345,6 +352,13 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
             if (_.done) return;
             _.done = true;
             _.owner().onChannelDone();
+        }
+
+        /// `markDone` for an undecodable stream; the transport is left attached
+        /// so the owner's `onChannelDone` sees it as a protocol error.
+        fn markCorrupt(*_) {
+            _.corrupt_frame = true;
+            _.markDone();
         }
 
         // -- platform callbacks --------------------------------------------

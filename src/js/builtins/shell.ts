@@ -131,9 +131,10 @@ export function createBunShellTemplateFunction(createShellInterpreter_, createPa
             res(out);
           }
         };
-        reject = (code, stdout, stderr) => {
-          potentialError!.initialize(new ShellOutput(stdout, stderr, code), code);
-          rej(potentialError);
+        // Only for a failure to build the output buffers; exit codes go through `resolve`.
+        reject = error => {
+          potentialError = undefined;
+          rej(error);
         };
       });
 

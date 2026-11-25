@@ -304,6 +304,8 @@ pub enum NapiStatus: c_uint {
     arraybuffer_expected = 19,
     detachable_arraybuffer_expected = 20,
     would_deadlock = 21,
+    no_external_buffers_allowed = 22,
+    cannot_run_js = 23,
 }
 
 /// This is not an `enum` so that the enum values cannot be trivially returned from NAPI functions,
@@ -784,12 +786,16 @@ pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *na
 }
 
 // we don't support async contexts
-@export @c fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, async_ctx: **!): napi_status {
+@export @c fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, async_ctx_: (**!)?): napi_status {
     log("napi_async_init", {});
     if (env_ == null) {
         return envIsNull();
     }
     const env = env_.?;
+    if (async_ctx_ == null) {
+        return env.invalidArg();
+    }
+    const async_ctx = async_ctx_.?;
     unsafe {
         async_ctx.* = env;
     }
@@ -923,7 +929,7 @@ pub extern fn napi_throw(env: napi_env, @"error": napi_value): napi_status ;
 pub extern fn napi_throw_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
 pub extern fn napi_throw_type_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
 pub extern fn napi_throw_range_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
-@export @c fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool): napi_status {
+@export @c fn napi_is_error(env_: napi_env, value_: napi_value, result_: (*bool)?): napi_status {
     log("napi_is_error", {});
     if (env_ == null) {
         return envIsNull();
@@ -934,6 +940,10 @@ pub extern fn napi_throw_range_error(env: napi_env, code: [*c]const u8, msg: [*c
     if (value == .zero) {
         return env.invalidArg();
     }
+    if (result_ == null) {
+        return env.invalidArg();
+    }
+    const result = result_.?;
     result.* = value.isAnyError();
     return env.ok();
 }

@@ -361,6 +361,22 @@ pub fn isFolderInCache(client: *PackageManager, folder_path: stringZ) bool {
         return (blk_catch_14: { break :blk_catch_14 ((bun.sys.directoryExistsAt(.fromStdDir(client.getCacheDirectory()), folder_path).unwrap()) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 false; }); });
 }
 
+pub fn isPackageInCacheAt(cache_dir: std.fs.Dir, folder_path: stringZ, tag: Resolution.Tag) bool {
+        const marker: []const u8 = (switch (tag) {
+.npm => "package.json",
+.git => ".bun-tag",
+else => {
+return (blk_catch_15: { break :blk_catch_15 ((bun.sys.directoryExistsAt(.fromStdDir(cache_dir), folder_path).unwrap()) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 false; }); });
+},
+});
+        const marker_path = bun.path.joinZ((&.{ folder_path, marker }), .auto);
+        return bun.sys.existsAt(.fromStdDir(cache_dir), marker_path);
+}
+
+pub fn isPackageInCache(client: *PackageManager, folder_path: stringZ, tag: Resolution.Tag) bool {
+        return isPackageInCacheAt(client.getCacheDirectory(), folder_path, tag);
+}
+
 pub fn setupGlobalDir(manager: *PackageManager, ctx: Command.Context) !void {
         manager.options.global_bin_dir = try Options.openGlobalBinDir(ctx.install);
         var out_buffer: bun.PathBuffer = undefined;
@@ -372,17 +388,17 @@ pub fn setupGlobalDir(manager: *PackageManager, ctx: Command.Context) !void {
 
 pub fn globalLinkDir(client: *PackageManager) std.fs.Dir {
         return ((client.global_link_dir) orelse (brk: {
-        var global_dir = (blk_catch_15: { break :blk_catch_15 ((Options.openGlobalDir(client.options.explicit_global_directory)) catch |e| { _ = &e; break :blk_catch_15 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .@"No global directory found")) {  _ = Output.errGeneric("failed to find a global directory for package caching and global link directories", .{});
+        var global_dir = (blk_catch_16: { break :blk_catch_16 ((Options.openGlobalDir(client.options.explicit_global_directory)) catch |e| { _ = &e; break :blk_catch_16 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .@"No global directory found")) {  _ = Output.errGeneric("failed to find a global directory for package caching and global link directories", .{});
         break :__sw_blk_0 cp_val(Global.exit(1)); } } {  _ = Output.err(e, "failed to open the global directory", .{});
         break :__sw_blk_0 cp_val(Global.exit(1)); }  unreachable; }); }); });
         _ = &global_dir;
         client.global_dir = global_dir;
-        client.global_link_dir = (blk_catch_16: { break :blk_catch_16 ((global_dir.makeOpenPath("node_modules", .{})) catch |e| { _ = &e; _ = Output.err(e, "failed to open global link dir node_modules at '{f}'", .{ FD.fromStdDir(global_dir) });
-        break :blk_catch_16 Global.exit(1); }); });
+        client.global_link_dir = (blk_catch_17: { break :blk_catch_17 ((global_dir.makeOpenPath("node_modules", .{})) catch |e| { _ = &e; _ = Output.err(e, "failed to open global link dir node_modules at '{f}'", .{ FD.fromStdDir(global_dir) });
+        break :blk_catch_17 Global.exit(1); }); });
         var buf: bun.PathBuffer = undefined;
         _ = &buf;
-        const _path = (blk_catch_17: { break :blk_catch_17 ((bun.getFdPath(.fromStdDir(client.global_link_dir.?), (&buf))) catch |e| { _ = &e; _ = Output.err(e, "failed to get the full path of the global directory", .{});
-        break :blk_catch_17 Global.exit(1); }); });
+        const _path = (blk_catch_18: { break :blk_catch_18 ((bun.getFdPath(.fromStdDir(client.global_link_dir.?), (&buf))) catch |e| { _ = &e; _ = Output.err(e, "failed to get the full path of the global directory", .{});
+        break :blk_catch_18 Global.exit(1); }); });
         client.global_link_dir_path = bun.handleOom(Fs.FileSystem.DirnameStore.instance.append(string, _path));
         break :brk client.global_link_dir.?;
 }));
@@ -411,10 +427,10 @@ pub fn pathForCachedNPMPath(manager: *PackageManager, buf: *bun.PathBuffer, pack
             var path_buf: bun.PathBuffer = undefined;
             _ = &path_buf;
             const joined = bun.path.joinAbsStringBufZ(manager.cache_directory_path, (&path_buf), (&.{ cache_path }), .windows);
-            return (blk_catch_18: { break :blk_catch_18 ((bun.sys.readlink(joined, buf).unwrap()) catch |e| { _ = &e; _ = bun.sys.unlink(joined);
+            return (blk_catch_19: { break :blk_catch_19 ((bun.sys.readlink(joined, buf).unwrap()) catch |e| { _ = &e; _ = bun.sys.unlink(joined);
             return e; }); });
         }
-        return (blk_catch_19: { break :blk_catch_19 ((cache_dir.readlinkat(cache_path, buf).unwrap()) catch |e| { _ = &e; _ = cache_dir.unlinkat(cache_path);
+        return (blk_catch_20: { break :blk_catch_20 ((cache_dir.readlinkat(cache_path, buf).unwrap()) catch |e| { _ = &e; _ = cache_dir.unlinkat(cache_path);
         return e; }); });
 }
 
@@ -519,8 +535,8 @@ else => {
 }
 
 pub fn attemptToCreatePackageJSONAndOpen() !std.fs.File {
-        const package_json_file = (blk_catch_20: { break :blk_catch_20 ((std.fs.cwd().createFileZ("package.json", .{ .read = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> {s} create package.json", .{ @errorName(e) });
-        break :blk_catch_20 Global.crash(); }); });
+        const package_json_file = (blk_catch_21: { break :blk_catch_21 ((std.fs.cwd().createFileZ("package.json", .{ .read = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> {s} create package.json", .{ @errorName(e) });
+        break :blk_catch_21 Global.crash(); }); });
         _ = try package_json_file.pwriteAll("{\"dependencies\": {}}", 0);
         return package_json_file;
 }
@@ -540,7 +556,7 @@ pub fn saveLockfile(manager: *PackageManager, load_result: *const Lockfile.LoadR
 .err => |e| e.format,
 .ok => |ok| ok.format,
 });
-                break :delete (blk_catch_21: { break :blk_catch_21 ((bun.sys.unlinkat(FD.cwd(), (if ((delete_format == .text)) (comptime bun.OSPathLiteral("bun.lock")) else (comptime bun.OSPathLiteral("bun.lockb")))).unwrap()) catch |e| { _ = &e; if ((e == error.ENOENT)) {
+                break :delete (blk_catch_22: { break :blk_catch_22 ((bun.sys.unlinkat(FD.cwd(), (if ((delete_format == .text)) (comptime bun.OSPathLiteral("bun.lock")) else (comptime bun.OSPathLiteral("bun.lockb")))).unwrap()) catch |e| { _ = &e; if ((e == error.ENOENT)) {
                     if (had_any_diffs) {
                         return;
                     }
@@ -586,7 +602,7 @@ _ = Output.prettyErrorln("No packages! Deleted empty lockfile", .{});
                         _ = Output.panic("Lockfile non-deterministic after saving", .{});
                     }
                 } else {
-                    if ((blk_catch_22: { break :blk_catch_22 ((manager.lockfile.hasMetaHashChanged(false, packages_len_before_install)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 false; }); })) {
+                    if ((blk_catch_23: { break :blk_catch_23 ((manager.lockfile.hasMetaHashChanged(false, packages_len_before_install)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 false; }); })) {
                         _ = Output.panic("Lockfile metahash non-deterministic after saving", .{});
                     }
                 }
@@ -633,8 +649,8 @@ pub fn writeYarnLock(client: *PackageManager) !void {
         const tmpname__ = ((std.fmt.bufPrint(tmpname_buf[8..], "{x}", .{ (&base64_bytes) })) catch unreachable);
         tmpname_buf[cp_cast_int(usize, (tmpname__.len + 8))] = 0;
         const tmpname = tmpname_buf[0..(tmpname__.len + 8) :0];
-        _ = (blk_catch_24: { break :blk_catch_24 ((tmpfile.create((&FileSystem.instance.fs), tmpname)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> failed to create tmpfile: {s}", .{ @errorName(e) });
-        break :blk_catch_24 Global.crash(); }); });
+        _ = (blk_catch_25: { break :blk_catch_25 ((tmpfile.create((&FileSystem.instance.fs), tmpname)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> failed to create tmpfile: {s}", .{ @errorName(e) });
+        break :blk_catch_25 Global.crash(); }); });
         var file = tmpfile.file();
         _ = &file;
         var file_buffer: [4096]u8 = undefined;

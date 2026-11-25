@@ -582,6 +582,9 @@ pub fn toArrayBuffer(
     }
 }
 
+@callconv("c")
+fn noopBytesDeallocator(_: *!, _: *!) {}
+
 pub fn toBuffer(
     globalThis: *JSGlobalObject,
     value: JSValue,
@@ -623,11 +626,9 @@ pub fn toBuffer(
                 }
             }
 
-            if (callback != null || ctx != null) {
-                return jsc.JSValue.createBufferWithCtx(globalThis, slice, ctx, callback);
-            }
-
-            return jsc.JSValue.createBuffer(globalThis, slice);
+            // No finalizer means borrow: the noop deallocator keeps GC from freeing
+            // caller-owned storage (oven-sh/bun#35405).
+            return jsc.JSValue.createBufferWithCtx(globalThis, slice, ctx, callback ?? noopBytesDeallocator);
         },
     }
 }

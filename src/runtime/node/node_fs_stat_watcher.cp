@@ -560,6 +560,9 @@ pub struct StatWatcher {
     /// After a restat found the file changed, this calls the listener function.
     fn swapAndCallListenerOnMainThread(*_) {
         const _guard = DerefGuard<StatWatcher>{ ptr: _ }; // Balance the ref from restat().
+        if (_.closed) {
+            return;
+        }
         let js_this: jsc.JSValue = .zero;
         if (v := _.this_value.tryGet()) {
             js_this = v;

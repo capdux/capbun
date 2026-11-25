@@ -144,13 +144,24 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
-        var first_msg: ?*const logger.Msg = (if ((log_guard.val.msgs.items.len > 0)) (&log_guard.val.msgs.items[0]) else null);
+        var first_msg: ?*const logger.Msg = (if ((log_guard.val.msgs.items.len > 0)) (blk: {
+        break :blk (&log_guard.val.msgs.items[0]);
+
+}) else null);
         _ = &first_msg;
-        for (log_guard.val.msgs.items) |*m| {
-            _ = &m;
-            if (((m.*).kind == .@"err")) {
-                first_msg = (m.*);
-                break;
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_0 = log_guard.val.msgs.items.len;
+            while (i < __end_0) : (i += 1) {
+                const m = (blk: {
+                break :blk (&log_guard.val.msgs.items[@as(usize, @intCast(i))]);
+
+});
+                if ((m.kind == .@"err")) {
+                    first_msg = m;
+                    break;
+                }
             }
         }
         if (first_msg) |msg| {

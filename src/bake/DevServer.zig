@@ -3826,8 +3826,9 @@ _ = dev.server_graph.onFileDeleted(abs_path, bv2);
 _ = dev.client_graph.onFileDeleted(abs_path, bv2);
             if (dev.client_graph.bundled_files.get(abs_path)) |file| {
                 _ = &file;
-                if ((file.html_route_bundle_index != null)) {
-                    watch_for_route_file = (!file.failed);
+                const unpacked = file.unpack();
+                if ((unpacked.html_route_bundle_index != null)) {
+                    watch_for_route_file = (!unpacked.failed);
                     _ = try dev.client_graph.insertFailure(.abs_path, abs_path, log, false);
                 }
             }

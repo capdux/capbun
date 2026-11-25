@@ -200,6 +200,64 @@ test("--parallel --bail stops dispatching new files after threshold", async () =
   expect(exitCode).toBe(1);
 });
 
+test.skipIf(!isWindows)(
+  "--parallel: a worker dying with a fatal NTSTATUS prints the crash banner and aborts",
+  async () => {
+    using dir = tempDir("parallel-ntstatus", {
+      "a-hang.test.js": `import {test} from "bun:test"; test("hang", async () => { await new Promise(() => {}); }, 999999);`,
+      "b-fastfail.test.js": `import {test} from "bun:test"; import { crash_handler } from "bun:internal-for-testing"; test("fastfail", () => { crash_handler.fastfail(); });`,
+    });
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "test", "--parallel=2"],
+      env: {
+        ...bunEnv,
+        BUN_TEST_PARALLEL_SCALE_MS: "0",
+        BUN_CRASH_REPORT_URL: "",
+        BUN_ENABLE_CRASH_REPORTING: "0",
+      },
+      cwd: String(dir),
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(stderr).toContain("(worker crashed: exit code 0xC0000409)");
+    expect(stderr).toContain("a test worker process crashed with exit code 0xC0000409");
+    expect(stderr).toContain("Aborting");
+    expect(stderr).toContain("aborted: sibling worker panicked");
+    expect(exitCode).not.toBe(0);
+  },
+  isASAN || isDebug ? 60_000 : 20_000,
+);
+
+test.skipIf(isWindows)(
+  "--parallel: a worker dying of a raw SIGABRT (fastfail) aborts the run",
+  async () => {
+    using dir = tempDir("parallel-fastfail-posix", {
+      "a-hang.test.js": `import {test} from "bun:test"; test("hang", async () => { await new Promise(() => {}); }, 999999);`,
+      "b-fastfail.test.js": `import {test} from "bun:test"; import { crash_handler } from "bun:internal-for-testing"; test("fastfail", () => { crash_handler.fastfail(); });`,
+    });
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "test", "--parallel=2"],
+      env: {
+        ...bunEnv,
+        BUN_TEST_PARALLEL_SCALE_MS: "0",
+        BUN_CRASH_REPORT_URL: "",
+        BUN_ENABLE_CRASH_REPORTING: "0",
+      },
+      cwd: String(dir),
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(stderr).toContain("(worker crashed: SIGABRT)");
+    expect(stderr).toContain("a test worker process crashed with SIGABRT");
+    expect(stderr).toContain("Aborting");
+    expect(stderr).toContain("aborted: sibling worker panicked");
+    expect(exitCode).not.toBe(0);
+  },
+  isASAN || isDebug ? 60_000 : 20_000,
+);
+
 test("--parallel prints per-test lines under their file's header", async () => {
   using dir = tempDir("parallel-output", {
     "a.test.js": `import {test,expect} from "bun:test";
@@ -716,11 +774,15 @@ test("--parallel: a test producing a >64MB result line is truncated, not treated
   expect(exitCode).toBe(1);
 }, 90_000);
 
-test("--parallel: a test writing garbage to fd 3 does not hang the coordinator", async () => {
+test("--parallel: a test writing garbage to fd 3 gets its worker killed and the run continues", async () => {
+  const passing = (name: string) =>
+    `import {test,expect} from "bun:test"; test(${JSON.stringify(name)},()=>expect(1).toBe(1));`;
   using dir = tempDir("parallel-hostile-fd3", {
-    "ok.test.js": `import {test,expect} from "bun:test"; test("ok",()=>expect(1).toBe(1));`,
-    "bad.test.js": `import {test} from "bun:test"; import {writeSync} from "fs";
+    "a-bad.test.js": `import {test} from "bun:test"; import {writeSync} from "fs";
       test("bad",()=>{ writeSync(3, Buffer.from([0xff,0xff,0xff,0xff,0x42])); });`,
+    "a-next.test.js": passing("next"),
+    "b1.test.js": passing("b1"),
+    "b2.test.js": passing("b2"),
   });
   await using proc = Bun.spawn({
     cmd: [bunExe(), "test", "--parallel=2"],
@@ -729,19 +791,17 @@ test("--parallel: a test writing garbage to fd 3 does not hang the coordinator",
     stderr: "pipe",
     stdout: "pipe",
   });
-  const result = await Promise.race([
-    Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]),
-    Bun.sleep(15000).then(() => "TIMEOUT" as const),
-  ]);
-  expect(result).not.toBe("TIMEOUT");
-  const [stdout, stderr, exitCode] = result as [string, string, number];
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
   expect(stdout).toContain("PARALLEL");
-  // ok.test.js's pass survives; bad.test.js's worker is treated as crashed
-  // once its IPC pipe is dropped — no retry, so the run is deterministically
-  // 1 pass / 1 fail. The coordinator kill(9)s the hostile worker, which on
-  // POSIX surfaces as SIGKILL (non-panic → no whole-run abort).
+  expect(stderr).toContain("a-bad.test.js (worker killed: corrupt IPC frame, something wrote to fd 3)");
+  expect(stderr).not.toContain("worker crashed");
+  expect(stderr).not.toContain("Aborting");
   expect(stderr).not.toContain("retrying");
-  expect(stderr).toContain("Ran ");
+  expect(stderr).toContain("(pass) next");
+  expect(stderr).toContain("(pass) b1");
+  expect(stderr).toContain("(pass) b2");
+  expect(stderr).toContain("\n 3 pass\n 1 fail\n");
+  expect(stderr).toContain("Ran 4 tests across 4 files.");
   expect(exitCode).toBe(1);
 });
 

@@ -164,7 +164,11 @@ pub fn determinePreinstallState(
                 return .extract;
             }
 
-            if (manager.isFolderInCache(folder_path)) {
+            const in_cache = if (patch_hash != null)
+                manager.isFolderInCache(folder_path)
+            else
+                manager.isPackageInCache(folder_path, pkg.resolution.tag);
+            if (in_cache) {
                 manager.setPreinstallState(pkg.@"meta".id, lockfile, .done);
                 return .done;
             }
@@ -181,7 +185,7 @@ pub fn determinePreinstallState(
                 const non_patched_path_ = folder_path[0 .. std.mem.indexOf(u8, folder_path, "_patch_hash=") ?? @panic("Expected folder path to contain `patch_hash=`, this is a bug in Bun. Please file a GitHub issue.")];
                 const non_patched_path = bun.handleOom(manager.lockfile.allocator.dupeZ(u8, non_patched_path_));
                 const non_patched_path_guard = FreeGuard<[:0]u8>{ alloc: manager.lockfile.allocator, ptr: non_patched_path };
-                if (manager.isFolderInCache(non_patched_path)) {
+                if (manager.isPackageInCache(non_patched_path, pkg.resolution.tag)) {
                     manager.setPreinstallState(pkg.@"meta".id, manager.lockfile, .apply_patch);
                     // yay step 1 is already done for us
                     return .apply_patch;

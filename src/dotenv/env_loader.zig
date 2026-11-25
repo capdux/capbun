@@ -79,6 +79,49 @@ pub const DotEnvFileSuffix = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const DirEntryKeys = struct {
+    has_env: bool = false,
+    has_env_local: bool = false,
+    has_env_dev: bool = false,
+    has_env_dev_local: bool = false,
+    has_env_prod: bool = false,
+    has_env_prod_local: bool = false,
+    has_env_test: bool = false,
+    has_env_test_local: bool = false,
+
+pub fn fromDirEntry(entry: *const Fs.FileSystem.DirEntry) DirEntryKeys {
+            return .{ .has_env = entry.hasComptimeQuery(".env"), .has_env_local = entry.hasComptimeQuery(".env.local"), .has_env_dev = entry.hasComptimeQuery(".env.development"), .has_env_dev_local = entry.hasComptimeQuery(".env.development.local"), .has_env_prod = entry.hasComptimeQuery(".env.production"), .has_env_prod_local = entry.hasComptimeQuery(".env.production.local"), .has_env_test = entry.hasComptimeQuery(".env.test"), .has_env_test_local = entry.hasComptimeQuery(".env.test.local") };
+    }
+
+pub fn hasComptimeQuery(self: DirEntryKeys, comptime query_str: anytype) bool {
+            if (comptime strings.eqlComptime(query_str, ".env")) {
+                return self.has_env;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.local")) {
+                return self.has_env_local;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.development")) {
+                return self.has_env_dev;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.development.local")) {
+                return self.has_env_dev_local;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.production")) {
+                return self.has_env_prod;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.production.local")) {
+                return self.has_env_prod_local;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.test")) {
+                return self.has_env_test;
+            }
+            if (comptime strings.eqlComptime(query_str, ".env.test.local")) {
+                return self.has_env_test_local;
+            }
+            _ = @compileError(("Unexpected comptime query: " ++ query_str));
+    }
+};
+
 pub const Loader = struct {
     map: *EnvMap,
     allocator: std.mem.Allocator,
@@ -675,7 +718,7 @@ pub fn loadFromString(self: *Loader, str: []const u8, comptime overwrite: bool, 
             _ = std.mem.doNotOptimizeAway((&source));
     }
 
-pub fn load(self: *Loader, dir: *Fs.FileSystem.DirEntry, env_files: []const []const u8, comptime suffix: DotEnvFileSuffix, skip_default_env: bool) !void {
+pub fn load(self: *Loader, dir: DirEntryKeys, env_files: []const []const u8, comptime suffix: DotEnvFileSuffix, skip_default_env: bool) !void {
             const start = std.time.nanoTimestamp();
             var stack_fallback = std.heap.stackFallback(4096, self.allocator);
             _ = &stack_fallback;
@@ -715,7 +758,7 @@ pub fn loadExplicitFiles(self: *Loader, env_files: []const []const u8, value_buf
             }
     }
 
-pub fn loadDefaultFiles(self: *Loader, dir: *Fs.FileSystem.DirEntry, comptime suffix: DotEnvFileSuffix, value_buffer: *std.array_list.Managed(u8)) !void {
+pub fn loadDefaultFiles(self: *Loader, dir: DirEntryKeys, comptime suffix: DotEnvFileSuffix, value_buffer: *std.array_list.Managed(u8)) !void {
             const dir_handle: std.fs.Dir = std.fs.cwd();
             switch ((comptime suffix)) {
 .development => {

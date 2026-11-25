@@ -1,4 +1,5 @@
-import { describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import { bunEnv, bunExe, tempDir } from "harness";
 import { ESBUILD, itBundled } from "./expectBundled";
 
 describe("bundler", () => {
@@ -302,4 +303,83 @@ describe("bundler", () => {
       },
     ],
   });
+  for (const unterminated of ["[name", "[dir", "[ext", "[hash", "[target", "a[b.js", "[name]-[hash.js"]) {
+    itBundled(`naming/UnterminatedPlaceholder/${unterminated}`, {
+      backend: "cli",
+      files: {
+        "/src/entry.js": `console.log(1);`,
+      },
+      root: "/src",
+      entryNaming: unterminated,
+      entryPointsRaw: ["./src/entry.js"],
+      bundleErrors: {
+        "<bun>": [`--entry-naming: unterminated "[`],
+      },
+    });
+  }
+  for (const [opt, flag] of [
+    ["chunkNaming", "--chunk-naming"],
+    ["assetNaming", "--asset-naming"],
+  ] as const) {
+    itBundled(`naming/UnterminatedPlaceholder/${flag}`, {
+      backend: "cli",
+      files: {
+        "/src/entry.js": `console.log(1);`,
+      },
+      root: "/src",
+      [opt]: "[name]-[hash",
+      entryPointsRaw: ["./src/entry.js"],
+      bundleErrors: {
+        "<bun>": [`${flag}: unterminated "[hash"`],
+      },
+    });
+  }
+  itBundled("naming/UnknownPlaceholderIsLiteral", {
+    backend: "cli",
+    files: {
+      "/src/entry.js": `console.log(1);`,
+    },
+    root: "/src",
+    entryNaming: "[nonexistent]-[name].[ext]",
+    entryPointsRaw: ["./src/entry.js"],
+    onAfterBundle(api) {
+      api.assertFileExists("/out/[nonexistent]-entry.js");
+    },
+    run: { file: "/out/[nonexistent]-entry.js", stdout: "1" },
+  });
+});
+
+describe("bundler", () => {
+  for (const [naming, option] of [
+    [`"[name"`, "naming"],
+    [`{ entry: "[dir]/[name" }`, "naming.entry"],
+    [`{ chunk: "[name]-[hash" }`, "naming.chunk"],
+    [`{ asset: "pre[post" }`, "naming.asset"],
+  ] as const) {
+    test(`naming/UnterminatedPlaceholderAPI ${naming}`, async () => {
+      using dir = tempDir("naming-unterminated", {
+        "e.ts": `console.log("hi");`,
+        "build.ts": `
+          try {
+            await Bun.build({ entrypoints: ["./e.ts"], outdir: "./out", throw: false, naming: ${naming} });
+            console.log("SURVIVED no-error");
+          } catch (e) {
+            console.log("SURVIVED", String(e));
+          }
+        `,
+      });
+      await using proc = Bun.spawn({
+        cmd: [bunExe(), "build.ts"],
+        env: bunEnv,
+        cwd: String(dir),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+      expect(stderr).toBe("");
+      expect(stdout).toContain(`${option}: unterminated "[`);
+      expect(stdout).toContain(`(missing "]")`);
+      expect(exitCode).toBe(0);
+    });
+  }
 });

@@ -814,7 +814,7 @@ pub fn init(
 
     env.loadProcess()?;
     let empty_env_paths: [0][]u8 = undefined;
-    env.load(entries_option.entries, &empty_env_paths, .production, false)?;
+    env.load(bun.DotEnv.DirEntryKeys.fromDirEntry(entries_option.entries), &empty_env_paths, .production, false)?;
 
     initializeStore();
 
@@ -1195,6 +1195,8 @@ pub const globalLinkDir = directories.globalLinkDir;
 pub const globalLinkDirAndPath = directories.globalLinkDirAndPath;
 pub const globalLinkDirPath = directories.globalLinkDirPath;
 pub const isFolderInCache = directories.isFolderInCache;
+pub const isPackageInCache = directories.isPackageInCache;
+pub const isPackageInCacheAt = directories.isPackageInCacheAt;
 pub const pathForCachedNPMPath = directories.pathForCachedNPMPath;
 pub const pathForResolution = directories.pathForResolution;
 pub const saveLockfile = directories.saveLockfile;

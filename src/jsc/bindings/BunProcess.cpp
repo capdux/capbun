@@ -2172,16 +2172,19 @@ static JSValue constructReportObjectComplete(VM& vm, Zig::GlobalObject* globalOb
             RETURN_IF_EXCEPTION(scope, {});
         }
 
-        header->putDirect(vm, JSC::Identifier::fromString(vm, "commandLine"_s), JSValue::decode(Bun__Process__createExecArgv(globalObject)), 0);
+        JSValue commandLine = JSValue::decode(Bun__Process__createExecArgv(globalObject));
         RETURN_IF_EXCEPTION(scope, {});
+        header->putDirect(vm, JSC::Identifier::fromString(vm, "commandLine"_s), commandLine, 0);
         header->putDirect(vm, JSC::Identifier::fromString(vm, "nodejsVersion"_s), JSC::jsString(vm, String::fromLatin1(REPORTED_NODEJS_VERSION)), 0);
         header->putDirect(vm, JSC::Identifier::fromString(vm, "wordSize"_s), JSC::jsNumber(64), 0);
         header->putDirect(vm, JSC::Identifier::fromString(vm, "arch"_s), constructArch(vm, header), 0);
         header->putDirect(vm, JSC::Identifier::fromString(vm, "platform"_s), constructPlatform(vm, header), 0);
-        header->putDirect(vm, JSC::Identifier::fromString(vm, "componentVersions"_s), constructVersions(vm, header), 0);
+        JSValue componentVersions = constructVersions(vm, header);
         RETURN_IF_EXCEPTION(scope, {});
-        header->putDirect(vm, JSC::Identifier::fromString(vm, "release"_s), constructProcessReleaseObject(vm, header), 0);
+        header->putDirect(vm, JSC::Identifier::fromString(vm, "componentVersions"_s), componentVersions, 0);
+        JSValue release = constructProcessReleaseObject(vm, header);
         RETURN_IF_EXCEPTION(scope, {});
+        header->putDirect(vm, JSC::Identifier::fromString(vm, "release"_s), release, 0);
 
         {
             // uname
@@ -2215,10 +2218,12 @@ static JSValue constructReportObjectComplete(VM& vm, Zig::GlobalObject* globalOb
 #endif
 #endif
 
-        header->putDirect(vm, Identifier::fromString(vm, "cpus"_s), JSC::constructEmptyArray(globalObject, nullptr), 0);
+        JSValue cpus = JSC::constructEmptyArray(globalObject, nullptr);
         RETURN_IF_EXCEPTION(scope, {});
-        header->putDirect(vm, Identifier::fromString(vm, "networkInterfaces"_s), JSC::constructEmptyArray(globalObject, nullptr), 0);
+        header->putDirect(vm, Identifier::fromString(vm, "cpus"_s), cpus, 0);
+        JSValue networkInterfaces = JSC::constructEmptyArray(globalObject, nullptr);
         RETURN_IF_EXCEPTION(scope, {});
+        header->putDirect(vm, Identifier::fromString(vm, "networkInterfaces"_s), networkInterfaces, 0);
 
         return header;
     };
@@ -2228,24 +2233,33 @@ static JSValue constructReportObjectComplete(VM& vm, Zig::GlobalObject* globalOb
         RETURN_IF_EXCEPTION(scope, {});
 
         JSC::JSObject* heapSpaces = JSC::constructEmptyObject(globalObject, globalObject->objectPrototype(), 9);
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "read_only_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        JSValue readOnlySpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "new_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "read_only_space"_s), readOnlySpace, 0);
+        JSValue newSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "old_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "new_space"_s), newSpace, 0);
+        JSValue oldSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "code_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "old_space"_s), oldSpace, 0);
+        JSValue codeSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "shared_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "code_space"_s), codeSpace, 0);
+        JSValue sharedSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "new_large_object_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "shared_space"_s), sharedSpace, 0);
+        JSValue newLargeObjectSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "large_object_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "new_large_object_space"_s), newLargeObjectSpace, 0);
+        JSValue largeObjectSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "code_large_object_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "large_object_space"_s), largeObjectSpace, 0);
+        JSValue codeLargeObjectSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "shared_large_object_space"_s), JSC::constructEmptyObject(globalObject), 0);
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "code_large_object_space"_s), codeLargeObjectSpace, 0);
+        JSValue sharedLargeObjectSpace = JSC::constructEmptyObject(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
+        heapSpaces->putDirect(vm, JSC::Identifier::fromString(vm, "shared_large_object_space"_s), sharedLargeObjectSpace, 0);
 
         heap->putDirect(vm, JSC::Identifier::fromString(vm, "totalMemory"_s), JSC::jsNumber(WTF::ramSize()), 0);
         heap->putDirect(vm, JSC::Identifier::fromString(vm, "executableMemory"_s), jsNumber(0), 0);
@@ -2394,32 +2408,45 @@ static JSValue constructReportObjectComplete(VM& vm, Zig::GlobalObject* globalOb
         JSC::JSObject* report = JSC::constructEmptyObject(globalObject, globalObject->objectPrototype(), 19);
         RETURN_IF_EXCEPTION(scope, {});
 
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "header"_s), constructHeader(), 0);
+        JSValue header = constructHeader();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "javascriptStack"_s), constructJavaScriptStack(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "header"_s), header, 0);
+        JSValue javascriptStack = constructJavaScriptStack();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "javascriptHeap"_s), constructJavaScriptHeap(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "javascriptStack"_s), javascriptStack, 0);
+        JSValue javascriptHeap = constructJavaScriptHeap();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "nativeStack"_s), constructNativeStack(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "javascriptHeap"_s), javascriptHeap, 0);
+        JSValue nativeStack = constructNativeStack();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "resourceUsage"_s), constructResourceUsage(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "nativeStack"_s), nativeStack, 0);
+        JSValue resourceUsage = constructResourceUsage();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "uvthreadResourceUsage"_s), constructUVThreadResourceUsage(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "resourceUsage"_s), resourceUsage, 0);
+        JSValue uvthreadResourceUsage = constructUVThreadResourceUsage();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "libuv"_s), constructLibUV(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "uvthreadResourceUsage"_s), uvthreadResourceUsage, 0);
+        JSValue libuv = constructLibUV();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "workers"_s), constructWorkers(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "libuv"_s), libuv, 0);
+        JSValue workers = constructWorkers();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "environmentVariables"_s), constructEnvironmentVariables(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "workers"_s), workers, 0);
+        JSValue environmentVariables = constructEnvironmentVariables();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "userLimits"_s), constructUserLimits(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "environmentVariables"_s), environmentVariables, 0);
+        JSValue userLimits = constructUserLimits();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "sharedObjects"_s), constructSharedObjects(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "userLimits"_s), userLimits, 0);
+        JSValue sharedObjects = constructSharedObjects();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "cpus"_s), constructCpus(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "sharedObjects"_s), sharedObjects, 0);
+        JSValue cpus = constructCpus();
         RETURN_IF_EXCEPTION(scope, {});
-        report->putDirect(vm, JSC::Identifier::fromString(vm, "networkInterfaces"_s), constructNetworkInterfaces(), 0);
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "cpus"_s), cpus, 0);
+        JSValue networkInterfaces = constructNetworkInterfaces();
         RETURN_IF_EXCEPTION(scope, {});
+        report->putDirect(vm, JSC::Identifier::fromString(vm, "networkInterfaces"_s), networkInterfaces, 0);
 
         return report;
     }

@@ -6,7 +6,7 @@ pub struct js_bindings {
     const JSValue = jsc.JSValue;
 
     static fn generate(global: *jsc.JSGlobalObject): jsc.JSValue {
-        const obj = jsc.JSValue.createEmptyObject(global, 8);
+        const obj = jsc.JSValue.createEmptyObject(global, 9);
         inline for (tuple of [ 
             [ "getMachOImageZeroOffset", jsGetMachOImageZeroOffset ],
             [ "getFeaturesAsVLQ", jsGetFeaturesAsVLQ ],
@@ -15,6 +15,7 @@ pub struct js_bindings {
             [ "panic", jsPanic ],
             [ "rootError", jsRootError ],
             [ "outOfMemory", jsOutOfMemory ],
+            [ "fastfail", jsFastfail ],
             [ "raiseIgnoringPanicHandler", jsRaiseIgnoringPanicHandler ],
         ]) {
             const name = jsc.ZigString.static(tuple[0]);
@@ -63,6 +64,15 @@ pub struct js_bindings {
     static fn jsRaiseIgnoringPanicHandler(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         crash_handler.suppressCoreDumpsIfNecessary();
         bun.Global.raiseIgnoringPanicHandler(.SIGSEGV);
+    }
+
+    static fn jsFastfail(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        crash_handler.suppressCoreDumpsIfNecessary();
+        if (bun.Environment.isWindows) {
+            std.process.abort();
+        } else {
+            bun.Global.raiseIgnoringPanicHandler(.SIGABRT);
+        }
     }
 
     static fn jsGetFeaturesAsVLQ(global: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {

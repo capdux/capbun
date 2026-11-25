@@ -21,7 +21,7 @@ type string = []const u8;
 fn QueueMicrotaskWrapper(comptime ContextType: type, comptime Function: auto): type {
     return struct {
         @callconv("c")
-        fn call(p: *!) {
+        static fn call(p: *!) {
             Function(bun.cast(ContextType, p));
         }
     };
@@ -178,7 +178,8 @@ inline fn argsIsEmpty(comptime T: type): bool {
         return error.JSError;
     }
 
-    pub fn throwOutOfMemory(*_): bun.JSError {
+    pub noinline fn throwOutOfMemory(*_): bun.JSError {
+        @branchHint(.cold);
         JSGlobalObject__throwOutOfMemoryError(_);
         return error.JSError;
     }
@@ -187,7 +188,8 @@ inline fn argsIsEmpty(comptime T: type): bool {
         return JSGlobalObject__createOutOfMemoryError(_);
     }
 
-    pub fn throwOutOfMemoryValue(*_): JSValue {
+    pub noinline fn throwOutOfMemoryValue(*_): JSValue {
+        @branchHint(.cold);
         JSGlobalObject__throwOutOfMemoryError(_);
         return .zero;
     }
@@ -946,7 +948,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     /// Throw an error from within the Bun runtime.
     ///
     /// The set of errors accepted by `ERR()` is defined in `ErrorCode.ts`.
-    pub fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]const u8, args: auto): ErrorCode.ErrorBuilder(code, fmt, NormArgsType(@TypeOf(args))) {
+    pub static fn ERR(global: *JSGlobalObject, comptime code: jsc.Error, comptime fmt: [:0]const u8, args: auto): ErrorCode.ErrorBuilder(code, fmt, NormArgsType(@TypeOf(args))) {
         return .{ global: global, args: (if (comptime @TypeOf(args) == void) EmptyFmtArgs{} else if (comptime @typeInfo(@TypeOf(args)) == .pointer) args.* else args) };
     }
 

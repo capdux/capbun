@@ -609,7 +609,7 @@ pub fn setRawMode(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe:
         const args = callframe.argumentsAsArray(1);
         const enabled = args[0].toBoolean();
         if (comptime Environment.isPosix) {
-            const tty_result = bun.tty.setMode(self.master_fd.cast(), (if (enabled) .raw else .normal));
+            const tty_result = bun.tty.setModeWhen(self.master_fd.cast(), (if (enabled) .raw else .normal), .now);
             if ((tty_result != 0)) {
                 return globalObject.throw("Failed to set raw mode", .{});
             }

@@ -970,3 +970,108 @@ describe.if(!!libPath)("can open more than 63 symbols via", () => {
     });
   }
 });
+
+// oven-sh/bun#35405: toBuffer without a finalizer used to mi_free caller-owned
+// memory on GC. Subprocess because unpatched builds crash.
+describe("toBuffer borrowed-pointer ownership (no bad-free on GC)", () => {
+  async function runsClean(script) {
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", script],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    return { stdout, stderr, exitCode };
+  }
+
+  const gcLoop = `for (let i = 0; i < 20; i++) { Bun.gc(true); Buffer.alloc(1024 * 1024); }`;
+
+  const originalSurvives = (index, expected) => `
+      adopted = null;
+      ${gcLoop}
+      if (original[${index}] !== ${expected}) throw new Error("caller memory corrupted after adopted GC: " + original[${index}]);
+      original[${index}] = 0x55;
+      if (original[${index}] !== 0x55) throw new Error("caller memory not writable after adopted GC");
+      original = null;
+      ${gcLoop}
+  `;
+
+  it.concurrent("toBuffer(ptr(buffer)) does not free caller-owned memory on GC", async () => {
+    expect(
+      await runsClean(`
+      import { ptr, toBuffer } from "bun:ffi";
+      let original = Buffer.alloc(64, 0x41);
+      let adopted = toBuffer(ptr(original), 0, 64);
+      if (adopted[0] !== 0x41) throw new Error("expected a zero-copy view");
+      adopted[0] = 0x42;
+      if (original[0] !== 0x42) throw new Error("expected an aliasing view");
+      ${originalSurvives(0, "0x42")}
+      console.log("survived-gc");
+    `),
+    ).toEqual({ stdout: "survived-gc\n", stderr: "", exitCode: 0 });
+  });
+
+  it.concurrent("toBuffer(ptr(buffer), offset) does not free an interior pointer on GC", async () => {
+    expect(
+      await runsClean(`
+      import { ptr, toBuffer } from "bun:ffi";
+      let original = Buffer.alloc(64, 0x41);
+      let adopted = toBuffer(ptr(original), 8, 48);
+      if (adopted[0] !== 0x41) throw new Error("expected a zero-copy view");
+      adopted[0] = 0x42;
+      if (original[8] !== 0x42) throw new Error("expected a view aliasing original[8]");
+      ${originalSurvives(8, "0x42")}
+      console.log("survived-gc");
+    `),
+    ).toEqual({ stdout: "survived-gc\n", stderr: "", exitCode: 0 });
+  });
+
+  it.concurrent("toBuffer(ptr(typedArray)) does not free caller-owned memory on GC", async () => {
+    expect(
+      await runsClean(`
+      import { ptr, toBuffer } from "bun:ffi";
+      let original = new Uint8Array(64).fill(0x41);
+      let adopted = toBuffer(ptr(original), 0, 64);
+      if (adopted[0] !== 0x41) throw new Error("expected a zero-copy view");
+      adopted[0] = 0x42;
+      if (original[0] !== 0x42) throw new Error("expected an aliasing view");
+      ${originalSurvives(0, "0x42")}
+      console.log("survived-gc");
+    `),
+    ).toEqual({ stdout: "survived-gc\n", stderr: "", exitCode: 0 });
+  });
+});
+
+describe("toBuffer at the Buffer length limit", () => {
+  it.concurrent("throws a RangeError above 2^32 bytes and still creates a view of exactly 2^32 bytes", async () => {
+    await using proc = Bun.spawn({
+      cmd: [
+        bunExe(),
+        "-e",
+        `
+        import { ptr, toBuffer } from "bun:ffi";
+        const backing = new Uint8Array(16);
+        let aboveLimit;
+        try {
+          aboveLimit = { length: toBuffer(ptr(backing), 0, 2 ** 32 + 1).length };
+        } catch (e) {
+          aboveLimit = { isRangeError: e instanceof RangeError };
+        }
+        const atLimit = { length: toBuffer(ptr(backing), 0, 2 ** 32).length };
+        console.log(JSON.stringify({ aboveLimit, atLimit }));
+        `,
+      ],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ result: JSON.parse(stdout.trim() || "null"), stderr, exitCode, signalCode: proc.signalCode }).toEqual({
+      result: { aboveLimit: { isRangeError: true }, atLimit: { length: 2 ** 32 } },
+      stderr: "",
+      exitCode: 0,
+      signalCode: null,
+    });
+  });
+});

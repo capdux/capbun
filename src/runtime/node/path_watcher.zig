@@ -441,6 +441,11 @@ pub fn threadMain(manager: *PathWatcherManager) void {
             _ = &buf;
             var path_buf: bun.PathBuffer = undefined;
             _ = &path_buf;
+            var rel_spill: std.ArrayListUnmanaged(u8) = .{};
+            _ = &rel_spill;
+            defer {
+            _ = rel_spill.deinit(bun.default_allocator);
+            }
             while (plat.running.load(.acquire)) {
                 const rc = bun.sys.syscall.read(plat.fd.cast(), (&buf), buf.len);
                 switch (bun.sys.getErrno(rc)) {
@@ -535,7 +540,7 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                         }
                         const owner = owners.items[@as(usize, @intCast(oi))];
                         const watcher = owner.watcher;
-                        const rel: []const u8 = (if (watcher.is_file) bun.path.basename(watcher.path) else (if ((owner.subpath.len == 0)) name else (if ((name.len == 0)) owner.subpath else bun.path.joinStringBuf((&path_buf), (&.{ owner.subpath, name }), .posix))));
+                        const rel: []const u8 = (if (watcher.is_file) bun.path.basename(watcher.path) else (if ((owner.subpath.len == 0)) name else (if ((name.len == 0)) owner.subpath else joinZBufSpill((&path_buf), (&rel_spill), (&.{ owner.subpath, name })))));
                         _ = watcher.emit(event_type, rel, ((!is_dir_child) and (!(((ev.mask & (IN.DELETE_SELF | IN.MOVE_SELF)) != 0) and (!watcher.is_file)))));
                         _ = bun.handleOom(touched.getOrPut(bun.default_allocator, watcher));
                         if ((((watcher.recursive and is_dir_child) and ((ev.mask & (IN.CREATE | IN.MOVED_TO)) != 0)) and (name.len > 0))) {
@@ -544,7 +549,12 @@ const e: bun.sys.Error = .{ .errno = @truncate(@intFromEnum(errno)), .syscall = 
                             _ = &_abs_buf_guard;
                             var ___abs_buf_guard_moved = false; _ = &___abs_buf_guard_moved;
                             defer if (!___abs_buf_guard_moved) { ___abs_buf_guard_moved = true; const __T = @TypeOf(_abs_buf_guard); if (@typeInfo(__T) == .optional) { if (_abs_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _abs_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _abs_buf_guard; _drop_val.__cp_deinit(); } };
-                            const child_abs = bun.path.joinZBuf(abs_buf, (&.{ watcher.path, owner.subpath, name }), .posix);
+                            var abs_spill: std.ArrayListUnmanaged(u8) = .{};
+                            _ = &abs_spill;
+                            defer {
+                            _ = abs_spill.deinit(bun.default_allocator);
+                            }
+                            const child_abs = joinZBufSpill(abs_buf, (&abs_spill), (&.{ watcher.path, owner.subpath, name }));
                             _ = addOne(manager, watcher, child_abs, rel);
                             _ = walkAndAdd(manager, watcher, child_abs, rel);
                         }
@@ -944,6 +954,21 @@ return .{ .err = e2.withoutPath() };
         return .{ .result = watcher };
 }
 
+pub fn joinZBufSpill(buf: []u8, spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8) [:0]const u8 {
+        var upper: usize = 2;
+        _ = &upper;
+        for (cp_iter_slice(parts)) |p| {
+            _ = &p;
+            upper = (upper + (p.len + 1));
+        }
+        if ((upper <= buf.len)) {
+            return bun.path.joinZBuf(buf, parts, .posix);
+        }
+        _ = spill.clearRetainingCapacity();
+        _ = bun.handleOom(spill.ensureTotalCapacity(bun.default_allocator, upper));
+        return bun.path.joinZBuf(spill.allocatedSlice(), parts, .posix);
+}
+
 pub fn walkSubtree(abs_dir: [:0]const u8, rel_dir: []const u8, comptime dirs_only: bool, ctx: anytype, comptime cb: *const fn (@TypeOf(ctx), [:0]const u8, []const u8, bool) void) void {
         var dfd: bun.FD = undefined;
         _ = &dfd;
@@ -966,11 +991,21 @@ dfd = f;
         _ = &_abs_buf_guard;
         var ___abs_buf_guard_moved = false; _ = &___abs_buf_guard_moved;
         defer if (!___abs_buf_guard_moved) { ___abs_buf_guard_moved = true; const __T = @TypeOf(_abs_buf_guard); if (@typeInfo(__T) == .optional) { if (_abs_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _abs_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _abs_buf_guard; _drop_val.__cp_deinit(); } };
+        var abs_spill: std.ArrayListUnmanaged(u8) = .{};
+        _ = &abs_spill;
+        defer {
+        _ = abs_spill.deinit(bun.default_allocator);
+        }
         const rel_buf = bun.path_buffer_pool.get();
         var _rel_buf_guard = PathBufferGuard(@TypeOf(rel_buf)){ .buf = rel_buf };
         _ = &_rel_buf_guard;
         var ___rel_buf_guard_moved = false; _ = &___rel_buf_guard_moved;
         defer if (!___rel_buf_guard_moved) { ___rel_buf_guard_moved = true; const __T = @TypeOf(_rel_buf_guard); if (@typeInfo(__T) == .optional) { if (_rel_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _rel_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _rel_buf_guard; _drop_val.__cp_deinit(); } };
+        var rel_spill: std.ArrayListUnmanaged(u8) = .{};
+        _ = &rel_spill;
+        defer {
+        _ = rel_spill.deinit(bun.default_allocator);
+        }
         while (true) {
             switch (it.next()) {
 .err => {
@@ -984,8 +1019,8 @@ if (opt) |entry| {
                     continue;
                 }
                 const name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).slice();
-                const child_abs = bun.path.joinZBuf(abs_buf, (&.{ abs_dir, name }), .posix);
-                const child_rel: []const u8 = (if ((rel_dir.len == 0)) name else bun.path.joinStringBuf(rel_buf, (&.{ rel_dir, name }), .posix));
+                const child_abs = joinZBufSpill(abs_buf, (&abs_spill), (&.{ abs_dir, name }));
+                const child_rel: []const u8 = (if ((rel_dir.len == 0)) name else joinZBufSpill(rel_buf, (&rel_spill), (&.{ rel_dir, name })));
                 _ = cb(ctx, child_abs, child_rel, child_is_file);
                 if ((!child_is_file)) {
                     _ = walkSubtree(child_abs, child_rel, dirs_only, ctx, cb);

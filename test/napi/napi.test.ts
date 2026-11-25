@@ -510,6 +510,13 @@ describe.concurrent("napi", () => {
     });
   });
 
+  describe("napi_get_cb_info this_arg", () => {
+    it("is globalThis for a bare call resolved through a closure scope", async () => {
+      const output = await checkSameOutput("test_this_value_of_bare_call_through_closure", []);
+      expect(output).toContain("bare call through closure returned globalThis: true");
+    });
+  });
+
   describe("bigint conversion to int64/uint64", () => {
     it("works", async () => {
       const tests = [-1n, 0n, 1n];
@@ -547,6 +554,28 @@ describe.concurrent("napi", () => {
   describe("napi_get_last_error_info", () => {
     it("returns information from the most recent call", async () => {
       await checkSameOutput("test_extended_error_messages", []);
+    });
+
+    it("returns a non-null message for napi_cannot_run_js", async () => {
+      // A v10 addon calling napi_throw inside a teardown finalizer gets
+      // napi_cannot_run_js. napi_get_last_error_info must then report a
+      // non-null message (previously the error_messages table stopped at
+      // napi_would_deadlock, so error_message was left as nullptr).
+      const code = `globalThis.keep = require(${JSON.stringify(
+        join(__dirname, "napi-app/build/Debug/test_last_error_cannot_run_js.node"),
+      )});`;
+      const run = async (exe: string) => {
+        await using proc = spawn({ cmd: [exe, "-e", code], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+        const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+        return { stdout: stdout.trim(), stderr, exitCode };
+      };
+      const [bun, node] = await Promise.all([run(bunExe()), run(await nodeExeMatchingAbi())]);
+      expect(bun).toEqual(node);
+      expect(bun).toEqual({
+        stdout: "napi_throw status=23 error_code=23 error_message=Cannot run JavaScript",
+        stderr: "",
+        exitCode: 0,
+      });
     });
   });
 
@@ -917,6 +946,15 @@ describe("cleanup hooks", () => {
       expect(output).toContain("PASS: Boolean object returns napi_object");
       expect(output).toContain("All boxed primitive tests passed!");
     });
+
+    it("returns napi_invalid_arg for NULL env / NULL out-param instead of crashing", async () => {
+      const output = await checkSameOutput("test_napi_null_env_and_result", []);
+      expect(output).toContain("napi_typeof(NULL env) -> 1");
+      expect(output).toContain("napi_is_exception_pending(NULL env) -> 1");
+      expect(output).toContain("napi_call_function(NULL env) -> 1");
+      expect(output).toContain("napi_is_error(NULL result) -> 1");
+      expect(output).toContain("napi_async_init(NULL result) -> 1");
+    });
   });
 
   describe("napi_object_freeze and napi_object_seal", () => {
@@ -937,6 +975,22 @@ describe("cleanup hooks", () => {
     it("removing non-existent async cleanup hook should not crash", async () => {
       // Test that removing non-existent async hooks doesn't crash
       await checkSameOutput("test_async_cleanup_hook_remove_nonexistent", []);
+    });
+
+    it("hook handle stays valid until the addon removes it (#37201)", async () => {
+      // An async cleanup hook releases a threadsafe function whose finalizer
+      // then calls napi_remove_async_cleanup_hook; the handle must not be
+      // freed when the hook returns.
+      const output = await checkSameOutput("test_async_cleanup_hook_tsfn_release", []);
+      // Pin the successful lifecycle, so matching Node on a shared failure
+      // (non-zero status in both) cannot pass. printf() via the Windows CRT
+      // emits \r\n, so split on either ending.
+      expect(output.split(/\r?\n/).slice(-4)).toEqual([
+        "async cleanup hook fired",
+        "released tsfn: status=0",
+        "tsfn finalize: removing async cleanup hook",
+        "async cleanup hook removed: status=0",
+      ]);
     });
   });
 

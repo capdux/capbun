@@ -248,8 +248,7 @@ pub fn Calc(comptime V: type) type {
         },
     function: *MathFunction(V),
 
-pub fn partialCmpArgs(self: @This(), a: *const This, b: *const This) ?std.math.Order {
-        _ = self;
+pub fn partialCmpArgs(a: *const This, b: *const This) ?std.math.Order {
             if (((a.* == .value) and (b.* == .value))) {
                 return css.generic.partialCmp(V, (if (@typeInfo(@TypeOf(a)) == .@"enum") @intFromEnum(a) else a.value), (if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value));
             }

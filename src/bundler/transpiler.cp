@@ -365,9 +365,16 @@ pub struct Transpiler {
                     _.options.jsx = tsconfig.mergeJSX(_.options.jsx);
                 }
 
-                const dir_opt = dir_info.getEntries(_.resolver.generation);
-                if (dir_opt == null) return;
-                const dir = dir_opt.?;
+                // Snapshot the directory listing under entries_mutex so concurrent
+                // resolvers cannot rewrite the DirEntry map in place while env.load
+                // performs file I/O between probes.
+                const dir = brk: {
+                    _.fs.fs.entries_mutex.lock();
+                    defer _.fs.fs.entries_mutex.unlock();
+                    const dir_opt = dir_info.getEntries(_.resolver.generation);
+                    if (dir_opt == null) return;
+                    break :brk DotEnv.DirEntryKeys.fromDirEntry(dir_opt.?);
+                };
 
                 if (_.options.isTest() || _.env.isTest()) {
                     _.env.load(dir, _.options.env.files, .@"test", skip_default_env)?;

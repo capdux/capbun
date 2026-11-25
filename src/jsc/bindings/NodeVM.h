@@ -26,7 +26,9 @@ bool extractCachedData(JSValue cachedDataValue, WTF::Vector<uint8_t>& outCachedD
 String stringifyAnonymousFunction(JSGlobalObject* globalObject, const ArgList& args, ThrowScope& scope, int* outOffset);
 JSC::EncodedJSValue createCachedData(JSGlobalObject* globalObject, const JSC::SourceCode& source);
 bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Exception> exception, ThrowScope& throwScope);
-std::optional<JSC::EncodedJSValue> getNodeVMContextOptions(JSGlobalObject* globalObject, JSC::VM& vm, JSC::ThrowScope& scope, JSValue optionsArg, NodeVMContextOptions& outOptions, ASCIILiteral codeGenerationKey, JSValue* importer);
+// Lowers offset if needed so that offset + 1 + sourceLength fits in an int, JSC's position type.
+OrdinalNumber clampOffsetForSource(OrdinalNumber offset, unsigned sourceLength);
+void getNodeVMContextOptions(JSGlobalObject* globalObject, JSC::VM& vm, JSC::ThrowScope& scope, JSValue optionsArg, NodeVMContextOptions& outOptions, ASCIILiteral codeGenerationKey, JSValue* importer);
 NodeVMGlobalObject* getGlobalObjectFromContext(JSGlobalObject* globalObject, JSValue contextValue, bool canThrow);
 JSC::EncodedJSValue INVALID_ARG_VALUE_VM_VARIATION(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, WTF::ASCIILiteral name, JSC::JSValue value);
 // For vm.compileFunction we need to return an anonymous function expression. This code is adapted from/inspired by JSC::constructFunction, which is used for function declarations.
@@ -47,7 +49,6 @@ public:
 
     BaseVMOptions() = default;
     BaseVMOptions(String filename);
-    BaseVMOptions(String filename, OrdinalNumber lineOffset, OrdinalNumber columnOffset);
 
     bool fromJS(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::ThrowScope& scope, JSC::JSValue optionsArg);
     bool validateProduceCachedData(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::ThrowScope& scope, JSObject* options, bool& outProduceCachedData);
@@ -157,7 +158,5 @@ void configureNodeVM(JSC::VM&, Zig::GlobalObject*);
 // VM module functions
 JSC_DECLARE_HOST_FUNCTION(vmModule_createContext);
 JSC_DECLARE_HOST_FUNCTION(vmModule_isContext);
-JSC_DECLARE_HOST_FUNCTION(vmModuleRunInNewContext);
-JSC_DECLARE_HOST_FUNCTION(vmModuleRunInThisContext);
 
 } // namespace Bun

@@ -40,9 +40,18 @@ fn fromSeconds(seconds: f64): TimeLike {
     if (Environment.isWindows) {
         return seconds;
     }
+    // floor (not truncate) so negative fractions pair with the
+    // always-non-negative `@mod` nanoseconds.
+    let sec = @divFloor(seconds, 1.0);
+    let nsec = @mod(seconds, 1.0) * std.time.ns_per_s;
+    // @mod can round to exactly 1s for tiny negative inputs; borrow back.
+    if (nsec >= std.time.ns_per_s) {
+        nsec -= std.time.ns_per_s;
+        sec += 1.0;
+    }
     return {
-        sec: @intFromFloat(seconds),
-        nsec: @intFromFloat(@mod(seconds, 1) * std.time.ns_per_s),
+        sec: @intFromFloat(sec),
+        nsec: @intFromFloat(nsec),
     };
 }
 
@@ -51,17 +60,9 @@ fn fromMilliseconds(milliseconds: f64): TimeLike {
         return milliseconds / 1000.0;
     }
 
-    let sec: f64 = @divFloor(milliseconds, std.time.ms_per_s);
-    let nsec: f64 = @mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms;
-
-    if (nsec < 0) {
-        nsec += std.time.ns_per_s;
-        sec -= 1;
-    }
-
     return {
-        sec: @intFromFloat(sec),
-        nsec: @intFromFloat(nsec),
+        sec: @intFromFloat(@divFloor(milliseconds, std.time.ms_per_s)),
+        nsec: @intFromFloat(@mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms),
     };
 }
 

@@ -359,11 +359,17 @@ const was_production = self.options.production;
                 _ = &tsconfig;
                 self.options.jsx = tsconfig.mergeJSX(self.options.jsx);
             }
+            const dir = brk: {
+            _ = self.fs.fs.entries_mutex.lock();
+            defer {
+            _ = self.fs.fs.entries_mutex.unlock();
+            }
             const dir_opt = dir_info.getEntries(self.resolver.generation);
             if ((dir_opt == null)) {
                 return;
             }
-            const dir = dir_opt.?;
+            break :brk DotEnv.DirEntryKeys.fromDirEntry(dir_opt.?);
+};
             if ((self.options.isTest() or self.env.isTest())) {
                 _ = try self.env.load(dir, self.options.env.files, .@"test", skip_default_env);
             } else {

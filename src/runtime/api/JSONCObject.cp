@@ -28,8 +28,9 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     const parse_result = json.parseTSConfig(source, log_ptr, allocator, true) catch e => {
         if (e == error.StackOverflow) return globalThis.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
-        let first_msg: (*const logger.Msg)? = if (log_guard.val.msgs.items.len > 0) &log_guard.val.msgs.items[0] else null;
-        for (*m of log_guard.val.msgs.items) {
+        let first_msg: (*const logger.Msg)? = if (log_guard.val.msgs.items.len > 0) unsafe { &log_guard.val.msgs.items[0] } else null;
+        for (i of 0..log_guard.val.msgs.items.len) {
+            const m = unsafe { &log_guard.val.msgs.items[i] };
             if (m.kind == .@"err") { first_msg = m; break; }
         }
         if (msg := first_msg) return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: {s}", { msg.data.text }));

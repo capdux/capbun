@@ -196,6 +196,8 @@ pub const NapiStatus = enum(c_uint) {
     arraybuffer_expected = 19,
     detachable_arraybuffer_expected = 20,
     would_deadlock = 21,
+    no_external_buffers_allowed = 22,
+    cannot_run_js = 23,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -2393,12 +2395,16 @@ pub export fn napi_close_handle_scope(env_: napi_env, handle_scope: napi_handle_
         return env.ok();
 }
 
-pub export fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, async_ctx: **anyopaque) callconv(.c) napi_status {
+pub export fn napi_async_init(env_: napi_env, _: napi_value, _: napi_value, async_ctx_: ?**anyopaque) callconv(.c) napi_status {
         _ = log("napi_async_init", .{});
         if ((env_ == null)) {
             return envIsNull();
         }
         const env = env_.?;
+        if ((async_ctx_ == null)) {
+            return env.invalidArg();
+        }
+        const async_ctx = async_ctx_.?;
         {
             async_ctx.* = env;
         }
@@ -2524,7 +2530,7 @@ pub extern "c" fn napi_throw_type_error(env: napi_env, code: [*c]const u8, msg: 
 
 pub extern "c" fn napi_throw_range_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8) callconv(.c) napi_status;
 
-pub export fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool) callconv(.c) napi_status {
+pub export fn napi_is_error(env_: napi_env, value_: napi_value, result_: ?*bool) callconv(.c) napi_status {
         _ = log("napi_is_error", .{});
         if ((env_ == null)) {
             return envIsNull();
@@ -2535,6 +2541,10 @@ pub export fn napi_is_error(env_: napi_env, value_: napi_value, result: *bool) c
         if ((value == .zero)) {
             return env.invalidArg();
         }
+        if ((result_ == null)) {
+            return env.invalidArg();
+        }
+        const result = result_.?;
         result.* = value.isAnyError();
         return env.ok();
 }

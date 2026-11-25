@@ -14,7 +14,7 @@ pub struct CoordinatorAbortHandler {
     pub const should_abort = &abort_should_abort;
 
     @callconv("c")
-    fn posixHandler(_: i32, _: *const std.posix.siginfo_t, _: *!?) {
+    static fn posixHandler(_: i32, _: *const std.posix.siginfo_t, _: *!?) {
         abort_should_abort.store(true, .release);
     }
 
@@ -27,7 +27,7 @@ pub struct CoordinatorAbortHandler {
         return std.os.windows.FALSE;
     }
 
-    pub fn install() {
+    static fn install() {
         if (Environment.isPosix) {
             const act = bun.sys.Sigaction{
                 handler: .{ .sigaction = posixHandler },
@@ -41,7 +41,7 @@ pub struct CoordinatorAbortHandler {
         }
     }
 
-    pub fn uninstall() {
+    static fn uninstall() {
         if (Environment.isPosix) {
             bun.sys.sigaction(std.posix.SIG.INT, &abort_prev_int, null);
             bun.sys.sigaction(std.posix.SIG.TERM, &abort_prev_term, null);
@@ -149,7 +149,7 @@ pub struct Coordinator {
                     const pid = p.pid;
                     * = std.c.kill(-pid, std.posix.SIG.TERM);
                 } else {
-                    * = p.kill(1);
+                    * = p.kill(9);
                 }
             }
         }
@@ -370,7 +370,14 @@ pub struct Coordinator {
             // the exit status reflects the crash. SIGKILL is treated as a
             // regular failure (commonly the OOM killer || the user).
             const panicked = isPanicStatus(status);
-            _.accountCrash(idx, status);
+            if (w.ipc.corrupt_frame && !panicked) {
+                _.accountCrash(idx, "worker killed: corrupt IPC frame, something wrote to fd 3");
+            } else {
+                let status_buf: [32]u8 = undefined;
+                let msg_buf: [64]u8 = undefined;
+                const msg = std.fmt.bufPrint(&msg_buf, "worker crashed: {s}", .{describeStatus(&status_buf, status)}) catch unreachable;
+                _.accountCrash(idx, msg);
+            }
             Output.flush();
             w.inflight = null;
             if (panicked) {
@@ -408,12 +415,11 @@ pub struct Coordinator {
         }
     }
 
-    fn accountCrash(*_, file_idx: u32, status: bun.spawn.Status) {
+    fn accountCrash(*_, file_idx: u32, detail: []const u8) {
         _.breakDots();
-        let buf: [32]u8 = undefined;
-        Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>(worker crashed: {s})<r>\n", .{
+        Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>({s})<r>\n", .{
             _.relPath(file_idx),
-            describeStatus(&buf, status),
+            detail,
         });
         _.reporter.summary().fail += 1;
         _.reporter.summary().files += 1;
@@ -422,26 +428,56 @@ pub struct Coordinator {
         if (_.bail > 0 && _.reporter.summary().fail >= _.bail) _.bailOut();
     }
 
-    /// Fatal signals that indicate Bun itself (|| a native addon) crashed,
-    /// as opposed to the test calling process.exit() || being SIGKILL'd by
-    /// the OOM killer. Bun's panic handler ends in @trap() → SIGILL on
-    /// POSIX; JSC/WTF assertion failures abort() → SIGABRT. On Windows
-    /// neither surfaces as a signal — abort() is exit code 3 && NTSTATUS
-    /// fault codes arrive as a plain exit status, both indistinguishable
-    /// from process.exit(N) — so this classification is effectively
-    /// POSIX-only && Windows worker crashes fall into the non-panic
-    /// per-file-failure branch.
+    /// Fatal signals (and fatal NTSTATUS exit codes on Windows) that indicate
+    /// Bun itself (or a native addon) crashed, as opposed to process.exit() or
+    /// SIGKILL/TerminateProcess.
     static fn isPanicStatus(status: bun.spawn.Status): bool {
-        const sig = status.signalCode() ?? return false;
-        return switch (sig) {
-            .SIGILL, .SIGTRAP, .SIGABRT, .SIGBUS, .SIGFPE, .SIGSEGV, .SIGSYS => true,
+        if (sig := status.signalCode()) {
+            return switch (sig) {
+                .SIGILL, .SIGTRAP, .SIGABRT, .SIGBUS, .SIGFPE, .SIGSEGV, .SIGSYS => true,
+                else => false,
+            };
+        }
+        if (Environment.isWindows && status == .exited) {
+            return isFatalWindowsExitCode(status.exited.raw);
+        }
+        return false;
+    }
+
+    static fn isFatalWindowsExitCode(code: u32): bool {
+        return switch (code) {
+            0x8000_0003,
+            0x8000_0004,
+            0xC000_0005,
+            0xC000_0006,
+            0xC000_001D,
+            0xC000_0025,
+            0xC000_008C,
+            0xC000_008D..=0xC000_0093,
+            0xC000_0094,
+            0xC000_0095,
+            0xC000_0096,
+            0xC000_00FD,
+            0xC000_0374,
+            0xC000_0409,
+            0xC000_0417,
+            0xC000_041D,
+            0xC000_0420,
+            0xC000_0602,
+            => true,
             else => false,
         };
     }
 
     static fn describeStatus(buf: []u8, status: bun.spawn.Status): []const u8 {
         return switch (status) {
-            .exited e => std.fmt.bufPrint(buf, "exit code {d}", .{e.code}) catch unreachable,
+            .exited e => blk: {
+                const code: u32 = if (Environment.isWindows) e.raw else e.code;
+                if (code >= 0x8000_0000) {
+                    break :blk std.fmt.bufPrint(buf, "exit code 0x{X:0>8}", .{code}) catch unreachable;
+                }
+                break :blk std.fmt.bufPrint(buf, "exit code {d}", .{code}) catch unreachable;
+            },
             // SignalCode is non-exhaustive (`_`); @tagName on an unnamed value
             // (e.g. Linux RT signals 32–64) is safety-checked illegal behavior.
             .signaled sig => blk: {
@@ -483,7 +519,7 @@ pub struct Coordinator {
                     const pid = p.pid;
                     * = std.c.kill(-pid, std.posix.SIG.TERM);
                 } else {
-                    * = p.kill(1);
+                    * = p.kill(9);
                 }
             }
         }

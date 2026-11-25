@@ -56,6 +56,24 @@ describe("vm", () => {
       );
       expect(result).toBe(2);
     });
+    test("ShadowRealm can be created and used inside a context", async () => {
+      await using proc = Bun.spawn({
+        cmd: [
+          bunExe(),
+          "-e",
+          `const vm = require("node:vm");
+          const realm = vm.runInNewContext("new ShadowRealm()");
+          const wrapped = vm.runInNewContext("new ShadowRealm().evaluate('(a, b) => a + b')");
+          console.log(typeof realm.evaluate, realm.evaluate("6 * 7"), wrapped(20, 22));`,
+        ],
+        env: bunEnv,
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+      expect(stderr).toBe("");
+      expect(stdout).toBe("function 42 42\n");
+      expect(exitCode).toBe(0);
+    });
   });
 
   describe("runInThisContext()", () => {
@@ -871,4 +889,140 @@ test("Loader is not defined in vm context", () => {
   expect(runInContext("Object.hasOwn(globalThis, 'Loader');", customContext)).toBe(true);
   // Ensure internal JSC Loader properties are not leaking through
   expect(runInContext("typeof Loader.registry;", customContext)).toBe("undefined");
+});
+
+describe("context options with throwing getters", () => {
+  // Without the fix, reading these options with a pending exception aborted
+  // the process, so run the matrix in a subprocess.
+  test.concurrent("the getter's exception propagates to the caller", async () => {
+    // Each entry point tests the context-option keys it actually reads:
+    // createContext takes codeGeneration, Script#runInNewContext takes
+    // contextCodeGeneration, and vm.runInNewContext goes through both.
+    // A dotted key puts the throwing getter on the nested object.
+    const codeGenerationKeys = (key: string) => [key, `${key}.strings`, `${key}.wasm`];
+    const contextKeys = (...codeGenerationKeyNames: string[]) => [
+      "name",
+      "origin",
+      ...codeGenerationKeyNames.flatMap(codeGenerationKeys),
+      "importModuleDynamically",
+      "microtaskMode",
+    ];
+    const matrix = {
+      createContext: contextKeys("codeGeneration"),
+      runInNewContext: contextKeys("codeGeneration", "contextCodeGeneration"),
+      scriptRunInNewContext: contextKeys("contextCodeGeneration"),
+    };
+    const code = `
+      const vm = require("node:vm");
+      const matrix = ${JSON.stringify(matrix)};
+      const entryPoints = {
+        createContext: opts => vm.createContext({}, opts),
+        runInNewContext: opts => vm.runInNewContext("1", {}, opts),
+        scriptRunInNewContext: opts => new vm.Script("1").runInNewContext({}, opts),
+      };
+      for (const [entry, keys] of Object.entries(matrix)) {
+        for (const key of keys) {
+          const opts = {};
+          const path = key.split(".");
+          let target = opts;
+          for (const part of path.slice(0, -1)) target = target[part] = {};
+          Object.defineProperty(target, path.at(-1), {
+            get() { throw new Error("getter:" + key); },
+            enumerable: true,
+          });
+          try {
+            entryPoints[entry](opts);
+            console.log(entry, key, "did not throw");
+          } catch (e) {
+            console.log(entry, key, e.message);
+          }
+        }
+      }
+      console.log("survived");
+    `;
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", code],
+      env: bunEnv,
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    const expected =
+      Object.entries(matrix)
+        .flatMap(([entry, keys]) => keys.map(key => `${entry} ${key} getter:${key}`))
+        .join("\n") + "\nsurvived\n";
+    expect(stderr).toBe("");
+    expect(stdout).toBe(expected);
+    expect(exitCode).toBe(0);
+  });
+});
+
+describe("node:vm lineOffset/columnOffset at the edge of int32", () => {
+  const INT32_MAX = 2147483647;
+
+  async function runFixture(body: string) {
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", `const vm = require("node:vm");\n${body}`],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    return stdout;
+  }
+
+  test.concurrent.each([
+    ["new Script, one-line source", `new vm.Script("1", { lineOffset: ${INT32_MAX} })`],
+    [
+      "new Script, second line steps past INT32_MAX",
+      `new vm.Script(${JSON.stringify("1;\n2;")}, { lineOffset: ${INT32_MAX - 1} })`,
+    ],
+    ["new Script, columnOffset", `new vm.Script("1", { columnOffset: ${INT32_MAX} })`],
+    [
+      "compileFunction, one-line body",
+      `vm.compileFunction("return 1", [], { lineOffset: ${INT32_MAX} })`,
+    ],
+    [
+      "compileFunction, columnOffset",
+      `vm.compileFunction("return 1", [], { columnOffset: ${INT32_MAX} })`,
+    ],
+  ])("%s does not overflow or abort", async (_, expression) => {
+    await runFixture(`${expression};`);
+  });
+
+  test.concurrent.each([
+    [
+      "line of a runtime error thrown by a Script",
+      `new vm.Script(${JSON.stringify('1;\nthrow new Error("q")')}, { filename: "big.js", lineOffset: ${INT32_MAX - 1} }).runInThisContext()`,
+      /big\.js:(-?\d+)/,
+    ],
+    [
+      "line of a compile-time SyntaxError from a Script",
+      `new vm.Script(${JSON.stringify("1;\n%%")}, { filename: "big.js", lineOffset: ${INT32_MAX - 1} })`,
+      /big\.js:(-?\d+)/,
+    ],
+    [
+      "column of a runtime error thrown on the first line of a Script",
+      `new vm.Script('throw new Error("q")', { filename: "big.js", columnOffset: ${INT32_MAX} }).runInThisContext()`,
+      /big\.js:1:(-?\d+)/,
+    ],
+    [
+      "line of a runtime error thrown by a compileFunction body",
+      `vm.compileFunction('throw new Error("q")', [], { filename: "big.js", lineOffset: ${INT32_MAX} })()`,
+      /big\.js:(-?\d+)/,
+    ],
+    [
+      "line of a compile-time SyntaxError from compileFunction",
+      `vm.compileFunction("%%", [], { filename: "big.js", lineOffset: ${INT32_MAX} })`,
+      /big\.js:(-?\d+)/,
+    ],
+  ])("%s stays near the requested offset", async (_, expression, pattern) => {
+    const stdout = await runFixture(`try { ${expression}; } catch (e) { console.log(e.stack); }`);
+    const match = pattern.exec(stdout);
+    expect(match).not.toBeNull();
+    const position = Number(match![1]);
+    expect(position).toBeGreaterThan(INT32_MAX - 100);
+    expect(position).toBeLessThanOrEqual(INT32_MAX);
+  });
 });

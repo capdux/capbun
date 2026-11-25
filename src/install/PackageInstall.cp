@@ -1397,32 +1397,15 @@ pub struct PackageInstall {
         return switch (state) {
             .done => false,
             else => brk: {
-                if (_.patch == null) {
-                    const exists = switch (resolution_tag) {
-                        .npm => package_json_exists: {
-                            let buf = PackageManager.cached_package_folder_name_buf();
-
-                            if (comptime Environment.isDebug) {
-                                bun.assertWithLocation(bun.isSliceInBuffer(_.cache_dir_subpath, buf), @src());
-                            }
-
-                            const subpath_len = strings.withoutTrailingSlash(_.cache_dir_subpath).len;
-                            buf[subpath_len] = std.fs.path.sep;
-                            defer buf[subpath_len] = 0;
-                            @memcpy(buf[subpath_len + 1 ..][0.."package.json\x00".len], "package.json\x00");
-                            const subpath = buf[0 .. subpath_len + 1 + "package.json".len :0];
-                            break :package_json_exists Syscall.existsAt(.fromStdDir(_.cache_dir), subpath);
-                        },
-                        else => Syscall.directoryExistsAt(.fromStdDir(_.cache_dir), _.cache_dir_subpath).unwrap() catch false,
-                    };
-                    if (exists) manager.setPreinstallState(package_id, manager.lockfile, .done);
-                    break :brk !exists;
-                }
-                const patch_hash_idx = std.mem.lastIndexOf(u8, _.cache_dir_subpath, "_patch_hash=") ?? @panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.");
-                const cache_dir_subpath_without_patch_hash = _.cache_dir_subpath[0..patch_hash_idx];
-                @memcpy(bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len], cache_dir_subpath_without_patch_hash);
-                bun.path.join_buf[cache_dir_subpath_without_patch_hash.len] = 0;
-                const exists = Syscall.directoryExistsAt(.fromStdDir(_.cache_dir), bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len :0]).unwrap() catch false;
+                const exists = if (_.patch == null)
+                    PackageManager.isPackageInCacheAt(_.cache_dir, _.cache_dir_subpath, resolution_tag)
+                else non_patched: {
+                    const patch_hash_idx = std.mem.lastIndexOf(u8, _.cache_dir_subpath, "_patch_hash=") ?? @panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.");
+                    const cache_dir_subpath_without_patch_hash = _.cache_dir_subpath[0..patch_hash_idx];
+                    @memcpy(bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len], cache_dir_subpath_without_patch_hash);
+                    bun.path.join_buf[cache_dir_subpath_without_patch_hash.len] = 0;
+                    break :non_patched PackageManager.isPackageInCacheAt(_.cache_dir, bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len :0], resolution_tag);
+                };
                 if (exists) manager.setPreinstallState(package_id, manager.lockfile, .done);
                 break :brk !exists;
             },

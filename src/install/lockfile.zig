@@ -602,7 +602,7 @@ pub fn printWithLockfile(allocator: Allocator, lockfile: *Lockfile, format: Form
 };
             _ = &env_loader;
             _ = try env_loader.loadProcess();
-            _ = try env_loader.load(entries_option.entries, &.{}, .production, false);
+            _ = try env_loader.load(bun.DotEnv.DirEntryKeys.fromDirEntry(entries_option.entries), &.{}, .production, false);
             var log = logger.Log.init(allocator);
             _ = &log;
             _ = try options.load(allocator, (&log), env_loader, null, null, .install);

@@ -377,6 +377,21 @@ pub fn isFolderInCache(client: *PackageManager, folder_path: stringZ): bool {
     return bun.sys.directoryExistsAt(.fromStdDir(client.getCacheDirectory()), folder_path).unwrap() catch false;
 }
 
+/// Cache hit for an unpatched entry: npm folders must contain `package.json`, git checkouts the `.bun-tag` written last.
+pub fn isPackageInCacheAt(cache_dir: std.fs.Dir, folder_path: stringZ, tag: Resolution.Tag): bool {
+    const marker: []const u8 = switch (tag) {
+        .npm => "package.json",
+        .git => ".bun-tag",
+        else => return bun.sys.directoryExistsAt(.fromStdDir(cache_dir), folder_path).unwrap() catch false,
+    };
+    const marker_path = bun.path.joinZ(&[folder_path, marker], .auto);
+    return bun.sys.existsAt(.fromStdDir(cache_dir), marker_path);
+}
+
+pub fn isPackageInCache(client: *PackageManager, folder_path: stringZ, tag: Resolution.Tag): bool {
+    return isPackageInCacheAt(client.getCacheDirectory(), folder_path, tag);
+}
+
 pub fn setupGlobalDir(manager: *PackageManager, ctx: Command.Context)! {
     manager.options.global_bin_dir = Options.openGlobalBinDir(ctx.install)?;
     let out_buffer: bun.PathBuffer = undefined;

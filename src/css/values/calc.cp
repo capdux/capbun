@@ -117,7 +117,7 @@ pub fn Calc(comptime V: type): type {
 
         const This = @This();
 
-        fn partialCmpArgs(a: *const This, b: *const This): std.math.Order? {
+        static fn partialCmpArgs(a: *const This, b: *const This): std.math.Order? {
             if (a.* == .value && b.* == .value) {
                 return css.generic.partialCmp(V, a.value, b.value);
             }

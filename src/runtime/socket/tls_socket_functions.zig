@@ -600,13 +600,11 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
                 return globalObject.throw("Expected context to be a string, Buffer or TypedArray", .{});
             }
         }
-        var _sb_guard = DeinitGuard(?jsc.Node.StringOrBuffer){ .ptr = (blk: {
-        break :blk (&context_sb);
-
-}) };
-        _ = &_sb_guard;
-        var ___sb_guard_moved = false; _ = &___sb_guard_moved;
-        defer if (!___sb_guard_moved) { ___sb_guard_moved = true; const __T = @TypeOf(_sb_guard); if (@typeInfo(__T) == .optional) { if (_sb_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sb_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sb_guard; _drop_val.__cp_deinit(); } };
+        defer {
+        if ((context_sb != null)) {
+            _ = context_sb.?.deinit();
+        }
+        }
         var context_ptr: ?[*c]const u8 = null;
         _ = &context_ptr;
         var context_len: usize = 0;
@@ -635,7 +633,7 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
         }
         const ssl_ptr = ssl_ptr_opt.?;
         const result = (blk: {
-        break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @alignCast(@ptrCast(label_slice.ptr))), label_slice.len, context_ptr, context_len, use_context);
+        break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @alignCast(@ptrCast(label_slice.ptr))), label_slice.len, (if (context_ptr) |p| p else null), context_len, use_context);
 
 });
         if ((result != 1)) {

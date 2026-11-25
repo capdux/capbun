@@ -852,6 +852,7 @@ bool Bun__deepEquals(JSC::JSGlobalObject* globalObject, JSValue v1, JSValue v2, 
         if (!o2Structure->hasNonReifiedStaticProperties() && o2Structure->canPerformFastPropertyEnumeration()) {
 
             bool result = true;
+            JSC::MarkedArgumentBuffer pairs;
             bool sameStructure = o2Structure->id() == o1Structure->id();
             if (sameStructure) {
                 o1Structure->forEachProperty(vm, [&](const PropertyTableEntry& entry) -> bool {
@@ -873,18 +874,8 @@ bool Bun__deepEquals(JSC::JSGlobalObject* globalObject, JSValue v1, JSValue v2, 
                         return false;
                     }
 
-                    if (left == right) return true;
-                    auto same = JSC::sameValue(globalObject, left, right);
-                    RETURN_IF_EXCEPTION(scope, false);
-                    if (same) return true;
-
-                    auto eql = Bun__deepEquals<isStrict, enableAsymmetricMatchers>(globalObject, left, right, gcBuffer, stack, scope, true);
-                    RETURN_IF_EXCEPTION(scope, false);
-                    if (!eql) {
-                        result = false;
-                        return false;
-                    }
-
+                    pairs.appendWithCrashOnOverflow(left);
+                    pairs.appendWithCrashOnOverflow(right);
                     return true;
                 });
             } else {
@@ -909,18 +900,8 @@ bool Bun__deepEquals(JSC::JSGlobalObject* globalObject, JSValue v1, JSValue v2, 
                         return false;
                     }
 
-                    if (left == right) return true;
-                    auto same = JSC::sameValue(globalObject, left, right);
-                    RETURN_IF_EXCEPTION(scope, false);
-                    if (same) return true;
-
-                    auto eql = Bun__deepEquals<isStrict, enableAsymmetricMatchers>(globalObject, left, right, gcBuffer, stack, scope, true);
-                    RETURN_IF_EXCEPTION(scope, false);
-                    if (!eql) {
-                        result = false;
-                        return false;
-                    }
-
+                    pairs.appendWithCrashOnOverflow(left);
+                    pairs.appendWithCrashOnOverflow(right);
                     return true;
                 });
 
@@ -937,10 +918,7 @@ bool Bun__deepEquals(JSC::JSGlobalObject* globalObject, JSValue v1, JSValue v2, 
                             }
                         }
 
-                        // Try to get the right value from the left. We don't need to check if they're equal
-                        // because the above loop has already iterated each property in the left. If we've
-                        // seen this property before, it was already `deepEquals`ed. If it doesn't exist,
-                        // the objects are not equal.
+                        // Membership check only; every left property is in `pairs` and compared below.
                         if (o1->getDirectOffset(vm, JSC::PropertyName(entry.key())) == invalidOffset) {
                             result = false;
                             return false;
@@ -957,7 +935,27 @@ bool Bun__deepEquals(JSC::JSGlobalObject* globalObject, JSValue v1, JSValue v2, 
                 }
             }
 
-            return result;
+            if (!result) {
+                return false;
+            }
+
+            for (size_t i = 0; i < pairs.size(); i += 2) {
+                JSValue left = pairs.at(i);
+                JSValue right = pairs.at(i + 1);
+
+                if (left == right) continue;
+                auto same = JSC::sameValue(globalObject, left, right);
+                RETURN_IF_EXCEPTION(scope, false);
+                if (same) continue;
+
+                auto eql = Bun__deepEquals<isStrict, enableAsymmetricMatchers>(globalObject, left, right, gcBuffer, stack, scope, true);
+                RETURN_IF_EXCEPTION(scope, false);
+                if (!eql) {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 
@@ -1144,12 +1142,17 @@ std::optional<bool> specialObjectsDequal(JSC::JSGlobalObject* globalObject, Mark
             return false;
         }
 
-        if (byteLength == 0)
-            return true;
-
-        if (right->isDetached() || left->isDetached()) [[unlikely]] {
+        if (left->isDetached() || right->isDetached()) [[unlikely]] {
+            if constexpr (!enableAsymmetricMatchers) {
+                // Node wraps each side in `new Uint8Array(buf)` to compare bytes, which
+                // throws on a detached ArrayBuffer; match that contract for node:assert/util.
+                throwTypeError(globalObject, scope, "Cannot perform Construct on a detached ArrayBuffer"_s);
+            }
             return false;
         }
+
+        if (byteLength == 0)
+            return true;
 
         const void* vector = left->data();
         const void* rightVector = right->data();
@@ -2203,8 +2206,8 @@ extern "C" JSC::EncodedJSValue ZigString__toJSONObject(const ZigString* strPtr, 
     if (str.isNull()) {
         // isNull() will be true for empty strings and for strings which are too long.
         // So we need to check the length is plausibly due to a long string.
-        if (strPtr->len > Bun__stringSyntheticAllocationLimit) {
-            scope.throwException(globalObject, Bun::createError(globalObject, Bun::ErrorCode::ERR_STRING_TOO_LONG, "Cannot parse a JSON string longer than 2^32-1 characters"_s));
+        if (strPtr->len > Bun__stringSyntheticAllocationLimit || strPtr->len > WTF::String::MaxLength) {
+            scope.throwException(globalObject, Bun::createError(globalObject, Bun::ErrorCode::ERR_STRING_TOO_LONG, "Cannot parse a JSON string longer than 2147483647 characters"_s));
             return {};
         }
     }
@@ -5372,10 +5375,11 @@ restart:
                 }
 
                 JSC::PropertySlot slot(object, PropertySlot::InternalMethodType::Get);
-                if (!object->getPropertySlot(globalObject, property, slot))
-                    continue;
-                // Ignore exceptions from "Get" proxy traps.
+                bool hasProperty = object->getPropertySlot(globalObject, property, slot);
+                // Ignore exceptions from "Get" proxy traps and lazy initializers; they also report the property as not found.
                 CLEAR_IF_EXCEPTION(scope);
+                if (!hasProperty)
+                    continue;
 
                 if ((slot.attributes() & PropertyAttribute::DontEnum) != 0) {
                     if (property == propertyNames->underscoreProto
@@ -5447,7 +5451,12 @@ restart:
                 break;
             if (iterating == globalObject)
                 break;
-            iterating = iterating->getPrototype(globalObject).getObject();
+            JSValue prototype = iterating->getPrototype(globalObject);
+            // Ignore exceptions from Proxy "getPrototypeOf" trap.
+            CLEAR_IF_EXCEPTION(scope);
+            if (!prototype)
+                break;
+            iterating = prototype.getObject();
         }
     }
 

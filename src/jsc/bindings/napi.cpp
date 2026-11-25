@@ -111,6 +111,7 @@ using namespace Zig;
 // Assert that the environment is not performing garbage collection
 #define NAPI_CHECK_ENV_NOT_IN_GC(_env) \
     do {                               \
+        NAPI_CHECK_ARG(_env, _env);    \
         (_env)->checkGC();             \
     } while (0)
 
@@ -192,7 +193,7 @@ napi_get_last_error_info(napi_env env, const napi_extended_error_info** result)
     }
     NAPI_CHECK_ARG(env, result);
 
-    constexpr napi_status last_status = napi_would_deadlock;
+    constexpr napi_status last_status = napi_cannot_run_js;
 
     constexpr const char* error_messages[] = {
         nullptr, // napi_ok
@@ -217,6 +218,8 @@ napi_get_last_error_info(napi_env env, const napi_extended_error_info** result)
         "An arraybuffer was expected",
         "A detachable arraybuffer was expected",
         "Main thread would deadlock",
+        "External buffers are not allowed",
+        "Cannot run JavaScript",
     };
 
     static_assert(std::size(error_messages) == last_status + 1,
@@ -1841,7 +1844,10 @@ extern "C" napi_status napi_get_all_property_names(
                 // Climb up the prototype chain to find inherited properties
                 JSObject* current_object = object;
                 while (!current_object->getOwnPropertyDescriptor(globalObject, key.toPropertyKey(globalObject), desc)) {
-                    JSObject* proto = current_object->getPrototype(globalObject).getObject();
+                    NAPI_RETURN_IF_EXCEPTION(env);
+                    JSValue protoValue = current_object->getPrototype(globalObject);
+                    NAPI_RETURN_IF_EXCEPTION(env);
+                    JSObject* proto = protoValue ? protoValue.getObject() : nullptr;
                     if (!proto) {
                         break;
                     }
@@ -1849,6 +1855,7 @@ extern "C" napi_status napi_get_all_property_names(
                 }
             } else {
                 object->getOwnPropertyDescriptor(globalObject, key.toPropertyKey(globalObject), desc);
+                NAPI_RETURN_IF_EXCEPTION(env);
             }
 
             bool include = true;
@@ -2855,6 +2862,7 @@ extern "C" napi_status napi_call_function(napi_env env, napi_value recv,
     const napi_value* argv,
     napi_value* result)
 {
+    NAPI_CHECK_ARG(env, env);
     if (env->throwPendingException()) {
         return napi_set_last_error(env, napi_pending_exception);
     }

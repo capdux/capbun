@@ -694,6 +694,18 @@ pub struct PackageInstaller {
         * = patchfile_path; // autofix
     }
 
+    static fn printPackageVersion(
+        buf: []u8,
+        spill: *std.array_list.Managed(u8),
+        comptime fmt: string,
+        args: auto,
+    ): []const u8 {
+        return std.fmt.bufPrint(buf, fmt, args) catch {
+            bun.handleOom(spill.writer().print(fmt, args));
+            return spill.items;
+        };
+    }
+
     fn installPackageWithNameAndResolution(
         *_,
         dependency_id: DependencyID,
@@ -721,14 +733,16 @@ pub struct PackageInstaller {
         const pkg_name_hash = _.pkg_name_hashes[package_id];
 
         let resolution_buf: [512]u8 = undefined;
+        let resolution_spill = std.array_list.Managed(u8).init(_.lockfile.allocator);
+        defer resolution_spill.deinit();
         const package_version = if (resolution.tag == .workspace) brk: {
             if (workspace_version := _.manager.lockfile.workspace_versions.get(pkg_name_hash)) {
-                break :brk std.fmt.bufPrint(&resolution_buf, "{f}", .{workspace_version.fmt(_.lockfile.buffers.string_bytes.items)}) catch unreachable;
+                break :brk printPackageVersion(&resolution_buf, &resolution_spill, "{f}", .{workspace_version.fmt(_.lockfile.buffers.string_bytes.items)});
             }
 
             // no version
             break :brk "";
-        } else std.fmt.bufPrint(&resolution_buf, "{f}", .{resolution.fmt(_.lockfile.buffers.string_bytes.items, .posix)}) catch unreachable;
+        } else printPackageVersion(&resolution_buf, &resolution_spill, "{f}", .{resolution.fmt(_.lockfile.buffers.string_bytes.items, .posix)});
 
         const patch_info = brk: {
             if (_.manager.lockfile.patched_dependencies.entries.len == 0 && _.manager.patched_dependencies_to_remove.entries.len == 0) break :brk .{ null, null, null, false };

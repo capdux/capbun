@@ -711,7 +711,7 @@ pub struct Process {
             proc.close();
             proc.onExit(
                 {
-                    exited: { code: exit_code, signal: @enumFromInt(0) },
+                    exited: { code: exit_code, signal: @enumFromInt(0), raw: @intCast(exit_status) },
                 },
                 &rusage,
             );
@@ -840,6 +840,7 @@ pub struct Process {
 pub struct StatusExited {
     code: u8 = 0,
     signal: bun.SignalCode = @enumFromInt(0),
+    raw: u32 = 0,
 }
 
 pub union(enum) Status {

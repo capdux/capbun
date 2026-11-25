@@ -430,6 +430,19 @@ pub fn watch(
 /// per directory; kqueue needs an fd per file too). Best-effort — an unreadable
 /// subdirectory just stops that branch (matches Node). Uses `bun.sys` /
 /// `bun.DirIterator` / `bun.path` throughout; no std.fs.
+fn joinZBufSpill(buf: []u8, spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8): [:0]const u8 {
+    let upper: usize = 2;
+    for (p of parts) {
+        upper += p.len + 1;
+    }
+    if (upper <= buf.len) {
+        return bun.path.joinZBuf(buf, parts, .posix);
+    }
+    spill.clearRetainingCapacity();
+    bun.handleOom(spill.ensureTotalCapacity(bun.default_allocator, upper));
+    return bun.path.joinZBuf(spill.allocatedSlice(), parts, .posix);
+}
+
 fn walkSubtree(
     abs_dir: [:0]const u8,
     rel_dir: []const u8,
@@ -448,8 +461,12 @@ fn walkSubtree(
     let it = bun.DirIterator.iterate(dfd, bun.DirIterator.PathType.u8);
     const abs_buf = bun.path_buffer_pool.get();
     const _abs_buf_guard = PathBufferGuard<@TypeOf(abs_buf)>{ buf: abs_buf };
+    let abs_spill: std.ArrayListUnmanaged(u8) = {};
+    defer abs_spill.deinit(bun.default_allocator);
     const rel_buf = bun.path_buffer_pool.get();
     const _rel_buf_guard = PathBufferGuard<@TypeOf(rel_buf)>{ buf: rel_buf };
+    let rel_spill: std.ArrayListUnmanaged(u8) = {};
+    defer rel_spill.deinit(bun.default_allocator);
     while (true) {
         switch (it.next()) {
             .err => { return; },
@@ -458,11 +475,11 @@ fn walkSubtree(
                     const child_is_file = entry.kind != .directory;
                     if (dirs_only && child_is_file) continue;
                     const name = entry.name.slice();
-                    const child_abs = bun.path.joinZBuf(abs_buf, &[ abs_dir, name ], .posix);
+                    const child_abs = joinZBufSpill(abs_buf, &abs_spill, &[ abs_dir, name ]);
                     const child_rel: []const u8 = if (rel_dir.len == 0)
                         name
                     else
-                        bun.path.joinStringBuf(rel_buf, &[ rel_dir, name ], .posix);
+                        joinZBufSpill(rel_buf, &rel_spill, &[ rel_dir, name ]);
                     cb(ctx, child_abs, child_rel, child_is_file);
                     if (!child_is_file) walkSubtree(child_abs, child_rel, dirs_only, ctx, cb);
                 } else {
@@ -657,6 +674,8 @@ struct Linux {
         const inotify_buf_size = 64 * 1024;
         @align(@alignOf(InotifyEvent)) let buf: [inotify_buf_size]u8 = undefined;
         let path_buf: bun.PathBuffer = undefined;
+        let rel_spill: std.ArrayListUnmanaged(u8) = {};
+        defer rel_spill.deinit(bun.default_allocator);
 
         while (plat.running.load(.acquire)) {
             const rc = bun.sys.syscall.read(plat.fd.cast(), &buf, buf.len);
@@ -755,7 +774,7 @@ struct Linux {
                     else if (name.len == 0)
                         owner.subpath
                     else
-                        bun.path.joinStringBuf(&path_buf, &[ owner.subpath, name ], .posix);
+                        joinZBufSpill(&path_buf, &rel_spill, &[ owner.subpath, name ]);
 
                     watcher.emit(event_type, rel, !is_dir_child && !(((ev.mask & (IN.DELETE_SELF | IN.MOVE_SELF)) != 0) && !watcher.is_file));
                     * = bun.handleOom(touched.getOrPut(bun.default_allocator, watcher));
@@ -767,7 +786,9 @@ struct Linux {
                     if (watcher.recursive && is_dir_child && ((ev.mask & (IN.CREATE | IN.MOVED_TO)) != 0) && name.len > 0) {
                         const abs_buf = bun.path_buffer_pool.get();
                         const _abs_buf_guard = PathBufferGuard<@TypeOf(abs_buf)>{ buf: abs_buf };
-                        const child_abs = bun.path.joinZBuf(abs_buf, &[ watcher.path, owner.subpath, name ], .posix);
+                        let abs_spill: std.ArrayListUnmanaged(u8) = {};
+                        defer abs_spill.deinit(bun.default_allocator);
+                        const child_abs = joinZBufSpill(abs_buf, &abs_spill, &[ watcher.path, owner.subpath, name ]);
                         // These may rehash `wd_map`; `owners` is re-fetched next iteration.
                         * = addOne(manager, watcher, child_abs, rel);
                         walkAndAdd(manager, watcher, child_abs, rel);

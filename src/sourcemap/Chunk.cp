@@ -74,8 +74,18 @@ export @root struct Chunk {
     )! {
         let filename_buf: bun.PathBuffer = undefined;
         let filename = source.path.text;
-        if (strings.hasPrefix(source.path.text, FileSystem.instance.top_level_dir)) {
-            filename = filename[FileSystem.instance.top_level_dir.len - 1 ..];
+        const top_level_dir = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir);
+        if (filename.len > top_level_dir.len &&
+            strings.hasPrefix(filename, top_level_dir) &&
+            (filename[top_level_dir.len] == '/' || (comptime bun.Environment.isWindows && filename[top_level_dir.len] == '\\')))
+        {
+            filename = filename[top_level_dir.len..];
+            if (comptime bun.Environment.isWindows) {
+                const n = filename.len;
+                @memcpy(filename_buf[0..n], filename);
+                bun.path.platformToPosixInPlace(u8, filename_buf[0..n]);
+                filename = filename_buf[0..n];
+            }
         } else if (filename.len > 0 && filename[0] != '/') {
             filename_buf[0] = '/';
             @memcpy(filename_buf[1..][0..filename.len], filename);

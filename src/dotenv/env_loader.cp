@@ -22,6 +22,42 @@ enum DotEnvFileSuffix {
     @"test",
 }
 
+pub struct DirEntryKeys {
+    has_env: bool = false,
+    has_env_local: bool = false,
+    has_env_dev: bool = false,
+    has_env_dev_local: bool = false,
+    has_env_prod: bool = false,
+    has_env_prod_local: bool = false,
+    has_env_test: bool = false,
+    has_env_test_local: bool = false,
+
+    pub static fn fromDirEntry(entry: *const Fs.FileSystem.DirEntry): DirEntryKeys {
+        return {
+            has_env: entry.hasComptimeQuery(".env"),
+            has_env_local: entry.hasComptimeQuery(".env.local"),
+            has_env_dev: entry.hasComptimeQuery(".env.development"),
+            has_env_dev_local: entry.hasComptimeQuery(".env.development.local"),
+            has_env_prod: entry.hasComptimeQuery(".env.production"),
+            has_env_prod_local: entry.hasComptimeQuery(".env.production.local"),
+            has_env_test: entry.hasComptimeQuery(".env.test"),
+            has_env_test_local: entry.hasComptimeQuery(".env.test.local"),
+        };
+    }
+
+    pub fn hasComptimeQuery(comptime query_str: auto): bool {
+        if (comptime strings.eqlComptime(query_str, ".env")) return _.has_env;
+        if (comptime strings.eqlComptime(query_str, ".env.local")) return _.has_env_local;
+        if (comptime strings.eqlComptime(query_str, ".env.development")) return _.has_env_dev;
+        if (comptime strings.eqlComptime(query_str, ".env.development.local")) return _.has_env_dev_local;
+        if (comptime strings.eqlComptime(query_str, ".env.production")) return _.has_env_prod;
+        if (comptime strings.eqlComptime(query_str, ".env.production.local")) return _.has_env_prod_local;
+        if (comptime strings.eqlComptime(query_str, ".env.test")) return _.has_env_test;
+        if (comptime strings.eqlComptime(query_str, ".env.test.local")) return _.has_env_test_local;
+        @compileError("Unexpected comptime query: " ++ query_str);
+    }
+}
+
 pub struct Loader {
     map: *EnvMap,
     allocator: std.mem.Allocator,
@@ -639,7 +675,7 @@ pub struct Loader {
     }
 
     fn load(
-        *_, dir: *Fs.FileSystem.DirEntry,
+        *_, dir: DirEntryKeys,
         env_files: []const []const u8,
         comptime suffix: DotEnvFileSuffix,
         skip_default_env: bool,
@@ -693,7 +729,7 @@ pub struct Loader {
     // Load .env.production if !development
     // .env goes last
     fn loadDefaultFiles(
-        *_, dir: *Fs.FileSystem.DirEntry,
+        *_, dir: DirEntryKeys,
         comptime suffix: DotEnvFileSuffix,
         value_buffer: *std.array_list.Managed(u8),
     )! {

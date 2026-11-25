@@ -387,7 +387,10 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
 
             clear_screen = !ctx.transpiler.env.hasSetNoClearTerminalOnReload(!Output.enable_ansi_colors_stdout);
 
-            reloader.getContext().start() catch @panic("Failed to start File Watcher");
+            reloader.getContext().start() catch e => {
+                bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                Output.panic("Failed to start File Watcher: {s}", .{ @errorName(e)});
+            };
         }
 
         fn putTombstone(*_, key: []const u8, value: *bun.fs.FileSystem.RealFS.EntriesOption) {

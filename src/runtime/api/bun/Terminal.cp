@@ -986,8 +986,11 @@ struct PosixIoctl {
         const enabled = args[0].toBoolean();
 
         if (comptime Environment.isPosix) {
-            // Use the existing TTY mode function
-            const tty_result = bun.tty.setMode(_.master_fd.cast(), if (enabled) .raw else .normal);
+            // Never Drain on the PTY master: with the child blocked in
+            // write() on a full PTY, the drain waits on a lock only our
+            // own reads can release, freezing the JS thread for as long
+            // as the child stays blocked.
+            const tty_result = bun.tty.setModeWhen(_.master_fd.cast(), if (enabled) .raw else .normal, .now);
             if (tty_result != 0) {
                 return globalObject.throw("Failed to set raw mode", {});
             }

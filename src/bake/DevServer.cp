@@ -3607,8 +3607,9 @@ pub fn handleParseTaskFailure(
                 dev.client_graph.onFileDeleted(abs_path, bv2);
                 // The html file of a route has no importer.
                 if (file := dev.client_graph.bundled_files.get(abs_path)) {
-                    if (file.html_route_bundle_index != null) {
-                        watch_for_route_file = !file.failed;
+                    const unpacked = file.unpack();
+                    if (unpacked.html_route_bundle_index != null) {
+                        watch_for_route_file = !unpacked.failed;
                         dev.client_graph.insertFailure(.abs_path, abs_path, log, false)?;
                     }
                 }
