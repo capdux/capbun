@@ -109,7 +109,7 @@ bool ScriptExecutionContext::postTaskTo(ScriptExecutionContextIdentifier identif
     Locker locker { allScriptExecutionContextsMapLock };
     auto* context = allScriptExecutionContextsMap().get(identifier);
 
-    if (!context)
+    if (!context || context->isTerminating())
         return false;
 
     context->postTaskConcurrently(WTF::move(task));
@@ -121,7 +121,7 @@ bool ScriptExecutionContext::postTaskTo(ScriptExecutionContextIdentifier identif
     Locker locker { allScriptExecutionContextsMapLock };
     auto* context = allScriptExecutionContextsMap().get(identifier);
 
-    if (!context)
+    if (!context || context->isTerminating())
         return false;
 
     betweenLookupAndEnqueue();
@@ -255,6 +255,16 @@ void ScriptExecutionContext::postTask(EventLoopTask* task)
     static_cast<Zig::GlobalObject*>(m_globalObject)->queueTask(task);
 }
 
+void ScriptExecutionContext::markTerminating()
+{
+    // postTaskTo() holds this lock across its isTerminating() check and
+    // postTaskConcurrently() enqueue. Taking it here establishes an ordering
+    // with every concurrent poster: either its whole critical section ran
+    // before ours, or ours ran first (poster observes true and drops the task).
+    Locker locker { allScriptExecutionContextsMapLock };
+    m_isTerminating.store(true, std::memory_order_release);
+}
+
 // Zig bindings
 extern "C" ScriptExecutionContextIdentifier ScriptExecutionContextIdentifier__forGlobalObject(JSC::JSGlobalObject* globalObject)
 {
@@ -266,6 +276,12 @@ extern "C" JSC::JSGlobalObject* ScriptExecutionContextIdentifier__getGlobalObjec
     auto* context = ScriptExecutionContext::getScriptExecutionContext(id);
     if (!context) return nullptr;
     return context->globalObject();
+}
+
+extern "C" void ScriptExecutionContext__markTerminating(JSC::JSGlobalObject* globalObject)
+{
+    if (auto* context = defaultGlobalObject(globalObject)->scriptExecutionContext())
+        context->markTerminating();
 }
 
 } // namespace WebCore

@@ -47,12 +47,12 @@ pub fn parse(
     }
 
     let input_slice_guard = DeinitGuard<jsc.ZigString.Slice>{ val: input_value.toSlice(globalThis, bun.default_allocator)? };
-    const source = &logger.Source.initPathString("input.jsonc", input_slice_guard.val.slice());
+    const input_bytes = input_slice_guard.val.slice();
+    if (input_bytes.len > std.math.maxInt(i32)) return globalThis.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+    const source = &logger.Source.initPathString("input.jsonc", input_bytes);
     const log_ptr: *logger.Log = &log_guard.val;
     const parse_result = json.parseTSConfig(source, log_ptr, allocator, true) catch e => {
-        if (e == error.StackOverflow) {
-            return globalThis.throwStackOverflow();
-        }
+        if (e == error.StackOverflow) return globalThis.throwStackOverflow();
         return globalThis.throwValue((log_guard.val.toJS(globalThis, default_allocator, "Failed to parse JSONC"))?);
     };
 

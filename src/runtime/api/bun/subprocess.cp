@@ -577,6 +577,15 @@ pub struct TestingAPIs {
         return JSValue.jsNumber(_.pid());
     }
 
+    pub fn closeReadablePipes(*_) {
+        if (_.stdout == .pipe) {
+            _.stdout.close();
+        }
+        if (_.stderr == .pipe) {
+            _.stderr.close();
+        }
+    }
+
     pub fn getKilled(*_, _: *JSGlobalObject): JSValue {
         return JSValue.jsBoolean(_.hasKilled());
     }
@@ -682,16 +691,6 @@ pub struct TestingAPIs {
 
         if (existing_stdin_value != .zero) {
             jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_stdin_value, 0);
-        }
-
-        if (client.flags.is_sync) {
-            if (client.stdout == .pipe) {
-                client.stdout.close();
-            }
-
-            if (client.stderr == .pipe) {
-                client.stderr.close();
-            }
         }
 
         if (pipe := stdin) {

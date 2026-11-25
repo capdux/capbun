@@ -72,6 +72,7 @@ export @root struct LineOffsetTable {
         let list = List{};
         list.ensureUnusedCapacity(allocator, @max(approximate_line_count, 1) as usize) catch unreachable;
         let column: i32 = 0;
+        let has_non_ascii = false;
         let byte_offset_to_first_non_ascii: u32 = 0;
         let column_byte_offset: u32 = 0;
         let line_byte_offset: u32 = 0;
@@ -100,14 +101,14 @@ export @root struct LineOffsetTable {
                 line_byte_offset = unsafe { (@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr)) } as u32;
             }
 
-            if (c > 0x7F && columns_for_non_ascii.items.len == 0) {
+            if (c > 0x7F && !has_non_ascii) {
                 assert(unsafe { @intFromPtr(remaining.ptr) >= @intFromPtr(contents.ptr) });
-                columns_for_non_ascii.appendAssumeCapacity(column);
+                has_non_ascii = true;
                 column_byte_offset = (unsafe { @intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr) } - line_byte_offset) as u32;
                 byte_offset_to_first_non_ascii = column_byte_offset;
             }
 
-            if (columns_for_non_ascii.items.len > 0) {
+            if (has_non_ascii) {
                 const line_bytes_so_far = (unsafe { @intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr) } as u32) - line_byte_offset;
                 columns_for_non_ascii.ensureUnusedCapacity((line_bytes_so_far - column_byte_offset) + 1) catch unreachable;
                 while (column_byte_offset <= line_bytes_so_far) : (column_byte_offset += 1) {
@@ -149,6 +150,7 @@ export @root struct LineOffsetTable {
                     }) catch unreachable;
 
                     column = 0;
+                    has_non_ascii = false;
                     byte_offset_to_first_non_ascii = 0;
                     column_byte_offset = 0;
                     line_byte_offset = 0;
@@ -169,7 +171,7 @@ export @root struct LineOffsetTable {
             line_byte_offset = contents.len as u32;
         }
 
-        if (columns_for_non_ascii.items.len > 0) {
+        if (has_non_ascii) {
             const line_bytes_so_far = (contents.len as u32) - line_byte_offset;
             columns_for_non_ascii.ensureUnusedCapacity((line_bytes_so_far - column_byte_offset) + 1) catch unreachable;
             while (column_byte_offset <= line_bytes_so_far) : (column_byte_offset += 1) {

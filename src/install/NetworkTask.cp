@@ -27,6 +27,7 @@ type string = []const u8;
 
 pub struct DedupeMapEntry {
     is_required: bool,
+    failed: bool = false,
 }
 pub const DedupeMap = std.HashMap(Task.Id, DedupeMapEntry, IdentityContext(Task.Id), 80);
 
@@ -102,6 +103,7 @@ const ForManifestError = OOM || error{
 
 pub const ForTarballError = OOM || error{
     InvalidURL,
+    AlreadyFailed,
 };
 
 @root struct NetworkTask {

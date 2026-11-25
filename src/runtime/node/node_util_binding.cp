@@ -257,7 +257,8 @@ pub fn parseEnv(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
     let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
     const allocator = arena_guard.val.allocator();
 
-    const str = content.asString().toSlice(globalThis, allocator);
+    const js_str = content.toJSString(globalThis)?;
+    const str = js_str.toSlice(globalThis, allocator);
 
     let map = envloader.Map.init(allocator);
     let p = envloader.Loader.init(&map, allocator);

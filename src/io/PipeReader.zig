@@ -1147,7 +1147,9 @@ pub fn onFileRead(fs: *uv.fs_t) callconv(.c) void {
             const parent_ptr = fs.data;
             _ = file.complete(was_canceled);
             if ((parent_ptr == null)) {
-                _ = bun.assert((file.state == .closing));
+                if ((file.state != .closing)) {
+                    _ = bun.default_allocator.destroy(file);
+                }
                 return;
             }
             var self_ptr: *WindowsBufferedReader = bun.cast(*WindowsBufferedReader, parent_ptr);
@@ -1264,7 +1266,13 @@ pub fn closeImpl(self: *WindowsBufferedReader, comptime callDone: bool) void {
                 _ = &source;
                 switch (source) {
 .sync_file, .file => |file| {
-_ = file.detach();
+if (self.flags.close_handle) {
+                    _ = file.detach();
+                } else {
+                    if ((!file.detachBorrowedFd())) {
+                        _ = bun.default_allocator.destroy(file);
+                    }
+                }
 },
 .pipe => |pipe| {
 pipe.data = pipe;

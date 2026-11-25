@@ -1863,7 +1863,7 @@ pub fn onUpgrade(self: *@This(), globalThis: *jsc.JSGlobalObject, object: jsc.JS
                     sec_websocket_extensions = ZigString.init(((req.header("sec-websocket-extensions")) orelse ("")));
                 }
             }
-            if ((sec_websocket_key_str.len == 0)) {
+            if ((sec_websocket_key_str.len != 24)) {
                 return JSValue.false;
             }
             if ((sec_websocket_protocol.len > 0)) {
@@ -2907,6 +2907,13 @@ pub fn doUnref(self: *@This(), _: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
 pub fn onBunInfoRequest(self: *@This(), req: *uws.Request, resp: *App.Response) void {
             _ = jsc.markBinding(@src());
+            if ((self.config.address != .unix)) {
+                const is_loopback = (if (resp.getRemoteSocketInfo()) |*address| (((strings.startsWith(address.ip, "127.") or strings.startsWith(address.ip, "::ffff:127.")) or strings.eqlComptime(address.ip, "::1")) or strings.eqlComptime(address.ip, "0:0:0:0:0:0:0:1")) else false);
+                if ((!is_loopback)) {
+                    _ = req.setYield(true);
+                    return;
+                }
+            }
             self.pending_requests = (self.pending_requests + 1);
             defer {
             self.pending_requests = (self.pending_requests - 1);
@@ -3393,7 +3400,8 @@ pub fn onChromeDevToolsJSONRequest(self: *@This(), req: *uws.Request, resp: *App
                 _ = httplog("{s} - {s}", .{ req.method(), req.url() });
             }
             const authorized = brk: {
-            if ((self.dev_server == null)) {
+            const dev = ((self.dev_server) orelse break :brk false);
+            if ((!dev.isAllowedDevHost(req))) {
                 break :brk false;
             }
             if (resp.getRemoteSocketInfo()) |*address| {

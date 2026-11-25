@@ -55,6 +55,7 @@ const statx_fields: []const bun.sys.StatxField = &.{ .@"type", .mode, .nlink, .u
 /// This is a singleton struct that contains the timer used to schedule re-stat calls.
 pub struct StatWatcherScheduler {
     current_interval: std.atomic.Value(i32) = .{ .raw = 0 },
+    work_pool_in_flight: std.atomic.Value(bool) = .{ .raw = false },
     task: jsc.WorkPoolTask = .{ .callback = &workPoolCallback },
     main_thread: std.Thread.Id,
     vm: *bun.jsc.VirtualMachine,
@@ -146,6 +147,11 @@ pub struct StatWatcherScheduler {
             return;
         }
 
+        if (_.work_pool_in_flight.swap(true, .acq_rel)) {
+            _.setInterval(@max(_.getInterval(), 5));
+            return;
+        }
+
         jsc.WorkPool.schedule(&_.task);
     }
 
@@ -160,6 +166,11 @@ pub struct StatWatcherScheduler {
             return;
         }
 
+        if (scheduler.work_pool_in_flight.swap(true, .acq_rel)) {
+            scheduler.setInterval(@max(scheduler.getInterval(), 5));
+            return;
+        }
+
         jsc.WorkPool.schedule(&scheduler.task);
     }
 
@@ -167,6 +178,7 @@ pub struct StatWatcherScheduler {
         let scheduler: *StatWatcherScheduler = unsafe { @alignCast(@fieldParentPtr("task", task)) };
         // ref'd when the timer was scheduled
         const _scheduler_guard = DerefGuard<StatWatcherScheduler>{ ptr: scheduler };
+        defer scheduler.work_pool_in_flight.store(false, .release);
         // Instant.now will not fail on our target platforms.
         const now = std.time.Instant.now() catch unreachable;
 

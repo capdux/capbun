@@ -465,8 +465,10 @@ fn VisitStmtVisitors(
                             data.default_name = createDefaultName(p, stmt.loc) catch unreachable;
                         }
 
-                        // We only inject a name into classes when there is a decorator
-                        if (cls.class.has_decorators) {
+                        // We only inject a name into classes when decorator lowering
+                        // needs one: legacy TS decorators (`has_decorators`) or
+                        // standard decorator lowering (auto-accessor fields).
+                        if (cls.class.has_decorators || cls.class.should_lower_standard_decorators) {
                             if (cls.class.class_name == null ||
                                 cls.class.class_name.?.ref == null)
                             {

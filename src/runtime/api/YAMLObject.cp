@@ -968,10 +968,15 @@ pub struct Stringifier {
     }
     let _input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
 
+    const input_bytes = input.slice();
+    if (input_bytes.len > std.math.maxInt(i32)) {
+        return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+    }
+
     let log = logger.Log.init(bun.default_allocator);
     let _log_guard = DeinitGuard<logger.Log>{ ptr: unsafe { &log } };
 
-    const source = &logger.Source.initPathString("input.yaml", input.slice());
+    const source = &logger.Source.initPathString("input.yaml", input_bytes);
 
     const root = bun.interchange.yaml.YAML.parse(source, &log, arena_allocator.allocator()) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;

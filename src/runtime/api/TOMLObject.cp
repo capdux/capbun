@@ -40,7 +40,11 @@ pub fn parse(
 
     let input_slice = input_value.toSlice(globalThis, bun.default_allocator)?;
     const input_slice_guard = DeinitGuard<@TypeOf(input_slice)>{ ptr: &input_slice };
-    const source = &logger.Source.initPathString("input.toml", input_slice.slice());
+    const input_bytes = input_slice.slice();
+    if (input_bytes.len > std.math.maxInt(i32)) {
+        return globalThis.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+    }
+    const source = &logger.Source.initPathString("input.toml", input_bytes);
     const log_ptr: *logger.Log = &log;
     const parse_result = TOML.parse(source, log_ptr, allocator, false) catch e => {
         if (e == error.StackOverflow) {

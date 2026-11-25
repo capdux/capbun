@@ -522,10 +522,9 @@ fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.J
     const output = output_opt.?;
 
     if (!data.run(output.slice())) {
-        const get_err = BoringSSL.ERR_get_error;
         const clear_err = BoringSSL.ERR_clear_error;
-        const e = Crypto.createCryptoError(globalThis, get_err());
         clear_err();
+        const e = globalThis.createErrorInstance("PBKDF2 derivation failed", .{});
         return globalThis.throwValue(e);
     }
 

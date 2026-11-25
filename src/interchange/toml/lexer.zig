@@ -973,18 +973,18 @@ var value: i64 = 0;
                     _ = &is_out_of_range;
                     variableLength: while (true) {
                         if ((!iterator.next((&iter)))) {
-                            break :variableLength;
+                            return self.syntaxError();
                         }
                         c3 = iter.c;
                         switch (c3) {
 48...57 => {
-value = ((value * 16) | (if (comptime @typeInfo(@TypeOf((c3 - 48))) == .@"enum") cp_cast_int(i64, @intFromEnum((c3 - 48))) else cp_cast_int(i64, (c3 - 48))));
+value = ((value *| 16) | (if (comptime @typeInfo(@TypeOf((c3 - 48))) == .@"enum") cp_cast_int(i64, @intFromEnum((c3 - 48))) else cp_cast_int(i64, (c3 - 48))));
 },
 97...102 => {
-value = ((value * 16) | (if (comptime @typeInfo(@TypeOf(((c3 + 10) - 97))) == .@"enum") cp_cast_int(i64, @intFromEnum(((c3 + 10) - 97))) else cp_cast_int(i64, ((c3 + 10) - 97))));
+value = ((value *| 16) | (if (comptime @typeInfo(@TypeOf(((c3 + 10) - 97))) == .@"enum") cp_cast_int(i64, @intFromEnum(((c3 + 10) - 97))) else cp_cast_int(i64, ((c3 + 10) - 97))));
 },
 65...70 => {
-value = ((value * 16) | (if (comptime @typeInfo(@TypeOf(((c3 + 10) - 65))) == .@"enum") cp_cast_int(i64, @intFromEnum(((c3 + 10) - 65))) else cp_cast_int(i64, ((c3 + 10) - 65))));
+value = ((value *| 16) | (if (comptime @typeInfo(@TypeOf(((c3 + 10) - 65))) == .@"enum") cp_cast_int(i64, @intFromEnum(((c3 + 10) - 65))) else cp_cast_int(i64, ((c3 + 10) - 65))));
 },
 '}' => {
 if (is_first) {

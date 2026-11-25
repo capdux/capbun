@@ -212,7 +212,17 @@ pub fn ParseStmt(
                                         break :default_name_getter LocRef{ loc: name.loc, @"ref": name.ref };
                                     }
                                 },
-                                else => {},
+                                else => {
+                                    const r = js_lexer.rangeOfIdentifier(p.source, stmt.loc);
+                                    p.log.addRangeErrorFmt(
+                                        p.source,
+                                        r,
+                                        p.allocator,
+                                        "Unexpected \"{s}\"",
+                                        .{p.source.textForRange(r)},
+                                    ) catch unreachable;
+                                    return error.SyntaxError;
+                                },
                             }
 
                             break :default_name_getter createDefaultName(p, defaultLoc) catch unreachable;
@@ -230,45 +240,38 @@ pub fn ParseStmt(
                     const expr = p.parseExpr(.comma)?;
 
                     // Handle the default export of an abstract class in TypeScript
-                    if (is_typescript_enabled && is_identifier && (p.lexer.token == .t_class || opts.ts_decorators != null) && strings.eqlComptime(name, "abstract")) {
-                        switch (expr.data) {
-                            .e_identifier => {
-                                let stmtOpts = ParseStatementOptions{
-                                    ts_decorators: opts.ts_decorators,
-                                    is_name_optional: true,
-                                };
-                                const stmt: Stmt = p.parseClassStmt(loc, &stmtOpts)?;
+                    if (is_typescript_enabled && is_identifier && (p.lexer.token == .t_class || opts.ts_decorators != null) && strings.eqlComptime(name, "abstract") && expr.data == .e_identifier) {
+                        let stmtOpts = ParseStatementOptions{
+                            ts_decorators: opts.ts_decorators,
+                            is_name_optional: true,
+                        };
+                        const stmt: Stmt = p.parseClassStmt(loc, &stmtOpts)?;
 
-                                // Use the statement name if present, since it's a better name
-                                const default_name: js_ast.LocRef = default_name_getter: {
-                                    switch (stmt.data) {
-                                        // This was just a type annotation
-                                        .s_type_script => {
-                                            return stmt;
-                                        },
+                        // Use the statement name if present, since it's a better name
+                        const default_name: js_ast.LocRef = default_name_getter: {
+                            switch (stmt.data) {
+                                // This was just a type annotation
+                                .s_type_script => {
+                                    return stmt;
+                                },
 
-                                        .s_function => |func_container| {
-                                            if (_name := func_container.func.name) {
-                                                break :default_name_getter LocRef{ loc: defaultLoc, @"ref": _name.ref };
-                                            }
-                                        },
-                                        .s_class => |cls| {
-                                            if (_name := cls.@"class".class_name) {
-                                                break :default_name_getter LocRef{ loc: defaultLoc, @"ref": _name.ref };
-                                            }
-                                        },
-                                        else => {},
+                                .s_function => |func_container| {
+                                    if (_name := func_container.func.name) {
+                                        break :default_name_getter LocRef{ loc: defaultLoc, @"ref": _name.ref };
                                     }
+                                },
+                                .s_class => |cls| {
+                                    if (_name := cls.@"class".class_name) {
+                                        break :default_name_getter LocRef{ loc: defaultLoc, @"ref": _name.ref };
+                                    }
+                                },
+                                else => {},
+                            }
 
-                                    break :default_name_getter createDefaultName(p, defaultLoc) catch unreachable;
-                                };
-                                p.has_export_default = true;
-                                return p.s(S.ExportDefault{ default_name: default_name, value: js_ast.StmtOrExpr{ stmt: stmt } }, loc);
-                            },
-                            else => {
-                                p.panic("internal error: unexpected", {});
-                            },
-                        }
+                            break :default_name_getter createDefaultName(p, defaultLoc) catch unreachable;
+                        };
+                        p.has_export_default = true;
+                        return p.s(S.ExportDefault{ default_name: default_name, value: js_ast.StmtOrExpr{ stmt: stmt } }, loc);
                     }
 
                     p.lexer.expectOrInsertSemicolon()?;
@@ -286,7 +289,7 @@ pub fn ParseStmt(
                     );
                 },
                 T.t_asterisk => {
-                    if (!opts.is_module_scope && !(opts.is_namespace_scope || !opts.is_typescript_declare)) {
+                    if (!opts.is_module_scope && (!opts.is_namespace_scope || !opts.is_typescript_declare)) {
                         p.lexer.unexpected()?;
                         return error.SyntaxError;
                     }
@@ -341,7 +344,7 @@ pub fn ParseStmt(
                     }, loc);
                 },
                 T.t_open_brace => {
-                    if (!opts.is_module_scope && !(opts.is_namespace_scope || !opts.is_typescript_declare)) {
+                    if (!opts.is_module_scope && (!opts.is_namespace_scope || !opts.is_typescript_declare)) {
                         p.lexer.unexpected()?;
                         return error.SyntaxError;
                     }
@@ -832,6 +835,9 @@ pub fn ParseStmt(
                     switch (res.stmt_or_expr) {
                         .stmt => |stmt| {
                             bad_let_range = null;
+                            // Keep the "let"/"using" declarations visible to the for-in/for-of
+                            // checks below ("forbidInitializers"), like the "var"/"const" cases.
+                            decls = .fromOwnedSlice(res.decls);
                             init_ = stmt;
                         },
                         .expr => |expr| {
@@ -1258,14 +1264,26 @@ pub fn ParseStmt(
                                         if (p.lexer.isContextualKeyword("global")) {
                                             p.lexer.next()?;
                                             p.lexer.expect(.t_open_brace)?;
+                                            const scope_index = p.scopes_in_order.items.len;
                                             * = p.parseStmtsUpTo(.t_close_brace, opts)?;
                                             p.lexer.next()?;
+                                            // The statements inside are dropped, so discard any scopes they
+                                            // recorded or the visit pass will hit a scope order mismatch.
+                                            p.discardScopesUpTo(scope_index);
                                             return p.s(S.TypeScript{}, loc);
                                         }
 
+                                        const scope_index = p.scopes_in_order.items.len;
                                         const stmt = p.parseStmt(opts)?;
                                         if (decs := opts.ts_decorators) {
                                             p.discardScopesUpTo(decs.scope_index);
+                                        } else {
+                                            // The statement is dropped below (or reduced to just its bindings
+                                            // for "export declare var" inside a namespace), so discard any
+                                            // scopes it recorded or the visit pass will hit a scope order
+                                            // mismatch (e.g. "declare foo: bar" parses a labeled statement
+                                            // that records a Label scope).
+                                            p.discardScopesUpTo(scope_index);
                                         }
 
                                         if (opts.is_namespace_scope && opts.is_export) {

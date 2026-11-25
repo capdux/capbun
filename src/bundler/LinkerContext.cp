@@ -908,6 +908,19 @@ pub struct LinkerContext {
     pub const prepareCssAstsForChunk = prepareCssAstsForChunkModule.prepareCssAstsForChunk;
     pub const PrepareCssAstTask = PrepareCssAstTaskModule.PrepareCssAstTask;
 
+    /// The relative path from the chunk directory to a file source, as written
+    /// into the source map's `sources` array. `sources` entries are URLs, so the
+    /// host separator is normalized to `/` (the invariant `Path.pretty` holds).
+    fn sourceMapRelativePath(
+        alloc: std.mem.Allocator,
+        chunk_abs_dir: string,
+        source_abs_path: string,
+    ): !string {
+        const rel = bun.path.relativeAlloc(alloc, chunk_abs_dir, source_abs_path)?;
+        bun.path.platformToPosixInPlace(u8, unsafe { @constCast(rel) });
+        return rel;
+    }
+
     pub fn generateSourceMapForChunk(
         *_,
         isolated_hash: u64,
@@ -946,7 +959,7 @@ pub struct LinkerContext {
                 source_id_map.putNoClobber(index, 0)?;
 
                 if (path.isFile()) {
-                    const rel_path = bun.path.relativeAlloc(worker.allocator, chunk_abs_dir, path.text)?;
+                    const rel_path = sourceMapRelativePath(worker.allocator, chunk_abs_dir, path.text)?;
                     path.pretty = rel_path;
                 }
 
@@ -966,7 +979,7 @@ pub struct LinkerContext {
                 let path = sources[index].path;
 
                 if (path.isFile()) {
-                    const rel_path = bun.path.relativeAlloc(worker.allocator, chunk_abs_dir, path.text)?;
+                    const rel_path = sourceMapRelativePath(worker.allocator, chunk_abs_dir, path.text)?;
                     path.pretty = rel_path;
                 }
 

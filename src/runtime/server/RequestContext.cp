@@ -1103,6 +1103,14 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             _.flags.has_sendfile_ctx = true;
             _.flags.has_abort_handler = true;
             _.flags.has_marked_pending = true;
+            if (_.flags.is_waiting_for_request_body) {
+                _.flags.is_waiting_for_request_body = false;
+                resp.clearOnData();
+            }
+            if (_.flags.has_timeout_handler) {
+                resp.clearTimeout();
+                _.flags.has_timeout_handler = false;
+            }
 
             FileResponseStream.start(.{
                 .fd = fd,
@@ -2331,7 +2339,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (needs_content_type &&
                 // do not insert the content type if it is the fallback value
                 // we may not know the content-type when streaming
-                (!_.blob.isDetached() || content_type.value.ptr != MimeType.other.value.ptr))
+                (!_.blob.isDetached() || content_type.value.ptr != MimeType.other.value.ptr) &&
+                std.mem.indexOfAny(u8, content_type.value, "\r\n\x00") == null)
             {
                 resp.writeHeader("content-type", content_type.value);
             }

@@ -258,6 +258,10 @@ pub fn processSubtree(self: Tree, dependency_id: DependencyID, hoist_root_id: Tr
                 }
             }
             const dependency = builder.dependencies[@as(usize, @intCast(dep_id))];
+            if ((!Dependency.isSafeInstallFolderName((if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name).slice(builder.buf())))) {
+                _ = builder.maybeReportError("Invalid dependency name \"{f}\"", .{ (if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name).fmt(builder.buf()) });
+                continue;
+            }
             const hoisted: HoistDependencyResult = hoisted: {
             if (dependency.behavior.isBundled()) {
                 break :hoisted .{ .placement = .{ .id = next.id, .bundled = true } };
@@ -484,6 +488,10 @@ pub fn relativePathAndDepth(lockfile: *const Lockfile, tree_id: Id, path_buf: *b
                 }
                 const id = depth_buf[@as(usize, @intCast(depth_buf_len))];
                 const name = trees[@as(usize, @intCast(id))].folderName(dependencies, buf);
+                if ((!Dependency.isSafeInstallFolderName(name))) {
+                    _ = Output.errGeneric("Lockfile is malformed (dependency name \"{s}\" is not a valid folder name)", .{ name });
+                    _ = bun.Global.crash();
+                }
                 _ = @memcpy(path_buf[path_written..][0..name.len], name);
                 path_written = (path_written + name.len);
                 if (comptime (path_style == .node_modules)) {

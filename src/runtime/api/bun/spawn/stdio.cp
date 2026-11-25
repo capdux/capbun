@@ -83,14 +83,15 @@ pub union(enum) Stdio {
         }
     }
 
-    fn canUseMemfd(is_sync: bool, has_max_buffer: bool): bool {
+    fn canUseMemfd(): bool {
         if (comptime !Environment.isLinux) {
             return false;
         }
         return switch (_) {
             .blob => !_.blob.needsToReadFile(),
             .memfd, .array_buffer => true,
-            .pipe => is_sync && !has_max_buffer,
+            // `.pipe` is never memfd: a memfd has no EOF signal, so a
+            // grandchild still writing after the child exits would be lost.
             else => false,
         };
     }
@@ -403,10 +404,12 @@ pub union(enum) Stdio {
                 return;
             }
 
+            const copied_value = jsc.ArrayBuffer.createBuffer(globalThis, array_buffer.byteSlice())?;
+            const copied = copied_value.asArrayBuffer(globalThis).?;
             out_stdio.* = {
                 array_buffer: jsc.ArrayBuffer.Strong{
-                    array_buffer: array_buffer,
-                    held: .create(array_buffer.value, globalThis),
+                    array_buffer: copied,
+                    held: .create(copied.value, globalThis),
                 },
             };
             return;

@@ -1965,7 +1965,6 @@ pub fn NewParser_(
                         });
                     }
                     declared_symbols.appendAssumeCapacity({ ref: entry.ref, is_top_level: true });
-                    p.module_scope.generated.append(allocator, entry.ref)?;
                     p.is_import_item.put(allocator, entry.ref, undefined)?;
                     p.named_imports.put(allocator, entry.ref, {
                         alias: entry.name,
@@ -2565,7 +2564,6 @@ pub fn NewParser_(
             }
 
             p.module_scope.generated.ensureUnusedCapacity(p.allocator, generated_symbols_count * 3)?;
-            p.module_scope.members.ensureUnusedCapacity(p.allocator, generated_symbols_count * 3 + p.module_scope.members.count())?;
 
             p.exports_ref = p.declareCommonJSSymbol(.hoisted, "exports")?;
             p.module_ref = p.declareCommonJSSymbol(.hoisted, "module")?;
@@ -2611,7 +2609,7 @@ pub fn NewParser_(
             switch (p.options.features.server_components) {
                 .none, .client_side => {},
                 else => {
-                    p.response_ref = p.declareGeneratedSymbol(.@"import", "Response")?;
+                    p.response_ref = p.declareCommonJSSymbol(.@"import", "Response")?;
                     p.bun_app_namespace_ref = p.newSymbol(
                         .other,
                         "import_bun_app",
@@ -2632,8 +2630,7 @@ pub fn NewParser_(
 
         static fn ensureRequireSymbol(p: *P) {
             if (p.runtime_imports.__require != null) return;
-            const static_symbol = generatedSymbolName("__require");
-            p.runtime_imports.__require = bun.handleOom(declareSymbolMaybeGenerated(p, .other, logger.Loc.Empty, static_symbol, true));
+            p.runtime_imports.__require = bun.handleOom(p.declareGeneratedSymbol(.other, "__require"));
             p.runtime_imports.put("__require", p.runtime_imports.__require.?);
         }
 
@@ -2698,7 +2695,7 @@ pub fn NewParser_(
                         let is_sloppy_mode_block_level_fn_stmt = false;
                         const original_member_ref = value.ref;
 
-                        if (p.willUseRenamer() && symbol.kind == .hoisted_function) {
+                        if (symbol.kind == .hoisted_function) {
                             // Block-level function declarations behave like "let" in strict mode
                             if (scope.strict_mode != .sloppy_mode) {
                                 continue;
@@ -2722,13 +2719,15 @@ pub fn NewParser_(
                             //   }
                             //   f();
                             //
-                            const hoisted_ref = p.newSymbol(.hoisted, symbol.original_name) catch unreachable;
-                            symbols = p.symbols.items;
-                            bun.handleOom(scope.generated.append(p.allocator, hoisted_ref));
-                            p.hoisted_ref_for_sloppy_mode_block_fn.put(p.allocator, value.ref, hoisted_ref) catch unreachable;
-                            value.ref = hoisted_ref;
-                            symbol = &symbols[hoisted_ref.innerIndex()];
-                            is_sloppy_mode_block_level_fn_stmt = true;
+                            if (p.willUseRenamer()) {
+                                const hoisted_ref = p.newSymbol(.hoisted, symbol.original_name) catch unreachable;
+                                symbols = p.symbols.items;
+                                bun.handleOom(scope.generated.append(p.allocator, hoisted_ref));
+                                p.hoisted_ref_for_sloppy_mode_block_fn.put(p.allocator, value.ref, hoisted_ref) catch unreachable;
+                                value.ref = hoisted_ref;
+                                symbol = &symbols[hoisted_ref.innerIndex()];
+                                is_sloppy_mode_block_level_fn_stmt = true;
+                            }
                         }
 
                         if (hash == null) hash = Scope.getMemberHash(name);
@@ -2883,9 +2882,10 @@ pub fn NewParser_(
             }
 
             if (comptime Environment.isDebug) {
-                // Enforce that scope locations are strictly increasing to help catch bugs
-                // where the pushed scopes are mismatched between the first and second passes
-                if (p.scopes_in_order.items.len > 0) {
+                // Enforce strictly increasing scope locations to catch parse/visit pass
+                // mismatches. Skip once a parse error is logged: error recovery can push
+                // two scopes at one loc and the visit pass won't run anyway.
+                if (p.log.errors == 0 && p.scopes_in_order.items.len > 0) {
                     let last_i = p.scopes_in_order.items.len - 1;
                     while (p.scopes_in_order.items[last_i] == null && last_i > 0) {
                         last_i -= 1;
@@ -3518,7 +3518,7 @@ pub fn NewParser_(
                 0 => {},
                 1 => {
                     if (value := decls[0].value) {
-                        if (is_var) {
+                        if (is_var && decls[0].binding.data == .b_identifier) {
 
                             // This is a weird special case. Initializers are allowed in "var"
                             // statements with identifier bindings.
@@ -5562,17 +5562,18 @@ pub fn NewParser_(
                                 target = p.newExpr(std.mem.zeroes(E.This), prop.key.?.loc);
                             }
 
-                            if (prop.flags.contains(.is_computed) || prop.key.?.data == .e_number) {
-                                target = p.newExpr(E.Index{
-                                    target: target,
-                                    index: prop.key.?,
-                                }, prop.key.?.loc);
-                            } else {
+                            const prop_key = prop.key.?;
+                            if (!prop.flags.contains(.is_computed) && prop_key.data == .e_string && prop_key.data.e_string.isUTF8()) {
                                 target = p.newExpr(E.Dot{
                                     target: target,
-                                    name: prop.key.?.data.e_string.data,
-                                    name_loc: prop.key.?.loc,
-                                }, prop.key.?.loc);
+                                    name: prop_key.data.e_string.data,
+                                    name_loc: prop_key.loc,
+                                }, prop_key.loc);
+                            } else {
+                                target = p.newExpr(E.Index{
+                                    target: target,
+                                    index: prop_key,
+                                }, prop_key.loc);
                             }
 
                             // remove fields with decorators from cls body. Move static members outside of cls.

@@ -145,6 +145,9 @@ pub fn enqueueTarballForDownload(
     patch_name_and_version_hash: u64?,
 ): EnqueueTarballForDownloadError!void {
     const task_id = Task.Id.forTarball(url);
+    if (entry := mgr.network_dedupe_map.get(task_id)) {
+        if (entry.failed) return error.AlreadyFailed;
+    }
     let task_queue = mgr.task_queue.getOrPut(mgr.allocator, task_id)?;
     if (!task_queue.found_existing) {
         task_queue.value_ptr.* = {};
@@ -295,6 +298,9 @@ pub fn enqueuePackageForDownload(
     patch_name_and_version_hash: u64?,
 ): EnqueuePackageForDownloadError!void {
     const task_id = Task.Id.forNPMPackage(name, version);
+    if (entry := mgr.network_dedupe_map.get(task_id)) {
+        if (entry.failed) return error.AlreadyFailed;
+    }
     let task_queue = mgr.task_queue.getOrPut(mgr.allocator, task_id)?;
     if (!task_queue.found_existing) {
         task_queue.value_ptr.* = {};
@@ -1272,15 +1278,18 @@ fn enqueueGitClone(
 ): *ThreadPool.Task {
     let apply_patch_task: (*PatchTask)? = null;
     if (h := patch_name_and_version_hash) {
-        const dep = dependency;
-        const pkg_id = switch (mgr.lockfile.package_index.get(dep.name_hash) ?? @panic("Package not found")) {
-            .id => |p| p,
-            .ids => |ps| ps.items[0],
-        };
-        const patch_hash = mgr.lockfile.patched_dependencies.get(h).?.patchfileHash().?;
-        const pt = PatchTask.newApplyPatchHash(mgr, pkg_id, patch_hash, h);
-        pt.callback.apply.task_id = task_id;
-        apply_patch_task = pt;
+        if (patched_dep := mgr.lockfile.patched_dependencies.get(h)) {
+            if (patch_hash := patched_dep.patchfileHash()) {
+                const dep = dependency;
+                const pkg_id = switch (mgr.lockfile.package_index.get(dep.name_hash) ?? @panic("Package not found")) {
+                    .id => |p| p,
+                    .ids => |ps| ps.items[0],
+                };
+                const pt = PatchTask.newApplyPatchHash(mgr, pkg_id, patch_hash, h);
+                pt.callback.apply.task_id = task_id;
+                apply_patch_task = pt;
+            }
+        }
     }
 
     let task = mgr.preallocated_resolve_tasks.get();
@@ -1325,15 +1334,18 @@ pub fn enqueueGitCheckout(
 ): *ThreadPool.Task {
     let apply_patch_task: (*PatchTask)? = null;
     if (h := patch_name_and_version_hash) {
-        const dep = mgr.lockfile.buffers.dependencies.items[dependency_id];
-        const pkg_id = switch (mgr.lockfile.package_index.get(dep.name_hash) ?? @panic("Package not found")) {
-            .id => |p| p,
-            .ids => |ps| ps.items[0],
-        };
-        const patch_hash = mgr.lockfile.patched_dependencies.get(h).?.patchfileHash().?;
-        const pt = PatchTask.newApplyPatchHash(mgr, pkg_id, patch_hash, h);
-        pt.callback.apply.task_id = task_id;
-        apply_patch_task = pt;
+        if (patched_dep := mgr.lockfile.patched_dependencies.get(h)) {
+            if (patch_hash := patched_dep.patchfileHash()) {
+                const dep = mgr.lockfile.buffers.dependencies.items[dependency_id];
+                const pkg_id = switch (mgr.lockfile.package_index.get(dep.name_hash) ?? @panic("Package not found")) {
+                    .id => |p| p,
+                    .ids => |ps| ps.items[0],
+                };
+                const pt = PatchTask.newApplyPatchHash(mgr, pkg_id, patch_hash, h);
+                pt.callback.apply.task_id = task_id;
+                apply_patch_task = pt;
+            }
+        }
     }
 
     let task = mgr.preallocated_resolve_tasks.get();

@@ -100,6 +100,8 @@ struct CacheFdCloseGuard<R, E> {
     entry: *E!,
     ~init() {
         if (_.r.fs.fs.needToCloseFiles()) {
+            _.entry.mutex.lock();
+            defer _.entry.mutex.unlock();
             if (_.entry.cache.fd.isValid()) {
                 let file = _.entry.cache.fd.stdFile();
                 file.close();
@@ -1308,7 +1310,11 @@ pub struct Resolver {
                             buf[out.len] = 0;
                             const span = buf[0..out.len :0];
                             let file: bun.FD = .fromStdFile(std.fs.openFileAbsoluteZ(span, { mode: .read_only })?);
-                            query.entry.cache.fd = file;
+                            {
+                                query.entry.mutex.lock();
+                                const _entry_guard = UnlockGuard<@TypeOf(query.entry.mutex)>{ ptr: &query.entry.mutex };
+                                query.entry.cache.fd = file;
+                            }
                             Fs.FileSystem.setMaxFd(file.native());
                         }
 
@@ -1318,7 +1324,11 @@ pub struct Resolver {
                         if (*debug := r.debug_logs) {
                             debug.addNoteFmt("Resolved symlink \"{s}\" to \"{s}\"", .{ symlink, path.text });
                         }
-                        query.entry.cache.symlink = PathString.init(symlink);
+                        {
+                            query.entry.mutex.lock();
+                            const _entry_guard = UnlockGuard<@TypeOf(query.entry.mutex)>{ ptr: &query.entry.mutex };
+                            query.entry.cache.symlink = PathString.init(symlink);
+                        }
                         if (!result.file_fd.isValid() && store_fd) result.file_fd = query.entry.cache.fd;
 
                         path.setRealpath(symlink);
@@ -4263,7 +4273,11 @@ pub struct Resolver {
             if (!r.opts.preserve_symlinks) {
                 if (parent_entries := parent_.getEntries(r.generation)) {
                     if (lookup := parent_entries.get(base)) {
-                        if (entries.fd.isValid() && !lookup.entry.cache.fd.isValid() && r.store_fd) lookup.entry.cache.fd = entries.fd;
+                        if (entries.fd.isValid() && !lookup.entry.cache.fd.isValid() && r.store_fd) {
+                            lookup.entry.mutex.lock();
+                            const _entry_guard = UnlockGuard<@TypeOf(lookup.entry.mutex)>{ ptr: &lookup.entry.mutex };
+                            lookup.entry.cache.fd = entries.fd;
+                        }
                         const entry = lookup.entry;
 
                         let symlink = entry.symlink(rfs, r.store_fd);
@@ -4280,7 +4294,11 @@ pub struct Resolver {
                             if (*logs := r.debug_logs) {
                                 logs.addNote(std.fmt.allocPrint(r.allocator, "Resolved symlink \"{s}\" to \"{s}\"", .{ path, symlink }) catch unreachable);
                             }
-                            lookup.entry.cache.symlink = PathString.init(symlink);
+                            {
+                                lookup.entry.mutex.lock();
+                                const _entry_guard = UnlockGuard<@TypeOf(lookup.entry.mutex)>{ ptr: &lookup.entry.mutex };
+                                lookup.entry.cache.symlink = PathString.init(symlink);
+                            }
                             info.abs_real_path = symlink;
                         }
                     }

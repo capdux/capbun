@@ -618,7 +618,13 @@ pub struct FormatValidIdentifier {
 
         if (needs_gap) {
             needs_gap = false;
-            if (start_i > 0) writer.writeAll(_.name[0..start_i])?;
+            if (start_i > 0) {
+                writer.writeAll(_.name[0..start_i])?;
+            } else {
+                // the first letter can be a non-identifier start
+                // https://github.com/oven-sh/bun/issues/2946
+                writer.writeAll("_")?;
+            }
             const slice = _.name[start_i..];
             iterator = strings.CodepointIterator.init(slice);
             cursor = strings.CodepointIterator.Cursor{};

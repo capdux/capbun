@@ -214,8 +214,8 @@ pub fn CssRuleList(comptime AtRule: type): type {
                         supp.minify(context, parent_is_unused)?;
                         if (supp.rules.v.items.len == 0) continue;
                     },
-                    .container => {
-                        debug("TODO: ContainerRule", {});
+                    .container => |*cont| {
+                        cont.rules.minify(context, parent_is_unused)?;
                     },
                     .layer_block => |*lay| {
                         lay.rules.minify(context, parent_is_unused)?;
@@ -224,8 +224,8 @@ pub fn CssRuleList(comptime AtRule: type): type {
                     .layer_statement => {
                         debug("TODO: LayerStatementRule", {});
                     },
-                    .moz_document => {
-                        debug("TODO: MozDocumentRule", {});
+                    .moz_document => |*doc| {
+                        doc.rules.minify(context, parent_is_unused)?;
                     },
                     .style => |*sty| {
                         const Selector = css.selector.Selector;
@@ -436,14 +436,15 @@ pub fn CssRuleList(comptime AtRule: type): type {
                     .counter_style => {
                         debug("TODO: CounterStyleRule", {});
                     },
-                    .scope => {
-                        debug("TODO: ScopeRule", {});
+                    .scope => |*scpe| {
+                        scpe.rules.minify(context, parent_is_unused)?;
                     },
-                    .nesting => {
-                        debug("TODO: NestingRule", {});
+                    .nesting => |*nst| {
+                        nst.style.chargeSelectorExpansion(context)?;
+                        nst.style.minifyNestedRules(context, parent_is_unused)?;
                     },
-                    .starting_style => {
-                        debug("TODO: StartingStyleRule", {});
+                    .starting_style => |*rl| {
+                        rl.rules.minify(context, parent_is_unused)?;
                     },
                     .font_palette_values => {
                         debug("TODO: FontPaletteValuesRule", {});
@@ -517,6 +518,8 @@ pub fn CssRuleList(comptime AtRule: type): type {
     };
 }
 
+pub const MAX_SELECTOR_EXPANSION: u32 = 65_536;
+
 pub struct MinifyContext {
     /// NOTE: this should the same allocator the AST was allocated with
     allocator: std.mem.Allocator,
@@ -529,6 +532,8 @@ pub struct MinifyContext {
     extra: *const css.StylesheetExtra,
     css_modules: bool,
     e: css.MinifyError? = null,
+    selector_expansion_multiplier: u32 = 1,
+    selector_expansion_total: u32 = 0,
 }
 
 pub struct Location {

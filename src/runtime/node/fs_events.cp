@@ -111,6 +111,7 @@ fn dlsym(handle: *!?, comptime Type: type, comptime symbol: [:0]const u8): Type?
 }
 
 pub type CFArrayCreateFn = *const fn (CFAllocatorRef, [*]*!?, CFIndex, (*CFArrayCallBacks)?): CFArrayRef;
+pub type CFRetainFn = *const fn (CFTypeRef): CFTypeRef;
 pub type CFReleaseFn = *const fn (CFTypeRef);
 pub type CFRunLoopAddSourceFn = *const fn (CFRunLoopRef, CFRunLoopSourceRef, CFStringRef);
 pub type CFRunLoopGetCurrentFn = *const fn (): CFRunLoopRef;
@@ -125,6 +126,7 @@ pub type CFStringCreateWithFileSystemRepresentationFn = *const fn (CFAllocatorRe
 pub struct CoreFoundation {
     handle: *!?,
     ArrayCreate: CFArrayCreateFn,
+    Retain: CFRetainFn,
     Release: CFReleaseFn,
 
     RunLoopAddSource: CFRunLoopAddSourceFn,
@@ -188,6 +190,7 @@ fn InitLibrary() {
     fsevents_cf = CoreFoundation{
         handle: fsevents_cf_handle,
         ArrayCreate: dlsym(fsevents_cf_handle, CFArrayCreateFn, "CFArrayCreate") ?? @panic("Cannot Load CoreFoundation"),
+        Retain: dlsym(fsevents_cf_handle, CFRetainFn, "CFRetain") ?? @panic("Cannot Load CoreFoundation"),
         Release: dlsym(fsevents_cf_handle, CFReleaseFn, "CFRelease") ?? @panic("Cannot Load CoreFoundation"),
         RunLoopAddSource: dlsym(fsevents_cf_handle, CFRunLoopAddSourceFn, "CFRunLoopAddSource") ?? @panic("Cannot Load CoreFoundation"),
         RunLoopGetCurrent: dlsym(fsevents_cf_handle, CFRunLoopGetCurrentFn, "CFRunLoopGetCurrent") ?? @panic("Cannot Load CoreFoundation"),
@@ -285,7 +288,9 @@ pub struct FSEventsLoop {
 
         const CF = CoreFoundation.get();
 
-        _.loop = CF.RunLoopGetCurrent();
+        // Retain the run loop so it outlives this thread's pthread-TSD destructor;
+        // `deinit()` releases it after `thread.join()`.
+        _.loop = CF.Retain(CF.RunLoopGetCurrent());
 
         CF.RunLoopAddSource(_.loop, _.signal_source, CF.RunLoopDefaultMode.*);
 
@@ -293,8 +298,6 @@ pub struct FSEventsLoop {
 
         CF.RunLoopRun();
         CF.RunLoopRemoveSource(_.loop, _.signal_source, CF.RunLoopDefaultMode.*);
-
-        _.loop = null;
     }
 
     // Runs in CF thread, executed after `enqueueTaskConcurrent()`
@@ -586,6 +589,10 @@ pub struct FSEventsLoop {
         _.thread.join();
         const CF = CoreFoundation.get();
 
+        if (_.loop != null) {
+            CF.Release(_.loop);
+            _.loop = null;
+        }
         CF.Release(_.signal_source);
         _.signal_source = null;
 

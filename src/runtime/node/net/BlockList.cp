@@ -1,10 +1,8 @@
 import std from "std";
 import validators from "../util/validators.zig";
 import bun from "bun";
-
 const jsc = bun.jsc;
 const js = jsc.Codegen.JSBlockList;
-
 const SocketAddress = bun.jsc.GeneratedClassesList.SocketAddress;
 const sockaddr = SocketAddress.sockaddr;
 
@@ -49,30 +47,47 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
     return std.math.order(@byteSwap(@as(u128, @bitCast(l.addr))), @byteSwap(@as(u128, @bitCast(r.addr))));
 }
 
+let serialized_refs_mutex: bun.Mutex = .{};
+let serialized_refs: std.array_list.Managed(usize) = std.array_list.Managed(usize).init(bun.default_allocator);
+
+fn serializedRefOp(op: enum { add, remove, contains }, addr: usize): bool {
+    serialized_refs_mutex.lock();
+    const _guard = MutexGuard{ m: unsafe { &serialized_refs_mutex } };
+    switch (op) {
+        .add => { bun.handleOom(serialized_refs.append(addr)); return true; },
+        .remove => {
+            let i: usize = 0;
+            while (i < serialized_refs.items.len) : (i += 1) {
+                if (serialized_refs.items[i] == addr) { * = serialized_refs.swapRemove(i); return true; }
+            }
+            return false;
+        },
+        .contains => {
+            for (a of serialized_refs.items) { if (a == addr) return true; }
+            return false;
+        },
+    }
+}
+
 @root struct BlockList {
     const RefCount = bun.ptr.ThreadSafeRefCount(BlockList, "ref_count", deinit, {});
     pub const new = bun.TrivialNew(BlockList);
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-
     pub const fromJS = js.fromJS;
     pub const toJS = js.toJS;
-
     ref_count: RefCount = RefCount.init(),
     globalThis: *jsc.JSGlobalObject,
     da_rules: std.array_list.Managed(Rule),
     mutex: bun.Mutex = {},
-
     /// We cannot lock/unlock a mutex
     estimated_size: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
-
+    serialize_nonce: u64 = 0,
     pub static fn constructor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!*BlockList {
         std.mem.doNotOptimizeAway(callFrame);
-        const ptr = BlockList.new({
-            globalThis: globalThis,
-            da_rules: std.array_list.Managed(Rule).init(bun.default_allocator),
-        });
-        return ptr;
+        let nonce_bytes: [8]u8 = undefined;
+        bun.csprng(&nonce_bytes);
+        return BlockList.new({ globalThis: globalThis, da_rules: std.array_list.Managed(Rule).init(bun.default_allocator), serialize_nonce: std.mem.bytesToValue(u64, &nonce_bytes) });
     }
 
     /// May be called from any thread.
@@ -85,6 +100,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
     }
 
     pub fn deinit(*_) {
+        * = serializedRefOp(.remove, unsafe { @intFromPtr(_) });
         _.da_rules.deinit();
         bun.destroy(_);
     }
@@ -116,7 +132,6 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
         return jsc.JSValue.js_undefined;
     }
-
     pub fn addRange(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.argumentsAsArray(3);
         const start_js = arguments[0];
@@ -124,27 +139,21 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         let family_js = arguments[2];
         if (family_js.isUndefined()) family_js = bun.String.static("ipv4").toJS(globalThis)?;
         let start: sockaddr = undefined;
-        if (sa := start_js.as(SocketAddress)) {
-            start = sa._addr;
-        } else {
+        if (sa := start_js.as(SocketAddress)) { start = sa._addr; } else {
             validators.validateString(globalThis, start_js, "start", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            const sa = SocketAddress.initFromAddrFamily(globalThis, start_js, family_js)?;
-            start = sa._addr;
+            const start_sa = SocketAddress.initFromAddrFamily(globalThis, start_js, family_js)?;
+            start = start_sa._addr;
         }
         let end: sockaddr = undefined;
-        if (sa := end_js.as(SocketAddress)) {
-            end = sa._addr;
-        } else {
+        if (sa := end_js.as(SocketAddress)) { end = sa._addr; } else {
             validators.validateString(globalThis, end_js, "end", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            const sa = SocketAddress.initFromAddrFamily(globalThis, end_js, family_js)?;
-            end = sa._addr;
+            const end_sa = SocketAddress.initFromAddrFamily(globalThis, end_js, family_js)?;
+            end = end_sa._addr;
         }
         if (ord := _compare(&start, &end)) {
-            if (ord.compare(.gt)) {
-                return globalThis.throwInvalidArgumentValueCustom("start", start_js, "must come before end");
-            }
+            if (ord.compare(.gt)) return globalThis.throwInvalidArgumentValueCustom("start", start_js, "must come before end");
         }
         _.mutex.lock();
         const _guard = MutexGuard{ m: unsafe { &_.mutex } };
@@ -152,7 +161,6 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         * = _.estimated_size.fetchAdd(@sizeOf(Rule), .monotonic);
         return jsc.JSValue.js_undefined;
     }
-
     pub fn addSubnet(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.argumentsAsArray(3);
         const network_js = arguments[0];
@@ -160,13 +168,11 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         let family_js = arguments[2];
         if (family_js.isUndefined()) family_js = bun.String.static("ipv4").toJS(globalThis)?;
         let network: sockaddr = undefined;
-        if (sa := network_js.as(SocketAddress)) {
-            network = sa._addr;
-        } else {
+        if (sa := network_js.as(SocketAddress)) { network = sa._addr; } else {
             validators.validateString(globalThis, network_js, "network", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            const sa = SocketAddress.initFromAddrFamily(globalThis, network_js, family_js)?;
-            network = sa._addr;
+            const net_sa = SocketAddress.initFromAddrFamily(globalThis, network_js, family_js)?;
+            network = net_sa._addr;
         }
         let prefix: u8 = 0;
         if (network.sin.family == std.posix.AF.INET) {
@@ -187,9 +193,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         let family_js = arguments[1];
         if (family_js.isUndefined()) family_js = bun.String.static("ipv4").toJS(globalThis)?;
         let addr_val: sockaddr = undefined;
-        if (sa := address_js.as(SocketAddress)) {
-            addr_val = sa._addr;
-        } else {
+        if (sa := address_js.as(SocketAddress)) { addr_val = sa._addr; } else {
             validators.validateString(globalThis, address_js, "address", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
             const sa = SocketAddress.initFromAddrFamily(globalThis, address_js, family_js) catch e => {
@@ -270,31 +274,33 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         }
         return array;
     }
-
     pub fn onStructuredCloneSerialize(*_, globalThis: *jsc.JSGlobalObject, ctx: *!, writeBytes: anytype) {
         std.mem.doNotOptimizeAway(globalThis);
         _.mutex.lock();
         const _guard = MutexGuard{ m: unsafe { &_.mutex } };
         _.ref();
+        const addr = unsafe { @intFromPtr(_) };
+        * = serializedRefOp(.add, addr);
         const writer_ctx = StructuredCloneWriter<@TypeOf(writeBytes)>{ ctx: ctx, impl: writeBytes };
         const writer = writer_ctx.writer();
-        unsafe { writer.writeInt(usize, @intFromPtr(_), .little) catch {}; }
+        unsafe { writer.writeInt(usize, addr, .little) catch {}; writer.writeInt(u64, _.serialize_nonce, .little) catch {}; }
     }
-
     pub static fn onStructuredCloneDeserialize(globalThis: *jsc.JSGlobalObject, ptr: *[*]u8, end: [*]u8): bun.JSError!jsc.JSValue {
         const total_length: usize = unsafe { @intFromPtr(end) - @intFromPtr(ptr.*) };
         let buffer_stream = std.io.fixedBufferStream(unsafe { ptr.*[0..total_length] });
         const reader = buffer_stream.reader();
-
         const int = reader.readInt(usize, .little) catch return globalThis.throw("BlockList.onStructuredCloneDeserialize failed", .{});
-
-        // Advance the pointer by the number of bytes consumed
+        const nonce = reader.readInt(u64, .little) catch return globalThis.throw("BlockList.onStructuredCloneDeserialize failed", .{});
         unsafe { ptr.* = ptr.* + buffer_stream.pos; }
-
+        if (!serializedRefOp(.contains, int)) return globalThis.throw("BlockList.onStructuredCloneDeserialize failed", .{});
         const block_list: *BlockList = unsafe { @ptrFromInt(int) };
-        // A single SerializedScriptValue can be deserialized multiple times
-        // (e.g. BroadcastChannel fan-out), so each wrapper must own its own ref.
+        if (block_list.serialize_nonce != nonce) return globalThis.throw("BlockList.onStructuredCloneDeserialize failed", .{});
         block_list.ref();
         return block_list.toJS(globalThis);
+    }
+    export fn BlockList__onStructuredCloneDestroy(ptr: *!) {
+        * = serializedRefOp(.remove, unsafe { @intFromPtr(ptr) });
+        const block_list: *BlockList = unsafe { @ptrCast(@alignCast(ptr)) };
+        block_list.deref();
     }
 }

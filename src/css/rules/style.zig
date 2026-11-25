@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -46,6 +47,26 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
@@ -53,6 +74,7 @@ const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Location = css.css_rules.Location;
 const ArrayList = std.ArrayListUnmanaged;
+const MAX_PREFIX_EXPANSION_BYTES: usize = cp_shl(64, 20);
 
 pub fn StyleRule(comptime R: type) type {
         return struct {
@@ -98,11 +120,11 @@ pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
             } else {
                 var first_rule = true;
                 _ = &first_rule;
+                var emitted_first_pass = false;
+                _ = &emitted_first_pass;
                 inline for (css.VendorPrefix.FIELDS) |field| {
                     if (@field(self.vendor_prefix, field)) {
-                        if (first_rule) {
-                            first_rule = false;
-                        } else {
+                        if ((!first_rule)) {
                             if ((!dest.minify)) {
                                 _ = try dest.writeChar(10);
                             }
@@ -110,7 +132,22 @@ pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
                         }
                         const prefix = css.VendorPrefix.fromName(field);
                         dest.vendor_prefix = prefix;
+                        const line = dest.line;
+                        const col = dest.col;
+                        const is_duplicate_pass = emitted_first_pass;
+                        const bytes_before: usize = (if (is_duplicate_pass) dest.bytesWritten() else 0);
                         _ = try self.toCssBase(dest);
+                        if (is_duplicate_pass) {
+                            const emitted = (dest.bytesWritten() -| bytes_before);
+                            dest.prefix_expansion_bytes = (dest.prefix_expansion_bytes +| emitted);
+                            if ((dest.prefix_expansion_bytes > MAX_PREFIX_EXPANSION_BYTES)) {
+                                return dest.newError(css.PrinterErrorKind.maximum_vendor_prefix_expansion, null);
+                            }
+                        }
+                        if (((dest.line != line) or (dest.col != col))) {
+                            first_rule = false;
+                            emitted_first_pass = true;
+                        }
                     }
                 }
                 dest.vendor_prefix = .{};
@@ -204,20 +241,45 @@ pub fn minify(self: *@This(), context: *css.MinifyContext, parent_is_unused: boo
                     unused = true;
                 }
             }
+            _ = try self.chargeSelectorExpansion(context);
             context.handler_context.context = .style_rule;
             _ = self.declarations.minify(context.handler, context.important_handler, (&context.handler_context));
             context.handler_context.context = .none;
             if ((self.rules.v.items.len > 0)) {
-                var handler_context = context.handler_context.child(.style_rule);
-                _ = &handler_context;
-                _ = std.mem.swap(css.PropertyHandlerContext, (&context.handler_context), (&handler_context));
-                _ = try self.rules.minify(context, unused);
-                _ = std.mem.swap(css.PropertyHandlerContext, (&context.handler_context), (&handler_context));
+                _ = try self.minifyNestedRules(context, unused);
                 if ((unused and (self.rules.v.items.len == 0))) {
                     return true;
                 }
             }
             return false;
+    }
+
+pub fn chargeSelectorExpansion(self: @This(), context: *css.MinifyContext) css.MinifyErr!void {
+            if ((context.selector_expansion_multiplier > 1)) {
+                const selector_count: u32 = (if (comptime @typeInfo(@TypeOf(@min(@max(self.selectors.v.len(), 1), (css.css_rules.MAX_SELECTOR_EXPANSION + 1)))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(@max(self.selectors.v.len(), 1), (css.css_rules.MAX_SELECTOR_EXPANSION + 1)))) else cp_cast_int(u32, @min(@max(self.selectors.v.len(), 1), (css.css_rules.MAX_SELECTOR_EXPANSION + 1))));
+                context.selector_expansion_total = (context.selector_expansion_total +| (context.selector_expansion_multiplier *| selector_count));
+                if ((context.selector_expansion_total > css.css_rules.MAX_SELECTOR_EXPANSION)) {
+                    context.e = css.MinifyError{ .kind = .selector_expansion_limit_exceeded, .loc = self.loc };
+                    return error.minify_err;
+                }
+            }
+    }
+
+pub fn minifyNestedRules(self: *@This(), context: *css.MinifyContext, parent_is_unused: bool) css.MinifyErr!void {
+            const saved_expansion_multiplier = context.selector_expansion_multiplier;
+            const selectors_incompatible = (((self.selectors.v.len() > 1) and context.targets.shouldCompileSelectors()) and (!self.isCompatible(context.targets.*)));
+            const splits_selectors = (selectors_incompatible and (!((context.targets.isCompatible(css.compat.Feature.is_selector) and (!self.selectors.anyHasPseudoElement())) and self.selectors.specifitiesAllEqual())));
+            if ((context.targets.shouldCompileSame(css.compat.Feature.nesting) or splits_selectors)) {
+                const selector_count: u32 = (if (comptime @typeInfo(@TypeOf(@min(@max(self.selectors.v.len(), 1), (css.css_rules.MAX_SELECTOR_EXPANSION + 1)))) == .@"enum") cp_cast_int(u32, @intFromEnum(@min(@max(self.selectors.v.len(), 1), (css.css_rules.MAX_SELECTOR_EXPANSION + 1)))) else cp_cast_int(u32, @min(@max(self.selectors.v.len(), 1), (css.css_rules.MAX_SELECTOR_EXPANSION + 1))));
+                context.selector_expansion_multiplier = (context.selector_expansion_multiplier *| selector_count);
+            }
+            var handler_context = context.handler_context.child(.style_rule);
+            _ = &handler_context;
+            _ = std.mem.swap(css.PropertyHandlerContext, (&context.handler_context), (&handler_context));
+            const result = self.rules.minify(context, parent_is_unused);
+            _ = std.mem.swap(css.PropertyHandlerContext, (&context.handler_context), (&handler_context));
+            context.selector_expansion_multiplier = saved_expansion_multiplier;
+            return result;
     }
 
 pub inline fn isDuplicate(self: *@This(), other: *const This) bool {

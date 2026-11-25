@@ -190,6 +190,9 @@ pub fn setFlush(self: *Context, flush: c_int) void {
     }
 
 pub fn doWork(self: *Context) void {
+            if ((self.state == null)) {
+                return;
+            }
             {
                 self.remaining = (switch (self.mode) {
 .ZSTD_COMPRESS => c.ZSTD_compressStream2(@ptrCast(self.state), (&self.output), (&self.input), @intCast(self.flush)),
@@ -247,6 +250,10 @@ else => "ZSTD_error_GENERIC",
     }
 
 pub fn close(self: *Context) void {
+            if ((self.state == null)) {
+                self.mode = .NONE;
+                return;
+            }
             {
                 _ = (switch (self.mode) {
 .ZSTD_COMPRESS => c.ZSTD_CCtx_reset(@ptrCast(self.state), c.ZSTD_reset_session_and_parameters),
@@ -317,6 +324,7 @@ pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         if ((callframe.argumentsCount() != 4)) {
             return globalThis.ERR(.MISSING_ARGS, "init(initParamsArray, pledgedSrcSize, writeState, processCallback)", .{}).throw();
         }
+        _ = try StreamImpl.throwUnlessIdle(self, globalThis);
         const initParamsArray_value = arguments[0];
         const pledgedSrcSize_value = arguments[1];
         const writeState_value = arguments[2];
@@ -368,6 +376,7 @@ pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
                 const err_ = self.stream.setParams(@intCast(i), x);
                 if (err_.isError()) {
                     _ = self.stream.close();
+                    self.closed = true;
                     return globalThis.ERR(.ZLIB_INITIALIZATION_FAILED, "{s}", .{ std.mem.sliceTo(err_.msg.?, 0) }).throw();
                 }
             }

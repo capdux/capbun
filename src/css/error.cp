@@ -198,6 +198,8 @@ pub enum PrinterErrorKind {
     invalid_composes_selector,
     /// The CSS modules pattern must end with `[local]` for use in CSS grid.
     invalid_css_modules_pattern_in_grid,
+    /// Serializing a style rule once per vendor prefix exceeded the expansion limit.
+    maximum_vendor_prefix_expansion,
     no_import_records,
 
     pub fn format(_: @This(), writer: *std.Io.Writer)! {
@@ -207,6 +209,7 @@ pub enum PrinterErrorKind {
             .invalid_composes_nesting => writer.writeAll("The 'composes' property cannot be used within nested rules"),
             .invalid_composes_selector => writer.writeAll("The 'composes' property can only be used with a simple class selector"),
             .invalid_css_modules_pattern_in_grid => writer.writeAll("CSS modules pattern must end with '[local]' when used in CSS grid"),
+            .maximum_vendor_prefix_expansion => writer.writeAll("Maximum vendor-prefix expansion exceeded when serializing deeply nested vendor-prefixed selectors"),
             .no_import_records => writer.writeAll("No import records found"),
         };
     }
@@ -402,6 +405,11 @@ pub enum MinifyErrorKind {
         /// The source location of the `@custom-media` rule with unsupported boolean logic.
         custom_media_loc: Location,
     },
+    /// Compiling nested rules for the configured browser targets would expand to
+    /// more than `css.css_rules.MAX_SELECTOR_EXPANSION` selectors.
+    selector_expansion_limit_exceeded,
+    /// Rule minification failed without recording a more specific diagnostic on `MinifyContext.e`.
+    unknown,
 
     fn format(_: @This(), writer: *std.Io.Writer)! {
         return switch (_) {
@@ -414,6 +422,11 @@ pub enum MinifyErrorKind {
                     custom_media_loc.custom_media_loc.column,
                 },
             )?,
+            .selector_expansion_limit_exceeded => writer.print(
+                "Nested CSS rules expand to more than {d} selectors when compiled for the configured browser targets. Reduce the nesting depth or the number of selectors per rule, or target browsers that support CSS nesting.",
+                .{css.css_rules.MAX_SELECTOR_EXPANSION},
+            )?,
+            .unknown => writer.writeAll("CSS minification failed")?,
         };
     }
 }

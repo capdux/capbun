@@ -790,7 +790,9 @@ pub fn toBytes(allocator: std.mem.Allocator, prefix: []const u8, output_files: [
                 if ((std.meta.activeTag((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value)) != .buffer)) {
                     continue;
                 }
-                const dest_path = bun.strings.removeLeadingDotSlash(output_file.dest_path);
+                var dest_path_buf: bun.PathBuffer = undefined;
+                _ = &dest_path_buf;
+                const dest_path = (if (comptime Environment.isWindows) bun.path.platformToPosixBuf(u8, bun.strings.removeLeadingDotSlash(output_file.dest_path), (&dest_path_buf)) else bun.strings.removeLeadingDotSlash(output_file.dest_path));
                 const bytecode: StringPointer = brk: {
                 if ((output_file.bytecode_index != std.math.maxInt(u32))) {
                     const bc_bytes = (if (@typeInfo(@TypeOf(output_files[@as(usize, @intCast(output_file.bytecode_index))])) == .@"enum") @intFromEnum(output_files[@as(usize, @intCast(output_file.bytecode_index))]) else output_files[@as(usize, @intCast(output_file.bytecode_index))].value).buffer.bytes;
@@ -825,12 +827,15 @@ pub fn toBytes(allocator: std.mem.Allocator, prefix: []const u8, output_files: [
                 if (comptime (bun.Environment.is_canary or bun.Environment.isDebug)) {
                     if (bun.env_var.BUN_FEATURE_FLAG_DUMP_CODE.get()) |dump_code_dir| {
                         _ = &dump_code_dir;
+                        var dump_rel_buf: bun.PathBuffer = undefined;
+                        _ = &dump_rel_buf;
+                        const dump_rel = sanitizeDumpParentDirs(dest_path, (&dump_rel_buf));
                         const buf = bun.path_buffer_pool.get();
                         var _guard_buf = PathBufferPoolGuard(@TypeOf(buf)){ .buf = buf };
                         _ = &_guard_buf;
                         var ___guard_buf_moved = false; _ = &___guard_buf_moved;
                         defer if (!___guard_buf_moved) { ___guard_buf_moved = true; const __T = @TypeOf(_guard_buf); if (@typeInfo(__T) == .optional) { if (_guard_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf; _drop_val.__cp_deinit(); } };
-                        const dest_z = bun.path.joinAbsStringBufZ(dump_code_dir, buf, (&.{ dest_path }), .auto);
+                        const dest_z = bun.path.joinAbsStringBufZ(dump_code_dir, buf, (&.{ dump_rel }), .auto);
                         switch (bun.sys.File.makeOpen(dest_z, ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), 436)) {
 .err => |e| {
 _ = Output.prettyErrorln("<r><red>error<r><d>:<r> failed to open {s}: {f}", .{ dest_path, e });
@@ -1531,8 +1536,9 @@ return error.InvalidSourceMap;
             }
             const map_vlq: []const u8 = mappings_str.data.e_string.slice(arena_alloc);
             const map_blob = (blk_catch_30: { break :blk_catch_30 ((SourceMap.InternalSourceMap.fromVLQ(arena_alloc, map_vlq, 0)) catch |__ce_30| { _ = &__ce_30; return error.InvalidSourceMap; }); });
+            const map_blob_len_u32 = ((std.math.cast(u32, map_blob.len)) orelse { return error.SourceMapTooLarge; });
             _ = try out.writeInt(u32, sources_paths.items.len, .little);
-            _ = try out.writeInt(u32, (if (comptime @typeInfo(@TypeOf(map_blob.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(map_blob.len)) else cp_cast_int(u32, map_blob.len)), .little);
+            _ = try out.writeInt(u32, map_blob_len_u32, .little);
             const string_payload_start_location = (((@sizeOf(u32) + @sizeOf(u32)) + ((@sizeOf(bun.StringPointer) * sources_content.items.len) * 2)) + map_blob.len);
             for (cp_iter_slice(sources_paths.items.slice())) |item| {
                 _ = &item;
@@ -1542,7 +1548,7 @@ return error.InvalidSourceMap;
                 const decoded = try item.data.e_string.stringCloned(arena_alloc);
                 const offset = string_payload.items.len;
                 _ = try string_payload.appendSlice(decoded);
-                const slice = bun.StringPointer{ .offset = (if (comptime @typeInfo(@TypeOf((offset + string_payload_start_location))) == .@"enum") cp_cast_int(u32, @intFromEnum((offset + string_payload_start_location))) else cp_cast_int(u32, (offset + string_payload_start_location))), .length = (if (comptime @typeInfo(@TypeOf((string_payload.items.len - offset))) == .@"enum") cp_cast_int(u32, @intFromEnum((string_payload.items.len - offset))) else cp_cast_int(u32, (string_payload.items.len - offset))) };
+                const slice = bun.StringPointer{ .offset = ((std.math.cast(u32, (offset + string_payload_start_location))) orelse { return error.SourceMapTooLarge; }), .length = ((std.math.cast(u32, (string_payload.items.len - offset))) orelse { return error.SourceMapTooLarge; }) };
                 _ = try out.writeInt(u32, slice.offset, .little);
                 _ = try out.writeInt(u32, slice.length, .little);
             }
@@ -1558,6 +1564,9 @@ return error.InvalidSourceMap;
                 defer if (!___guard_utf8_moved) { ___guard_utf8_moved = true; const __T = @TypeOf(_guard_utf8); if (@typeInfo(__T) == .optional) { if (_guard_utf8) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_utf8.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_utf8; _drop_val.__cp_deinit(); } };
                 const offset = string_payload.items.len;
                 const bound = bun.zstd.compressBound(utf8.len);
+                if ((bound > std.math.maxInt(u32))) {
+                    return error.SourceMapTooLarge;
+                }
                 _ = try string_payload.ensureUnusedCapacity(bound);
                 const unused = string_payload.unusedCapacitySlice();
                 const compressed_result = bun.zstd.compress(unused, utf8, 1);
@@ -1565,12 +1574,38 @@ return error.InvalidSourceMap;
                     _ = bun.Output.panic("Unexpected error compressing sourcemap: {s}", .{ bun.span(compressed_result.err) });
                 }
                 string_payload.items.len = (string_payload.items.len + compressed_result.success);
-                const slice = bun.StringPointer{ .offset = (if (comptime @typeInfo(@TypeOf((offset + string_payload_start_location))) == .@"enum") cp_cast_int(u32, @intFromEnum((offset + string_payload_start_location))) else cp_cast_int(u32, (offset + string_payload_start_location))), .length = (if (comptime @typeInfo(@TypeOf((string_payload.items.len - offset))) == .@"enum") cp_cast_int(u32, @intFromEnum((string_payload.items.len - offset))) else cp_cast_int(u32, (string_payload.items.len - offset))) };
+                const slice = bun.StringPointer{ .offset = ((std.math.cast(u32, (offset + string_payload_start_location))) orelse { return error.SourceMapTooLarge; }), .length = ((std.math.cast(u32, (string_payload.items.len - offset))) orelse { return error.SourceMapTooLarge; }) };
                 _ = try out.writeInt(u32, slice.offset, .little);
                 _ = try out.writeInt(u32, slice.length, .little);
             }
             _ = try out.writeAll(map_blob);
             _ = bun.assert((header_list.items.len == string_payload_start_location));
+    }
+
+pub fn sanitizeDumpParentDirs(input: []const u8, buf: []u8) []const u8 {
+            var len: usize = 0;
+            _ = &len;
+            var it = std.mem.splitAny(u8, input, "/\\");
+            _ = &it;
+            var first = true;
+            _ = &first;
+            while (it.next()) |seg| {
+                if ((!first)) {
+                    if ((len >= buf.len)) {
+                        return input;
+                    }
+                    buf[cp_cast_int(usize, len)] = 47;
+                    len = (len + 1);
+                }
+                first = false;
+                const out_seg = (if (bun.strings.eqlComptime(seg, "..")) "_.._" else seg);
+                if (((len + out_seg.len) > buf.len)) {
+                    return input;
+                }
+                _ = @memcpy(buf[len..(len + out_seg.len)], out_seg);
+                len = (len + out_seg.len);
+            }
+            return buf[0..len];
     }
     pub const base_path = base_path_val;
     pub const base_public_path = base_public_path_val;

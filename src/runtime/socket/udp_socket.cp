@@ -345,11 +345,14 @@ pub struct UDPSocketConfig {
             }
             const connect_port_js = connect_port_opt.?;
             const connect_port = connect_port_js.coerceToInt32(globalThis)?;
+            if (connect_port < 1 || connect_port > 0xffff) {
+                return globalThis.throwInvalidArguments("Expected \"connect.port\" to be an integer between 1 and 65535", .{});
+            }
 
             const connect_host = connect_host_js.toBunString(globalThis)?;
 
             config.connect = .{
-                .port = if (connect_port < 1 || connect_port > 0xffff) 0 else @as(u16, @intCast(connect_port)),
+                .port = @as(u16, @intCast(connect_port)),
                 .address = connect_host,
             };
         }

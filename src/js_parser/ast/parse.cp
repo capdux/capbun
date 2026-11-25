@@ -181,6 +181,7 @@ pub fn Parse(
 
                 // Parse decorators for this property
                 const first_decorator_loc = p.lexer.loc();
+                const property_scope_index = p.scopes_in_order.items.len;
                 if (opts.allow_ts_decorators) {
                     opts.ts_decorators = p.parseTypeScriptDecorators()?;
                     opts.has_class_decorators = class_opts.ts_decorators.len > 0;
@@ -207,6 +208,8 @@ pub fn Parse(
                     }
 
                     has_decorators = has_decorators || opts.has_argument_decorators;
+                } else {
+                    p.discardScopesUpTo(property_scope_index);
                 }
             }
 
@@ -685,7 +688,9 @@ pub fn Parse(
                     opts.is_using_statement = true;
                     let decls_list = p.parseAndDeclareDecls(.constant, opts)?;
                     const decls: G.Decl.List = .moveFromList(&decls_list);
-                    if (!opts.is_for_loop_init) {
+                    if (opts.is_typescript_declare) {
+                        p.log.addError(p.source, token_range.loc, "Cannot use \"declare\" with a \"using\" declaration")?;
+                    } else if (!opts.is_for_loop_init) {
                         p.requireInitializers(.k_using, decls.slice())?;
                     }
                     return ExprOrLetStmt{
@@ -725,7 +730,9 @@ pub fn Parse(
                         opts.is_using_statement = true;
                         let decls_list = p.parseAndDeclareDecls(.constant, opts)?;
                         const decls: G.Decl.List = .moveFromList(&decls_list);
-                        if (!opts.is_for_loop_init) {
+                        if (opts.is_typescript_declare) {
+                            p.log.addError(p.source, token_range.loc, "Cannot use \"declare\" with an \"await using\" declaration")?;
+                        } else if (!opts.is_for_loop_init) {
                             p.requireInitializers(.k_await_using, decls.slice())?;
                         }
                         return ExprOrLetStmt{

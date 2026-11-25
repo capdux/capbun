@@ -166,6 +166,7 @@ pub const Printer = struct {
     symbols: *const bun.ast.Symbol.Map,
     local_names: ?*const css.LocalsResultsMap = null,
     allocator: Allocator,
+    prefix_expansion_bytes: usize = 0,
     pub threadlocal var in_debug_fmt: if (bun.Environment.isDebug) bool else u0 = (if (bun.Environment.isDebug) false else 0);
 
 pub fn lookupSymbol(self: *Printer, ref_: bun.bundle_v2.Ref) []const u8 {
@@ -201,6 +202,10 @@ pub inline fn getWrittenAmt(writer: *std.Io.Writer) usize {
             } else {
                 _ = @panic("css: got bad writer type");
             }
+    }
+
+pub inline fn bytesWritten(self: Printer) usize {
+            return This.getWrittenAmt(self.dest);
     }
 
 pub fn filename(self: *const Printer) []const u8 {

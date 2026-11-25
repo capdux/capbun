@@ -228,7 +228,11 @@ pub fn handleInternalMessageChild(globalThis: *jsc.JSGlobalObject, message: jsc.
 pub fn sendHelperPrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         _ = log("sendHelperPrimary", .{});
         const arguments = callframe.arguments_old(4).ptr;
-        const subprocess = ((arguments[0].@"as"(bun.jsc.Subprocess)) orelse { return globalThis.throwInvalidArgumentTypeValue("subprocess", "Subprocess", arguments[0]); });
+        const subprocess_opt = arguments[0].@"as"(bun.jsc.Subprocess);
+        if ((subprocess_opt == null)) {
+            return jsc.JSValue.@"false";
+        }
+        const subprocess = subprocess_opt.?;
         const message = arguments[1];
         const handle = arguments[2];
         const callback = arguments[3];
@@ -262,7 +266,11 @@ pub fn sendHelperPrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
 
 pub fn onInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(3).ptr;
-        const subprocess = ((arguments[0].@"as"(bun.jsc.Subprocess)) orelse { return globalThis.throwInvalidArgumentTypeValue("subprocess", "Subprocess", arguments[0]); });
+        const subprocess_opt = arguments[0].@"as"(bun.jsc.Subprocess);
+        if ((subprocess_opt == null)) {
+            return jsc.JSValue.js_undefined;
+        }
+        const subprocess = subprocess_opt.?;
         const ipc_opt = subprocess.ipc();
         if ((ipc_opt == null)) {
             return jsc.JSValue.js_undefined;

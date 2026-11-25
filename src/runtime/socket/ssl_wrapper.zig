@@ -143,6 +143,8 @@ pub fn SSLWrapper(comptime T: type) type {
     ssl: ?*BoringSSL.SSL = null,
     ctx: ?*BoringSSL.SSL_CTX = null,
     flags: SSLWrapperFlags = .{},
+    renegotiation_count: u8 = 0,
+    renegotiation_window_start_ms: u64 = 0,
 
 pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers) !This {
             _ = bun.BoringSSL.load();
@@ -262,7 +264,7 @@ pub fn flush(self: *@This()) usize {
 
 pub fn hasPendingData(self: @This()) bool {
             const ssl = ((self.ssl) orelse { return false; });
-            return ((BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_wbio(ssl)) > 0) or (BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_rbio(ssl)) > 0));
+            return (((BoringSSL.SSL_pending(ssl) > 0) or (BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_wbio(ssl)) > 0)) or (BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_rbio(ssl)) > 0));
     }
 
 pub fn hasPendingRead(self: @This()) bool {
@@ -446,6 +448,19 @@ pub fn handleReading(self: *@This(), buffer: *[BUFFER_SIZE]u8) bool {
                     if (((ssl_err != BoringSSL.SSL_ERROR_WANT_READ) and (ssl_err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
                         if ((ssl_err == BoringSSL.SSL_ERROR_WANT_RENEGOTIATE)) {
                             self.flags.handshake_state = HandshakeState.HANDSHAKE_RENEGOTIATION_PENDING;
+                            const now_ms: u64 = @intCast(@max(std.time.milliTimestamp(), 0));
+                            if (((self.renegotiation_count == 0) or ((now_ms >= self.renegotiation_window_start_ms) and ((now_ms - self.renegotiation_window_start_ms) >= RENEGOTIATION_WINDOW_MS)))) {
+                                self.renegotiation_window_start_ms = now_ms;
+                                self.renegotiation_count = 0;
+                            }
+                            if ((self.renegotiation_count >= MAX_RENEGOTIATIONS)) {
+                                self.flags.handshake_state = HandshakeState.HANDSHAKE_COMPLETED;
+                                self.flags.fatal_error = true;
+                                _ = self.triggerHandshakeCallback(false, self.getVerifyError());
+                                _ = self.triggerCloseCallback();
+                                return false;
+                            }
+                            self.renegotiation_count = (self.renegotiation_count + 1);
                             if ((BoringSSL.SSL_renegotiate(ssl) == 0)) {
                                 self.flags.handshake_state = HandshakeState.HANDSHAKE_COMPLETED;
                                 _ = self.triggerHandshakeCallback(false, self.getVerifyError());
@@ -531,6 +546,8 @@ pub fn handleTraffic(self: *@This()) void {
     }
     const This = @This();
     const BUFFER_SIZE = 65536;
+    const MAX_RENEGOTIATIONS: u8 = 3;
+    const RENEGOTIATION_WINDOW_MS: u64 = (600 * 1000);
     pub const Flags = SSLWrapperFlags;
     pub const HandshakeState = SSLWrapperHandshakeState;
     pub const Handlers = SSLWrapperHandlers(T);

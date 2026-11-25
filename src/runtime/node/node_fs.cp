@@ -1,3 +1,6 @@
+extern fn JSC__JSValue__pinArrayBuffer(v: jsc.JSValue): bool;
+extern fn JSC__JSValue__unpinArrayBuffer(v: jsc.JSValue);
+
 pub enum RealpathVariant { native, emulated }
 pub enum ResolvedLinkType { file, dir, junction }
 type OptCStr = ([*:0]u8)?;
@@ -1620,8 +1623,10 @@ pub struct _ArgumentsWritev {
 
     static fn deinit(_: *const @This()) {}
 
-    fn deinitAndUnprotect() {
+    fn deinitAndUnprotect(*_) {
+        _.buffers.release();
         _.buffers.value.unprotect();
+        _.buffers.views.deinit();
         _.buffers.buffers.deinit();
     }
 
@@ -1633,6 +1638,12 @@ pub struct _ArgumentsWritev {
         _.buffers.buffers.items = clone;
         _.buffers.buffers.capacity = clone.len;
         _.buffers.buffers.allocator = bun.default_allocator;
+
+        const views_clone = bun.handleOom(bun.default_allocator.dupe(jsc.JSValue, _.buffers.views.items));
+        _.buffers.views.deinit();
+        _.buffers.views.items = views_clone;
+        _.buffers.views.capacity = views_clone.len;
+        _.buffers.views.allocator = bun.default_allocator;
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWritev {
@@ -1641,12 +1652,13 @@ pub struct _ArgumentsWritev {
             return throwInvalidFdError(ctx, fd_value);
         };
 
-        const buffers = jsc.Node.VectorArrayBuffer.fromJS(
+        let buffers = jsc.Node.VectorArrayBuffer.fromJS(
             ctx,
             arguments.protectEatNext() ?? {
                 return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
             },
             arguments.@"arena".allocator(),
+            arguments.will_be_async,
         )?;
 
         let position: u52? = null;
@@ -1656,6 +1668,9 @@ pub struct _ArgumentsWritev {
                 if (pos_value.isNumber()) {
                     position = pos_value.to(u52);
                 } else {
+                    buffers.release();
+                    buffers.views.deinit();
+                    buffers.buffers.deinit();
                     return ctx.throwInvalidArguments("position must be a number", {});
                 }
             }
@@ -1672,8 +1687,10 @@ pub struct _ArgumentsReadv {
 
     static fn deinit(_: *const @This()) {}
 
-    fn deinitAndUnprotect() {
+    fn deinitAndUnprotect(*_) {
+        _.buffers.release();
         _.buffers.value.unprotect();
+        _.buffers.views.deinit();
         _.buffers.buffers.deinit();
     }
 
@@ -1685,6 +1702,12 @@ pub struct _ArgumentsReadv {
         _.buffers.buffers.items = clone;
         _.buffers.buffers.capacity = clone.len;
         _.buffers.buffers.allocator = bun.default_allocator;
+
+        const views_clone = bun.handleOom(bun.default_allocator.dupe(jsc.JSValue, _.buffers.views.items));
+        _.buffers.views.deinit();
+        _.buffers.views.items = views_clone;
+        _.buffers.views.capacity = views_clone.len;
+        _.buffers.views.allocator = bun.default_allocator;
     }
 
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadv {
@@ -1693,12 +1716,13 @@ pub struct _ArgumentsReadv {
             return throwInvalidFdError(ctx, fd_value);
         };
 
-        const buffers = jsc.Node.VectorArrayBuffer.fromJS(
+        let buffers = jsc.Node.VectorArrayBuffer.fromJS(
             ctx,
             arguments.protectEatNext() ?? {
                 return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
             },
             arguments.@"arena".allocator(),
+            arguments.will_be_async,
         )?;
 
         let position: u52? = null;
@@ -1708,6 +1732,9 @@ pub struct _ArgumentsReadv {
                 if (pos_value.isNumber()) {
                     position = pos_value.to(u52);
                 } else {
+                    buffers.release();
+                    buffers.views.deinit();
+                    buffers.buffers.deinit();
                     return ctx.throwInvalidArguments("position must be a number", {});
                 }
             }
@@ -2779,6 +2806,7 @@ pub struct _ArgumentsRead {
     offset: u64,
     length: u64,
     position: ReadPosition? = null,
+    pinned: bool = false,
 
     static fn deinit(_: *const @This()) {}
 
@@ -2787,6 +2815,9 @@ pub struct _ArgumentsRead {
     }
 
     fn deinitAndUnprotect(*_) {
+        if (_.pinned) {
+            unsafe { JSC__JSValue__unpinArrayBuffer(_.buffer.buffer.value); }
+        }
         _.buffer.buffer.value.unprotect();
     }
 
@@ -2829,7 +2860,7 @@ pub struct _ArgumentsRead {
         //     });
         //   }
         if (length_float == 0) {
-            return { fd: fd, buffer: buffer, length: 0, offset: 0 };
+            return { fd: fd, buffer: buffer, length: 0, offset: 0, pinned: false };
         }
 
         const buf_len = buffer.slice().len;
@@ -2893,12 +2924,20 @@ pub struct _ArgumentsRead {
         else
             null;
 
+        const pinned = if (arguments.will_be_async) unsafe { JSC__JSValue__pinArrayBuffer(buffer_value) } else false;
+        if (pinned) {
+            if (b := Buffer.fromJS(ctx, buffer_value)) {
+                buffer = b;
+            }
+        }
+
         return {
             fd: fd,
             buffer: buffer,
             offset: offset,
             length: length,
             position: position,
+            pinned: pinned,
         };
     }
 }

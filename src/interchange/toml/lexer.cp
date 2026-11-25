@@ -980,18 +980,18 @@ pub @value class Lexer {
                                 let is_first = true;
                                 let is_out_of_range = false;
                                 variableLength: while (true) {
-                                    if (!iterator.next(&iter)) break :variableLength;
+                                    if (!iterator.next(&iter)) return _.syntaxError();
                                     c3 = iter.c;
 
                                     switch (c3) {
                                         '0'...'9' => {
-                                            value = value * 16 | @as(i64, c3 - '0');
+                                            value = (value *| 16) | @as(i64, c3 - '0');
                                         },
                                         'a'...'f' => {
-                                            value = value * 16 | @as(i64, c3 + 10 - 'a');
+                                            value = (value *| 16) | @as(i64, c3 + 10 - 'a');
                                         },
                                         'A'...'F' => {
-                                            value = value * 16 | @as(i64, c3 + 10 - 'A');
+                                            value = (value *| 16) | @as(i64, c3 + 10 - 'A');
                                         },
                                         '}' => {
                                             if (is_first) {

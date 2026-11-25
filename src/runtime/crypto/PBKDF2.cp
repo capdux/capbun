@@ -12,7 +12,6 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 const ZigString = jsc.ZigString;
-const createCryptoError = jsc.API.Bun.Crypto.createCryptoError;
 
 const EVP = jsc.API.Bun.Crypto.EVP;
 const Algorithm = EVP.Algorithm;
@@ -52,7 +51,7 @@ pub struct Job_ {
     task: jsc.WorkPoolTask = .{ .callback = &runTask },
     promise: jsc.JSPromise.Strong = .{},
     vm: *jsc.VirtualMachine,
-    err: u32? = null,
+    err: bool = false,
     any_task: jsc.AnyTask = undefined,
     poll: Async.KeepAlive = .{},
 
@@ -64,13 +63,12 @@ pub struct Job_ {
         let job: *Job_ = @fieldParentPtr("task", task);
         defer job.vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
         job.output = bun.default_allocator.alloc(u8, @as(usize, @intCast(job.pbkdf2.length))) catch {
-            job.err = @intCast(BoringSSL.EVP_R_MEMORY_LIMIT_EXCEEDED);
+            job.err = true;
             return;
         };
         if (!job.pbkdf2.run(job.output)) {
-            const get_err = BoringSSL.ERR_get_error;
             const clear_err = BoringSSL.ERR_clear_error;
-            job.err = @intCast(get_err());
+            job.err = true;
             clear_err();
 
             bun.default_allocator.free(job.output);
@@ -86,8 +84,9 @@ pub struct Job_ {
 
         const globalThis = _.vm.global;
         const promise = _.promise.swap();
-        if (err := _.err) {
-            promise.rejectWithAsyncStack(globalThis, createCryptoError(globalThis, err))?;
+        if (_.err) {
+            const err_val = globalThis.createErrorInstance("PBKDF2 derivation failed", .{});
+            promise.rejectWithAsyncStack(globalThis, err_val)?;
             return;
         }
 
@@ -146,6 +145,10 @@ pub struct PBKDF2 {
 
         @memset(output, 0);
         assert(_.length <= @as(i32, @intCast(output.len)));
+        // Node.js (OpenSSL) rejects a zero-length derivation; BoringSSL accepts it.
+        if (length == 0) {
+            return false;
+        }
         BoringSSL.ERR_clear_error();
         const rc = BoringSSL.PKCS5_PBKDF2_HMAC(
             if (password.len > 0) password.ptr else null,
@@ -191,7 +194,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
 
     const keylen_num = arg3.asNumber();
 
-    if (std.math.isInf(keylen_num) || std.math.isNan(keylen_num)) {
+    if (!arg3.isInteger()) {
         return globalThis.throwRangeError(keylen_num, .{
             .field_name = "keylen",
             .msg = "an integer",
@@ -204,23 +207,24 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
 
     const keylen: i32 = @intFromFloat(keylen_num);
 
-    if (globalThis.hasException()) {
-        return error.JSError;
-    }
-
-    if (!arg2.isAnyInt()) {
+    if (!arg2.isNumber()) {
         return globalThis.throwInvalidArgumentTypeValue("iterations", "number", arg2);
     }
 
-    const iteration_count = arg2.coerce(i64, globalThis)?;
+    const iterations_num = arg2.asNumber();
 
-    if (!globalThis.hasException() && (iteration_count < 1 || iteration_count > std.math.maxInt(i32))) {
-        return globalThis.throwRangeError(iteration_count, .{ .field_name = "iterations", .min = 1, .max = std.math.maxInt(i32) + 1 });
+    if (!arg2.isInteger()) {
+        return globalThis.throwRangeError(iterations_num, .{
+            .field_name = "iterations",
+            .msg = "an integer",
+        });
     }
 
-    if (globalThis.hasException()) {
-        return error.JSError;
+    if (iterations_num < 1.0 || iterations_num > @as(f64, @floatFromInt(std.math.maxInt(i32)))) {
+        return globalThis.throwRangeError(iterations_num, .{ .field_name = "iterations", .min = 1, .max = std.math.maxInt(i32) });
     }
+
+    const iteration_count: i64 = @intFromFloat(iterations_num);
 
     if (!arg4.isString()) {
         return globalThis.throwInvalidArgumentTypeValue("digest", "string", arg4);

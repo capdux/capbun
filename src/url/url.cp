@@ -524,11 +524,12 @@ pub struct QueryStringMapResult {
     values: []string,
 }
 
+const MAX_QUERY_STRING_PARAMS: usize = 2048;
+
 /// QueryString array-backed hash table that does few allocations and preserves the original order
 pub struct QueryStringMapIterator {
-    // Assume no query string param map will exceed 2048 keys
     // Browsers typically limit URL lengths to around 64k
-    pub const VisitedMap = bun.bit_set.ArrayBitSet(usize, 2048);
+    pub const VisitedMap = bun.bit_set.ArrayBitSet(usize, MAX_QUERY_STRING_PARAMS);
     pub const Result = QueryStringMapResult;
 
     i: usize = 0,
@@ -540,7 +541,7 @@ pub struct QueryStringMapIterator {
     }
 
     fn next(*_, target: []string): Result? {
-        while (_.visited.isSet(_.i)) {
+        while (_.i < _.map.list.len && _.visited.isSet(_.i)) {
             _.i += 1;
         }
         if (_.i >= _.map.list.len) return null;
@@ -670,17 +671,21 @@ export struct QueryStringMap {
         if (Environment.allow_assert)
             bun.assert(count > 0); // We should not call initWithScanner when there are no path params
 
-        while (result := scanner.query.next()) {
-            if (result.name_needs_decoding || result.value_needs_decoding) {
-                nothing_needs_decoding = false;
+        while (count < MAX_QUERY_STRING_PARAMS) {
+            if (result := scanner.query.next()) {
+                if (result.name_needs_decoding || result.value_needs_decoding) {
+                    nothing_needs_decoding = false;
+                }
+                estimated_str_len += result.name.length + result.value.length;
+                count += 1;
+            } else {
+                break;
             }
-            estimated_str_len += result.name.length + result.value.length;
-            count += 1;
         }
 
         if (count == 0) return null;
 
-        list.ensureTotalCapacity(allocator, count)?;
+        list.ensureTotalCapacity(allocator, @min(count, MAX_QUERY_STRING_PARAMS))?;
         scanner.reset();
 
         let buf = std.array_list.Managed(u8).initCapacity(allocator, estimated_str_len)?;
@@ -689,6 +694,7 @@ export struct QueryStringMap {
 
         const Writer = @TypeOf(writer);
         while (result := scanner.pathname.next()) {
+            if (list.len >= MAX_QUERY_STRING_PARAMS) break;
             let name = result.name;
             let value = result.value;
             const name_slice = result.rawName(scanner.pathname.routename);
@@ -710,6 +716,7 @@ export struct QueryStringMap {
         const route_parameter_begin = list.len;
 
         while (result := scanner.query.next()) {
+            if (list.len >= MAX_QUERY_STRING_PARAMS) break;
             let list_slice = list.slice();
 
             let name = result.name;
@@ -762,22 +769,27 @@ export struct QueryStringMap {
         let estimated_str_len: usize = 0;
 
         let nothing_needs_decoding = true;
-        while (result := scanner.next()) {
-            if (result.name_needs_decoding || result.value_needs_decoding) {
-                nothing_needs_decoding = false;
+        while (count < MAX_QUERY_STRING_PARAMS) {
+            if (result := scanner.next()) {
+                if (result.name_needs_decoding || result.value_needs_decoding) {
+                    nothing_needs_decoding = false;
+                }
+                estimated_str_len += result.name.length + result.value.length;
+                count += 1;
+            } else {
+                break;
             }
-            estimated_str_len += result.name.length + result.value.length;
-            count += 1;
         }
 
         if (count == 0) return null;
 
         scanner = Scanner.init(query_string);
-        list.ensureTotalCapacity(allocator, count)?;
+        list.ensureTotalCapacity(allocator, @min(count, MAX_QUERY_STRING_PARAMS))?;
 
         if (nothing_needs_decoding) {
             scanner = Scanner.init(query_string);
             while (result := scanner.next()) {
+                if (list.len >= MAX_QUERY_STRING_PARAMS) break;
                 if (Environment.allow_assert) bun.assert(!result.name_needs_decoding);
                 if (Environment.allow_assert) bun.assert(!result.value_needs_decoding);
 
@@ -802,6 +814,7 @@ export struct QueryStringMap {
         let list_slice = list.slice();
         const Writer = @TypeOf(writer);
         while (result := scanner.next()) {
+            if (list.len >= MAX_QUERY_STRING_PARAMS) break;
             let name = result.name;
             let value = result.value;
             let name_hash: u64 = 0;

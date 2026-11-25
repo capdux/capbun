@@ -86,6 +86,7 @@ pub extern fn simdutf__utf16_length_from_latin1(input: [*]const u8, length: usiz
 extern fn simdutf__base64_encode(input: [*]const u8, length: usize, output: [*]u8, is_urlsafe: c_int): usize;
 extern fn simdutf__base64_decode_from_binary(input: [*]const u8, length: usize, output: [*]u8, outlen: usize, is_urlsafe: c_int): SIMDUTFResult;
 extern fn simdutf__base64_decode_from_binary16(input: [*]const u16, length: usize, output: [*]u8, outlen: usize, is_urlsafe: c_int): SIMDUTFResult;
+extern fn simdutf__base64_decode_from_binary_lenient(input: [*]const u8, length: usize, output: [*]u8, outlen: usize): SIMDUTFResult;
 extern fn simdutf__base64_length_from_binary(length: usize, options: c_int): usize;
 
 static struct validate_with_errors {
@@ -409,5 +410,9 @@ pub static struct base64 {
 
     pub fn decode16(input: []const u16, output: []u8, is_urlsafe: bool): SIMDUTFResult {
         unsafe { return simdutf__base64_decode_from_binary16(input.ptr, input.len, output.ptr, output.len, @intFromBool(is_urlsafe)); }
+    }
+
+    pub fn decode_lenient(input: []const u8, output: []u8): SIMDUTFResult {
+        unsafe { return simdutf__base64_decode_from_binary_lenient(input.ptr, input.len, output.ptr, output.len); }
     }
 }

@@ -3296,10 +3296,31 @@ pub fn StyleSheet(comptime AtRule: type): type {
                 .custom_media = custom_media,
                 .css_modules = _.options.css_modules != null,
                 .extra = extra,
+                .e = null,
+                .selector_expansion_multiplier = 1,
+                .selector_expansion_total = 0,
             };
 
             _.rules.minify(&minify_ctx, false) catch {
-                @panic("TODO: Handle");
+                bun.debugAssert(minify_ctx.e != null);
+                const e = minify_ctx.e orelse MinifyError{
+                    kind: .unknown,
+                    loc: Location.dummy(),
+                };
+                const filename: []const u8 = if (e.loc.source_index < _.sources.items.len)
+                    _.sources.items[e.loc.source_index]
+                else
+                    _.options.filename;
+                return .{
+                    .err = .{
+                        .kind = e.kind,
+                        .loc = .{
+                            .filename = filename,
+                            .line = e.loc.line,
+                            .column = e.loc.column,
+                        },
+                    },
+                };
             };
 
             return .success;

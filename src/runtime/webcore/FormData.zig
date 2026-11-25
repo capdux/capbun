@@ -474,7 +474,19 @@ else => {
                         }
                     } else {
                         if ((((value.len > 0) and field.content_type.isEmpty()) and strings.eqlCaseInsensitiveASCII(key, "content-type", true))) {
-                            field.content_type = subslicer.sub(strings.trim(value, "; \t")).value();
+                            const trimmed = strings.trim(value, "; \t");
+                            var valid_ct = true;
+                            _ = &valid_ct;
+                            for (cp_iter_slice(trimmed)) |b| {
+                                _ = &b;
+                                if ((!((b == 9) or ((b >= 32) and (b <= 126))))) {
+                                    valid_ct = false;
+                                    break;
+                                }
+                            }
+                            if (valid_ct) {
+                                field.content_type = subslicer.sub(trimmed).value();
+                            }
                         }
                     }
                 }

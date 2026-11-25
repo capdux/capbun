@@ -424,6 +424,10 @@ pub fn __cp_deinit(self: *@This()) void {
             if (self.__cp_dropped) return;
             self.__cp_dropped = true;
                 if (self.r.fs.fs.needToCloseFiles()) {
+                    _ = self.entry.mutex.lock();
+                    defer {
+                    _ = self.entry.mutex.unlock();
+                    }
                     if (self.entry.cache.fd.isValid()) {
                         var file = self.entry.cache.fd.stdFile();
                         _ = &file;
@@ -1274,7 +1278,14 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
                                     const span = buf[0..out.len :0];
                                     var file: bun.FD = .fromStdFile(try std.fs.openFileAbsoluteZ(span, .{ .mode = .read_only }));
                                     _ = &file;
-                                    query.entry.cache.fd = file;
+                                    {
+                                        _ = query.entry.mutex.lock();
+                                        var _entry_guard = UnlockGuard(@TypeOf(query.entry.mutex)){ .ptr = (&query.entry.mutex) };
+                                        _ = &_entry_guard;
+                                        var ___entry_guard_moved = false; _ = &___entry_guard_moved;
+                                        defer if (!___entry_guard_moved) { ___entry_guard_moved = true; const __T = @TypeOf(_entry_guard); if (@typeInfo(__T) == .optional) { if (_entry_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _entry_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _entry_guard; _drop_val.__cp_deinit(); } };
+                                        query.entry.cache.fd = file;
+                                    }
                                     _ = Fs.FileSystem.setMaxFd(file.native());
                                 }
                                 var _guard_cache_fd = CacheFdCloseGuard(@TypeOf(r.*), @TypeOf(query.entry.*)){ .r = r, .entry = query.entry };
@@ -1286,7 +1297,14 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
                                     _ = &debug;
                                     _ = (debug.*).addNoteFmt("Resolved symlink \"{s}\" to \"{s}\"", .{ symlink, path.text });
                                 }
-                                query.entry.cache.symlink = PathString.init(symlink);
+                                {
+                                    _ = query.entry.mutex.lock();
+                                    var _entry_guard = UnlockGuard(@TypeOf(query.entry.mutex)){ .ptr = (&query.entry.mutex) };
+                                    _ = &_entry_guard;
+                                    var ___entry_guard_moved = false; _ = &___entry_guard_moved;
+                                    defer if (!___entry_guard_moved) { ___entry_guard_moved = true; const __T = @TypeOf(_entry_guard); if (@typeInfo(__T) == .optional) { if (_entry_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _entry_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _entry_guard; _drop_val.__cp_deinit(); } };
+                                    query.entry.cache.symlink = PathString.init(symlink);
+                                }
                                 if (((!result.file_fd.isValid()) and store_fd)) {
                                     result.file_fd = query.entry.cache.fd;
                                 }
@@ -3454,6 +3472,11 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                         if (parent_entries.get(base)) |lookup| {
                             _ = &lookup;
                             if (((entries.fd.isValid() and (!lookup.entry.cache.fd.isValid())) and r.store_fd)) {
+                                _ = lookup.entry.mutex.lock();
+                                var _entry_guard = UnlockGuard(@TypeOf(lookup.entry.mutex)){ .ptr = (&lookup.entry.mutex) };
+                                _ = &_entry_guard;
+                                var ___entry_guard_moved = false; _ = &___entry_guard_moved;
+                                defer if (!___entry_guard_moved) { ___entry_guard_moved = true; const __T = @TypeOf(_entry_guard); if (@typeInfo(__T) == .optional) { if (_entry_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _entry_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _entry_guard; _drop_val.__cp_deinit(); } };
                                 lookup.entry.cache.fd = entries.fd;
                             }
                             const entry = lookup.entry;
@@ -3473,7 +3496,14 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                                         _ = &logs;
                                         _ = (logs.*).addNote(((std.fmt.allocPrint(r.allocator, "Resolved symlink \"{s}\" to \"{s}\"", .{ path, symlink })) catch unreachable));
                                     }
-                                    lookup.entry.cache.symlink = PathString.init(symlink);
+                                    {
+                                        _ = lookup.entry.mutex.lock();
+                                        var _entry_guard = UnlockGuard(@TypeOf(lookup.entry.mutex)){ .ptr = (&lookup.entry.mutex) };
+                                        _ = &_entry_guard;
+                                        var ___entry_guard_moved = false; _ = &___entry_guard_moved;
+                                        defer if (!___entry_guard_moved) { ___entry_guard_moved = true; const __T = @TypeOf(_entry_guard); if (@typeInfo(__T) == .optional) { if (_entry_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _entry_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _entry_guard; _drop_val.__cp_deinit(); } };
+                                        lookup.entry.cache.symlink = PathString.init(symlink);
+                                    }
                                     info.abs_real_path = symlink;
                                 }
                             }

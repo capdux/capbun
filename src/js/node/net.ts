@@ -52,6 +52,8 @@ const doConnect = $newZigFunction("node_net_binding.zig", "doConnect", 2);
 
 const addServerName = $newZigFunction("Listener.zig", "jsAddServerName", 3);
 const upgradeDuplexToTLS = $newZigFunction("runtime/socket/socket.zig", "jsUpgradeDuplexToTLS", 2);
+// tls.connect({ socket }) upgrade: hostname policy stays with this JS layer.
+const upgradeTLSDeferred = $newZigFunction("runtime/socket/socket.zig", "jsUpgradeTLSDeferred", 2);
 const isNamedPipeSocket = $newZigFunction("runtime/socket/socket.zig", "jsIsNamedPipeSocket", 1);
 const getBufferedAmount = $newZigFunction("runtime/socket/socket.zig", "jsGetBufferedAmount", 1);
 
@@ -718,7 +720,9 @@ function Socket(options?) {
 
   this[kSetNoDelay] = Boolean(noDelay);
   this[kSetKeepAlive] = Boolean(keepAlive);
-  this[kSetKeepAliveInitialDelay] = ~~(keepAliveInitialDelay / 1000);
+  // Bun's native _handle.setKeepAlive takes milliseconds (it is the public
+  // Bun.Socket), so store ms here. Node stores seconds because libuv does.
+  this[kSetKeepAliveInitialDelay] = MathMax(0, ~~keepAliveInitialDelay);
 
   this[khandlers] = SocketHandlers2;
   this.bytesRead = 0;
@@ -1007,7 +1011,7 @@ Socket.prototype.connect = function connect(...args) {
         } else {
           if (socket) {
             this[kupgraded] = connection;
-            const result = socket.upgradeTLS({
+            const result = upgradeTLSDeferred(socket, {
               data: { self: this, req: { oncomplete: afterConnect } },
               tls,
               socket: this[khandlers],
@@ -1045,7 +1049,7 @@ Socket.prototype.connect = function connect(...args) {
                 this._handle = result;
               } else {
                 this[kupgraded] = connection;
-                const result = socket.upgradeTLS({
+                const result = upgradeTLSDeferred(connection._handle, {
                   data: { self: this, req: { oncomplete: afterConnect } },
                   tls,
                   socket: this[khandlers],
@@ -1341,7 +1345,10 @@ Socket.prototype.resetAndDestroy = function resetAndDestroy() {
 
 Socket.prototype.setKeepAlive = function setKeepAlive(enable = false, initialDelayMsecs = 0) {
   enable = Boolean(enable);
-  const initialDelay = ~~(initialDelayMsecs / 1000);
+  // Bun's native _handle.setKeepAlive takes milliseconds; the ms→seconds
+  // conversion for TCP_KEEPIDLE lives in the native binding. Clamp to 0 so
+  // negatives and ~~ overflow match Node's no-validate behavior.
+  const initialDelay = MathMax(0, ~~initialDelayMsecs);
 
   if (!this._handle) {
     this[kSetKeepAlive] = enable;
@@ -2117,7 +2124,7 @@ function Server(options?, connectionListener?) {
   this[bunSocketServerOptions] = undefined;
   this.allowHalfOpen = allowHalfOpen;
   this.keepAlive = keepAlive;
-  this.keepAliveInitialDelay = keepAliveInitialDelay;
+  this.keepAliveInitialDelay = MathMax(0, ~~keepAliveInitialDelay);
   this.highWaterMark = highWaterMark;
   this.pauseOnConnect = Boolean(pauseOnConnect);
   this.noDelay = noDelay;

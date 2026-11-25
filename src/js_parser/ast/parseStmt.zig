@@ -256,7 +256,9 @@ if (cls.@"class".class_name) |name| {
                 }
 },
 else => {
-
+const r = js_lexer.rangeOfIdentifier(p.source, stmt.loc);
+                _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Unexpected \"{s}\"", .{ p.source.textForRange(r) })) catch unreachable);
+                return error.SyntaxError;
 },
 }
                 break :default_name_getter ((createDefaultName(p, defaultLoc)) catch unreachable);
@@ -268,10 +270,8 @@ else => {
             const is_identifier = (p.lexer.token == .t_identifier);
             const name = p.lexer.identifier;
             const expr = try p.parseExpr(.comma);
-            if ((((is_typescript_enabled and is_identifier) and ((p.lexer.token == .t_class) or (opts.ts_decorators != null))) and strings.eqlComptime(name, "abstract"))) {
-                switch (expr.data) {
-.e_identifier => {
-var stmtOpts = ParseStatementOptions{ .ts_decorators = opts.ts_decorators, .is_name_optional = true };
+            if (((((is_typescript_enabled and is_identifier) and ((p.lexer.token == .t_class) or (opts.ts_decorators != null))) and strings.eqlComptime(name, "abstract")) and (expr.data == .e_identifier))) {
+                var stmtOpts = ParseStatementOptions{ .ts_decorators = opts.ts_decorators, .is_name_optional = true };
                 _ = &stmtOpts;
                 const stmt: Stmt = try p.parseClassStmt(loc, (&stmtOpts));
                 const default_name: js_ast.LocRef = default_name_getter: {
@@ -299,18 +299,13 @@ else => {
 };
                 p.has_export_default = true;
                 return p.s(S.ExportDefault{ .default_name = default_name, .value = js_ast.StmtOrExpr{ .stmt = stmt } }, loc);
-},
-else => {
-_ = p.panic("internal error: unexpected", .{});
-},
-}
             }
             _ = try p.lexer.expectOrInsertSemicolon();
             p.has_export_default = true;
             return p.s(S.ExportDefault{ .default_name = p.defaultNameForExpr(expr, defaultLoc), .value = js_ast.StmtOrExpr{ .expr = expr } }, loc);
 },
 T.t_asterisk => {
-if (((!opts.is_module_scope) and (!(opts.is_namespace_scope or (!opts.is_typescript_declare))))) {
+if (((!opts.is_module_scope) and ((!opts.is_namespace_scope) or (!opts.is_typescript_declare)))) {
                 _ = try p.lexer.unexpected();
                 return error.SyntaxError;
             }
@@ -351,7 +346,7 @@ if (((!opts.is_module_scope) and (!(opts.is_namespace_scope or (!opts.is_typescr
             return p.s(S.ExportStar{ .namespace_ref = namespace_ref, .alias = alias, .import_record_index = import_record_index }, loc);
 },
 T.t_open_brace => {
-if (((!opts.is_module_scope) and (!(opts.is_namespace_scope or (!opts.is_typescript_declare))))) {
+if (((!opts.is_module_scope) and ((!opts.is_namespace_scope) or (!opts.is_typescript_declare)))) {
                 _ = try p.lexer.unexpected();
                 return error.SyntaxError;
             }
@@ -374,7 +369,7 @@ if (((!opts.is_module_scope) and (!(opts.is_namespace_scope or (!opts.is_typescr
                 }
                 const import_record_index = p.addImportRecord(.stmt, parsedPath.loc, parsedPath.text);
                 const path_name = fs.PathName.init(parsedPath.text);
-                const namespace_ref = (blk_catch_3: { break :blk_catch_3 ((p.storeNameInRef((blk_catch_2: { break :blk_catch_2 ((std.fmt.allocPrint(p.allocator, "import_{f}", .{ path_name.fmtIdentifier() })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+                const namespace_ref = (blk_catch_4: { break :blk_catch_4 ((p.storeNameInRef((blk_catch_3: { break :blk_catch_3 ((std.fmt.allocPrint(p.allocator, "import_{f}", .{ path_name.fmtIdentifier() })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
                 if (comptime track_symbol_usage_during_parse_pass) {
                     p.import_records.items[@as(usize, @intCast(import_record_index))].flags.calls_runtime_re_export_fn = true;
                 }
@@ -738,6 +733,7 @@ var stmtOpts = ParseStatementOptions{ .lexical_decl = .allow_all, .is_for_loop_i
             switch (res.stmt_or_expr) {
 .stmt => |stmt| {
 bad_let_range = null;
+            decls = .fromOwnedSlice(res.decls);
             init_ = stmt;
 },
 .expr => |expr| {
@@ -1110,14 +1106,19 @@ opts.lexical_decl = .allow_all;
                         if (p.lexer.isContextualKeyword("global")) {
                             _ = try p.lexer.next();
                             _ = try p.lexer.expect(.t_open_brace);
+                            const scope_index = p.scopes_in_order.items.len;
                             _ = try p.parseStmtsUpTo(.t_close_brace, opts);
                             _ = try p.lexer.next();
+                            _ = p.discardScopesUpTo(scope_index);
                             return p.s(S.TypeScript, loc);
                         }
+                        const scope_index = p.scopes_in_order.items.len;
                         const stmt = try p.parseStmt(opts);
                         if (opts.ts_decorators) |decs| {
                             _ = &decs;
                             _ = p.discardScopesUpTo(decs.scope_index);
+                        } else {
+                            _ = p.discardScopesUpTo(scope_index);
                         }
                         if ((opts.is_namespace_scope and opts.is_export)) {
                             var decls: G.Decl.List = .{};

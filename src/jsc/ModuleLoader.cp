@@ -706,8 +706,15 @@ pub fn transpileSourceCode(
                 tag: tag,
             };
         },
-        // provideFetch() should be called
-        .napi => unreachable,
+        // The `.node` fast-paths only match module keys that literally end in
+        // `.node`, so `?query` suffixes and `--loader <ext>:napi` mappings
+        // still reach here.
+        .napi => {
+            if (global := globalObject) {
+                return global.throwTypeError("To load Node-API modules, use require() or process.dlopen instead of import.", {});
+            }
+            return error.NotSupported;
+        },
         // .wasm => {
         //     jsc_vm.transpiled_count += 1;
         //     let fd: ?FD = null;

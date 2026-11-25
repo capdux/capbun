@@ -545,17 +545,20 @@ pub fn spawnZ(path: [*:0]const u8, actions: ?Actions, attr: ?Attr, argv: [*:null
 .close => {
 _ = (blk_catch_4: { break :blk_catch_4 ((posix_actions.close(bun.FD.fromNative(action.fds[0]))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
                             _ = bun.sys.syslog("posix_spawn_file_actions_addclose({d}) failed: {s}", .{ action.fds[0], @errorName(e) });
-                        } }); });
+                        }
+                        return spawnActionError(e, path); }); });
 },
 .dup2 => {
 _ = (blk_catch_5: { break :blk_catch_5 ((posix_actions.dup2(bun.FD.fromNative(action.fds[0]), bun.FD.fromNative(action.fds[1]))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
                             _ = bun.sys.syslog("posix_spawn_file_actions_adddup2({d}, {d}) failed: {s}", .{ action.fds[0], action.fds[1], @errorName(e) });
-                        } }); });
+                        }
+                        return spawnActionError(e, path); }); });
 },
 .open => {
 _ = (blk_catch_6: { break :blk_catch_6 ((posix_actions.openZ(bun.FD.fromNative(action.fds[0]), action.path.?, (if (comptime @typeInfo(@TypeOf(action.flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(action.flags)) else cp_cast_int(i32, action.flags)), (if (comptime @typeInfo(@TypeOf(action.mode)) == .@"enum") cp_cast_int(i32, @intFromEnum(action.mode)) else cp_cast_int(i32, action.mode)))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
                             _ = bun.sys.syslog("posix_spawn_file_actions_addopen({d}, {s}, {d}, {d}) failed: {s}", .{ action.fds[0], action.path.?, action.flags, action.mode, @errorName(e) });
-                        } }); });
+                        }
+                        return spawnActionError(e, path); }); });
 },
 .none => {
 
@@ -566,7 +569,8 @@ _ = (blk_catch_6: { break :blk_catch_6 ((posix_actions.openZ(bun.FD.fromNative(a
                         _ = &chdir_path;
                         _ = (blk_catch_7: { break :blk_catch_7 ((posix_actions.chdir(bun.span(chdir_path))) catch |e| { _ = &e; if (comptime bun.Environment.allow_assert) {
                             _ = bun.sys.syslog("posix_spawn_file_actions_addchdir({s}) failed: {s}", .{ chdir_path, @errorName(e) });
-                        } }); });
+                        }
+                        return spawnActionError(e, path); }); });
                     }
                 }
                 var pid: pid_t = undefined;
@@ -674,3 +678,8 @@ pub const WaitPidMaybe = Maybe(PosixWaitPidResult);
 pub const PidMaybe = Maybe(pid_t);
 
 extern "c" fn posix_spawnattr_reset_signals(attr: *system.posix_spawnattr_t) callconv(.c) c_int;
+
+pub fn spawnActionError(e: anyerror, path: [*:0]const u8) PidMaybe {
+        const code: std.c.E = (if ((e == error.InvalidFileDescriptor)) .BADF else (if ((e == error.SystemResources)) .NOMEM else (if ((e == error.NameTooLong)) .NAMETOOLONG else .INVAL)));
+        return PidMaybe{ .@"err" = .{ .errno = @as(bun.sys.Error.Int, @truncate(@intFromEnum(code))), .syscall = .posix_spawn, .path = bun.asByteSlice(path) } };
+}

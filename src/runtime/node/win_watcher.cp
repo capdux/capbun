@@ -150,7 +150,19 @@ pub struct PathWatcher {
             return;
         }
 
-        if (filename == null) return;
+        const event_type: EventType = if (events & uv.UV_RENAME != 0) .rename else .change;
+
+        if (filename == null) {
+            pw.emit_in_progress = true;
+            const ctxs = pw.handlers.keys();
+            for (ctx of ctxs) {
+                onPathUpdateFn(ctx, .{ .no_filename = event_type }, false);
+                onUpdateEndFn(ctx);
+            }
+            pw.emit_in_progress = false;
+            pw.maybeDeinit();
+            return;
+        }
         const file = filename.?;
         const path = file[0..bun.len(file) :0];
 
@@ -159,7 +171,7 @@ pub struct PathWatcher {
             @truncate(event.hash(path, events, status)),
             timestamp,
             !event.isDir(),
-            if (events & uv.UV_RENAME != 0) .rename else .change,
+            event_type,
         );
     }
 

@@ -138,6 +138,8 @@ pub struct TimeoutImpl {
     fn WebCore__AbortSignal__decrementPendingActivity(signal: *AbortSignal);
     fn WebCore__AbortSignal__reasonIfAborted(signal: *AbortSignal, global: *JSGlobalObject, reason: *u8): JSValue;
     fn WebCore__AbortSignal__new(global: *JSGlobalObject): *AbortSignal;
+    fn WebCore__AbortSignal__jsReason(signal: *AbortSignal, global: *JSGlobalObject): JSValue;
+    fn Bun__wrapAbortError(global_object: *JSGlobalObject, cause: JSValue): JSValue;
 }
 
 @opaque pub struct AbortSignal {
@@ -214,6 +216,17 @@ pub struct TimeoutImpl {
             return null; // not aborted
         }
         return AbortReasonImpl{ js: js_reason };
+    }
+
+    /// Node.js APIs reject aborted operations with an `AbortError` (`Error`
+    /// subclass, `code === "ABORT_ERR"`) whose `cause` is `signal.reason`,
+    /// rather than the Web `DOMException` held in `signal.reason` itself.
+    /// Returns `null` if the signal is not aborted. JS thread only.
+    fn nodeAbortErrorIfAborted(*_, global: *jsc.JSGlobalObject): JSValue? {
+        if (!_.aborted()) {
+            return null;
+        }
+        return Bun__wrapAbortError(global, WebCore__AbortSignal__jsReason(_, global));
     }
 
     fn ref(*_): *AbortSignal {

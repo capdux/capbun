@@ -456,7 +456,7 @@ pub fn decodeHeaderBlock(session: *ClientSession, stream: *Stream) {
         if (stream.status_code != 0 || malformed) {
             continue;
         }
-        if (isMalformedResponseField(result.name)) {
+        if (isMalformedResponseField(result.name) || isMalformedResponseValue(result.value)) {
             malformed = true;
             continue;
         }
@@ -527,9 +527,13 @@ pub fn stripPadding(payload: string): string? {
 }
 
 pub fn isMalformedResponseField(name: string): bool {
+    if (name.len == 0) {
+        return true;
+    }
     for (c of name) {
-        if (c >= 'A' && c <= 'Z') {
-            return true;
+        switch (c) {
+            'a'..='z', '0'..='9', '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~' => {},
+            * => return true,
         }
     }
     return strings.eqlComptime(name, "connection") ||
@@ -538,6 +542,15 @@ pub fn isMalformedResponseField(name: string): bool {
         strings.eqlComptime(name, "te") ||
         strings.eqlComptime(name, "transfer-encoding") ||
         strings.eqlComptime(name, "upgrade");
+}
+
+pub fn isMalformedResponseValue(value: string): bool {
+    for (c of value) {
+        if (c == 0 || c == '\r' || c == '\n') {
+            return true;
+        }
+    }
+    return false;
 }
 
 pub fn errorCodeFor(err: anyerror): wire.ErrorCode {

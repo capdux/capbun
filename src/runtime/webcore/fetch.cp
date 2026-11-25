@@ -280,14 +280,39 @@ pub fn Bun__fetch_(
     globalThis: *JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {
-    return fetchImpl(false, globalThis, callframe);
+    return rejectOnException(globalThis, fetchImpl(false, globalThis, callframe));
 }
 
 pub fn nodeHttpClient(
     globalThis: *JSGlobalObject,
     callframe: *CallFrame,
 ): JSError!JSValue {
-    return fetchImpl(true, globalThis, callframe);
+    return rejectOnException(globalThis, fetchImpl(true, globalThis, callframe));
+}
+
+/// WHATWG fetch step 3: an exception thrown while processing `input`/`init`
+/// rejects the returned promise; `fetch()` never throws synchronously.
+fn rejectOnException(
+    globalThis: *JSGlobalObject,
+    result: JSError!JSValue,
+): JSError!JSValue {
+    const val = result catch |e| {
+        if (e == error.JSTerminated) return error.JSTerminated;
+        const exc = globalThis.takeException(e);
+        if (exc.isTerminationException()) return error.JSTerminated;
+        const err = exc.toError() ?? exc;
+        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+    };
+    if (val == .zero) {
+        if (exc := globalThis.tryTakeException()) {
+            if (exc.isTerminationException()) return error.JSTerminated;
+            const err = exc.toError() ?? exc;
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+        }
+        bun.debugAssert(false);
+        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.createErrorInstance("fetch() failed", .{}));
+    }
+    return val;
 }
 
 fn fetchImpl(

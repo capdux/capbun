@@ -258,12 +258,65 @@ pub struct FileStreamWrapper {
     }
 }
 
+enum FormDataComponent {
+    name,
+    string_value,
+    filename,
+}
+
+fn encodeFormDataComponent(allocator: std.mem.Allocator, bytes: []const u8, component: FormDataComponent): ([]u8)? {
+    const escape = component != .string_value;
+    const normalize = component != .filename;
+    const needles: []const u8 = if (escape) "\"\r\n" else "\r\n";
+
+    let i_opt = std.mem.indexOfAny(u8, bytes, needles);
+    if (i_opt == null) return null;
+
+    let i = i_opt.?;
+    let remain = bytes;
+    let out = std.array_list.Managed(u8).initCapacity(allocator, bytes.len + 8) catch e => bun.handleOom(e);
+    while (true) {
+        bun.handleOom(out.appendSlice(remain[0..i]));
+        const b = remain[i];
+        let consumed: usize = 1;
+        if (b == '"') {
+            bun.handleOom(out.appendSlice("%22"));
+        } else if (normalize) {
+            bun.handleOom(out.appendSlice(if (escape) "%0D%0A" else "\r\n"));
+            if (b == '\r' && i + 1 < remain.len && remain[i + 1] == '\n') {
+                consumed = 2;
+            }
+        } else if (b == '\r') {
+            bun.handleOom(out.appendSlice("%0D"));
+        } else {
+            bun.handleOom(out.appendSlice("%0A"));
+        }
+        remain = remain[i + consumed..];
+        if (next := std.mem.indexOfAny(u8, remain, needles)) {
+            i = next;
+        } else {
+            break;
+        }
+    }
+    bun.handleOom(out.appendSlice(remain));
+    return bun.handleOom(out.toOwnedSlice());
+}
+
 struct FormDataContext {
     allocator: std.mem.Allocator,
     joiner: StringJoiner,
     boundary: []const u8,
     failed: bool = false,
     globalThis: *JSGlobalObject,
+
+    fn pushStringSlice(*_, slice: ZigString.Slice, component: FormDataComponent) {
+        if (encoded := encodeFormDataComponent(_.allocator, slice.slice(), component)) {
+            slice.deinit();
+            _.joiner.push(encoded, _.allocator);
+            return;
+        }
+        _.joiner.push(slice.slice(), slice.allocator.get());
+    }
 
     fn onEntry(*_, name: ZigString, entry: jsc.DOMFormData.FormDataEntry) {
         if (_.failed) return;
@@ -278,18 +331,18 @@ struct FormDataContext {
 
         joiner.pushStatic("Content-Disposition: form-data; name=\"");
         const name_slice = name.toSlice(allocator);
-        joiner.push(name_slice.slice(), name_slice.allocator.get());
+        _.pushStringSlice(name_slice, .name);
 
         switch (entry) {
             .string => |value| {
                 joiner.pushStatic("\"\r\n\r\n");
                 const value_slice = value.toSlice(allocator);
-                joiner.push(value_slice.slice(), value_slice.allocator.get());
+                _.pushStringSlice(value_slice, .string_value);
             },
             .file => |value| {
                 joiner.pushStatic("\"; filename=\"");
                 const filename_slice = value.filename.toSlice(allocator);
-                joiner.push(filename_slice.slice(), filename_slice.allocator.get());
+                _.pushStringSlice(filename_slice, .filename);
                 joiner.pushStatic("\"\r\n");
 
                 let blob = value.blob;

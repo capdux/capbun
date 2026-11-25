@@ -12,6 +12,7 @@
 #include "CachedScript.h"
 #include "wtf/ThreadSafeWeakPtr.h"
 #include <wtf/URL.h>
+#include <atomic>
 
 namespace uWS {
 template<bool isServer, bool isClient, typename UserData>
@@ -134,11 +135,19 @@ public:
 
     static ScriptExecutionContext* getMainThreadScriptExecutionContext();
 
+    // Set once when the context is permanently shutting down (WebWorker__teardownJSCVM).
+    // Takes allScriptExecutionContextsMapLock so it serializes with postTaskTo's
+    // check-then-enqueue; a caller that drains the concurrent queue after this
+    // returns will observe every task enqueued before the flag flipped.
+    void markTerminating();
+    bool isTerminating() const { return m_isTerminating.load(std::memory_order_acquire); }
+
 private:
     JSC::VM* m_vm = nullptr;
     JSC::JSGlobalObject* m_globalObject = nullptr;
     WTF::URL m_url = WTF::URL();
     ScriptExecutionContextIdentifier m_identifier;
+    std::atomic<bool> m_isTerminating { false };
 
     UncheckedKeyHashSet<ContextDestructionObserver*> m_destructionObservers;
 

@@ -409,13 +409,20 @@ num_extern_strings = (num_extern_strings + @as(u32, @intCast((bin.data.e_object.
                 }
                 if ((pkg.get("resolved") == null)) {
                     const version_prop = pkg.get("version");
-                    const pkg_name = packageNameFromPath(pkg_path);
+                    var pkg_name: []const u8 = "";
+                    _ = &pkg_name;
+                    if (pkg.get("name")) |set_name| {
+                        _ = &set_name;
+                        pkg_name = ((set_name.asString(allocator)) orelse { return error.InvalidNPMLockfile; });
+                    } else {
+                        pkg_name = packageNameFromPath(pkg_path);
+                    }
                     if (((version_prop != null) and (pkg_name.len > 0))) {
                         const registry = manager.scopeForPackageName(pkg_name);
                         var count: usize = 0;
                         _ = &count;
                         count = (count + ((registry.url.href.len + pkg_name.len) + "/-/".len));
-                        if ((pkg_name[0] == 64)) {
+                        if (strings.hasPrefixComptime(pkg_name, "@")) {
                             const slash_opt = strings.indexOfChar(pkg_name, 47);
                             if ((slash_opt == null)) {
                                 return error.InvalidNPMLockfile;
@@ -443,7 +450,7 @@ num_extern_strings = (num_extern_strings + @as(u32, @intCast((bin.data.e_object.
                         remain = remain[pkg_name.len..];
                         _ = @memcpy(remain[0..3], "/-/"[0..3]);
                         remain = remain["/-/".len..];
-                        if ((pkg_name[0] == 64)) {
+                        if (strings.hasPrefixComptime(pkg_name, "@")) {
                             const slash_index = ((strings.indexOfChar(pkg_name, 47)) orelse (unreachable));
                             _ = @memcpy(remain[0..pkg_name[(slash_index + 1)..].len], pkg_name[(slash_index + 1)..]);
                             remain = remain[pkg_name[(slash_index + 1)..].len..];
@@ -1128,11 +1135,33 @@ else => .npm,
             return error.NotAllPackagesGotResolved;
         }
         _ = try lockfile.resolve(log);
+        _ = clearNonRegistryPlatformConstraints(lockfile);
         if (Environment.allow_assert) {
             _ = try lockfile.verifyData();
         }
         lockfile.meta_hash = try lockfile.generateMetaHash(false, lockfile.packages.len);
         return LoadResult{ .ok = .{ .lockfile = lockfile, .migrated = .npm, .loaded_from_binary_lockfile = false, .serializer_result = .{}, .format = .binary } };
+}
+
+pub fn clearNonRegistryPlatformConstraints(lockfile: *Lockfile) void {
+        const resolutions = lockfile.packages.items(.resolution);
+        const metas = lockfile.packages.items(.@"meta");
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_13 = lockfile.packages.len;
+            while (i < __end_13) : (i += 1) {
+                switch (resolutions[@as(usize, @intCast(i))].tag) {
+.root, .npm => {
+
+},
+else => {
+metas[@as(usize, @intCast(i))].arch = Npm.Architecture.all;
+                metas[@as(usize, @intCast(i))].os = Npm.OperatingSystem.all;
+},
+}
+            }
+        }
 }
 
 pub fn packageNameFromPath(pkg_path: []const u8) []const u8 {
@@ -1148,9 +1177,23 @@ pub fn packageNameFromPath(pkg_path: []const u8) []const u8 {
             if (strings.hasPrefixComptime(pkg_path, "node_modules/")) {
                 pkg_name_start = "node_modules/".len;
             } else {
-                if (strings.lastIndexOf(pkg_path, "/")) |idx| {
-                    _ = &idx;
-                    pkg_name_start = idx;
+                if (strings.lastIndexOf(pkg_path, "/")) |last_index| {
+                    _ = &last_index;
+                    const parent = pkg_path[0..last_index];
+                    if (strings.lastIndexOf(parent, "/")) |i| {
+                        _ = &i;
+                        if (strings.hasPrefixComptime(parent[(i + 1)..], "@")) {
+                            pkg_name_start = (i + "/".len);
+                        } else {
+                            pkg_name_start = (last_index + "/".len);
+                        }
+                    } else {
+                        if (strings.hasPrefixComptime(parent, "@")) {
+                            pkg_name_start = 0;
+                        } else {
+                            pkg_name_start = (last_index + "/".len);
+                        }
+                    }
                 } else {
                     pkg_name_start = 0;
                 }

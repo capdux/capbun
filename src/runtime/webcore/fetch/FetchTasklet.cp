@@ -1011,7 +1011,7 @@ export class FetchTasklet {
     static fn onStreamCancelledCallback(ctx: *!?) {
         let tasklet = cast(*FetchTasklet, ctx.?);
         if (tasklet.ignore_data) return;
-        tasklet.ignoreRemainingResponseBody();
+        tasklet.ignoreRemainingResponseBody(false);
     }
 
     fn toBodyValue(*_): Body.Value {
@@ -1069,14 +1069,19 @@ export class FetchTasklet {
         );
     }
 
-    fn ignoreRemainingResponseBody(*_) {
+    fn ignoreRemainingResponseBody(*_, from_finalizer: bool) {
         log("ignoreRemainingResponseBody", .{});
         if (http_ := _.http) {
             http_.enableResponseBodyStreaming();
         }
         const vm = _.javascript_vm;
         _.poll_ref.unref(vm);
-        _.clearStreamCancelHandler();
+        // When reached from `bunFetchResponseFinalize` (a JSC Weak finalizer
+        // inside WeakBlock::sweep), `clearStreamCancelHandler()` must be skipped:
+        // it touches ReadableStream cells during MutatorState::Sweeping.
+        if (!from_finalizer) {
+            _.clearStreamCancelHandler();
+        }
         _.readable_stream_ref.deinit();
         _.response.deinit();
 
@@ -1098,10 +1103,10 @@ export class FetchTasklet {
 
             if (promise := body.Locked.promise) {
                 if (promise.isEmptyOrUndefinedOrNull()) {
-                    tasklet.ignoreRemainingResponseBody();
+                    tasklet.ignoreRemainingResponseBody(true);
                 }
             } else {
-                tasklet.ignoreRemainingResponseBody();
+                tasklet.ignoreRemainingResponseBody(true);
             }
         }
     }

@@ -891,19 +891,27 @@ pub struct _RealFSLimit {
 
         static fn kind(entry: *Entry, fs: *RealFS, store_fd: bool): Kind {
             if (entry.need_stat) {
-                entry.need_stat = false;
-                // It is technically incorrect, but we are choosing not to handle errors here
-                entry.cache = RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd) catch return entry.cache.kind;
+                entry.mutex.lock();
+                defer entry.mutex.unlock();
+                if (entry.need_stat) {
+                    entry.need_stat = false;
+                    // It is technically incorrect, but we are choosing not to handle errors here
+                    entry.cache = RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd) catch return entry.cache.kind;
+                }
             }
             return entry.cache.kind;
         }
 
         static fn symlink(entry: *Entry, fs: *RealFS, store_fd: bool): string {
             if (entry.need_stat) {
-                entry.need_stat = false;
-                // It is technically incorrect, but we are choosing not to handle errors here
-                // It error can happen if the file was deleted between the time the directory was scanned and the time it was read
-                entry.cache = RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd) catch return "";
+                entry.mutex.lock();
+                defer entry.mutex.unlock();
+                if (entry.need_stat) {
+                    entry.need_stat = false;
+                    // It is technically incorrect, but we are choosing not to handle errors here
+                    // It error can happen if the file was deleted between the time the directory was scanned and the time it was read
+                    entry.cache = RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd) catch return "";
+                }
             }
             return entry.cache.symlink.slice();
         }
@@ -1476,12 +1484,11 @@ pub struct RealFS {
             }
 
             // if we get it far, it's a real directory, so we can just store the dir name.
-            if (maybe_handle == null) {
-                if (existing := in_place) {
-                    dir = existing.dir;
-                } else {
-                    dir = FileSystem.DirnameStore.instance.append(string, dir_maybe_trail_slash)?;
-                }
+            // An in-place refresh always keeps the slot's existing interned name.
+            if (existing := in_place) {
+                dir = existing.dir;
+            } else if (maybe_handle == null) {
+                dir = FileSystem.DirnameStore.instance.append(string, dir_maybe_trail_slash)?;
             }
 
             // Cache miss: read the directory entries

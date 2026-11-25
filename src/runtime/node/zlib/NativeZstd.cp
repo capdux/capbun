@@ -113,6 +113,9 @@ pub struct Context {
     }
 
     pub fn doWork(*_) {
+        if (_.state == null) {
+            return;
+        }
         unsafe {
             _.remaining = switch (_.mode) {
                 .ZSTD_COMPRESS => c.ZSTD_compressStream2(@ptrCast(_.state), &_.output, &_.input, @intCast(_.flush)),
@@ -172,6 +175,10 @@ pub struct Context {
     }
 
     pub fn close(*_) {
+        if (_.state == null) {
+            _.mode = .NONE;
+            return;
+        }
         unsafe {
             * = switch (_.mode) {
                 .ZSTD_COMPRESS => c.ZSTD_CCtx_reset(@ptrCast(_.state), c.ZSTD_reset_session_and_parameters),
@@ -254,6 +261,7 @@ pub struct Context {
         const arguments = callframe.argumentsAsArray(4);
         const this_value = callframe.this();
         if (callframe.argumentsCount() != 4) return globalThis.ERR(.MISSING_ARGS, "init(initParamsArray, pledgedSrcSize, writeState, processCallback)", {}).throw();
+        StreamImpl.throwUnlessIdle(_, globalThis)?;
 
         const initParamsArray_value = arguments[0];
         const pledgedSrcSize_value = arguments[1];
@@ -295,6 +303,7 @@ pub struct Context {
             const err_ = _.stream.setParams(@intCast(i), x);
             if (err_.isError()) {
                 _.stream.close();
+                _.closed = true;
                 return globalThis.ERR(.ZLIB_INITIALIZATION_FAILED, "{s}", [std.mem.sliceTo(err_.msg.?, 0)]).throw();
             }
         }

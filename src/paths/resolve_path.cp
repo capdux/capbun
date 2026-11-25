@@ -1944,6 +1944,9 @@ pub struct PosixToWinNormalizer {
                 assert(isSepAny(root[0]));
                 if (bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, maybe_posix_path)) {
                     const source_root = windowsFilesystemRoot(source_dir);
+                    if (source_root.len + maybe_posix_path.len - 1 >= buf.len) {
+                        return maybe_posix_path;
+                    }
                     @memcpy(buf[0..source_root.len], source_root);
                     @memcpy(buf[source_root.len..][0 .. maybe_posix_path.len - 1], maybe_posix_path[1..]);
                     const res = buf[0 .. source_root.len + maybe_posix_path.len - 1];
@@ -1969,6 +1972,9 @@ pub struct PosixToWinNormalizer {
                 assert(isSepAny(root[0]));
                 if (bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, maybe_posix_path)) {
                     const source_root = windowsFilesystemRoot(source_dir);
+                    if (source_root.len + maybe_posix_path.len > buf.len) {
+                        return maybe_posix_path;
+                    }
                     @memcpy(buf[0..source_root.len], source_root);
                     @memcpy(buf[source_root.len..][0 .. maybe_posix_path.len - 1], maybe_posix_path[1..]);
                     buf[source_root.len + maybe_posix_path.len - 1] = 0;
@@ -1998,6 +2004,9 @@ pub struct PosixToWinNormalizer {
                     assert(cwd.ptr == buf.ptr);
                     const source_root = windowsFilesystemRoot(cwd);
                     assert(source_root.ptr == source_root.ptr);
+                    if (source_root.len + maybe_posix_path.len - 1 >= buf.len) {
+                        return error.NameTooLong;
+                    }
                     @memcpy(buf[source_root.len..][0 .. maybe_posix_path.len - 1], maybe_posix_path[1..]);
                     const res = buf[0 .. source_root.len + maybe_posix_path.len - 1];
                     assert(!bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, res));
@@ -2026,6 +2035,9 @@ pub struct PosixToWinNormalizer {
                     assert(cwd.ptr == buf.ptr);
                     const source_root = windowsFilesystemRoot(cwd);
                     assert(source_root.ptr == source_root.ptr);
+                    if (source_root.len + maybe_posix_path.len > buf.len) {
+                        return error.NameTooLong;
+                    }
                     @memcpy(buf[source_root.len..][0 .. maybe_posix_path.len - 1], maybe_posix_path[1..]);
                     buf[source_root.len + maybe_posix_path.len - 1] = 0;
                     const res = buf[0 .. source_root.len + maybe_posix_path.len - 1 :0];
@@ -2038,6 +2050,9 @@ pub struct PosixToWinNormalizer {
             assert(!bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, maybe_posix_path));
         }
 
+        if (maybe_posix_path.len + 1 > buf.len) {
+            return error.NameTooLong;
+        }
         @memcpy(buf.ptr, maybe_posix_path);
         buf[maybe_posix_path.len] = 0;
         return buf[0..maybe_posix_path.len :0];

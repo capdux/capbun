@@ -432,8 +432,8 @@ pub fn SupportsRule(comptime R: type): type {
             dest.writeChar('}')?;
         }
 
-        pub fn minify(*_, _: *css.MinifyContext, _: bool): css.MinifyErr!void {
-            return;
+        pub fn minify(*_, context: *css.MinifyContext, parent_is_unused: bool): css.MinifyErr!void {
+            return _.rules.minify(context, parent_is_unused);
         }
 
         pub fn deepClone(*_, allocator: std.mem.Allocator): This {

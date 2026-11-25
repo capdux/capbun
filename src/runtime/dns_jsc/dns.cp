@@ -3413,7 +3413,9 @@ pub struct Resolver {
         if (addr_str.length() == 0) {
             return globalThis.throwInvalidArgumentType("lookupService", "address", "non-empty string");
         }
-        const addr_s = addr_str.getZigString(globalThis).slice();
+        const addr_slice = addr_str.toSlice(globalThis, bun.default_allocator);
+        const _addr_guard = DeinitGuard<@TypeOf(addr_slice)>{ val: addr_slice };
+        const addr_s = addr_slice.slice();
 
         const port_value = arguments.ptr[1];
         const port: u16 = port_value.toPortNumber(globalThis)?;

@@ -68,6 +68,7 @@ pub enum WebWorkerStatus: u8 {
 
 @c {
     fn WebWorker__teardownJSCVM(global: *jsc.JSGlobalObject);
+    fn ScriptExecutionContext__markTerminating(global: *jsc.JSGlobalObject);
     fn WebWorker__dispatchExit(worker: *!, exit_code: i32);
     fn WebWorker__dispatchOnline(cpp_worker: *!, global: *jsc.JSGlobalObject);
     fn WebWorker__fireEarlyMessages(cpp_worker: *!, global: *jsc.JSGlobalObject);
@@ -763,6 +764,7 @@ pub struct LiveWorkers {
 
         // ---- 3. JSC VM teardown ----------------------------------------------
         if (global := globalObject) {
+            ScriptExecutionContext__markTerminating(global);
             WebWorker__teardownJSCVM(global);
         }
 

@@ -68,6 +68,7 @@ pub enum _EventType: u8 {
     @"error" = 2,
     abort = 3,
     close = 4,
+    no_filename = 5,
 
     fn toJS(
         globalObject: *jsc.JSGlobalObject,
@@ -108,12 +109,14 @@ pub union(_EventType) _Event {
     @"error": bun.sys.Error,
     abort: void,
     close: void,
+    no_filename: PosixWatcher.PathWatcher.EventType,
 
     static fn dupe(event: _Event): _Event! {
         return switch (event) {
             .rename path => .{ .rename = (bun.default_allocator.dupe(u8, path)?) },
             .change path => .{ .change = (bun.default_allocator.dupe(u8, path)?) },
             .@"error" e => .{ .@"error" = e.clone(bun.default_allocator) },
+            .no_filename event_type => .{ .no_filename = event_type },
             .abort => .abort,
             .close => .close,
         };
@@ -191,6 +194,9 @@ pub struct _FSWatchTaskPosix {
                 },
                 .@"error" e => {
                     _.ctx.emitError(e);
+                },
+                .no_filename event_type => {
+                    _.ctx.emitNullFilename(event_type);
                 },
                 .abort => {
                     _.ctx.emitIfAborted();
@@ -285,6 +291,9 @@ pub struct _FSWatchTaskWindows {
             },
             .@"error" e => {
                 watcher.emitError(e);
+            },
+            .no_filename event_type => {
+                watcher.emitNullFilename(event_type);
             },
             .abort => {
                 watcher.emitIfAborted();
@@ -610,6 +619,13 @@ pub struct FSWatcher {
                     &args,
                 ) catch err_val => _.globalThis.reportActiveExceptionAsUnhandled(err_val);
             }
+        }
+    }
+
+    fn emitNullFilename(*_, event_type: PosixWatcher.PathWatcher.EventType) {
+        switch (event_type) {
+            .rename => _.emitWithFilename(jsc.JSValue.@"null", .rename),
+            .change => _.emitWithFilename(jsc.JSValue.@"null", .change),
         }
     }
 

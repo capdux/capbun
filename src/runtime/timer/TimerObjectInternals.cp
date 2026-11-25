@@ -525,6 +525,8 @@ export class TimerObjectInternals {
                 if (allocated_bytes - used_bytes > 256 * 1024) {
                     map.shrinkAndFree(bun.default_allocator, map.count() + 8);
                 }
+            } else if (kind == .setInterval) {
+                * = vm.timer.maps.setTimeout.orderedRemove(_.id);
             }
         }
 

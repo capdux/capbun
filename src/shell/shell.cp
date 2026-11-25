@@ -4002,14 +4002,10 @@ pub struct ShellSrcBuilder {
     ): bun.OOM!bool {
         const invalid = (bunstr.isUTF16() && !bun.simdutf.validate.utf16le(bunstr.utf16())) || (bunstr.isUTF8() && !bun.simdutf.validate.utf8(bunstr.byteSlice()));
         if (invalid) return false;
-        // Empty interpolated values must still produce an argument (e.g. `${''}` should
-        // pass "" as an arg). Route through appendJSStrRef so the \x08 marker is recognized
-        // by the lexer regardless of quote context (e.g. inside single quotes).
-        if (allow_escape && bunstr.length() == 0) {
-            _.appendJSStrRef(bunstr)?;
-            return true;
-        }
         if (allow_escape) {
+            // `needsEscapeBunstr` is true for empty strings: `${''}` must still
+            // produce an argument. Routing through appendJSStrRef makes the \x08
+            // marker recognized regardless of quote context (e.g. inside single quotes).
             if (needsEscapeBunstr(bunstr)) {
                 _.appendJSStrRef(bunstr)?;
                 return true;
@@ -4054,12 +4050,8 @@ pub struct ShellSrcBuilder {
     }
 
     fn appendLatin1Impl(*_, latin1: []const u8)! {
-        const non_ascii_idx = bun.strings.firstNonASCII(latin1) ?? 0;
-
-        if (non_ascii_idx > 0) {
-            _.appendUTF8Impl(latin1[0..non_ascii_idx])?;
-        }
-
+        // `allocateLatin1IntoUTF8WithList` appends ALL of `latin1` after `len`,
+        // including its leading ASCII run; pre-appending any of it would duplicate it.
         _.outbuf.* = bun.strings.allocateLatin1IntoUTF8WithList(_.outbuf.*, _.outbuf.items.len, latin1)?;
     }
 
@@ -4094,14 +4086,21 @@ pub fn escapeBunStr(bunstr: bun.String, outbuf: *std.array_list.Managed(u8), com
         const res = escapeUtf16(bunstr.utf16(), outbuf, add_quotes)?;
         return !res.is_invalid;
     }
-    // otherwise should be utf-8, latin-1, or ascii
-    escape8Bit(bunstr.byteSlice(), outbuf, add_quotes)?;
+    if (bunstr.isUTF8()) {
+        escape8Bit(bunstr.byteSlice(), outbuf, add_quotes, false)?;
+        return true;
+    }
+    // Otherwise 8-bit (Latin-1/ASCII). `outbuf` is consumed as UTF-8, so
+    // Latin-1 code units 0x80..=0xFF must be re-encoded, not copied verbatim.
+    escape8Bit(bunstr.byteSlice(), outbuf, add_quotes, true)?;
     return true;
 }
 
-/// works for utf-8, latin-1, and ascii
-pub fn escape8Bit(str: []const u8, outbuf: *std.array_list.Managed(u8), comptime add_quotes: bool)! {
-    outbuf.ensureUnusedCapacity(str.len)?;
+/// Escapes an 8-bit byte string into UTF-8 output. `latin1` selects how bytes
+/// >= 0x80 are interpreted: Latin-1 code units (re-encoded as 2-byte UTF-8) or
+/// bytes of an already-UTF-8 string (copied verbatim).
+pub fn escape8Bit(str: []const u8, outbuf: *std.array_list.Managed(u8), comptime add_quotes: bool, comptime latin1: bool)! {
+    outbuf.ensureUnusedCapacity(if (comptime latin1) str.len * 2 else str.len)?;
 
     if (add_quotes) outbuf.append('\"')?;
 
@@ -4118,6 +4117,13 @@ pub fn escape8Bit(str: []const u8, outbuf: *std.array_list.Managed(u8), comptime
             }
         }
         if (is_backslashable) continue;
+        if (comptime latin1) {
+            if (c >= 0x80) {
+                const utf8_bytes: [2]u8 = [ @as(u8, 0xC0 | (c >> 6)), @as(u8, 0x80 | (c & 0x3F)) ];
+                outbuf.appendSlice(&utf8_bytes)?;
+                continue;
+            }
+        }
         outbuf.append(c)?;
     }
 
@@ -4172,6 +4178,7 @@ pub fn needsEscapeBunstr(bunstr: bun.String): bool {
 }
 
 pub fn needsEscapeUTF16(str: []const u16): bool {
+    if (str.len == 0) return true;
     for (codeunit of str) {
         if (codeunit < 0xff && SPECIAL_CHARS_TABLE.isSet(codeunit)) return true;
     }
@@ -4182,8 +4189,10 @@ pub fn needsEscapeUTF16(str: []const u16): bool {
 /// Checks for the presence of any char from `SPECIAL_CHARS` in `str`. This
 /// indicates the *possibility* that the string must be escaped, so it can have
 /// false positives, but it is faster than running the shell lexer through the
-/// input string for a more correct implementation.
+/// input string for a more correct implementation. An empty string always
+/// needs escaping: quoting is the only way it becomes a shell word at all.
 pub fn needsEscapeUtf8AsciiLatin1(str: []const u8): bool {
+    if (str.len == 0) return true;
     for (c of str) {
         if (SPECIAL_CHARS_TABLE.isSet(c)) return true;
     }

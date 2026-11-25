@@ -48,7 +48,7 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
         if (data == .zero) {
             return globalThis.throwInvalidArgumentTypeValue("data", "string or an instance of Buffer, TypedArray, or DataView", .js_undefined);
         }
-        if (data.isString()) {
+        if (data.isStringLiteral()) {
             break :data_blk data.asString().toSlice(globalThis, bun.default_allocator);
         }
         let buffer: Buffer = undefined;
@@ -91,6 +91,18 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
 pub fn CompressionStream(comptime T: type): type {
     return struct {
+        pub static fn throwUnlessIdle(stream: *T, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
+            if (stream.write_in_progress) {
+                return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
+            }
+            if (stream.pending_close) {
+                return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
+            }
+            if (stream.closed) {
+                return globalThis.ERR(.INVALID_STATE, "zlib binding closed", {}).throw();
+            }
+        }
+
         pub static fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
 
@@ -140,12 +152,7 @@ pub fn CompressionStream(comptime T: type): type {
                 return globalThis.ERR(.OUT_OF_RANGE, "out_off + out_len ({d}) exceeds output buffer length ({d})", .{ @as(usize, out_off) + @as(usize, out_len), out_buf.byte_len }).throw();
             }
 
-            if (stream.write_in_progress) {
-                return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
-            }
-            if (stream.pending_close) {
-                return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
-            }
+            throwUnlessIdle(stream, globalThis)?;
 
             // Pin both buffers before mutating any state: materializing a
             // FastTypedArray's backing store can fail on OOM, and failing here
@@ -229,9 +236,11 @@ pub fn CompressionStream(comptime T: type): type {
             stream.stream.updateWriteResult(&stream.write_result.?[1], &stream.write_result.?[0]);
             this_value.ensureStillAlive();
 
-            const write_callback: jsc.JSValue = T.js.writeCallbackGetCached(this_value).?;
-
-            vm.eventLoop().runCallback(write_callback, global, this_value, []);
+            // `init()` caches the JS write callback; a handle whose `init()` was
+            // never called has none, so there is nothing to notify.
+            if (write_callback := T.js.writeCallbackGetCached(this_value)) {
+                vm.eventLoop().runCallback(write_callback, global, this_value, []);
+            }
 
             if (stream.pending_reset) resetInternal(stream, global, this_value);
             if (stream.pending_close) closeInternal(stream);
@@ -287,12 +296,7 @@ pub fn CompressionStream(comptime T: type): type {
             }
             out = out_buf.byteSlice()[out_off..][0..out_len];
 
-            if (stream.write_in_progress) {
-                return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
-            }
-            if (stream.pending_close) {
-                return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
-            }
+            throwUnlessIdle(stream, globalThis)?;
             stream.write_in_progress = true;
             stream.ref();
 
@@ -384,11 +388,13 @@ pub fn CompressionStream(comptime T: type): type {
             let code_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.code, 0) ?? "" }));
             const code_value = code_str.transferToJS(globalThis) catch return;
 
-            const callback: jsc.JSValue = T.js.errorCallbackGetCached(this_value) ??
-                Output.panic("Assertion failure: cachedErrorCallback is null in node:zlib binding", .{});
-
-            const vm = globalThis.bunVM();
-            vm.eventLoop().runCallback(callback, globalThis, this_value, &[msg_value, err_value, code_value]);
+            // The `zlib.ts` wrapper installs `onerror` right after construction,
+            // but a handle driven directly has none; there is nobody to notify.
+            // The pending reset/close handling below still runs either way.
+            if (callback := T.js.errorCallbackGetCached(this_value)) {
+                const vm = globalThis.bunVM();
+                vm.eventLoop().runCallback(callback, globalThis, this_value, &[msg_value, err_value, code_value]);
+            }
 
             if (stream.pending_reset) resetInternal(stream, globalThis, this_value);
             if (stream.pending_close) closeInternal(stream);

@@ -114,6 +114,15 @@ pub const Retry = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const FormDataComponent = enum {
+    name,
+    string_value,
+    filename,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+};
+
 pub const BlobClosingState = enum(u8) {
     running,
     closing,
@@ -534,6 +543,16 @@ pub const FormDataContext = struct {
     failed: bool = false,
     globalThis: *JSGlobalObject,
 
+pub fn pushStringSlice(self: *FormDataContext, slice: ZigString.Slice, component: FormDataComponent) void {
+            if (encodeFormDataComponent(self.allocator, slice.slice(), component)) |encoded| {
+                _ = &encoded;
+                _ = slice.deinit();
+                _ = self.joiner.push(encoded, self.allocator);
+                return;
+            }
+            _ = self.joiner.push(slice.slice(), slice.allocator.get());
+    }
+
 pub fn onEntry(self: *FormDataContext, name: ZigString, entry: jsc.DOMFormData.FormDataEntry) void {
             if (self.failed) {
                 return;
@@ -548,17 +567,17 @@ pub fn onEntry(self: *FormDataContext, name: ZigString, entry: jsc.DOMFormData.F
             _ = joiner.pushStatic("\r\n");
             _ = joiner.pushStatic("Content-Disposition: form-data; name=\"");
             const name_slice = name.toSlice(allocator);
-            _ = joiner.push(name_slice.slice(), name_slice.allocator.get());
+            _ = self.pushStringSlice(name_slice, .name);
             switch (entry) {
 .string => |value| {
 _ = joiner.pushStatic("\"\r\n\r\n");
             const value_slice = value.toSlice(allocator);
-            _ = joiner.push(value_slice.slice(), value_slice.allocator.get());
+            _ = self.pushStringSlice(value_slice, .string_value);
 },
 .file => |value| {
 _ = joiner.pushStatic("\"; filename=\"");
             const filename_slice = value.filename.toSlice(allocator);
-            _ = joiner.push(filename_slice.slice(), filename_slice.allocator.get());
+            _ = self.pushStringSlice(filename_slice, .filename);
             _ = joiner.pushStatic("\"\r\n");
             var blob = value.blob;
             _ = &blob;
@@ -3324,6 +3343,54 @@ pub fn free(_: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
 } else struct {
 });
 
+pub fn encodeFormDataComponent(allocator: std.mem.Allocator, bytes: []const u8, component: FormDataComponent) ?[]u8 {
+        const escape = (component != .string_value);
+        const normalize = (component != .filename);
+        const needles: []const u8 = (if (escape) "\"\r\n" else "\r\n");
+        var i_opt = std.mem.indexOfAny(u8, bytes, needles);
+        _ = &i_opt;
+        if ((i_opt == null)) {
+            return null;
+        }
+        var i = i_opt.?;
+        _ = &i;
+        var remain = bytes;
+        _ = &remain;
+        var out = (blk_catch_13: { break :blk_catch_13 ((std.array_list.Managed(u8).initCapacity(allocator, (bytes.len + 8))) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
+        _ = &out;
+        while (true) {
+            _ = bun.handleOom(out.appendSlice(remain[0..i]));
+            const b = remain[@as(usize, @intCast(i))];
+            var consumed: usize = 1;
+            _ = &consumed;
+            if ((b == 34)) {
+                _ = bun.handleOom(out.appendSlice("%22"));
+            } else {
+                if (normalize) {
+                    _ = bun.handleOom(out.appendSlice((if (escape) "%0D%0A" else "\r\n")));
+                    if ((((b == 13) and ((i + 1) < remain.len)) and (remain[@as(usize, @intCast((i + 1)))] == 10))) {
+                        consumed = 2;
+                    }
+                } else {
+                    if ((b == 13)) {
+                        _ = bun.handleOom(out.appendSlice("%0D"));
+                    } else {
+                        _ = bun.handleOom(out.appendSlice("%0A"));
+                    }
+                }
+            }
+            remain = remain[(i + consumed)..];
+            if (std.mem.indexOfAny(u8, remain, needles)) |next| {
+                _ = &next;
+                i = next;
+            } else {
+                break;
+            }
+        }
+        _ = bun.handleOom(out.appendSlice(remain));
+        return bun.handleOom(out.toOwnedSlice());
+}
+
 pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
         var args = callframe.arguments_old(2);
         _ = &args;
@@ -3475,7 +3542,7 @@ _ = fd.close();
         }
 },
 .s3 => |*s3| {
-var aws_options = (blk_catch_13: { break :blk_catch_13 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+var aws_options = (blk_catch_14: { break :blk_catch_14 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
         _ = &aws_options;
         var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
         _ = &_guard_aws;
@@ -3528,7 +3595,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 const promise_value = promise.asValue(ctx);
                 _ = promise_value.ensureStillAlive();
                 _ = write_file_promise.promise.strong.set(ctx, promise_value);
-                _ = (blk_catch_14: { break :blk_catch_14 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
+                _ = (blk_catch_15: { break :blk_catch_15 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
                     return error.JSTerminated;
                 } }); });
                 return promise_value;
@@ -3573,7 +3640,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         } else {
                             if ((destination_type == .s3)) {
                                 const s3 = (&destination_store.data.s3);
-                                var aws_options = (blk_catch_16: { break :blk_catch_16 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+                                var aws_options = (blk_catch_17: { break :blk_catch_17 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
                                 _ = &aws_options;
                                 var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
                                 _ = &_guard_aws;
@@ -3641,7 +3708,7 @@ pub fn writeStringToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Pat
                 needs_async.* = true;
                 return .zero;
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_17: { break :blk_catch_17 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_17| { _ = &__ce_17; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_18: { break :blk_catch_18 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_18| { _ = &__ce_18; return .zero; }); }));
         }
 },
 });
@@ -3683,9 +3750,9 @@ truncate = false;
                     return .zero;
                 }
                 if (comptime (!needs_open)) {
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_18: { break :blk_catch_18 ((e.toJS(globalThis)) catch |__ce_18| { _ = &__ce_18; return .zero; }); }));
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_19: { break :blk_catch_19 ((e.toJS(globalThis)) catch |__ce_19| { _ = &__ce_19; return .zero; }); }));
                 }
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_19: { break :blk_catch_19 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_19| { _ = &__ce_19; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_20: { break :blk_catch_20 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_20| { _ = &__ce_20; return .zero; }); }));
 },
 }
             }
@@ -3707,7 +3774,7 @@ pub fn writeBytesToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Path
                     return .zero;
                 }
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_20: { break :blk_catch_20 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_20| { _ = &__ce_20; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_21: { break :blk_catch_21 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_21| { _ = &__ce_21; return .zero; }); }));
         }
 },
 });
@@ -3742,9 +3809,9 @@ if ((!Environment.isWindows)) {
                 }
             }
             if (comptime (!needs_open)) {
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_21: { break :blk_catch_21 ((e.toJS(globalThis)) catch |__ce_21| { _ = &__ce_21; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_22: { break :blk_catch_22 ((e.toJS(globalThis)) catch |__ce_22| { _ = &__ce_22; return .zero; }); }));
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_22: { break :blk_catch_22 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_22| { _ = &__ce_22; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_23: { break :blk_catch_23 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_23| { _ = &__ce_23; return .zero; }); }));
 },
 }
         }
@@ -4568,7 +4635,7 @@ blob.name = name_value_str.dupeRef();
 }
 
 pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
-        return (blk_catch_23: { break :blk_catch_23 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        return (blk_catch_24: { break :blk_catch_24 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             if ((globalThis.throwOutOfMemory() == error.JSError)) {
             }
         }

@@ -2689,7 +2689,18 @@ pub struct PathTemplate {
             const field = field_opt.?;
 
             switch (field) {
-                .dir => writeReplacingSlashesOnWindows(writer, if (_.placeholder.dir.len > 0) _.placeholder.dir else ".")?,
+                .dir => {
+                    if (_.placeholder.dir.len == 0) {
+                        writer.writeAll(".")?;
+                    } else {
+                        let d: []const u8 = _.placeholder.dir;
+                        while (d.len >= 3 && d[0] == '.' && d[1] == '.' && (d[2] == '/' || d[2] == '\\')) {
+                            writeReplacingSlashesOnWindows(writer, "_.._/")?;
+                            d = d[3..];
+                        }
+                        writeReplacingSlashesOnWindows(writer, if (strings.eqlComptime(d, "..")) "_.._" else d)?;
+                    }
+                },
                 .name => writeReplacingSlashesOnWindows(writer, _.placeholder.name)?,
                 .ext => writeReplacingSlashesOnWindows(writer, _.placeholder.ext)?,
                 .hash => {

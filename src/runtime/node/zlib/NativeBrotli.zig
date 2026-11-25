@@ -210,6 +210,9 @@ pub fn setFlush(self: *Context, flush: c_int) void {
     }
 
 pub fn doWork(self: *Context) void {
+            if ((self.state == null)) {
+                return;
+            }
             switch (self.mode) {
 .BROTLI_ENCODE => {
 var next_in = self.next_in;
@@ -296,7 +299,9 @@ _ = unreachable;
     }
 
 pub fn close(self: *Context) void {
-            _ = self.deinitState();
+            if ((self.state != null)) {
+                _ = self.deinitState();
+            }
             self.mode = .NONE;
     }
 
@@ -366,6 +371,7 @@ pub fn init(self: *NativeBrotli, globalThis: *jsc.JSGlobalObject, callframe: *js
         if ((arguments.len != 3)) {
             return globalThis.ERR(.MISSING_ARGS, "init(params, writeResult, writeCallback)", .{}).throw();
         }
+        _ = try StreamImpl.throwUnlessIdle(self, globalThis);
         const writeResult_value = arguments[1];
         const writeResult_ab = ((writeResult_value.asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value); });
         if ((writeResult_ab.typed_array_type != .Uint32Array)) {
@@ -403,6 +409,7 @@ pub fn init(self: *NativeBrotli, globalThis: *jsc.JSGlobalObject, callframe: *js
                 e = self.stream.setParams(@intCast(i), d);
                 if (e.isError()) {
                     _ = self.stream.close();
+                    self.closed = true;
                     return jsc.JSValue.false;
                 }
             }

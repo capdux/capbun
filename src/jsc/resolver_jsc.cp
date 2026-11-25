@@ -3,6 +3,14 @@
 
 struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
 struct DeinitGuard<T> { val: T, ~init() { _.val.deinit(); } }
+struct StringListDerefGuard {
+    list: *std.array_list.Managed(bun.String)!,
+    ~init() {
+        for (s of _.list.items) {
+            s.deref();
+        }
+    }
+}
 struct PathBufferGuard {
     buf: @TypeOf(bun.path_buffer_pool.get()),
     ~init() { bun.path_buffer_pool.put(_.buf); }
@@ -35,6 +43,7 @@ pub fn nodeModulePathsJSValue(in_str: bun.String, globalObject: *bun.jsc.JSGloba
     const alloc = stack_fallback_allocator.get();
 
     let list = DeinitGuard<std.array_list.Managed(bun.String)>{ val: std.array_list.Managed(bun.String).init(alloc) };
+    const _list_items_guard = StringListDerefGuard{ list: unsafe { &list.val } };
 
     const sliced = DeinitGuard<@TypeOf(in_str.toUTF8(bun.default_allocator))>{ val: in_str.toUTF8(bun.default_allocator) };
     const base_path = if (use_dirname) std.fs.path.dirname(sliced.val.slice()) ?? sliced.val.slice() else sliced.val.slice();

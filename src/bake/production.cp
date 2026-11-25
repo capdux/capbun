@@ -908,15 +908,27 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         navigatable_routes.append(FrameworkRouter.Route.Index.init(@intCast(i)))?;
     }
 
+    // These strings live only in this heap slice until the route arrays below
+    // store them; the conservative GC stack scan cannot see a heap buffer, so
+    // keep each one protected (module evaluation below can trigger GC).
     let css_chunk_js_strings = (allocator.alloc(JSValue, css_chunks_count))?;
     defer allocator.free(css_chunk_js_strings);
+    let protected_css_count: usize = 0;
+    defer {
+        for (j of 0..protected_css_count) {
+            css_chunk_js_strings[j].unprotect();
+        }
+    }
     for (i of 0..css_chunks_count) {
         const output_file = bundled_outputs[css_chunks_first + @as(usize, @intCast(i))];
         bun.assert(output_file.dest_path[0] != '.');
         // CSS chunks must be in contiguous order!!
         bun.assert(output_file.loader.isCSS());
         const fmt_str = bun.String.createFormat("{s}{s}", .{ public_path, output_file.dest_path })?;
-        css_chunk_js_strings[i] = fmt_str.toJS(global)?;
+        const js_str = fmt_str.toJS(global)?;
+        js_str.protect();
+        css_chunk_js_strings[i] = js_str;
+        protected_css_count = @as(usize, @intCast(i)) + 1;
     }
 
     // Route URL patterns with parameter placeholders.

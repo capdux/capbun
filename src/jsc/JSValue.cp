@@ -2032,6 +2032,7 @@ pub enum JSValue: i64 {
     /// - Does not increment ref count
     /// - Make sure `this` stays on the stack. If you're method chaining, you may need to call `this.ensureStillAlive()`.
     pub fn asString(): *JSString {
+        bun.debugAssert(_.isStringLiteral());
         return JSC__JSValue__asString(_);
     }
 

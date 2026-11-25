@@ -326,7 +326,7 @@ pub struct RunCommand {
         for (part of passthrough) {
             copy_script.append(' ')?;
             if (bun.shell.needsEscapeUtf8AsciiLatin1(part)) {
-                bun.shell.escape8Bit(part, &copy_script, true)?;
+                bun.shell.escape8Bit(part, &copy_script, true, false)?;
             } else {
                 copy_script.appendSlice(part)?;
             }
@@ -2093,7 +2093,6 @@ pub struct BunXFastPath {
     const debug = Output.scoped(.BunXFastPath, .visible);
 
     static let direct_launch_buffer: bun.WPathBuffer = undefined;
-    static let environment_buffer: bun.WPathBuffer = undefined;
 
     /// Append a single UTF-8 argument to a Windows command line (UTF-16), with proper quoting and escaping.
     /// Returns the number of UTF-16 code units written.
@@ -2228,6 +2227,9 @@ pub struct BunXFastPath {
         }
         ctx.passthrough = passthrough;
 
+        const env_block = env.map.writeWindowsEnvBlock(ctx.allocator) catch return;
+        defer ctx.allocator.free(env_block);
+
         const run_ctx = shim_impl.FromBunRunContext{
             handle: handle,
             base_path: path_to_use[4..],
@@ -2235,7 +2237,7 @@ pub struct BunXFastPath {
             force_use_bun: ctx.debug.run_in_bun,
             direct_launch_with_bun_js: &directLaunchCallback,
             cli_context: ctx,
-            environment: (env.map.writeWindowsEnvBlock(&environment_buffer) catch return),
+            environment: env_block.ptr,
         };
 
         if (Environment.isDebug) {

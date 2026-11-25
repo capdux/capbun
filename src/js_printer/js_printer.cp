@@ -5610,7 +5610,7 @@ fn NewPrinter(
             const func = part.stmts[0].data.s_expr.value.data.e_function.func;
 
             // Special-case lazy-export AST
-            if (ast.has_lazy_export) {
+            if (ast.has_lazy_export && func.body.stmts.len > 0 && func.body.stmts[0].data == .s_lazy_export) {
                 @branchHint(.unlikely);
                 p.printFnArgs(func.open_parens_loc, func.args, func.flags.contains(.has_rest_arg), false);
                 p.printSpace();
@@ -5633,7 +5633,7 @@ fn NewPrinter(
             }
 
             // ESM is represented by an array tuple [ dependencies, exports, starImports, load, async ];
-            else if (ast.exports_kind == .esm) {
+            if (ast.exports_kind == .esm) {
                 p.print(": [ [");
                 // Print the dependencies.
                 if (part.stmts.len > 1) {

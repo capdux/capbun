@@ -1186,6 +1186,17 @@ pub struct BundleV2 {
         bundle.linker.resolver = &bundle.transpiler.resolver;
         bundle.linker.graph.code_splitting = transpiler.options.code_splitting;
 
+        // Cross-chunk imports/exports are only generated for ESM (see
+        // computeCrossChunkDependencies). Reject other formats up front
+        // rather than panicking later. Matches esbuild.
+        if (transpiler.options.code_splitting && transpiler.options.output_format != .esm) {
+            transpiler.log.addError(
+                null,
+                bun.logger.Loc.Empty,
+                "Code splitting is currently only supported when format is set to \"esm\"",
+            ) catch {};
+        }
+
         bundle.linker.options.minify_syntax = transpiler.options.minify_syntax;
         bundle.linker.options.minify_identifiers = transpiler.options.minify_identifiers;
         bundle.linker.options.minify_whitespace = transpiler.options.minify_whitespace;

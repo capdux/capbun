@@ -87,7 +87,7 @@ pub struct BinaryExpressionVisitorImpl<P> {
     /// "Local variables" passed from "checkAndPrepare" to "visitRightAndFinish"
     is_stmt_expr: bool = false,
 
-    fn visitRightAndFinish(
+    static fn visitRightAndFinish(
         v: *BinaryExpressionVisitorImpl<P>,
         p: *P,
     ): Expr {
@@ -171,7 +171,22 @@ pub struct BinaryExpressionVisitorImpl<P> {
                 // "(0, this.fn)" => "this.fn"
                 // "(0, this.fn)()" => "(0, this.fn)()"
                 if (p.options.features.minify_syntax) {
-                    if (simplified_left := SideEffects.simplifyUnusedExpr(p, e_.left)) {
+                    // If e_.left is itself a comma, its .left was already simplified
+                    // by the previous unwind step; only simplify its .right to avoid
+                    // re-walking/reallocating the whole chain (O(n^2) arena blowup).
+                    let maybe_simplified_left: Expr? = null;
+                    if (e_.left.data == .e_binary && e_.left.data.e_binary.op == .bin_comma) {
+                        const inner = e_.left.data.e_binary;
+                        if (simplified_right := SideEffects.simplifyUnusedExpr(p, inner.right)) {
+                            inner.right = simplified_right;
+                            maybe_simplified_left = e_.left;
+                        } else {
+                            maybe_simplified_left = inner.left;
+                        }
+                    } else {
+                        maybe_simplified_left = SideEffects.simplifyUnusedExpr(p, e_.left);
+                    }
+                    if (simplified_left := maybe_simplified_left) {
                         if (simplified_left.isEmpty()) {
                             return e_.right;
                         }
@@ -559,7 +574,7 @@ pub struct BinaryExpressionVisitorImpl<P> {
         return Expr{ loc: v.loc, data: { e_binary: e_ } };
     }
 
-    fn checkAndPrepare(v: *BinaryExpressionVisitorImpl<P>, p: *P): Expr? {
+    static fn checkAndPrepare(v: *BinaryExpressionVisitorImpl<P>, p: *P): Expr? {
         return checkAndPrepareImpl(P, v, p);
     }
 }

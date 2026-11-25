@@ -1,3 +1,12 @@
+/// WHATWG Fetch "null body status": a Response with one of these status codes
+/// has a null body, so no body bytes reach the wire and HEAD frames like GET.
+pub fn isNullBody(code: u16): bool {
+    return switch (code) {
+        101, 103, 204, 205, 304 => true,
+        else => false,
+    };
+}
+
 pub fn get(code: u16): string? {
     return switch (code) {
         100 => "100 Continue",

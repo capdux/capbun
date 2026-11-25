@@ -2032,7 +2032,12 @@ pub inline fn wrapGenericRequestHandler(comptime handler: anytype, comptime is_s
 
 pub fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) void {
             _ = assert((dev.magic == .valid));
-            _ = handler(dev, req, (if (uses_any_response) AnyResponse.init(resp) else resp));
+            const any_resp = AnyResponse.init(resp);
+            if ((!isAllowedDevHost(dev, req))) {
+                _ = hostForbidden(any_resp);
+                return;
+            }
+            _ = handler(dev, req, (if (uses_any_response) any_resp else resp));
     }
 }).handle;
 }
@@ -2040,12 +2045,113 @@ pub fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response
 pub inline fn redirectHandler(comptime path: []const u8, comptime is_ssl: bool) *const fn (*DevServer, *Request, *uws.NewApp(is_ssl).Response) void {
         return (struct {
 
-pub fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) void {
+pub fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) void {
+            if ((!isAllowedDevHost(dev, req))) {
+                _ = hostForbidden(AnyResponse.init(resp));
+                return;
+            }
             _ = resp.writeStatus("302 Found");
             _ = resp.writeHeader("Location", path);
             _ = resp.end("Redirecting...", false);
     }
 }).handle;
+}
+
+pub fn hostWithoutPort(host: []const u8) []const u8 {
+        var h = host;
+        _ = &h;
+        var rest: []const u8 = host[host.len..];
+        _ = &rest;
+        if (((host.len > 0) and (host[0] == 91))) {
+            const end = ((bun.strings.indexOfChar(host, 93)) orelse { return ""; });
+            h = host[0..(end + 1)];
+            rest = host[(end + 1)..];
+        } else {
+            if (bun.strings.lastIndexOfChar(host, 58)) |colon| {
+                _ = &colon;
+                h = host[0..colon];
+                rest = host[colon..];
+            }
+        }
+        if ((rest.len == 0)) {
+            return h;
+        }
+        if (((rest.len >= 2) and (rest[0] == 58))) {
+            for (cp_iter_slice(rest[1..])) |ch| {
+                _ = &ch;
+                if (((ch < 48) or (ch > 57))) {
+                    return "";
+                }
+            }
+            return h;
+        }
+        return "";
+}
+
+pub fn isAllowedDevHost(dev: *DevServer, req: *Request) bool {
+        const raw_host = ((req.header("host")) orelse { return false; });
+        const host = hostWithoutPort(raw_host);
+        if ((host.len == 0)) {
+            return false;
+        }
+        if (bun.strings.eqlCaseInsensitiveASCII(host, "localhost", true)) {
+            return true;
+        }
+        const dot_localhost: []const u8 = ".localhost";
+        if (((host.len > dot_localhost.len) and bun.strings.eqlCaseInsensitiveASCII(host[(host.len - dot_localhost.len)..], dot_localhost, true))) {
+            return true;
+        }
+        const ip = (if ((((host.len >= 2) and (host[0] == 91)) and (host[@as(usize, @intCast((host.len - 1)))] == 93))) host[1..(host.len - 1)] else host);
+        const parsed_ip = (blk_catch_21: { break :blk_catch_21 ((std.net.Address.parseIp(ip, 0)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); });
+        if ((parsed_ip != null)) {
+            return true;
+        }
+        if (dev.server) |server| {
+            _ = &server;
+            if ((server.config().address == .tcp)) {
+                if (server.config().address.tcp.hostname) |h| {
+                    _ = &h;
+                    return bun.strings.eqlCaseInsensitiveASCII(host, std.mem.span(h), true);
+                }
+            }
+        }
+        return false;
+}
+
+pub fn isAllowedDevOrigin(req: *Request) bool {
+        const origin = ((req.header("origin")) orelse { return true; });
+        const scheme_end = ((bun.strings.indexOf(origin, "://")) orelse { return false; });
+        const origin_host = hostWithoutPort(origin[(scheme_end + 3)..]);
+        if ((origin_host.len == 0)) {
+            return false;
+        }
+        if (bun.strings.eqlCaseInsensitiveASCII(origin_host, "localhost", true)) {
+            return true;
+        }
+        const dot_localhost: []const u8 = ".localhost";
+        if (((origin_host.len > dot_localhost.len) and bun.strings.eqlCaseInsensitiveASCII(origin_host[(origin_host.len - dot_localhost.len)..], dot_localhost, true))) {
+            return true;
+        }
+        const raw_host = ((req.header("host")) orelse { return false; });
+        return bun.strings.eqlCaseInsensitiveASCII(origin_host, hostWithoutPort(raw_host), true);
+}
+
+pub fn hostForbidden(resp: AnyResponse) void {
+        _ = resp.corked(hostForbiddenCorked, .{ resp });
+}
+
+pub fn hostForbiddenCorked(resp: AnyResponse) void {
+        _ = resp.writeStatus("403 Forbidden");
+        _ = resp.end("Blocked: Host header does not match the dev server", false);
+}
+
+pub fn originForbidden(resp: AnyResponse) void {
+        _ = resp.corked(originForbiddenCorked, .{ resp });
+}
+
+pub fn originForbiddenCorked(resp: AnyResponse) void {
+        _ = resp.writeStatus("403 Forbidden");
+        _ = resp.end("Blocked: Origin header does not match the dev server", false);
 }
 
 pub fn onIncrementalVisualizer(_: *DevServer, _: *Request, resp: AnyResponse) void {
@@ -2162,7 +2268,7 @@ break;
             _ = try dev.next_bundle.route_queue.put(dev.allocator(), route_bundle_index, undefined);
             _ = try defer_function(ctx, .next_bundle);
             dev.routeBundlePtr(route_bundle_index).server_state = .bundling;
-            _ = (blk_catch_22: { break :blk_catch_22 ((dev.startAsyncBundle(entry_points.*, false, (blk_catch_21: { break :blk_catch_21 ((std.time.Timer.start()) catch |__ce_21| { _ = &__ce_21; @panic("timers unsupported"); }); }))) catch |e| { _ = &e; break :blk_catch_22 bun.handleOom(e); }); });
+            _ = (blk_catch_23: { break :blk_catch_23 ((dev.startAsyncBundle(entry_points.*, false, (blk_catch_22: { break :blk_catch_22 ((std.time.Timer.start()) catch |__ce_22| { _ = &__ce_22; @panic("timers unsupported"); }); }))) catch |e| { _ = &e; break :blk_catch_23 bun.handleOom(e); }); });
             return;
 },
 .deferred_to_next_bundle => {
@@ -2411,7 +2517,7 @@ pub fn computeArgumentsForFrameworkRequest(dev: *DevServer, route_bundle_index: 
 })), .client_id = ((framework_bundle.cached_client_bundle_url.get()) orelse (str: {
         const bundle_index: u32 = route_bundle_index.get();
         const generation: u32 = route_bundle.client_script_generation;
-        var str_guard = BunStringGuard{ .str = (blk_catch_23: { break :blk_catch_23 ((bun.String.createFormat((client_prefix ++ "/route-{x}{x}.js"), .{ std.mem.asBytes((&bundle_index)), std.mem.asBytes((&generation)) })) catch |e| { _ = &e; break :blk_catch_23 bun.handleOom(e); }); }) };
+        var str_guard = BunStringGuard{ .str = (blk_catch_24: { break :blk_catch_24 ((bun.String.createFormat((client_prefix ++ "/route-{x}{x}.js"), .{ std.mem.asBytes((&bundle_index)), std.mem.asBytes((&generation)) })) catch |e| { _ = &e; break :blk_catch_24 bun.handleOom(e); }); }) };
         _ = &str_guard;
         var __str_guard_moved = false; _ = &__str_guard_moved;
         defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
@@ -2698,8 +2804,8 @@ pub fn prepareAndLogResolutionFailures(dev: *DevServer) !void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_22 = rf_keys.len;
-                while (i < __end_22) : (i += 1) {
+                const __end_23 = rf_keys.len;
+                while (i < __end_23) : (i += 1) {
                     const owner = rf_keys[@as(usize, @intCast(i))];
                     const log = (&rf_vals[@as(usize, @intCast(i))]);
                     if (log.hasErrors()) {
@@ -2722,7 +2828,7 @@ _ = unreachable;
             if (Environment.isDebug) {
                 _ = Output.debugWarn("dev.log should not be written into when using DevServer", .{});
             }
-            _ = (blk_catch_24: { break :blk_catch_24 ((dev.log.print(Output.errorWriter())) catch |__ce_24| { _ = &__ce_24;  }); });
+            _ = (blk_catch_25: { break :blk_catch_25 ((dev.log.print(Output.errorWriter())) catch |__ce_25| { _ = &__ce_25;  }); });
         }
 }
 
@@ -2925,8 +3031,8 @@ pub fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle) bun.JSErr
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_30 = names.len;
-            while (i < __end_30) : (i += 1) {
+            const __end_31 = names.len;
+            while (i < __end_31) : (i += 1) {
                 const item = names[@as(usize, @intCast(i))];
                 const asset_path_buf_len = ((asset_prefix.len + (@sizeOf(u64) * 2)) + "/.css".len);
                 _ = &asset_path_buf_len;
@@ -2985,8 +3091,8 @@ pub fn makeArrayForServerComponentsPatch(dev: *DevServer, global: *jsc.JSGlobalO
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_31 = items.len;
-            while (i < __end_31) : (i += 1) {
+            const __end_32 = items.len;
+            while (i < __end_32) : (i += 1) {
                 const item = items[@as(usize, @intCast(i))];
                 var relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
                 _ = &relative_path_guard;
@@ -3052,8 +3158,8 @@ pub fn finalizeBundle(dev: *DevServer, bv2: *bun.bundle_v2.BundleV2, result: *co
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_32 = scb_source_indices.len;
-            while (i < __end_32) : (i += 1) {
+            const __end_33 = scb_source_indices.len;
+            while (i < __end_33) : (i += 1) {
                 const source_index = scb_source_indices[@as(usize, @intCast(i))];
                 const ssr_index = scb_ssr_source_indices[@as(usize, @intCast(i))];
                 const ref_index = scb_ref_source_indices[@as(usize, @intCast(i))];
@@ -3074,8 +3180,8 @@ pub fn finalizeBundle(dev: *DevServer, bv2: *bun.bundle_v2.BundleV2, result: *co
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_33 = js_parts.len;
-            while (i < __end_33) : (i += 1) {
+            const __end_34 = js_parts.len;
+            while (i < __end_34) : (i += 1) {
                 const part_range = js_parts[@as(usize, @intCast(i))];
                 const compile_result = js_comp_results[@as(usize, @intCast(i))];
                 const index = part_range.source_index;
@@ -3101,8 +3207,8 @@ else => dev.server_graph,
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_34 = css_chunks.len;
-            while (i < __end_34) : (i += 1) {
+            const __end_35 = css_chunks.len;
+            while (i < __end_35) : (i += 1) {
                 var chunk = (&css_chunks[@as(usize, @intCast(i))]);
                 _ = &chunk;
                 const metadata = css_meta_vals[@as(usize, @intCast(i))];
@@ -3215,7 +3321,7 @@ _ = try dev.client_graph.processChunkDependencies((&ctx), .normal, part_range.so
             var __arena_guard_moved = false; _ = &__arena_guard_moved;
             defer if (!__arena_guard_moved) { __arena_guard_moved = true; const __T = @TypeOf(arena_guard); if (@typeInfo(__T) == .optional) { if (arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = arena_guard; _drop_val.__cp_deinit(); } };
             _ = try dev.server_graph.takeSourceMap(arena_guard.@"arena".allocator(), dev.allocator(), (&source_map_entry_guard.entry));
-            const json_data = (blk_catch_26: { break :blk_catch_26 ((source_map_entry_guard.entry.renderJSON(dev, arena_guard.@"arena".allocator(), .hmr_chunk, dev.allocator(), .server)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            const json_data = (blk_catch_27: { break :blk_catch_27 ((source_map_entry_guard.entry.renderJSON(dev, arena_guard.@"arena".allocator(), .hmr_chunk, dev.allocator(), .server)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                 return error.OutOfMemory;
             } else {
                 _ = unreachable;
@@ -3240,19 +3346,19 @@ _ = try dev.client_graph.processChunkDependencies((&ctx), .normal, part_range.so
                 if (comptime AllocationScope.enabled) {
                     _ = dev.allocation_scope.leakSlice(json);
                 }
-                server_modules = (blk_catch_27: { break :blk_catch_27 ((c.BakeLoadServerHmrPatchWithSourceMap((blk: {
+                server_modules = (blk_catch_28: { break :blk_catch_28 ((c.BakeLoadServerHmrPatchWithSourceMap((blk: {
                 break :blk @ptrCast(dev.vm.global);
 
 }), bun.String.cloneUTF8(server_bundle), json.ptr, json.len)) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
                 @panic("Error thrown while evaluating server code. This is always a bug in the bundler."); }); });
             } else {
-                server_modules = (blk_catch_28: { break :blk_catch_28 ((c.BakeLoadServerHmrPatch((blk: {
+                server_modules = (blk_catch_29: { break :blk_catch_29 ((c.BakeLoadServerHmrPatch((blk: {
                 break :blk @ptrCast(dev.vm.global);
 
 }), bun.String.cloneLatin1(server_bundle))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
                 @panic("Error thrown while evaluating server code. This is always a bug in the bundler."); }); });
             }
-            _ = (blk_catch_29: { break :blk_catch_29 (((dev.server_register_update_callback.get()).?.call(dev.vm.global, dev.vm.global.toJSValue(), (&.{ server_modules, try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_added.items), try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_removed.items) }))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
+            _ = (blk_catch_30: { break :blk_catch_30 (((dev.server_register_update_callback.get()).?.call(dev.vm.global, dev.vm.global.toJSValue(), (&.{ server_modules, try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_added.items), try dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_removed.items) }))) catch |e| { _ = &e; _ = dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
             @panic("Error thrown in Hot-module-replacement code. This is always a bug in the HMR runtime."); }); });
         }
         var route_bits_guard = DynamicBitSetGuard{ .bits = try DynamicBitSetUnmanaged.initEmpty(stack_alloc, dev.route_bundles.items.len), .alloc = stack_alloc };
@@ -3663,7 +3769,7 @@ pub fn startNextBundleIfPresent(dev: *DevServer) void {
             _ = &entry_points;
             var is_reload = false;
             _ = &is_reload;
-            var timer = (blk_catch_31: { break :blk_catch_31 ((std.time.Timer.start()) catch |__ce_31| { _ = &__ce_31; @panic("timers unsupported"); }); });
+            var timer = (blk_catch_32: { break :blk_catch_32 ((std.time.Timer.start()) catch |__ce_32| { _ = &__ce_32; @panic("timers unsupported"); }); });
             _ = &timer;
             if ((dev.next_bundle.reload_event != null)) {
                 var current = dev.next_bundle.reload_event.?;
@@ -3818,7 +3924,7 @@ pub fn onRequest(dev: *DevServer, req: *Request, resp: anytype) void {
             _ = &route_index;
             var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = AnyResponse.init(resp), .kind = .server_handler, .route_bundle_index = bun.handleOom(dev.getOrPutRouteBundle(.{ .framework = route_index })) };
             _ = &ctx;
-            _ = (blk_catch_32: { break :blk_catch_32 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_32 (__sw_blk_48: { const __disc_48 = e; _ = &__disc_48; if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .JSError)) {  break :__sw_blk_48 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .JSTerminated)) {  break :__sw_blk_48 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_48) and !cp_is_null_val(__disc_48))) { const __err_v_48 = cp_unwrap_err_val(__disc_48); _ = &__err_v_48; if (cp_match_tag(__err_v_48, .OutOfMemory)) {  break :__sw_blk_48 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_33 (__sw_blk_49: { const __disc_49 = e; _ = &__disc_49; if ((!cp_has_ok_val(__disc_49) and !cp_is_null_val(__disc_49))) { const __err_v_49 = cp_unwrap_err_val(__disc_49); _ = &__err_v_49; if (cp_match_tag(__err_v_49, .JSError)) {  break :__sw_blk_49 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_49) and !cp_is_null_val(__disc_49))) { const __err_v_49 = cp_unwrap_err_val(__disc_49); _ = &__err_v_49; if (cp_match_tag(__err_v_49, .JSTerminated)) {  break :__sw_blk_49 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_49) and !cp_is_null_val(__disc_49))) { const __err_v_49 = cp_unwrap_err_val(__disc_49); _ = &__err_v_49; if (cp_match_tag(__err_v_49, .OutOfMemory)) {  break :__sw_blk_49 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             return;
         }
         if ((dev.server.?.config().onRequest != .zero)) {
@@ -3842,12 +3948,16 @@ pub fn handleRenderRedirect(dev: *DevServer, saved_request: bun.jsc.API.SavedReq
 }
 
 pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, req: *uws.Request, resp: AnyResponse) bun.OOM!void {
+        if ((!isAllowedDevHost(dev, req))) {
+            _ = hostForbidden(resp);
+            return;
+        }
         var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = resp, .kind = .bundled_html_page, .route_bundle_index = try dev.getOrPutRouteBundle(.{ .html = html }) };
         _ = &ctx;
-        _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        _ = (blk_catch_34: { break :blk_catch_34 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
-        break :blk_catch_33 dev.vm.global.reportActiveExceptionAsUnhandled(e); }); });
+        break :blk_catch_34 dev.vm.global.reportActiveExceptionAsUnhandled(e); }); });
 }
 
 pub fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex) !RouteBundle.Index {
@@ -4064,11 +4174,11 @@ pub noinline fn dumpBundleForChunk(dev: *DevServer, dump_dir: std.fs.Dir, side: 
         const size = std.mem.replacementSize(u8, rel_path, (".." ++ std.fs.path.sep_str), ("_.._" ++ std.fs.path.sep_str));
         _ = std.mem.replace(u8, rel_path, (".." ++ std.fs.path.sep_str), ("_.._" ++ std.fs.path.sep_str), (&b));
         const rel_path_escaped = b[0..size];
-        _ = (blk_catch_34: { break :blk_catch_34 ((dumpBundle(dump_dir, (switch (side) {
+        _ = (blk_catch_35: { break :blk_catch_35 ((dumpBundle(dump_dir, (switch (side) {
 .client => .client,
 .server => (if (is_ssr_graph) .ssr else .server),
 }), rel_path_escaped, code, wrap)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-        break :blk_catch_34 @as(void, Output.warn("Could not dump bundle: {}", .{ e })); }); });
+        break :blk_catch_35 @as(void, Output.warn("Could not dump bundle: {}", .{ e })); }); });
 }
 
 pub fn emitVisualizerMessageIfNeeded(dev: *DevServer) void {
@@ -4090,7 +4200,7 @@ pub fn emitVisualizerMessageIfNeeded(dev: *DevServer) void {
         defer if (!__payload_guard_moved) { __payload_guard_moved = true; const __T = @TypeOf(payload_guard); if (@typeInfo(__T) == .optional) { if (payload_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { payload_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = payload_guard; _drop_val.__cp_deinit(); } };
         var payload = (&payload_guard.list);
         _ = &payload;
-        _ = (blk_catch_36: { break :blk_catch_36 ((dev.writeVisualizerMessage(payload)) catch |__ce_36| { _ = &__ce_36; return; }); });
+        _ = (blk_catch_37: { break :blk_catch_37 ((dev.writeVisualizerMessage(payload)) catch |__ce_37| { _ = &__ce_37; return; }); });
         _ = dev.publish(.incremental_visualizer, payload.items, .binary);
 }
 
@@ -4130,7 +4240,7 @@ pub fn emitMemoryVisualizerMessage(dev: *DevServer) void {
         var payload = (&payload_guard.list);
         _ = &payload;
         _ = payload.appendAssumeCapacity(MessageId.memory_visualizer.char());
-        _ = (blk_catch_38: { break :blk_catch_38 ((writeMemoryVisualizerMessage(dev, payload)) catch |__ce_38| { _ = &__ce_38; return; }); });
+        _ = (blk_catch_39: { break :blk_catch_39 ((writeMemoryVisualizerMessage(dev, payload)) catch |__ce_39| { _ = &__ce_39; return; }); });
         _ = dev.publish(.memory_visualizer, payload.items, .binary);
 }
 
@@ -4147,8 +4257,8 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_51 = keys.len;
-                while (i < __end_51) : (i += 1) {
+                const __end_52 = keys.len;
+                while (i < __end_52) : (i += 1) {
                     const key = keys[@as(usize, @intCast(i))];
                     const value = values[@as(usize, @intCast(i))];
                     _ = bun.assert((value.ref_count > 0));
@@ -4180,8 +4290,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_52 = bf_keys.len;
-                while (i < __end_52) : (i += 1) {
+                const __end_53 = bf_keys.len;
+                while (i < __end_53) : (i += 1) {
                     const k = bf_keys[@as(usize, @intCast(i))];
                     const v = bf_vals[@as(usize, @intCast(i))];
                     const file = v.unpack();
@@ -4216,8 +4326,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_53 = g.edges.items.len;
-                while (i < __end_53) : (i += 1) {
+                const __end_54 = g.edges.items.len;
+                while (i < __end_54) : (i += 1) {
                     const edge = g.edges.items[@as(usize, @intCast(i))];
                     if ((std.mem.indexOfScalar(G.EdgeIndex, g.edges_free_list.items, G.EdgeIndex.init(@intCast(i))) != null)) {
                         continue;
@@ -4231,6 +4341,14 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
 
 pub fn onWebSocketUpgrade(dev: *DevServer, res: anytype, req: *Request, upgrade_ctx: *uws.WebSocketUpgradeContext, id: usize) void {
         _ = assert((id == 0));
+        if ((!isAllowedDevHost(dev, req))) {
+            _ = hostForbidden(AnyResponse.init(res));
+            return;
+        }
+        if ((!isAllowedDevOrigin(req))) {
+            _ = originForbidden(AnyResponse.init(res));
+            return;
+        }
         const dw = HmrSocket.new(dev, res);
         _ = bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, undefined));
         _ = res.upgrade(HmrSocketPtr, dw, ((req.header("sec-websocket-key")) orelse ("")), ((req.header("sec-websocket-protocol")) orelse ("")), ((req.header("sec-websocket-extension")) orelse ("")), upgrade_ctx);
@@ -4412,6 +4530,9 @@ pub fn relativePath(dev: *DevServer, relative_path_buf: *bun.PathBuffer, path: [
         if ((((path.len >= (dev.root.len + 1)) and (path[@as(usize, @intCast(dev.root.len))] == 47)) and bun.strings.startsWith(path, dev.root))) {
             return path[(dev.root.len + 1)..];
         }
+        if (((path.len + (dev.root.len * 2)) >= bun.MAX_PATH_BYTES)) {
+            return path;
+        }
         const rel = bun.path.relativePlatformBuf(relative_path_buf, dev.root, path, .auto, true);
         _ = bun.path.platformToPosixInPlace(u8, (blk: {
         break :blk @constCast(rel);
@@ -4430,8 +4551,8 @@ pub fn dumpStateDueToCrash(dev: *DevServer) !void {
         _ = &max_path_len;
         var filepath_buf: [max_path_len]u8 = undefined;
         _ = &filepath_buf;
-        const filepath = (blk_catch_39: { break :blk_catch_39 ((std.fmt.bufPrintZ((&filepath_buf), "incremental-graph-crash-dump.{d}.html", .{ std.time.timestamp() })) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 "incremental-graph-crash-dump.html"; }); });
-        const file = (blk_catch_40: { break :blk_catch_40 ((std.fs.cwd().createFileZ(filepath, .{})) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+        const filepath = (blk_catch_40: { break :blk_catch_40 ((std.fmt.bufPrintZ((&filepath_buf), "incremental-graph-crash-dump.{d}.html", .{ std.time.timestamp() })) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 "incremental-graph-crash-dump.html"; }); });
+        const file = (blk_catch_41: { break :blk_catch_41 ((std.fs.cwd().createFileZ(filepath, .{})) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
         _ = Output.warn("Could not open file for dumping incremental graph: {}", .{ e });
         return; }); });
         var file_guard = FileCloseGuard{ .file = file };

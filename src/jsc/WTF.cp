@@ -1,4 +1,8 @@
 pub struct WTF {
+    /// ECMA-262 §21.4.1.1 Time Value range bound (±8.64e15 ms). Mirrors
+    /// `WTF::maxECMAScriptTime`; a static_assert in wtf-bindings.cpp keeps them in sync.
+    pub const MAX_ECMASCRIPT_TIME: f64 = 8.64e15;
+
     extern fn WTF__parseDouble(bytes: [*]const u8, length: usize, counted: *usize): f64 ;
 
     extern fn WTF__numberOfProcessorCores(): c_int ;

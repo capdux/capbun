@@ -104,6 +104,10 @@ pub enum TickState { timeout, completed }
     }
 
     fn prepareTimerOnWindows(*_, ts: *const bun.timespec) {
+        // Refresh the loop's cached clock: this loop only runs while a spawnSync call is in
+        // flight, so `loop->time` (which `uv_timer_start` computes the due time from) can be
+        // staler than the timeout, which would make the timer fire immediately.
+        bun.windows.libuv.uv_update_time(_.uws_loop.uv_loop);
         if (timer := _.uv_timer) {
             timer.start(ts.msUnsigned(), 0, &onUVTimer);
             timer.ref();

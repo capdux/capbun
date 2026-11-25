@@ -27,6 +27,13 @@ const Stream = Lockfile.Stream;
 const StringPool = Lockfile.StringPool;
 const VersionHashMap = Lockfile.VersionHashMap;
 
+@c struct PatchedDepExternal {
+    path: @TypeOf(@as(PatchedDep, undefined).path),
+    _padding: [7]u8 = [0, 0, 0, 0, 0, 0, 0],
+    patchfile_hash_is_null: u8 = 1,
+    __patchfile_hash: u64 = 0,
+}
+
 struct StreamType {
     bytes: *std.array_list.Managed(u8),
 
@@ -539,11 +546,18 @@ pub struct SerializerLoadResult {
                     const patched_dependencies_paths = (Lockfile.Buffers.readArray(
                         stream,
                         allocator,
-                        std.ArrayListUnmanaged(PatchedDep),
+                        std.ArrayListUnmanaged(PatchedDepExternal),
                     )?);
 
                     for (i of 0..patched_dependencies_name_and_version_hashes.items.len) {
-                        map.putAssumeCapacity(patched_dependencies_name_and_version_hashes.items[i], patched_dependencies_paths.items[i]);
+                        const ext = patched_dependencies_paths.items[i];
+                        let dep = PatchedDep{ path: ext.path };
+                        switch (ext.patchfile_hash_is_null) {
+                            0 => dep.setPatchfileHash(ext.__patchfile_hash),
+                            1 => dep.setPatchfileHash(null),
+                            else => return error.InvalidLockfile,
+                        }
+                        map.putAssumeCapacity(patched_dependencies_name_and_version_hashes.items[i], dep);
                     }
                 } else {
                     stream.pos -= 8;

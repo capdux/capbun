@@ -1246,6 +1246,14 @@ if (auto_close) {
             self.flags.has_sendfile_ctx = true;
             self.flags.has_abort_handler = true;
             self.flags.has_marked_pending = true;
+            if (self.flags.is_waiting_for_request_body) {
+                self.flags.is_waiting_for_request_body = false;
+                _ = resp.clearOnData();
+            }
+            if (self.flags.has_timeout_handler) {
+                _ = resp.clearTimeout();
+                self.flags.has_timeout_handler = false;
+            }
             _ = FileResponseStream.start(.{ .fd = fd, .auto_close = auto_close, .resp = anyResponse(resp), .vm = self.server.?.vm, .file_type = file_type, .pollable = pollable, .offset = self.sendfile.offset, .length = (if (is_regular) (if (comptime @typeInfo(@TypeOf(self.sendfile.remain)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.sendfile.remain)) else cp_cast_int(u64, self.sendfile.remain)) else null), .idle_timeout = self.server.?.config.idleTimeout, .ctx = self, .on_complete = onFileStreamComplete, .on_abort = onFileStreamAbort, .on_error = onFileStreamError });
     }
 
@@ -2334,7 +2342,7 @@ pub fn renderMetadata(self: *@This()) void {
 
 }))) catch |__ce_21| { _ = &__ce_21; return; }); });
             }
-            if ((needs_content_type and ((!self.blob.isDetached()) or ((if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value).ptr != (if (@typeInfo(@TypeOf(MimeType.other)) == .@"enum") @intFromEnum(MimeType.other) else MimeType.other.value).ptr)))) {
+            if (((needs_content_type and ((!self.blob.isDetached()) or ((if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value).ptr != (if (@typeInfo(@TypeOf(MimeType.other)) == .@"enum") @intFromEnum(MimeType.other) else MimeType.other.value).ptr))) and (std.mem.indexOfAny(u8, (if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value), "\r\n\x00") == null))) {
                 _ = resp.writeHeader("content-type", (if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value));
             }
             if (comptime ((!http3) and @hasDecl(ThisServer, "h3AltSvc"))) {

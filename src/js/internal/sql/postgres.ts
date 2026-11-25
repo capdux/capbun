@@ -461,6 +461,10 @@ function onQueryFinish(this: PooledPostgresConnection, onClose: (err: Error) => 
   this.adapter.release(this);
 }
 
+function closeNT(onClose: (err: Error) => void, err: Error | null) {
+  onClose(err as Error);
+}
+
 class PooledPostgresConnection {
   private static async createConnection(
     options: Bun.SQL.__internal.DefinedPostgresOrMySQLOptions,
@@ -515,7 +519,9 @@ class PooledPostgresConnection {
         !prepare,
       );
     } catch (e) {
-      onClose(e as Error);
+      // defer so the callback never runs while the adapter is still filling
+      // this.connections (it scans that array); mysql.ts does the same
+      process.nextTick(closeNT, onClose, e);
       return null;
     }
   }
@@ -536,30 +542,34 @@ class PooledPostgresConnection {
       err = wrapPostgresError(err);
     }
     const connectionInfo = this.connectionInfo;
-    if (connectionInfo?.onconnect) {
-      connectionInfo.onconnect(err);
-    }
-    this.storedError = err;
-    if (!err) {
-      this.flags |= PooledConnectionFlags.canBeConnected;
-    }
-    this.state = err ? PooledConnectionState.closed : PooledConnectionState.connected;
-    const onFinish = this.onFinish;
-    if (onFinish) {
-      this.queryCount = 0;
-      this.flags &= ~PooledConnectionFlags.reserved;
-      this.flags &= ~PooledConnectionFlags.preReserved;
-
-      // pool is closed, lets finish the connection
-      // pool is closed, lets finish the connection
-      if (err) {
-        onFinish(err);
-      } else {
-        this.connection?.close();
+    try {
+      // user code; a throw must not abort the pool bookkeeping below
+      // (the exception keeps propagating after the finally block runs)
+      if (connectionInfo?.onconnect) {
+        connectionInfo.onconnect(err);
       }
-      return;
+    } finally {
+      this.storedError = err;
+      if (!err) {
+        this.flags |= PooledConnectionFlags.canBeConnected;
+      }
+      this.state = err ? PooledConnectionState.closed : PooledConnectionState.connected;
+      const onFinish = this.onFinish;
+      if (onFinish) {
+        this.queryCount = 0;
+        this.flags &= ~PooledConnectionFlags.reserved;
+        this.flags &= ~PooledConnectionFlags.preReserved;
+
+        // pool is closed, lets finish the connection
+        if (err) {
+          onFinish(err);
+        } else {
+          this.connection?.close();
+        }
+      } else {
+        this.adapter.release(this, true);
+      }
     }
-    this.adapter.release(this, true);
   }
 
   #onClose(err) {
@@ -567,30 +577,35 @@ class PooledPostgresConnection {
       err = wrapPostgresError(err);
     }
     const connectionInfo = this.connectionInfo;
-    if (connectionInfo?.onclose) {
-      connectionInfo.onclose(err);
-    }
-    this.state = PooledConnectionState.closed;
-    this.connection = null;
-    this.storedError = err;
+    try {
+      // user code; a throw must not abort the pool bookkeeping below
+      // (the exception keeps propagating after the finally block runs)
+      if (connectionInfo?.onclose) {
+        connectionInfo.onclose(err);
+      }
+    } finally {
+      this.state = PooledConnectionState.closed;
+      this.connection = null;
+      this.storedError = err;
 
-    // remove from ready connections if its there
-    this.adapter.readyConnections?.delete(this);
-    const queries = new Set(this.queries);
-    this.queries?.clear?.();
-    this.queryCount = 0;
-    this.flags &= ~PooledConnectionFlags.reserved;
+      // remove from ready connections if its there
+      this.adapter.readyConnections?.delete(this);
+      const queries = new Set(this.queries);
+      this.queries?.clear?.();
+      this.queryCount = 0;
+      this.flags &= ~PooledConnectionFlags.reserved;
 
-    // notify all queries that the connection is closed
-    for (const onClose of queries) {
-      onClose(err);
-    }
-    const onFinish = this.onFinish;
-    if (onFinish) {
-      onFinish(err);
-    }
+      // notify all queries that the connection is closed
+      for (const onClose of queries) {
+        onClose(err);
+      }
+      const onFinish = this.onFinish;
+      if (onFinish) {
+        onFinish(err);
+      }
 
-    this.adapter.release(this, true);
+      this.adapter.release(this, true);
+    }
   }
 
   constructor(connectionInfo: Bun.SQL.__internal.DefinedPostgresOrMySQLOptions, adapter: PostgresAdapter) {
@@ -959,7 +974,7 @@ class PostgresAdapter
       const pollSize = this.connections.length;
       for (let i = 0; i < pollSize; i++) {
         const connection = this.connections[i];
-        if (connection.state === PooledConnectionState.connected) {
+        if (connection?.state === PooledConnectionState.connected) {
           return true;
         }
       }
@@ -974,7 +989,7 @@ class PostgresAdapter
       const pollSize = this.connections.length;
       for (let i = 0; i < pollSize; i++) {
         const connection = this.connections[i];
-        if (connection.state === PooledConnectionState.connected) {
+        if (connection?.state === PooledConnectionState.connected) {
           connection.connection?.flush();
         }
       }
@@ -1000,7 +1015,7 @@ class PostgresAdapter
       const pollSize = this.connections.length;
       for (let i = 0; i < pollSize; i++) {
         const connection = this.connections[i];
-        switch (connection.state) {
+        switch (connection?.state) {
           case PooledConnectionState.pending:
             {
               const { promise, resolve } = Promise.withResolvers();
@@ -1105,7 +1120,9 @@ class PostgresAdapter
         for (let i = 0; i < pollSize; i++) {
           const connection = this.connections[i];
           // we need a new connection and we have some connections that can retry
-          if (connection.state === PooledConnectionState.closed) {
+          // (an unassigned hole is a connection still being created, so it
+          // lands in the "pending" branch below)
+          if (connection?.state === PooledConnectionState.closed) {
             if (connection.retry()) {
               // lets wait for connection to be released
               if (!retry_in_progress) {

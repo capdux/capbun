@@ -1297,6 +1297,12 @@ pub struct Installer {
                 patch.name_and_version_hash,
             ),
         };
+        // Every peer variant shares one patched cache dir (named by the patch
+        // contents hash, not the peer set). Once it exists, reuse it: rebuilding
+        // it replaces the directory under earlier entries' running hardlink tasks.
+        if (sys.directoryExistsAt(FD.fromStdDir(patch_task.val.callback.apply.cache_dir), patch_task.val.callback.apply.cache_dir_subpath).unwrapOr(false)) {
+            return;
+        }
         bun.handleOom(patch_task.val.apply());
 
         if (patch_task.val.callback.apply.logger.hasErrors()) {

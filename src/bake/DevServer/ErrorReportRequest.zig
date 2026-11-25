@@ -220,21 +220,25 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
         _ = &_sm_arena_guard;
         var ___sm_arena_guard_moved = false; _ = &___sm_arena_guard_moved;
         defer if (!___sm_arena_guard_moved) { ___sm_arena_guard_moved = true; const __T = @TypeOf(_sm_arena_guard); if (@typeInfo(__T) == .optional) { if (_sm_arena_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sm_arena_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sm_arena_guard; _drop_val.__cp_deinit(); } };
-        const name = try readString32(reader, temp_alloc);
-        var _name_guard = FreeGuard(u8){ .allocator = temp_alloc, .slice = name };
+        const sm_alloc = arena_alloc.allocator();
+        const raw_name = try readString32(reader, temp_alloc);
+        var _name_guard = FreeGuard(u8){ .allocator = temp_alloc, .slice = raw_name };
         _ = &_name_guard;
         var ___name_guard_moved = false; _ = &___name_guard_moved;
         defer if (!___name_guard_moved) { ___name_guard_moved = true; const __T = @TypeOf(_name_guard); if (@typeInfo(__T) == .optional) { if (_name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _name_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _name_guard; _drop_val.__cp_deinit(); } };
-        const message = try readString32(reader, temp_alloc);
-        var _msg_guard = FreeGuard(u8){ .allocator = temp_alloc, .slice = message };
+        const name = try sanitizeForTerminal(raw_name, sm_alloc);
+        const raw_message = try readString32(reader, temp_alloc);
+        var _msg_guard = FreeGuard(u8){ .allocator = temp_alloc, .slice = raw_message };
         _ = &_msg_guard;
         var ___msg_guard_moved = false; _ = &___msg_guard_moved;
         defer if (!___msg_guard_moved) { ___msg_guard_moved = true; const __T = @TypeOf(_msg_guard); if (@typeInfo(__T) == .optional) { if (_msg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _msg_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _msg_guard; _drop_val.__cp_deinit(); } };
-        const browser_url = try readString32(reader, temp_alloc);
-        var _url_guard = FreeGuard(u8){ .allocator = temp_alloc, .slice = browser_url };
+        const message = try sanitizeForTerminal(raw_message, sm_alloc);
+        const raw_browser_url = try readString32(reader, temp_alloc);
+        var _url_guard = FreeGuard(u8){ .allocator = temp_alloc, .slice = raw_browser_url };
         _ = &_url_guard;
         var ___url_guard_moved = false; _ = &___url_guard_moved;
         defer if (!___url_guard_moved) { ___url_guard_moved = true; const __T = @TypeOf(_url_guard); if (@typeInfo(__T) == .optional) { if (_url_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _url_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _url_guard; _drop_val.__cp_deinit(); } };
+        const browser_url = try sanitizeForTerminal(raw_browser_url, sm_alloc);
         var frames: ArrayListUnmanaged(jsc.ZigStackFrame) = .empty;
         _ = &frames;
         var _frames_guard = DeinitWithAllocGuard(@TypeOf(frames)){ .ptr = (&frames), .allocator = temp_alloc };
@@ -250,8 +254,8 @@ pub fn runWithBody(ctx: *ErrorReportRequest, body: []const u8, r: AnyResponse) !
             while (frame_idx < __end_1) : (frame_idx += 1) {
                 const line = try reader.readInt(i32, .little);
                 const column = try reader.readInt(i32, .little);
-                const function_name = try readString32(reader, temp_alloc);
-                const file_name = try readString32(reader, temp_alloc);
+                const function_name = try sanitizeForTerminal(try readString32(reader, temp_alloc), sm_alloc);
+                const file_name = try sanitizeForTerminal(try readString32(reader, temp_alloc), sm_alloc);
                 _ = frames.appendAssumeCapacity(jsc.ZigStackFrame{ .function_name = .init(function_name), .source_url = .init(file_name), .position = (if ((line > 0)) jsc.ZigStackFramePosition{ .line = .fromOneBased(line), .column = (if ((column < 1)) .invalid else .fromOneBased(column)), .line_start_byte = 0 } else jsc.ZigStackFramePosition{ .line = .invalid, .column = .invalid, .line_start_byte = 0 }), .code_type = .None, .is_async = false, .remapped = false });
             }
         }
@@ -547,6 +551,40 @@ pub fn extractJsonEncodedSourceCode(contents: []const u8, target_line: u32, aren
             }
         }
         return result;
+}
+
+pub fn sanitizeForTerminal(s: []const u8, arena: Allocator) ![]const u8 {
+        var prev: u8 = 0;
+        _ = &prev;
+        var has_bad = false;
+        _ = &has_bad;
+        for (cp_iter_slice(s)) |b| {
+            _ = &b;
+            if ((((((b < 32) and (b != 9)) and (b != 10)) or (b == 127)) or (((prev == 194) and (b >= 128)) and (b <= 159)))) {
+                has_bad = true;
+                break;
+            }
+            prev = b;
+        }
+        if ((!has_bad)) {
+            return s;
+        }
+        var copy = try arena.dupe(u8, s);
+        _ = &copy;
+        prev = 0;
+        var i: usize = 0;
+        _ = &i;
+        while ((i < copy.len)) : (i = (i + 1)) {
+            const cur = copy[@as(usize, @intCast(i))];
+            if ((((((cur < 32) and (cur != 9)) and (cur != 10)) or (cur == 127)) or (((prev == 194) and (cur >= 128)) and (cur <= 159)))) {
+                copy[cp_cast_int(usize, i)] = 32;
+                if (((prev == 194) and (i > 0))) {
+                    copy[cp_cast_int(usize, (i - 1))] = 32;
+                }
+            }
+            prev = cur;
+        }
+        return copy;
 }
 const Output = bun.Output;
 const bake = bun.bake;

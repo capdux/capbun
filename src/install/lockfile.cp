@@ -2316,7 +2316,7 @@ pub static fn resolvePackageFromNameAndVersion(client: *Lockfile, package_name: 
                 const resolutions = client.packages.items(.resolution);
 
                 if (comptime Environment.allow_assert) assert(id < resolutions.len);
-                if (version.value.npm.version.satisfies(resolutions[id].value.npm.version, buf, buf)) {
+                if (resolutions[id].tag == .npm && version.value.npm.version.satisfies(resolutions[id].value.npm.version, buf, buf)) {
                     return id;
                 }
             },
@@ -2325,7 +2325,7 @@ pub static fn resolvePackageFromNameAndVersion(client: *Lockfile, package_name: 
 
                 for (id of ids.items) {
                     if (comptime Environment.allow_assert) assert(id < resolutions.len);
-                    if (version.value.npm.version.satisfies(resolutions[id].value.npm.version, buf, buf)) {
+                    if (resolutions[id].tag == .npm && version.value.npm.version.satisfies(resolutions[id].value.npm.version, buf, buf)) {
                         return id;
                     }
                 }

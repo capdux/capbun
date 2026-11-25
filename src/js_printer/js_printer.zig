@@ -5481,7 +5481,7 @@ pub fn printDevServerModule(p: *Printer, source: *const logger.Source, ast: *con
             _ = p.printIndent();
             _ = p.printStringLiteralUTF8(source.path.pretty, false);
             const func = (if (@typeInfo(@TypeOf(part.stmts[0].data.s_expr)) == .@"enum") @intFromEnum(part.stmts[0].data.s_expr) else part.stmts[0].data.s_expr.value).data.e_function.func;
-            if (ast.has_lazy_export) {
+            if (((ast.has_lazy_export and (func.body.stmts.len > 0)) and (func.body.stmts[0].data == .s_lazy_export))) {
                 @branchHint(.unlikely);
                 _ = p.printFnArgs(func.open_parens_loc, func.args, func.flags.contains(.has_rest_arg), false);
                 _ = p.printSpace();
@@ -5498,99 +5498,98 @@ pub fn printDevServerModule(p: *Printer, source: *const logger.Source, ast: *con
                 _ = p.printIndent();
                 _ = p.print("},\n");
                 return;
-            } else {
-                if ((ast.exports_kind == .esm)) {
-                    _ = p.print(": [ [");
-                    if ((part.stmts.len > 1)) {
-                        _ = p.indent();
-                        _ = p.print("\n");
-                        for (cp_iter_slice(part.stmts[1..])) |stmt| {
-                            _ = &stmt;
-                            _ = p.printIndent();
-                            const imp = stmt.data.s_import;
-                            const record = p.importRecord(imp.import_record_index);
-                            _ = p.printStringLiteralUTF8(record.path.pretty, false);
-                            const item_count = ((if (comptime @typeInfo(@TypeOf(@intFromBool((imp.default_name != null)))) == .@"enum") cp_cast_int(u32, @intFromEnum(@intFromBool((imp.default_name != null)))) else cp_cast_int(u32, @intFromBool((imp.default_name != null)))) + @as(u32, @intCast(imp.items.len)));
-                            _ = (blk_catch_30: { break :blk_catch_30 ((p.fmt(", {d},", .{ item_count })) catch |__ce_30| { _ = &__ce_30;  }); });
-                            if ((item_count == 0)) {
-                                _ = p.print((if ((imp.star_name_loc != null)) " // namespace import" else " // bare import"));
-                            } else {
-                                if ((imp.default_name != null)) {
-                                    _ = p.print(" \"default\",");
-                                }
-                                for (imp.items) |item| {
-                                    _ = &item;
-                                    _ = p.print(" ");
-                                    _ = p.printStringLiteralUTF8(item.alias, false);
-                                    _ = p.print(",");
-                                }
-                            }
-                            _ = p.print("\n");
-                        }
-                        _ = p.unindent();
-                        _ = p.printIndent();
-                    }
-                    _ = p.print("], [");
-                    if ((ast.named_exports.count() > 0)) {
-                        _ = p.indent();
-                        var len: usize = std.math.maxInt(usize);
-                        _ = &len;
-                        for (cp_iter_slice(ast.named_exports.keys())) |key| {
-                            _ = &key;
-                            if ((len > 120)) {
-                                _ = p.printNewline();
-                                _ = p.printIndent();
-                                len = 0;
-                            } else {
-                                _ = p.print(" ");
-                            }
-                            len = (len + key.len);
-                            _ = p.printStringLiteralUTF8(key, false);
-                            _ = p.print(",");
-                        }
-                        _ = p.unindent();
-                        _ = p.printNewline();
-                        _ = p.printIndent();
-                    }
-                    _ = p.print("], [");
+            }
+            if ((ast.exports_kind == .esm)) {
+                _ = p.print(": [ [");
+                if ((part.stmts.len > 1)) {
                     _ = p.indent();
-                    var had_any_stars = false;
-                    _ = &had_any_stars;
-                    for (cp_iter_slice(ast.export_star_import_records)) |star| {
-                        _ = &star;
-                        const record = p.importRecord(star);
-                        if (record.path.is_disabled) {
-                            continue;
-                        }
-                        had_any_stars = true;
-                        _ = p.printNewline();
+                    _ = p.print("\n");
+                    for (cp_iter_slice(part.stmts[1..])) |stmt| {
+                        _ = &stmt;
                         _ = p.printIndent();
+                        const imp = stmt.data.s_import;
+                        const record = p.importRecord(imp.import_record_index);
                         _ = p.printStringLiteralUTF8(record.path.pretty, false);
+                        const item_count = ((if (comptime @typeInfo(@TypeOf(@intFromBool((imp.default_name != null)))) == .@"enum") cp_cast_int(u32, @intFromEnum(@intFromBool((imp.default_name != null)))) else cp_cast_int(u32, @intFromBool((imp.default_name != null)))) + @as(u32, @intCast(imp.items.len)));
+                        _ = (blk_catch_30: { break :blk_catch_30 ((p.fmt(", {d},", .{ item_count })) catch |__ce_30| { _ = &__ce_30;  }); });
+                        if ((item_count == 0)) {
+                            _ = p.print((if ((imp.star_name_loc != null)) " // namespace import" else " // bare import"));
+                        } else {
+                            if ((imp.default_name != null)) {
+                                _ = p.print(" \"default\",");
+                            }
+                            for (imp.items) |item| {
+                                _ = &item;
+                                _ = p.print(" ");
+                                _ = p.printStringLiteralUTF8(item.alias, false);
+                                _ = p.print(",");
+                            }
+                        }
+                        _ = p.print("\n");
+                    }
+                    _ = p.unindent();
+                    _ = p.printIndent();
+                }
+                _ = p.print("], [");
+                if ((ast.named_exports.count() > 0)) {
+                    _ = p.indent();
+                    var len: usize = std.math.maxInt(usize);
+                    _ = &len;
+                    for (cp_iter_slice(ast.named_exports.keys())) |key| {
+                        _ = &key;
+                        if ((len > 120)) {
+                            _ = p.printNewline();
+                            _ = p.printIndent();
+                            len = 0;
+                        } else {
+                            _ = p.print(" ");
+                        }
+                        len = (len + key.len);
+                        _ = p.printStringLiteralUTF8(key, false);
                         _ = p.print(",");
                     }
                     _ = p.unindent();
-                    if (had_any_stars) {
-                        _ = p.printNewline();
-                        _ = p.printIndent();
-                    }
-                    _ = p.print("], ");
-                    if ((!ast.top_level_await_keyword.isEmpty())) {
-                        _ = p.print("async");
-                    }
-                    _ = p.printFnArgs(func.open_parens_loc, func.args, func.flags.contains(.has_rest_arg), false);
-                    _ = p.print(" => {\n");
-                    _ = p.indent();
-                    _ = p.printBlockBody(func.body.stmts, TopLevel.init(.no));
-                    _ = p.unindent();
+                    _ = p.printNewline();
                     _ = p.printIndent();
-                    _ = p.print("}, ");
-                    _ = p.print((if ((!ast.top_level_await_keyword.isEmpty())) "true" else "false"));
-                    _ = p.print("],\n");
-                } else {
-                    _ = bun.assert((ast.exports_kind == .cjs));
-                    _ = p.printFunc(func);
-                    _ = p.print(",\n");
                 }
+                _ = p.print("], [");
+                _ = p.indent();
+                var had_any_stars = false;
+                _ = &had_any_stars;
+                for (cp_iter_slice(ast.export_star_import_records)) |star| {
+                    _ = &star;
+                    const record = p.importRecord(star);
+                    if (record.path.is_disabled) {
+                        continue;
+                    }
+                    had_any_stars = true;
+                    _ = p.printNewline();
+                    _ = p.printIndent();
+                    _ = p.printStringLiteralUTF8(record.path.pretty, false);
+                    _ = p.print(",");
+                }
+                _ = p.unindent();
+                if (had_any_stars) {
+                    _ = p.printNewline();
+                    _ = p.printIndent();
+                }
+                _ = p.print("], ");
+                if ((!ast.top_level_await_keyword.isEmpty())) {
+                    _ = p.print("async");
+                }
+                _ = p.printFnArgs(func.open_parens_loc, func.args, func.flags.contains(.has_rest_arg), false);
+                _ = p.print(" => {\n");
+                _ = p.indent();
+                _ = p.printBlockBody(func.body.stmts, TopLevel.init(.no));
+                _ = p.unindent();
+                _ = p.printIndent();
+                _ = p.print("}, ");
+                _ = p.print((if ((!ast.top_level_await_keyword.isEmpty())) "true" else "false"));
+                _ = p.print("],\n");
+            } else {
+                _ = bun.assert((ast.exports_kind == .cjs));
+                _ = p.printFunc(func);
+                _ = p.print(",\n");
             }
             _ = p.unindent();
     }

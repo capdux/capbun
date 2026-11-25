@@ -135,7 +135,7 @@ pub fn LowerDecorators(
             const key_expr = prop.key.?;
             if (prop.flags.contains(.is_computed) || key_expr.data == .e_number) {
                 return p.newExpr(E.Index{ target: target_expr, index: key_expr }, key_expr.loc);
-            } else if (key_expr.data == .e_string) {
+            } else if (key_expr.data == .e_string && key_expr.data.e_string.isUTF8()) {
                 return p.newExpr(E.Dot{
                     target: target_expr,
                     name: key_expr.data.e_string.data,
@@ -589,7 +589,9 @@ pub fn LowerDecorators(
                     class_name_loc = loc;
                     expr_class_is_anonymous = true;
                     if (name := name_from_context) {
-                        cls.class_name = { ref: newSym(p, .other, name), loc: loc };
+                        if (canBeClassBindingName(name)) {
+                            cls.class_name = { ref: newSym(p, .other, name), loc: loc };
+                        }
                     }
                 }
             } else {
@@ -848,7 +850,7 @@ pub fn LowerDecorators(
                     // Undecorated auto-accessor → WeakMap + getter/setter
                     if (prop.kind == .auto_accessor) {
                         const accessor_name = brk: {
-                            if (prop.key.?.data == .e_string)
+                            if (prop.key.?.data == .e_string && prop.key.?.data.e_string.isUTF8())
                                 break :brk std.fmt.allocPrint(p.allocator, "_{s}", .{prop.key.?.data.e_string.data}) catch unreachable;
                             const name = std.fmt.allocPrint(p.allocator, "_accessor_storage{d}", .{accessor_storage_counter}) catch unreachable;
                             accessor_storage_counter += 1;
@@ -1005,7 +1007,7 @@ pub fn LowerDecorators(
                 } else if (k == 4) {
                     // Decorated public auto-accessor → WeakMap
                     const accessor_name = brk: {
-                        if (key_expr.data == .e_string)
+                        if (key_expr.data == .e_string && key_expr.data.e_string.isUTF8())
                             break :brk std.fmt.allocPrint(p.allocator, "_{s}", .{key_expr.data.e_string.data}) catch unreachable;
                         const name = std.fmt.allocPrint(p.allocator, "_accessor_storage{d}", .{accessor_storage_counter}) catch unreachable;
                         accessor_storage_counter += 1;
@@ -1535,6 +1537,16 @@ const Decl = G.Decl;
 const Property = G.Property;
 
 const js_parser = bun.js_parser;
+const js_lexer = bun.js_lexer;
 const JSXTransformType = js_parser.JSXTransformType;
 const Ref = js_parser.Ref;
 const arguments_str = js_parser.arguments_str;
+const isEvalOrArguments = js_parser.isEvalOrArguments;
+
+fn canBeClassBindingName(name: []const u8): bool {
+    return js_lexer.isIdentifier(name) &&
+        !js_lexer.Keywords.has(name) &&
+        !js_lexer.StrictModeReservedWords.has(name) &&
+        !std.mem.eql(u8, name, "await") &&
+        !isEvalOrArguments(name);
+}

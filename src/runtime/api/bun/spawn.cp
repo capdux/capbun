@@ -168,6 +168,24 @@ pub struct PosixWaitPidResult {
 pub const WaitPidMaybe = Maybe(PosixWaitPidResult);
 pub const PidMaybe = Maybe(pid_t);
 
+fn spawnActionError(e: anyerror, path: [*:0]const u8): PidMaybe {
+    const code: std.c.E = if (e == error.InvalidFileDescriptor)
+        .BADF
+    else if (e == error.SystemResources)
+        .NOMEM
+    else if (e == error.NameTooLong)
+        .NAMETOOLONG
+    else
+        .INVAL;
+    return PidMaybe{
+        @"err": {
+            errno: @as(bun.sys.Error.Int, @truncate(@intFromEnum(code))),
+            syscall: .posix_spawn,
+            path: bun.asByteSlice(path),
+        },
+    };
+}
+
 pub struct PosixAttr {
     attr: system.posix_spawnattr_t,
     detached: bool = false,
@@ -458,16 +476,19 @@ pub struct PosixSpawn {
                             if (comptime bun.Environment.allow_assert) {
                                 bun.sys.syslog("posix_spawn_file_actions_addclose({d}) failed: {s}", [action.fds[0], @errorName(e)]);
                             }
+                            return spawnActionError(e, path);
                         },
                         .dup2 => posix_actions.dup2(bun.FD.fromNative(action.fds[0]), bun.FD.fromNative(action.fds[1])) catch e => {
                             if (comptime bun.Environment.allow_assert) {
                                 bun.sys.syslog("posix_spawn_file_actions_adddup2({d}, {d}) failed: {s}", [action.fds[0], action.fds[1], @errorName(e)]);
                             }
+                            return spawnActionError(e, path);
                         },
                         .open => posix_actions.openZ(bun.FD.fromNative(action.fds[0]), action.path.?, i32(action.flags), i32(action.mode)) catch e => {
                             if (comptime bun.Environment.allow_assert) {
                                 bun.sys.syslog("posix_spawn_file_actions_addopen({d}, {s}, {d}, {d}) failed: {s}", [action.fds[0], action.path.?, action.flags, action.mode, @errorName(e)]);
                             }
+                            return spawnActionError(e, path);
                         },
                         .none => {},
                     }
@@ -479,6 +500,7 @@ pub struct PosixSpawn {
                         if (comptime bun.Environment.allow_assert) {
                             bun.sys.syslog("posix_spawn_file_actions_addchdir({s}) failed: {s}", [chdir_path, @errorName(e)]);
                         }
+                        return spawnActionError(e, path);
                     };
                 }
             }

@@ -571,6 +571,15 @@ pub fn getPid(self: *Subprocess, _: *JSGlobalObject) JSValue {
         return JSValue.jsNumber(self.pid());
 }
 
+pub fn closeReadablePipes(self: *Subprocess) void {
+        if ((self.stdout == .pipe)) {
+            _ = self.stdout.close();
+        }
+        if ((self.stderr == .pipe)) {
+            _ = self.stderr.close();
+        }
+}
+
 pub fn getKilled(self: *Subprocess, _: *JSGlobalObject) JSValue {
         return JSValue.jsBoolean(self.hasKilled());
 }
@@ -690,14 +699,6 @@ pub fn onProcessExit(client: *Subprocess, process: *Process, status: bun.spawn.S
         }
         if ((existing_stdin_value != .zero)) {
             _ = jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_stdin_value, 0);
-        }
-        if (client.flags.is_sync) {
-            if ((client.stdout == .pipe)) {
-                _ = client.stdout.close();
-            }
-            if ((client.stderr == .pipe)) {
-                _ = client.stderr.close();
-            }
         }
         if (stdin) |pipe| {
             _ = &pipe;

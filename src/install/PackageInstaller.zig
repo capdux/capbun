@@ -843,9 +843,10 @@ if (comptime Environment.allow_assert) {
                         _ = bun.assertWithLocation(resolution.canEnqueueInstallTask(), @src());
                     }
                     const context: TaskCallbackContext = .{ .dependency_install_context = .{ .tree_id = self.current_tree_id, .path = bun.handleOom(self.node_modules.path.clone()), .dependency_id = dependency_id } };
+                    const download_patch_hash = (if (remove_patch) null else patch_name_and_version_hash);
                     switch (resolution.tag) {
 .git => {
-_ = self.manager.enqueueGitForCheckout(dependency_id, alias.slice(self.lockfile.buffers.string_bytes.items), resolution, context, patch_name_and_version_hash);
+_ = self.manager.enqueueGitForCheckout(dependency_id, alias.slice(self.lockfile.buffers.string_bytes.items), resolution, context, download_patch_hash);
 },
 .github => {
 const url = self.manager.allocGitHubURL((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).github));
@@ -854,11 +855,15 @@ const url = self.manager.allocGitHubURL((&(if (@typeInfo(@TypeOf(resolution)) ==
                     var ___guard_url_moved = false; _ = &___guard_url_moved;
                     defer if (!___guard_url_moved) { ___guard_url_moved = true; const __T = @TypeOf(_guard_url); if (@typeInfo(__T) == .optional) { if (_guard_url) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_url.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_url; _drop_val.__cp_deinit(); } };
                     _ = (&_guard_url);
-                    _ = (blk_catch_7: { break :blk_catch_7 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, url, context, patch_name_and_version_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = (blk_catch_7: { break :blk_catch_7 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, url, context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
                             _ = self.failWithInvalidUrl(is_pending_package_install, log_level);
+                        } else {
+                            if ((e == error.AlreadyFailed)) {
+                                _ = self.incrementTreeInstallCount(self.current_tree_id, (!is_pending_package_install), log_level);
+                            }
                         }
                     } }); });
 },
@@ -866,11 +871,15 @@ const url = self.manager.allocGitHubURL((&(if (@typeInfo(@TypeOf(resolution)) ==
 _ = self.manager.enqueueTarballForReading(dependency_id, package_id, alias.slice(self.lockfile.buffers.string_bytes.items), resolution, context);
 },
 .remote_tarball => {
-_ = (blk_catch_8: { break :blk_catch_8 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).remote_tarball.slice(self.lockfile.buffers.string_bytes.items), context, patch_name_and_version_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+_ = (blk_catch_8: { break :blk_catch_8 ((self.manager.enqueueTarballForDownload(dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).remote_tarball.slice(self.lockfile.buffers.string_bytes.items), context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
                             _ = self.failWithInvalidUrl(is_pending_package_install, log_level);
+                        } else {
+                            if ((e == error.AlreadyFailed)) {
+                                _ = self.incrementTreeInstallCount(self.current_tree_id, (!is_pending_package_install), log_level);
+                            }
                         }
                     } }); });
 },
@@ -880,11 +889,15 @@ if (comptime Environment.isDebug) {
                             _ = Output.debugWarn("package {s}@{f} missing tarball_url", .{ @TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
                         }
                     }
-                    _ = (blk_catch_9: { break :blk_catch_9 ((self.manager.enqueuePackageForDownload(@TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.slice(self.lockfile.buffers.string_bytes.items), context, patch_name_and_version_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = (blk_catch_9: { break :blk_catch_9 ((self.manager.enqueuePackageForDownload(@TypeOf(pkg_name).slice((&pkg_name), self.lockfile.buffers.string_bytes.items), dependency_id, package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url.slice(self.lockfile.buffers.string_bytes.items), context, download_patch_hash)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         _ = bun.outOfMemory();
                     } else {
                         if ((e == error.InvalidURL)) {
                             _ = self.failWithInvalidUrl(is_pending_package_install, log_level);
+                        } else {
+                            if ((e == error.AlreadyFailed)) {
+                                _ = self.incrementTreeInstallCount(self.current_tree_id, (!is_pending_package_install), log_level);
+                            }
                         }
                     } }); });
 },

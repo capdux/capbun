@@ -144,6 +144,7 @@ pub struct _Handler<const ssl: bool> {
         if (session := tagged.get(bun.http.H2.ClientSession)) {
             return session.onClose(error.ConnectionClosed);
         }
+        bun.http.unregisterAbortTrackerForSocket(ssl, socket);
     }
 
     static fn addMemoryBackToPool(pooled: *_PooledSocket<ssl>) {
@@ -247,6 +248,8 @@ pub struct _Handler<const ssl: bool> {
         HTTPContext(ssl).markTaggedSocketAsDead(socket, tagged);
         if (client := tagged.get(bun.http)) {
             client.onConnectError();
+        } else {
+            bun.http.unregisterAbortTrackerForSocket(ssl, socket);
         }
     }
     static fn onEnd(
@@ -487,14 +490,15 @@ export class HTTPContext<const ssl: bool> {
 
         if (ssl) {
             if (client.canOfferH2()) {
+                const host_header_hash = client.proxyAuthHash();
                 for (session of _.active_h2_sessions.items) {
-                    if (session.hasHeadroom() && session.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props))) {
+                    if (session.hasHeadroom() && session.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), host_header_hash)) {
                         session.adopt(client);
                         return null;
                     }
                 }
                 for (pc of _.pending_h2_connects.items) {
-                    if (pc.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props))) {
+                    if (pc.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), host_header_hash)) {
                         bun.handleOom(pc.waiters.append(bun.default_allocator, client));
                         return null;
                     }
@@ -506,7 +510,7 @@ export class HTTPContext<const ssl: bool> {
             const want_tunnel = client.http_proxy != null && client.url.isHTTPS();
             const target_hostname: []const u8 = if (want_tunnel) client.url.hostname else "";
             const target_port: u16 = if (want_tunnel) client.url.getPortAuto() else 0;
-            const proxy_auth_hash: u64 = if (want_tunnel) client.proxyAuthHash() else 0;
+            const proxy_auth_hash: u64 = if (want_tunnel || ssl) client.proxyAuthHash() else 0;
 
             if (found := _.existingSocket(
                 client.flags.reject_unauthorized,
@@ -563,6 +567,7 @@ export class HTTPContext<const ssl: bool> {
                     .hostname = bun.handleOom(bun.default_allocator.dupe(u8, hostname)),
                     .port = port,
                     .ssl_config = bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props),
+                    .host_header_hash = client.proxyAuthHash(),
                 });
                 bun.handleOom(_.pending_h2_connects.append(bun.default_allocator, pc));
                 client.pending_h2 = pc;

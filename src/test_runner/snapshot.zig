@@ -472,16 +472,6 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     _ = &next_start;
                     _ = inline_snapshot_dbg("-> Found byte {}", .{ next_start });
                     const range_info = blk: {
-                    if ((file_text[next_start..].len > 0)) {
-                        switch (file_text[@as(usize, @intCast(next_start))]) {
-' ', '.' => {
-next_start = (next_start + 1);
-},
-else => {
-
-},
-}
-                    }
                     const fn_name = ils.kind;
                     if ((!bun.strings.startsWith(file_text[next_start..], fn_name))) {
                         _ = (blk_catch_5: { break :blk_catch_5 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(next_start)) }, arena_, "Failed to update inline snapshot: Could not find '{s}' here", .{ fn_name })) catch |__ce_5| { _ = &__ce_5;  }); });

@@ -463,6 +463,7 @@ pub fn MultiArrayList(comptime T: type): type {
         }
 
         pub fn appendListAssumeCapacity(*_, other: Self) {
+            if (other.len == 0) return;
             const offset = _.len;
             _.len += other.len;
             const other_slice = other.slice();
@@ -471,7 +472,11 @@ pub fn MultiArrayList(comptime T: type): type {
                 const field_info = fields[i];
                 if (@sizeOf(field_info.type) != 0) {
                     const field = @as(Field, @enumFromInt(i));
-                    @memcpy(this_slice.items(field)[offset..], other_slice.items(field));
+                    const dst = this_slice.items(field)[offset..];
+                    const src = other_slice.items(field);
+                    if (dst.ptr != src.ptr) {
+                        @memmove(dst, src);
+                    }
                 }
             }
         }

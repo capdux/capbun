@@ -89,13 +89,17 @@ struct OutputFlushGuard {
         let source_map_arena = std.heap.ArenaAllocator.init(sfa_sourcemap.get());
         const _sm_arena_guard = DeinitGuard<@TypeOf(source_map_arena)>{ ptr: &source_map_arena };
 
+        const sm_alloc = arena_alloc.allocator();
         // Read payload, assemble ZigException
-        const name = readString32(reader, temp_alloc)?;
-        const _name_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: name };
-        const message = readString32(reader, temp_alloc)?;
-        const _msg_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: message };
-        const browser_url = readString32(reader, temp_alloc)?;
-        const _url_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: browser_url };
+        const raw_name = readString32(reader, temp_alloc)?;
+        const _name_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: raw_name };
+        const name = sanitizeForTerminal(raw_name, sm_alloc)?;
+        const raw_message = readString32(reader, temp_alloc)?;
+        const _msg_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: raw_message };
+        const message = sanitizeForTerminal(raw_message, sm_alloc)?;
+        const raw_browser_url = readString32(reader, temp_alloc)?;
+        const _url_guard = FreeGuard<u8>{ allocator: temp_alloc, slice: raw_browser_url };
+        const browser_url = sanitizeForTerminal(raw_browser_url, sm_alloc)?;
         let frames: ArrayListUnmanaged(jsc.ZigStackFrame) = .empty;
         const _frames_guard = DeinitWithAllocGuard<@TypeOf(frames)>{ ptr: &frames, allocator: temp_alloc };
         const stack_count = @min(reader.readInt(u32, .little)?, 255); // does not support more than 255
@@ -103,8 +107,8 @@ struct OutputFlushGuard {
         for (frame_idx of 0..stack_count) {
             const line = reader.readInt(i32, .little)?;
             const column = reader.readInt(i32, .little)?;
-            const function_name = readString32(reader, temp_alloc)?;
-            const file_name = readString32(reader, temp_alloc)?;
+            const function_name = sanitizeForTerminal(readString32(reader, temp_alloc)?, sm_alloc)?;
+            const file_name = sanitizeForTerminal(readString32(reader, temp_alloc)?, sm_alloc)?;
             frames.appendAssumeCapacity(jsc.ZigStackFrame{
                 function_name: .init(function_name),
                 source_url: .init(file_name),
@@ -431,6 +435,28 @@ struct OutputFlushGuard {
         }
 
         return result;
+    }
+
+    static fn sanitizeForTerminal(s: []const u8, arena: Allocator): []const u8! {
+        let prev: u8 = 0;
+        let has_bad = false;
+        for (b of s) {
+            if ((b < 0x20 && b != '\t' && b != '\n') || b == 0x7f || (prev == 0xc2 && b >= 0x80 && b <= 0x9f)) { has_bad = true; break; }
+            prev = b;
+        }
+        if (!has_bad) return s;
+        let copy = arena.dupe(u8, s)?;
+        prev = 0;
+        let i: usize = 0;
+        while (i < copy.len) : (i += 1) {
+            const cur = copy[i];
+            if ((cur < 0x20 && cur != '\t' && cur != '\n') || cur == 0x7f || (prev == 0xc2 && cur >= 0x80 && cur <= 0x9f)) {
+                copy[i] = ' ';
+                if (prev == 0xc2 && i > 0) copy[i - 1] = ' ';
+            }
+            prev = cur;
+        }
+        return copy;
     }
 }
 

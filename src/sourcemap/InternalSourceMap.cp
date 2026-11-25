@@ -737,6 +737,12 @@ export @root struct InternalSourceMap {
         unsafe { prev.* = current; }
     }
 
+    static fn accumulateVLQ(absolute: i32, delta: i32): i32 ! InvalidSourceMapError {
+        const next = std.math.add(i32, absolute, delta) catch return error.InvalidSourceMap;
+        if (next < 0) return error.InvalidSourceMap;
+        return next;
+    }
+
     pub static fn fromVLQ(
         allocator: std.mem.Allocator,
         vlq: []const u8,
@@ -764,7 +770,7 @@ export @root struct InternalSourceMap {
 
             const gc = VLQ.decode(remain, 0);
             if (gc.start == 0) return error.InvalidSourceMap;
-            generated_column += gc.value;
+            generated_column = accumulateVLQ(generated_column, gc.value)?;
             remain = remain[gc.start..];
 
             if (remain.len == 0 || remain[0] == ',' || remain[0] == ';') {
@@ -774,17 +780,17 @@ export @root struct InternalSourceMap {
 
             const si = VLQ.decode(remain, 0);
             if (si.start == 0) return error.InvalidSourceMap;
-            source_index += si.value;
+            source_index = accumulateVLQ(source_index, si.value)?;
             remain = remain[si.start..];
 
             const ol = VLQ.decode(remain, 0);
             if (ol.start == 0) return error.InvalidSourceMap;
-            original_line += ol.value;
+            original_line = accumulateVLQ(original_line, ol.value)?;
             remain = remain[ol.start..];
 
             const oc = VLQ.decode(remain, 0);
             if (oc.start == 0) return error.InvalidSourceMap;
-            original_column += oc.value;
+            original_column = accumulateVLQ(original_column, oc.value)?;
             remain = remain[oc.start..];
 
             if (remain.len > 0 && remain[0] != ',' && remain[0] != ';') {

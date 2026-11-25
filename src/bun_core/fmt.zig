@@ -600,6 +600,8 @@ pub fn format(self: FormatValidIdentifier, writer: *std.Io.Writer) !void {
                 needs_gap = false;
                 if ((start_i > 0)) {
                     _ = try writer.writeAll(self.name[0..start_i]);
+                } else {
+                    _ = try writer.writeAll("_");
                 }
                 const slice = self.name[start_i..];
                 iterator = strings.CodepointIterator.init(slice);

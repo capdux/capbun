@@ -30,7 +30,7 @@ pub union(DependencyURITag) DependencyURI {
     local: String,
     remote: String,
 
-    pub fn eql(lhs: DependencyURI, rhs: DependencyURI, lhs_buf: []const u8, rhs_buf: []const u8): bool {
+    static fn eql(lhs: DependencyURI, rhs: DependencyURI, lhs_buf: []const u8, rhs_buf: []const u8): bool {
         if (std.meta.activeTag(lhs) != std.meta.activeTag(rhs)) {
             return false;
         }
@@ -519,7 +519,7 @@ pub struct DependencyVersion {
         return bytes;
     }
 
-    pub inline fn eql(
+    static inline fn eql(
         lhs: *const DependencyVersion,
         rhs: *const DependencyVersion,
         lhs_buf: []const u8,
@@ -593,11 +593,11 @@ pub struct DependencyVersion {
         return _.bundled;
     }
 
-    pub inline fn eq(lhs: DependencyBehavior, rhs: DependencyBehavior): bool {
+    static inline fn eq(lhs: DependencyBehavior, rhs: DependencyBehavior): bool {
         return @as(u8, @bitCast(lhs)) == @as(u8, @bitCast(rhs));
     }
 
-    pub inline fn includes(lhs: DependencyBehavior, rhs: DependencyBehavior): bool {
+    static inline fn includes(lhs: DependencyBehavior, rhs: DependencyBehavior): bool {
         return (@as(u8, @bitCast(lhs)) & @as(u8, @bitCast(rhs))) != 0;
     }
 
@@ -629,7 +629,7 @@ pub struct DependencyVersion {
         return new_val;
     }
 
-    pub inline fn cmp(lhs: DependencyBehavior, rhs: DependencyBehavior): std.math.Order {
+    static inline fn cmp(lhs: DependencyBehavior, rhs: DependencyBehavior): std.math.Order {
         if (eq(lhs, rhs)) {
             return .eq;
         }
@@ -986,6 +986,26 @@ static fn isScopedPackageName(name: string): bool ! InvalidPackageNameError {
     }
 
     return error.InvalidPackageName;
+}
+
+pub static fn isSafeInstallFolderName(name: string): bool {
+    if (name.len == 0) return false;
+    let start: usize = 0;
+    let i: usize = 0;
+    while (i <= name.len) : (i += 1) {
+        if (i < name.len) {
+            const c = name[i];
+            if (c == '\\' || c == ':' || c == 0) return false;
+        }
+        if (i == name.len || name[i] == '/') {
+            const comp = name[start..i];
+            if (comp.len == 0 || strings.eqlComptime(comp, ".") || strings.eqlComptime(comp, "..")) {
+                return false;
+            }
+            start = i + 1;
+        }
+    }
+    return true;
 }
 
 /// assumes version is valid

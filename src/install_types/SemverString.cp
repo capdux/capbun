@@ -519,7 +519,12 @@ pub struct SemverStringBuilder {
         } else {
             const a = _.ptr();
             const b = that.ptr();
-            return strings.eql(this_buf[a.off..][0..a.len], that_buf[b.off..][0..b.len]);
+            const a_off: usize = a.off;
+            const a_len: usize = a.len;
+            const b_off: usize = b.off;
+            const b_len: usize = b.len;
+            if (a_off + a_len > this_buf.len || b_off + b_len > that_buf.len) return false;
+            return strings.eql(this_buf[a_off..][0..a_len], that_buf[b_off..][0..b_len]);
         }
     }
 
@@ -560,7 +565,10 @@ pub struct SemverStringBuilder {
             },
             else => {
                 const ptr_ = str.ptr();
-                return buf[ptr_.off..][0..ptr_.len];
+                const off: usize = ptr_.off;
+                const len_: usize = ptr_.len;
+                if (off + len_ > buf.len) return "";
+                return buf[off..][0..len_];
             },
         }
     }

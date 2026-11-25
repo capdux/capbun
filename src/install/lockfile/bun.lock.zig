@@ -1018,7 +1018,7 @@ else => {
         _ = try log.addError(source, lockfile_version_expr.loc, "Invalid lockfile version");
         return error.InvalidLockfileVersion;
 };
-        const lockfile_version = (blk_catch_3: { break :blk_catch_3 ((std.@"meta".intToEnum(Version, lockfile_version_num)) catch |__ce_3| { _ = &__ce_3; _ = try log.addError(source, lockfile_version_expr.loc, "Unknown lockfile version");
+        const lockfile_version = (blk_catch_3: { break :blk_catch_3 ((std.@"meta".intToEnum(Version, lockfile_version_num)) catch |__ce_3| { _ = &__ce_3; _ = try log.addRangeErrorFmtWithNote(source, bun.logger.Range{ .loc = lockfile_version_expr.loc }, allocator, "Unsupported lockfile version {d}. This lockfile was likely created by a newer version of Bun. (This is Bun v{s}, which supports lockfile versions up to {d}.)", .{ lockfile_version_num, bun.Global.package_json_version, @intFromEnum(Version.current) }, "Run 'bun upgrade' to update to the latest version of Bun", .{}, bun.logger.Range.None);
         return error.UnknownLockfileVersion; }); });
         lockfile.text_lockfile_version = lockfile_version;
         if (root.get("configVersion")) |config_version_expr| {

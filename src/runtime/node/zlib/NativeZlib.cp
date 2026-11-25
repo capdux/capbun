@@ -266,7 +266,7 @@ pub struct Context {
             .BROTLI_ENCODE, .BROTLI_DECODE => {},
             .ZSTD_COMPRESS, .ZSTD_DECOMPRESS => {},
         }
-        bun.assert(status == .Ok || status == .DataError);
+        bun.assert(status == .Ok || status == .DataError || status == .StreamError);
         _.mode = .NONE;
     }
 }
@@ -339,6 +339,7 @@ pub struct Context {
         if (arguments.len != 7) {
             return globalThis.ERR(.MISSING_ARGS, "init(windowBits, level, memLevel, strategy, writeResult, writeCallback, dictionary)", {}).throw();
         }
+        StreamImpl.throwUnlessIdle(_, globalThis)?;
 
         const windowBits = validators.validateInt32(globalThis, arguments[0], "windowBits", {}, null, null)?;
         const level = validators.validateInt32(globalThis, arguments[1], "level", {}, null, null)?;
@@ -355,7 +356,17 @@ pub struct Context {
         }
         const writeResult = writeResult_slice.ptr;
         const writeCallback = validators.validateFunction(globalThis, "writeCallback", arguments[5])?;
-        const dictionary: ([]u8)? = if (arguments[6].isUndefined()) null else (arguments[6].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("dictionary", "Buffer, TypedArray, or DataView", arguments[6])).byteSlice();
+        let dictionary: ([]u8)? = null;
+        if (!arguments[6].isUndefined()) {
+            const dict_ab = arguments[6].asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("dictionary", "Buffer, TypedArray, or DataView", arguments[6]);
+            if (dict_ab.byte_len > std.math.maxInt(u32)) {
+                return globalThis.throwRangeError(@as(i64, @intCast(dict_ab.byte_len)), .{
+                    .field_name = "dictionary.byteLength",
+                    .max = std.math.maxInt(u32),
+                });
+            }
+            dictionary = dict_ab.byteSlice();
+        }
 
         _.write_result = writeResult;
         js.writeCallbackSetCached(this_value, globalThis, writeCallback.withAsyncContextIfNeeded(globalThis));
@@ -365,6 +376,9 @@ pub struct Context {
         }
 
         _.stream.init(level, windowBits, memLevel, strategy, dictionary);
+        if (_.stream.mode == .NONE) {
+            _.closed = true;
+        }
 
         return jsc.JSValue.js_undefined;
     }
@@ -375,6 +389,7 @@ pub struct Context {
         if (arguments.len != 2) {
             return globalThis.ERR(.MISSING_ARGS, "params(level, strategy)", {}).throw();
         }
+        StreamImpl.throwUnlessIdle(_, globalThis)?;
 
         const level = validators.validateInt32(globalThis, arguments[0], "level", {}, null, null)?;
         const strategy = validators.validateInt32(globalThis, arguments[1], "strategy", {}, null, null)?;

@@ -57,6 +57,7 @@ export @root struct ClientSession {
     port: u16,
     ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr? = null,
     did_have_handshaking_error: bool,
+    host_header_hash: u64 = 0,
 
     write_buffer: bun.io.StreamBuffer = {},
     read_buffer: std.ArrayListUnmanaged(u8) = {},
@@ -124,6 +125,7 @@ export @root struct ClientSession {
             port: client.connected_url.getPortAuto(),
             ssl_config: ssl_config,
             did_have_handshaking_error: client.flags.did_have_handshaking_error,
+            host_header_hash: client.proxyAuthHash(),
         });
         bun.http.H2.live_sessions.fetchAdd(1, .monotonic);
         ctx.registerH2(session);
@@ -138,8 +140,8 @@ export @root struct ClientSession {
             _.next_stream_id < H2FrameParser.MAX_STREAM_ID;
     }
 
-    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
-        return _.port == port && bun.api.server.ServerConfig.SSLConfig.rawPtr(_.ssl_config) == ssl_config && bun.strings.eqlLong(_.hostname, hostname, true);
+    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?, host_header_hash: u64): bool {
+        return _.port == port && bun.api.server.ServerConfig.SSLConfig.rawPtr(_.ssl_config) == ssl_config && _.host_header_hash == host_header_hash && bun.strings.eqlLong(_.hostname, hostname, true);
     }
 
     fn adopt(*_, client: *HTTPClient) {
@@ -600,7 +602,7 @@ export @root struct ClientSession {
                 null,
                 "",
                 0,
-                0,
+                _.host_header_hash,
                 _,
             );
         } else {

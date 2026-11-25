@@ -615,6 +615,10 @@ pub fn stat(path: [:0]const u8): Maybe(bun.Stat) {
     }
 }
 
+@c {
+    fn statfs64(path: [*:0]const u8, buf: *bun.StatFS): c_int;
+}
+
 pub fn statfs(path: [:0]const u8): Maybe(bun.StatFS) {
     if (Environment.isWindows) {
         return { err: ErrorMod.fromCode(.ENOSYS, .statfs) };
@@ -623,6 +627,8 @@ pub fn statfs(path: [:0]const u8): Maybe(bun.StatFS) {
             let statfs_ = mem.zeroes(bun.StatFS);
             const rc = if (Environment.isLinux)
                 c.statfs(path, &statfs_)
+            else if (comptime Environment.isMac && Environment.isX64)
+                statfs64(path, &statfs_)
             else if (Environment.isMac)
                 c.statfs(path, &statfs_)
             else if (Environment.isFreeBSD)
@@ -2899,28 +2905,27 @@ pub fn symlinkW(dest: [:0]const u16, target: [:0]const u16, options: WindowsSyml
                 else => {},
             }
 
-            if (e := errno.toSystemErrno()) {
-                switch (e) {
-                    .ENOENT,
-                    .EEXIST => {
-                        return {
-                            err: {
-                                errno: @intFromEnum(e),
-                                syscall: .symlink,
-                            },
-                        };
-                    },
+            const e: bun.sys.SystemErrno = errno.toSystemErrno() ?? .EUNKNOWN;
+            switch (e) {
+                .ENOENT,
+                .EEXIST => {
+                    return {
+                        err: {
+                            errno: @intFromEnum(e),
+                            syscall: .symlink,
+                        },
+                    };
+                },
 
-                    else => {},
-                }
-                WindowsSymlinkOptions.has_failed_to_create_symlink = true;
-                return {
-                    err: {
-                        errno: @intFromEnum(e),
-                        syscall: .symlink,
-                    },
-                };
+                else => {},
             }
+            WindowsSymlinkOptions.has_failed_to_create_symlink = true;
+            return {
+                err: {
+                    errno: @intFromEnum(e),
+                    syscall: .symlink,
+                },
+            };
         }
 
         log("CreateSymbolicLinkW({f}, {f}, {}) = 0", .{
@@ -3840,25 +3845,15 @@ pub fn existsAtType(fd: bun.FD, subpath: auto): Maybe(ExistsAtType) {
             return { err: e.err };
         }
 
-        const is_regular_file = basic_info.FileAttributes != c.INVALID_FILE_ATTRIBUTES &&
-            // from libuv: directories cannot be read-only
-            // https://github.com/libuv/libuv/blob/eb5af8e3c0ea19a6b0196d5db3212dae1785739b/src/win/fs.c#L2144-L2146
-            ((basic_info.FileAttributes & c.FILE_ATTRIBUTE_DIRECTORY) == 0 ||
-                (basic_info.FileAttributes & c.FILE_ATTRIBUTE_READONLY) == 0);
-
         const is_dir = basic_info.FileAttributes != c.INVALID_FILE_ATTRIBUTES &&
-            (basic_info.FileAttributes & c.FILE_ATTRIBUTE_DIRECTORY) != 0 &&
-            (basic_info.FileAttributes & c.FILE_ATTRIBUTE_READONLY) == 0;
+            (basic_info.FileAttributes & c.FILE_ATTRIBUTE_DIRECTORY) != 0;
 
         return if (is_dir) {
             syslog("NtQueryAttributesFile({f}, O_RDONLY, 0) = directory", .{bun.fmt.fmtOSPath(path, {})});
             return { result: .directory };
-        } else if (is_regular_file) {
+        } else {
             syslog("NtQueryAttributesFile({f}, O_RDONLY, 0) = file", .{bun.fmt.fmtOSPath(path, {})});
             return { result: .file };
-        } else {
-            syslog("NtQueryAttributesFile({f}, O_RDONLY, 0) = {d}", .{ bun.fmt.fmtOSPath(path, {}), basic_info.FileAttributes });
-            return { err: ErrorMod.fromCode(.UNKNOWN, .access) };
         };
     }
 

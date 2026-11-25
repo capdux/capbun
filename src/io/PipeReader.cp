@@ -1053,7 +1053,10 @@ pub struct WindowsBufferedReader {
         file.complete(was_canceled);
 
         if (parent_ptr == null) {
-            bun.assert(file.state == .closing);
+            if (file.state != .closing) {
+                // detachBorrowedFd path: no close scheduled, so reclaim here.
+                bun.default_allocator.destroy(file);
+            }
             return;
         }
 
@@ -1156,7 +1159,11 @@ pub struct WindowsBufferedReader {
         if (source := _.source) {
             switch (source) {
                 .sync_file, .file => |file| {
-                    file.detach();
+                    if (_.flags.close_handle) {
+                        file.detach();
+                    } else if (!file.detachBorrowedFd()) {
+                        bun.default_allocator.destroy(file);
+                    }
                 },
                 .pipe pipe => {
                     pipe.data = pipe;

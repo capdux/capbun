@@ -9,10 +9,8 @@ pub struct BacktrackingImpl<P> {
         const FnReturnType = bun.@"meta".ReturnOf(func);
         const Payload = @typeInfo(FnReturnType).error_union.payload;
         if (comptime Payload == bool || Payload == void) {
-            const ok = func(p) catch e => brk: {
-                if (e == error.Backtrack || p.lexer.did_panic) {
-                    backtrack = true;
-                }
+            const ok = func(p) catch brk: {
+                backtrack = true;
                 break :brk if (comptime Payload == bool) false else {};
             };
             * = ok;
@@ -27,10 +25,8 @@ pub struct BacktrackingImpl<P> {
             }
             return !backtrack;
         } else {
-            const result = func(p) catch e => brk: {
-                if (e == error.Backtrack || p.lexer.did_panic) {
-                    backtrack = true;
-                }
+            const result = func(p) catch brk: {
+                backtrack = true;
                 break :brk SkipTypeParameterResult.did_not_skip_anything;
             };
 
@@ -57,10 +53,8 @@ pub struct BacktrackingImpl<P> {
         const FnReturnType = bun.@"meta".ReturnOf(func);
         const Payload = @typeInfo(FnReturnType).error_union.payload;
         if (comptime Payload == bool || Payload == void) {
-            const ok = @call(.auto, func, args) catch e => brk: {
-                if (e == error.Backtrack) {
-                    backtrack = true;
-                }
+            const ok = @call(.auto, func, args) catch brk: {
+                backtrack = true;
                 break :brk if (comptime Payload == bool) false else {};
             };
             * = ok;
@@ -173,6 +167,9 @@ pub fn SkipTypescript(
 
         static fn skipTypeScriptBinding(p: *P)! {
             p.markTypeScriptOnly();
+            if (!p.stack_check.isSafeToRecurse()) {
+                return error.StackOverflow;
+            }
             switch (p.lexer.token) {
                 .t_identifier, .t_this => {
                     p.lexer.next()?;
@@ -343,6 +340,9 @@ pub fn SkipTypescript(
             result: if (get_metadata) *TypeScript.Metadata else void,
         ): anyerror!void {
             p.markTypeScriptOnly();
+            if (!p.stack_check.isSafeToRecurse()) {
+                return error.StackOverflow;
+            }
 
             while (true) {
                 switch (p.lexer.token) {

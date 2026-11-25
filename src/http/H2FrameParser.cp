@@ -3,14 +3,14 @@
 
 import bun from "bun";
 
-export const client_preface: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+pub const client_preface: string = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-export const MAX_WINDOW_SIZE = std.math.maxInt(i32);
-export const MAX_HEADER_TABLE_SIZE = std.math.maxInt(u32);
-export const MAX_STREAM_ID = std.math.maxInt(i32);
-export const MAX_FRAME_SIZE = std.math.maxInt(u24);
-export const DEFAULT_WINDOW_SIZE = std.math.maxInt(u16);
-export const DEFAULT_MAX_FRAME_SIZE: u24 = 16384;
+pub const MAX_WINDOW_SIZE = std.math.maxInt(i32);
+pub const MAX_HEADER_TABLE_SIZE = std.math.maxInt(u32);
+pub const MAX_STREAM_ID = std.math.maxInt(i32);
+pub const MAX_FRAME_SIZE = std.math.maxInt(u24);
+pub const DEFAULT_WINDOW_SIZE = std.math.maxInt(u16);
+pub const DEFAULT_MAX_FRAME_SIZE: u24 = 16384;
 
 export enum FrameType(u8) {
     HTTP_FRAME_DATA = 0x00,

@@ -159,7 +159,7 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         if ((data == .zero)) {
             return globalThis.throwInvalidArgumentTypeValue("data", "string or an instance of Buffer, TypedArray, or DataView", .js_undefined);
         }
-        if (data.isString()) {
+        if (data.isStringLiteral()) {
             break :data_blk data.asString().toSlice(globalThis, bun.default_allocator);
         }
         var buffer: Buffer = undefined;
@@ -215,6 +215,18 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
 pub fn CompressionStream(comptime T: type) type {
         return struct {
 
+pub fn throwUnlessIdle(stream: *T, globalThis: *jsc.JSGlobalObject) bun.JSError!void {
+            if (stream.write_in_progress) {
+                return globalThis.ERR(.INVALID_STATE, "Write already in progress", .{}).throw();
+            }
+            if (stream.pending_close) {
+                return globalThis.ERR(.INVALID_STATE, "Pending close", .{}).throw();
+            }
+            if (stream.closed) {
+                return globalThis.ERR(.INVALID_STATE, "zlib binding closed", .{}).throw();
+            }
+    }
+
 pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
             if ((arguments.len != 7)) {
@@ -261,12 +273,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             if ((out_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(out_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_off)) else cp_cast_int(usize, out_off)) + (if (comptime @typeInfo(@TypeOf(out_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_len)) else cp_cast_int(usize, out_len))))) {
                 return globalThis.ERR(.OUT_OF_RANGE, "out_off + out_len ({d}) exceeds output buffer length ({d})", .{ ((if (comptime @typeInfo(@TypeOf(out_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_off)) else cp_cast_int(usize, out_off)) + (if (comptime @typeInfo(@TypeOf(out_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_len)) else cp_cast_int(usize, out_len))), out_buf.byte_len }).throw();
             }
-            if (stream.write_in_progress) {
-                return globalThis.ERR(.INVALID_STATE, "Write already in progress", .{}).throw();
-            }
-            if (stream.pending_close) {
-                return globalThis.ERR(.INVALID_STATE, "Pending close", .{}).throw();
-            }
+            _ = try throwUnlessIdle(stream, globalThis);
             if ((!arguments[1].isNull())) {
                 if ((!(blk: {
                 break :blk JSC__JSValue__pinArrayBuffer(arguments[1]);
@@ -353,8 +360,10 @@ pub fn runFromJSThread(stream: *T) void {
             }
             _ = stream.stream.updateWriteResult((&stream.write_result.?[1]), (&stream.write_result.?[0]));
             _ = this_value.ensureStillAlive();
-            const write_callback: jsc.JSValue = (T.js.writeCallbackGetCached(this_value)).?;
-            _ = vm.eventLoop().runCallback(write_callback, global, this_value, &.{});
+            if (T.js.writeCallbackGetCached(this_value)) |write_callback| {
+                _ = &write_callback;
+                _ = vm.eventLoop().runCallback(write_callback, global, this_value, &.{});
+            }
             if (stream.pending_reset) {
                 _ = resetInternal(stream, global, this_value);
             }
@@ -411,12 +420,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
                 return globalThis.ERR(.OUT_OF_RANGE, "out_off + out_len ({d}) exceeds output buffer length ({d})", .{ ((if (comptime @typeInfo(@TypeOf(out_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_off)) else cp_cast_int(usize, out_off)) + (if (comptime @typeInfo(@TypeOf(out_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_len)) else cp_cast_int(usize, out_len))), out_buf.byte_len }).throw();
             }
             out = out_buf.byteSlice()[out_off..][0..out_len];
-            if (stream.write_in_progress) {
-                return globalThis.ERR(.INVALID_STATE, "Write already in progress", .{}).throw();
-            }
-            if (stream.pending_close) {
-                return globalThis.ERR(.INVALID_STATE, "Pending close", .{}).throw();
-            }
+            _ = try throwUnlessIdle(stream, globalThis);
             stream.write_in_progress = true;
             _ = stream.ref();
             _ = stream.stream.setBuffers(in_slice, out);
@@ -497,9 +501,11 @@ pub fn emitError(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JS
             var code_str = bun.handleOom(bun.String.createFormat("{s}", .{ ((std.mem.sliceTo(err_.code, 0)) orelse ("")) }));
             _ = &code_str;
             const code_value = (blk_catch_3: { break :blk_catch_3 ((code_str.transferToJS(globalThis)) catch |__ce_3| { _ = &__ce_3; return; }); });
-            const callback: jsc.JSValue = ((T.js.errorCallbackGetCached(this_value)) orelse (Output.panic("Assertion failure: cachedErrorCallback is null in node:zlib binding", .{})));
-            const vm = globalThis.bunVM();
-            _ = vm.eventLoop().runCallback(callback, globalThis, this_value, (&.{ msg_value, err_value, code_value }));
+            if (T.js.errorCallbackGetCached(this_value)) |callback| {
+                _ = &callback;
+                const vm = globalThis.bunVM();
+                _ = vm.eventLoop().runCallback(callback, globalThis, this_value, (&.{ msg_value, err_value, code_value }));
+            }
             if (stream.pending_reset) {
                 _ = resetInternal(stream, globalThis, this_value);
             }

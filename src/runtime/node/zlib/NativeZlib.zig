@@ -357,7 +357,7 @@ status = c.inflateEnd((&self.state));
 
 },
 }
-            _ = bun.assert(((status == .Ok) or (status == .DataError)));
+            _ = bun.assert((((status == .Ok) or (status == .DataError)) or (status == .StreamError)));
             self.mode = .NONE;
     }
     const c = bun.zlib;
@@ -410,6 +410,7 @@ pub fn init(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         if ((arguments.len != 7)) {
             return globalThis.ERR(.MISSING_ARGS, "init(windowBits, level, memLevel, strategy, writeResult, writeCallback, dictionary)", .{}).throw();
         }
+        _ = try StreamImpl.throwUnlessIdle(self, globalThis);
         const windowBits = try validators.validateInt32(globalThis, arguments[0], "windowBits", .{}, null, null);
         const level = try validators.validateInt32(globalThis, arguments[1], "level", .{}, null, null);
         const memLevel = try validators.validateInt32(globalThis, arguments[2], "memLevel", .{}, null, null);
@@ -425,13 +426,24 @@ pub fn init(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         }
         const writeResult = writeResult_slice.ptr;
         const writeCallback = try validators.validateFunction(globalThis, "writeCallback", arguments[5]);
-        const dictionary: ?[]u8 = (if (arguments[6].isUndefined()) null else ((arguments[6].asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("dictionary", "Buffer, TypedArray, or DataView", arguments[6]); }).byteSlice());
+        var dictionary: ?[]u8 = null;
+        _ = &dictionary;
+        if ((!arguments[6].isUndefined())) {
+            const dict_ab = ((arguments[6].asArrayBuffer(globalThis)) orelse { return globalThis.throwInvalidArgumentTypeValue("dictionary", "Buffer, TypedArray, or DataView", arguments[6]); });
+            if ((dict_ab.byte_len > std.math.maxInt(u32))) {
+                return globalThis.throwRangeError(@as(i64, @intCast(dict_ab.byte_len)), .{ .field_name = "dictionary.byteLength", .max = std.math.maxInt(u32) });
+            }
+            dictionary = dict_ab.byteSlice();
+        }
         self.write_result = writeResult;
         _ = js.writeCallbackSetCached(this_value, globalThis, writeCallback.withAsyncContextIfNeeded(globalThis));
         if ((dictionary != null)) {
             _ = js.dictionarySetCached(this_value, globalThis, arguments[6]);
         }
         _ = self.stream.init(level, windowBits, memLevel, strategy, dictionary);
+        if ((self.stream.mode == .NONE)) {
+            self.closed = true;
+        }
         return jsc.JSValue.js_undefined;
 }
 
@@ -440,6 +452,7 @@ pub fn params(self: *NativeZlib, globalThis: *jsc.JSGlobalObject, callframe: *js
         if ((arguments.len != 2)) {
             return globalThis.ERR(.MISSING_ARGS, "params(level, strategy)", .{}).throw();
         }
+        _ = try StreamImpl.throwUnlessIdle(self, globalThis);
         const level = try validators.validateInt32(globalThis, arguments[0], "level", .{}, null, null);
         const strategy = try validators.validateInt32(globalThis, arguments[1], "strategy", .{}, null, null);
         const e = self.stream.setParams(level, strategy);

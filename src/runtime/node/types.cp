@@ -916,43 +916,83 @@ pub struct Valid {
     }
 }
 
+extern fn JSC__JSValue__pinArrayBuffer(v: jsc.JSValue): bool;
+extern fn JSC__JSValue__unpinArrayBuffer(v: jsc.JSValue);
+
 pub struct VectorArrayBuffer {
     value: jsc.JSValue,
     buffers: std.array_list.Managed(bun.PlatformIOVec),
+    views: std.array_list.Managed(jsc.JSValue),
+    pinned: bool = false,
 
     fn toJS(_: *jsc.JSGlobalObject): jsc.JSValue {
         return _.value;
     }
 
-    static fn fromJS(globalObject: *jsc.JSGlobalObject, val: jsc.JSValue, allocator: std.mem.Allocator): bun.JSError!VectorArrayBuffer {
+    fn release(*_) {
+        if (!_.pinned) return;
+        _.pinned = false;
+        for (view of _.views.items) {
+            unsafe { JSC__JSValue__unpinArrayBuffer(view); }
+            view.unprotect();
+        }
+    }
+
+    static fn fromJS(globalObject: *jsc.JSGlobalObject, val: jsc.JSValue, allocator: std.mem.Allocator, pin: bool): bun.JSError!VectorArrayBuffer {
         if (!val.jsType().isArrayLike()) {
             return globalObject.throwInvalidArguments("Expected ArrayBufferView[]", .{});
         }
 
         let bufferlist = std.array_list.Managed(bun.PlatformIOVec).init(allocator);
-        let i: usize = 0;
+        let views = std.array_list.Managed(jsc.JSValue).init(allocator);
         const len = val.getLength(globalObject)?;
         bun.handleOom(bufferlist.ensureTotalCapacityPrecise(len));
+        bun.handleOom(views.ensureTotalCapacityPrecise(len));
 
+        // Collect all elements first so user getters / proxy traps cannot
+        // detach or free a backing store that has already been captured.
+        let i: usize = 0;
         while (i < len) {
-            const element = val.getIndex(globalObject, @as(u32, @truncate(i)))?;
-
+            const element = val.getIndex(globalObject, @as(u32, @truncate(i))) catch |e| {
+                views.deinit();
+                bufferlist.deinit();
+                return e;
+            };
             if (!element.isCell()) {
+                views.deinit();
+                bufferlist.deinit();
                 return globalObject.throwInvalidArguments("Expected ArrayBufferView[]", .{});
             }
-
-            const array_buf_opt = element.asArrayBuffer(globalObject);
-            if (array_buf_opt == null) {
-                return globalObject.throwInvalidArguments("Expected ArrayBufferView[]", .{});
-            }
-            const array_buffer = array_buf_opt.?;
-
-            const buf = array_buffer.byteSlice();
-            bun.handleOom(bufferlist.append(bun.platformIOVecCreate(buf)));
+            bun.handleOom(views.append(element));
             i += 1;
         }
 
-        return .{ value: val, buffers: bufferlist };
+        let out = VectorArrayBuffer{
+            value: val,
+            buffers: bufferlist,
+            views: views,
+            pinned: false,
+        };
+
+        for (element of out.views.items) {
+            const array_buf_opt = element.asArrayBuffer(globalObject);
+            if (array_buf_opt == null) {
+                out.release();
+                out.views.deinit();
+                out.buffers.deinit();
+                return globalObject.throwInvalidArguments("Expected ArrayBufferView[]", .{});
+            }
+            if (pin) {
+                out.pinned = true;
+                unsafe { * = JSC__JSValue__pinArrayBuffer(element); }
+                element.protect();
+            }
+            const array_buffer = array_buf_opt.?;
+            const buf = array_buffer.byteSlice();
+            bun.handleOom(out.buffers.append(bun.platformIOVecCreate(buf)));
+        }
+
+        return out;
     }
 }
 

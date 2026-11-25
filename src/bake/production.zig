@@ -847,16 +847,33 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
         defer {
         _ = allocator.free(css_chunk_js_strings);
         }
+        var protected_css_count: usize = 0;
+        _ = &protected_css_count;
+        defer {
+        {
+            {
+                var j: i32 = 0;
+                _ = &j;
+                const __end_7 = protected_css_count;
+                while (j < __end_7) : (j += 1) {
+                    _ = css_chunk_js_strings[@as(usize, @intCast(j))].unprotect();
+                }
+            }
+        }
+        }
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_7 = css_chunks_count;
-            while (i < __end_7) : (i += 1) {
+            const __end_8 = css_chunks_count;
+            while (i < __end_8) : (i += 1) {
                 const output_file = bundled_outputs[@as(usize, @intCast((css_chunks_first + @as(usize, @intCast(i)))))];
                 _ = bun.assert((output_file.dest_path[0] != 46));
                 _ = bun.assert(output_file.loader.isCSS());
                 const fmt_str = try bun.String.createFormat("{s}{s}", .{ public_path, output_file.dest_path });
-                css_chunk_js_strings[cp_cast_int(usize, i)] = try fmt_str.toJS(global);
+                const js_str = try fmt_str.toJS(global);
+                _ = js_str.protect();
+                css_chunk_js_strings[cp_cast_int(usize, i)] = js_str;
+                protected_css_count = (@as(usize, @intCast(i)) + 1);
             }
         }
         const route_patterns = try JSValue.createEmptyArray(global, navigatable_routes.items.len);
@@ -873,8 +890,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
         {
             var nav_index: i32 = 0;
             _ = &nav_index;
-            const __end_8 = navigatable_routes.items.len;
-            while (nav_index < __end_8) : (nav_index += 1) {
+            const __end_9 = navigatable_routes.items.len;
+            while (nav_index < __end_9) : (nav_index += 1) {
                 const route_index = navigatable_routes.items[@as(usize, @intCast(nav_index))];
                 defer {
                 _ = params_buf.clearRetainingCapacity();
@@ -986,8 +1003,8 @@ else => {
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_12 = params_buf.items.len;
-                        while (i < __end_12) : (i += 1) {
+                        const __end_13 = params_buf.items.len;
+                        while (i < __end_13) : (i += 1) {
                             const param = params_buf.items[@as(usize, @intCast(i))];
                             _ = try param_info_array.putIndex(global, @intCast(((params_buf.items.len - @as(usize, @intCast(i))) - 1)), try bun.String.createUTF8ForJS(global, param));
                         }

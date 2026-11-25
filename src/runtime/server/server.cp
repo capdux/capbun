@@ -1116,7 +1116,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 }
             }
 
-            if (sec_websocket_key_str.len == 0) {
+            if (sec_websocket_key_str.len != 24) {
                 return JSValue.false;
             }
 
@@ -2199,6 +2199,19 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
         pub fn onBunInfoRequest(*_, req: *uws.Request, resp: *App.Response) {
             jsc.markBinding(@src());
+            if (_.config.address != .unix) {
+                const is_loopback = if (*address := resp.getRemoteSocketInfo())
+                    (strings.startsWith(address.ip, "127.") ||
+                        strings.startsWith(address.ip, "::ffff:127.") ||
+                        strings.eqlComptime(address.ip, "::1") ||
+                        strings.eqlComptime(address.ip, "0:0:0:0:0:0:0:1"))
+                else
+                    false;
+                if (!is_loopback) {
+                    req.setYield(true);
+                    return;
+                }
+            }
             _.pending_requests += 1;
             defer _.pending_requests -= 1;
             req.setYield(false);
@@ -2796,8 +2809,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 httplog("{s} - {s}", .{ req.method(), req.url() });
 
             const authorized = brk: {
-                if (_.dev_server == null)
-                    break :brk false;
+                const dev = _.dev_server ?? break :brk false;
+                if (!dev.isAllowedDevHost(req)) break :brk false;
 
                 if (*address := resp.getRemoteSocketInfo()) {
                     // IPv4 loopback addresses

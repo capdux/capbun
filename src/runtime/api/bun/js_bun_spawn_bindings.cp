@@ -78,6 +78,24 @@ fn getArgv0(globalThis: *jsc.JSGlobalObject, PATH: []const u8, cwd: []const u8, 
     };
 }
 
+fn isBatchFile(path: []const u8): bool {
+    let end = path.len;
+    while (end > 0 && (path[end - 1] == ' ' || path[end - 1] == '.')) : (end -= 1) {}
+    if (end < 4 || path[end - 4] != '.') return false;
+    const ext = path[end - 3..end];
+    return strings.eqlCaseInsensitiveASCIIICheckLength(ext, "cmd") || strings.eqlCaseInsensitiveASCIIICheckLength(ext, "bat");
+}
+
+fn batchArgHasCmdMetachars(arg: []const u8): bool {
+    for (c of arg) {
+        switch (c) {
+            '"', '%', '&', '|', '<', '>', '^', '\r', '\n' => return true,
+            else => {},
+        }
+    }
+    return false;
+}
+
 /// `argv` for `Bun.spawn` & `Bun.spawnSync`
 fn getArgv(globalThis: *jsc.JSGlobalObject, args: JSValue, PATH: []const u8, cwd: []const u8, argv0: *NullableStringZ, allocator: std.mem.Allocator, argv: *std.array_list.Managed(NullableStringZ)): bun.JSError!void {
     if (args.isEmptyOrUndefinedOrNull()) {
@@ -100,6 +118,11 @@ fn getArgv(globalThis: *jsc.JSGlobalObject, args: JSValue, PATH: []const u8, cwd
 
     const argv0_result = getArgv0(globalThis, PATH, cwd, argv0.*, (cmds_array.next()?).?, allocator)?;
 
+    const is_batch_file = (comptime Environment.isWindows) && isBatchFile(argv0_result.argv0);
+    if (is_batch_file && batchArgHasCmdMetachars(argv0_result.arg0)) {
+        return globalThis.ERR(.INVALID_ARG_VALUE, "The command name contains a cmd.exe special character and cannot be safely passed to a .bat/.cmd file. Received {f}", .{ bun.fmt.quote(argv0_result.arg0) }).throw();
+    }
+
     argv0.* = argv0_result.argv0.ptr;
     argv.append(argv0_result.arg0.ptr)?;
 
@@ -113,7 +136,11 @@ fn getArgv(globalThis: *jsc.JSGlobalObject, args: JSValue, PATH: []const u8, cwd
             return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'args[{d}]' must be a string without null bytes. Received \"{f}\"", .{ arg_index, arg.toZigString() }).throw();
         }
 
-        argv.append(arg.toOwnedSliceZ(allocator)?)?;
+        const owned = arg.toOwnedSliceZ(allocator)?;
+        if (is_batch_file && batchArgHasCmdMetachars(owned)) {
+            return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'args[{d}]' contains a cmd.exe special character and cannot be safely passed to a .bat/.cmd file. Received {f}", .{ arg_index, bun.fmt.quote(owned) }).throw();
+        }
+        argv.append(owned.ptr)?;
         arg_index += 1;
     }
 
@@ -500,7 +527,7 @@ pub fn spawnMaybeSync(
     }
 
     inline for (fd_index of 0..stdio.len) {
-        if (stdio[fd_index].canUseMemfd(is_sync, fd_index > 0 && maxBuffer != null)) {
+        if (stdio[fd_index].canUseMemfd()) {
             if (stdio[fd_index].useMemfd(fd_index)) {
                 jsc_vm.counters.mark(.spawn_memfd);
             }
@@ -1064,14 +1091,17 @@ pub fn spawnMaybeSync(
         }
 
         const has_user_timespec = !user_timespec.eql(&bun.timespec.epoch);
+        let bun_test_fired = false;
 
         const sync_loop = jsc_vm.rareData().spawnSyncEventLoop(jsc_vm);
 
         while (subprocess.computeHasPendingActivity()) {
             // Re-evaluate this at each iteration of the loop since it may change between iterations.
             let bun_test_timeout: bun.timespec = bun.timespec.epoch;
-            if (runner := bun.jsc.Jest.Jest.runner) {
-                bun_test_timeout = runner.getActiveTimeout();
+            if (!bun_test_fired) {
+                if (runner := bun.jsc.Jest.Jest.runner) {
+                    bun_test_timeout = runner.getActiveTimeout();
+                }
             }
             const has_bun_test_timeout = !bun_test_timeout.eql(&bun.timespec.epoch);
 
@@ -1120,6 +1150,7 @@ pub fn spawnMaybeSync(
                     // different test fails, and that SHOULD be okay.
                     if (has_bun_test_timeout) {
                         if (bun_test_timeout.order(&now) == .lt) {
+                            bun_test_fired = true;
                             let active_file_strong = bun.jsc.Jest.Jest.runner.?.bun_test_root.active_file
                                 // TODO: add a .cloneNonOptional()?
                                 .clone();
@@ -1136,9 +1167,14 @@ pub fn spawnMaybeSync(
                             // the event loop again, but it should wake up
                             // ~instantly so we can drain the events.
                             jsc.Jest.bun_test.BunTest.bunTestTimeoutCallback(taken_active_file, &absolute_timespec, jsc_vm);
+                            * = subprocess.tryKill(subprocess.killSignal);
                         }
                     }
                 },
+            }
+
+            if (did_timeout || bun_test_fired || subprocess.exited_due_to_maxbuf != null) {
+                subprocess.closeReadablePipes();
             }
         }
     }

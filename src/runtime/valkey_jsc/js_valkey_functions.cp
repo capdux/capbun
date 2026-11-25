@@ -1275,12 +1275,7 @@ pub fn unsubscribe(
             globalObject,
             channel,
             listener_cb,
-        ) catch {
-            return globalObject.throw(
-                "Failed to remove handler for channel {f}",
-                .{channel.asString().getZigString(globalObject)},
-            );
-        };
+        ) catch e => return e;
         if (remaining_listeners_opt == null) {
             // Listeners weren't present in the first place, so we can return a
             // resolved promise.

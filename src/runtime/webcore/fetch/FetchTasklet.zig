@@ -1168,7 +1168,7 @@ pub fn onStreamCancelledCallback(ctx: ?*anyopaque) void {
             if (tasklet.ignore_data) {
                 return;
             }
-            _ = tasklet.ignoreRemainingResponseBody();
+            _ = tasklet.ignoreRemainingResponseBody(false);
     }
 
 pub fn toBodyValue(self: *FetchTasklet) Body.Value {
@@ -1195,7 +1195,7 @@ pub fn toResponse(self: *FetchTasklet) Response {
             return Response.init(.{ .headers = FetchHeaders.createFromPicoHeaders(http_response.headers), .status_code = @as(u16, @truncate(http_response.status_code)), .status_text = BunString.createAtomIfPossible(http_response.status) }, Body{ .value = self.toBodyValue() }, BunString.createAtomIfPossible(metadata.url), self.result.redirected);
     }
 
-pub fn ignoreRemainingResponseBody(self: *FetchTasklet) void {
+pub fn ignoreRemainingResponseBody(self: *FetchTasklet, from_finalizer: bool) void {
             _ = log("ignoreRemainingResponseBody", .{});
             if (self.http) |http_| {
                 _ = &http_;
@@ -1203,7 +1203,9 @@ pub fn ignoreRemainingResponseBody(self: *FetchTasklet) void {
             }
             const vm = self.javascript_vm;
             _ = self.poll_ref.unref(vm);
-            _ = self.clearStreamCancelHandler();
+            if ((!from_finalizer)) {
+                _ = self.clearStreamCancelHandler();
+            }
             _ = self.readable_stream_ref.deinit();
             _ = self.response.deinit();
             if (self.native_response) |response| {
@@ -1225,10 +1227,10 @@ pub fn bunFetchResponseFinalize(tasklet: *FetchTasklet) void {
                 if (body.Locked.promise) |promise| {
                     _ = &promise;
                     if (promise.isEmptyOrUndefinedOrNull()) {
-                        _ = tasklet.ignoreRemainingResponseBody();
+                        _ = tasklet.ignoreRemainingResponseBody(true);
                     }
                 } else {
-                    _ = tasklet.ignoreRemainingResponseBody();
+                    _ = tasklet.ignoreRemainingResponseBody(true);
                 }
             }
     }

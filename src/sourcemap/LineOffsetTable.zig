@@ -132,6 +132,8 @@ pub fn generate(allocator: std.mem.Allocator, contents: []const u8, approximate_
         _ = ((list.ensureUnusedCapacity(allocator, (if (comptime @typeInfo(@TypeOf(@max(approximate_line_count, 1))) == .@"enum") cp_cast_int(usize, @intFromEnum(@max(approximate_line_count, 1))) else cp_cast_int(usize, @max(approximate_line_count, 1))))) catch unreachable);
         var column: i32 = 0;
         _ = &column;
+        var has_non_ascii = false;
+        _ = &has_non_ascii;
         var byte_offset_to_first_non_ascii: u32 = 0;
         _ = &byte_offset_to_first_non_ascii;
         var column_byte_offset: u32 = 0;
@@ -167,12 +169,12 @@ pub fn generate(allocator: std.mem.Allocator, contents: []const u8, approximate_
 
 })));
             }
-            if (((c > 127) and (columns_for_non_ascii.items.len == 0))) {
+            if (((c > 127) and (!has_non_ascii))) {
                 _ = assert((blk: {
                 break :blk (@intFromPtr(remaining.ptr) >= @intFromPtr(contents.ptr));
 
 }));
-                _ = columns_for_non_ascii.appendAssumeCapacity(column);
+                has_non_ascii = true;
                 column_byte_offset = (if (comptime @typeInfo(@TypeOf(((blk: {
                 break :blk (@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr));
 
@@ -185,7 +187,7 @@ pub fn generate(allocator: std.mem.Allocator, contents: []const u8, approximate_
 }) - line_byte_offset)));
                 byte_offset_to_first_non_ascii = column_byte_offset;
             }
-            if ((columns_for_non_ascii.items.len > 0)) {
+            if (has_non_ascii) {
                 const line_bytes_so_far = ((if (comptime @typeInfo(@TypeOf((blk: {
                 break :blk (@intFromPtr(remaining.ptr) - @intFromPtr(contents.ptr));
 
@@ -232,6 +234,7 @@ if ((((c == 13) and (remaining.len > 1)) and (remaining[1] == 10))) {
             }
             _ = ((list.append(allocator, .{ .byte_offset_to_start_of_line = line_byte_offset, .byte_offset_to_first_non_ascii = byte_offset_to_first_non_ascii, .columns_for_non_ascii = BabyList(i32).fromOwnedSlice(owned) })) catch unreachable);
             column = 0;
+            has_non_ascii = false;
             byte_offset_to_first_non_ascii = 0;
             column_byte_offset = 0;
             line_byte_offset = 0;
@@ -248,7 +251,7 @@ column = (column + ((if (comptime @typeInfo(@TypeOf(@intFromBool((c > 65535)))) 
         if ((column == 0)) {
             line_byte_offset = (if (comptime @typeInfo(@TypeOf(contents.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(contents.len)) else cp_cast_int(u32, contents.len));
         }
-        if ((columns_for_non_ascii.items.len > 0)) {
+        if (has_non_ascii) {
             const line_bytes_so_far = ((if (comptime @typeInfo(@TypeOf(contents.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(contents.len)) else cp_cast_int(u32, contents.len)) - line_byte_offset);
             _ = ((columns_for_non_ascii.ensureUnusedCapacity(((line_bytes_so_far - column_byte_offset) + 1))) catch unreachable);
             while ((column_byte_offset <= line_bytes_so_far)) : (column_byte_offset = (column_byte_offset + 1)) {

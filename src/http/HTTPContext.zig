@@ -183,6 +183,7 @@ pub fn onClose(ptr: AnyPtr, socket: SocketHandler(ssl), _: c_int, _: OptionalAny
                     _ = &session;
                     return session.onClose(error.ConnectionClosed);
                 }
+                _ = bun.http.unregisterAbortTrackerForSocket(ssl, socket);
         }
 
 pub fn addMemoryBackToPool(pooled: *_PooledSocket(ssl)) void {
@@ -284,6 +285,8 @@ pub fn onConnectError(ptr: AnyPtr, socket: SocketHandler(ssl), _: c_int) void {
                 if (tagged.get(bun.http)) |client| {
                     _ = &client;
                     _ = client.onConnectError();
+                } else {
+                    _ = bun.http.unregisterAbortTrackerForSocket(ssl, socket);
                 }
         }
 
@@ -508,16 +511,17 @@ pub fn connect(self: *@This(), client: *bun.http, hostname_: []const u8, port: u
                 client.connected_url.hostname = hostname;
                 if (ssl) {
                     if (client.canOfferH2()) {
+                        const host_header_hash = client.proxyAuthHash();
                         for (self.active_h2_sessions.items) |session| {
                             _ = &session;
-                            if ((session.hasHeadroom() and session.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props)))) {
+                            if ((session.hasHeadroom() and session.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), host_header_hash))) {
                                 _ = session.adopt(client);
                                 return null;
                             }
                         }
                         for (self.pending_h2_connects.items) |pc| {
                             _ = &pc;
-                            if (pc.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props))) {
+                            if (pc.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), host_header_hash)) {
                                 _ = bun.handleOom(pc.waiters.append(bun.default_allocator, client));
                                 return null;
                             }
@@ -528,7 +532,7 @@ pub fn connect(self: *@This(), client: *bun.http, hostname_: []const u8, port: u
                     const want_tunnel = ((client.http_proxy != null) and client.url.isHTTPS());
                     const target_hostname: []const u8 = (if (want_tunnel) client.url.hostname else "");
                     const target_port: u16 = (if (want_tunnel) client.url.getPortAuto() else 0);
-                    const proxy_auth_hash: u64 = (if (want_tunnel) client.proxyAuthHash() else 0);
+                    const proxy_auth_hash: u64 = (if ((want_tunnel or ssl)) client.proxyAuthHash() else 0);
                     if (self.existingSocket(client.flags.reject_unauthorized, hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), want_tunnel, target_hostname, target_port, proxy_auth_hash, (if (ssl) client.alpnOffer() else .h1))) |found| {
                         _ = &found;
                         const sock = found.socket;
@@ -567,7 +571,7 @@ pub fn connect(self: *@This(), client: *bun.http, hostname_: []const u8, port: u
                 client.allow_retry = false;
                 if (ssl) {
                     if (client.canOfferH2()) {
-                        const pc = bun.http.H2.PendingConnect.new(.{ .hostname = bun.handleOom(bun.default_allocator.dupe(u8, hostname)), .port = port, .ssl_config = bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props) });
+                        const pc = bun.http.H2.PendingConnect.new(.{ .hostname = bun.handleOom(bun.default_allocator.dupe(u8, hostname)), .port = port, .ssl_config = bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), .host_header_hash = client.proxyAuthHash() });
                         _ = bun.handleOom(self.pending_h2_connects.append(bun.default_allocator, pc));
                         client.pending_h2 = pc;
                     }

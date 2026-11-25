@@ -85,10 +85,15 @@ pub fn parse(
         };
     const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: &input };
 
+    const input_bytes = input.slice();
+    if (input_bytes.len > std.math.maxInt(i32)) {
+        return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+    }
+
     let log = logger.Log.init(bun.default_allocator);
     const log_guard = DeinitGuard<logger.Log>{ ptr: &log };
 
-    const source = &logger.Source.initPathString("input.json5", input.slice());
+    const source = &logger.Source.initPathString("input.json5", input_bytes);
 
     const root = json5.JSON5Parser.parse(source, &log, allocator) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;

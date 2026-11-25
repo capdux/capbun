@@ -664,8 +664,6 @@ if ((!self.has_queued_finalizer)) {
 pub fn dispatchOne(self: *ThreadSafeFunction, is_first: bool) bool {
             var queue_finalizer_after_call = false;
             _ = &queue_finalizer_after_call;
-            var has_more: bool = false;
-            _ = &has_more;
             var task: ?*anyopaque = null;
             _ = &task;
             {
@@ -701,14 +699,13 @@ pub fn dispatchOne(self: *ThreadSafeFunction, is_first: bool) bool {
                         _ = self.blocking_condvar.signal();
                     }
                 }
-                has_more = (!self.isClosing());
                 task = t;
             }
             _ = (blk_catch_1: { break :blk_catch_1 ((self.call(task, (!is_first))) catch |__ce_1| { _ = &__ce_1; return false; }); });
             if (queue_finalizer_after_call) {
                 _ = self.maybeQueueFinalizer();
             }
-            return has_more;
+            return true;
     }
 
 pub fn call(self: *ThreadSafeFunction, task: ?*anyopaque, is_first: bool) bun.JSTerminated!void {
@@ -752,7 +749,7 @@ pub fn enqueue(self: *ThreadSafeFunction, ctx: ?*anyopaque, block: bool) napi_st
             var ___lock_guard_moved = false; _ = &___lock_guard_moved;
             defer if (!___lock_guard_moved) { ___lock_guard_moved = true; const __T = @TypeOf(_lock_guard); if (@typeInfo(__T) == .optional) { if (_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _lock_guard; _drop_val.__cp_deinit(); } };
             if (block) {
-                while (self.queue.isBlocked()) {
+                while ((self.queue.isBlocked() and (!self.isClosing()))) {
                     _ = self.blocking_condvar.wait((&self.lock));
                 }
             } else {
@@ -851,10 +848,14 @@ pub fn release(self: *ThreadSafeFunction, mode: napi_threadsafe_function_release
                         _ = self.closing.store(.closing, .seq_cst);
                         _ = self.aborted.store(true, .seq_cst);
                         if ((self.queue.max_queue_size > 0)) {
-                            _ = self.blocking_condvar.signal();
+                            _ = self.blocking_condvar.broadcast();
                         }
                     }
                     _ = self.scheduleDispatch();
+                } else {
+                    if ((prev_remaining == 1)) {
+                        _ = self.scheduleDispatch();
+                    }
                 }
             }
             return @intFromEnum(NapiStatus.ok);
@@ -2112,12 +2113,9 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, lengt
         var str_val = str_pair[0];
         _ = &str_val;
         const bytes = str_pair[1];
-        var _str_guard = DerefGuard(bun.String){ .ptr = (&str_val) };
-        _ = &_str_guard;
-        var ___str_guard_moved = false; _ = &___str_guard_moved;
-        defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
         _ = @memcpy(bytes, slice);
-        _ = result.set(env, (blk_catch_6: { break :blk_catch_6 ((str_val.toJS(env.toJS())) catch |__ce_6| { _ = &__ce_6; return env.setLastError(.generic_failure); }); }));
+        _ = result.set(env, (blk_catch_6: { break :blk_catch_6 ((str_val.transferToJS(env.toJS())) catch |__ce_6| { _ = &__ce_6; _ = str_val.deref();
+        return env.setLastError(.generic_failure); }); }));
         return env.ok();
 }
 

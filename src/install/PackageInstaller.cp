@@ -912,6 +912,7 @@ pub struct PackageInstaller {
                         dependency_id: dependency_id,
                     },
                 };
+                const download_patch_hash = if (remove_patch) null else patch_name_and_version_hash;
                 switch (resolution.tag) {
                     .git => {
                         _.manager.enqueueGitForCheckout(
@@ -919,7 +920,7 @@ pub struct PackageInstaller {
                             alias.slice(_.lockfile.buffers.string_bytes.items),
                             resolution,
                             context,
-                            patch_name_and_version_hash,
+                            download_patch_hash,
                         );
                     },
                     .github => {
@@ -931,7 +932,7 @@ pub struct PackageInstaller {
                             package_id,
                             url,
                             context,
-                            patch_name_and_version_hash,
+                            download_patch_hash,
                         ) catch e => {
                             if (e == error.OutOfMemory) {
                                 bun.outOfMemory();
@@ -940,6 +941,8 @@ pub struct PackageInstaller {
                                     is_pending_package_install,
                                     log_level,
                                 );
+                            } else if (e == error.AlreadyFailed) {
+                                _.incrementTreeInstallCount(_.current_tree_id, !is_pending_package_install, log_level);
                             }
                         };
                     },
@@ -958,7 +961,7 @@ pub struct PackageInstaller {
                             package_id,
                             resolution.value.remote_tarball.slice(_.lockfile.buffers.string_bytes.items),
                             context,
-                            patch_name_and_version_hash,
+                            download_patch_hash,
                         ) catch e => {
                             if (e == error.OutOfMemory) {
                                 bun.outOfMemory();
@@ -967,6 +970,8 @@ pub struct PackageInstaller {
                                     is_pending_package_install,
                                     log_level,
                                 );
+                            } else if (e == error.AlreadyFailed) {
+                                _.incrementTreeInstallCount(_.current_tree_id, !is_pending_package_install, log_level);
                             }
                         };
                     },
@@ -989,7 +994,7 @@ pub struct PackageInstaller {
                             resolution.value.npm.version,
                             resolution.value.npm.url.slice(_.lockfile.buffers.string_bytes.items),
                             context,
-                            patch_name_and_version_hash,
+                            download_patch_hash,
                         ) catch e => {
                             if (e == error.OutOfMemory) {
                                 bun.outOfMemory();
@@ -998,6 +1003,8 @@ pub struct PackageInstaller {
                                     is_pending_package_install,
                                     log_level,
                                 );
+                            } else if (e == error.AlreadyFailed) {
+                                _.incrementTreeInstallCount(_.current_tree_id, !is_pending_package_install, log_level);
                             }
                         };
                     },

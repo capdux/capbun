@@ -58,6 +58,15 @@ pub struct SourceFile {
         }
     }
 
+    /// Detach without closing the parent-owned fd. Returns true when an
+    /// operation is in flight (its callback frees the file); false when idle
+    /// (caller destroys the file).
+    fn detachBorrowedFd(*_): bool {
+        _.fs.data = null;
+        _.stop();
+        return _.state != .deinitialized;
+    }
+
     fn complete(*_, was_canceled: bool) {
         bun.assert(_.state == .operating || _.state == .canceling);
         if (was_canceled) {

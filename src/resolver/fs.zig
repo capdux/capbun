@@ -1036,16 +1036,28 @@ pub fn deinit(e: *Entry, allocator: std.mem.Allocator) void {
 
 pub fn kind(entry: *Entry, fs: *RealFS, store_fd: bool) Kind {
             if (entry.need_stat) {
-                entry.need_stat = false;
-                entry.cache = (blk_catch_0: { break :blk_catch_0 ((RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd)) catch |__ce_0| { _ = &__ce_0; return entry.cache.kind; }); });
+                _ = (if (comptime @typeInfo(@TypeOf(entry.mutex)) == .pointer) (entry.mutex) else &(entry.mutex)).lock();
+                defer {
+                _ = (if (comptime @typeInfo(@TypeOf(entry.mutex)) == .pointer) (entry.mutex) else &(entry.mutex)).unlock();
+                }
+                if (entry.need_stat) {
+                    entry.need_stat = false;
+                    entry.cache = (blk_catch_0: { break :blk_catch_0 ((RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd)) catch |__ce_0| { _ = &__ce_0; return entry.cache.kind; }); });
+                }
             }
             return entry.cache.kind;
     }
 
 pub fn symlink(entry: *Entry, fs: *RealFS, store_fd: bool) []const u8 {
             if (entry.need_stat) {
-                entry.need_stat = false;
-                entry.cache = (blk_catch_1: { break :blk_catch_1 ((RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd)) catch |__ce_1| { _ = &__ce_1; return ""; }); });
+                _ = (if (comptime @typeInfo(@TypeOf(entry.mutex)) == .pointer) (entry.mutex) else &(entry.mutex)).lock();
+                defer {
+                _ = (if (comptime @typeInfo(@TypeOf(entry.mutex)) == .pointer) (entry.mutex) else &(entry.mutex)).unlock();
+                }
+                if (entry.need_stat) {
+                    entry.need_stat = false;
+                    entry.cache = (blk_catch_1: { break :blk_catch_1 ((RealFS.kind(fs, entry.dir, entry.base(), entry.cache.fd, store_fd)) catch |__ce_1| { _ = &__ce_1; return ""; }); });
+                }
             }
             return entry.cache.symlink.slice();
     }
@@ -1446,11 +1458,11 @@ pub fn readDirectoryWithIterator(fs: *RealFS, dir_maybe_trail_slash: []const u8,
             if (((maybe_handle == null) and ((!store_fd) or RealFS.needToCloseFiles(fs)))) {
                 handle_guard.ptr = (&handle);
             }
-            if ((maybe_handle == null)) {
-                if (in_place) |existing| {
-                    _ = &existing;
-                    dir = existing.dir;
-                } else {
+            if (in_place) |existing| {
+                _ = &existing;
+                dir = existing.dir;
+            } else {
+                if ((maybe_handle == null)) {
                     dir = try FileSystem.DirnameStore.instance.append(string, dir_maybe_trail_slash);
                 }
             }

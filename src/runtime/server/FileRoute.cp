@@ -6,6 +6,7 @@ const AnyServer = jsc.API.AnyServer;
 const Blob = jsc.WebCore.Blob;
 
 const FileResponseStream = bun.api.server.FileResponseStream;
+const HTTPStatusText = bun.api.server.HTTPStatusText;
 const RangeRequest = bun.api.server.RangeRequest;
 const writeStatus = bun.api.server.writeStatus;
 
@@ -345,10 +346,6 @@ pub struct FileRouteInitOptions {
             if (range == .unsatisfiable) break :brk 416;
             if (range == .satisfiable) break :brk 206;
 
-            if (size == 0 && file_type == .file && _.status_code == 200) {
-                break :brk 204;
-            }
-
             break :brk _.status_code;
         };
 
@@ -358,15 +355,12 @@ pub struct FileRouteInitOptions {
         resp.writeMark();
         _.writeHeaders(resp);
 
-        // Bodiless statuses end here — before the range switch, so a 304 (which
-        // can win over a satisfiable Range per RFC 9110 §13.2.2) doesn't emit
-        // Content-Range.
-        switch (status_code) {
-            204, 205, 304, 307, 308 => {
-                resp.endWithoutBody(resp.shouldCloseConnection());
-                return;
-            },
-            else => {},
+        // Bodiless statuses end before the range switch so a 304 emits no
+        // Content-Range. FileResponseStream ships via sendfile/write(), so a
+        // null-body status must never start it; 307/308 routes skip it too.
+        if (HTTPStatusText.isNullBody(status_code) || status_code == 307 || status_code == 308) {
+            resp.endWithoutBody(resp.shouldCloseConnection());
+            return;
         }
 
         let body_offset: u64 = 0;

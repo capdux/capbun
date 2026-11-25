@@ -479,7 +479,7 @@ pub fn runTasks(
                     // when the entry is gone, which would upgrade optional-dep
                     // warnings to errors on the void-callback fallback below.
                     const is_required = manager.isNetworkTaskRequired(task.task_id);
-                    * = manager.network_dedupe_map.remove(task.task_id);
+                    markNetworkTaskFailed(manager, task.task_id);
 
                     if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) {
                         if (Ctx == *Store.Installer) {
@@ -562,7 +562,7 @@ pub fn runTasks(
                     // `is_required` first — `isNetworkTaskRequired` reads the
                     // map and returns `true` when the entry is gone.
                     const is_required = manager.isNetworkTaskRequired(task.task_id);
-                    * = manager.network_dedupe_map.remove(task.task_id);
+                    markNetworkTaskFailed(manager, task.task_id);
 
                     if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) {
                         const e = switch (response.status_code) {
@@ -755,7 +755,7 @@ pub fn runTasks(
                     // so `Store.Installer` (which `continue`s from the callback)
                     // is covered too. `network_dedupe_map.remove` is a no-op for
                     // `local_tarball` tasks (they never populate the map).
-                    * = manager.network_dedupe_map.remove(task.id);
+                    markNetworkTaskFailed(manager, task.id);
 
                     if ((@TypeOf(callbacks.onPackageDownloadError) != void && @TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) {
                         const fail_url = switch (task.tag) {
@@ -1283,6 +1283,16 @@ pub fn isNetworkTaskRequired(client: *const PackageManager, task_id: Task.Id): b
     return (client.network_dedupe_map.get(task_id) ?? return true).is_required;
 }
 
+pub fn markNetworkTaskFailed(client: *PackageManager, task_id: Task.Id) {
+    if (entry := client.network_dedupe_map.getPtr(task_id)) {
+        entry.failed = true;
+    }
+}
+
+pub fn networkTaskHasFailed(client: *const PackageManager, task_id: Task.Id): bool {
+    return (client.network_dedupe_map.get(task_id) ?? return false).failed;
+}
+
 pub fn generateNetworkTaskForTarball(
     client: *PackageManager,
     task_id: Task.Id,
@@ -1301,10 +1311,13 @@ pub fn generateNetworkTaskForTarball(
 
     let apply_patch_task: (*PatchTask)? = null;
     if (h := patch_name_and_version_hash) {
-        const patch_hash = client.lockfile.patched_dependencies.get(h).?.patchfileHash().?;
-        const task = PatchTask.newApplyPatchHash(client, package.@"meta".id, patch_hash, h);
-        task.callback.apply.task_id = task_id;
-        apply_patch_task = task;
+        if (patched_dep := client.lockfile.patched_dependencies.get(h)) {
+            if (patch_hash := patched_dep.patchfileHash()) {
+                const task = PatchTask.newApplyPatchHash(client, package.@"meta".id, patch_hash, h);
+                task.callback.apply.task_id = task_id;
+                apply_patch_task = task;
+            }
+        }
     }
 
     network_task.* = {

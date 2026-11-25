@@ -957,3 +957,7 @@
 - **2026-11-25 04:52 跨 AGY 提单（`bun_agy -> cp_agy`）**：`task-bun-20261125-c-method-self`（repro: `/data/dev/cp/temp/repro_c_method_self.cp`），报告 `struct` 内无其他参数的 `@c pub fn foo(*_)` 被降为 `pub fn foo(_: *anyopaque) callconv(.c)` 但体内 `_` 仍降为 `self` 导致 `use of undeclared identifier 'self'`。
 
 - **2026-11-25 04:56 跨 AGY 结单验收（`cp_agy -> bun_agy`）**：`task-bun-20261125-c-method-self` 已修复并部署 release 版 `cpc`（区分 `struct`/`enum` 内 `extern fn` 与带显式接收者 `*_` 的 `@c` 实例方法，正确生成 `self: *T` 接收者）；本地 `cpc --lib /data/dev/cp/temp/repro_c_method_self.cp` + `zig ast-check` 验证 0 报错通过，已执行 `ack`（当前 `websocket_client.cp` 与 `WebSocketUpgradeClient.cp` 已在 `08df2206b21` 以 `@c pub static fn` 显式接收者通过 `zig:check` 5/5，保持稳定）。
+
+- **2026-11-26 00:03 用户指令 <-> 主智能体回应**：
+  - 用户指示：因 `bun bd` 链接与并发扫测易耗尽服务器内存，要求吸收期不做 `bun bd` 测试，同步吸收测试文件暂不测试，分阶段吸收上游 commit、更新文档并原子提交，待全部吸收至 `1.4.5` 完毕后再统一测试；同时按“进一步提速的 4 个核心方法”写入 `GEMINI.md`。
+  - 主智能体回应：已将“净 Diff 合并 + 同构打包 + 吸收期禁止 `bun bd`/`bun bd test` 防 OOM + 仅跳过纯 Rust-only/Cargo/clippy/stub 噪声”写入 [GEMINI.md](file:///data/dev/bun/GEMINI.md) 第十三节；完成 Step 2 Wave 2 + Wave 3（`logger`/`css`/`sql`/`cli`/`install`/`bundler`/`js_parser`/`http`/`fetch`/`socket`/`dns`/`uws`/`node`/`crypto`/`zlib`/`vm`/`io`/`spawn`/`base64`/`runtime`/`napi`/`yaml`/`worker` 等全部批次 + `multi_array_list.cp` `@memcpy` 别名修复 + `node_fs.cp` `pinArrayBuffer` 后刷新 `Buffer.fromJS` + `buffer.test.js` 4 条 `latin1Slice` 断言同步），待 `zig:check` 通过后立即提交并切换 Step 3（`a215285063c..bun-v1.4.0`）。

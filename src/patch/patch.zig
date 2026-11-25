@@ -331,7 +331,10 @@ const pathz = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_deletion
                 }
 },
 .file_rename => {
-const from_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.from_path));
+if (((!isSafePatchPath(part.file_rename.from_path)) or (!isSafePatchPath(part.file_rename.to_path)))) {
+                    return bun.sys.Error.fromCode(.INVAL, .rename);
+                }
+                const from_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.from_path));
                 const to_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.to_path));
                 if (std.fs.path.dirname(to_path)) |todir| {
                     _ = &todir;
@@ -383,14 +386,18 @@ return e.withoutPath();
                     continue;
                 }
                 const hunk = part.file_creation.hunk.?;
-                const last_line = (hunk.parts.items[0].lines.items.len -| 1);
-                const no_newline_at_end_of_file = hunk.parts.items[0].no_newline_at_end_of_file;
+                if ((hunk.parts.items.len == 0)) {
+                    continue;
+                }
+                const first_part = hunk.parts.items[0];
+                const last_line = (first_part.lines.items.len -| 1);
+                const no_newline_at_end_of_file = first_part.no_newline_at_end_of_file;
                 const count = count: {
                 var total: usize = 0;
                 _ = &total;
                 var i: usize = 0;
                 _ = &i;
-                for (hunk.parts.items[0].lines.items) |line| {
+                for (first_part.lines.items) |line| {
                     _ = &line;
                     total = (total + line.len);
                     total = (total + @intFromBool((i < last_line)));
@@ -407,7 +414,7 @@ return e.withoutPath();
                 _ = &i;
                 var idx: usize = 0;
                 _ = &idx;
-                for (hunk.parts.items[0].lines.items) |line| {
+                for (first_part.lines.items) |line| {
                     _ = &line;
                     _ = @memcpy(contents[i..(i + line.len)], line);
                     i = (i + line.len);
@@ -437,13 +444,19 @@ return e.withoutPath();
                 }
 },
 .file_patch => {
-if (PatchFile.applyPatch(part.file_patch, (&arena_alloc), patch_dir, (&state)).asErr()) |e| {
+if ((!isSafePatchPath(part.file_patch.path))) {
+                    return bun.sys.Error.fromCode(.INVAL, .open);
+                }
+                if (PatchFile.applyPatch(part.file_patch, (&arena_alloc), patch_dir, (&state)).asErr()) |e| {
                     _ = &e;
                     return e.withoutPath();
                 }
 },
 .file_mode_change => {
-const newmode = part.file_mode_change.new_mode;
+if ((!isSafePatchPath(part.file_mode_change.path))) {
+                    return bun.sys.Error.fromCode(.INVAL, .fchmodat);
+                }
+                const newmode = part.file_mode_change.new_mode;
                 const filepath = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_mode_change.path));
                 if (comptime bun.Environment.isPosix) {
                     if (bun.sys.fchmodat(patch_dir, filepath, newmode.toBunMode(), 0).asErr()) |e| {
@@ -514,15 +527,15 @@ return .{ .err = e.withPath(file_path) };
             file_line_count = count;
             for (patch.hunks.items) |hunk| {
                 _ = &hunk;
-                count = (if (comptime @typeInfo(@TypeOf((((if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(i64, @intFromEnum(count)) else cp_cast_int(i64, count)) + (if (comptime @typeInfo(@TypeOf(hunk.header.patched.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(hunk.header.patched.len)) else cp_cast_int(i64, hunk.header.patched.len))) - (if (comptime @typeInfo(@TypeOf(hunk.header.original.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(hunk.header.original.len)) else cp_cast_int(i64, hunk.header.original.len))))) == .@"enum") cp_cast_int(usize, @intFromEnum((((if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(i64, @intFromEnum(count)) else cp_cast_int(i64, count)) + (if (comptime @typeInfo(@TypeOf(hunk.header.patched.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(hunk.header.patched.len)) else cp_cast_int(i64, hunk.header.patched.len))) - (if (comptime @typeInfo(@TypeOf(hunk.header.original.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(hunk.header.original.len)) else cp_cast_int(i64, hunk.header.original.len))))) else cp_cast_int(usize, (((if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(i64, @intFromEnum(count)) else cp_cast_int(i64, count)) + (if (comptime @typeInfo(@TypeOf(hunk.header.patched.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(hunk.header.patched.len)) else cp_cast_int(i64, hunk.header.patched.len))) - (if (comptime @typeInfo(@TypeOf(hunk.header.original.len)) == .@"enum") cp_cast_int(i64, @intFromEnum(hunk.header.original.len)) else cp_cast_int(i64, hunk.header.original.len)))));
+                count = ((count +| (if (comptime @typeInfo(@TypeOf(hunk.header.patched.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(hunk.header.patched.len)) else cp_cast_int(usize, hunk.header.patched.len))) -| (if (comptime @typeInfo(@TypeOf(hunk.header.original.len)) == .@"enum") cp_cast_int(usize, @intFromEnum(hunk.header.original.len)) else cp_cast_int(usize, hunk.header.original.len)));
                 for (hunk.parts.items) |part| {
                     _ = &part;
                     switch (part.type) {
 .deletion => {
-count = (count + @intFromBool(part.no_newline_at_end_of_file));
+count = (count +| @intFromBool(part.no_newline_at_end_of_file));
 },
 .insertion => {
-count = (count - @intFromBool(part.no_newline_at_end_of_file));
+count = (count -| @intFromBool(part.no_newline_at_end_of_file));
 },
 .context => {
 
@@ -929,10 +942,12 @@ if (bun.strings.hasPrefix(line, "@@")) {
                                                     self.current_file_patch.after_hash = hashes[1];
                                                 } else {
                                                     if (bun.strings.hasPrefix(line, "--- ")) {
-                                                        self.current_file_patch.from_path = std.mem.trim(u8, line["--- a/".len..], WHITESPACE);
+                                                        const from_slice = (if ((line.len >= "--- a/".len)) line["--- a/".len..] else "");
+                                                        self.current_file_patch.from_path = std.mem.trim(u8, from_slice, WHITESPACE);
                                                     } else {
                                                         if (bun.strings.hasPrefix(line, "+++ ")) {
-                                                            self.current_file_patch.to_path = std.mem.trim(u8, line["+++ b/".len..], WHITESPACE);
+                                                            const to_slice = (if ((line.len >= "+++ b/".len)) line["+++ b/".len..] else "");
+                                                            self.current_file_patch.to_path = std.mem.trim(u8, to_slice, WHITESPACE);
                                                         }
                                                     }
                                                 }
@@ -1259,6 +1274,35 @@ const PAGE_SIZE = 16384;
 const debug = bun.Output.scoped(.patch, .visible);
 const empty_hunk_header = HunkHeader{ .original = HunkHeaderRange{ .start = 1, .len = 0 }, .patched = HunkHeaderRange{ .start = 1, .len = 0 } };
 pub const TestingAPIs = TestingMod.TestingAPIs;
+
+pub fn isSafePatchPath(path: []const u8) bool {
+        if ((path.len == 0)) {
+            return false;
+        }
+        if (((path[0] == 47) or (path[0] == 92))) {
+            return false;
+        }
+        if ((((path.len >= 2) and std.ascii.isAlphabetic(path[0])) and (path[1] == 58))) {
+            return false;
+        }
+        var start: usize = 0;
+        _ = &start;
+        var i: usize = 0;
+        _ = &i;
+        while ((i <= path.len)) : (i = (i + 1)) {
+            if (((i < path.len) and (path[@as(usize, @intCast(i))] == 0))) {
+                return false;
+            }
+            if ((((i == path.len) or (path[@as(usize, @intCast(i))] == 47)) or (path[@as(usize, @intCast(i))] == 92))) {
+                const seg = path[start..i];
+                if ((((seg.len == 2) and (seg[0] == 46)) and (seg[1] == 46))) {
+                    return false;
+                }
+                start = (i + 1);
+            }
+        }
+        return true;
+}
 
 pub fn parsePatchFile(file: []const u8) ParseErr!PatchFile {
         var lines_parser = PatchLinesParser{  };

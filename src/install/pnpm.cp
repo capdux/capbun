@@ -6,6 +6,7 @@ import { Bin } from "./bin.zig";
 import { Integrity } from "./integrity.zig";
 import { Resolution } from "./resolution.zig";
 import Lockfile from "./lockfile.zig";
+import migration from "./migration.zig";
 
 type string = []const u8;
 type LoadResult = Lockfile.LoadResult;
@@ -933,6 +934,10 @@ pub fn migratePnpmLockfile(
             lockfile.buffers.resolutions.items[dep_id] = res_pkg_id;
         }
     }
+
+    // pnpm records `os`/`cpu` for every `packages:` entry whose manifest
+    // declares them, including `file:` folders, tarballs, and git packages.
+    migration.clearNonRegistryPlatformConstraints(lockfile);
 
     lockfile.resolve(log)?;
 

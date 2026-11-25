@@ -132,6 +132,7 @@ if ($debug) {
  */
 function spawn(file, args, options) {
   options = normalizeSpawnArguments(file, args, options);
+  if (options.windowsBatchFileError) throw options.windowsBatchFileError;
   validateTimeout(options.timeout);
   validateAbortSignal(options.signal, "options.signal");
   const killSignal = sanitizeKillSignal(options.killSignal);
@@ -490,6 +491,26 @@ function spawnSync(file, args, options) {
     maxBuffer: MAX_BUFFER,
     ...normalizeSpawnArguments(file, args, options),
   };
+
+  if (options.windowsBatchFileError) {
+    const error = new SystemError(
+      `spawnSync ${options.file} EINVAL`,
+      options.file,
+      "spawnSync " + options.file,
+      -4071,
+      "EINVAL",
+    );
+    error.spawnargs = ArrayPrototypeSlice.$call(options.args, 1);
+    return {
+      signal: null,
+      status: null,
+      output: [null, null, null],
+      pid: 0,
+      stdout: null,
+      stderr: null,
+      error,
+    };
+  }
 
   const maxBuffer = options.maxBuffer;
   const encoding = options.encoding;
@@ -952,6 +973,9 @@ function normalizeSpawnArguments(file, args, options) {
       else file = "/bin/sh";
       args = ["-c", command];
     }
+  } else if (process.platform === "win32" && /\.(?:cmd|bat)[\s.]*$/i.exec(file) !== null) {
+    // Reject .bat/.cmd without shell to prevent cmd.exe argument injection.
+    options = { ...options, windowsBatchFileError: new SystemError(`spawn ${file} EINVAL`, file, "spawn", -4071, "EINVAL") };
   }
 
   // Handle argv0

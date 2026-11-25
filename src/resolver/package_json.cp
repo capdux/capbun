@@ -1797,6 +1797,16 @@ pub struct ESModule {
                     }
                 }
 
+                if (subpath.len > 0) {
+                    if (invalid := findInvalidSubpathSegment(subpath)) {
+                        if (log := r.debug_logs) {
+                            log.addNoteFmt("The path \"{s}\" is invalid because it contains an invalid segment \"{s}\"", .{ subpath, invalid });
+                        }
+
+                        return Resolution{ .path = subpath, status: .InvalidModuleSpecifier, debug: { token: target.first_token } };
+                    }
+                }
+
                 // If target does not start with "./", then...
                 if (!strings.startsWith(str, "./")) {
                     if (log := r.debug_logs) {
@@ -2181,21 +2191,63 @@ fn findInvalidSegment(path_: string): string? {
             path = "";
         }
 
-        switch (segment.len) {
-            1 => {
-                if (strings.eqlComptimeIgnoreLen(segment, ".")) return segment;
-            },
-            2 => {
-                if (strings.eqlComptimeIgnoreLen(segment, "..")) return segment;
-            },
-            12 => {
-                if (strings.eqlComptimeIgnoreLen(segment, "node_modules")) return segment;
-            },
-            else => {},
-        }
+        if (isInvalidSegment(segment)) return segment;
     }
 
     return null;
+}
+
+fn findInvalidSubpathSegment(path_: string): string? {
+    let path = path_;
+    while (path.len > 0) {
+        let segment = path;
+        if (new_slash := strings.indexAnyComptime(path, "/\\")) {
+            segment = path[0..new_slash];
+            path = path[new_slash + 1 ..];
+        } else {
+            path = "";
+        }
+
+        if (isInvalidSegment(segment)) return segment;
+    }
+
+    return null;
+}
+
+fn hexDigitValue(c: u8): u8? {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return null;
+}
+
+fn isInvalidSegment(segment: string): bool {
+    let decoded: [12]u8 = undefined;
+    let len: usize = 0;
+    let i: usize = 0;
+    while (i < segment.len) {
+        const b = segment[i];
+        let c = b;
+        if (b == '%' && i + 2 < segment.len) {
+            if (hi := hexDigitValue(segment[i + 1])) {
+                if (lo := hexDigitValue(segment[i + 2])) {
+                    c = (hi << 4) | lo;
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+        if (len == decoded.len) return false;
+        decoded[len] = std.ascii.toLower(c);
+        len += 1;
+    }
+    const d = decoded[0..len];
+    return strings.eqlComptime(d, ".") || strings.eqlComptime(d, "..") || strings.eqlComptime(d, "node_modules");
 }
 
 

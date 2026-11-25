@@ -673,7 +673,11 @@ else => .javascript,
 }, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .is_commonjs_module = is_commonjs_module, .module_info = module_info_deserialized, .tag = tag };
 },
 .napi => {
-_ = unreachable;
+if (globalObject) |global| {
+            _ = &global;
+            return global.throwTypeError("To load Node-API modules, use require() or process.dlopen instead of import.", .{});
+        }
+        return error.NotSupported;
 },
 .wasm => {
 if ((strings.eqlComptime(referrer, "undefined") and strings.eqlLong(jsc_vm.main, path.text, true))) {

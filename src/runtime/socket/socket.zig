@@ -115,6 +115,16 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const StoredVerifyError = struct {
+    code: []u8,
+    reason: []u8,
+
+pub fn deinit(self: *StoredVerifyError) void {
+            _ = default_allocator.free(self.code);
+            _ = default_allocator.free(self.reason);
+    }
+};
+
 pub fn OptDerefGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -312,7 +322,12 @@ pub const Flags = packed struct(u16) {
     is_paused: bool = false,
     allow_half_open: bool = false,
     bypass_tls: bool = false,
-    _: u6 = 0,
+    rejected: bool = false,
+    hostname_mismatch: bool = false,
+    reject_unauthorized: bool = false,
+    defers_server_identity: bool = false,
+    tls_server_role: bool = false,
+    _: u1 = 0,
 };
 
 pub const DuplexUpgradeContext = struct {
@@ -557,6 +572,33 @@ pub fn selectALPNCallback(ssl: ?*BoringSSL.SSL, out: [*c][*c]const u8, outlen: [
         }
 }
 
+pub fn tlsTrueDefaults(vm: *jsc.VirtualMachine) jsc.API.ServerConfig.SSLConfig {
+        var cfg = jsc.API.ServerConfig.SSLConfig.zero;
+        _ = &cfg;
+        cfg.reject_unauthorized = @intFromBool(vm.getTLSRejectUnauthorized());
+        return cfg;
+}
+
+pub fn resolveRejectUnauthorized(vm: *jsc.VirtualMachine, cfg_opt: OptSSLConfig, is_server: bool) bool {
+        if (cfg_opt) |cfg| {
+            _ = &cfg;
+            return (((!is_server) or (cfg.request_cert != 0)) and (cfg.reject_unauthorized != 0));
+        }
+        return ((!is_server) and vm.getTLSRejectUnauthorized());
+}
+
+pub fn upgradeRejectPolicy(vm: *jsc.VirtualMachine, cfg_opt: OptSSLConfig, is_server: bool, ctx: ?*BoringSSL.SSL_CTX) bool {
+        if (((cfg_opt == null) and is_server)) {
+            if (ctx) |c| {
+                _ = &c;
+                const mode = (BoringSSL.SSL_VERIFY_PEER | BoringSSL.SSL_VERIFY_FAIL_IF_NO_PEER_CERT);
+                return ((BoringSSL.SSL_CTX_get_verify_mode(c) & mode) == mode);
+            }
+            return false;
+        }
+        return resolveRejectUnauthorized(vm, cfg_opt, is_server);
+}
+
 pub fn NewSocket(comptime ssl: bool) type {
         return struct {
     socket: Socket,
@@ -570,6 +612,7 @@ pub fn NewSocket(comptime ssl: bool) type {
     connection: ?Listener.UnixOrHost = null,
     protos: ?[]const u8,
     server_name: ?[]const u8 = null,
+    verify_error: ?StoredVerifyError = null,
     buffered_data_for_node_net: bun.ByteList = .{},
     bytes_written: u64 = 0,
     native_callback: NativeCallbacks = .none,
@@ -716,7 +759,8 @@ pub fn setKeepAlive(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: 
             _ = jsc.markBinding(@src());
             const args = callframe.arguments_old(2);
             const enabled: bool = (if ((args.len >= 1)) args.ptr[0].toBoolean() else false);
-            const initialDelay: u32 = (if ((args.len > 1)) @intCast(try globalThis.validateIntegerRange(args.ptr[1], i32, 0, .{ .min = 0, .field_name = "initialDelay" })) else 0);
+            const initialDelayMs: u32 = (if ((args.len > 1)) @intCast(try globalThis.validateIntegerRange(args.ptr[1], i32, 0, .{ .min = 0, .field_name = "initialDelay" })) else 0);
+            const initialDelay = (initialDelayMs / 1000);
             _ = log("setKeepAlive({}, {})", .{ enabled, initialDelay });
             return JSValue.jsBoolean(self.socket.setKeepAlive(enabled, initialDelay));
     }
@@ -1075,6 +1119,26 @@ pub fn onEnd(self: *@This(), _: Socket) void {
             _ = (blk_catch_7: { break :blk_catch_7 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
 
+pub fn actsAsTLSServer(self: @This()) bool {
+            return (self.isServer() or self.flags.tls_server_role);
+    }
+
+pub fn rejectUnauthorizedConnection(self: *@This()) void {
+            if ((self.socket.isDetached() or self.socket.isClosed())) {
+                return;
+            }
+            _ = self.closeAndDetach(.fast_shutdown);
+    }
+
+pub fn storedVerifyErrorToJS(self: @This(), globalObject: *jsc.JSGlobalObject) ?JSValue {
+            if (self.verify_error) |stored| {
+                _ = &stored;
+                const err = jsc.SystemError{ .code = bun.String.cloneUTF8(stored.code), .message = bun.String.cloneUTF8(stored.reason) };
+                return err.toErrorInstance(globalObject);
+            }
+            return null;
+    }
+
 pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) bun.JSError!void {
             _ = jsc.markBinding(@src());
             self.flags.handshake_complete = true;
@@ -1082,20 +1146,94 @@ pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bu
             if (self.socket.isDetached()) {
                 return;
             }
+            _ = self.ref();
+            var _keepalive = DerefGuard(This){ .ptr = self };
+            _ = &_keepalive;
+            var ___keepalive_moved = false; _ = &___keepalive_moved;
+            defer if (!___keepalive_moved) { ___keepalive_moved = true; const __T = @TypeOf(_keepalive); if (@typeInfo(__T) == .optional) { if (_keepalive) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _keepalive.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _keepalive; _drop_val.__cp_deinit(); } };
             const h = self.getHandlers();
             _ = log("onHandshake {s} ({d})", .{ (if ((h.mode == .server)) "S" else "C"), success });
-            const authorized = (if ((success == 1)) true else false);
-            self.flags.authorized = authorized;
+            var authorized = (success == 1);
+            _ = &authorized;
+            var hostname_mismatch = false;
+            _ = &hostname_mismatch;
+            var hostname_mismatch_reason: ?[]u8 = null;
+            _ = &hostname_mismatch_reason;
+            if (comptime ssl) {
+                if ((authorized and (!self.actsAsTLSServer()))) {
+                    if (self.socket.ssl()) |ssl_ptr| {
+                        _ = &ssl_ptr;
+                        var hostname: []const u8 = "";
+                        _ = &hostname;
+                        if (self.server_name) |server_name| {
+                            _ = &server_name;
+                            hostname = server_name;
+                        } else {
+                            if (self.connection) |connection| {
+                                _ = &connection;
+                                if ((connection == .host)) {
+                                    hostname = connection.host.host;
+                                }
+                            }
+                        }
+                        if (((hostname.len > 0) and (!bun.BoringSSL.checkServerIdentity(ssl_ptr, hostname)))) {
+                            authorized = false;
+                            hostname_mismatch = true;
+                            var msg_buf = std.array_list.Managed(u8).init(default_allocator);
+                            _ = &msg_buf;
+                            _ = bun.handleOom(msg_buf.appendSlice("Hostname/IP does not match certificate's altnames: "));
+                            _ = bun.handleOom(bun.BoringSSL.writeServerIdentityMismatchReason(ssl_ptr, hostname, (&msg_buf)));
+                            hostname_mismatch_reason = bun.handleOom(msg_buf.toOwnedSlice());
+                        }
+                    }
+                }
+            }
+            const verify_failed = ((comptime ssl) and (ssl_error.error_no != 0));
+            if (self.verify_error) |*old_ve| {
+                _ = &old_ve;
+                _ = (old_ve.*).deinit();
+                self.verify_error = null;
+            }
+            if (verify_failed) {
+                const code_slice = (if ((ssl_error.code == null)) "" else ssl_error.code[0..bun.len(ssl_error.code)]);
+                const reason_slice = (if ((ssl_error.reason == null)) "" else ssl_error.reason[0..bun.len(ssl_error.reason)]);
+                if (hostname_mismatch_reason) |reason_buf| {
+                    _ = &reason_buf;
+                    _ = default_allocator.free(reason_buf);
+                }
+                self.verify_error = StoredVerifyError{ .code = bun.handleOom(default_allocator.dupe(u8, code_slice)), .reason = bun.handleOom(default_allocator.dupe(u8, reason_slice)) };
+            } else {
+                if (hostname_mismatch_reason) |reason_buf| {
+                    _ = &reason_buf;
+                    self.verify_error = StoredVerifyError{ .code = bun.handleOom(default_allocator.dupe(u8, "ERR_TLS_CERT_ALTNAME_INVALID")), .reason = reason_buf };
+                }
+            }
+            const reject_unauthorized = (((success == 1) and self.flags.reject_unauthorized) and (verify_failed or (hostname_mismatch and (!self.flags.defers_server_identity))));
+            self.flags.authorized = (authorized and (!verify_failed));
+            self.flags.hostname_mismatch = hostname_mismatch;
+            self.flags.rejected = reject_unauthorized;
+            if (reject_unauthorized) {
+                if (self.twin) |twin| {
+                    _ = &twin;
+                    twin.flags.rejected = true;
+                }
+            }
             var callback = h.onHandshake;
             _ = &callback;
             var is_open = false;
             _ = &is_open;
             if (h.vm.isShuttingDown()) {
+                if (reject_unauthorized) {
+                    _ = self.rejectUnauthorizedConnection();
+                }
                 return;
             }
             if ((callback == .zero)) {
                 callback = h.onOpen;
                 if ((callback == .zero)) {
+                    if (reject_unauthorized) {
+                        _ = self.rejectUnauthorizedConnection();
+                    }
                     return;
                 }
                 is_open = true;
@@ -1115,12 +1253,15 @@ pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bu
                     h.onOpen = .zero;
                 }
             } else {
-                const authorization_error: JSValue = (if ((ssl_error.error_no == 0)) JSValue.jsNull() else try ssl_error.toJS(globalObject));
+                const authorization_error: JSValue = (if ((ssl_error.error_no == 0)) (if ((hostname_mismatch and (!self.flags.defers_server_identity))) ((self.storedVerifyErrorToJS(globalObject)) orelse (JSValue.jsNull())) else JSValue.jsNull()) else try ssl_error.toJS(globalObject));
                 result = (blk_catch_9: { break :blk_catch_9 ((callback.call(globalObject, this_value, (&.{ this_value, JSValue.jsBoolean(authorized), authorization_error }))) catch |e| { _ = &e; break :blk_catch_9 globalObject.takeException(e); }); });
             }
             if (result.toError()) |err_value| {
                 _ = &err_value;
                 _ = h.callErrorHandler(this_value, (&.{ this_value, err_value }));
+            }
+            if (reject_unauthorized) {
+                _ = self.rejectUnauthorizedConnection();
             }
     }
 
@@ -1264,11 +1405,11 @@ pub fn timeout(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: *js
 pub fn getAuthorizationError(self: *@This(), globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
             _ = jsc.markBinding(@src());
             if (self.socket.isDetached()) {
-                return JSValue.jsNull();
+                return ((self.storedVerifyErrorToJS(globalObject)) orelse (JSValue.jsNull()));
             }
             const ssl_error = self.socket.getVerifyError();
             if ((ssl_error.error_no == 0)) {
-                return JSValue.jsNull();
+                return ((self.storedVerifyErrorToJS(globalObject)) orelse (JSValue.jsNull()));
             }
             const code = (if ((ssl_error.code == null)) "" else ssl_error.code[0..bun.len(ssl_error.code)]);
             const reason = (if ((ssl_error.reason == null)) "" else ssl_error.reason[0..bun.len(ssl_error.reason)]);
@@ -1655,7 +1796,7 @@ pub fn writeOrEnd(self: *@This(), globalObject: *jsc.JSGlobalObject, args: []jsc
             if (globalObject.hasException()) {
                 return .fail;
             }
-            if ((self.socket.isShutdown() or self.socket.isClosed())) {
+            if (((self.socket.isShutdown() or self.socket.isClosed()) or (if (comptime ssl) self.flags.rejected else false))) {
                 return .{ .success = .{ .wrote = -1, .total = bytes.len } };
             }
             if (((!self.flags.end_after_flush) and is_end)) {
@@ -1699,6 +1840,11 @@ pub fn canEndAfterFlush(self: @This()) bool {
     }
 
 pub fn internalFlush(self: *@This()) void {
+            if (comptime ssl) {
+                if (self.flags.rejected) {
+                    return;
+                }
+            }
             if ((self.buffered_data_for_node_net.len > 0)) {
                 const written: usize = @intCast(@max(self.doSocketWrite(self.buffered_data_for_node_net.slice()), 0));
                 self.bytes_written = (self.bytes_written + written);
@@ -1819,6 +1965,11 @@ pub fn release(self: *@This()) void {
                 self.server_name = null;
                 _ = default_allocator.free(server_name);
             }
+            if (self.verify_error) |*ve| {
+                _ = &ve;
+                _ = (ve.*).deinit();
+                self.verify_error = null;
+            }
             if (self.connection) |connection| {
                 _ = &connection;
                 self.connection = null;
@@ -1884,6 +2035,14 @@ pub fn getBytesWritten(self: *@This(), _: *jsc.JSGlobalObject) JSValue {
 
 pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
             _ = jsc.markBinding(@src());
+            const args = callframe.arguments_old(1);
+            if ((args.len < 1)) {
+                return globalObject.throw("Expected 1 arguments", .{});
+            }
+            return self.upgradeTLSImpl(globalObject, args.ptr[0], false);
+    }
+
+pub fn upgradeTLSImpl(self: *@This(), globalObject: *jsc.JSGlobalObject, opts: JSValue, defers_server_identity: bool) bun.JSError!JSValue {
             if (comptime ssl) {
                 return JSValue.js_undefined;
             }
@@ -1893,11 +2052,6 @@ pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: 
             if (self.isServer()) {
                 return globalObject.throw("Server-side upgradeTLS is not supported. Use upgradeDuplexToTLS with isServer: true instead.", .{});
             }
-            const args = callframe.arguments_old(1);
-            if ((args.len < 1)) {
-                return globalObject.throw("Expected 1 arguments", .{});
-            }
-            const opts = args.ptr[0];
             if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
                 return globalObject.throw("Expected options object", .{});
             }
@@ -1963,7 +2117,7 @@ pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: 
                         _ssl_opts_guard.val = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls_js);
                     } else {
                         if (tls_js.toBoolean()) {
-                            _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.zero;
+                            _ssl_opts_guard.val = tlsTrueDefaults(jsc.VirtualMachine.get());
                         }
                     }
                     if ((_ssl_opts_guard.val == null)) {
@@ -2018,7 +2172,16 @@ pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: 
                     sni = sn;
                 }
             }
-            var tls = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = null, .protos = duped_protos, .server_name = duped_server_name, .owned_ssl_ctx = _ctx_guard.ctx });
+            var cfg_opt: OptSSLConfig = null;
+            _ = &cfg_opt;
+            if ((_ssl_opts_guard.val != null)) {
+                cfg_opt = bun.cast(OptSSLConfig, (blk: {
+                break :blk (&_ssl_opts_guard.val.?);
+
+}));
+            }
+            const reject_unauthorized = upgradeRejectPolicy(vm, cfg_opt, false, _ctx_guard.ctx);
+            var tls = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = null, .protos = duped_protos, .server_name = duped_server_name, .owned_ssl_ctx = _ctx_guard.ctx, .flags = .{ .reject_unauthorized = reject_unauthorized, .defers_server_identity = defers_server_identity } });
             _ = &tls;
             if (self.connection) |conn_ref| {
                 _ = &conn_ref;
@@ -2141,6 +2304,22 @@ pub fn tcp_socket_function_that_returns_null(self: *@This(), _: *jsc.JSGlobalObj
 };
 }
 
+pub fn jsUpgradeTLSDeferred(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = jsc.markBinding(@src());
+        const args = callframe.argumentsAsArray(2);
+        const socket = args[0];
+        const opts = args[1];
+        if (socket.@"as"(TCPSocket)) |tcp| {
+            _ = &tcp;
+            return tcp.upgradeTLSImpl(globalObject, opts, true);
+        }
+        if (socket.@"as"(TLSSocket)) |tls| {
+            _ = &tls;
+            return tls.upgradeTLSImpl(globalObject, opts, true);
+        }
+        return globalObject.throw("Expected a socket instance", .{});
+}
+
 pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = jsc.markBinding(@src());
         const args = callframe.arguments_old(2);
@@ -2213,7 +2392,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
                 _ssl_opts_guard.val = try jsc.API.ServerConfig.SSLConfig.fromJS(jsc.VirtualMachine.get(), globalObject, tls);
             } else {
                 if (tls.toBoolean()) {
-                    _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.zero;
+                    _ssl_opts_guard.val = tlsTrueDefaults(jsc.VirtualMachine.get());
                 }
             }
         }
@@ -2255,7 +2434,8 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
                 duped_server_name = bun.handleOom(bun.default_allocator.dupe(u8, std.mem.span(sn)));
             }
         }
-        var tls = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = null, .protos = duped_protos, .server_name = duped_server_name });
+        const reject_unauthorized = upgradeRejectPolicy(handlers.vm, socket_config, is_server, _ctx_guard.ctx);
+        var tls = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = null, .protos = duped_protos, .server_name = duped_server_name, .flags = .{ .reject_unauthorized = reject_unauthorized, .defers_server_identity = (!is_server) } });
         _ = &tls;
         const tls_js_value = tls.getThisValue(globalObject);
         _ = TLSSocket.js.dataSetCached(tls_js_value, globalObject, default_data);

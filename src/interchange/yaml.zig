@@ -375,6 +375,16 @@ pub fn cp(self: ParserEscape) type {
     }
 };
 
+pub const BlockIndentedKind = enum {
+    seq_entry,
+    map_explicit_key,
+    map_value,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const Encoding = enum {
     latin1,
     utf8,
@@ -729,6 +739,7 @@ pub const ParserParseResultError = union(enum) {
     unexpected_eof: ParserErrorPos,
     unexpected_token: ParserErrorPos,
     unexpected_character: ParserErrorPos,
+    tab_indentation: ParserErrorPos,
     invalid_directive: ParserErrorPos,
     unresolved_tag_handle: ParserErrorPos,
     unresolved_alias: ParserErrorPos,
@@ -756,6 +767,9 @@ _ = try log.addError(source, e.pos.loc(), "Unexpected token");
 },
 .unexpected_character => |e| {
 _ = try log.addError(source, e.pos.loc(), "Unexpected character");
+},
+.tab_indentation => |e| {
+_ = try log.addError(source, e.pos.loc(), "Tab characters cannot be used as indentation");
 },
 .invalid_directive => |e| {
 _ = try log.addError(source, e.pos.loc(), "Invalid directive");
@@ -813,41 +827,45 @@ pub fn fail(e: ParseError, parser: *const Parser(enc)) ParserParseResult(enc) {
                             if ((e == error.UnexpectedEof)) {
                                 return .{ .@"err" = ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.token.start } } };
                             } else {
-                                if ((e == error.InvalidDirective)) {
-                                    return .{ .@"err" = ParserParseResultError{ .invalid_directive = ParserErrorPos{ .pos = parser.token.start } } };
+                                if ((e == error.TabIndentation)) {
+                                    return .{ .@"err" = ParserParseResultError{ .tab_indentation = ParserErrorPos{ .pos = parser.token.start } } };
                                 } else {
-                                    if ((e == error.UnexpectedCharacter)) {
-                                        if ((!parser.pos.isLessThan(parser.input.len))) {
-                                            return .{ .@"err" = ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.pos } } };
-                                        }
-                                        return .{ .@"err" = ParserParseResultError{ .unexpected_character = ParserErrorPos{ .pos = parser.pos } } };
+                                    if ((e == error.InvalidDirective)) {
+                                        return .{ .@"err" = ParserParseResultError{ .invalid_directive = ParserErrorPos{ .pos = parser.token.start } } };
                                     } else {
-                                        if ((e == error.UnresolvedTagHandle)) {
-                                            return .{ .@"err" = ParserParseResultError{ .unresolved_tag_handle = ParserErrorPos{ .pos = parser.pos } } };
+                                        if ((e == error.UnexpectedCharacter)) {
+                                            if ((!parser.pos.isLessThan(parser.input.len))) {
+                                                return .{ .@"err" = ParserParseResultError{ .unexpected_eof = ParserErrorPos{ .pos = parser.pos } } };
+                                            }
+                                            return .{ .@"err" = ParserParseResultError{ .unexpected_character = ParserErrorPos{ .pos = parser.pos } } };
                                         } else {
-                                            if ((e == error.UnresolvedAlias)) {
-                                                return .{ .@"err" = ParserParseResultError{ .unresolved_alias = ParserErrorPos{ .pos = parser.token.start } } };
+                                            if ((e == error.UnresolvedTagHandle)) {
+                                                return .{ .@"err" = ParserParseResultError{ .unresolved_tag_handle = ParserErrorPos{ .pos = parser.pos } } };
                                             } else {
-                                                if ((e == error.MultilineImplicitKey)) {
-                                                    return .{ .@"err" = ParserParseResultError{ .multiline_implicit_key = ParserErrorPos{ .pos = parser.token.start } } };
+                                                if ((e == error.UnresolvedAlias)) {
+                                                    return .{ .@"err" = ParserParseResultError{ .unresolved_alias = ParserErrorPos{ .pos = parser.token.start } } };
                                                 } else {
-                                                    if ((e == error.MultipleAnchors)) {
-                                                        return .{ .@"err" = ParserParseResultError{ .multiple_anchors = ParserErrorPos{ .pos = parser.token.start } } };
+                                                    if ((e == error.MultilineImplicitKey)) {
+                                                        return .{ .@"err" = ParserParseResultError{ .multiline_implicit_key = ParserErrorPos{ .pos = parser.token.start } } };
                                                     } else {
-                                                        if ((e == error.MultipleTags)) {
-                                                            return .{ .@"err" = ParserParseResultError{ .multiple_tags = ParserErrorPos{ .pos = parser.token.start } } };
+                                                        if ((e == error.MultipleAnchors)) {
+                                                            return .{ .@"err" = ParserParseResultError{ .multiple_anchors = ParserErrorPos{ .pos = parser.token.start } } };
                                                         } else {
-                                                            if ((e == error.UnexpectedDocumentStart)) {
-                                                                return .{ .@"err" = ParserParseResultError{ .unexpected_document_start = ParserErrorPos{ .pos = parser.pos } } };
+                                                            if ((e == error.MultipleTags)) {
+                                                                return .{ .@"err" = ParserParseResultError{ .multiple_tags = ParserErrorPos{ .pos = parser.token.start } } };
                                                             } else {
-                                                                if ((e == error.UnexpectedDocumentEnd)) {
-                                                                    return .{ .@"err" = ParserParseResultError{ .unexpected_document_end = ParserErrorPos{ .pos = parser.pos } } };
+                                                                if ((e == error.UnexpectedDocumentStart)) {
+                                                                    return .{ .@"err" = ParserParseResultError{ .unexpected_document_start = ParserErrorPos{ .pos = parser.pos } } };
                                                                 } else {
-                                                                    if ((e == error.MultipleYamlDirectives)) {
-                                                                        return .{ .@"err" = ParserParseResultError{ .multiple_yaml_directives = ParserErrorPos{ .pos = parser.token.start } } };
+                                                                    if ((e == error.UnexpectedDocumentEnd)) {
+                                                                        return .{ .@"err" = ParserParseResultError{ .unexpected_document_end = ParserErrorPos{ .pos = parser.pos } } };
                                                                     } else {
-                                                                        if ((e == error.InvalidIndentation)) {
-                                                                            return .{ .@"err" = ParserParseResultError{ .invalid_indentation = ParserErrorPos{ .pos = parser.pos } } };
+                                                                        if ((e == error.MultipleYamlDirectives)) {
+                                                                            return .{ .@"err" = ParserParseResultError{ .multiple_yaml_directives = ParserErrorPos{ .pos = parser.token.start } } };
+                                                                        } else {
+                                                                            if ((e == error.InvalidIndentation)) {
+                                                                                return .{ .@"err" = ParserParseResultError{ .invalid_indentation = ParserErrorPos{ .pos = parser.pos } } };
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
@@ -991,10 +1009,15 @@ pub fn mappingAnchor(self: *@This()) ?String.Range {
                 return null;
         }
 
-pub fn implicitKeyAnchors(self: *@This(), implicit_key_line: Line) ImplicitKeyAnchors {
+pub fn implicitKeyAnchors(self: *@This(), implicit_key_line: Line) MultipleAnchorsError!ImplicitKeyAnchors {
                 if (self.has_mapping_anchor) |mapping_anchor| {
                     _ = &mapping_anchor;
-                    _ = bun.assert((self.has_anchor != null));
+                    if (self.has_anchor) |inner| {
+                        _ = &inner;
+                        if ((inner.line != implicit_key_line)) {
+                            return error.MultipleAnchors;
+                        }
+                    }
                     var ka: ?String.Range = null;
                     _ = &ka;
                     if (self.has_anchor) |key_anchor| {
@@ -1030,6 +1053,12 @@ pub fn tag(self: *@This()) NodeTag {
                     return tag_token.data.tag;
                 }
                 return .none;
+        }
+
+pub fn takeTag(self: *@This()) NodeTag {
+                const t = self.tag();
+                self.has_tag = null;
+                return t;
         }
 
 pub fn tagLine(self: *@This()) ?Line {
@@ -1535,24 +1564,23 @@ pub fn ParserLiteralScalarCtx(comptime enc: Encoding) type {
         text: std.array_list.Managed(enc.unit()),
         start: Pos,
         content_indent: Indent,
-        previous_indent: Indent,
         max_leading_indent: Indent,
         line: Line,
         folded: bool,
+        explicit_indent: bool,
+        prev_more_indented: bool,
+        cur_more_indented: bool,
 
-pub fn done(self: *@This(), was_eof: bool) OOM!Token(enc) {
+pub fn done(self: *@This()) OOM!Token(enc) {
+                if (((self.text.items.len != 0) and (self.leading_newlines == 0))) {
+                    self.leading_newlines = 1;
+                }
                 switch (self.chomp) {
 .keep => {
-if (was_eof) {
-                    _ = try self.text.appendNTimes(10, (self.leading_newlines + 1));
-                } else {
-                    if ((self.text.items.len != 0)) {
-                        _ = try self.text.appendNTimes(10, self.leading_newlines);
-                    }
-                }
+_ = try self.text.appendNTimes(10, self.leading_newlines);
 },
 .clip => {
-if ((was_eof or (self.text.items.len != 0))) {
+if ((self.text.items.len != 0)) {
                     _ = try self.text.append(10);
                 }
 },
@@ -1565,36 +1593,34 @@ if ((was_eof or (self.text.items.len != 0))) {
 
 pub fn append(self: *@This(), c: enc.unit()) AppendError!void {
                 if ((self.text.items.len == 0)) {
-                    if (self.content_indent.isLessThan(self.max_leading_indent)) {
+                    if (((!self.explicit_indent) and self.content_indent.isLessThan(self.max_leading_indent))) {
                         return error.UnexpectedCharacter;
                     }
-                }
-                if (self.folded) {
-                    switch (self.leading_newlines) {
-0 => {
-_ = try self.text.append(c);
-},
-1 => {
-if ((self.previous_indent == self.content_indent)) {
-                        _ = try self.text.appendSlice((&.{ 32, c }));
-                    } else {
-                        _ = try self.text.appendSlice((&.{ 10, c }));
-                    }
-                    self.leading_newlines = 0;
-},
-else => {
-_ = try self.text.ensureUnusedCapacity(self.leading_newlines);
-                    _ = self.text.appendNTimesAssumeCapacity(10, (self.leading_newlines - 1));
-                    _ = self.text.appendAssumeCapacity(c);
-                    self.leading_newlines = 0;
-},
-}
-                } else {
                     _ = try self.text.ensureUnusedCapacity((self.leading_newlines + 1));
                     _ = self.text.appendNTimesAssumeCapacity(10, self.leading_newlines);
                     _ = self.text.appendAssumeCapacity(c);
                     self.leading_newlines = 0;
+                    self.prev_more_indented = self.cur_more_indented;
+                    return;
                 }
+                if ((self.leading_newlines == 0)) {
+                    _ = try self.text.append(c);
+                    return;
+                }
+                if (((self.folded and (!self.prev_more_indented)) and (!self.cur_more_indented))) {
+                    if ((self.leading_newlines == 1)) {
+                        _ = try self.text.append(32);
+                    } else {
+                        _ = try self.text.ensureUnusedCapacity(self.leading_newlines);
+                        _ = self.text.appendNTimesAssumeCapacity(10, (self.leading_newlines - 1));
+                    }
+                } else {
+                    _ = try self.text.ensureUnusedCapacity((self.leading_newlines + 1));
+                    _ = self.text.appendNTimesAssumeCapacity(10, self.leading_newlines);
+                }
+                _ = self.text.appendAssumeCapacity(c);
+                self.leading_newlines = 0;
+                self.prev_more_indented = self.cur_more_indented;
         }
         const String = ParserString(enc);
         const AppendError = (OOM || error{UnexpectedCharacter});
@@ -1615,6 +1641,7 @@ pub fn ParserScanCtx(comptime enc: Encoding) type {
     return struct {
         parser: *Parser(enc),
         count_indentation: bool,
+        in_indent_position: bool,
         additional_parent_indent: ?Indent,
 
 pub fn scanWhitespace(self: *@This(), comptime ws: enc.unit()) ScanError!enc.unit() {
@@ -1628,6 +1655,7 @@ if ((parser.peek(1) == 10)) {
 },
 10 => {
 self.count_indentation = true;
+                self.in_indent_position = true;
                 self.additional_parent_indent = null;
                 _ = parser.newline();
                 _ = parser.inc(1);
@@ -1654,8 +1682,12 @@ var total: usize = 1;
                 return parser.next();
 },
 9 => {
-if ((self.count_indentation and (self.parser.context.get() == .block_in))) {
-                    return error.UnexpectedCharacter;
+if (((self.count_indentation and (self.additional_parent_indent == null)) and (self.parser.context.get() == .block_in))) {
+                    return error.TabIndentation;
+                }
+                if (self.in_indent_position) {
+                    self.parser.tab_after_indent = true;
+                    self.additional_parent_indent = null;
                 }
                 self.count_indentation = false;
                 _ = parser.inc(1);
@@ -2053,6 +2085,7 @@ pub fn Parser(comptime enc: Encoding) type {
         input: []const enc.unit(),
         pos: Pos,
         line_indent: Indent,
+        tab_after_indent: bool,
         line: Line,
         token: Token(enc),
         allocator: std.mem.Allocator,
@@ -2065,7 +2098,7 @@ pub fn Parser(comptime enc: Encoding) type {
         stack_check: bun.StackCheck,
 
 pub fn init(allocator: std.mem.Allocator, input: []const enc.unit()) @This() {
-                return .{ .input = input, .allocator = allocator, .pos = Pos.@"from"(0), .line_indent = .none, .line = Line.@"from"(1), .token = Token(enc).eof(.{ .start = Pos.@"from"(0), .indent = .none, .line = Line.@"from"(1) }), .context = .init(allocator), .block_indents = .init(allocator), .explicit_document_start_line = null, .anchors = .init(allocator), .tag_handles = .init(allocator), .whitespace_buf = .init(allocator), .stack_check = .init() };
+                return .{ .input = input, .allocator = allocator, .pos = Pos.@"from"(0), .line_indent = .none, .tab_after_indent = false, .line = Line.@"from"(1), .token = Token(enc).eof(.{ .start = Pos.@"from"(0), .indent = .none, .line = Line.@"from"(1) }), .context = .init(allocator), .block_indents = .init(allocator), .explicit_document_start_line = null, .anchors = .init(allocator), .tag_handles = .init(allocator), .whitespace_buf = .init(allocator), .stack_check = .init() };
         }
 
 pub fn deinit(self: *@This()) void {
@@ -2116,6 +2149,7 @@ pub fn inc(self: *@This(), n: usize) void {
 
 pub fn newline(self: *@This()) void {
                 self.line_indent = .none;
+                self.tab_after_indent = false;
                 _ = self.line.inc(1);
         }
 
@@ -2362,16 +2396,24 @@ return error.UnexpectedToken;
                             const value: Expr = .init(E.Null, .{}, self.token.start.loc());
                             _ = try props.append(.{ .key = key, .value = value });
                         } else {
-                            const value = try self.parseNode(.{});
+                            const value = try self.parseNode(.{ .current_mapping_indent = self.token.indent });
                             _ = try props.appendMaybeMerge(key, value);
                         }
-                        if ((self.token.data == .collect_entry)) {
-                            _ = try self.context.set(.flow_key);
-                            defer {
-                            _ = self.context.unset(.flow_key);
-                            }
-                            _ = try self.scan(.{});
+                        switch (self.token.data) {
+.collect_entry => {
+_ = try self.context.set(.flow_key);
+                        defer {
+                        _ = self.context.unset(.flow_key);
                         }
+                        _ = try self.scan(.{});
+},
+.mapping_end => {
+
+},
+else => {
+return error.UnexpectedToken;
+},
+}
                     }
                 }
                 _ = try self.scan(.{});
@@ -2393,80 +2435,18 @@ pub fn parseBlockSequence(self: *@This()) ParseError!Expr {
                 var prev_line = Line.@"from"(0);
                 _ = &prev_line;
                 while (((self.token.data == .sequence_entry) and (self.token.indent == sequence_indent))) {
+                    if (self.tab_after_indent) {
+                        return error.TabIndentation;
+                    }
                     const entry_line = self.token.line;
-                    _ = &entry_line;
                     const entry_start = self.token.start;
-                    const entry_indent = self.token.indent;
-                    if (((seq.items.len != 0) and (prev_line == self.token.line))) {
+                    if (((seq.items.len != 0) and (prev_line == entry_line))) {
                         break;
                     }
-                    prev_line = self.token.line;
-                    _ = try self.scan(.{ .additional_parent_indent = entry_indent.add(1) });
-                    {
-                        const item: Expr = try (switch (self.token.data) {
-.eof => Expr.init(E.Null, .{}, entry_start.add(2).loc()),
-.sequence_entry => item: {
-                        if (self.token.indent.isLessThanOrEqual(sequence_indent)) {
-                            break :item Expr.init(E.Null, .{}, entry_start.add(2).loc());
-                        }
-                        break :item try self.parseNode(.{});
-},
-.tag, .anchor => item: {
-                        var has_tag: ?Token(enc) = null;
-                        _ = &has_tag;
-                        var has_anchor: ?Token(enc) = null;
-                        _ = &has_anchor;
-                        var sw_v_1 = self.token.data;
-                        _ = &sw_v_1;
-                        sw_1: while (true) {
-                            switch (sw_v_1) {
-.tag => {
-if ((has_tag != null)) {
-                                return error.UnexpectedToken;
-                            }
-                            has_tag = self.token;
-                            _ = try self.scan(.{ .additional_parent_indent = entry_indent.add(1), .tag = self.token.data.tag });
-                            sw_v_1 = self.token.data;
-                            continue :sw_1;
-},
-.anchor => |anchor| {
-_ = &anchor;
-                            if ((has_anchor != null)) {
-                                return error.UnexpectedToken;
-                            }
-                            has_anchor = self.token;
-                            var tag: NodeTag = .none;
-                            _ = &tag;
-                            if (has_tag) |t| {
-                                _ = &t;
-                                tag = t.data.tag;
-                            }
-                            _ = try self.scan(.{ .additional_parent_indent = entry_indent.add(1), .tag = tag });
-                            sw_v_1 = self.token.data;
-                            continue :sw_1;
-},
-.sequence_entry => {
-if (self.token.indent.isLessThanOrEqual(sequence_indent)) {
-                                var tag: NodeTag = .none;
-                                _ = &tag;
-                                if (has_tag) |t| {
-                                    _ = &t;
-                                    tag = t.data.tag;
-                                }
-                                break :item tag.resolveNull(entry_start.add(2).loc());
-                            }
-                            break :item try self.parseNode(.{ .scanned_tag = has_tag, .scanned_anchor = has_anchor });
-},
-else => {
-break :item self.parseNode(.{ .scanned_tag = has_tag, .scanned_anchor = has_anchor });
-},
-}
-                        }
-},
-else => try self.parseNode(.{}),
-});
-                        _ = try seq.append(item);
-                    }
+                    prev_line = entry_line;
+                    _ = try self.scan(.{ .additional_parent_indent = sequence_indent.add(1) });
+                    const item = try self.parseBlockIndented(sequence_indent, entry_line, entry_start.add(2), .seq_entry);
+                    _ = try seq.append(item);
                 }
                 return Expr.init(E.Array, E.Array{ .items = bun.BabyList(Expr).moveFromList((&seq)) }, sequence_start.loc());
         }
@@ -2478,12 +2458,21 @@ pub fn parseBlockMapping(self: *@This(), first_key: Expr, mapping_start: Pos, ma
                         return error.UnexpectedToken;
                     }
                 }
-                _ = try self.block_indents.push(mapping_indent);
+                const pushed_block_indent = ((self.context.get() != .flow_in) and (self.context.get() != .flow_key));
+                if (pushed_block_indent) {
+                    _ = try self.block_indents.push(mapping_indent);
+                }
                 defer {
-                _ = self.block_indents.pop();
+                {
+                    if (pushed_block_indent) {
+                        _ = self.block_indents.pop();
+                    }
+                }
                 }
                 var props: MappingProps = .init(self.allocator);
                 _ = &props;
+                var first_entry_end_line = mapping_line;
+                _ = &first_entry_end_line;
                 {
                     const mapping_value_start = self.token.start;
                     const mapping_value_line = self.token.line;
@@ -2494,31 +2483,22 @@ pub fn parseBlockMapping(self: *@This(), first_key: Expr, mapping_start: Pos, ma
                     }
                     break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
 },
-else => value: {
-                    _ = try self.scan(.{});
-                    break :value (switch (self.token.data) {
-.sequence_entry => {
-{
-                        if ((self.token.line == mapping_value_line)) {
-                            return error.UnexpectedToken;
-                        }
+.mapping_value => value: {
+                    first_entry_end_line = mapping_value_line;
+                    if ((((mapping_value_line != mapping_line) and ((self.context.get() != .flow_in) and (self.context.get() != .flow_key))) and ((self.token.indent != mapping_indent) or self.tab_after_indent))) {
                         if (self.token.indent.isLessThan(mapping_indent)) {
                             break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
                         }
-                        break :value try self.parseNode(.{ .current_mapping_indent = mapping_indent });
-                    }
-},
-else => {
-{
-                        if (((self.token.line != mapping_value_line) and self.token.indent.isLessThanOrEqual(mapping_indent))) {
-                            break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
+                        if (self.tab_after_indent) {
+                            return error.TabIndentation;
                         }
-                        break :value try self.parseNode(.{ .current_mapping_indent = mapping_indent });
+                        return error.UnexpectedToken;
                     }
+                    const parent_indent: ?Indent = (if ((mapping_value_line != mapping_line)) mapping_indent.add(1) else null);
+                    _ = try self.scan(.{ .additional_parent_indent = parent_indent });
+                    break :value try self.parseBlockIndented(mapping_indent, mapping_value_line, mapping_value_start, .map_value);
 },
-});
-
-},
+else => Expr.init(E.Null, .{}, mapping_value_start.loc()),
 });
                     _ = try props.appendMaybeMerge(first_key, value);
                 }
@@ -2529,12 +2509,15 @@ else => {
                 defer {
                 _ = self.context.unset(.block_in);
                 }
-                var previous_line = mapping_line;
+                var previous_line = first_entry_end_line;
                 _ = &previous_line;
                 while ((((switch (self.token.data) {
 .eof, .document_start, .document_end => false,
 else => true,
 }) and (self.token.indent == mapping_indent)) and (self.token.line != previous_line))) {
+                    if (self.tab_after_indent) {
+                        return error.TabIndentation;
+                    }
                     const key_line = self.token.line;
                     previous_line = key_line;
                     const explicit_key = (self.token.data == .mapping_key);
@@ -2549,19 +2532,41 @@ if (explicit_key) {
                     return error.UnexpectedToken;
 },
 .mapping_value => {
-if ((key_line != self.token.line)) {
-                        return error.MultilineImplicitKey;
+if (explicit_key) {
+                        if (((self.token.indent != mapping_indent) or self.tab_after_indent)) {
+                            if (self.token.indent.isLessThan(mapping_indent)) {
+                                const value: Expr = .init(E.Null, .{}, self.pos.loc());
+                                _ = try props.append(.{ .key = key, .value = value });
+                                continue;
+                            }
+                            if (self.tab_after_indent) {
+                                return error.TabIndentation;
+                            }
+                            return error.UnexpectedToken;
+                        }
+                    } else {
+                        if ((key_line != self.token.line)) {
+                            return error.MultilineImplicitKey;
+                        }
                     }
 },
 .mapping_key => {
 
 },
 else => {
-return error.UnexpectedToken;
+if (explicit_key) {
+                        const value: Expr = .init(E.Null, .{}, self.pos.loc());
+                        _ = try props.append(.{ .key = key, .value = value });
+                        continue;
+                    }
+                    return error.UnexpectedToken;
 },
 }
                     const mapping_value_line = self.token.line;
                     const mapping_value_start = self.token.start;
+                    if ((self.token.data == .mapping_value)) {
+                        previous_line = mapping_value_line;
+                    }
                     const value: Expr = (switch (self.token.data) {
 .mapping_key => value: {
                     if ((self.token.line == key_line)) {
@@ -2570,34 +2575,96 @@ return error.UnexpectedToken;
                     break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
 },
 else => value: {
-                    _ = try self.scan(.{});
-                    break :value (switch (self.token.data) {
-.sequence_entry => {
-{
-                        if ((self.token.line == key_line)) {
-                            return error.UnexpectedToken;
-                        }
-                        if (self.token.indent.isLessThan(mapping_indent)) {
-                            break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
-                        }
-                        break :value try self.parseNode(.{ .current_mapping_indent = mapping_indent });
-                    }
-},
-else => {
-{
-                        if (((self.token.line != mapping_value_line) and self.token.indent.isLessThanOrEqual(mapping_indent))) {
-                            break :value Expr.init(E.Null, .{}, mapping_value_start.loc());
-                        }
-                        break :value try self.parseNode(.{ .current_mapping_indent = mapping_indent });
-                    }
-},
-});
-
+                    const parent_indent: ?Indent = (if ((mapping_value_line != key_line)) mapping_indent.add(1) else null);
+                    _ = try self.scan(.{ .additional_parent_indent = parent_indent });
+                    break :value try self.parseBlockIndented(mapping_indent, mapping_value_line, mapping_value_start, .map_value);
 },
 });
                     _ = try props.appendMaybeMerge(key, value);
                 }
                 return Expr.init(E.Object, .{ .properties = props.moveList() }, mapping_start.loc());
+        }
+
+pub fn propsToENode(self: *@This(), tag: ?Token(enc), anchor: ?Token(enc), loc: logger.Loc) ParseError!Expr {
+                var resolved_tag: NodeTag = .none;
+                _ = &resolved_tag;
+                if (tag) |t| {
+                    _ = &t;
+                    resolved_tag = t.data.tag;
+                }
+                const e_node = resolved_tag.resolveNull(loc);
+                if (anchor) |a| {
+                    _ = &a;
+                    _ = try self.anchors.put(a.data.anchor.slice(self.input), e_node);
+                }
+                return e_node;
+        }
+
+pub fn parseBlockIndented(self: *@This(), n: Indent, indicator_line: Line, indicator_start: Pos, kind: BlockIndentedKind) ParseError!Expr {
+                var value_tag: ?Token(enc) = null;
+                _ = &value_tag;
+                var value_anchor: ?Token(enc) = null;
+                _ = &value_anchor;
+                const in_flow = ((self.context.get() == .flow_in) or (self.context.get() == .flow_key));
+                while (true) {
+                    if (((!in_flow) and (self.token.line != indicator_line))) {
+                        const belongs_to_parent = (if (((self.token.data == .sequence_entry) and (kind != .seq_entry))) self.token.indent.isLessThan(n) else self.token.indent.isLessThanOrEqual(n));
+                        if (belongs_to_parent) {
+                            if ((value_tag != null)) {
+                                switch (self.token.data) {
+.scalar => |s| {
+const ch = self.input[@as(usize, @intCast(self.token.start.cast()))];
+                                if ((((ch != 39) and (ch != 34)) and (!s.multiline))) {
+                                    self.pos = self.token.start;
+                                    self.line = self.token.line;
+                                    self.line_indent = self.token.indent;
+                                    _ = try self.scan(.{});
+                                }
+},
+else => {
+
+},
+}
+                            }
+                            return self.propsToENode(value_tag, value_anchor, indicator_start.loc());
+                        }
+                    }
+                    switch (self.token.data) {
+.anchor => {
+if ((value_anchor == null)) {
+                        value_anchor = self.token;
+                    } else {
+                        return self.parseNode(.{ .current_mapping_indent = n, .explicit_mapping_key = (kind == .map_explicit_key), .scanned_tag = value_tag, .scanned_anchor = (value_anchor.?) });
+                    }
+},
+.tag => {
+if ((value_tag == null)) {
+                        value_tag = self.token;
+                    } else {
+                        return self.parseNode(.{ .current_mapping_indent = n, .explicit_mapping_key = (kind == .map_explicit_key), .scanned_tag = (value_tag.?), .scanned_anchor = value_anchor });
+                    }
+},
+.sequence_entry, .mapping_key => {
+if (((self.token.line == indicator_line) and (self.token.indent.isLessThanOrEqual(n) or self.tab_after_indent))) {
+                        if (self.tab_after_indent) {
+                            return error.TabIndentation;
+                        }
+                        return error.UnexpectedToken;
+                    }
+                    return self.parseNode(.{ .current_mapping_indent = n, .explicit_mapping_key = (kind == .map_explicit_key), .scanned_tag = value_tag, .scanned_anchor = value_anchor });
+},
+else => {
+return self.parseNode(.{ .current_mapping_indent = n, .explicit_mapping_key = (kind == .map_explicit_key), .scanned_tag = value_tag, .scanned_anchor = value_anchor });
+},
+}
+                    var tag: NodeTag = .none;
+                    _ = &tag;
+                    if (value_tag) |t| {
+                        _ = &t;
+                        tag = t.data.tag;
+                    }
+                    _ = try self.scan(.{ .tag = tag });
+                }
         }
 
 pub fn parseNode(self: *@This(), opts: ParseNodeOptions) ParseError!Expr {
@@ -2641,6 +2708,7 @@ _ = try node_props.setTag(self.token);
 const alias_start = self.token.start;
                     const alias_indent = self.token.indent;
                     const alias_line = self.token.line;
+                    const alias_tab_after_indent = self.tab_after_indent;
                     if (node_props.has_anchor) |anchor| {
                         _ = &anchor;
                         if ((anchor.line == alias_line)) {
@@ -2664,11 +2732,18 @@ const alias_start = self.token.start;
                     copy.loc = alias_start.loc();
                     _ = try self.scan(.{});
                     if ((self.token.data == .mapping_value)) {
-                        if (((alias_line != self.token.line) and (!opts.explicit_mapping_key))) {
-                            return error.MultilineImplicitKey;
+                        if ((self.token.indent.isLessThan(alias_indent) or ((opts.explicit_mapping_key and (alias_line != self.token.line)) and self.token.indent.isLessThanOrEqual(alias_indent)))) {
+                            node = copy;
+                            break :node_sw;
                         }
                         if ((self.context.get() == .flow_key)) {
                             return copy;
+                        }
+                        if (((alias_line != self.token.line) and (!opts.explicit_mapping_key))) {
+                            return error.MultilineImplicitKey;
+                        }
+                        if ((alias_tab_after_indent and ((self.context.get() == .block_out) or (self.context.get() == .block_in)))) {
+                            return error.TabIndentation;
                         }
                         if (opts.current_mapping_indent) |current_mapping_indent| {
                             _ = &current_mapping_indent;
@@ -2686,14 +2761,22 @@ const alias_start = self.token.start;
 const sequence_start = self.token.start;
                     const sequence_indent = self.token.indent;
                     const sequence_line = self.token.line;
+                    const sequence_tab_after_indent = self.tab_after_indent;
                     const seq = try self.parseFlowSequence();
                     if ((self.token.data == .mapping_value)) {
-                        if (((sequence_line != self.token.line) and (!opts.explicit_mapping_key))) {
-                            return error.MultilineImplicitKey;
+                        if ((self.token.indent.isLessThan(sequence_indent) or ((opts.explicit_mapping_key and (sequence_line != self.token.line)) and self.token.indent.isLessThanOrEqual(sequence_indent)))) {
+                            node = seq;
+                            break :node_sw;
                         }
                         if ((self.context.get() == .flow_key)) {
                             node = seq;
                             break :node_sw;
+                        }
+                        if (((sequence_line != self.token.line) and (!opts.explicit_mapping_key))) {
+                            return error.MultilineImplicitKey;
+                        }
+                        if ((sequence_tab_after_indent and ((self.context.get() == .block_out) or (self.context.get() == .block_in)))) {
+                            return error.TabIndentation;
                         }
                         if (opts.current_mapping_indent) |current_mapping_indent| {
                             _ = &current_mapping_indent;
@@ -2702,7 +2785,7 @@ const sequence_start = self.token.start;
                                 break :node_sw;
                             }
                         }
-                        const implicit_key_anchors = node_props.implicitKeyAnchors(sequence_line);
+                        const implicit_key_anchors = try node_props.implicitKeyAnchors(sequence_line);
                         if (implicit_key_anchors.key_anchor) |key_anchor| {
                             _ = &key_anchor;
                             _ = try self.anchors.put(key_anchor.slice(self.input), seq);
@@ -2744,14 +2827,22 @@ if (node_props.anchorLine()) |anchor_line| {
 const mapping_start = self.token.start;
                     const mapping_indent = self.token.indent;
                     const mapping_line = self.token.line;
+                    const mapping_tab_after_indent = self.tab_after_indent;
                     const map = try self.parseFlowMapping();
                     if ((self.token.data == .mapping_value)) {
-                        if (((mapping_line != self.token.line) and (!opts.explicit_mapping_key))) {
-                            return error.MultilineImplicitKey;
+                        if ((self.token.indent.isLessThan(mapping_indent) or ((opts.explicit_mapping_key and (mapping_line != self.token.line)) and self.token.indent.isLessThanOrEqual(mapping_indent)))) {
+                            node = map;
+                            break :node_sw;
                         }
                         if ((self.context.get() == .flow_key)) {
                             node = map;
                             break :node_sw;
+                        }
+                        if (((mapping_line != self.token.line) and (!opts.explicit_mapping_key))) {
+                            return error.MultilineImplicitKey;
+                        }
+                        if ((mapping_tab_after_indent and ((self.context.get() == .block_out) or (self.context.get() == .block_in)))) {
+                            return error.TabIndentation;
                         }
                         if (opts.current_mapping_indent) |current_mapping_indent| {
                             _ = &current_mapping_indent;
@@ -2760,7 +2851,7 @@ const mapping_start = self.token.start;
                                 break :node_sw;
                             }
                         }
-                        const implicit_key_anchors = node_props.implicitKeyAnchors(mapping_line);
+                        const implicit_key_anchors = try node_props.implicitKeyAnchors(mapping_line);
                         if (implicit_key_anchors.key_anchor) |key_anchor| {
                             _ = &key_anchor;
                             _ = try self.anchors.put(key_anchor.slice(self.input), map);
@@ -2777,12 +2868,17 @@ const mapping_start = self.token.start;
                     break :node_sw;
 },
 .mapping_key => {
-const mapping_start = self.token.start;
+if (self.tab_after_indent) {
+                        return error.TabIndentation;
+                    }
+                    const mapping_start = self.token.start;
                     const mapping_indent = self.token.indent;
                     const mapping_line = self.token.line;
                     _ = try self.block_indents.push(mapping_indent);
-                    _ = try self.scan(.{});
-                    const key = try self.parseNode(.{ .explicit_mapping_key = true, .current_mapping_indent = ((opts.current_mapping_indent) orelse (mapping_indent)) });
+                    const in_flow = ((self.context.get() == .flow_in) or (self.context.get() == .flow_key));
+                    const parent_indent: ?Indent = (if (in_flow) null else mapping_indent.add(1));
+                    _ = try self.scan(.{ .additional_parent_indent = parent_indent });
+                    const key = try self.parseBlockIndented(mapping_indent, mapping_line, mapping_start, .map_explicit_key);
                     _ = self.block_indents.pop();
                     if (opts.current_mapping_indent) |current_mapping_indent| {
                         _ = &current_mapping_indent;
@@ -2798,6 +2894,9 @@ if ((self.context.get() == .flow_key)) {
                         node = Expr.init(E.Null, .{}, self.token.start.loc());
                         break :node_sw;
                     }
+                    if ((self.tab_after_indent and (self.context.get() != .flow_in))) {
+                        return error.TabIndentation;
+                    }
                     if (opts.current_mapping_indent) |current_mapping_indent| {
                         _ = &current_mapping_indent;
                         if ((current_mapping_indent == self.token.indent)) {
@@ -2805,16 +2904,37 @@ if ((self.context.get() == .flow_key)) {
                             break :node_sw;
                         }
                     }
-                    const first_key: Expr = .init(E.Null, .{}, self.token.start.loc());
-                    node = try self.parseBlockMapping(first_key, self.token.start, self.token.indent, self.token.line);
+                    const colon_line = self.token.line;
+                    const key_tag = (if ((node_props.tagLine() == colon_line)) node_props.takeTag() else NodeTag.none);
+                    const first_key = key_tag.resolveNull(self.token.start.loc());
+                    const implicit_key_anchors = try node_props.implicitKeyAnchors(colon_line);
+                    if (implicit_key_anchors.key_anchor) |key_anchor| {
+                        _ = &key_anchor;
+                        _ = try self.anchors.put(key_anchor.slice(self.input), first_key);
+                    }
+                    const mapping = try self.parseBlockMapping(first_key, self.token.start, self.token.indent, colon_line);
+                    if (implicit_key_anchors.mapping_anchor) |mapping_anchor| {
+                        _ = &mapping_anchor;
+                        _ = try self.anchors.put(mapping_anchor.slice(self.input), mapping);
+                    }
+                    node_props.has_anchor = null;
+                    node = mapping;
                     break :node_sw;
 },
 .scalar => |scalar| {
 const scalar_start = self.token.start;
                     const scalar_indent = self.token.indent;
                     const scalar_line = self.token.line;
+                    const scalar_tab_after_indent = self.tab_after_indent;
                     _ = try self.scan(.{ .tag = node_props.tag(), .outside_context = true });
                     if ((self.token.data == .mapping_value)) {
+                        if ((self.token.indent.isLessThan(scalar_indent) or ((opts.explicit_mapping_key and (scalar_line != self.token.line)) and self.token.indent.isLessThanOrEqual(scalar_indent)))) {
+                            node = scalar.data.toExpr(scalar_start, self.input);
+                            break :node_sw;
+                        }
+                        if ((scalar_tab_after_indent and ((self.context.get() == .block_out) or (self.context.get() == .block_in)))) {
+                            return error.TabIndentation;
+                        }
                         if (opts.current_mapping_indent) |current_mapping_indent| {
                             _ = &current_mapping_indent;
                             if ((current_mapping_indent == scalar_indent)) {
@@ -2834,7 +2954,7 @@ if (((scalar_line != self.token.line) and (!opts.explicit_mapping_key))) {
 },
 }
                         const implicit_key = scalar.data.toExpr(scalar_start, self.input);
-                        const implicit_key_anchors = node_props.implicitKeyAnchors(scalar_line);
+                        const implicit_key_anchors = try node_props.implicitKeyAnchors(scalar_line);
                         if (implicit_key_anchors.key_anchor) |key_anchor| {
                             _ = &key_anchor;
                             _ = try self.anchors.put(key_anchor.slice(self.input), implicit_key);
@@ -3290,9 +3410,10 @@ if ((self.peek(1) == 10)) {
                     continue :sw_13;
 },
 10 => {
-_ = self.inc(1);
+_ = self.newline();
+                    _ = self.inc(1);
                     if ((self.next() == 9)) {
-                        return error.UnexpectedCharacter;
+                        return error.TabIndentation;
                     }
                     return ScanBlockHeaderResult{ .indent = ((indent_indicator) orelse (.default)), .chomp = ((chomp) orelse (.default)) };
 },
@@ -3303,8 +3424,17 @@ return error.UnexpectedCharacter;
                 }
         }
 
-pub fn scanAutoIndentedLiteralScalar(self: *@This(), chomp: Chomp, folded: bool, start: Pos, line: Line) ScanLiteralScalarError!Token(enc) {
-                var ctx: LiteralScalarCtx = .{ .chomp = chomp, .text = .init(self.allocator), .folded = folded, .start = start, .line = line, .leading_newlines = 0, .content_indent = .none, .previous_indent = .none, .max_leading_indent = .none };
+pub fn scanAutoIndentedLiteralScalar(self: *@This(), indent_indicator: Indent.Indicator, chomp: Chomp, folded: bool, start: Pos, line: Line) ScanLiteralScalarError!Token(enc) {
+                const explicit_indent: ?Indent = (if ((indent_indicator == .auto)) null else blk: {
+                var parent: usize = 0;
+                _ = &parent;
+                if (self.block_indents.get()) |b| {
+                    _ = &b;
+                    parent = b.cast();
+                }
+                break :blk Indent.@"from"((parent + @intFromEnum(indent_indicator)));
+});
+                var ctx: LiteralScalarCtx = .{ .chomp = chomp, .text = .init(self.allocator), .folded = folded, .start = start, .line = line, .leading_newlines = 0, .content_indent = ((explicit_indent) orelse (.none)), .max_leading_indent = .none, .explicit_indent = (explicit_indent != null), .prev_more_indented = false, .cur_more_indented = false };
                 _ = &ctx;
                 var first = (if (comptime @typeInfo(enc.unit()) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(enc.unit(), @enumFromInt(0)) else @as(enc.unit(), 0));
                 _ = &first;
@@ -3313,7 +3443,10 @@ pub fn scanAutoIndentedLiteralScalar(self: *@This(), chomp: Chomp, folded: bool,
                 first_sw: while (true) {
                     switch (first_ch) {
 0 => {
-return Token(enc).scalar(.{ .start = start, .indent = self.line_indent, .line = line, .resolved = .{ .data = .{ .string = .{ .list = .init(self.allocator) } }, .multiline = true } });
+if ((explicit_indent == null)) {
+                        ctx.content_indent = self.line_indent;
+                    }
+                    return ctx.done();
 },
 13 => {
 if ((self.peek(1) == 10)) {
@@ -3326,7 +3459,7 @@ if ((self.peek(1) == 10)) {
 _ = self.newline();
                     _ = self.inc(1);
                     if ((self.next() == 9)) {
-                        return error.UnexpectedCharacter;
+                        return error.TabIndentation;
                     }
                     ctx.leading_newlines = (ctx.leading_newlines + 1);
                     first_ch = self.next();
@@ -3336,6 +3469,22 @@ _ = self.newline();
 var indent: Indent = Indent.@"from"(1);
                     _ = &indent;
                     _ = self.inc(1);
+                    if (explicit_indent) |ci| {
+                        _ = &ci;
+                        while ((indent.isLessThan(ci) and (self.next() == 32))) {
+                            _ = indent.inc(1);
+                            _ = self.inc(1);
+                        }
+                        self.line_indent = indent;
+                        const nc = self.next();
+                        if ((((nc == 0) or (nc == 10)) or (nc == 13))) {
+                            first_ch = nc;
+                            continue :first_sw;
+                        }
+                        ctx.content_indent = ci;
+                        first = nc;
+                        break :first_sw;
+                    }
                     while ((self.next() == 32)) {
                         _ = indent.inc(1);
                         _ = self.inc(1);
@@ -3348,19 +3497,23 @@ var indent: Indent = Indent.@"from"(1);
                     continue :first_sw;
 },
 else => |c| {
-ctx.content_indent = self.line_indent;
+ctx.content_indent = ((explicit_indent) orelse (self.line_indent));
                     first = c;
                     break :first_sw;
 },
 }
                 }
-                ctx.previous_indent = ctx.content_indent;
+                ctx.cur_more_indented = ((first == 32) or (first == 9));
+                if ((first == 9)) {
+                    self.tab_after_indent = true;
+                }
+                const min_indent = (if (self.block_indents.get()) |b| Indent.@"from"(@max(ctx.content_indent.cast(), (b.cast() + 1))) else ctx.content_indent);
                 var lit_ch = first;
                 _ = &lit_ch;
                 lit_sw: while (true) {
                     switch (lit_ch) {
 0 => {
-return ctx.done(true);
+return ctx.done();
 },
 13 => {
 if ((self.peek(1) == 10)) {
@@ -3389,7 +3542,7 @@ ctx.leading_newlines = (ctx.leading_newlines + 1);
                         _ = self.newline();
                         _ = self.inc(1);
                         if ((self.next() == 9)) {
-                            return error.UnexpectedCharacter;
+                            return error.TabIndentation;
                         }
                         nl_ch = self.next();
                         continue :newlines_sw;
@@ -3397,42 +3550,25 @@ ctx.leading_newlines = (ctx.leading_newlines + 1);
 ' ' => {
 var indent: Indent = Indent.@"from"(0);
                         _ = &indent;
-                        while ((self.next() == 32)) {
+                        while ((indent.isLessThan(ctx.content_indent) and (self.next() == 32))) {
                             _ = indent.inc(1);
-                            if (ctx.content_indent.isLessThan(indent)) {
-                                switch (folded) {
-true => {
-switch (ctx.leading_newlines) {
-0 => {
-_ = try ctx.text.append(32);
-},
-else => {
-_ = try ctx.text.ensureUnusedCapacity((ctx.leading_newlines + 1));
-                                _ = ctx.text.appendNTimesAssumeCapacity(10, ctx.leading_newlines);
-                                _ = ctx.text.appendAssumeCapacity(32);
-                                ctx.leading_newlines = 0;
-},
-}
-},
-else => {
-_ = try ctx.text.ensureUnusedCapacity((ctx.leading_newlines + 1));
-                                _ = ctx.text.appendNTimesAssumeCapacity(10, ctx.leading_newlines);
-                                ctx.leading_newlines = 0;
-                                _ = ctx.text.appendAssumeCapacity(32);
-},
-}
-                            }
                             _ = self.inc(1);
                         }
-                        if (ctx.content_indent.isLessThan(indent)) {
-                            ctx.previous_indent = self.line_indent;
-                        }
                         self.line_indent = indent;
-                        lit_ch = self.next();
+                        const nc = self.next();
+                        ctx.cur_more_indented = ((nc == 32) or (nc == 9));
+                        if ((nc == 9)) {
+                            self.tab_after_indent = true;
+                        }
+                        lit_ch = nc;
                         continue :lit_sw;
 },
 else => |c| {
-lit_ch = c;
+ctx.cur_more_indented = (c == 9);
+                        if ((c == 9)) {
+                            self.tab_after_indent = true;
+                        }
+                        lit_ch = c;
                         continue :lit_sw;
 },
 }
@@ -3440,17 +3576,10 @@ lit_ch = c;
 },
 '-' => {
 if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
-                        return ctx.done(false);
+                        return ctx.done();
                     }
-                    if (self.block_indents.get()) |block_indent| {
-                        _ = &block_indent;
-                        if (self.line_indent.isLessThanOrEqual(block_indent)) {
-                            return ctx.done(false);
-                        }
-                    } else {
-                        if (self.line_indent.isLessThan(ctx.content_indent)) {
-                            return ctx.done(false);
-                        }
+                    if (self.line_indent.isLessThan(min_indent)) {
+                        return ctx.done();
                     }
                     _ = try ctx.append(45);
                     _ = self.inc(1);
@@ -3459,17 +3588,10 @@ if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isA
 },
 '.' => {
 if ((((self.line_indent == .none) and self.remainStartsWith("...")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
-                        return ctx.done(false);
+                        return ctx.done();
                     }
-                    if (self.block_indents.get()) |block_indent| {
-                        _ = &block_indent;
-                        if (self.line_indent.isLessThanOrEqual(block_indent)) {
-                            return ctx.done(false);
-                        }
-                    } else {
-                        if (self.line_indent.isLessThan(ctx.content_indent)) {
-                            return ctx.done(false);
-                        }
+                    if (self.line_indent.isLessThan(min_indent)) {
+                        return ctx.done();
                     }
                     _ = try ctx.append(46);
                     _ = self.inc(1);
@@ -3477,15 +3599,8 @@ if ((((self.line_indent == .none) and self.remainStartsWith("...")) and self.isA
                     continue :lit_sw;
 },
 else => |c| {
-if (self.block_indents.get()) |block_indent| {
-                        _ = &block_indent;
-                        if (self.line_indent.isLessThanOrEqual(block_indent)) {
-                            return ctx.done(false);
-                        }
-                    } else {
-                        if (self.line_indent.isLessThan(ctx.content_indent)) {
-                            return ctx.done(false);
-                        }
+if (self.line_indent.isLessThan(min_indent)) {
+                        return ctx.done();
                     }
                     _ = try ctx.append(c);
                     _ = self.inc(1);
@@ -3505,8 +3620,7 @@ pub fn scanLiteralScalar(self: *@This()) ScanLiteralScalarError!Token(enc) {
                 const block_hdr = try self.scanBlockHeader();
                 const indent_indicator = block_hdr.indent;
                 const chomp = block_hdr.chomp;
-                _ = &indent_indicator;
-                return self.scanAutoIndentedLiteralScalar(chomp, false, start, line);
+                return self.scanAutoIndentedLiteralScalar(indent_indicator, chomp, false, start, line);
         }
 
 pub fn scanFoldedScalar(self: *@This()) ScanLiteralScalarError!Token(enc) {
@@ -3515,8 +3629,7 @@ pub fn scanFoldedScalar(self: *@This()) ScanLiteralScalarError!Token(enc) {
                 const block_hdr = try self.scanBlockHeader();
                 const indent_indicator = block_hdr.indent;
                 const chomp = block_hdr.chomp;
-                _ = &indent_indicator;
-                return self.scanAutoIndentedLiteralScalar(chomp, true, start, line);
+                return self.scanAutoIndentedLiteralScalar(indent_indicator, chomp, true, start, line);
         }
 
 pub fn scanSingleQuotedScalar(self: *@This()) ScanSingleQuotedScalarError!Token(enc) {
@@ -4008,7 +4121,11 @@ var range = self.stringRange();
         }
 
 pub fn scan(self: *@This(), opts: ScanOptions) ScanError!void {
-                var ctx: ScanCtx = .{ .parser = self, .count_indentation = (opts.first_scan or (opts.additional_parent_indent != null)), .additional_parent_indent = opts.additional_parent_indent };
+                const init_count_indent = (opts.first_scan or (opts.additional_parent_indent != null));
+                if (init_count_indent) {
+                    self.tab_after_indent = false;
+                }
+                var ctx: ScanCtx = .{ .parser = self, .count_indentation = init_count_indent, .in_indent_position = init_count_indent, .additional_parent_indent = opts.additional_parent_indent };
                 _ = &ctx;
                 const previous_token_line = self.token.line;
                 var scan_ch = self.next();
@@ -4257,8 +4374,12 @@ self.token = try self.scanTagProperty();
 const start = self.pos;
                     switch (self.context.get()) {
 .block_out, .block_in => {
-_ = self.inc(1);
-                    self.token = try self.scanLiteralScalar();
+const indicator_indent = self.line_indent;
+                    _ = self.inc(1);
+                    var tok = try self.scanLiteralScalar();
+                    _ = &tok;
+                    tok.indent = indicator_indent;
+                    self.token = tok;
                     break :scan_sw;
 },
 .flow_in, .flow_key => {
@@ -4272,8 +4393,12 @@ _ = self.inc(1);
 const start = self.pos;
                     switch (self.context.get()) {
 .block_out, .block_in => {
-_ = self.inc(1);
-                    self.token = try self.scanFoldedScalar();
+const indicator_indent = self.line_indent;
+                    _ = self.inc(1);
+                    var tok = try self.scanFoldedScalar();
+                    _ = &tok;
+                    tok.indent = indicator_indent;
+                    self.token = tok;
                     break :scan_sw;
 },
 .flow_in, .flow_key => {
@@ -4620,6 +4745,7 @@ pub fn stringBuilder(self: *@This()) String.Builder {
                 UnexpectedEof,
                 InvalidDirective,
                 UnexpectedCharacter,
+                TabIndentation,
                 UnresolvedTagHandle,
                 UnresolvedAlias,
                 MultilineImplicitKey,
@@ -4644,10 +4770,11 @@ pub fn stringBuilder(self: *@This()) String.Builder {
                 // ScalarTypeMismatch,
             };
         const ScalarResolverCtx = ParserScalarResolverCtx(enc);
-        const ScanBlockHeaderError = error{UnexpectedCharacter};
+        const ScanBlockHeaderError = error{UnexpectedCharacter, TabIndentation};
         const ScanLiteralScalarError = error{
                 OutOfMemory,
                 UnexpectedCharacter,
+                TabIndentation,
                 InvalidIndentation,
             };
         const LiteralScalarCtx = ParserLiteralScalarCtx(enc);
@@ -4672,6 +4799,7 @@ pub fn stringBuilder(self: *@This()) String.Builder {
                 UnexpectedDocumentStart,
                 UnexpectedDocumentEnd,
                 InvalidIndentation,
+                TabIndentation,
                 // ScalarTypeMismatch,
             };
         const ScanOptions = ParserScanOptions(enc);

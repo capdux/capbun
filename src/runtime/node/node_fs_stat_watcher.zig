@@ -155,6 +155,7 @@ pub fn __cp_deinit(self: *@This()) void {
 
 pub const StatWatcherScheduler = struct {
     current_interval: std.atomic.Value(i32) = .{ .raw = 0 },
+    work_pool_in_flight: std.atomic.Value(bool) = .{ .raw = false },
     task: jsc.WorkPoolTask = .{ .callback = (&workPoolCallback) },
     main_thread: std.Thread.Id,
     vm: *bun.jsc.VirtualMachine,
@@ -224,6 +225,10 @@ pub fn timerCallback(self: *StatWatcherScheduler) void {
             if (has_been_cleared) {
                 return;
             }
+            if (self.work_pool_in_flight.swap(true, .acq_rel)) {
+                _ = self.setInterval(@max(self.getInterval(), 5));
+                return;
+            }
             _ = jsc.WorkPool.schedule((&self.task));
     }
 
@@ -234,6 +239,10 @@ pub fn onEventLoopTimer(timer: *EventLoopTimer) void {
             var ___scheduler_guard_moved = false; _ = &___scheduler_guard_moved;
             defer if (!___scheduler_guard_moved) { ___scheduler_guard_moved = true; const __T = @TypeOf(_scheduler_guard); if (@typeInfo(__T) == .optional) { if (_scheduler_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scheduler_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scheduler_guard; _drop_val.__cp_deinit(); } };
             if ((scheduler.current_interval.load(.monotonic) == 0)) {
+                return;
+            }
+            if (scheduler.work_pool_in_flight.swap(true, .acq_rel)) {
+                _ = scheduler.setInterval(@max(scheduler.getInterval(), 5));
                 return;
             }
             _ = jsc.WorkPool.schedule((&scheduler.task));
@@ -249,6 +258,9 @@ pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
             _ = &_scheduler_guard;
             var ___scheduler_guard_moved = false; _ = &___scheduler_guard_moved;
             defer if (!___scheduler_guard_moved) { ___scheduler_guard_moved = true; const __T = @TypeOf(_scheduler_guard); if (@typeInfo(__T) == .optional) { if (_scheduler_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scheduler_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scheduler_guard; _drop_val.__cp_deinit(); } };
+            defer {
+            _ = scheduler.work_pool_in_flight.store(false, .release);
+            }
             const now = ((std.time.Instant.now()) catch unreachable);
             var batch = scheduler.watchers.popBatch();
             _ = &batch;

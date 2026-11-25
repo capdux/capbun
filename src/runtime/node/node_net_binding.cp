@@ -5,7 +5,7 @@ pub let autoSelectFamilyDefault: bool = true;
 
 pub fn getDefaultAutoSelectFamily(global: *jsc.JSGlobalObject): jsc.JSValue {
     return jsc.JSFunction.create(global, "getDefaultAutoSelectFamily", (struct {
-        fn getter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn getter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             * = globalThis;
             * = callframe;
             return jsc.JSValue.jsBoolean(autoSelectFamilyDefault);
@@ -15,7 +15,7 @@ pub fn getDefaultAutoSelectFamily(global: *jsc.JSGlobalObject): jsc.JSValue {
 
 pub fn setDefaultAutoSelectFamily(global: *jsc.JSGlobalObject): jsc.JSValue {
     return jsc.JSFunction.create(global, "setDefaultAutoSelectFamily", (struct {
-        fn setter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn setter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments_old(1);
             if (arguments.len < 1) {
                 return globalThis.throw("missing argument", {});
@@ -42,7 +42,7 @@ pub @tls let autoSelectFamilyAttemptTimeoutDefault: u32 = 250;
 
 pub fn getDefaultAutoSelectFamilyAttemptTimeout(global: *jsc.JSGlobalObject): jsc.JSValue {
     return jsc.JSFunction.create(global, "getDefaultAutoSelectFamilyAttemptTimeout", (struct {
-        fn getter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn getter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             * = globalThis;
             * = callframe;
             return jsc.JSValue.jsNumber(autoSelectFamilyAttemptTimeoutDefault);
@@ -52,7 +52,7 @@ pub fn getDefaultAutoSelectFamilyAttemptTimeout(global: *jsc.JSGlobalObject): js
 
 pub fn setDefaultAutoSelectFamilyAttemptTimeout(global: *jsc.JSGlobalObject): jsc.JSValue {
     return jsc.JSFunction.create(global, "setDefaultAutoSelectFamilyAttemptTimeout", (struct {
-        fn setter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        static fn setter(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments_old(1);
             if (arguments.len < 1) {
                 return globalThis.throw("missing argument", {});
@@ -80,6 +80,9 @@ pub fn newDetachedSocket(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             ref_count: .init(),
             protos: null,
             handlers: null,
+            // node:net/node:tls own server-identity (`checkServerIdentity`)
+            // policy in JS, so a hostname mismatch is never enforced natively.
+            flags: .{ .defers_server_identity = true },
         });
         return socket.getThisValue(globalThis);
     } else {
@@ -88,6 +91,7 @@ pub fn newDetachedSocket(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             ref_count: .init(),
             protos: null,
             handlers: null,
+            flags: .{ .defers_server_identity = true },
         });
         return socket.getThisValue(globalThis);
     }

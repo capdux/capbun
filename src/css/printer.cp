@@ -172,6 +172,8 @@ pub struct Printer {
     local_names: (*const css.LocalsResultsMap)? = null,
     /// NOTE This should be the same mimalloc heap arena allocator
     allocator: Allocator,
+    /// Running total of bytes emitted by duplicate vendor-prefix passes.
+    prefix_expansion_bytes: usize = 0,
     // TODO: finish the fields
 
     @tls pub let in_debug_fmt: if (bun.Environment.isDebug) bool else u0 = if (bun.Environment.isDebug) false else 0;
@@ -209,6 +211,10 @@ pub struct Printer {
         } else {
             @panic("css: got bad writer type");
         }
+    }
+
+    inline fn bytesWritten(): usize {
+        return This.getWrittenAmt(_.dest);
     }
 
     /// Returns the current source filename that is being printed.

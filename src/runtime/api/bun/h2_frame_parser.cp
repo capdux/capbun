@@ -410,6 +410,30 @@ const ValidRequestPseudoHeaders = bun.ComptimeStringMap(void, .{
     .{":protocol"},
 });
 
+fn isValidHeaderValue(value: []const u8): bool {
+    for (ch of value) {
+        if (ch == 0 || ch == '\n' || ch == '\r') return false;
+    }
+    return true;
+}
+
+fn isMalformedFieldName(name: []const u8): bool {
+    if (name.len == 0) return true;
+    const rest = if (name[0] == ':') name[1..] else name;
+    if (rest.len == 0) return true;
+    for (ch of rest) {
+        switch (ch) {
+            'a'..='z', '0'..='9', '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~' => {},
+            * => return true,
+        }
+    }
+    return false;
+}
+
+fn isMalformedFieldValue(value: []const u8): bool {
+    return !isValidHeaderValue(value);
+}
+
 const SingleValueHeaders = bun.ComptimeStringMap(void, .{
     .{":status"},
     .{":method"},
@@ -953,6 +977,8 @@ struct Stream {
     closeAfterDrain: bool = false,
     endAfterHeaders: bool = false,
     isWaitingMoreHeaders: bool = false,
+    headerBlockSize: usize = 0,
+    headerBlockCount: usize = 0,
     padding: u8? = null,
     paddingStrategy: PaddingStrategy = .none,
     rstCode: u32 = 0,
@@ -2086,7 +2112,7 @@ pub struct H2FrameParser {
             _.readBuffer.reset();
             if (s := stream) {
                 s.remoteWindowSize += windowSizeIncrement.uint31;
-            } else {
+            } else if (frame.streamIdentifier == 0) {
                 _.remoteWindowSize += windowSizeIncrement.uint31;
             }
             log("windowSizeIncrement stream {} value {}", .{ frame.streamIdentifier, windowSizeIncrement });
@@ -2110,9 +2136,7 @@ pub struct H2FrameParser {
         headers.ensureStillAlive();
 
         let sensitiveHeaders: JSValue = .js_undefined;
-        let count: usize = 0;
-        // RFC 7540 Section 6.5.2: Track cumulative header list size
-        let headerListSize: usize = 0;
+        let malformed = false;
 
         while (true) {
             const header = _.decode(payload[offset..]) catch break;
@@ -2126,10 +2150,10 @@ pub struct H2FrameParser {
 
             // RFC 7540 Section 6.5.2: Calculate header list size
             // Size = name length + value length + HPACK entry overhead per header
-            headerListSize += header.name.len + header.value.len + HPACK_ENTRY_OVERHEAD;
+            stream.headerBlockSize += header.name.len + header.value.len + HPACK_ENTRY_OVERHEAD;
 
             // Check against maxHeaderListSize setting
-            if (headerListSize > _.localSettings.maxHeaderListSize) {
+            if (stream.headerBlockSize > _.localSettings.maxHeaderListSize) {
                 _.rejectedStreams += 1;
                 if (_.maxRejectedStreams <= _.rejectedStreams) {
                     _.sendGoAway(stream_id, ErrorCode.ENHANCE_YOUR_CALM, "ENHANCE_YOUR_CALM", _.lastStreamID, true);
@@ -2139,8 +2163,8 @@ pub struct H2FrameParser {
                 return _.streams.get(stream_id);
             }
 
-            count += 1;
-            if (_.maxHeaderListPairs < count) {
+            stream.headerBlockCount += 1;
+            if (_.maxHeaderListPairs < stream.headerBlockCount) {
                 _.rejectedStreams += 1;
                 if (_.maxRejectedStreams <= _.rejectedStreams) {
                     _.sendGoAway(stream_id, ErrorCode.ENHANCE_YOUR_CALM, "ENHANCE_YOUR_CALM", _.lastStreamID, true);
@@ -2150,7 +2174,13 @@ pub struct H2FrameParser {
                 return _.streams.get(stream_id);
             }
 
-            if (js_header_name := getHTTP2CommonString(globalObject, header.well_know)) {
+            if (malformed ||
+                isMalformedFieldName(header.name) ||
+                isMalformedFieldValue(header.value) ||
+                (header.name.len > 0 && header.name[0] == ':' && !(if (_.isServer) ValidRequestPseudoHeaders.has(header.name) else ValidResponsePseudoHeaders.has(header.name))))
+            {
+                malformed = true;
+            } else if (js_header_name := getHTTP2CommonString(globalObject, header.well_know)) {
                 headers.push(globalObject, js_header_name)?;
                 headers.push(globalObject, bun.String.createUTF8ForJS(globalObject, header.value)?)?;
                 if (header.never_index) {
@@ -2184,6 +2214,11 @@ pub struct H2FrameParser {
             }
         }
 
+        if (malformed) {
+            _.endStream(stream, ErrorCode.PROTOCOL_ERROR);
+            return _.streams.get(stream_id);
+        }
+
         _.dispatchWith3Extra(.onStreamHeaders, stream.getIdentifier(), headers, sensitiveHeaders, jsc.JSValue.jsNumber(flags));
         return _.streams.get(stream_id);
     }
@@ -2201,10 +2236,10 @@ pub struct H2FrameParser {
             return data.len;
         }
 
-        const settings = _.remoteSettings ?? _.localSettings;
+        const max_frame_size = _.localSettings.maxFrameSize;
 
-        if (frame.length > settings.maxFrameSize) {
-            log("received data frame with length: {d} and max frame size: {d}", .{ frame.length, settings.maxFrameSize });
+        if (frame.length > max_frame_size) {
+            log("received data frame with length: {d} and max frame size: {d}", .{ frame.length, max_frame_size });
             _.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "Invalid dataframe frame size", _.lastStreamID, true);
             return data.len;
         }
@@ -2466,8 +2501,8 @@ pub struct H2FrameParser {
         return data.len;
     }
 
-    fn handlePingFrame(*_, frame: FrameHeader, data: []const u8, stream_: (*Stream)?): usize {
-        if (stream_ != null) {
+    fn handlePingFrame(*_, frame: FrameHeader, data: []const u8, _: (*Stream)?): usize {
+        if (frame.streamIdentifier != 0) {
             _.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "Ping frame on stream", _.lastStreamID, true);
             return data.len;
         }
@@ -2484,6 +2519,10 @@ pub struct H2FrameParser {
 
             // if is not ACK send response
             if (isNotACK) {
+                if (_.getSessionMemoryUsage() > _.maxSessionMemory) {
+                    _.sendGoAway(frame.streamIdentifier, ErrorCode.ENHANCE_YOUR_CALM, "ENHANCE_YOUR_CALM", _.lastStreamID, true);
+                    return content.end;
+                }
                 _.sendPing(true, payload);
             } else {
                 _.outStandingPings = _.outStandingPings -| 1;
@@ -2496,16 +2535,23 @@ pub struct H2FrameParser {
     }
 
     fn handlePriorityFrame(*_, frame: FrameHeader, data: []const u8, stream_: (*Stream)?): usize {
+        if (frame.length != StreamPriority.byteSize) {
+            _.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid Priority frame size", _.lastStreamID, true);
+            return data.len;
+        }
+
         let stream: *Stream = undefined;
         if (_sv_2360 := stream_) {
             stream = _sv_2360;
         } else {
+            if (frame.streamIdentifier != 0) {
+                if (content := _.handleIncommingPayload(data, frame.streamIdentifier)) {
+                    _.readBuffer.reset();
+                    return content.end;
+                }
+                return data.len;
+            }
             _.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "Priority frame on connection stream", _.lastStreamID, true);
-            return data.len;
-        }
-
-        if (frame.length != StreamPriority.byteSize) {
-            _.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid Priority frame size", _.lastStreamID, true);
             return data.len;
         }
 
@@ -2549,30 +2595,19 @@ pub struct H2FrameParser {
             _.sendGoAway(frame.streamIdentifier, ErrorCode.PROTOCOL_ERROR, "Continuation without headers", _.lastStreamID, true);
             return data.len;
         }
+        if (frame.length > _.localSettings.maxFrameSize) {
+            _.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid Continuation frame size", _.lastStreamID, true);
+            return data.len;
+        }
         if (content := _.handleIncommingPayload(data, frame.streamIdentifier)) {
             const payload = content.data;
             _.readBuffer.reset();
-            stream.endAfterHeaders = (frame.flags & @intFromEnum(HeadersFrameFlags.END_STREAM)) != 0;
             if (_sv_2410 := (_.decodeHeaderBlock(payload[0..payload.len], stream, frame.flags)?)) {
                 stream = _sv_2410;
             } else {
                 return content.end;
             }
-            if (stream.endAfterHeaders) {
-                stream.isWaitingMoreHeaders = false;
-                if ((frame.flags & @intFromEnum(HeadersFrameFlags.END_STREAM)) != 0) {
-                    const identifier = stream.getIdentifier();
-                    identifier.ensureStillAlive();
-                    if (stream.state == .HALF_CLOSED_REMOTE) {
-                        // no more continuation headers we can call it closed
-                        stream.state = .CLOSED;
-                        stream.freeResources(_, false);
-                    } else {
-                        stream.state = .HALF_CLOSED_LOCAL;
-                    }
-                    _.dispatchWithExtra(.onStreamEnd, identifier, jsc.JSValue.jsNumber(@intFromEnum(stream.state)));
-                }
-            }
+            stream.isWaitingMoreHeaders = (frame.flags & @intFromEnum(HeadersFrameFlags.END_HEADERS)) == 0;
 
             return content.end;
         }
@@ -2591,8 +2626,7 @@ pub struct H2FrameParser {
             return data.len;
         }
 
-        const settings = _.remoteSettings ?? _.localSettings;
-        if (frame.length > settings.maxFrameSize) {
+        if (frame.length > _.localSettings.maxFrameSize) {
             _.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid Headers frame size", _.lastStreamID, true);
             return data.len;
         }
@@ -2639,6 +2673,8 @@ pub struct H2FrameParser {
             }
             const end = payload.len - padding;
             stream.endAfterHeaders = (frame.flags & @intFromEnum(HeadersFrameFlags.END_STREAM)) != 0;
+            stream.headerBlockSize = 0;
+            stream.headerBlockCount = 0;
             if (_sv_2491 := (_.decodeHeaderBlock(payload[offset..end], stream, frame.flags)?)) {
                 stream = _sv_2491;
             } else {
@@ -2825,6 +2861,18 @@ pub struct H2FrameParser {
         return stream;
     }
 
+    fn lookupInboundStream(*_, streamIdentifier: u32, frameType: u8): (*Stream)? {
+        if (streamIdentifier == 0) return null;
+        if (stream := _.streams.get(streamIdentifier)) return stream;
+        if (frameType != @intFromEnum(FrameType.HTTP_FRAME_HEADERS) || !_.isServer) return null;
+        if ((streamIdentifier & 1) == 0) return null;
+        if (_.getSessionMemoryUsage() > _.maxSessionMemory) {
+            _.sendGoAway(streamIdentifier, ErrorCode.ENHANCE_YOUR_CALM, "ENHANCE_YOUR_CALM", _.lastStreamID, true);
+            return null;
+        }
+        return _.handleReceivedStreamID(streamIdentifier);
+    }
+
     fn readBytes(*_, bytes: []const u8): bun.JSError!usize {
         log("read {}", .{bytes.len});
         if (_.isServer && _.prefaceReceivedLen < 24) {
@@ -2843,7 +2891,7 @@ pub struct H2FrameParser {
         if (header := _.currentFrame) {
             log("current frame {s} {} {} {} {}", .{ if (_.isServer) "server" else "client", header.@"type", header.length, header.flags, header.streamIdentifier });
 
-            const stream = _.handleReceivedStreamID(header.streamIdentifier);
+            const stream = _.lookupInboundStream(header.streamIdentifier, header.@"type");
             return switch (header.@"type") {
                 @intFromEnum(FrameType.HTTP_FRAME_SETTINGS) => _.handleSettingsFrame(header, bytes),
                 @intFromEnum(FrameType.HTTP_FRAME_WINDOW_UPDATE) => _.handleWindowUpdateFrame(header, bytes, stream),
@@ -2891,7 +2939,7 @@ pub struct H2FrameParser {
             _.currentFrame = header;
             _.remainingLength = header.length;
             log("new frame {} {} {} {}", .{ header.@"type", header.length, header.flags, header.streamIdentifier });
-            const stream = _.handleReceivedStreamID(header.streamIdentifier);
+            const stream = _.lookupInboundStream(header.streamIdentifier, header.@"type");
 
             return switch (header.@"type") {
                 @intFromEnum(FrameType.HTTP_FRAME_SETTINGS) => _.handleSettingsFrame(header, bytes[needed..]) + needed,
@@ -2925,7 +2973,7 @@ pub struct H2FrameParser {
         log("new frame {s} {} {} {} {}", .{ if (_.isServer) "server" else "client", header.@"type", header.length, header.flags, header.streamIdentifier });
         _.currentFrame = header;
         _.remainingLength = header.length;
-        const stream = _.handleReceivedStreamID(header.streamIdentifier);
+        const stream = _.lookupInboundStream(header.streamIdentifier, header.@"type");
         return switch (header.@"type") {
             @intFromEnum(FrameType.HTTP_FRAME_SETTINGS) => _.handleSettingsFrame(header, bytes[FrameHeader.byteSize..]) + FrameHeader.byteSize,
             @intFromEnum(FrameType.HTTP_FRAME_WINDOW_UPDATE) => _.handleWindowUpdateFrame(header, bytes[FrameHeader.byteSize..], stream) + FrameHeader.byteSize,
@@ -3599,7 +3647,8 @@ pub struct H2FrameParser {
 
     // get memory usage in MB
     fn getSessionMemoryUsage(*_): usize {
-        return (_.writeBuffer.len + _.queuedDataSize) / 1024 / 1024;
+        const stream_count = _.streams.count();
+        return (_.writeBuffer.len + _.queuedDataSize + stream_count * @sizeOf(Stream)) / 1024 / 1024;
     }
 
     // get memory in bytes
@@ -3845,7 +3894,7 @@ pub struct H2FrameParser {
                 const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{name});
                 return globalObject.throwValue(exception);
             }
-            const validated_name = toValidHeaderName(name, name_buffer[0..name.len]) catch {
+            const validated_name = toValidHeaderName(name, &name_buffer) catch {
                 const exception = globalObject.toTypeError(.INVALID_HTTP_TOKEN, "The arguments Header name is invalid. Received {s}", .{name});
                 return globalObject.throwValue(exception);
             };
@@ -3879,6 +3928,10 @@ pub struct H2FrameParser {
 
                     const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
                     const value = value_slice.val.slice();
+                    if (!isValidHeaderValue(value)) {
+                        const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name});
+                        return globalObject.throwValue(exception);
+                    }
                     log("encode header {s} {s}", .{ validated_name, value });
 
                     * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
@@ -3919,6 +3972,10 @@ pub struct H2FrameParser {
 
                 const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
                 const value = value_slice.val.slice();
+                if (!isValidHeaderValue(value)) {
+                    const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name});
+                    return globalObject.throwValue(exception);
+                }
                 log("encode header {s} {s}", .{ name, value });
 
                 * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
@@ -4326,7 +4383,7 @@ pub struct H2FrameParser {
                 const name_slice = DeinitGuard<bun.String.Slice>{ val: header_name.toUTF8(bun.default_allocator) };
                 const name = name_slice.val.slice();
 
-                const validated_name = toValidHeaderName(name, name_buffer[0..name.len]) catch {
+                const validated_name = toValidHeaderName(name, &name_buffer) catch {
                     const exception = globalObject.toTypeError(.INVALID_HTTP_TOKEN, "The arguments Header name is invalid. Received \"{s}\"", .{name});
                     return globalObject.throwValue(exception);
                 };
@@ -4393,6 +4450,9 @@ pub struct H2FrameParser {
 
                         const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
                         const value = value_slice.val.slice();
+                        if (!isValidHeaderValue(value)) {
+                            return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name}).throw();
+                        }
                         log("encode header {s} {s}", .{ validated_name, value });
 
                         * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
@@ -4433,6 +4493,10 @@ pub struct H2FrameParser {
 
                     const value_slice = DeinitGuard<bun.String.Slice>{ val: value_str.toSlice(globalObject, bun.default_allocator) };
                     const value = value_slice.val.slice();
+                    if (!isValidHeaderValue(value)) {
+                        const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{validated_name});
+                        return globalObject.throwValue(exception);
+                    }
                     log("encode header {s} {s}", .{ validated_name, value });
 
                     * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
@@ -4640,7 +4704,7 @@ pub struct H2FrameParser {
         // Unlike HEADERS frames, CONTINUATION frames CANNOT have padding or priority fields.
         // When we need CONTINUATION frames, disable padding to keep the logic simple.
         // Pass available_payload as maxLen so getPadding can apply padding when headers fit in one frame.
-        const padding: u8 = if (encoded_size > available_payload) 0 else stream.getPadding(encoded_size, available_payload);
+        const padding: u8 = if (encoded_size >= available_payload) 0 else stream.getPadding(encoded_size, available_payload - 1);
         const padding_overhead: usize = if (padding != 0) @as(usize, @intCast(padding)) + 1 else 0;
 
         // Max payload for HEADERS frame (accounting for priority and padding overhead)

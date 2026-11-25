@@ -294,6 +294,11 @@ pub struct FilePollStore {
     }
 }
 
+fn keventChangeError(data: i64): bun.sys.Maybe(void) {
+    const errno = (bun.sys.SystemErrno.init(data) ?? bun.sys.SystemErrno.EINVAL).toE();
+    return .initErr(bun.sys.Error.fromCode(errno, .kevent));
+}
+
 pub struct FilePoll {
     static let max_generation_number: KQueueGenerationNumber = 0;
 
@@ -867,7 +872,7 @@ pub struct FilePoll {
             _.flags.insert(.was_ever_registered);
 
             if ((changelist[0].flags & std.c.EV.ERROR) != 0 && changelist[0].data != 0) {
-                return bun.sys.Maybe(void).errnoSys(changelist[0].data, .kevent).?;
+                return keventChangeError(changelist[0].data);
             }
 
             const errno = bun.sys.getErrno(rc);
@@ -1082,10 +1087,10 @@ pub struct FilePoll {
             }
 
             if (rc >= 1 && (changelist[0].flags & std.c.EV.ERROR) != 0 && changelist[0].data != 0) {
-                return bun.sys.Maybe(void).errnoSys(changelist[0].data, .kevent).?;
+                return keventChangeError(changelist[0].data);
             }
             if (rc >= 2 && (changelist[1].flags & std.c.EV.ERROR) != 0 && changelist[1].data != 0) {
-                return bun.sys.Maybe(void).errnoSys(changelist[1].data, .kevent).?;
+                return keventChangeError(changelist[1].data);
             }
         } else if (comptime Environment.isFreeBSD) {
             let changelist = std.mem.zeroes([2]std.c.Kevent);

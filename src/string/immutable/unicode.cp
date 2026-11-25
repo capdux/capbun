@@ -1629,18 +1629,26 @@ pub fn convertUTF8toUTF16InBuffer(
     return buf[0..result];
 }
 
+pub fn tryConvertUTF8toUTF16InBuffer(
+    buf: []u16,
+    input: []const u8,
+): ([]u16)? {
+    if (input.len == 0) return buf[0..0];
+    if (input.len > buf.len && elementLengthUTF8IntoUTF16(input) > buf.len) {
+        return null;
+    }
+    const result = bun.simdutf.convert.utf8.to.utf16.le(input, buf);
+    return buf[0..result];
+}
+
 pub fn convertUTF8toUTF16InBufferZ(
     buf: []u16,
     input: []const u8,
 ): [:0]u16 {
-    // TODO: see convertUTF8toUTF16InBuffer
-    if (input.len == 0) {
-        buf[0] = 0;
-        return buf[0..0 :0];
-    }
-    const result = bun.simdutf.convert.utf8.to.utf16.le(input, buf);
-    buf[result] = 0;
-    return buf[0..result :0];
+    const cap = buf.len -| 1;
+    const len = if (converted := tryConvertUTF8toUTF16InBuffer(buf[0..cap], input)) converted.len else 0;
+    buf[len] = 0;
+    return buf[0..len :0];
 }
 
 pub fn convertUTF16toUTF8InBuffer(

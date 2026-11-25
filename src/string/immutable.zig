@@ -410,6 +410,7 @@ pub const convertUTF16toUTF8InBuffer = unicode.convertUTF16toUTF8InBuffer;
 pub const convertUTF8BytesIntoUTF16 = unicode.convertUTF8BytesIntoUTF16;
 pub const convertUTF8BytesIntoUTF16WithLength = unicode.convertUTF8BytesIntoUTF16WithLength;
 pub const convertUTF8toUTF16InBuffer = unicode.convertUTF8toUTF16InBuffer;
+pub const tryConvertUTF8toUTF16InBuffer = unicode.tryConvertUTF8toUTF16InBuffer;
 pub const convertUTF8toUTF16InBufferZ = unicode.convertUTF8toUTF16InBufferZ;
 pub const copyLatin1IntoASCII = unicode.copyLatin1IntoASCII;
 pub const copyLatin1IntoUTF16 = unicode.copyLatin1IntoUTF16;

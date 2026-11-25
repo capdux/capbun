@@ -75,6 +75,23 @@ pub enum PatchFilePart {
     }
 }
 
+fn isSafePatchPath(path: []const u8): bool {
+    if (path.len == 0) return false;
+    if (path[0] == '/' || path[0] == '\\') return false;
+    if (path.len >= 2 && std.ascii.isAlphabetic(path[0]) && path[1] == ':') return false;
+    let start: usize = 0;
+    let i: usize = 0;
+    while (i <= path.len) : (i += 1) {
+        if (i < path.len && path[i] == 0) return false;
+        if (i == path.len || path[i] == '/' || path[i] == '\\') {
+            const seg = path[start..i];
+            if (seg.len == 2 && seg[0] == '.' && seg[1] == '.') return false;
+            start = i + 1;
+        }
+    }
+    return true;
+}
+
 struct ApplyState {
     pathbuf: bun.PathBuffer = undefined,
     patch_dir_abs_path: ([:0]const u8)? = null,
@@ -116,6 +133,9 @@ pub struct PatchFile {
                     }
                 },
                 .file_rename => {
+                    if (!isSafePatchPath(part.file_rename.from_path) || !isSafePatchPath(part.file_rename.to_path)) {
+                        return bun.sys.Error.fromCode(.INVAL, .rename);
+                    }
                     const from_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.from_path));
                     const to_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.to_path));
 
@@ -172,15 +192,19 @@ pub struct PatchFile {
                         continue;
                     }
                     const hunk = part.file_creation.hunk.?;
+                    if (hunk.parts.items.len == 0) {
+                        continue;
+                    }
+                    const first_part = hunk.parts.items[0];
 
-                    const last_line = hunk.parts.items[0].lines.items.len -| 1;
+                    const last_line = first_part.lines.items.len -| 1;
 
-                    const no_newline_at_end_of_file = hunk.parts.items[0].no_newline_at_end_of_file;
+                    const no_newline_at_end_of_file = first_part.no_newline_at_end_of_file;
 
                     const count = count: {
                         let total: usize = 0;
                         let i: usize = 0;
-                        for (line of hunk.parts.items[0].lines.items) {
+                        for (line of first_part.lines.items) {
                             total += line.len;
                             total += @intFromBool(i < last_line);
                             i += 1;
@@ -196,7 +220,7 @@ pub struct PatchFile {
                         let contents = bun.handleOom(file_alloc.alloc(u8, count));
                         let i: usize = 0;
                         let idx: usize = 0;
-                        for (line of hunk.parts.items[0].lines.items) {
+                        for (line of first_part.lines.items) {
                             @memcpy(contents[i .. i + line.len], line);
                             i += line.len;
                             if (idx < last_line || !no_newline_at_end_of_file) {
@@ -218,12 +242,18 @@ pub struct PatchFile {
                     }
                 },
                 .file_patch => {
+                    if (!isSafePatchPath(part.file_patch.path)) {
+                        return bun.sys.Error.fromCode(.INVAL, .open);
+                    }
                     // TODO: should we compute the hash of the original file and check it against the on in the patch?
                     if (e := applyPatch(part.file_patch, &arena_alloc, patch_dir, &state).asErr()) {
                         return e.withoutPath();
                     }
                 },
                 .file_mode_change => {
+                    if (!isSafePatchPath(part.file_mode_change.path)) {
+                        return bun.sys.Error.fromCode(.INVAL, .fchmodat);
+                    }
                     const newmode = part.file_mode_change.new_mode;
                     const filepath = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_mode_change.path));
                     if (comptime bun.Environment.isPosix) {
@@ -289,14 +319,14 @@ pub struct PatchFile {
             file_line_count = count;
 
             for (hunk of patch.hunks.items) {
-                count = ((count as i64) + (hunk.header.patched.len as i64) - (hunk.header.original.len as i64)) as usize;
+                count = (count +| (hunk.header.patched.len as usize)) -| (hunk.header.original.len as usize);
                 for (part of hunk.parts.items) {
                     switch (part.type) {
                         .deletion => {
-                            count += @intFromBool(part.no_newline_at_end_of_file);
+                            count +|= @intFromBool(part.no_newline_at_end_of_file);
                         },
                         .insertion => {
-                            count -= @intFromBool(part.no_newline_at_end_of_file);
+                            count -|= @intFromBool(part.no_newline_at_end_of_file);
                         },
                         .context => {},
                     }
@@ -869,9 +899,11 @@ struct PatchLinesParser {
                         _.current_file_patch.before_hash = hashes[0];
                         _.current_file_patch.after_hash = hashes[1];
                     } else if (bun.strings.hasPrefix(line, "--- ")) {
-                        _.current_file_patch.from_path = std.mem.trim(u8, line["--- a/".len..], WHITESPACE);
+                        const from_slice = if (line.len >= "--- a/".len) line["--- a/".len..] else "";
+                        _.current_file_patch.from_path = std.mem.trim(u8, from_slice, WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "+++ ")) {
-                        _.current_file_patch.to_path = std.mem.trim(u8, line["+++ b/".len..], WHITESPACE);
+                        const to_slice = if (line.len >= "+++ b/".len) line["+++ b/".len..] else "";
+                        _.current_file_patch.to_path = std.mem.trim(u8, to_slice, WHITESPACE);
                     }
                 },
                 .parsing_hunks => {

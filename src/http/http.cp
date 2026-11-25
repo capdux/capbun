@@ -462,6 +462,26 @@ fn unregisterAbortTracker(
     * = socket_async_http_abort_tracker.swapRemove(client.async_http_id);
 }
 
+pub fn unregisterAbortTrackerForSocket(
+    comptime is_ssl: bool,
+    socket: NewHTTPContext(is_ssl).HTTPSocket,
+) {
+    if (socket.isDetached()) return;
+    let i: usize = 0;
+    while (i < socket_async_http_abort_tracker.count()) {
+        const entry = socket_async_http_abort_tracker.values()[i];
+        const is_match = if (comptime is_ssl)
+            entry == .SocketTLS && entry.SocketTLS.socket.eq(socket.socket)
+        else
+            entry == .SocketTCP && entry.SocketTCP.socket.eq(socket.socket);
+        if (is_match) {
+            socket_async_http_abort_tracker.swapRemoveAt(i);
+        } else {
+            i += 1;
+        }
+    }
+}
+
 pub fn onOpen(
     client: *HTTPClient,
     comptime is_ssl: bool,
@@ -1005,6 +1025,10 @@ export @root @value struct HTTPClient {
         if (_.prev_redirect.len > 0) {
             bun.default_allocator.free(_.prev_redirect);
             _.prev_redirect = "";
+        }
+        if (_.state.flags.clear_hostname_on_redirect) {
+            _.state.flags.clear_hostname_on_redirect = false;
+            _.hostname = null;
         }
         if (_.remaining_redirect_count == 0) {
             _.fail(error.TooManyRedirects);
@@ -1565,6 +1589,40 @@ export @root @value struct HTTPClient {
         }
 
         fn writeToStreamUsingBuffer(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !bool {
+            if (proxy := _.proxy_tunnel) {
+                if (socket.isClosed() || socket.isShutdown()) {
+                    return error.ConnectionClosed;
+                }
+                const pending = buffer.slice();
+                if (pending.len > 0) {
+                    const n = proxy.write(pending) catch {
+                        if (data.len > 0) bun.handleOom(buffer.write(data));
+                        return true;
+                    };
+                    _.state.request_sent_len += n;
+                    buffer.cursor += n;
+                    if (n < pending.len) {
+                        if (data.len > 0) bun.handleOom(buffer.write(data));
+                        return true;
+                    }
+                    if (buffer.isEmpty()) {
+                        buffer.reset();
+                    }
+                }
+                if (data.len > 0) {
+                    const n = proxy.write(data) catch {
+                        bun.handleOom(buffer.write(data));
+                        return true;
+                    };
+                    _.state.request_sent_len += n;
+                    if (n < data.len) {
+                        bun.handleOom(buffer.write(data[n..]));
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             const to_send = buffer.slice();
             if (to_send.len > 0) {
                 const amount = writeToSocket(is_ssl, socket, to_send)?;
@@ -1651,6 +1709,9 @@ export @root @value struct HTTPClient {
 
             if (proxy := _.proxy_tunnel) {
                 proxy.onWritable(is_ssl, socket);
+                if (socket.isClosed()) {
+                    return;
+                }
             }
 
             switch (_.state.request_stage) {
@@ -1823,7 +1884,7 @@ export @root @value struct HTTPClient {
                             _.state.request_body = _.state.request_body[_.state.request_sent_len - headers_len ..];
                         }
 
-                        const has_sent_body = _.state.request_body.len == 0;
+                        const has_sent_body = if (_.state.original_request_body == .bytes) _.state.request_body.len == 0 else false;
 
                         if (has_sent_headers && has_sent_body) {
                             _.state.request_stage = .done;
@@ -1835,7 +1896,9 @@ export @root @value struct HTTPClient {
                             if (_.flags.is_streaming_request_body) {
                                 _.progressUpdate(is_ssl, _.getSslCtx(is_ssl), socket);
                             }
-                            assert(_.state.request_body.len > 0);
+                            assert((_.state.original_request_body == .bytes && _.state.request_body.len > 0) ||
+                                _.state.original_request_body == .sendfile ||
+                                _.state.original_request_body == .stream);
 
                             if (amount == to_send.len) {
                                 _.onWritable(false, is_ssl, socket);
@@ -1912,6 +1975,11 @@ export @root @value struct HTTPClient {
                     &amount_read,
                 ) catch (e) {
                     if (e == error.ShortRead) {
+                        const MAX_RESPONSE_HEADER_BUFFER: usize = 1024 * 1024;
+                        if (to_read.len > MAX_RESPONSE_HEADER_BUFFER) {
+                            _.closeAndFail(error.ResponseHeadersTooLarge, is_ssl, socket);
+                            return;
+                        }
                         _.handleShortRead(is_ssl, incoming_data, socket, needs_move);
                     } else {
                         _.closeAndFail(e, is_ssl, socket);
@@ -2127,7 +2195,7 @@ export @root @value struct HTTPClient {
                 if (t := _.proxy_tunnel) {
                     let wrapper_ok = false;
                     if (*w := t.wrapper) {
-                        wrapper_ok = !w.isShutdown();
+                        wrapper_ok = !w.isShutdown() && !w.flags.fatal_error && !w.hasPendingData();
                     }
                     tunnel_poolable = _.state.request_stage == .done &&
                         t.write_buffer.isEmpty() &&
@@ -2229,7 +2297,7 @@ export @root @value struct HTTPClient {
                 tunnel.shutdown();
                 tunnel.detachAndDeref();
                 NewHTTPContext(is_ssl).closeSocket(socket);
-            } else if (_.state.request_stage == .done && _.isKeepAlivePossible() && !socket.isClosedOrHasError()) {
+            } else if (_.state.request_stage == .done && _.isKeepAlivePossible() && !socket.isClosedOrHasError() && (!is_ssl || _.http_proxy != null || _.hostname == null)) {
                 log("Keep-Alive release in redirect", .{});
                 assert(_.connected_url.hostname.len > 0);
                 ctx.releaseSocket(
@@ -2251,6 +2319,10 @@ export @root @value struct HTTPClient {
             if (_.prev_redirect.len > 0) {
                 bun.default_allocator.free(_.prev_redirect);
                 _.prev_redirect = "";
+            }
+            if (_.state.flags.clear_hostname_on_redirect) {
+                _.state.flags.clear_hostname_on_redirect = false;
+                _.hostname = null;
             }
 
             if (_.remaining_redirect_count == 0) {
@@ -2527,8 +2599,16 @@ export @root @value struct HTTPClient {
                 const header = response.headers.list[header_i];
                 const header_hash = hashHeaderName(header.name);
                 if (header_hash == content_length_header_hash) {
-                    const content_length = std.fmt.parseInt(usize, header.value, 10) catch 0;
+                    if (_.flags.proxy_tunneling && _.proxy_tunnel == null && response.status_code == 200) {
+                        continue;
+                    }
+                    const content_length = std.fmt.parseInt(usize, header.value, 10) catch {
+                        return error.InvalidContentLength;
+                    };
                     if (_.method.hasBody()) {
+                        if (_.state.content_length != null && _.state.content_length.? != content_length) {
+                            return error.InvalidContentLength;
+                        }
                         _.state.content_length = content_length;
                     } else {
                         // ignore body size for HEAD requests
@@ -2555,6 +2635,9 @@ export @root @value struct HTTPClient {
                         }
                     }
                 } else if (header_hash == transfer_encoding_header_hash) {
+                    if (_.flags.proxy_tunneling && _.proxy_tunnel == null && response.status_code == 200) {
+                        continue;
+                    }
                     if (strings.eqlComptime(header.value, "gzip")) {
                         if (!_.flags.disable_decompression) {
                             _.state.transfer_encoding = Encoding.gzip;
@@ -2637,6 +2720,7 @@ export @root @value struct HTTPClient {
                 }
             }
 
+            let is_proxy_connect_failure = false;
             if (_.flags.proxy_tunneling && _.proxy_tunnel == null) {
                 if (response.status_code == 200) {
                     // signal to continue the proxing
@@ -2646,6 +2730,7 @@ export @root @value struct HTTPClient {
                 // proxy denied connection so return proxy result (407, 403 etc)
                 _.flags.proxy_tunneling = false;
                 _.flags.disable_keepalive = true;
+                is_proxy_connect_failure = true;
             }
 
             const status_code = response.status_code;
@@ -2658,7 +2743,7 @@ export @root @value struct HTTPClient {
             // if is no redirect or if is redirect == "manual" just proceed
             const is_redirect = status_code >= 300 && status_code <= 399;
             if (is_redirect) {
-                if (_.redirect_type == FetchRedirect.follow && location.len > 0 && _.remaining_redirect_count > 0) {
+                if (!is_proxy_connect_failure && _.redirect_type == FetchRedirect.follow && location.len > 0 && _.remaining_redirect_count > 0) {
                     switch (status_code) {
                         302, 301, 307, 308, 303 => {
                             // https://fetch.spec.whatwg.org/#http-redirect-fetch step 11:
@@ -2855,23 +2940,27 @@ export @root @value struct HTTPClient {
                             // locationURL’s origin, then for each headerName of CORS
                             // non-wildcard request-header name, delete headerName from
                             // request’s header list.
-                            if (!is_same_origin && _.header_entries.len > 0) {
-                                const hashes_to_remove: [3]u64 = [
-                                    authorization_header_hash,
-                                    proxy_authorization_header_hash,
-                                    cookie_header_hash,
-                                ];
-                                inline for (target_hash of hashes_to_remove) {
-                                    const names = _.header_entries.items(.name);
+                            if (!is_same_origin) {
+                                _.state.flags.clear_hostname_on_redirect = true;
+                                if (_.header_entries.len > 0) {
+                                    const hashes_to_remove: [4]u64 = [
+                                        authorization_header_hash,
+                                        proxy_authorization_header_hash,
+                                        cookie_header_hash,
+                                        host_header_hash,
+                                    ];
+                                    inline for (target_hash of hashes_to_remove) {
+                                        const names = _.header_entries.items(.name);
 
-                                    let i: usize = 0;
-                                    while (i < names.len) : (i += 1) {
-                                        const name_ptr = names[i];
-                                        const name = _.headerStr(name_ptr);
-                                        const hash = hashHeaderName(name);
-                                        if (hash == target_hash) {
-                                            _.header_entries.orderedRemove(i);
-                                            break;
+                                        let i: usize = 0;
+                                        while (i < names.len) : (i += 1) {
+                                            const name_ptr = names[i];
+                                            const name = _.headerStr(name_ptr);
+                                            const hash = hashHeaderName(name);
+                                            if (hash == target_hash) {
+                                                _.header_entries.orderedRemove(i);
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -2883,7 +2972,7 @@ export @root @value struct HTTPClient {
                         },
                         else => {},
                     }
-                } else if (_.redirect_type == FetchRedirect.@"error") {
+                } else if (!is_proxy_connect_failure && _.redirect_type == FetchRedirect.@"error") {
                     // error out if redirect is not allowed
                     return error.UnexpectedRedirect;
                 }

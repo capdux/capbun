@@ -3179,7 +3179,12 @@ pub fn globalLookupService(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
             if ((addr_str.length() == 0)) {
                 return globalThis.throwInvalidArgumentType("lookupService", "address", "non-empty string");
             }
-            const addr_s = addr_str.getZigString(globalThis).slice();
+            const addr_slice = addr_str.toSlice(globalThis, bun.default_allocator);
+            var _addr_guard = DeinitGuard(@TypeOf(addr_slice)){ .val = addr_slice };
+            _ = &_addr_guard;
+            var ___addr_guard_moved = false; _ = &___addr_guard_moved;
+            defer if (!___addr_guard_moved) { ___addr_guard_moved = true; const __T = @TypeOf(_addr_guard); if (@typeInfo(__T) == .optional) { if (_addr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _addr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _addr_guard; _drop_val.__cp_deinit(); } };
+            const addr_s = addr_slice.slice();
             const port_value = arguments.ptr[1];
             const port: u16 = try port_value.toPortNumber(globalThis);
             var sa: std.posix.sockaddr.storage = std.mem.zeroes(std.posix.sockaddr.storage);

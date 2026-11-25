@@ -527,7 +527,7 @@ pub fn runScriptsWithFilter(ctx: Command.Context): noreturn! {
             for (part of ctx.passthrough) {
                 copy_script.append(' ')?;
                 if (bun.shell.needsEscapeUtf8AsciiLatin1(part)) {
-                    bun.shell.escape8Bit(part, &copy_script, true)?;
+                    bun.shell.escape8Bit(part, &copy_script, true, false)?;
                 } else {
                     copy_script.appendSlice(part)?;
                 }

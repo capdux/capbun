@@ -134,7 +134,13 @@ pub fn ParseTypescript(
             p.current_scope.ts_namespace = ts_namespace;
 
             const old_has_non_local_export_declare_inside_namespace = p.has_non_local_export_declare_inside_namespace;
+            const old_fn_or_arrow_data = p.fn_or_arrow_data_parse;
             p.has_non_local_export_declare_inside_namespace = false;
+            p.fn_or_arrow_data_parse = .{
+                is_this_disallowed: true,
+                is_return_disallowed: true,
+                is_top_level: old_fn_or_arrow_data.is_top_level,
+            };
 
             // Parse the statements inside the namespace
             let stmts: ListManaged(Stmt) = ListManaged(Stmt).init(p.allocator);
@@ -161,6 +167,7 @@ pub fn ParseTypescript(
             }
             const has_non_local_export_declare_inside_namespace = p.has_non_local_export_declare_inside_namespace;
             p.has_non_local_export_declare_inside_namespace = old_has_non_local_export_declare_inside_namespace;
+            p.fn_or_arrow_data_parse = old_fn_or_arrow_data;
 
             // Add any exported members from this namespace's body as members of the
             // associated namespace object.
@@ -414,6 +421,12 @@ pub fn ParseTypescript(
 
             p.lexer.expect(.t_open_brace)?;
 
+            const old_fn_or_arrow_data = p.fn_or_arrow_data_parse;
+            p.fn_or_arrow_data_parse = .{
+                is_this_disallowed: true,
+                is_top_level: old_fn_or_arrow_data.is_top_level,
+            };
+
             // Parse the body
             let values = std.array_list.Managed(js_ast.EnumValue).init(p.allocator);
             while (p.lexer.token != .t_close_brace) {
@@ -459,6 +472,8 @@ pub fn ParseTypescript(
 
                 p.lexer.next()?;
             }
+
+            p.fn_or_arrow_data_parse = old_fn_or_arrow_data;
 
             if (!opts.is_typescript_declare) {
                 // Avoid a collision with the enum closure argument variable if the

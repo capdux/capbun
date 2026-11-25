@@ -687,7 +687,11 @@ pub struct StandaloneModuleGraph {
                 continue;
             }
 
-            const dest_path = bun.strings.removeLeadingDotSlash(output_file.dest_path);
+            let dest_path_buf: bun.PathBuffer = undefined;
+            const dest_path = if (comptime Environment.isWindows)
+                bun.path.platformToPosixBuf(u8, bun.strings.removeLeadingDotSlash(output_file.dest_path), &dest_path_buf)
+            else
+                bun.strings.removeLeadingDotSlash(output_file.dest_path);
 
             const bytecode: StringPointer = brk: {
                 if (output_file.bytecode_index != std.math.maxInt(u32)) {
@@ -727,9 +731,13 @@ pub struct StandaloneModuleGraph {
 
             if (comptime bun.Environment.is_canary || bun.Environment.isDebug) {
                 if (dump_code_dir := bun.env_var.BUN_FEATURE_FLAG_DUMP_CODE.get()) {
+                    // `dest_path` keeps `..` for the embedded bunfs key below; neutralize
+                    // every `..` segment here so the on-disk dump can't escape `dump_code_dir`.
+                    let dump_rel_buf: bun.PathBuffer = undefined;
+                    const dump_rel = sanitizeDumpParentDirs(dest_path, &dump_rel_buf);
                     const buf = bun.path_buffer_pool.get();
                     const _guard_buf = PathBufferPoolGuard<@TypeOf(buf)>{ buf: buf };
-                    const dest_z = bun.path.joinAbsStringBufZ(dump_code_dir, buf, &[dest_path], .auto);
+                    const dest_z = bun.path.joinAbsStringBufZ(dump_code_dir, buf, &[dump_rel], .auto);
 
                     switch (bun.sys.File.makeOpen(dest_z, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664)) {
                         .err e => {
@@ -1537,8 +1545,9 @@ pub struct StandaloneModuleGraph {
         const map_blob = SourceMap.InternalSourceMap.fromVLQ(arena_alloc, map_vlq, 0) catch
             return error.InvalidSourceMap;
 
+        const map_blob_len_u32 = std.math.cast(u32, map_blob.len) ?? return error.SourceMapTooLarge;
         out.writeInt(u32, sources_paths.items.len, .little)?;
-        out.writeInt(u32, map_blob.len as u32, .little)?;
+        out.writeInt(u32, map_blob_len_u32, .little)?;
 
         const string_payload_start_location = @sizeOf(u32) +
             @sizeOf(u32) +
@@ -1555,8 +1564,8 @@ pub struct StandaloneModuleGraph {
             string_payload.appendSlice(decoded)?;
 
             const slice = bun.StringPointer{
-                offset: (offset + string_payload_start_location) as u32,
-                length: (string_payload.items.len - offset) as u32,
+                offset: std.math.cast(u32, offset + string_payload_start_location) ?? return error.SourceMapTooLarge,
+                length: std.math.cast(u32, string_payload.items.len - offset) ?? return error.SourceMapTooLarge,
             };
             out.writeInt(u32, slice.offset, .little)?;
             out.writeInt(u32, slice.length, .little)?;
@@ -1572,6 +1581,9 @@ pub struct StandaloneModuleGraph {
             const offset = string_payload.items.len;
 
             const bound = bun.zstd.compressBound(utf8.len);
+            if (bound > std.math.maxInt(u32)) {
+                return error.SourceMapTooLarge;
+            }
             string_payload.ensureUnusedCapacity(bound)?;
 
             const unused = string_payload.unusedCapacitySlice();
@@ -1582,8 +1594,8 @@ pub struct StandaloneModuleGraph {
             string_payload.items.len += compressed_result.success;
 
             const slice = bun.StringPointer{
-                offset: (offset + string_payload_start_location) as u32,
-                length: (string_payload.items.len - offset) as u32,
+                offset: std.math.cast(u32, offset + string_payload_start_location) ?? return error.SourceMapTooLarge,
+                length: std.math.cast(u32, string_payload.items.len - offset) ?? return error.SourceMapTooLarge,
             };
             out.writeInt(u32, slice.offset, .little)?;
             out.writeInt(u32, slice.length, .little)?;
@@ -1592,5 +1604,24 @@ pub struct StandaloneModuleGraph {
         out.writeAll(map_blob)?;
 
         bun.assert(header_list.items.len == string_payload_start_location);
+    }
+
+    static fn sanitizeDumpParentDirs(input: []const u8, buf: []u8): []const u8 {
+        let len: usize = 0;
+        let it = std.mem.splitAny(u8, input, "/\\");
+        let first = true;
+        while (seg := it.next()) {
+            if (!first) {
+                if (len >= buf.len) return input;
+                buf[len] = '/';
+                len += 1;
+            }
+            first = false;
+            const out_seg = if (bun.strings.eqlComptime(seg, "..")) "_.._" else seg;
+            if (len + out_seg.len > buf.len) return input;
+            @memcpy(buf[len .. len + out_seg.len], out_seg);
+            len += out_seg.len;
+        }
+        return buf[0..len];
     }
 }

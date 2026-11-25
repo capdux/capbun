@@ -828,10 +828,10 @@ fn BaseWindowsPipeWriter(
             const _source_opt = _.source;
             if (_source_opt == null) return;
             const source = _source_opt.?;
-            const has_inflight_write = if (@hasField(WindowsPipeWriter, "current_payload")) switch (source) {
+            const has_inflight_write = switch (source) {
                 .sync_file, .file file => file.state == .operating || file.state == .canceling,
                 else => false,
-            } else false;
+            };
             switch (source) {
                 .sync_file, .file file => {
                     if (_.owns_fd) {
@@ -999,6 +999,7 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
         }
 
         fn onWriteComplete(*_, status: uv.ReturnCode) {
+            const _parent_guard = DerefGuard<Parent>{ ptr: _.parent };
             const written = _.pending_payload_size;
             _.pending_payload_size = 0;
             if (e := status.toError(.write)) {
@@ -1035,10 +1036,12 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
 
             if (was_canceled) {
                 writer.pending_payload_size = 0;
+                writer.parent.deref();
                 return;
             }
 
             if (e := result.toError(.write)) {
+                const _parent_guard = DerefGuard<Parent>{ ptr: writer.parent };
                 writer.close();
                 onError(writer.parent, e);
                 return;
@@ -1072,6 +1075,8 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
                         file.complete(false);
                         _.close();
                         onError(_.parent, e);
+                    } else {
+                        _.parent.ref();
                     }
                 },
                 else => {
@@ -1080,6 +1085,8 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
                     if (write_err := _.write_req.write(pipe.toStream(), &_.write_buffer, _, onWriteComplete).asErr()) {
                         _.close();
                         onError(_.parent, write_err);
+                    } else {
+                        _.parent.ref();
                     }
                 },
             }
@@ -1292,7 +1299,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                 log("onWrite() = {s}", .{e.name()});
 
                 onError(_.parent, e);
-                _.closeWithoutReporting();
+                _.close();
                 return;
             }
 
@@ -1367,7 +1374,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                 const err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .pipe);
                 _.last_write_result = .{ .err = err };
                 onError(_.parent, err);
-                _.closeWithoutReporting();
+                _.close();
                 return;
             }
             let pipe = _.source.?;
@@ -1390,7 +1397,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                         file.complete(false);
                         _.last_write_result = .{ .e = e };
                         onError(_.parent, e);
-                        _.closeWithoutReporting();
+                        _.close();
                         return;
                     }
                 },
@@ -1399,7 +1406,7 @@ pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: 
                     if (e := _.write_req.write(pipe.toStream(), &_.write_buffer, _, onWriteComplete).asErr()) {
                         _.last_write_result = .{ .e = e };
                         onError(_.parent, e);
-                        _.closeWithoutReporting();
+                        _.close();
                         return;
                     }
                 },

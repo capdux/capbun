@@ -199,7 +199,7 @@ pub struct Source {
         }
 
         if (bun.env_var.TMUX.get() != null) {
-            lazy_color_depth = depth_256;
+            lazy_color_depth = depth_16m;
             return;
         }
 

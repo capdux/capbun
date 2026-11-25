@@ -208,7 +208,11 @@ pub struct Visitor {
 }
 
 pub fn generateCodeForLazyExport(c: *LinkerContext, source_index: Index.Int): void!bun.OOM {
-    const exports_kind = c.graph.ast.items(.exports_kind)[source_index];
+    let exports_kind = c.graph.ast.items(.exports_kind)[source_index];
+    if (c.options.output_format == .internal_bake_dev && exports_kind != .cjs) {
+        exports_kind = .cjs;
+        c.graph.ast.items(.exports_kind)[source_index] = .cjs;
+    }
     const all_sources = c.parse_graph.input_files.items(.source);
     const all_css_asts = c.graph.ast.items(.css);
     const maybe_css_ast: (*bun.css.BundlerStyleSheet)? = all_css_asts[source_index];

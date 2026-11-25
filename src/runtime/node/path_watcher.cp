@@ -219,6 +219,12 @@ pub struct PathWatcher {
         }
     }
 
+    fn emitOverflow(*_) {
+        for (ctx of _.handlers.keys()) {
+            onPathUpdateFn(ctx, .{ .no_filename = .change }, false);
+        }
+    }
+
     /// Signals end-of-batch so `FSWatcher` can flush its queued events to the JS thread.
     /// Caller holds `manager.mutex`.
     fn flush(*_) {
@@ -685,6 +691,15 @@ struct Linux {
                 const ev: *align(1) const InotifyEvent = unsafe { @ptrCast(buf[i..].ptr) };
                 i += @sizeOf(InotifyEvent) + ev.name_len;
                 const wd = ev.watch_descriptor;
+
+                if ((ev.mask & IN.Q_OVERFLOW) != 0) {
+                    for (w of manager.watchers.values()) {
+                        w.emitOverflow();
+                        const empty_void: void = undefined;
+                        bun.handleOom(touched.put(bun.default_allocator, w, empty_void));
+                    }
+                    continue;
+                }
 
                 // Kernel retired this wd (rm_watch, or the watched inode is gone).
                 if ((ev.mask & IN.IGNORED) != 0) {

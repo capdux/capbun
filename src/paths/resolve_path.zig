@@ -294,6 +294,9 @@ pub fn resolveWithExternalBuf(buf: *Buf, source_dir: []const u8, maybe_posix_pat
                     _ = assert(isSepAny(root[0]));
                     if (bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, maybe_posix_path)) {
                         const source_root = windowsFilesystemRoot(source_dir);
+                        if ((((source_root.len + maybe_posix_path.len) - 1) >= buf.len)) {
+                            return maybe_posix_path;
+                        }
                         _ = @memcpy(buf[0..source_root.len], source_root);
                         _ = @memcpy(buf[source_root.len..][0..(maybe_posix_path.len - 1)], maybe_posix_path[1..]);
                         const res = buf[0..((source_root.len + maybe_posix_path.len) - 1)];
@@ -315,6 +318,9 @@ pub fn resolveWithExternalBufZ(buf: *Buf, source_dir: []const u8, maybe_posix_pa
                     _ = assert(isSepAny(root[0]));
                     if (bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, maybe_posix_path)) {
                         const source_root = windowsFilesystemRoot(source_dir);
+                        if (((source_root.len + maybe_posix_path.len) > buf.len)) {
+                            return maybe_posix_path;
+                        }
                         _ = @memcpy(buf[0..source_root.len], source_root);
                         _ = @memcpy(buf[source_root.len..][0..(maybe_posix_path.len - 1)], maybe_posix_path[1..]);
                         buf[cp_cast_int(usize, ((source_root.len + maybe_posix_path.len) - 1))] = 0;
@@ -340,6 +346,9 @@ pub fn resolveCWDWithExternalBuf(buf: *Buf, maybe_posix_path: []const u8) ![]con
                         _ = assert((cwd.ptr == buf.ptr));
                         const source_root = windowsFilesystemRoot(cwd);
                         _ = assert((source_root.ptr == source_root.ptr));
+                        if ((((source_root.len + maybe_posix_path.len) - 1) >= buf.len)) {
+                            return error.NameTooLong;
+                        }
                         _ = @memcpy(buf[source_root.len..][0..(maybe_posix_path.len - 1)], maybe_posix_path[1..]);
                         const res = buf[0..((source_root.len + maybe_posix_path.len) - 1)];
                         _ = assert((!bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, res)));
@@ -363,6 +372,9 @@ pub fn resolveCWDWithExternalBufZ(buf: *bun.PathBuffer, maybe_posix_path: []cons
                         _ = assert((cwd.ptr == buf.ptr));
                         const source_root = windowsFilesystemRoot(cwd);
                         _ = assert((source_root.ptr == source_root.ptr));
+                        if (((source_root.len + maybe_posix_path.len) > buf.len)) {
+                            return error.NameTooLong;
+                        }
                         _ = @memcpy(buf[source_root.len..][0..(maybe_posix_path.len - 1)], maybe_posix_path[1..]);
                         buf[cp_cast_int(usize, ((source_root.len + maybe_posix_path.len) - 1))] = 0;
                         const res = buf[0..((source_root.len + maybe_posix_path.len) - 1) :0];
@@ -372,6 +384,9 @@ pub fn resolveCWDWithExternalBufZ(buf: *bun.PathBuffer, maybe_posix_path: []cons
                     }
                 }
                 _ = assert((!bun.strings.isWindowsAbsolutePathMissingDriveLetter(u8, maybe_posix_path)));
+            }
+            if (((maybe_posix_path.len + 1) > buf.len)) {
+                return error.NameTooLong;
             }
             _ = @memcpy(buf.ptr, maybe_posix_path);
             buf[cp_cast_int(usize, maybe_posix_path.len)] = 0;

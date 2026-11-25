@@ -16,6 +16,7 @@ const uws = bun.uws;
 const AnyResponse = uws.AnyResponse;
 type AbortFn = *const fn (*!, AnyResponse) void;
 struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+struct OptDerefGuard<T> { val: T? = null, ~init() { if (v := _.val) { v.deref(); } } }
 
 const log = bun.Output.scoped(.FileResponseStream, .hidden);
 
@@ -24,7 +25,8 @@ const log = bun.Output.scoped(.FileResponseStream, .hidden);
     finished: bool = false,
     errored: bool = false,
     resp_detached: bool = false,
-    _: u4 = 0,
+    read_ref_held: bool = false,
+    _: u3 = 0,
 }
 
 enum _Mode { reader, sendfile }
@@ -157,7 +159,7 @@ pub static fn start(opts: StartOptions) {
     }
 
     // hold a ref for the in-flight read; released in onReaderDone/onReaderError
-    stream.ref();
+    stream.holdReadRef();
     stream.reader.read();
 }
 
@@ -208,7 +210,7 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
     switch (_.resp.write(chunk)) {
         .backpressure => {
             // release the read ref; onWritable re-takes it
-            const _bp_guard = DerefGuard(*FileResponseStream){ .val = _ };
+            const _bp_guard = _.takeReadRef();
             _.resp.onWritable(*FileResponseStream, onWritable, _);
             if (comptime !bun.Environment.isPosix) _.reader.pause();
             return false;
@@ -218,13 +220,25 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
 }
 
 pub fn onReaderDone(_: *FileResponseStream) {
-    const _guard = DerefGuard(*FileResponseStream){ .val = _ };
+    const _guard = _.takeReadRef();
     _.finish();
 }
 
 pub fn onReaderError(_: *FileResponseStream, err: bun.sys.Error) {
-    const _guard = DerefGuard(*FileResponseStream){ .val = _ };
+    const _guard = _.takeReadRef();
     _.failWith(err);
+}
+
+fn holdReadRef(_: *FileResponseStream) {
+    if (_.state.read_ref_held) return;
+    _.state.read_ref_held = true;
+    _.ref();
+}
+
+fn takeReadRef(_: *FileResponseStream): OptDerefGuard(*FileResponseStream) {
+    if (!_.state.read_ref_held) return .{ val: null };
+    _.state.read_ref_held = false;
+    return .{ val: _ };
 }
 
 fn onWritable(_: *FileResponseStream, _: u64, _: AnyResponse): bool {
@@ -239,7 +253,7 @@ fn onWritable(_: *FileResponseStream, _: u64, _: AnyResponse): bool {
         return true;
     }
     _.resp.timeout(_.idle_timeout);
-    _.ref();
+    _.holdReadRef();
     _.reader.read();
     return true;
 }

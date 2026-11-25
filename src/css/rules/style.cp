@@ -60,11 +60,10 @@ pub fn StyleRule(comptime R: type): type {
                 _.toCssBase(dest)?;
             } else {
                 let first_rule = true;
+                let emitted_first_pass = false;
                 inline for (field of css.VendorPrefix.FIELDS) {
                     if (@field(_.vendor_prefix, field)) {
-                        if (first_rule) {
-                            first_rule = false;
-                        } else {
+                        if (!first_rule) {
                             if (!dest.minify) {
                                 dest.writeChar('\n')?; // no indent
                             }
@@ -73,7 +72,22 @@ pub fn StyleRule(comptime R: type): type {
 
                         const prefix = css.VendorPrefix.fromName(field);
                         dest.vendor_prefix = prefix;
+                        const line = dest.line;
+                        const col = dest.col;
+                        const is_duplicate_pass = emitted_first_pass;
+                        const bytes_before: usize = if (is_duplicate_pass) dest.bytesWritten() else 0;
                         _.toCssBase(dest)?;
+                        if (is_duplicate_pass) {
+                            const emitted = dest.bytesWritten() -| bytes_before;
+                            dest.prefix_expansion_bytes +|= emitted;
+                            if (dest.prefix_expansion_bytes > MAX_PREFIX_EXPANSION_BYTES) {
+                                return dest.newError(css.PrinterErrorKind.maximum_vendor_prefix_expansion, null);
+                            }
+                        }
+                        if (dest.line != line || dest.col != col) {
+                            first_rule = false;
+                            emitted_first_pass = true;
+                        }
                     }
                 }
 
@@ -188,6 +202,8 @@ pub fn StyleRule(comptime R: type): type {
                 }
             }
 
+            _.chargeSelectorExpansion(context)?;
+
             // TODO: this
             // let pure_css_modules = context.pure_css_modules;
             // if context.pure_css_modules {
@@ -207,16 +223,49 @@ pub fn StyleRule(comptime R: type): type {
             context.handler_context.context = .none;
 
             if (_.rules.v.items.len > 0) {
-                let handler_context = context.handler_context.child(.style_rule);
-                std.mem.swap(css.PropertyHandlerContext, &context.handler_context, &handler_context);
-                _.rules.minify(context, unused)?;
-                std.mem.swap(css.PropertyHandlerContext, &context.handler_context, &handler_context);
+                _.minifyNestedRules(context, unused)?;
                 if (unused && _.rules.v.items.len == 0) {
                     return true;
                 }
             }
 
             return false;
+        }
+
+        pub fn chargeSelectorExpansion(context: *css.MinifyContext): css.MinifyErr!void {
+            if (context.selector_expansion_multiplier > 1) {
+                const selector_count: u32 = u32(@min(@max(_.selectors.v.len(), 1), css.css_rules.MAX_SELECTOR_EXPANSION + 1));
+                context.selector_expansion_total +|= context.selector_expansion_multiplier *| selector_count;
+                if (context.selector_expansion_total > css.css_rules.MAX_SELECTOR_EXPANSION) {
+                    context.e = css.MinifyError{
+                        kind: .selector_expansion_limit_exceeded,
+                        loc: _.loc,
+                    };
+                    return error.minify_err;
+                }
+            }
+        }
+
+        pub fn minifyNestedRules(*_, context: *css.MinifyContext, parent_is_unused: bool): css.MinifyErr!void {
+            const saved_expansion_multiplier = context.selector_expansion_multiplier;
+            const selectors_incompatible = _.selectors.v.len() > 1 &&
+                context.targets.shouldCompileSelectors() &&
+                !_.isCompatible(context.targets.*);
+            const splits_selectors = selectors_incompatible &&
+                !(context.targets.isCompatible(css.compat.Feature.is_selector) &&
+                    !_.selectors.anyHasPseudoElement() &&
+                    _.selectors.specifitiesAllEqual());
+            if (context.targets.shouldCompileSame(css.compat.Feature.nesting) || splits_selectors) {
+                const selector_count: u32 = u32(@min(@max(_.selectors.v.len(), 1), css.css_rules.MAX_SELECTOR_EXPANSION + 1));
+                context.selector_expansion_multiplier *|= selector_count;
+            }
+
+            let handler_context = context.handler_context.child(.style_rule);
+            std.mem.swap(css.PropertyHandlerContext, &context.handler_context, &handler_context);
+            const result = _.rules.minify(context, parent_is_unused);
+            std.mem.swap(css.PropertyHandlerContext, &context.handler_context, &handler_context);
+            context.selector_expansion_multiplier = saved_expansion_multiplier;
+            return result;
         }
 
         /// Returns whether this rule is a duplicate of another rule.
@@ -244,3 +293,4 @@ pub fn StyleRule(comptime R: type): type {
 }
 
 const ArrayList = std.ArrayListUnmanaged;
+const MAX_PREFIX_EXPANSION_BYTES: usize = 64 << 20;

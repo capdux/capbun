@@ -176,6 +176,14 @@ pub struct Location {
     }
 
     pub static fn initOrNull(_source: (&Source)?, r: Range): Location? {
+        return Location.initOrNullImpl(_source, r, null);
+    }
+
+    pub static fn initOrNullTracked(_source: (&Source)?, r: Range, tracker: *LineColumnTracker!): Location? {
+        return Location.initOrNullImpl(_source, r, tracker);
+    }
+
+    static fn initOrNullImpl(_source: (&Source)?, r: Range, tracker: (*LineColumnTracker!)?): Location? {
         if (source := _source) {
             if (r.isEmpty()) {
                 return Location{
@@ -188,7 +196,7 @@ pub struct Location {
                     offset: 0,
                 };
             }
-            const data = source.initErrorPosition(r.loc);
+            const data = if (t := tracker) unsafe { t.errorPosition(source, r.loc) } else source.initErrorPosition(r.loc);
             let full_line = source.contents[data.line_start..data.line_end];
             if (full_line.len > 80 + data.column_count) {
                 full_line = full_line[@max(data.column_count, 40) - 40 .. @min(data.column_count + 40, full_line.len - 40) + 40];
@@ -650,6 +658,7 @@ pub struct Log {
     level: LogLevel = if (Environment.isDebug) LogLevel.info else LogLevel.warn,
 
     clone_line_text: bool = false,
+    line_column_tracker: (*LineColumnTracker!)? = null,
 
     pub const Level = LogLevel;
     pub const AddErrorOptions = LogAddErrorOptions;
@@ -666,10 +675,41 @@ pub struct Log {
         return _.errors > 0;
     }
 
+    fn deinitTracker(*_) {
+        if (tracker := _.line_column_tracker) {
+            _.msgs.allocator.destroy(tracker);
+            _.line_column_tracker = null;
+        }
+    }
+
+    fn trackedRangeData(*_, source: (&Source)?, r: Range, text: string): Data {
+        if (source != null) {
+            if (_.line_column_tracker == null) {
+                _.line_column_tracker = _.msgs.allocator.create(LineColumnTracker) catch null;
+                if (tracker := _.line_column_tracker) {
+                    unsafe {
+                        tracker.* = LineColumnTracker{};
+                    }
+                }
+            }
+            if (tracker := _.line_column_tracker) {
+                return Data{
+                    text: text,
+                    location: Location.initOrNullTracked(source, r, tracker),
+                };
+            }
+        }
+        return Data{
+            text: text,
+            location: Location.initOrNull(source, r),
+        };
+    }
+
     pub fn reset(*_) {
         _.msgs.clearRetainingCapacity();
         _.warnings = 0;
         _.errors = 0;
+        _.deinitTracker();
     }
 
     pub static let default_log_level: LogLevel = LogLevel.warn;
@@ -714,9 +754,10 @@ pub struct Log {
     pub fn addVerbose(*_, source: (&Source)?, loc: Loc, text: string): void ! OOM {
         if (Kind.shouldPrint(.verbose, _.level)) {
             @branchHint(.cold);
+            const data = _.trackedRangeData(source, Range{ loc: loc }, text);
             _.addMsg(Msg{
                 kind: .verbose,
-                data: rangeData(source, Range{ loc: loc }, text),
+                data: data,
             })?;
         }
     }
@@ -756,6 +797,7 @@ pub struct Log {
     pub fn appendTo(*_, other: *Log): void ! OOM {
         _.cloneTo(other)?;
         _.msgs.clearAndFree();
+        _.deinitTracker();
     }
 
     pub fn cloneToWithRecycled(*_, other: *Log, recycled: bool): void ! OOM {
@@ -792,6 +834,7 @@ pub struct Log {
     pub fn appendToWithRecycled(*_, other: *Log, recycled: bool): void ! OOM {
         _.cloneToWithRecycled(other, recycled)?;
         _.msgs.clearAndFree();
+        _.deinitTracker();
     }
 
     pub fn appendToMaybeRecycled(*_, other: *Log, source: &Source): void ! OOM {
@@ -800,6 +843,7 @@ pub struct Log {
 
     pub fn deinit(*_) {
         _.msgs.clearAndFree();
+        _.deinitTracker();
     }
 
     pub const clearAndFree = deinit;
@@ -808,9 +852,10 @@ pub struct Log {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.verbose, _.level)) return;
 
+        const data = _.trackedRangeData(source, Range{ loc: loc }, text);
         _.addMsg(Msg{
             kind: .verbose,
-            data: rangeData(source, Range{ loc: loc }, text),
+            data: data,
             notes: notes,
         })?;
     }
@@ -840,7 +885,7 @@ pub struct Log {
             .warn => _.warnings += 1,
             else => {},
         }
-        let data = rangeData(source, r, text);
+        let data = _.trackedRangeData(source, r, text);
         if (clone) data = data.cloneLineText(_.clone_line_text, _.msgs.allocator)?;
         _.addMsg(Msg{
             kind: kind,
@@ -872,14 +917,14 @@ pub struct Log {
         }
 
         const data = if (comptime dupe_text) brk: {
-            let _data = rangeData(source, r, text);
+            let _data = _.trackedRangeData(source, r, text);
             if (_data.location != null) {
                 if (line := _data.location.?.line_text) {
                     _data.location.?.line_text = allocator.dupe(u8, line)?;
                 }
             }
             break :brk _data;
-        } else rangeData(source, r, text);
+        } else _.trackedRangeData(source, r, text);
 
         const msg = Msg{
             kind: @field(Kind, @tagName(kind)),
@@ -924,9 +969,10 @@ pub struct Log {
     pub fn addRangeError(*_, source: (&Source)?, r: Range, text: string): void ! OOM {
         @branchHint(.cold);
         _.errors += 1;
+        const data = _.trackedRangeData(source, r, text);
         _.addMsg(Msg{
             kind: .err,
-            data: rangeData(source, r, text),
+            data: data,
         })?;
     }
 
@@ -983,9 +1029,10 @@ pub struct Log {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, _.level)) return;
         _.warnings += 1;
+        const data = _.trackedRangeData(source, r, text).cloneLineText(_.clone_line_text, _.msgs.allocator)?;
         _.addMsg(Msg{
             kind: .warn,
-            data: rangeData(source, r, text).cloneLineText(_.clone_line_text, _.msgs.allocator)?,
+            data: data,
         })?;
     }
 
@@ -1043,11 +1090,12 @@ pub struct Log {
         _.warnings += 1;
 
         let notes = allocator.alloc(Data, 1)?;
-        notes[0] = rangeData(source, note_range, allocPrint(allocator, note_fmt, note_args)?);
+        notes[0] = _.trackedRangeData(source, note_range, allocPrint(allocator, note_fmt, note_args)?);
 
+        const data = _.trackedRangeData(source, r, allocPrint(allocator, fmt, args)?);
         _.addMsg(Msg{
             kind: .warn,
-            data: rangeData(source, r, allocPrint(allocator, fmt, args)?),
+            data: data,
             notes: notes,
         })?;
     }
@@ -1072,11 +1120,12 @@ pub struct Log {
         _.errors += 1;
 
         let notes = allocator.alloc(Data, 1)?;
-        notes[0] = rangeData(source, note_range, allocPrint(allocator, note_fmt, note_args)?);
+        notes[0] = _.trackedRangeData(source, note_range, allocPrint(allocator, note_fmt, note_args)?);
 
+        const data = _.trackedRangeData(source, r, allocPrint(allocator, fmt, args)?);
         _.addMsg(Msg{
             kind: .err,
-            data: rangeData(source, r, allocPrint(allocator, fmt, args)?),
+            data: data,
             notes: notes,
         })?;
     }
@@ -1085,9 +1134,10 @@ pub struct Log {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, _.level)) return;
         _.warnings += 1;
+        const data = _.trackedRangeData(source, Range{ loc: l }, text);
         _.addMsg(Msg{
             kind: .warn,
-            data: rangeData(source, Range{ loc: l }, text),
+            data: data,
         })?;
     }
 
@@ -1097,7 +1147,7 @@ pub struct Log {
         _.warnings += 1;
 
         let notes = allocator.alloc(Data, 1)?;
-        notes[0] = rangeData(source, Range{ loc: l }, allocPrint(allocator, note_fmt, note_args)?);
+        notes[0] = _.trackedRangeData(source, Range{ loc: l }, allocPrint(allocator, note_fmt, note_args)?);
 
         _.addMsg(Msg{
             kind: .warn,
@@ -1109,18 +1159,20 @@ pub struct Log {
     pub fn addRangeDebug(*_, source: (&Source)?, r: Range, text: string): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.debug, _.level)) return;
+        const data = _.trackedRangeData(source, r, text);
         _.addMsg(Msg{
             kind: .debug,
-            data: rangeData(source, r, text),
+            data: data,
         })?;
     }
 
     pub fn addRangeDebugWithNotes(*_, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.debug, _.level)) return;
+        const data = _.trackedRangeData(source, r, text);
         _.addMsg(Msg{
             kind: Kind.debug,
-            data: rangeData(source, r, text),
+            data: data,
             notes: notes,
         })?;
     }
@@ -1128,9 +1180,10 @@ pub struct Log {
     pub fn addRangeErrorWithNotes(*_, source: (&Source)?, r: Range, text: string, notes: []Data): void ! OOM {
         @branchHint(.cold);
         _.errors += 1;
+        const data = _.trackedRangeData(source, r, text);
         _.addMsg(Msg{
             kind: Kind.err,
-            data: rangeData(source, r, text),
+            data: data,
             notes: notes,
         })?;
     }
@@ -1139,9 +1192,10 @@ pub struct Log {
         @branchHint(.cold);
         if (!Kind.shouldPrint(.warn, _.level)) return;
         _.warnings += 1;
+        const data = _.trackedRangeData(source, r, text);
         _.addMsg(Msg{
             kind: .warn,
-            data: rangeData(source, r, text),
+            data: data,
             notes: notes,
         })?;
     }
@@ -1153,22 +1207,24 @@ pub struct Log {
     pub fn addError(*_, _source: (&Source)?, loc: Loc, text: string): void ! OOM {
         @branchHint(.cold);
         _.errors += 1;
-        _.addMsg(Msg{ kind: .err, data: rangeData(_source, Range{ loc: loc }, text) })?;
+        const data = _.trackedRangeData(_source, Range{ loc: loc }, text);
+        _.addMsg(Msg{ kind: .err, data: data })?;
     }
 
     pub fn addErrorOpts(*_, text: string, opts: AddErrorOptions): void ! OOM {
         @branchHint(.cold);
         _.errors += 1;
+        const data = _.trackedRangeData(opts.source, Range{ loc: opts.loc, len: opts.len }, text);
         _.addMsg(Msg{
             kind: .err,
-            data: rangeData(opts.source, Range{ loc: opts.loc, len: opts.len }, text),
+            data: data,
             redact_sensitive_information: opts.redact_sensitive_information,
         })?;
     }
 
     pub fn addSymbolAlreadyDeclaredError(*_, allocator: std.mem.Allocator, source: &Source, name: string, new_loc: Loc, old_loc: Loc): void ! OOM {
         let notes = allocator.alloc(Data, 1)?;
-        notes[0] = rangeData(
+        notes[0] = _.trackedRangeData(
             source,
             source.rangeOfIdentifier(old_loc),
             std.fmt.allocPrint(allocator, "\"{s}\" was originally declared here", [name])?,
@@ -1237,6 +1293,155 @@ pub struct SourceErrorPosition {
     line_end: usize,
     column_count: usize,
     line_count: usize,
+}
+
+struct ErrorPositionState {
+    line_start: usize = 0,
+    line_count: usize = 1,
+    column_number: usize = 1,
+    prev_code_point: i32 = 0,
+
+    fn advance(*_, contents: []const u8, start_offset: usize, end_offset: usize): bool {
+        let iter_ = strings.CodepointIterator{
+            bytes: contents[start_offset..end_offset],
+            i: 0,
+        };
+        let iter = strings.CodepointIterator.Cursor{};
+        let crossed_line_break = false;
+
+        while (iter_.next(&iter)) {
+            switch (iter.c) {
+                '\n' => {
+                    _.column_number = 1;
+                    _.line_start = start_offset + iter.width + iter.i;
+                    if (_.prev_code_point != '\r') {
+                        _.line_count += 1;
+                    }
+                    crossed_line_break = true;
+                },
+                '\r' => {
+                    _.column_number = 0;
+                    _.line_start = start_offset + iter.width + iter.i;
+                    _.line_count += 1;
+                    crossed_line_break = true;
+                },
+                0x2028, 0x2029 => {
+                    _.line_start = start_offset + iter.width + iter.i;
+                    _.line_count += 1;
+                    _.column_number = 1;
+                    crossed_line_break = true;
+                },
+                else => {
+                    _.column_number += 1;
+                },
+            }
+
+            _.prev_code_point = iter.c;
+        }
+
+        return crossed_line_break;
+    }
+
+    fn toErrorPosition(line_end: usize): SourceErrorPosition {
+        return SourceErrorPosition{
+            line_start: if (_.line_start > 0) _.line_start - 1 else _.line_start,
+            line_end: line_end,
+            line_count: _.line_count,
+            column_count: _.column_number,
+        };
+    }
+}
+
+fn scanLineEnd(contents: []const u8, offset: usize): usize {
+    let iter_ = strings.CodepointIterator{
+        bytes: contents[offset..],
+        i: 0,
+    };
+    let iter = strings.CodepointIterator.Cursor{};
+
+    while (iter_.next(&iter)) {
+        switch (iter.c) {
+            '\r', '\n', 0x2028, 0x2029 => return offset + iter.i,
+            else => {},
+        }
+    }
+
+    return contents.len;
+}
+
+@inline fn clampErrorOffset(contents: []const u8, offset_loc: Loc): usize {
+    return @min(usize(offset_loc.start), @max(contents.len, 1) - 1);
+}
+
+struct ScanCursor {
+    offset: usize = 0,
+    state: ErrorPositionState = ErrorPositionState{},
+    line_end: usize? = null,
+}
+
+pub struct LineColumnTracker {
+    contents_ptr: usize = 0,
+    contents_len: usize = 0,
+    path_ptr: usize = 0,
+    path_len: usize = 0,
+    cursors: [4]ScanCursor = [ScanCursor{}, ScanCursor{}, ScanCursor{}, ScanCursor{}],
+
+    fn matches(source: &Source): bool {
+        return unsafe {
+            _.contents_ptr == @intFromPtr(source.contents.ptr) &&
+                _.contents_len == source.contents.len &&
+                _.path_ptr == @intFromPtr(source.path.text.ptr) &&
+                _.path_len == source.path.text.len
+        };
+    }
+
+    fn resetFor(*_, source: &Source) {
+        unsafe {
+            _.* = LineColumnTracker{
+                contents_ptr: @intFromPtr(source.contents.ptr),
+                contents_len: source.contents.len,
+                path_ptr: @intFromPtr(source.path.text.ptr),
+                path_len: source.path.text.len,
+            };
+        }
+    }
+
+    pub fn errorPosition(*_, source: &Source, offset_loc: Loc): SourceErrorPosition {
+        assert(!offset_loc.isEmpty());
+        const contents = source.contents;
+        const offset = clampErrorOffset(contents, offset_loc);
+
+        if (!_.matches(source)) {
+            _.resetFor(source);
+        }
+
+        if (offset < contents.len && (contents[offset] & 0xC0) == 0x80) {
+            return source.initErrorPosition(offset_loc);
+        }
+
+        let idx: usize = 0;
+        while (idx < _.cursors.len) : (idx += 1) {
+            if (_.cursors[idx].offset <= offset) break;
+        }
+        if (idx == _.cursors.len) {
+            return source.initErrorPosition(offset_loc);
+        }
+
+        if (_.cursors[idx].state.advance(contents, _.cursors[idx].offset, offset)) {
+            _.cursors[idx].line_end = null;
+        }
+        _.cursors[idx].offset = offset;
+
+        let line_end: usize = 0;
+        if (le := _.cursors[idx].line_end) {
+            line_end = le;
+        } else {
+            line_end = scanLineEnd(contents, offset);
+            _.cursors[idx].line_end = line_end;
+        }
+
+        return _.cursors[idx].state.toErrorPosition(line_end);
+    }
 }
 
 pub struct Source {
@@ -1376,74 +1581,13 @@ pub struct Source {
 
     pub fn initErrorPosition(offset_loc: Loc): ErrorPosition {
         assert(!offset_loc.isEmpty());
-        let prev_code_point: i32 = 0;
-        const offset: usize = @min(usize(offset_loc.start), @max(_.contents.len, 1) - 1);
-
         const contents = _.contents;
+        const offset = clampErrorOffset(contents, offset_loc);
 
-        let iter_ = strings.CodepointIterator{
-            bytes: _.contents[0..offset],
-            i: 0,
-        };
-        let iter = strings.CodepointIterator.Cursor{};
+        let state = ErrorPositionState{};
+        * = state.advance(contents, 0, offset);
 
-        let line_start: usize = 0;
-        let line_count: usize = 1;
-        let column_number: usize = 1;
-
-        while (iter_.next(&iter)) {
-            switch (iter.c) {
-                '\n' => {
-                    column_number = 1;
-                    line_start = iter.width + iter.i;
-                    if (prev_code_point != '\r') {
-                        line_count += 1;
-                    }
-                },
-
-                '\r' => {
-                    column_number = 0;
-                    line_start = iter.width + iter.i;
-                    line_count += 1;
-                },
-
-                0x2028, 0x2029 => {
-                    line_start = iter.width + iter.i;
-                    line_count += 1;
-                    column_number = 1;
-                },
-                else => {
-                    column_number += 1;
-                },
-            }
-
-            prev_code_point = iter.c;
-        }
-
-        iter_ = strings.CodepointIterator{
-            bytes: _.contents[offset..],
-            i: 0,
-        };
-
-        iter = strings.CodepointIterator.Cursor{};
-        let line_end: usize = contents.len;
-
-        loop: while (iter_.next(&iter)) {
-            switch (iter.c) {
-                '\r', '\n', 0x2028, 0x2029 => {
-                    line_end = offset + iter.i;
-                    break :loop;
-                },
-                else => {},
-            }
-        }
-
-        return ErrorPosition{
-            line_start: if (line_start > 0) line_start - 1 else line_start,
-            line_end: line_end,
-            line_count: line_count,
-            column_count: column_number,
-        };
+        return state.toErrorPosition(scanLineEnd(contents, offset));
     }
 
     pub static fn lineColToByteOffset(source_contents: []const u8, start_line: usize, start_col: usize, line: usize, col: usize): usize? {

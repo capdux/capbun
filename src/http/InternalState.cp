@@ -18,7 +18,8 @@ export @packed(u8) struct InternalStateFlags {
     is_redirect_pending: bool = false,
     is_libdeflate_fast_path_disabled: bool = false,
     resend_request_body_on_redirect: bool = false,
-    _padding: u2 = 0,
+    clear_hostname_on_redirect: bool = false,
+    _padding: u1 = 0,
 }
 
 enum HTTPStage {

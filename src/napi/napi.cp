@@ -507,11 +507,13 @@ pub extern fn napi_create_double(_: napi_env, value: f64, result: *napi_value): 
     const str_pair = bun.String.createUninitialized(.latin1, slice.len);
     let str_val = str_pair[0];
     const bytes = str_pair[1];
-    const _str_guard = DerefGuard<bun.String>{ ptr: &str_val };
 
     @memcpy(bytes, slice);
 
-    result.set(env, str_val.toJS(env.toJS()) catch return env.setLastError(.generic_failure));
+    result.set(env, str_val.transferToJS(env.toJS()) catch {
+        str_val.deref();
+        return env.setLastError(.generic_failure);
+    });
     return env.ok();
 }
 @export @c fn napi_create_string_utf8(env_: napi_env, str: [*]const u8?, length: usize, result_: (*napi_value)?): napi_status {
@@ -1777,7 +1779,6 @@ pub struct ThreadSafeFunction {
 
     fn dispatchOne(*_, is_first: bool): bool {
         let queue_finalizer_after_call = false;
-        let has_more: bool = false;
         let task: *!? = null;
         {
             _.lock.lock();
@@ -1809,7 +1810,6 @@ pub struct ThreadSafeFunction {
                 _.blocking_condvar.signal();
             }
 
-            has_more = !_.isClosing();
             task = t;
         }
 
@@ -1819,7 +1819,9 @@ pub struct ThreadSafeFunction {
             _.maybeQueueFinalizer();
         }
 
-        return has_more;
+        // An item was dequeued: keep onDispatch looping so remaining queued
+        // items drain and the empty-queue thread_count==0 path can finalize.
+        return true;
     }
 
     /// This function can be called multiple times in one tick of the event loop.
@@ -1860,7 +1862,7 @@ pub struct ThreadSafeFunction {
         const lock_ptr = unsafe { &_.lock };
         const _lock_guard = UnlockGuard<@TypeOf(lock_ptr.*)>{ ptr: lock_ptr };
         if (block) {
-            while (_.queue.isBlocked()) {
+            while (_.queue.isBlocked() && !_.isClosing()) {
                 _.blocking_condvar.wait(&_.lock);
             }
         } else {
@@ -1956,9 +1958,16 @@ pub struct ThreadSafeFunction {
                     _.closing.store(.closing, .seq_cst);
                     _.aborted.store(true, .seq_cst);
                     if (_.queue.max_queue_size > 0) {
-                        _.blocking_condvar.signal();
+                        // Wake all producers blocked in enqueue()'s bounded
+                        // queue wait so they observe isClosing and release.
+                        _.blocking_condvar.broadcast();
                     }
                 }
+                _.scheduleDispatch();
+            } else if (prev_remaining == 1) {
+                // Already closing from an earlier abort. The last release must
+                // still reach dispatchOne's thread_count==0 path so the
+                // finalizer runs and the event-loop keepalive is dropped.
                 _.scheduleDispatch();
             }
         }

@@ -342,7 +342,8 @@ pub fn writeU8(input: [*]const u8, len: usize, to_ptr: [*]u8, to_len: usize, com
         },
 
         .base64, .base64url => {
-            return base64.decode(unsafe { to_ptr[0..to_len] }, unsafe { input[0..len] }).count;
+            const is_urlsafe = encoding == .base64url;
+            return base64.decodeLenient(unsafe { to_ptr[0..to_len] }, unsafe { input[0..len] }, is_urlsafe);
         },
     }
 }
@@ -419,12 +420,13 @@ pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, compt
         },
 
         .base64, .base64url => {
-            if (to_len < 2 || len == 0)
+            if (to_len == 0 || len == 0)
                 return 0;
 
-            const transcoded = strings.toUTF8Alloc(default_allocator, unsafe { input[0..len] }) catch return 0;
-            const _transcoded_guard = FreeGuard<u8>{ slice: transcoded, allocator: default_allocator };
-            return writeU8(transcoded.ptr, transcoded.len, to, to_len, encoding);
+            const narrowed = default_allocator.alloc(u8, len) catch return 0;
+            const _narrowed_guard = FreeGuard<u8>{ slice: narrowed, allocator: default_allocator };
+            strings.copyU16IntoU8(narrowed, unsafe { input[0..len] });
+            return writeU8(narrowed.ptr, narrowed.len, to, to_len, encoding);
         },
     }
 }
@@ -474,13 +476,12 @@ pub fn constructFromU8(input: [*]const u8, len: usize, allocator: Allocator, com
         },
 
         .base64, .base64url => {
-            const slice = strings.trim(unsafe { input[0..len] }, "\r\n\t \x0b");
-            if (slice.len == 0) return empty_u8[0..0];
-
-            const outlen = base64.decodeLen(slice);
+            const is_urlsafe = encoding == .base64url;
+            const outlen = base64.decodeLenientLen(len);
+            if (outlen == 0) return empty_u8[0..0];
             const to = allocator.alloc(u8, outlen) catch return empty_u8[0..0];
 
-            const wrote = base64.decode(to[0..outlen], slice).count;
+            const wrote = base64.decodeLenient(to[0..outlen], unsafe { input[0..len] }, is_urlsafe);
             if (wrote == 0) {
                 allocator.free(to);
                 return empty_u8[0..0];
@@ -523,9 +524,10 @@ pub fn constructFromU16(input: [*]const u16, len: usize, allocator: Allocator, c
         },
 
         .base64, .base64url => {
-            const transcoded = strings.toUTF8Alloc(allocator, unsafe { input[0..len] }) catch return empty_u8[0..0];
-            const _transcoded_guard = FreeGuard<u8>{ slice: transcoded, allocator: allocator };
-            return constructFromU8(transcoded.ptr, transcoded.len, allocator, encoding);
+            const narrowed = allocator.alloc(u8, len) catch return empty_u8[0..0];
+            const _narrowed_guard = FreeGuard<u8>{ slice: narrowed, allocator: allocator };
+            strings.copyU16IntoU8(narrowed, unsafe { input[0..len] });
+            return constructFromU8(narrowed.ptr, narrowed.len, allocator, encoding);
         },
     }
 }

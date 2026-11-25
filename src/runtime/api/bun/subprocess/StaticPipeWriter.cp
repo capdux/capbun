@@ -91,11 +91,13 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
 
         fn onError(*_, e: bun.sys.Error) {
             log("StaticPipeWriter(0x{x}) onError(err={f})", .{ @intFromPtr(_), e });
+            _.buffer = "";
             _.source.detach();
         }
 
         fn onClose(*_) {
             log("StaticPipeWriter(0x{x}) onClose()", .{@intFromPtr(_)});
+            _.buffer = "";
             _.source.detach();
             _.process.onCloseIO(.stdin);
         }

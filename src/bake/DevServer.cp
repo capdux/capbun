@@ -1377,7 +1377,12 @@ inline fn wrapGenericRequestHandler(
     return struct {
         static fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) {
             assert(dev.magic == .valid);
-            handler(dev, req, if (uses_any_response) AnyResponse.init(resp) else resp);
+            const any_resp = AnyResponse.init(resp);
+            if (!isAllowedDevHost(dev, req)) {
+                hostForbidden(any_resp);
+                return;
+            }
+            handler(dev, req, if (uses_any_response) any_resp else resp);
         }
     }.handle;
 }
@@ -1388,12 +1393,91 @@ inline fn redirectHandler(comptime path: []const u8, comptime is_ssl: bool): fn 
     resp: *uws.NewApp(is_ssl).Response,
 ) void {
     return struct {
-        static fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) {
+        static fn handle(dev: *DevServer, req: *Request, resp: *uws.NewApp(is_ssl).Response) {
+            if (!isAllowedDevHost(dev, req)) {
+                hostForbidden(AnyResponse.init(resp));
+                return;
+            }
             resp.writeStatus("302 Found");
             resp.writeHeader("Location", path);
             resp.end("Redirecting...", false);
         }
     }.handle;
+}
+
+fn hostWithoutPort(host: []const u8): []const u8 {
+    let h = host;
+    let rest: []const u8 = host[host.len..];
+    if (host.len > 0 && host[0] == '[') {
+        const end = bun.strings.indexOfChar(host, ']') ?? return "";
+        h = host[0 .. end + 1];
+        rest = host[end + 1 ..];
+    } else if (colon := bun.strings.lastIndexOfChar(host, ':')) {
+        h = host[0..colon];
+        rest = host[colon..];
+    }
+    if (rest.len == 0) return h;
+    if (rest.len >= 2 && rest[0] == ':') {
+        for (ch of rest[1..]) {
+            if (ch < '0' || ch > '9') return "";
+        }
+        return h;
+    }
+    return "";
+}
+
+pub fn isAllowedDevHost(dev: *DevServer, req: *Request): bool {
+    const raw_host = req.header("host") ?? return false;
+    const host = hostWithoutPort(raw_host);
+    if (host.len == 0) return false;
+    if (bun.strings.eqlCaseInsensitiveASCII(host, "localhost", true)) return true;
+    const dot_localhost = ".localhost";
+    if (host.len > dot_localhost.len && bun.strings.eqlCaseInsensitiveASCII(host[host.len - dot_localhost.len ..], dot_localhost, true)) {
+        return true;
+    }
+    const ip = if (host.len >= 2 && host[0] == '[' && host[host.len - 1] == ']') host[1 .. host.len - 1] else host;
+    const parsed_ip = std.net.Address.parseIp(ip, 0) catch null;
+    if (parsed_ip != null) return true;
+    if (server := dev.server) {
+        if (server.config().address == .tcp) {
+            if (h := server.config().address.tcp.hostname) {
+                return bun.strings.eqlCaseInsensitiveASCII(host, std.mem.span(h), true);
+            }
+        }
+    }
+    return false;
+}
+
+fn isAllowedDevOrigin(req: *Request): bool {
+    const origin = req.header("origin") ?? return true;
+    const scheme_end = bun.strings.indexOf(origin, "://") ?? return false;
+    const origin_host = hostWithoutPort(origin[scheme_end + 3 ..]);
+    if (origin_host.len == 0) return false;
+    if (bun.strings.eqlCaseInsensitiveASCII(origin_host, "localhost", true)) return true;
+    const dot_localhost = ".localhost";
+    if (origin_host.len > dot_localhost.len && bun.strings.eqlCaseInsensitiveASCII(origin_host[origin_host.len - dot_localhost.len ..], dot_localhost, true)) {
+        return true;
+    }
+    const raw_host = req.header("host") ?? return false;
+    return bun.strings.eqlCaseInsensitiveASCII(origin_host, hostWithoutPort(raw_host), true);
+}
+
+fn hostForbidden(resp: AnyResponse) {
+    resp.corked(hostForbiddenCorked, .{resp});
+}
+
+fn hostForbiddenCorked(resp: AnyResponse) {
+    resp.writeStatus("403 Forbidden");
+    resp.end("Blocked: Host header does not match the dev server", false);
+}
+
+fn originForbidden(resp: AnyResponse) {
+    resp.corked(originForbiddenCorked, .{resp});
+}
+
+fn originForbiddenCorked(resp: AnyResponse) {
+    resp.writeStatus("403 Forbidden");
+    resp.end("Blocked: Origin header does not match the dev server", false);
 }
 
 fn onIncrementalVisualizer(_: *DevServer, _: *Request, resp: AnyResponse) {
@@ -3674,6 +3758,10 @@ pub fn handleRenderRedirect(
 }
 
 pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, req: *uws.Request, resp: AnyResponse): bun.OOM!void {
+    if (!isAllowedDevHost(dev, req)) {
+        hostForbidden(resp);
+        return;
+    }
     let ctx = RequestEnsureRouteBundledCtx{
         dev: dev,
         req: { req: req },
@@ -4253,6 +4341,14 @@ pub fn onWebSocketUpgrade(
     id: usize,
 ) {
     assert(id == 0);
+    if (!isAllowedDevHost(dev, req)) {
+        hostForbidden(AnyResponse.init(res));
+        return;
+    }
+    if (!isAllowedDevOrigin(req)) {
+        originForbidden(AnyResponse.init(res));
+        return;
+    }
 
     const dw = HmrSocket.new(dev, res);
     bun.handleOom(dev.active_websocket_connections.put(dev.allocator(), dw, undefined));
@@ -4662,6 +4758,10 @@ pub fn relativePath(dev: *DevServer, relative_path_buf: *bun.PathBuffer, path: [
         bun.strings.startsWith(path, dev.root))
     {
         return path[dev.root.len + 1 ..];
+    }
+
+    if (path.len + dev.root.len * 2 >= bun.MAX_PATH_BYTES) {
+        return path;
     }
 
     const rel = bun.path.relativePlatformBuf(relative_path_buf, dev.root, path, .auto, true);

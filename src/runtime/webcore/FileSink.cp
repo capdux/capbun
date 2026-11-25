@@ -212,14 +212,11 @@ pub struct TestingAPIs {
             if (vm := _.eventLoop().bunVM()) {
                 if (vm.is_inside_deferred_task_queue) {
                     _.runPendingLater();
-                    if (Environment.isWindows) _.clearKeepAliveRef();
                     return;
                 }
             }
             _.runPending();
         }
-
-        if (Environment.isWindows) _.clearKeepAliveRef();
     }
 
     fn onReady(*_) {

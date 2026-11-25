@@ -1271,34 +1271,37 @@ pub fn stdEnvMap(self: *EnvMap, allocator: std.mem.Allocator) !StdEnvMapWrapper 
             return .{ .unsafe_map = env_map };
     }
 
-pub fn writeWindowsEnvBlock(self: *EnvMap, result: *[32767]u16) ![*]const u16 {
-            var it = self.map.iterator();
-            _ = &it;
+pub fn writeWindowsEnvBlock(self: *EnvMap, allocator: std.mem.Allocator) ![]u16 {
+            var capacity: usize = 4;
+            _ = &capacity;
+            {
+                var it = self.map.iterator();
+                _ = &it;
+                while (it.next()) |pair| {
+                    capacity = (capacity + (((pair.key_ptr.len + 1) + (if (@typeInfo(@TypeOf(pair.value_ptr)) == .@"enum") @intFromEnum(pair.value_ptr) else pair.value_ptr.value).len) + 1));
+                }
+            }
+            var result = try allocator.alloc(u16, capacity);
+            _ = &result;
             var i: usize = 0;
             _ = &i;
-            while (it.next()) |pair| {
-                i = (i + bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len);
-                if (((i + 7) >= result.len)) {
-                    return error.TooManyEnvironmentVariables;
+            {
+                var it = self.map.iterator();
+                _ = &it;
+                while (it.next()) |pair| {
+                    i = (i + bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len);
+                    result[cp_cast_int(usize, i)] = 61;
+                    i = (i + 1);
+                    i = (i + bun.strings.convertUTF8toUTF16InBuffer(result[i..], (if (@typeInfo(@TypeOf(pair.value_ptr.*)) == .@"enum") @intFromEnum(pair.value_ptr.*) else pair.value_ptr.*.value)).len);
+                    result[cp_cast_int(usize, i)] = 0;
+                    i = (i + 1);
                 }
-                result[cp_cast_int(usize, i)] = 61;
-                i = (i + 1);
-                i = (i + bun.strings.convertUTF8toUTF16InBuffer(result[i..], (if (@typeInfo(@TypeOf(pair.value_ptr.*)) == .@"enum") @intFromEnum(pair.value_ptr.*) else pair.value_ptr.*.value)).len);
-                if (((i + 5) >= result.len)) {
-                    return error.TooManyEnvironmentVariables;
-                }
-                result[cp_cast_int(usize, i)] = 0;
-                i = (i + 1);
             }
             result[cp_cast_int(usize, i)] = 0;
-            i = (i + 1);
-            result[cp_cast_int(usize, i)] = 0;
-            i = (i + 1);
-            result[cp_cast_int(usize, i)] = 0;
-            i = (i + 1);
-            result[cp_cast_int(usize, i)] = 0;
-            i = (i + 1);
-            return result[0..].ptr;
+            result[cp_cast_int(usize, (i + 1))] = 0;
+            result[cp_cast_int(usize, (i + 2))] = 0;
+            result[cp_cast_int(usize, (i + 3))] = 0;
+            return result;
     }
 
 pub fn iterator(self: EnvMap) HashTable.Iterator {

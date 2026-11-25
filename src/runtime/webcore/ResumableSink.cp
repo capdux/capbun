@@ -303,6 +303,9 @@ pub fn ResumableSink(
             return _.#js_this != .strong || _.status == .done;
         }
 
+        /// Detach JS wrapper slots without running JS callbacks or invoking onEnd.
+        /// NOT safe during GC sweep (Weak/cell finalizers): the cached-value
+        /// setters downcast the wrapper cell and issue a write barrier.
         fn detachJS(*_) {
             if (js_this := _.#js_this.tryGet()) {
                 setDrain(js_this, _.globalThis, .zero);

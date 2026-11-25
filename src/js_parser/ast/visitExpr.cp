@@ -399,9 +399,22 @@ fn VisitExprVisitors(
             const e_ = expr.data.e_template;
             if (tag := e_.tag) {
                 e_.tag = p.visitExpr(tag);
+            }
 
+            // Visit the interpolation values before the macro dispatch below: its
+            // early-return paths (dead code, macros disabled, node_modules, macro
+            // failure) replace the whole expression without visiting the parts,
+            // which would leave the scopes recorded during the parse pass for any
+            // arrows/functions inside them unconsumed and trip "Scope mismatch
+            // while visiting" on the next scope push. Mirrors e_call, which visits
+            // its arguments before macro handling.
+            for (*part of e_.parts) {
+                part.value = p.visitExpr(part.value);
+            }
+
+            if (tag := e_.tag) {
                 if (comptime allow_macros) {
-                    const sym_ref = switch (e_.tag.?.data) {
+                    const sym_ref = switch (tag.data) {
                         .e_import_identifier => |ident| ident.ref,
                         .e_dot => |dot| if (dot.target.data == .e_identifier) dot.target.data.e_identifier.ref else null,
                         else => null,
@@ -411,13 +424,13 @@ fn VisitExprVisitors(
                         if (macro_ref_data := p.@"macro".refs.get(sym_ref.?)) {
                             p.ignoreUsage(sym_ref.?);
                             if (p.is_control_flow_dead) {
-                                return p.newExpr(E.Undefined{}, e_.tag.?.loc);
+                                return p.newExpr(E.Undefined{}, tag.loc);
                             }
 
                             // this ordering incase someone wants to use a macro in a node_module conditionally
                             if (p.options.features.no_macros) {
                                 p.log.addError(p.source, tag.loc, "Macros are disabled") catch unreachable;
-                                return p.newExpr(E.Undefined{}, e_.tag.?.loc);
+                                return p.newExpr(E.Undefined{}, tag.loc);
                             }
 
                             if (p.source.path.isNodeModule()) {
@@ -426,7 +439,7 @@ fn VisitExprVisitors(
                             }
 
                             p.macro_call_count += 1;
-                            const name = macro_ref_data.name ?? e_.tag.?.data.e_dot.name;
+                            const name = macro_ref_data.name ?? tag.data.e_dot.name;
                             const record = &p.import_records.items[macro_ref_data.import_record_id];
                             // We must visit it to convert inline_identifiers and record usage
                             const macro_result = (p.options.macro_context.call(
@@ -445,10 +458,6 @@ fn VisitExprVisitors(
                         }
                     }
                 }
-            }
-
-            for (*part of e_.parts) {
-                part.value = p.visitExpr(part.value);
             }
 
             // When mangling, inline string values into the template literal. Note that
@@ -1084,11 +1093,7 @@ fn VisitExprVisitors(
                         !property.flags.contains(.is_method) &&
                         expr_in.assign_target == .none &&
                         key.data.isStringValue() &&
-                        strings.eqlComptime(
-                            // __proto__ is utf8, assume it lives in refs
-                            key.data.e_string.slice(p.allocator),
-                            "__proto__",
-                        ))
+                        key.data.e_string.eqlComptime("__proto__"))
                     {
                         if (has_proto) {
                             const r = js_lexer.rangeOfIdentifier(p.source, key.loc);

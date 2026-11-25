@@ -1273,6 +1273,9 @@ pub fn applyPackagePatch(self: *Installer, entry_id: Store.Entry.Id, patch: Patc
             _ = &patch_task;
             var __patch_task_moved = false; _ = &__patch_task_moved;
             defer if (!__patch_task_moved) { __patch_task_moved = true; const __T = @TypeOf(patch_task); if (@typeInfo(__T) == .optional) { if (patch_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { patch_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = patch_task; _drop_val.__cp_deinit(); } };
+            if (sys.directoryExistsAt(FD.fromStdDir(patch_task.val.callback.apply.cache_dir), patch_task.val.callback.apply.cache_dir_subpath).unwrapOr(false)) {
+                return;
+            }
             _ = bun.handleOom(patch_task.val.apply());
             if (patch_task.val.callback.apply.logger.hasErrors()) {
                 _ = bun.handleOom(patch_task.val.callback.apply.logger.cloneToWithRecycled(log, true));

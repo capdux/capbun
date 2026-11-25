@@ -45,7 +45,7 @@ pub struct Tmpfile {
                 }
             }
 
-            tmpfile.fd = switch (bun.sys.openat(destination_dir, tmpfilename, O.CREAT | O.CLOEXEC | O.WRONLY, perm)) {
+            tmpfile.fd = switch (bun.sys.openat(destination_dir, tmpfilename, O.CREAT | O.EXCL | O.CLOEXEC | O.WRONLY, perm)) {
                 .result fd => switch (fd.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {
                     .result owned_fd => owned_fd,
                     .err e => return .{ .err = e },

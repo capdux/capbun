@@ -360,6 +360,46 @@ pub fn decode(destination: []u8, source: string): bun.simdutf.SIMDUTFResult {
     return result;
 }
 
+/// Destination size that lets `decodeLenient` decode an input of
+/// `source_len` base64 characters in a single simdutf pass (the worst-case
+/// decoded length).
+pub fn decodeLenientLen(source_len: usize): usize {
+    return (source_len / 4) * 3 + (if (source_len % 4 != 0) @as(usize, 3) else 0);
+}
+
+/// Decode base64 the way Node.js `Buffer.from(str, "base64" | "base64url")`
+/// and `buf.write(str, "base64" | "base64url")` do: both the standard and the
+/// URL-safe alphabets are accepted, whitespace and any other non-alphabet
+/// bytes are skipped, and decoding stops at the first `'='`. Invalid input
+/// never fails — as much data as possible is decoded.
+pub fn decodeLenient(destination: []u8, source: string, is_urlsafe: bool): usize {
+    const strict = bun.simdutf.base64.decode(source, destination, is_urlsafe);
+    if (strict.isSuccessful()) {
+        return strict.count;
+    }
+
+    // simdutf only honors the accept-garbage stop-at-'=' rule when the
+    // destination can hold the worst-case decode; with a smaller destination
+    // (e.g. `buf.write` into a short buffer) it switches to a chunked strategy
+    // that keeps decoding past the '='. Apply the rule up front in that case
+    // so both strategies agree.
+    const trimmed_source = if (destination.len < decodeLenientLen(source.len)) brk: {
+        if (index := std.mem.indexOfScalar(u8, source, '=')) {
+            break :brk source[0..index];
+        }
+        break :brk source;
+    } else source;
+
+    const result = bun.simdutf.base64.decode_lenient(trimmed_source, destination);
+    if (result.isSuccessful()) {
+        return result.count;
+    }
+
+    let wrote: usize = 0;
+    mixed_decoder.decode(destination, trimmed_source, &wrote) catch {};
+    return wrote;
+}
+
 struct SliceFreeGuard {
     allocator: std.mem.Allocator,
     slice: ([]u8)?,

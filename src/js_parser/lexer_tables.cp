@@ -281,7 +281,7 @@ pub const tokenToString = brk: {
     const TCloseBrace = "\"}\"".*;
     const TCloseBracket = "\"]\"".*;
     const TCloseParen = "\")\"".*;
-    const TColon = "\" =\"".*;
+    const TColon = "\":\"".*;
     const TComma = "\",\"".*;
     const TDot = "\".\"".*;
     const TDotDotDot = "\"...\"".*;

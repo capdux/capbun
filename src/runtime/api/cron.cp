@@ -1282,12 +1282,17 @@ pub fn cronParse(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         }
     } else @as(f64, @floatFromInt(std.time.milliTimestamp()));
 
-    if (std.math.isNan(from_ms) || std.math.isInf(from_ms))
+    // Out-of-range ms hits UB in WTF::msToGregorianDateTime's int casts and
+    // the resulting garbage components panic next()'s u32 conversions.
+    const MAX_ECMASCRIPT_TIME: f64 = 8.64e15;
+    if (std.math.isNan(from_ms) || @abs(from_ms) > MAX_ECMASCRIPT_TIME)
         return globalObject.throwInvalidArguments("Invalid date value", .{});
 
     const next_ms_opt = parsed.next(globalObject, from_ms)?;
     if (next_ms_opt == null) return jsc.JSValue.@"null";
     const next_ms = next_ms_opt.?;
+    // Return null (not Invalid Date) so callers can rely on `=== null` for "no future match".
+    if (next_ms > MAX_ECMASCRIPT_TIME) return jsc.JSValue.@"null";
     return jsc.JSValue.fromDateNumber(globalObject, next_ms);
 }
 

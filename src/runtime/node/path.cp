@@ -2684,6 +2684,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                             tmpBuf[1] = asT(T, CHAR_BACKWARD_SLASH);
                             bufOffset = bufSize;
                             bufSize += firstPart.len;
+                            if (bufSize + 1 > tmpBuf.len) return .{ err: bun.sys.Error.fromCode(.NAMETOOLONG, .TODO) };
                             bun.memmove(tmpBuf[bufOffset..bufSize], firstPart);
                             bufOffset = bufSize;
                             bufSize += 1;
@@ -2691,6 +2692,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                             const slice = path[last..j];
                             bufOffset = bufSize;
                             bufSize += slice.len;
+                            if (bufSize > tmpBuf.len) return .{ err: bun.sys.Error.fromCode(.NAMETOOLONG, .TODO) };
                             bun.memmove(tmpBuf[bufOffset..bufSize], slice);
 
                             device = tmpBuf[0..bufSize];

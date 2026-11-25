@@ -145,6 +145,10 @@ pub fn relativePathAndDepth(
 
             const id = depth_buf[depth_buf_len];
             const name = trees[id].folderName(dependencies, buf);
+            if (!Dependency.isSafeInstallFolderName(name)) {
+                Output.errGeneric("Lockfile is malformed (dependency name \"{s}\" is not a valid folder name)", .{name});
+                bun.Global.crash();
+            }
             @memcpy(path_buf[path_written..][0..name.len], name);
             path_written += name.len;
 
@@ -615,6 +619,10 @@ pub fn isFilteredDependencyOrWorkspace(
             }
 
             const dependency = builder.dependencies[dep_id];
+            if (!Dependency.isSafeInstallFolderName(dependency.name.slice(builder.buf()))) {
+                builder.maybeReportError("Invalid dependency name \"{f}\"", .{dependency.name.fmt(builder.buf())});
+                continue;
+            }
 
             const hoisted: HoistDependencyResult = hoisted: {
 

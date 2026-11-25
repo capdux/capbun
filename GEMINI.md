@@ -272,3 +272,19 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 6. **并发测试降拥堵与严禁 `gdb` 挂死铁律（2026-11-25 Phase 3 自优化固化）**：
    - 运行多子进程并发类测试（如 `websocket-server`/`http`）时，在 `bun-debug` 下统一附加 `--max-concurrency=2` 并使用绝对路径 `/data/dev/bun/build/debug/bun-debug`（避免 `cwd` 切换后找不到相对路径 `${BUN}`）。
    - **严禁**在子智能体中对大型 Debug 二进制（`bun-debug`）启动 `gdb`/`lldb` 断点调试（极易因符号加载/断点停顿挂死 15+ 分钟），排查泄漏统一采用静态源码追踪 + 轻量 `-e` 复现探针 + `BUN_DEBUG_<scope>=1`；主智能体发现子智能体 `> 10` 分钟无进展或 `gdb` 驻留时立即回收重派。
+
+---
+
+## 十三、 吸收上游 Bun Rust 版本 Commit 提速固化规则（2026-11-25 固化）
+
+1. **按“净 Diff 合并”替代“逐 Commit 移植”**：
+   - 在同一个区段（如 Step 2 / Step 3 / Step 4 小版本区间）内，若同一文件被多个 commit 连续修改，直接按子系统/文件提取 `起点..终点` 的净安全 Diff（过滤 Rust 语法/重构噪声），一次性等价落入 `.cp`，严禁同一文件被反复修改多次。
+2. **批量脚本预筛选 + 同构子系统大包分配**：
+   - 先用 Python 脚本自动过滤 `clippy`、`cargo`、`windows-stub`、`crate move`、纯 `unsafe`/类型重构等 Rust-only 噪声，仅保留触及逻辑边界、内存生命周期、`defer`/`errdefer`、整数溢出、缓冲区校验的 Diff。
+   - 按同构子系统打包（10~20 个文件/路），主智能体保持 2 路并发子智能体，同时主智能体同步承担快速修复/JS-TS/C++ 移植与协调，不闲置等待。
+3. **编译与测试分层节奏（吸收期禁止 `bun bd` 防 OOM）**：
+   - 子智能体移植期间仅逐文件跑轻量 `python3 scripts/cpc_brief.py -n 8`（4 门禁），不触发全仓构建。
+   - **吸收期严禁执行 `bun bd` 链接与 `bun bd test` 并发扫测**（Debug+ASan 链接与多进程测试易耗尽服务器内存导致重启）；阶段收官仅运行轻量 `bun run zig:check`（约 2GB RAM）做全仓语义校验，**同步吸收上游测试文件暂不运行**，待全部吸收至 1.4.5 完毕后再统一构建与回归测试。
+4. **仅对非 Rust-only 的 Linux/Windows/跨平台运行时修复吸收**：
+   - 跳过 Cargo/clippy/Windows Rust stub crate 搬家 commit；对真正影响 Windows/Linux/跨平台运行时行为与内存安全的修复全部等价吸收。
+

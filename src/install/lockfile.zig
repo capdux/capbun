@@ -1991,7 +1991,7 @@ const resolutions = client.packages.items(.resolution);
         if (comptime Environment.allow_assert) {
             _ = assert((id < resolutions.len));
         }
-        if ((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.satisfies((if (@typeInfo(@TypeOf(resolutions[@as(usize, @intCast(id))])) == .@"enum") @intFromEnum(resolutions[@as(usize, @intCast(id))]) else resolutions[@as(usize, @intCast(id))].value).npm.version, buf, buf)) {
+        if (((resolutions[@as(usize, @intCast(id))].tag == .npm) and (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.satisfies((if (@typeInfo(@TypeOf(resolutions[@as(usize, @intCast(id))])) == .@"enum") @intFromEnum(resolutions[@as(usize, @intCast(id))]) else resolutions[@as(usize, @intCast(id))].value).npm.version, buf, buf))) {
             return id;
         }
 },
@@ -2002,7 +2002,7 @@ const resolutions = client.packages.items(.resolution);
             if (comptime Environment.allow_assert) {
                 _ = assert((id < resolutions.len));
             }
-            if ((if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.satisfies((if (@typeInfo(@TypeOf(resolutions[@as(usize, @intCast(id))])) == .@"enum") @intFromEnum(resolutions[@as(usize, @intCast(id))]) else resolutions[@as(usize, @intCast(id))].value).npm.version, buf, buf)) {
+            if (((resolutions[@as(usize, @intCast(id))].tag == .npm) and (if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).npm.version.satisfies((if (@typeInfo(@TypeOf(resolutions[@as(usize, @intCast(id))])) == .@"enum") @intFromEnum(resolutions[@as(usize, @intCast(id))]) else resolutions[@as(usize, @intCast(id))].value).npm.version, buf, buf))) {
                 return id;
             }
         }

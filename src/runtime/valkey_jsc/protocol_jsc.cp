@@ -54,23 +54,27 @@ pub struct ToJSOptions {
     pub return_as_buffer: bool = false,
 }
 
-fn valkeyStrToJSValue(globalObject: *jsc.JSGlobalObject, str: []const u8, options: *const ToJSOptions): bun.JSError!jsc.JSValue {
+fn valkeyStrToJSValue(globalObject: *jsc.JSGlobalObject, str: *[]const u8, options: *const ToJSOptions): bun.JSError!jsc.JSValue {
     if (options.return_as_buffer) {
-        // TODO: handle values > 4.7 GB
-        return (jsc.ArrayBuffer.createBuffer(globalObject, str))?;
+        // The parser's payload is an owned allocation that is only converted
+        // once; adopt it as the Buffer backing store instead of copying it
+        // into a fresh ArrayBuffer.
+        const bytes = str.*;
+        str.* = "";
+        return jsc.JSValue.createBuffer(globalObject, unsafe { @constCast(bytes) });
     } else {
-        return bun.String.createUTF8ForJS(globalObject, str);
+        return bun.String.createUTF8ForJS(globalObject, str.*);
     }
 }
 
 pub fn respValueToJSWithOptions(resp_val: *RESPValue, globalObject: *jsc.JSGlobalObject, options: ToJSOptions): bun.JSError!jsc.JSValue {
     switch (resp_val.*) {
-        .SimpleString => |str| return valkeyStrToJSValue(globalObject, str, &options),
+        .SimpleString => |*str| return valkeyStrToJSValue(globalObject, str, &options),
         .Error => |str| return valkeyErrorToJS(globalObject, str, protocol.RedisError.InvalidResponse),
         .Integer => |int| return jsc.JSValue.jsNumber(int),
-        .BulkString => |maybe_str| {
-            if (str := maybe_str) {
-                return valkeyStrToJSValue(globalObject, str, &options);
+        .BulkString => |*maybe_str| {
+            if (maybe_str.* != null) {
+                return valkeyStrToJSValue(globalObject, unsafe { &(maybe_str.*.?) }, &options);
             } else {
                 return jsc.JSValue.jsNull();
             }
@@ -89,7 +93,7 @@ pub fn respValueToJSWithOptions(resp_val: *RESPValue, globalObject: *jsc.JSGloba
         .Double => |d| return jsc.JSValue.jsNumber(d),
         .Boolean => |b| return jsc.JSValue.jsBoolean(b),
         .BlobError => |str| return valkeyErrorToJS(globalObject, str, protocol.RedisError.InvalidBlobError),
-        .VerbatimString => |verbatim| return valkeyStrToJSValue(globalObject, verbatim.content, &options),
+        .VerbatimString => |*verbatim| return valkeyStrToJSValue(globalObject, &verbatim.content, &options),
         .Map => |entries| {
             let js_obj = jsc.JSValue.createEmptyObjectWithNullPrototype(globalObject);
             let i: usize = 0;

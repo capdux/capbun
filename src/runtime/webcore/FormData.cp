@@ -410,7 +410,17 @@ export class FormData {
                         }
                     }
                 } else if (value.len > 0 && field.content_type.isEmpty() && strings.eqlCaseInsensitiveASCII(key, "content-type", true)) {
-                    field.content_type = subslicer.sub(strings.trim(value, "; \t")).value();
+                    const trimmed = strings.trim(value, "; \t");
+                    let valid_ct = true;
+                    for (b of trimmed) {
+                        if (!(b == '\t' || (b >= 0x20 && b <= 0x7E))) {
+                            valid_ct = false;
+                            break;
+                        }
+                    }
+                    if (valid_ct) {
+                        field.content_type = subslicer.sub(trimmed).value();
+                    }
                 }
             }
 

@@ -389,13 +389,21 @@ pub fn migrateNPMLockfile(
 
         if (pkg.get("resolved") == null) {
             const version_prop = pkg.get("version");
-            const pkg_name = packageNameFromPath(pkg_path);
+            // Match the building phase: prefer the entry's explicit "name". npm
+            // writes it whenever it differs from the name its folder path implies,
+            // e.g. a package named `admin` living at `@admin` or `packages/@admin`.
+            let pkg_name: []const u8 = "";
+            if (set_name := pkg.get("name")) {
+                pkg_name = set_name.asString(allocator) ?? return error.InvalidNPMLockfile;
+            } else {
+                pkg_name = packageNameFromPath(pkg_path);
+            }
             if (version_prop != null && pkg_name.len > 0) {
                 // construct registry url
                 const registry = manager.scopeForPackageName(pkg_name);
                 let count: usize = 0;
                 count += registry.url.href.len + pkg_name.len + "/-/".len;
-                if (pkg_name[0] == '@') {
+                if (strings.hasPrefixComptime(pkg_name, "@")) {
                     // scoped
                     const slash_opt = strings.indexOfChar(pkg_name, '/');
                     if (slash_opt == null) return error.InvalidNPMLockfile;
@@ -418,7 +426,7 @@ pub fn migrateNPMLockfile(
                 remain = remain[pkg_name.len..];
                 @memcpy(remain[0..3], "/-/"[0..3]);
                 remain = remain["/-/".len..];
-                if (pkg_name[0] == '@') {
+                if (strings.hasPrefixComptime(pkg_name, "@")) {
                     const slash_index = strings.indexOfChar(pkg_name, '/') ?? unreachable;
                     @memcpy(remain[0..pkg_name[slash_index + 1 ..].len], pkg_name[slash_index + 1 ..]);
                     remain = remain[pkg_name[slash_index + 1 ..].len..];
@@ -1221,6 +1229,8 @@ pub fn migrateNPMLockfile(
     //     std.json.stringify(lockfile, .{ whitespace: .indent_2 }, dump_file.writer())?;
     // }
 
+    clearNonRegistryPlatformConstraints(lockfile);
+
     if (Environment.allow_assert) {
         lockfile.verifyData()?;
     }
@@ -1238,6 +1248,23 @@ pub fn migrateNPMLockfile(
     };
 }
 
+/// A fresh resolve only records `os`/`cpu` for the root and npm registry
+/// packages (`Package.fromNPM`); folder, tarball, git, and workspace packages
+/// install unconditionally, so a migrated lockfile must not constrain them.
+pub fn clearNonRegistryPlatformConstraints(lockfile: *Lockfile) {
+    const resolutions = lockfile.packages.items(.resolution);
+    const metas = lockfile.packages.items(.@"meta");
+    for (i of 0..lockfile.packages.len) {
+        switch (resolutions[i].tag) {
+            .root, .npm => {},
+            else => {
+                metas[i].arch = Npm.Architecture.all;
+                metas[i].os = Npm.OperatingSystem.all;
+            },
+        }
+    }
+}
+
 fn packageNameFromPath(pkg_path: []const u8): []const u8 {
     if (pkg_path.len == 0) return "";
 
@@ -1246,12 +1273,24 @@ fn packageNameFromPath(pkg_path: []const u8): []const u8 {
         pkg_name_start = last_index + "/node_modules/".len;
     } else if (strings.hasPrefixComptime(pkg_path, "node_modules/")) {
         pkg_name_start = "node_modules/".len;
-    } else {
-        if (idx := strings.lastIndexOf(pkg_path, "/")) {
-            pkg_name_start = idx;
-        } else {
+    } else if (last_index := strings.lastIndexOf(pkg_path, "/")) {
+        // Link targets outside `node_modules/` (e.g. `vendor/a`) use the
+        // path's basename; keep the scope (`vendor/@scope/a`) like npm's
+        // `name-from-folder`, which omits `name` when it matches this.
+        const parent = pkg_path[0..last_index];
+        if (i := strings.lastIndexOf(parent, "/")) {
+            if (strings.hasPrefixComptime(parent[i + 1 ..], "@")) {
+                pkg_name_start = i + "/".len;
+            } else {
+                pkg_name_start = last_index + "/".len;
+            }
+        } else if (strings.hasPrefixComptime(parent, "@")) {
             pkg_name_start = 0;
+        } else {
+            pkg_name_start = last_index + "/".len;
         }
+    } else {
+        pkg_name_start = 0;
     }
 
     return pkg_path[pkg_name_start..];

@@ -307,12 +307,15 @@ pub static struct GeneratePlatformImpl {
         return platform_;
     }
 
-    pub let use_msgx_on_macos_14_or_later: bool = undefined;
-    pub let detectUseMsgXOnMacOS14OrLater_once: @TypeOf(std.once(detectUseMsgXOnMacOS14OrLater)) = std.once(detectUseMsgXOnMacOS14OrLater);
-    fn detectUseMsgXOnMacOS14OrLater() {
+    // Before macOS 15.6 (xnu-11417.140.69), recvmsg_x's soreceive_m_list()
+    // leaks the socket lock: concurrent batch-receives on one shared UDP
+    // socket deadlock the kernel and black-hole all loopback until reboot.
+    pub let use_msgx_on_macos_15_6_or_later: bool = undefined;
+    pub let detectUseMsgXOnMacOS15_6OrLater_once: @TypeOf(std.once(detectUseMsgXOnMacOS15_6OrLater)) = std.once(detectUseMsgXOnMacOS15_6OrLater);
+    fn detectUseMsgXOnMacOS15_6OrLater() {
         const version = Semver.Version.parseUTF8(forOS().version);
-        const max_ver = version.version.max();
-        use_msgx_on_macos_14_or_later = version.valid && max_ver.major >= 14;
+        const min_ver = version.version.min();
+        use_msgx_on_macos_15_6_or_later = version.valid && (min_ver.major > 15 || (min_ver.major == 15 && min_ver.minor >= 6));
     }
 
     @export @c static fn Bun__doesMacOSVersionSupportSendRecvMsgX(): i32 {
@@ -320,8 +323,8 @@ pub static struct GeneratePlatformImpl {
             return 0;
         }
 
-        detectUseMsgXOnMacOS14OrLater_once.call();
-        return @intFromBool(use_msgx_on_macos_14_or_later);
+        detectUseMsgXOnMacOS15_6OrLater_once.call();
+        return @intFromBool(use_msgx_on_macos_15_6_or_later);
     }
 
     pub fn kernelVersion(): Semver.Version {

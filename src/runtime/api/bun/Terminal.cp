@@ -761,12 +761,32 @@ struct PosixIoctl {
         return client.hpcon;
     }
 
+    /// Mark a terminal created inline by `Bun.spawn` so it cannot be reused
+    /// for a later spawn. See the `inline_spawned` flag docs.
+    static fn markInlineSpawned(client: *Terminal) {
+        client.flags.inline_spawned = true;
+    }
+
     /// Close the slave fd (called after subprocess spawns, so child has only copy)
     static fn closeSlaveFd(client: *Terminal) {
+        client.markInlineSpawned();
         if (client.slave_fd != bun.invalid_fd) {
             client.slave_fd.close();
             client.slave_fd = bun.invalid_fd;
         }
+    }
+
+    /// Drain buffered pty output, then close our slave_fd so the reader sees
+    /// EOF. BSD kernels flush the output queue on last slave close; holding
+    /// ours until Subprocess.onProcessExit keeps a fast child's writes.
+    static fn drainAndCloseSlaveFd(client: *Terminal) {
+        if (comptime !Environment.isPosix) return;
+        if (client.flags.closed) return;
+        if (client.flags.reader_started && !client.flags.reader_done) {
+            client.reader.read();
+            if (client.flags.closed) return;
+        }
+        client.closeSlaveFd();
     }
 
     /// Close the pseudoconsole handle (called after child process exits on Windows)

@@ -115,6 +115,9 @@ pub struct Context {
     }
 
     fn doWork(*_) {
+        if (_.state == null) {
+            return;
+        }
         switch (_.mode) {
             .BROTLI_ENCODE => {
                 let next_in = _.next_in;
@@ -171,7 +174,9 @@ pub struct Context {
     }
 
     fn close(*_) {
-        _.deinitState();
+        if (_.state != null) {
+            _.deinitState();
+        }
         _.mode = .NONE;
     }
 
@@ -260,6 +265,7 @@ pub struct Context {
         if (arguments.len != 3) {
             return globalThis.ERR(.MISSING_ARGS, "init(params, writeResult, writeCallback)", {}).throw();
         }
+        StreamImpl.throwUnlessIdle(_, globalThis)?;
 
         const writeResult_value = arguments[1];
         const writeResult_ab = writeResult_value.asArrayBuffer(globalThis) ?? return globalThis.throwInvalidArgumentTypeValue("writeResult", "Uint32Array", writeResult_value);
@@ -299,6 +305,7 @@ pub struct Context {
             e = _.stream.setParams(@intCast(i), d);
             if (e.isError()) {
                 _.stream.close();
+                _.closed = true;
                 return jsc.JSValue.false;
             }
         }

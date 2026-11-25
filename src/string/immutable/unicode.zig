@@ -1552,14 +1552,22 @@ pub fn convertUTF8toUTF16InBuffer(buf: []u16, input: []const u8) []u16 {
         return buf[0..result];
 }
 
-pub fn convertUTF8toUTF16InBufferZ(buf: []u16, input: []const u8) [:0]u16 {
+pub fn tryConvertUTF8toUTF16InBuffer(buf: []u16, input: []const u8) ?[]u16 {
         if ((input.len == 0)) {
-            buf[cp_cast_int(usize, 0)] = 0;
-            return buf[0..0 :0];
+            return buf[0..0];
+        }
+        if (((input.len > buf.len) and (elementLengthUTF8IntoUTF16(input) > buf.len))) {
+            return null;
         }
         const result = bun.simdutf.convert.utf8.to.utf16.le(input, buf);
-        buf[cp_cast_int(usize, result)] = 0;
-        return buf[0..result :0];
+        return buf[0..result];
+}
+
+pub fn convertUTF8toUTF16InBufferZ(buf: []u16, input: []const u8) [:0]u16 {
+        const cap = (buf.len -| 1);
+        const len = (if (tryConvertUTF8toUTF16InBuffer(buf[0..cap], input)) |converted| converted.len else 0);
+        buf[cp_cast_int(usize, len)] = 0;
+        return buf[0..len :0];
 }
 
 pub fn convertUTF16toUTF8InBuffer(buf: []u8, input: []const u16) ![]const u8 {

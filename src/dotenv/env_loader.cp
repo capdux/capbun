@@ -1302,31 +1302,44 @@ pub struct EnvMap {
         return .{ .unsafe_map = env_map };
     }
 
-    /// Write the Windows environment block into a buffer
-    /// This can be passed to CreateProcessW's lpEnvironment parameter
-    fn writeWindowsEnvBlock(*_, result: *[32767]u16): !([*]const u16!) {
-        let it = _.map.iterator();
-        let i: usize = 0;
-        while (pair := it.next()) {
-            i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len;
-            if (i + 7 >= result.len) return error.TooManyEnvironmentVariables;
-            result[i] = '=';
-            i += 1;
-            i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.value_ptr.*.value).len;
-            if (i + 5 >= result.len) return error.TooManyEnvironmentVariables;
-            result[i] = 0;
-            i += 1;
+    /// Build a heap-allocated Windows environment block suitable for
+    /// `CreateProcessW`'s `lpEnvironment` with `CREATE_UNICODE_ENVIRONMENT`.
+    ///
+    /// The 32,767-character limit applies to `CreateProcessA` (ANSI) only; the
+    /// Unicode block has no documented size limit, so this sizes the buffer to
+    /// the actual contents instead of failing when the environment is large.
+    fn writeWindowsEnvBlock(*_, allocator: std.mem.Allocator): !([]u16) {
+        // UTF-16 output is at most one code unit per UTF-8 input byte (ASCII
+        // is 1:1; multi-byte sequences shrink; surrogate pairs are 2 units
+        // from 4 bytes), so the UTF-8 byte length is a safe upper bound.
+        let capacity: usize = 4;
+        {
+            let it = _.map.iterator();
+            while (pair := it.next()) {
+                capacity += pair.key_ptr.len + 1 + pair.value_ptr.value.len + 1;
+            }
         }
-        result[i] = 0;
-        i += 1;
-        result[i] = 0;
-        i += 1;
-        result[i] = 0;
-        i += 1;
-        result[i] = 0;
-        i += 1;
 
-        return result[0..].ptr;
+        let result = allocator.alloc(u16, capacity)?;
+        let i: usize = 0;
+        {
+            let it = _.map.iterator();
+            while (pair := it.next()) {
+                i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len;
+                result[i] = '=';
+                i += 1;
+                i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.value_ptr.*.value).len;
+                result[i] = 0;
+                i += 1;
+            }
+        }
+        // Terminator: four trailing NUL u16s.
+        result[i] = 0;
+        result[i + 1] = 0;
+        result[i + 2] = 0;
+        result[i + 3] = 0;
+
+        return result;
     }
 
     fn iterator(): HashTable.Iterator {

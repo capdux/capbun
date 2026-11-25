@@ -39,7 +39,6 @@ pub fn ParseJSXElement(
                 parse_attributes: while (true) {
                     switch (p.lexer.token) {
                         .t_identifier => {
-                            defer i += 1;
                             // Parse the prop name
                             const key_range = p.lexer.range();
                             const prop_name_literal = p.lexer.identifier;
@@ -71,6 +70,7 @@ pub fn ParseJSXElement(
                             }
 
                             props.append(G.Property{ key: prop_name, value: value })?;
+                            i += 1;
                         },
                         .t_open_brace => {
                             defer i += 1;

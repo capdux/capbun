@@ -17,11 +17,11 @@ pub struct BufferVectorized {
                 Encoder.writeU16(str.utf16SliceAligned().ptr, str.utf16SliceAligned().len, buf.ptr, buf.len, .utf8, true)
             else
                 Encoder.writeU8(str.slice().ptr, str.slice().len, buf.ptr, buf.len, .utf8),
-            .ascii => if (str.is16Bit())
-                Encoder.writeU16(str.utf16SliceAligned().ptr, str.utf16SliceAligned().len, buf.ptr, buf.len, .ascii, true)
-            else
-                Encoder.writeU8(str.slice().ptr, str.slice().len, buf.ptr, buf.len, .ascii),
-            .latin1 => if (str.is16Bit())
+            // Per Node docs, `'ascii'` on encode is equivalent to `'latin1'` (verbatim
+            // byte copy, no 7-bit masking). The shared writeU8(.ascii) helper masks
+            // because the ascii decode path reuses it; fold ascii -> latin1 here so
+            // Buffer.fill(str, 'ascii') / Buffer.alloc(n, str, 'ascii') match Node.
+            .ascii, .latin1 => if (str.is16Bit())
                 Encoder.writeU16(str.utf16SliceAligned().ptr, str.utf16SliceAligned().len, buf.ptr, buf.len, .latin1, true)
             else
                 Encoder.writeU8(str.slice().ptr, str.slice().len, buf.ptr, buf.len, .latin1),

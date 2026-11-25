@@ -1081,6 +1081,9 @@ pub fn init(transpiler: *Transpiler, bake_options: ?BundleBakeOptions, alloc: st
             }
             bundle.linker.resolver = (&bundle.transpiler.resolver);
             bundle.linker.graph.code_splitting = transpiler.options.code_splitting;
+            if ((transpiler.options.code_splitting and (transpiler.options.output_format != .esm))) {
+                _ = (blk_catch_14: { break :blk_catch_14 ((transpiler.log.addError(null, bun.logger.Loc.Empty, "Code splitting is currently only supported when format is set to \"esm\"")) catch |__ce_14| { _ = &__ce_14;  }); });
+            }
             bundle.linker.options.minify_syntax = transpiler.options.minify_syntax;
             bundle.linker.options.minify_identifiers = transpiler.options.minify_identifiers;
             bundle.linker.options.minify_whitespace = transpiler.options.minify_whitespace;
@@ -1138,7 +1141,7 @@ pub fn decrementScanCounter(self: *BundleV2) void {
 
 pub fn onAfterDecrementScanCounter(self: *BundleV2) void {
             if ((self.asynchronous and self.isDone())) {
-                _ = (blk_catch_14: { break :blk_catch_14 ((self.finishFromBakeDevServer(((self.transpiler.options.dev_server) orelse (@panic("No dev server attached in asynchronous bundle job"))))) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 @as(void, bun.outOfMemory()); }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((self.finishFromBakeDevServer(((self.transpiler.options.dev_server) orelse (@panic("No dev server attached in asynchronous bundle job"))))) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 @as(void, bun.outOfMemory()); }); });
             }
     }
 
@@ -1186,7 +1189,7 @@ for (cp_iter_slice(data)) |entry_point| {
                             continue;
                         }
                     }
-                    const resolved = (blk_catch_15: { break :blk_catch_15 ((self.transpiler.resolveEntryPoint(entry_point)) catch |__ce_15| { _ = &__ce_15; continue; }); });
+                    const resolved = (blk_catch_16: { break :blk_catch_16 ((self.transpiler.resolveEntryPoint(entry_point)) catch |__ce_16| { _ = &__ce_16; continue; }); });
                     _ = try self.enqueueEntryItem(resolved, true, brk: {
                     const main_target = self.transpiler.options.target;
                     if (main_target.isServerSide()) {
@@ -1230,8 +1233,8 @@ const abs_paths = data.files.set.keys();
                         if (any_plugin_matched) {
                             continue;
                         }
-                        const resolved = (blk_catch_16: { break :blk_catch_16 ((transpiler.resolveEntryPoint(abs_path)) catch |e| { _ = &e; const dev = self.transpiler.options.dev_server.?;
-                        _ = (blk_catch_17: { break :blk_catch_17 ((dev.handleParseTaskFailure(e, (if (flags.client) .client else .server), abs_path, transpiler.log, self)) catch |oom_err| { _ = &oom_err; break :blk_catch_17 bun.handleOom(oom_err); }); });
+                        const resolved = (blk_catch_17: { break :blk_catch_17 ((transpiler.resolveEntryPoint(abs_path)) catch |e| { _ = &e; const dev = self.transpiler.options.dev_server.?;
+                        _ = (blk_catch_18: { break :blk_catch_18 ((dev.handleParseTaskFailure(e, (if (flags.client) .client else .server), abs_path, transpiler.log, self)) catch |oom_err| { _ = &oom_err; break :blk_catch_18 bun.handleOom(oom_err); }); });
                         _ = transpiler.log.reset();
                         continue; }); });
                         if (flags.client) {
@@ -1262,7 +1265,7 @@ for (cp_iter_slice(data.files.keys())) |key| {
                     if (self.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target)) {
                         continue;
                     }
-                    const resolved = (blk_catch_18: { break :blk_catch_18 ((self.transpiler.resolveEntryPoint(abs_path)) catch |__ce_18| { _ = &__ce_18; continue; }); });
+                    const resolved = (blk_catch_19: { break :blk_catch_19 ((self.transpiler.resolveEntryPoint(abs_path)) catch |__ce_19| { _ = &__ce_19; continue; }); });
                     _ = try self.enqueueEntryItem(resolved, true, target);
                 }
 },
@@ -1381,7 +1384,7 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
 pub fn enqueueParseTask(self: *BundleV2, resolve_result: *const _resolver.Result, source: *const Logger.Source, loader: Loader, known_target: options.Target) OOM!Index.Int {
             const source_index = Index.init((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))));
             _ = ((self.graph.ast.append(self.allocator(), JSAst.empty)) catch unreachable);
-            _ = (blk_catch_20: { break :blk_catch_20 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_20 bun.handleOom(oom_err); }); });
+            _ = (blk_catch_21: { break :blk_catch_21 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_21 bun.handleOom(oom_err); }); });
             var task = bun.handleOom(self.allocator().create(ParseTask));
             _ = &task;
             task.* = ParseTask.init(resolve_result, source_index, self);
@@ -1408,7 +1411,7 @@ pub fn enqueueParseTask(self: *BundleV2, resolve_result: *const _resolver.Result
 pub fn enqueueParseTask2(self: *BundleV2, source: *const Logger.Source, loader: Loader, known_target: options.Target) OOM!Index.Int {
             const source_index = Index.init((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))));
             _ = ((self.graph.ast.append(self.allocator(), JSAst.empty)) catch unreachable);
-            _ = (blk_catch_22: { break :blk_catch_22 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_22 bun.handleOom(oom_err); }); });
+            _ = (blk_catch_23: { break :blk_catch_23 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_23 bun.handleOom(oom_err); }); });
             var task = bun.handleOom(self.allocator().create(ParseTask));
             _ = &task;
             task.* = .{ .ctx = self, .path = source.path, .contents_or_fd = .{ .contents = source.contents }, .side_effects = .has_side_effects, .jsx = (if (((known_target == .bake_server_components_ssr) and (!self.framework.?.server_components.?.separate_ssr_graph))) self.transpiler.options.jsx else self.transpilerForTarget(known_target).options.jsx), .source_index = source_index, .module_type = .unknown, .emit_decorator_metadata = false, .package_version = "", .loader = loader, .tree_shaking = self.linker.options.tree_shaking, .known_target = known_target };
@@ -1509,7 +1512,7 @@ pub fn generateFromCLI(transpiler: *Transpiler, alloc: std.mem.Allocator, event_
                 return .{ .output_files = std.array_list.Managed(options.OutputFile).init(alloc), .metafile = null, .metafile_markdown = null };
             }
             const output_files = try bundle.linker.generateChunksInParallel(chunks, false);
-            const metafile: ?[]const u8 = (if (bundle.linker.options.metafile) (blk_catch_23: { break :blk_catch_23 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&bundle.linker), chunks)) catch |e| { _ = &e; break :blk_catch_23 blk: {
+            const metafile: ?[]const u8 = (if (bundle.linker.options.metafile) (blk_catch_24: { break :blk_catch_24 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&bundle.linker), chunks)) catch |e| { _ = &e; break :blk_catch_24 blk: {
             _ = bun.Output.warn("Failed to generate metafile: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
@@ -1523,7 +1526,7 @@ pub fn scanModuleGraphFromCLI(transpiler: *Transpiler, alloc: std.mem.Allocator,
             if (bundle.transpiler.log.hasErrors()) {
                 return error.BuildFailed;
             }
-            _ = (blk_catch_24: { break :blk_catch_24 ((bundle.enqueueEntryPoints(.normal, entry_points)) catch |e| { _ = &e; _ = bundle.waitForParse();
+            _ = (blk_catch_25: { break :blk_catch_25 ((bundle.enqueueEntryPoints(.normal, entry_points)) catch |e| { _ = &e; _ = bundle.waitForParse();
             return e; }); });
             _ = bundle.waitForParse();
             return bundle;
@@ -1623,7 +1626,7 @@ pub fn processFilesToCopy(self: *BundleV2, reachable_files: []const Index) !void
 };
                         const loader = loaders[@as(usize, @intCast(index))];
                         _ = ((additional_output_files.append(options.OutputFile.init(.{ .source_index = .init(index), .data = .{ .buffer = .{ .data = source.contents, .allocator = file_allocators[@as(usize, @intCast(index))] } }, .size = source.contents.len, .output_path = output_path, .input_path = bun.handleOom(bun.default_allocator.dupe(u8, source.path.text)), .input_loader = .file, .output_kind = .asset, .loader = loader, .hash = content_hashes_for_additional_files[@as(usize, @intCast(index))], .side = .client, .entry_point_index = null, .is_executable = false }))) catch unreachable);
-                        _ = (blk_catch_26: { break :blk_catch_26 ((additional_files[@as(usize, @intCast(index))].append(self.allocator(), AdditionalFile{ .output_file = @as(u32, @truncate((additional_output_files.items.len - 1))) })) catch |oom_err| { _ = &oom_err; break :blk_catch_26 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_27: { break :blk_catch_27 ((additional_files[@as(usize, @intCast(index))].append(self.allocator(), AdditionalFile{ .output_file = @as(u32, @truncate((additional_output_files.items.len - 1))) })) catch |oom_err| { _ = &oom_err; break :blk_catch_27 bun.handleOom(oom_err); }); });
                     }
                 }
                 self.graph.additional_output_files = additional_output_files.moveToUnmanaged();
@@ -1677,7 +1680,7 @@ const source = (&bundle.graph.input_files.items(.source)[@as(usize, @intCast(loa
                 _ = bundle.graph.pool.schedule(load.parse_task);
                 return;
             }
-            _ = (blk_catch_27: { break :blk_catch_27 ((log.addErrorFmt(source, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(source.path.pretty), bun.fmt.quote(source.path.namespace) })) catch |__ce_27| { _ = &__ce_27;  }); });
+            _ = (blk_catch_28: { break :blk_catch_28 ((log.addErrorFmt(source, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(source.path.pretty), bun.fmt.quote(source.path.namespace) })) catch |__ce_28| { _ = &__ce_28;  }); });
             _ = bundle.decrementScanCounter();
 },
 .success => |code| {
@@ -1707,7 +1710,7 @@ const should_copy_for_bundling = code.loader.shouldCopyForBundling();
                 if ((!bundle.shouldAddWatcherPlugin(load.namespace, load.path))) {
                     break :add_watchers;
                 }
-                const fd = (if (bun.Watcher.requires_file_descriptors) (switch (bun.sys.open((&(blk_catch_29: { break :blk_catch_29 ((std.posix.toPosixPath(load.path)) catch |__ce_29| { _ = &__ce_29; break :add_watchers; }); })), bun.Watcher.watch_open_flags, 0)) {
+                const fd = (if (bun.Watcher.requires_file_descriptors) (switch (bun.sys.open((&(blk_catch_30: { break :blk_catch_30 ((std.posix.toPosixPath(load.path)) catch |__ce_30| { _ = &__ce_30; break :add_watchers; }); })), bun.Watcher.watch_open_flags, 0)) {
 .result => |fd| fd,
 .err => break :add_watchers,
 }) else bun.invalid_fd);
@@ -1726,7 +1729,7 @@ if (bundle.transpiler.options.dev_server) |dev| {
                 var msg_mut = msg;
                 _ = &msg_mut;
                 const temp_log: Logger.Log = .{ .clone_line_text = false, .errors = @intFromBool((msg.kind == .err)), .warnings = @intFromBool((msg.kind == .warn)), .msgs = std.array_list.Managed(Logger.Msg).fromOwnedSlice(bundle.allocator(), (&msg_mut)[0..1]) };
-                _ = (blk_catch_30: { break :blk_catch_30 ((dev.handleParseTaskFailure(error.Plugin, load.bakeGraph(), source.path.keyForIncrementalGraph(), (&temp_log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_30 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_31: { break :blk_catch_31 ((dev.handleParseTaskFailure(error.Plugin, load.bakeGraph(), source.path.keyForIncrementalGraph(), (&temp_log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_31 bun.handleOom(oom_err); }); });
             } else {
                 _ = bun.handleOom(log.msgs.append(msg));
                 log.errors = (log.errors + @intFromBool((msg.kind == .err)));
@@ -1766,11 +1769,11 @@ pub fn onResolve(resolve: *bun.jsc.API.JSBundler.Resolve, bundle: *BundleV2) voi
 if (strings.eqlComptime(resolve.import_record.namespace, "file")) {
                 if ((resolve.import_record.kind == .entry_point_build)) {
                     const target = resolve.import_record.original_target;
-                    const resolved = (blk_catch_31: { break :blk_catch_31 ((bundle.transpilerForTarget(target).resolveEntryPoint(resolve.import_record.specifier)) catch |__ce_31| { _ = &__ce_31; return; }); });
-                    const source_index = (blk_catch_32: { break :blk_catch_32 ((bundle.enqueueEntryItem(resolved, true, target)) catch |__ce_32| { _ = &__ce_32; return; }); });
+                    const resolved = (blk_catch_32: { break :blk_catch_32 ((bundle.transpilerForTarget(target).resolveEntryPoint(resolve.import_record.specifier)) catch |__ce_32| { _ = &__ce_32; return; }); });
+                    const source_index = (blk_catch_33: { break :blk_catch_33 ((bundle.enqueueEntryItem(resolved, true, target)) catch |__ce_33| { _ = &__ce_33; return; }); });
                     if (source_index) |idx| {
                         _ = &idx;
-                        _ = (blk_catch_33: { break :blk_catch_33 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_33 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_34: { break :blk_catch_34 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_34 bun.handleOom(oom_err); }); });
                     }
                     return;
                 }
@@ -1779,10 +1782,10 @@ if (strings.eqlComptime(resolve.import_record.namespace, "file")) {
             }
             const log = bundle.logForResolutionFailures(resolve.import_record.source_file, resolve.import_record.original_target.bakeGraph());
             if ((resolve.import_record.kind == .entry_point_build)) {
-                _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_34| { _ = &__ce_34;  }); });
+                _ = (blk_catch_35: { break :blk_catch_35 ((log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_35| { _ = &__ce_35;  }); });
             } else {
                 const source = (&bundle.graph.input_files.items(.source)[@as(usize, @intCast(resolve.import_record.importer_source_index))]);
-                _ = (blk_catch_35: { break :blk_catch_35 ((log.addRangeErrorFmt(source, resolve.import_record.range, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_35| { _ = &__ce_35;  }); });
+                _ = (blk_catch_36: { break :blk_catch_36 ((log.addRangeErrorFmt(source, resolve.import_record.range, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_36| { _ = &__ce_36;  }); });
             }
 },
 .success => |result| {
@@ -1796,10 +1799,10 @@ var out_source_index: ?Index = null;
                 } else {
                     path.namespace = result.namespace;
                 }
-                const existing = (blk_catch_36: { break :blk_catch_36 ((bundle.pathToSourceIndexMap(resolve.import_record.original_target).getOrPutPath(bundle.allocator(), (&path))) catch |oom_err| { _ = &oom_err; break :blk_catch_36 bun.handleOom(oom_err); }); });
+                const existing = (blk_catch_37: { break :blk_catch_37 ((bundle.pathToSourceIndexMap(resolve.import_record.original_target).getOrPutPath(bundle.allocator(), (&path))) catch |oom_err| { _ = &oom_err; break :blk_catch_37 bun.handleOom(oom_err); }); });
                 if ((!existing.found_existing)) {
                     const free_items: [2][]const u8 = .{ result.namespace, result.path };
-                    _ = (blk_catch_37: { break :blk_catch_37 ((bundle.free_list.appendSlice((&free_items))) catch |__ce_37| { _ = &__ce_37;  }); });
+                    _ = (blk_catch_38: { break :blk_catch_38 ((bundle.free_list.appendSlice((&free_items))) catch |__ce_38| { _ = &__ce_38;  }); });
                     path = bun.handleOom(bundle.pathWithPrettyInitialized(path, resolve.import_record.original_target));
                     existing.key_ptr.* = path.text;
                     const source_index = Index.init((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(bundle.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(bundle.graph.ast.len)) else cp_cast_int(i32, bundle.graph.ast.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(bundle.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(bundle.graph.ast.len)) else cp_cast_int(i32, bundle.graph.ast.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(bundle.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(bundle.graph.ast.len)) else cp_cast_int(i32, bundle.graph.ast.len)))));
@@ -1838,16 +1841,16 @@ var out_source_index: ?Index = null;
             if (out_source_index) |source_index| {
                 _ = &source_index;
                 if ((resolve.import_record.kind == .entry_point_build)) {
-                    _ = (blk_catch_41: { break :blk_catch_41 ((bundle.graph.entry_points.append(bundle.allocator(), source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_41 bun.handleOom(oom_err); }); });
-                    _ = (blk_catch_42: { break :blk_catch_42 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_42 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_42: { break :blk_catch_42 ((bundle.graph.entry_points.append(bundle.allocator(), source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_42 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_43: { break :blk_catch_43 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_43 bun.handleOom(oom_err); }); });
                 } else {
                     const source_import_records = (&bundle.graph.ast.items(.import_records)[@as(usize, @intCast(resolve.import_record.importer_source_index))]);
                     if ((source_import_records.len <= resolve.import_record.import_record_index)) {
-                        const entry = (blk_catch_43: { break :blk_catch_43 ((bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(bundle.allocator(), resolve.import_record.importer_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_43 bun.handleOom(oom_err); }); });
+                        const entry = (blk_catch_44: { break :blk_catch_44 ((bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(bundle.allocator(), resolve.import_record.importer_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_44 bun.handleOom(oom_err); }); });
                         if ((!entry.found_existing)) {
                             entry.value_ptr.* = .{};
                         }
-                        _ = (blk_catch_44: { break :blk_catch_44 ((entry.value_ptr.append(bundle.allocator(), .{ .to_source_index = source_index, .import_record_index = resolve.import_record.import_record_index })) catch |oom_err| { _ = &oom_err; break :blk_catch_44 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_45: { break :blk_catch_45 ((entry.value_ptr.append(bundle.allocator(), .{ .to_source_index = source_index, .import_record_index = resolve.import_record.import_record_index })) catch |oom_err| { _ = &oom_err; break :blk_catch_45 bun.handleOom(oom_err); }); });
                     } else {
                         const import_record: *ImportRecord = (&source_import_records.slice()[@as(usize, @intCast(resolve.import_record.import_record_index))]);
                         import_record.source_index = source_index;
@@ -1973,11 +1976,11 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
             }
             var output_files = try self.linker.generateChunksInParallel(chunks, false);
             _ = &output_files;
-            const metafile: ?[]const u8 = (if (self.linker.options.metafile) (blk_catch_46: { break :blk_catch_46 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&self.linker), chunks)) catch |e| { _ = &e; break :blk_catch_46 blk: {
+            const metafile: ?[]const u8 = (if (self.linker.options.metafile) (blk_catch_47: { break :blk_catch_47 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&self.linker), chunks)) catch |e| { _ = &e; break :blk_catch_47 blk: {
             _ = bun.Output.warn("Failed to generate metafile: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
-            const metafile_markdown: ?[]const u8 = (if (((self.linker.options.metafile_markdown_path.len > 0) and (metafile != null))) (blk_catch_47: { break :blk_catch_47 ((LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?)) catch |e| { _ = &e; break :blk_catch_47 blk: {
+            const metafile_markdown: ?[]const u8 = (if (((self.linker.options.metafile_markdown_path.len > 0) and (metafile != null))) (blk_catch_48: { break :blk_catch_48 ((LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?)) catch |e| { _ = &e; break :blk_catch_48 blk: {
             _ = bun.Output.warn("Failed to generate metafile markdown: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
@@ -1999,7 +2002,7 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
 
 pub fn writeMetafileOutput(output_files: *std.array_list.Managed(options.OutputFile), outdir: []const u8, file_path: []const u8, content: []const u8, output_kind: jsc.API.BuildArtifact.OutputKind) !void {
             if ((outdir.len > 0)) {
-                var root_dir = (blk_catch_48: { break :blk_catch_48 ((bun.FD.cwd().stdDir().makeOpenPath(outdir, .{})) catch |e| { _ = &e; _ = bun.Output.warn("Failed to open output directory '{s}': {s}", .{ outdir, @errorName(e) });
+                var root_dir = (blk_catch_49: { break :blk_catch_49 ((bun.FD.cwd().stdDir().makeOpenPath(outdir, .{})) catch |e| { _ = &e; _ = bun.Output.warn("Failed to open output directory '{s}': {s}", .{ outdir, @errorName(e) });
                 return; }); });
                 _ = &root_dir;
                 var _guard_root_dir = CloseGuard(@TypeOf(root_dir)){ .ptr = (blk: {
@@ -2012,15 +2015,15 @@ pub fn writeMetafileOutput(output_files: *std.array_list.Managed(options.OutputF
                 if (std.fs.path.dirname(file_path)) |parent| {
                     _ = &parent;
                     if ((parent.len > 0)) {
-                        _ = (blk_catch_49: { break :blk_catch_49 ((root_dir.makePath(parent)) catch |__ce_49| { _ = &__ce_49;  }); });
+                        _ = (blk_catch_50: { break :blk_catch_50 ((root_dir.makePath(parent)) catch |__ce_50| { _ = &__ce_50;  }); });
                     }
                 }
                 var path_buf: bun.PathBuffer = undefined;
                 _ = &path_buf;
-                _ = (blk_catch_50: { break :blk_catch_50 ((jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
+                _ = (blk_catch_51: { break :blk_catch_51 ((jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
                 break :blk @constCast(content.ptr);
 
-}), .len = @as(u32, @truncate(content.len)), .byte_len = @as(u32, @truncate(content.len)) } } }, .encoding = .buffer, .mode = 420, .dirfd = bun.FD.fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(file_path) } } }).unwrap()) catch |e| { _ = &e; break :blk_catch_50 bun.Output.warn("Failed to write metafile to '{s}': {s}", .{ file_path, @errorName(e) }); }); });
+}), .len = @as(u32, @truncate(content.len)), .byte_len = @as(u32, @truncate(content.len)) } } }, .encoding = .buffer, .mode = 420, .dirfd = bun.FD.fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(file_path) } } }).unwrap()) catch |e| { _ = &e; break :blk_catch_51 bun.Output.warn("Failed to write metafile to '{s}': {s}", .{ file_path, @errorName(e) }); }); });
             }
             const is_json = (output_kind == .@"metafile-json");
             _ = try output_files.append(options.OutputFile.init(.{ .loader = (if (is_json) .json else .file), .input_loader = (if (is_json) .json else .file), .input_path = bun.handleOom(bun.default_allocator.dupe(u8, (if (is_json) "metafile.json" else "metafile.md"))), .output_path = bun.handleOom(bun.default_allocator.dupe(u8, file_path)), .data = .{ .saved = content.len }, .output_kind = output_kind, .is_executable = false, .side = null, .entry_point_index = null }));
@@ -2245,12 +2248,12 @@ pub fn enqueueOnLoadPluginIfNeeded(self: *BundleV2, parse: *ParseTask) bool {
                 return true;
             }
             if (bun.strings.eqlComptime(parse.path.namespace, "dataurl")) {
-                const maybe_data_url = (blk_catch_53: { break :blk_catch_53 ((DataURL.parse(parse.path.text)) catch |__ce_53| { _ = &__ce_53; return false; }); });
+                const maybe_data_url = (blk_catch_54: { break :blk_catch_54 ((DataURL.parse(parse.path.text)) catch |__ce_54| { _ = &__ce_54; return false; }); });
                 if ((maybe_data_url == null)) {
                     return false;
                 }
                 const data_url = maybe_data_url.?;
-                const maybe_decoded = (blk_catch_54: { break :blk_catch_54 ((data_url.decodeData(bun.default_allocator)) catch |__ce_54| { _ = &__ce_54; return false; }); });
+                const maybe_decoded = (blk_catch_55: { break :blk_catch_55 ((data_url.decodeData(bun.default_allocator)) catch |__ce_55| { _ = &__ce_55; return false; }); });
                 _ = bun.handleOom(self.free_list.append(maybe_decoded));
                 parse.contents_or_fd = .{ .contents = maybe_decoded };
                 parse.loader = (switch (data_url.decodeMimeType().category) {
@@ -2426,12 +2429,12 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &target;
                 if (((import_record.*).tag == .bake_resolve_to_ssr_graph)) {
                     if ((self.framework == null)) {
-                        _ = (blk_catch_55: { break :blk_catch_55 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_55| { _ = &__ce_55; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_56: { break :blk_catch_56 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_56| { _ = &__ce_56; @panic("unexpected log error"); }); });
                         continue;
                     }
                     const is_supported = ((self.framework.?.server_components != null) and self.framework.?.server_components.?.separate_ssr_graph);
                     if ((!is_supported)) {
-                        _ = (blk_catch_56: { break :blk_catch_56 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_56| { _ = &__ce_56; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_57: { break :blk_catch_57 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, (import_record.*).range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_57| { _ = &__ce_57; @panic("unexpected log error"); }); });
                         continue;
                     }
                     transpiler = (blk: {
@@ -2463,7 +2466,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             (import_record.*).source_index = .init(id);
                             continue;
                         }
-                        const resolve_entry = (blk_catch_57: { break :blk_catch_57 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_57 bun.handleOom(oom_err); }); });
+                        const resolve_entry = (blk_catch_58: { break :blk_catch_58 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_58 bun.handleOom(oom_err); }); });
                         if (resolve_entry.found_existing) {
                             (import_record.*).path = resolve_entry.value_ptr.*.path;
                             continue;
@@ -2497,7 +2500,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &resolve_result;
                 const dummy_resolve_result: _resolver.Result = undefined;
                 inner: while (true) {
-                    resolve_result = (blk_catch_58: { break :blk_catch_58 ((transpiler.resolver.resolveWithFramework(source_dir, (import_record.*).path.text, (import_record.*).kind)) catch |e| { _ = &e; break :blk_catch_58 blk_res: {
+                    resolve_result = (blk_catch_59: { break :blk_catch_59 ((transpiler.resolver.resolveWithFramework(source_dir, (import_record.*).path.text, (import_record.*).kind)) catch |e| { _ = &e; break :blk_catch_59 blk_res: {
                     const log = self.logForResolutionFailures(source.path.text, bake_graph);
                     if ((e == error.ModuleNotFound)) {
                         if ((self.bun_watcher != null)) {
@@ -2510,7 +2513,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             }
                             if (self.transpiler.options.dev_server) |dev| {
                                 _ = &dev;
-                                _ = (blk_catch_59: { break :blk_catch_59 ((dev.directory_watchers.trackResolutionFailure(source.path.text, (import_record.*).path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_59 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_60: { break :blk_catch_60 ((dev.directory_watchers.trackResolutionFailure(source.path.text, (import_record.*).path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
                             }
                         }
                     }
@@ -2520,15 +2523,15 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                         last_error = e;
                         if (isPackagePath((import_record.*).path.text)) {
                             if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin((import_record.*).path.text))) {
-                                _ = (blk_catch_60: { break :blk_catch_60 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
                             } else {
                                 if (((!ctx.target.isBun()) and strings.eqlComptime((import_record.*).path.text, "bun"))) {
-                                    _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
+                                    _ = (blk_catch_62: { break :blk_catch_62 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
                                 } else {
                                     if (((!ctx.target.isBun()) and strings.hasPrefixComptime((import_record.*).path.text, "bun:"))) {
-                                        _ = (blk_catch_62: { break :blk_catch_62 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_63: { break :blk_catch_63 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
                                     } else {
-                                        _ = (blk_catch_63: { break :blk_catch_63 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
                                     }
                                 }
                             }
@@ -2545,7 +2548,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             }
                             break :brk specifier_to_use;
 } else (import_record.*).path.text);
-                            _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
+                            _ = (blk_catch_65: { break :blk_catch_65 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
                         }
                     } break :__sw_blk_31; } } {  last_error = e; break :__sw_blk_31; }  }
                     had_resolve_error = true;
@@ -2577,7 +2580,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                     _ = brk: {
                     if (((path.loader((&self.transpiler.options.loaders)) == .html) and (((import_record.*).loader == null) or ((import_record.*).loader.? == .html)))) {
                         const log = self.logForResolutionFailures(source.path.text, bake_graph);
-                        _ = (blk_catch_65: { break :blk_catch_65 ((log.addRangeErrorFmt(source, (import_record.*).range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_66: { break :blk_catch_66 ((log.addRangeErrorFmt(source, (import_record.*).range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
                         continue;
                     }
                     if ((loader == .css)) {
@@ -2591,7 +2594,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             const hash = ((dev_server.assets.getHash(path.text)) orelse (@panic("cached asset not found")));
                             (import_record.*).path.text = path.text;
                             (import_record.*).path.namespace = "file";
-                            (import_record.*).path.pretty = (blk_catch_66: { break :blk_catch_66 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
+                            (import_record.*).path.pretty = (blk_catch_67: { break :blk_catch_67 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
                             (import_record.*).path.is_disabled = false;
                         } else {
                             (import_record.*).path.text = path.text;
@@ -2626,7 +2629,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 if (is_html_entrypoint) {
                     (import_record.*).kind = .html_manifest;
                 }
-                const resolve_entry = (blk_catch_67: { break :blk_catch_67 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
+                const resolve_entry = (blk_catch_68: { break :blk_catch_68 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
                 if (resolve_entry.found_existing) {
                     (import_record.*).path = resolve_entry.value_ptr.*.path;
                     continue;
@@ -2650,7 +2653,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 if ((resolve_result.path_pair.secondary != null)) {
                     const secondary = (&resolve_result.path_pair.secondary.?);
                     if ((((!secondary.is_disabled) and (secondary != path)) and (!strings.eqlLong(secondary.text, path.text, true)))) {
-                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_68: { break :blk_catch_68 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
+                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_69: { break :blk_catch_69 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_69 bun.handleOom(oom_err); }); });
                     }
                 }
                 if (is_html_entrypoint) {
@@ -2900,7 +2903,7 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
             if (((result.unique_key_for_additional_file.len > 0) and result.loader.shouldCopyForBundling())) {
                 if (bundle.transpiler.options.dev_server) |dev| {
                     _ = &dev;
-                    _ = (blk_catch_76: { break :blk_catch_76 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_76 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_77: { break :blk_catch_77 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_77 bun.handleOom(oom_err); }); });
                 }
             }
             graph.input_files.items(.loader)[cp_cast_int(usize, result.source.index.get())] = result.loader;
@@ -2946,20 +2949,20 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
                 var ssr_index: Index.Int = undefined;
                 _ = &ssr_index;
                 if (bundle.framework.?.server_components.?.separate_ssr_graph) {
-                    reference_source_index = (blk_catch_78: { break :blk_catch_78 ((bundle.enqueueServerComponentGeneratedFile(.{ .client_reference_proxy = .{ .other_source = result.source, .named_exports = result.ast.named_exports } }, result.source)) catch |oom_err| { _ = &oom_err; break :blk_catch_78 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    reference_source_index = (blk_catch_79: { break :blk_catch_79 ((bundle.enqueueServerComponentGeneratedFile(.{ .client_reference_proxy = .{ .other_source = result.source, .named_exports = result.ast.named_exports } }, result.source)) catch |oom_err| { _ = &oom_err; break :blk_catch_79 @as(Index.Int, bun.handleOom(oom_err)); }); });
                     const ssr_source = (&result.source);
                     ssr_source.path.pretty = ssr_source.path.text;
                     ssr_source.path = bun.handleOom(bundle.pathWithPrettyInitialized(ssr_source.path, .bake_server_components_ssr));
-                    ssr_index = (blk_catch_79: { break :blk_catch_79 ((bundle.enqueueParseTask2(ssr_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .bake_server_components_ssr)) catch |oom_err| { _ = &oom_err; break :blk_catch_79 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    ssr_index = (blk_catch_80: { break :blk_catch_80 ((bundle.enqueueParseTask2(ssr_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .bake_server_components_ssr)) catch |oom_err| { _ = &oom_err; break :blk_catch_80 @as(Index.Int, bun.handleOom(oom_err)); }); });
                 } else {
                     const server_source = (&result.source);
                     server_source.path.pretty = server_source.path.text;
                     server_source.path = bun.handleOom(bundle.pathWithPrettyInitialized(server_source.path, bundle.transpiler.options.target));
-                    reference_source_index = (blk_catch_80: { break :blk_catch_80 ((bundle.enqueueParseTask2(server_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .browser)) catch |oom_err| { _ = &oom_err; break :blk_catch_80 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    reference_source_index = (blk_catch_81: { break :blk_catch_81 ((bundle.enqueueParseTask2(server_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .browser)) catch |oom_err| { _ = &oom_err; break :blk_catch_81 @as(Index.Int, bun.handleOom(oom_err)); }); });
                     ssr_index = Index.invalid.get();
                 }
-                _ = (blk_catch_81: { break :blk_catch_81 ((graph.pathToSourceIndexMap(result.ast.target).put(bundle.allocator(), result.source.path.text, reference_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_81 bun.handleOom(oom_err); }); });
-                _ = (blk_catch_82: { break :blk_catch_82 ((graph.server_component_boundaries.put(bundle.allocator(), result.source.index.get(), result.use_directive, reference_source_index, ssr_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_82 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_82: { break :blk_catch_82 ((graph.pathToSourceIndexMap(result.ast.target).put(bundle.allocator(), result.source.path.text, reference_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_82 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_83: { break :blk_catch_83 ((graph.server_component_boundaries.put(bundle.allocator(), result.source.index.get(), result.use_directive, reference_source_index, ssr_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_83 bun.handleOom(oom_err); }); });
             }
 },
 .err => |*e| {
@@ -2969,7 +2972,7 @@ if (comptime Environment.enable_logs) {
             if (process_log) {
                 if (bundle.transpiler.options.dev_server) |dev_server| {
                     _ = &dev_server;
-                    _ = (blk_catch_83: { break :blk_catch_83 ((dev_server.handleParseTaskFailure(e.err, e.target.bakeGraph(), graph.input_files.items(.source)[@as(usize, @intCast(e.source_index.get()))].path.text, (&e.log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_83 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_84: { break :blk_catch_84 ((dev_server.handleParseTaskFailure(e.err, e.target.bakeGraph(), graph.input_files.items(.source)[@as(usize, @intCast(e.source_index.get()))].path.text, (&e.log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_84 bun.handleOom(oom_err); }); });
                 } else {
                     if ((e.log.msgs.items.len > 0)) {
                         _ = ((e.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreachable);
@@ -3395,7 +3398,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             var path_clone = path;
             _ = &path_clone;
             if ((target == .bake_server_components_ssr)) {
-                path_clone.pretty = (blk_catch_87: { break :blk_catch_87 ((std.fmt.bufPrint(buf, "ssr:{s}", .{ rel })) catch |__ce_87| { _ = &__ce_87; break :blk_catch_87 buf[0..]; }); });
+                path_clone.pretty = (blk_catch_88: { break :blk_catch_88 ((std.fmt.bufPrint(buf, "ssr:{s}", .{ rel })) catch |__ce_88| { _ = &__ce_88; break :blk_catch_88 buf[0..]; }); });
             } else {
                 path_clone.pretty = rel;
             }
@@ -3404,7 +3407,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             var path_clone = path;
             _ = &path_clone;
             const NamespaceAlt = std.fmt.Alt(string, fmtEscapedNamespace);
-            path_clone.pretty = (blk_catch_88: { break :blk_catch_88 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_88| { _ = &__ce_88; break :blk_catch_88 buf[0..]; }); });
+            path_clone.pretty = (blk_catch_89: { break :blk_catch_89 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_89| { _ = &__ce_89; break :blk_catch_89 buf[0..]; }); });
             return path_clone.dupeAllocFixPretty(allocator);
         }
 }

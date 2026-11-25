@@ -488,6 +488,10 @@ function ClientRequest(input, options, cb) {
             if (err.code === "ConnectionRefused") {
               err = new Error("ECONNREFUSED");
               err.code = "ECONNREFUSED";
+            } else if (err.code === "InvalidContentLength") {
+              err = $HPE_UNEXPECTED_CONTENT_LENGTH("Parse Error");
+            } else if (err.code === "InvalidHTTPResponse") {
+              err = $HPE_INVALID_HEADER_TOKEN("Parse Error: Invalid header token encountered");
             }
             // Node treats AbortError separately.
             // The "abort" listener on the abort controller should have called this
