@@ -154,9 +154,6 @@ return jsc.JSValue.jsNumber(d);
 .Boolean => |b| {
 return jsc.JSValue.jsBoolean(b);
 },
-.BlobError => |str| {
-return valkeyErrorToJS(globalObject, str, protocol.RedisError.InvalidBlobError);
-},
 .VerbatimString => |*verbatim| {
 return valkeyStrToJSValue(globalObject, (&verbatim.content), (&options));
 },

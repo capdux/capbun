@@ -83,6 +83,47 @@ fn countAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scope) {
     header_builder.count("npm-auth-type", "legacy");
 }
 
+struct SplitUserinfo {
+    userinfo: []const u8,
+    url_without_userinfo: []const u8,
+}
+
+/// Splits `http://user:pass@host/pkg.tgz` into `user:pass` and `http://host/pkg.tgz`; only an `@` in the authority counts, not `/@scope/`.
+fn splitUrlUserinfo(allocator: std.mem.Allocator, url: []const u8): OOM!SplitUserinfo? {
+    const scheme_end = strings.indexOf(url, "://") ?? return null;
+    const authority_start = scheme_end + "://".len;
+    const rest = url[authority_start..];
+    const authority_end = strings.indexOfAny(rest, "/?#") ?? rest.len;
+    const authority = rest[0..authority_end];
+    const at = strings.lastIndexOfChar(authority, '@') ?? return null;
+
+    let without_userinfo = allocator.alloc(u8, url.len - (at + 1))?;
+    @memcpy(without_userinfo[0..authority_start], url[0..authority_start]);
+    @memcpy(without_userinfo[authority_start..], rest[at + 1 ..]);
+    return SplitUserinfo{
+        userinfo: rest[0..at],
+        url_without_userinfo: without_userinfo,
+    };
+}
+
+/// `Basic base64(userinfo)` as written (no percent-decoding, `user` means `user:`), matching what npm sends via node's `auth` option.
+fn basicAuthorizationFromUserinfo(allocator: std.mem.Allocator, userinfo: []const u8): OOM![]const u8 {
+    const scheme = "Basic ";
+    const has_colon = strings.containsChar(userinfo, ':');
+    const raw_len = userinfo.len + (if (has_colon) @as(usize, 0) else @as(usize, 1));
+    let user_pass = allocator.alloc(u8, raw_len)?;
+    defer allocator.free(user_pass);
+    @memcpy(user_pass[0..userinfo.len], userinfo);
+    if (!has_colon) {
+        user_pass[userinfo.len] = ':';
+    }
+    const encoded_len = std.base64.standard.Encoder.calcSize(user_pass.len);
+    let value = allocator.alloc(u8, scheme.len + encoded_len)?;
+    @memcpy(value[0..scheme.len], scheme);
+    * = std.base64.standard.Encoder.encode(value[scheme.len..], user_pass);
+    return value;
+}
+
 pub struct PackageManifestCallback {
     loaded_manifest: (Npm.PackageManifest)? = null,
     name: strings.StringOrTinyString,
@@ -452,6 +493,16 @@ pub const ForTarballError = OOM || error{
             return error.InvalidURL;
         }
 
+        // Userinfo becomes a header and leaves the URL: `bun.URL` keeps it in `origin`, which the redirect same-origin check compares.
+        let url_authorization: ([]const u8)? = null;
+        defer if (ua := url_authorization) allocator.free(ua);
+        if (split := splitUrlUserinfo(allocator, _.url_buf)?) {
+            if (split.userinfo.len > 0) {
+                url_authorization = basicAuthorizationFromUserinfo(allocator, split.userinfo)?;
+            }
+            _.url_buf = split.url_without_userinfo;
+        }
+
         _.response_buffer = MutableString.initEmpty(allocator);
         _.allocator = allocator;
 
@@ -462,10 +513,21 @@ pub const ForTarballError = OOM || error{
             countAuth(&header_builder, scope);
         }
 
+        // Registry credentials win over URL userinfo, as in npm.
+        let use_url_auth = false;
+        if (ua := url_authorization) {
+            if (header_builder.header_count == 0) {
+                header_builder.count("Authorization", ua);
+                use_url_auth = true;
+            }
+        }
+
         if (header_builder.header_count > 0) {
             header_builder.allocate(allocator)?;
 
-            if (authorization == .allow_authorization) {
+            if (use_url_auth) {
+                header_builder.append("Authorization", url_authorization.?);
+            } else if (authorization == .allow_authorization) {
                 appendAuth(&header_builder, scope);
             }
 

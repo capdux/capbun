@@ -18,8 +18,7 @@ const POSTGRES_EPOCH_DATE = 946684800000;
 
 pub fn fromBinary(bytes: []const u8): f64 {
     const microseconds = std.mem.readInt(i64, bytes[0..8], .big);
-    const double_microseconds: f64 = @floatFromInt(microseconds);
-    return (double_microseconds / std.time.us_per_ms) + POSTGRES_EPOCH_DATE;
+    return @floatFromInt(@divFloor(microseconds, std.time.us_per_ms) + POSTGRES_EPOCH_DATE);
 }
 
 pub fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): bun.JSError!i64 {

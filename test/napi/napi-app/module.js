@@ -980,4 +980,32 @@ nativeTests.test_create_tsfn_with_async_context = async () => {
   });
 };
 
+nativeTests.test_create_reference_primitive_by_version = () => {
+  const v10 = require("./build/Debug/test_create_reference_primitive_v10.node");
+  const v8 = require("./build/Debug/test_create_reference_primitive_v8.node");
+  const cases = [
+    ["undefined", undefined],
+    ["null", null],
+    ["boolean", true],
+    ["number", 1.5],
+    ["string", "s"],
+    ["bigint", 7n],
+    ["symbol", Symbol("sym")],
+    ["registered symbol", Symbol.for("test_create_reference_primitive")],
+    ["object", { a: 1 }],
+    ["function", () => 0],
+  ];
+  for (const [declared, addon] of [
+    [10, v10],
+    [8, v8],
+  ]) {
+    for (const [name, value] of cases) {
+      const { status, roundTrip, heldAtZero, reref, declared: d } = addon.create_ref(value);
+      let line = `declared=${declared} header=${d} ${name}: status=${status}`;
+      if (status === 0) line += ` roundTrip=${roundTrip} heldAtZero=${heldAtZero} reref=${reref}`;
+      console.log(line);
+    }
+  }
+};
+
 module.exports = nativeTests;

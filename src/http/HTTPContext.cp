@@ -14,6 +14,21 @@ pub type OptionalAnyPtr = *!?;
 
 const MAX_KEEPALIVE_HOSTNAME: usize = 128;
 const pool_size: usize = 64;
+const unix_pool_size: usize = 128;
+
+pub enum PeerVerification: u2 {
+    none = 0,
+    callback = 1,
+    native = 2,
+
+    pub fn allows(pooled: PeerVerification): bool {
+        return @intFromEnum(_) <= @intFromEnum(pooled);
+    }
+
+    pub fn max(other: PeerVerification): PeerVerification {
+        return if (@intFromEnum(_) >= @intFromEnum(other)) _ else other;
+    }
+}
 
 pub struct DeadSocket {
     garbage: u8 = 0,
@@ -28,6 +43,7 @@ pub struct _PooledSocket<const ssl: bool> {
     hostname_len: u8 = 0,
     port: u16 = 0,
     did_have_handshaking_error_while_reject_unauthorized_is_false: bool = false,
+    verification: PeerVerification = .none,
     ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr? = null,
     owner: *HTTPContext(ssl),
     proxy_tunnel: ProxyTunnel.RefPtr? = null,
@@ -44,10 +60,23 @@ pub struct _PooledSocket<const ssl: bool> {
     }
 }
 
+pub struct _PooledUnixSocket<const ssl: bool> {
+    http_socket: SocketHandler(ssl),
+    unix_path: []const u8 = "",
+    target_hostname: []const u8 = "",
+    target_port: u16 = 0,
+    did_have_handshaking_error_while_reject_unauthorized_is_false: bool = false,
+    verification: PeerVerification = .none,
+    ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr? = null,
+    owner: *HTTPContext(ssl),
+    park_seq: u64 = 0,
+}
+
 pub struct _ExistingSocket<const ssl: bool> {
     socket: SocketHandler(ssl),
     tunnel: (*ProxyTunnel)?,
     h2_session: (*bun.http.H2.ClientSession)?,
+    verification: PeerVerification = .none,
 
     fn hasTunnel(): bool {
         return _.tunnel != null;
@@ -283,6 +312,8 @@ export class HTTPContext<const ssl: bool> {
         bun.http.H2.ClientSession,
     });
     pub const PooledSocketHiveAllocator = bun.HiveArray(PooledSocket, pool_size);
+    pub const PooledUnixSocket = _PooledUnixSocket(ssl);
+    pub const PooledUnixSocketHiveAllocator = bun.HiveArray(PooledUnixSocket, unix_pool_size);
 
     pub static fn markTaggedSocketAsDead(socket: HTTPSocket, tagged: ActiveSocket) {
         if (tagged.is(PooledSocket)) {
@@ -380,7 +411,7 @@ export class HTTPContext<const ssl: bool> {
 
     fn existingSocket(
         *_,
-        reject_unauthorized: bool,
+        verification: PeerVerification,
         hostname: []const u8,
         port: u16,
         ssl_config: (*bun.api.server.ServerConfig.SSLConfig)?,
@@ -405,7 +436,11 @@ export class HTTPContext<const ssl: bool> {
                 continue;
             }
 
-            if (socket.did_have_handshaking_error_while_reject_unauthorized_is_false && reject_unauthorized) {
+            if (socket.did_have_handshaking_error_while_reject_unauthorized_is_false && verification != .none) {
+                continue;
+            }
+
+            if (!verification.allows(socket.verification)) {
                 continue;
             }
 
@@ -429,7 +464,7 @@ export class HTTPContext<const ssl: bool> {
                 if (!bun.strings.eqlLong(socket.target_hostname, target_hostname, true)) {
                     continue;
                 }
-                if (reject_unauthorized && !socket.proxy_tunnel.?.data.established_with_reject_unauthorized) {
+                if (!verification.allows(socket.proxy_tunnel.?.data.verification)) {
                     continue;
                 }
             }
@@ -457,16 +492,104 @@ export class HTTPContext<const ssl: bool> {
                 }
                 const h2_session = socket.h2_session;
                 socket.h2_session = null;
+                const socket_verification = socket.verification;
                 bun.assert(_.pending_sockets.put(socket));
-                return .{ .socket = http_socket, .tunnel = tunnel, .h2_session = h2_session };
+                return .{ .socket = http_socket, .tunnel = tunnel, .h2_session = h2_session, .verification = socket_verification };
             }
         }
 
         return null;
     }
 
+    fn existingUnixSocket(
+        *_,
+        verification: PeerVerification,
+        unix_path: []const u8,
+        target_hostname: []const u8,
+        target_port: u16,
+        ssl_config: (*bun.api.server.ServerConfig.SSLConfig)?,
+    ): ExistingSocket? {
+        let iter = _.pending_unix_sockets.used.iterator(.{ .kind = .set });
+        while (pending_socket_index := iter.next()) {
+            let socket = _.pending_unix_sockets.at(@as(u16, @intCast(pending_socket_index)));
+            if (!std.mem.eql(u8, socket.unix_path, unix_path)) {
+                continue;
+            }
+            if (bun.api.server.ServerConfig.SSLConfig.rawPtr(socket.ssl_config) != ssl_config) {
+                continue;
+            }
+            if (socket.did_have_handshaking_error_while_reject_unauthorized_is_false && verification != .none) {
+                continue;
+            }
+            if (!verification.allows(socket.verification)) {
+                continue;
+            }
+            if (ssl) {
+                if (socket.target_port != target_port || !bun.strings.eqlLong(socket.target_hostname, target_hostname, true)) {
+                    continue;
+                }
+            }
+
+            const http_socket = socket.http_socket;
+            if (http_socket.isClosed() || http_socket.isShutdown() || http_socket.getError() != 0) {
+                if (*s := socket.ssl_config) s.deinit();
+                socket.ssl_config = null;
+                if (socket.unix_path.len > 0) {
+                    bun.default_allocator.free(socket.unix_path);
+                    socket.unix_path = "";
+                }
+                if (socket.target_hostname.len > 0) {
+                    bun.default_allocator.free(socket.target_hostname);
+                    socket.target_hostname = "";
+                }
+                if (ctx := http_socket.ext(AnyPtrPtr)) {
+                    ctx.* = bun.cast(AnyPtrPtr, ActiveSocket.init(dead_socket).ptr());
+                }
+                @This().closeSocket(http_socket);
+                bun.assert(_.pending_unix_sockets.put(socket));
+                continue;
+            }
+
+            if (*s := socket.ssl_config) s.deinit();
+            socket.ssl_config = null;
+            if (socket.unix_path.len > 0) {
+                bun.default_allocator.free(socket.unix_path);
+                socket.unix_path = "";
+            }
+            if (socket.target_hostname.len > 0) {
+                bun.default_allocator.free(socket.target_hostname);
+                socket.target_hostname = "";
+            }
+            const socket_verification = socket.verification;
+            bun.assert(_.pending_unix_sockets.put(socket));
+            return .{ .socket = http_socket, .tunnel = null, .h2_session = null, .verification = socket_verification };
+        }
+        return null;
+    }
+
     pub fn connectSocket(*_, client: *bun.http, socket_path: []const u8): !HTTPSocket? {
         client.connected_url = if (client.http_proxy != null) client.http_proxy.? else client.url;
+        if (client.isKeepAlivePossible()) {
+            if (found := _.existingUnixSocket(
+                client.socketVerification(),
+                socket_path,
+                client.url.hostname,
+                client.url.getPortAuto(),
+                bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props),
+            )) {
+                const sock = found.socket;
+                if (ctx := sock.ext(AnyPtrPtr)) {
+                    ctx.* = bun.cast(AnyPtrPtr, ActiveSocket.init(client).ptr());
+                }
+                client.flags.reused_socket_verification = found.verification;
+                client.allow_retry = true;
+                client.onOpen(ssl, sock)?;
+                if (ssl) {
+                    client.firstCall(ssl, sock);
+                }
+                return sock;
+            }
+        }
         const socket = HTTPSocket.connectUnixGroup(
             &_.group,
             kind,
@@ -492,13 +615,13 @@ export class HTTPContext<const ssl: bool> {
             if (client.canOfferH2()) {
                 const host_header_hash = client.proxyAuthHash();
                 for (session of _.active_h2_sessions.items) {
-                    if (session.hasHeadroom() && session.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), host_header_hash)) {
+                    if (session.hasHeadroom() && session.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), client.socketVerification(), host_header_hash)) {
                         session.adopt(client);
                         return null;
                     }
                 }
                 for (pc of _.pending_h2_connects.items) {
-                    if (pc.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), host_header_hash)) {
+                    if (pc.matches(hostname, port, bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props), client.socketVerification(), host_header_hash)) {
                         bun.handleOom(pc.waiters.append(bun.default_allocator, client));
                         return null;
                     }
@@ -513,7 +636,7 @@ export class HTTPContext<const ssl: bool> {
             const proxy_auth_hash: u64 = if (want_tunnel || ssl) client.proxyAuthHash() else 0;
 
             if (found := _.existingSocket(
-                client.flags.reject_unauthorized,
+                client.socketVerification(),
                 hostname,
                 port,
                 bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props),
@@ -527,6 +650,7 @@ export class HTTPContext<const ssl: bool> {
                 if (ctx := sock.ext(AnyPtrPtr)) {
                     ctx.* = bun.cast(AnyPtrPtr, ActiveSocket.init(client).ptr());
                 }
+                client.flags.reused_socket_verification = found.verification;
                 client.allow_retry = true;
                 if (session := found.h2_session) {
                     if (ssl) {
@@ -567,6 +691,7 @@ export class HTTPContext<const ssl: bool> {
                     .hostname = bun.handleOom(bun.default_allocator.dupe(u8, hostname)),
                     .port = port,
                     .ssl_config = bun.api.server.ServerConfig.SSLConfig.rawPtr(client.tls_props),
+                    .verification = client.socketVerification(),
                     .host_header_hash = client.proxyAuthHash(),
                 });
                 bun.handleOom(_.pending_h2_connects.append(bun.default_allocator, pc));
@@ -633,6 +758,24 @@ export class HTTPContext<const ssl: bool> {
                 pooled.http_socket.close(.failure);
             }
         }
+        {
+            let iter = _.pending_unix_sockets.used.iterator(.{ .kind = .set });
+            while (idx := iter.next()) {
+                let pooled = _.pending_unix_sockets.at(@intCast(idx));
+                if (*s := pooled.ssl_config) s.deinit();
+                pooled.ssl_config = null;
+                if (pooled.unix_path.len > 0) {
+                    bun.default_allocator.free(pooled.unix_path);
+                    pooled.unix_path = "";
+                }
+                if (pooled.target_hostname.len > 0) {
+                    bun.default_allocator.free(pooled.target_hostname);
+                    pooled.target_hostname = "";
+                }
+                @This().markSocketAsDead(pooled.http_socket);
+                pooled.http_socket.close(.failure);
+            }
+        }
         _.active_h2_sessions.deinit(bun.default_allocator);
         for (pc of _.pending_h2_connects.items) pc.deinit();
         _.pending_h2_connects.deinit(bun.default_allocator);
@@ -672,6 +815,7 @@ export class HTTPContext<const ssl: bool> {
         *_,
         socket: HTTPSocket,
         did_have_handshaking_error_while_reject_unauthorized_is_false: bool,
+        verification: PeerVerification,
         hostname: []const u8,
         port: u16,
         ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr?,
@@ -680,12 +824,72 @@ export class HTTPContext<const ssl: bool> {
         target_port: u16,
         proxy_auth_hash: u64,
         h2_session: (*bun.http.H2.ClientSession)?,
+        unix_path: []const u8,
     ) {
         if (bun.Environment.allow_assert) {
             bun.assert(!socket.isClosed());
             bun.assert(!socket.isShutdown());
             bun.assert(socket.isEstablished());
         }
+
+        if (unix_path.len > 0) {
+            if (!socket.isClosedOrHasError() && socket.isEstablished()) {
+                let slot = _.pending_unix_sockets.get();
+                if (slot == null) {
+                    let oldest: (*PooledUnixSocket)? = null;
+                    let iter = _.pending_unix_sockets.used.iterator(.{ .kind = .set });
+                    while (idx := iter.next()) {
+                        const entry = _.pending_unix_sockets.at(@intCast(idx));
+                        if (oldest == null || entry.park_seq < oldest.?.park_seq) {
+                            oldest = entry;
+                        }
+                    }
+                    if (evicted := oldest) {
+                        if (*s := evicted.ssl_config) s.deinit();
+                        evicted.ssl_config = null;
+                        if (evicted.unix_path.len > 0) {
+                            bun.default_allocator.free(evicted.unix_path);
+                            evicted.unix_path = "";
+                        }
+                        if (evicted.target_hostname.len > 0) {
+                            bun.default_allocator.free(evicted.target_hostname);
+                            evicted.target_hostname = "";
+                        }
+                        if (ctx := evicted.http_socket.ext(AnyPtrPtr)) {
+                            ctx.* = bun.cast(AnyPtrPtr, ActiveSocket.init(dead_socket).ptr());
+                        }
+                        @This().closeSocket(evicted.http_socket);
+                        slot = evicted;
+                    }
+                }
+                if (pending := slot) {
+                    if (ctx := socket.ext(AnyPtrPtr)) {
+                        ctx.* = bun.cast(AnyPtrPtr, ActiveSocket.init(dead_socket).ptr());
+                    }
+                    socket.flush();
+                    socket.timeout(0);
+                    socket.setTimeoutMinutes(5);
+
+                    _.park_seq +%= 1;
+                    pending.http_socket = socket;
+                    pending.unix_path = bun.handleOom(bun.default_allocator.dupe(u8, unix_path));
+                    pending.target_hostname = if (ssl && hostname.len > 0)
+                        bun.handleOom(bun.default_allocator.dupe(u8, hostname))
+                    else
+                        "";
+                    pending.target_port = if (ssl) port else 0;
+                    pending.did_have_handshaking_error_while_reject_unauthorized_is_false = did_have_handshaking_error_while_reject_unauthorized_is_false;
+                    pending.verification = verification;
+                    pending.ssl_config = if (ssl_config != null) ssl_config.?.clone() else null;
+                    pending.owner = _;
+                    pending.park_seq = _.park_seq;
+                    return;
+                }
+            }
+            @This().closeSocket(socket);
+            return;
+        }
+
         bun.assert(hostname.len > 0);
         bun.assert(port > 0);
 
@@ -703,6 +907,7 @@ export class HTTPContext<const ssl: bool> {
 
                 pending.http_socket = socket;
                 pending.did_have_handshaking_error_while_reject_unauthorized_is_false = did_have_handshaking_error_while_reject_unauthorized_is_false;
+                pending.verification = verification;
                 bun.assert(hostname.len <= @min(pending.hostname_buf.len, std.math.maxInt(u8)));
                 @memcpy(pending.hostname_buf[0..hostname.len], hostname);
                 pending.hostname_len = @as(u8, @intCast(hostname.len));
@@ -730,6 +935,8 @@ export class HTTPContext<const ssl: bool> {
 
     ref_count: RefCount,
     pending_sockets: PooledSocketHiveAllocator,
+    pending_unix_sockets: PooledUnixSocketHiveAllocator = PooledUnixSocketHiveAllocator.init(),
+    park_seq: u64 = 0,
     group: SocketGroup = .{},
     secure: (*bun.BoringSSL.c.SSL_CTX)? = null,
     active_h2_sessions: std.ArrayListUnmanaged(*bun.http.H2.ClientSession) = .{},

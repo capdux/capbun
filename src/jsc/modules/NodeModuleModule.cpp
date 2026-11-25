@@ -431,6 +431,9 @@ JSC_DEFINE_CUSTOM_GETTER(nodeModuleResolveFilename,
         PropertyName propertyName))
 {
     auto* globalObject = defaultGlobalObject(lexicalGlobalObject);
+    if (globalObject->hasOverriddenModuleResolveFilenameFunction) [[unlikely]] {
+        return JSValue::encode(globalObject->m_moduleResolveFilenameOverride.get());
+    }
     return JSValue::encode(
         globalObject->m_moduleResolveFilenameFunction.getInitializedOnMainThread(
             globalObject));
@@ -443,20 +446,24 @@ JSC_DEFINE_CUSTOM_SETTER(setNodeModuleResolveFilename,
 {
     auto* globalObject = defaultGlobalObject(lexicalGlobalObject);
     auto value = JSValue::decode(encodedValue);
-    if (value.isCell()) {
-        bool isOriginal = false;
-        if (value.isCallable()) {
-            JSC::CallData callData = JSC::getCallData(value);
+    bool isOriginal = false;
+    if (value.isCallable()) {
+        JSC::CallData callData = JSC::getCallData(value);
 
-            if (callData.type == JSC::CallData::Type::Native) {
-                if (callData.native.function.untaggedPtr() == &jsFunctionResolveFileName) {
-                    isOriginal = true;
-                }
+        if (callData.type == JSC::CallData::Type::Native) {
+            if (callData.native.function.untaggedPtr() == &jsFunctionResolveFileName) {
+                isOriginal = true;
             }
         }
-        globalObject->hasOverriddenModuleResolveFilenameFunction = !isOriginal;
-        globalObject->m_moduleResolveFilenameFunction.set(
-            lexicalGlobalObject->vm(), globalObject, value.asCell());
+    }
+
+    if (isOriginal) {
+        globalObject->hasOverriddenModuleResolveFilenameFunction = false;
+        globalObject->m_moduleResolveFilenameOverride.clear();
+    } else {
+        globalObject->m_moduleResolveFilenameOverride.set(
+            lexicalGlobalObject->vm(), globalObject, value);
+        globalObject->hasOverriddenModuleResolveFilenameFunction = true;
     }
 
     return true;
@@ -815,10 +822,17 @@ JSC_DEFINE_CUSTOM_GETTER(moduleRunMain,
 extern "C" void Bun__VirtualMachine__setOverrideModuleRunMain(void* bunVM, bool isOriginal);
 extern "C" JSC::EncodedJSValue NodeModuleModule__callOverriddenRunMain(Zig::GlobalObject* global, JSValue argv1)
 {
-    auto overrideHandler = uncheckedDowncast<JSObject>(global->m_moduleRunMainFunction.get(global));
+    auto& vm = JSC::getVM(global);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    JSValue overrideHandler = global->m_moduleRunMainFunction.get(global);
+    auto callData = JSC::getCallData(overrideHandler);
+    if (callData.type == JSC::CallData::Type::None) {
+        throwException(global, scope, createNotAFunctionError(global, overrideHandler));
+        return {};
+    }
     MarkedArgumentBuffer args;
     args.append(argv1);
-    return JSC::JSValue::encode(JSC::profiledCall(global, JSC::ProfilingReason::API, overrideHandler, JSC::getCallData(overrideHandler), global, args));
+    RELEASE_AND_RETURN(scope, JSC::JSValue::encode(JSC::profiledCall(global, JSC::ProfilingReason::API, overrideHandler, callData, global, args)));
 }
 
 JSC_DEFINE_CUSTOM_SETTER(setModuleRunMain,
@@ -1078,7 +1092,7 @@ void addNodeModuleConstructorProperties(JSC::VM& vm,
         });
 
     globalObject->m_moduleResolveFilenameFunction.initLater(
-        [](const Zig::GlobalObject::Initializer<JSCell>& init) {
+        [](const Zig::GlobalObject::Initializer<JSFunction>& init) {
             JSFunction* resolveFilenameFunction = JSFunction::create(
                 init.vm, init.owner, 2, "_resolveFilename"_s,
                 jsFunctionResolveFileName, JSC::ImplementationVisibility::Public,

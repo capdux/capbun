@@ -542,10 +542,21 @@ pub struct ShellRmTask {
         }
     }
 
-    pub fn bufJoin(*_, buf: *bun.PathBuffer, parts: []const []const u8, _: Syscall.Tag): Maybe(PathStringZ) {
+    static fn joinZBufSpill(buf: *bun.PathBuffer, spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8, comptime platform: ResolvePath.Platform): [:0]const u8 {
+        const needed = ResolvePath.joinNeeded(parts);
+        if (needed <= buf.len) {
+            return ResolvePath.joinZBuf(buf, parts, platform);
+        }
+        if (spill.items.len < needed) {
+            bun.handleOom(spill.resize(bun.default_allocator, needed));
+        }
+        return ResolvePath.joinZBuf(spill.items, parts, platform);
+    }
+
+    pub fn bufJoin(*_, buf: *bun.PathBuffer, spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8, _: Syscall.Tag): Maybe(PathStringZ) {
         if (_.join_style == .posix) {
-            return { result: ResolvePath.joinZBuf(buf, parts, .posix) };
-        } else return { result: ResolvePath.joinZBuf(buf, parts, .windows) };
+            return { result: joinZBufSpill(buf, spill, parts, .posix) };
+        } else return { result: joinZBufSpill(buf, spill, parts, .windows) };
     }
 
     pub fn removeEntry(*_, dir_task: *ShellDirTask, is_absolute: bool): Maybe(void) {
@@ -632,6 +643,8 @@ pub struct ShellRmTask {
         };
 
         let i: usize = 0;
+        let join_spill: std.ArrayListUnmanaged(u8) = .{};
+        defer join_spill.deinit(bun.default_allocator);
         let loop_err: Syscall.Error? = null;
         while (true) {
             const current = (switch (entry) {
@@ -659,6 +672,7 @@ pub struct ShellRmTask {
                     ];
                     const file_path = switch (_.bufJoin(
                         buf,
+                        &join_spill,
                         &join_parts,
                         .unlink,
                     )) {
@@ -830,7 +844,10 @@ pub struct ShellRmTask {
             return bun.handleOom(std.fs.path.joinZ(alloc, subdir_parts));
         }
 
-        const out = bun.handleOom(alloc.dupeZ(u8, bun.path.join(subdir_parts, .auto)));
+        let spill: std.ArrayListUnmanaged(u8) = .{};
+        defer spill.deinit(bun.default_allocator);
+        const joined = bun.handleOom(ResolvePath.joinSpill(&spill, bun.default_allocator, subdir_parts, .auto));
+        const out = bun.handleOom(alloc.dupeZ(u8, joined));
 
         return out;
     }

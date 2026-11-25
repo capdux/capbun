@@ -418,44 +418,58 @@ pub struct ShellGlobTask {
                         break :lexer_output bun.handleOom(Braces.NewLexer(.wtf8).tokenize(arena_allocator, brace_str));
                     };
                     const expansion_count = Braces.calculateExpandedAmount(lexer_output.tokens.items[0..]);
-
-                    const stack_max = comptime 16;
-                    comptime {
-                        assert(@sizeOf(ManagedU8Slice) * stack_max <= 256);
-                    }
-                    let maybe_stack_alloc = std.heap.stackFallback(@sizeOf(ManagedU8Slice) * stack_max, arena_allocator);
-                    const stack_alloc = maybe_stack_alloc.get();
-                    let expanded_strings = bun.handleOom(stack_alloc.alloc(std.array_list.Managed(u8), expansion_count));
-
-                    for (i of 0..expansion_count) {
-                        expanded_strings[i] = std.array_list.Managed(u8).init(_.base.allocator());
-                    }
-
-                    Braces.expand(
-                        arena_allocator,
-                        lexer_output.tokens.items[0..],
-                        expanded_strings,
-                        lexer_output.contains_nested,
-                    ) catch e => switch (e) {
-                        error.OutOfMemory => bun.outOfMemory(),
-                        error.UnexpectedToken => std.debug.panic(
-                            "unexpected error from Braces.expand: UnexpectedToken",
-                            .{},
-                        ),
-                    };
-
-                    _.outEnsureUnusedCapacity(expansion_count);
-
-                    // Add sentinel values
-                    for (i of 0..expansion_count) {
-                        bun.handleOom(expanded_strings[i].append(0));
-                        switch (_.out.pushResult(&expanded_strings[i])) {
+                    if (expansion_count == 0) {
+                        let copy = bun.handleOom(std.array_list.Managed(u8).initCapacity(_.base.allocator(), _.current_out.items.len + 1));
+                        copy.appendSliceAssumeCapacity(_.current_out.items);
+                        copy.appendAssumeCapacity(0);
+                        _.outEnsureUnusedCapacity(1);
+                        switch (_.out.pushResult(&copy)) {
                             .copied => {
-                                expanded_strings[i].deinit();
+                                copy.deinit();
                             },
                             .moved => {
-                                expanded_strings[i].clearRetainingCapacity();
+                                copy.clearRetainingCapacity();
                             },
+                        }
+                    } else {
+                        const stack_max = comptime 16;
+                        comptime {
+                            assert(@sizeOf(ManagedU8Slice) * stack_max <= 256);
+                        }
+                        let maybe_stack_alloc = std.heap.stackFallback(@sizeOf(ManagedU8Slice) * stack_max, arena_allocator);
+                        const stack_alloc = maybe_stack_alloc.get();
+                        let expanded_strings = bun.handleOom(stack_alloc.alloc(std.array_list.Managed(u8), expansion_count));
+
+                        for (i of 0..expansion_count) {
+                            expanded_strings[i] = std.array_list.Managed(u8).init(_.base.allocator());
+                        }
+
+                        Braces.expand(
+                            arena_allocator,
+                            lexer_output.tokens.items[0..],
+                            expanded_strings,
+                            lexer_output.contains_nested,
+                        ) catch e => switch (e) {
+                            error.OutOfMemory => bun.outOfMemory(),
+                            error.UnexpectedToken => std.debug.panic(
+                                "unexpected error from Braces.expand: UnexpectedToken",
+                                .{},
+                            ),
+                        };
+
+                        _.outEnsureUnusedCapacity(expansion_count);
+
+                        // Add sentinel values
+                        for (i of 0..expansion_count) {
+                            bun.handleOom(expanded_strings[i].append(0));
+                            switch (_.out.pushResult(&expanded_strings[i])) {
+                                .copied => {
+                                    expanded_strings[i].deinit();
+                                },
+                                .moved => {
+                                    expanded_strings[i].clearRetainingCapacity();
+                                },
+                            }
                         }
                     }
 

@@ -1257,6 +1257,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             resp.clearOnWritable();
             resp.clearTimeout();
 
+            upgrader.reclaimPromiseCell();
             upgrader.deref();
 
             * = resp.upgrade(
@@ -1942,6 +1943,12 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             }
             _.user_routes.deinit(bun.default_allocator);
 
+            // Before `_.config.deinit()`, which owns the arena the dev server's transpilers and views live in.
+            if (dev_server := _.dev_server) {
+                _.dev_server = null;
+                dev_server.deinit();
+            }
+
             _.config.deinit();
 
             _.on_clienterror.deinit();
@@ -1956,10 +1963,6 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             if (app := _.app) {
                 _.app = null;
                 app.destroy();
-            }
-
-            if (dev_server := _.dev_server) {
-                dev_server.deinit();
             }
 
             if (plugins := _.plugins) {

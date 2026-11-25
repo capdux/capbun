@@ -190,7 +190,7 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
         _.max_size.? = _.max_size.? -| c.len;
         chunk = c;
         if (state_ != .eof && _.max_size.? == 0) {
-            if (comptime !bun.Environment.isPosix) _.reader.pause();
+            _.reader.pause();
             _.ref();
             _.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onEofTask).init(_);
             _.vm.eventLoop().enqueueTask(jsc.Task.init(&_.eof_task.?));
@@ -213,7 +213,7 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
             // release the read ref; onWritable re-takes it
             const _bp_guard = _.takeReadRef();
             _.resp.onWritable(*FileResponseStream, onWritable, _);
-            if (comptime !bun.Environment.isPosix) _.reader.pause();
+            _.reader.pause();
             return false;
         },
         .want_more => return true,
@@ -260,6 +260,8 @@ fn onWritable(_: *FileResponseStream, _: u64, _: AnyResponse): bool {
     }
     _.resp.timeout(_.idle_timeout);
     _.holdReadRef();
+    // A paused POSIX reader ignores `read()`.
+    _.reader.unpause();
     _.reader.read();
     return true;
 }

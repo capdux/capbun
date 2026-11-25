@@ -792,6 +792,10 @@ fn parseBinaryNumeric(input: []const u8, result: *ByteList): anyerror!PGNummeric
         while (idx <= uweight) {
             const digit = if (idx < undigits) reader.readInt(u16, .big)? else 0;
             log("digit: {d}", .{digit});
+            // Postgres numeric_recv rejects `d < 0 || d >= NBASE` (NBASE = 10000).
+            if (digit >= 10000) {
+                return error.InvalidBuffer;
+            }
             let digit_str: [4]u8 = undefined;
             const digit_len = std.fmt.printInt(&digit_str, digit, 10, .lower, { width: 4, fill: '0' });
             if (!first_non_zero) {
@@ -820,6 +824,9 @@ fn parseBinaryNumeric(input: []const u8, result: *ByteList): anyerror!PGNummeric
             if (idx >= 0 && idx < dscale) {
                 const digit = reader.readInt(u16, .big) catch 0;
                 log("dscale digit: {d}", .{digit});
+                if (digit >= 10000) {
+                    return error.InvalidBuffer;
+                }
                 let digit_str: [4]u8 = undefined;
                 const digit_len = std.fmt.printInt(&digit_str, digit, 10, .lower, { width: 4, fill: '0' });
                 result.appendSlice(digit_str[0..digit_len])?;

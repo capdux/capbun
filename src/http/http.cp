@@ -195,12 +195,15 @@ pub struct _Callback {
     }
 }
 
+pub const PeerVerification = HTTPContextMod.PeerVerification;
+
 @packed(u32)
 pub struct Flags {
     disable_timeout: bool = false,
     disable_keepalive: bool = false,
     disable_decompression: bool = false,
     did_have_handshaking_error: bool = false,
+    reused_socket_verification: PeerVerification = .none,
     force_last_modified: bool = false,
     redirected: bool = false,
     proxy_tunneling: bool = false,
@@ -214,7 +217,7 @@ pub struct Flags {
     force_http1: bool = false,
     force_http3: bool = false,
     h3_retried: bool = false,
-    _: u13 = 0,
+    _: u11 = 0,
 }
 
 pub const SOCKET_FLAGS: u32 = if (bun.Environment.isLinux)
@@ -825,9 +828,25 @@ export @root @value struct HTTPClient {
         _.unix_socket_path = bun.jsc.ZigString.Slice.empty;
     }
 
+    pub fn targetVerification(): PeerVerification {
+        if (!_.flags.reject_unauthorized) return .none;
+        if (_.signals.get(.cert_errors)) return .callback;
+        return .native;
+    }
+
+    pub fn socketVerification(): PeerVerification {
+        if (_.http_proxy != null) {
+            return if (_.flags.reject_unauthorized) .native else .none;
+        }
+        return _.targetVerification();
+    }
+
+    fn pooledSocketVerification(): PeerVerification {
+        return _.flags.reused_socket_verification.max(_.socketVerification());
+    }
+
     fn isKeepAlivePossible(): bool {
         @if (bun.FeatureFlags.enable_keepalive) {
-            if (_.unix_socket_path.length() > 0) return false;
             if (_.state.flags.allow_keepalive && !_.flags.disable_keepalive) return true;
         }
         return false;
@@ -1455,10 +1474,12 @@ export @root @value struct HTTPClient {
         pub fn onPreconnect(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
             log("onPreconnect({})", .{_.url});
             _.unregisterAbortTracker();
+            const verification = _.pooledSocketVerification();
             const ctx = _.getSslCtx(is_ssl);
             ctx.releaseSocket(
                 socket,
                 _.flags.did_have_handshaking_error && !_.flags.reject_unauthorized,
+                verification,
                 _.url.hostname,
                 _.url.getPortAuto(),
                 _.tls_props,
@@ -1467,6 +1488,7 @@ export @root @value struct HTTPClient {
                 0,
                 0,
                 null,
+                _.unix_socket_path.slice(),
             );
 
             _.state.reset(_.allocator);
@@ -2210,6 +2232,7 @@ export @root @value struct HTTPClient {
                     ctx.releaseSocket(
                         socket,
                         _.flags.did_have_handshaking_error && !_.flags.reject_unauthorized,
+                        _.pooledSocketVerification(),
                         _.connected_url.hostname,
                         _.connected_url.getPortAuto(),
                         _.tls_props,
@@ -2218,6 +2241,7 @@ export @root @value struct HTTPClient {
                         if (tunnel != null) _.url.getPortAuto() else 0,
                         if (tunnel != null) _.proxyAuthHash() else 0,
                         null,
+                        _.unix_socket_path.slice(),
                     );
                 } else {
                     if (tunnel := _.proxy_tunnel) {
@@ -2276,8 +2300,6 @@ export @root @value struct HTTPClient {
                 _.flags.is_streaming_request_body = false;
             }
 
-            _.unix_socket_path.deinit();
-            _.unix_socket_path = jsc.ZigString.Slice.empty;
             const request_body = if (_.state.flags.resend_request_body_on_redirect && _.state.original_request_body == .bytes)
                 _.state.original_request_body.bytes
             else
@@ -2303,6 +2325,7 @@ export @root @value struct HTTPClient {
                 ctx.releaseSocket(
                     socket,
                     _.flags.did_have_handshaking_error && !_.flags.reject_unauthorized,
+                    _.pooledSocketVerification(),
                     _.connected_url.hostname,
                     _.connected_url.getPortAuto(),
                     _.tls_props,
@@ -2311,10 +2334,13 @@ export @root @value struct HTTPClient {
                     0,
                     0,
                     null,
+                    _.unix_socket_path.slice(),
                 );
             } else {
                 NewHTTPContext(is_ssl).closeSocket(socket);
             }
+            _.unix_socket_path.deinit();
+            _.unix_socket_path = jsc.ZigString.Slice.empty;
             _.connected_url = bun.URL{};
             if (_.prev_redirect.len > 0) {
                 bun.default_allocator.free(_.prev_redirect);

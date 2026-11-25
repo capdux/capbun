@@ -803,7 +803,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
                     const prev = edit.*;
                     edit.name = sliced.slice();
                     edit.detectEditor(VirtualMachine.get().transpiler.env);
-                    editor_choice = edit.editor;
+                    editor_choice = edit.found();
                     if (editor_choice == null) {
                         edit.* = prev;
                         return globalThis.throw("Could not find editor \"{s}\"", .{ sliced.slice() });
@@ -826,13 +826,13 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
         }
     }
 
-    let editor_opt = editor_choice ?? edit.editor;
+    let editor_opt = editor_choice ?? edit.found();
     if (editor_opt == null) {
         edit.autoDetectEditor(VirtualMachine.get().transpiler.env);
-        if (edit.editor == null) {
+        editor_opt = edit.found();
+        if (editor_opt == null) {
             return globalThis.throw("Failed to auto-detect editor", .{});
         }
-        editor_opt = edit.editor;
     }
     const editor = editor_opt.?;
 

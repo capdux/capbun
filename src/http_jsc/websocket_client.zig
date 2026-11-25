@@ -1358,6 +1358,32 @@ pub fn hasBackpressure(self: @This()) bool {
             return false;
     }
 
+pub fn bufferedAmount(self: @This()) usize {
+            var total: usize = self.send_buffer.count;
+            _ = &total;
+            if (self.proxy_tunnel) |tunnel| {
+                _ = &tunnel;
+                total = (total + tunnel.bufferedAmount());
+            }
+            return total;
+    }
+
+pub fn pauseStream(self: @This()) bool {
+            if (self.proxy_tunnel) |tunnel| {
+                _ = &tunnel;
+                return tunnel.pauseStream();
+            }
+            return self.tcp.pauseStream();
+    }
+
+pub fn resumeStream(self: @This()) bool {
+            if (self.proxy_tunnel) |tunnel| {
+                _ = &tunnel;
+                return tunnel.resumeStream();
+            }
+            return self.tcp.resumeStream();
+    }
+
 pub fn writeBinaryData(ws: *WebSocket, ptr: [*]const u8, len: usize, op: u8) callconv(.c) void {
             _ = ws.ref();
             var _deref_guard = DerefGuard(WebSocket){ .ptr = ws };
@@ -1679,9 +1705,24 @@ pub fn memoryCost(ws: *WebSocket) callconv(.c) usize {
             return cost;
     }
 
+pub fn getBufferedAmount(ws: *WebSocket) callconv(.c) usize {
+            return ws.bufferedAmount();
+    }
+
+pub fn pauseSocket(ws: *WebSocket) callconv(.c) bool {
+            return ws.pauseStream();
+    }
+
+pub fn resumeSocket(ws: *WebSocket) callconv(.c) bool {
+            return ws.resumeStream();
+    }
+
 pub fn exportAll() void {
             const name = (comptime (if (ssl) "WebSocketClientTLS" else "WebSocketClient"));
             _ = @export((&cancel), .{ .name = (("Bun__" ++ name) ++ "__cancel") });
+            _ = @export((&getBufferedAmount), .{ .name = (("Bun__" ++ name) ++ "__bufferedAmount") });
+            _ = @export((&pauseSocket), .{ .name = (("Bun__" ++ name) ++ "__pause") });
+            _ = @export((&resumeSocket), .{ .name = (("Bun__" ++ name) ++ "__resume") });
             _ = @export((&close), .{ .name = (("Bun__" ++ name) ++ "__close") });
             _ = @export((&finalize), .{ .name = (("Bun__" ++ name) ++ "__finalize") });
             _ = @export((&init), .{ .name = (("Bun__" ++ name) ++ "__init") });

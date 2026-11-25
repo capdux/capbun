@@ -280,17 +280,20 @@ pub struct FileRouteInitOptions {
         const input_if_modified_since_date: u64? = req.dateForHeader("if-modified-since") catch return; // TODO: properly propagate exception upwards
 
         let can_serve_file: bool = false;
+        let offset: u64 = 0;
         let size: u64 = 0;
         let file_type: bun.io.FileType = undefined;
         let pollable: bool = false;
         switch (bun.sys.fstat(fd)) {
             .result => |stat| {
                 const stat_size: u64 = @intCast(@max(stat.size, 0));
-                const _size: u64 = @min(stat_size, @as(u64, _.blob.size));
+                const _offset: u64 = @min(@as(u64, _.blob.offset), stat_size);
+                const _size: u64 = @min(@as(u64, _.blob.size), stat_size - _offset);
 
                 if (!bun.S.ISDIR(@intCast(stat.mode))) {
                     _.stat_hash.hash(stat, path);
                     can_serve_file = true;
+                    offset = _offset;
                     size = _size;
                     if (bun.S.ISFIFO(@intCast(stat.mode)) || bun.S.ISCHR(@intCast(stat.mode))) {
                         file_type = .pipe;
@@ -363,6 +366,7 @@ pub struct FileRouteInitOptions {
             return;
         }
 
+        // `null` (read to EOF) is only for pipes and sockets; a file's body is its Content-Length.
         let body_offset: u64 = 0;
         let body_len: u64? = null;
         switch (range) {
@@ -370,7 +374,7 @@ pub struct FileRouteInitOptions {
                 let crbuf: [96]u8 = undefined;
                 resp.writeHeader("content-range", std.fmt.bufPrint(&crbuf, "bytes {d}-{d}/{d}", .{ r.start, r.end, size }) catch unreachable);
                 resp.writeHeader("accept-ranges", "bytes");
-                body_offset = _.blob.offset + r.start;
+                body_offset = offset + r.start;
                 body_len = r.end - r.start + 1;
             },
             .unsatisfiable => {
@@ -381,18 +385,30 @@ pub struct FileRouteInitOptions {
                 return;
             },
             .none => {
-                body_offset = if (file_type == .file) _.blob.offset else 0;
-                body_len = if (file_type == .file && _.blob.size > 0) @as(u64, @intCast(size)) else null;
+                if (file_type == .file) {
+                    body_offset = offset;
+                    body_len = size;
+                } else {
+                    body_offset = 0;
+                    body_len = null;
+                }
             },
         }
 
-        if (file_type == .file && !resp.state().hasWrittenContentLengthHeader()) {
-            resp.writeHeaderInt("content-length", body_len ?? size);
-            resp.markWroteContentLengthHeader();
+        if (len := body_len) {
+            if (!resp.state().hasWrittenContentLengthHeader()) {
+                resp.writeHeaderInt("content-length", len);
+                resp.markWroteContentLengthHeader();
+            }
         }
 
         if (method == .HEAD) {
             resp.endWithoutBody(resp.shouldCloseConnection());
+            return;
+        }
+
+        if (body_len != null && body_len.? == 0) {
+            resp.end("", resp.shouldCloseConnection());
             return;
         }
 

@@ -2114,37 +2114,28 @@ pub struct ExpectMatcherUtils {
         VirtualMachine.get().allocator.destroy(_);
     }
 
-    static fn printValue(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): !JSValue {
-        let stack_fallback = std.heap.stackFallback(512, globalThis.allocator());
-        let mutable_string = DeinitGuard<bun.MutableString>{ val: bun.MutableString.init2048(stack_fallback.get())? };
-
-        let buffered_writer = bun.MutableString.BufferedWriter{ context: &mutable_string.val };
-        let writer = buffered_writer.writer();
+    static fn printValue(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): bun.JSError!JSValue {
+        let stack_fallback = std.heap.stackFallback(2048, globalThis.allocator());
+        let alloc_writer = std.Io.Writer.Allocating.init(stack_fallback.get());
+        defer alloc_writer.deinit();
+        const writer = &alloc_writer.writer;
 
         if (color := color_or_null) {
             if (Output.enable_ansi_colors_stderr) {
-                writer.writeAll(Output.prettyFmt(color, true))?;
+                writer.writeAll(Output.prettyFmt(color, true)) catch return error.OutOfMemory;
             }
         }
 
         let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
-        writer.print("{f}", .{ value.toFmt(&formatter.val) })?;
+        formatter.val.formatValue(@TypeOf(writer), writer, value, globalThis, false)?;
 
         if (color_or_null != null) {
             if (Output.enable_ansi_colors_stderr) {
-                writer.writeAll(Output.prettyFmt("<r>", true))?;
+                writer.writeAll(Output.prettyFmt("<r>", true)) catch return error.OutOfMemory;
             }
         }
 
-        buffered_writer.flush()?;
-
-        return bun.String.createUTF8ForJS(globalThis, mutable_string.val.slice());
-    }
-
-    static inline fn printValueCatched(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ([]const u8)?): JSValue {
-        return printValue(globalThis, value, color_or_null) catch {
-            return globalThis.throwOutOfMemoryValue();
-        };
+        return bun.String.createUTF8ForJS(globalThis, alloc_writer.written());
     }
 
     fn stringify(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -2152,7 +2143,7 @@ pub struct ExpectMatcherUtils {
         * = self_ref;
         const arguments = callframe.arguments_old(1).slice();
         const value = if (arguments.len < 1) .js_undefined else arguments[0];
-        return printValueCatched(globalThis, value, null);
+        return printValue(globalThis, value, null);
     }
 
     fn printExpected(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -2160,7 +2151,7 @@ pub struct ExpectMatcherUtils {
         * = self_ref;
         const arguments = callframe.arguments_old(1).slice();
         const value = if (arguments.len < 1) .js_undefined else arguments[0];
-        return printValueCatched(globalThis, value, "<green>");
+        return printValue(globalThis, value, "<green>");
     }
 
     fn printReceived(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
@@ -2168,7 +2159,7 @@ pub struct ExpectMatcherUtils {
         * = self_ref;
         const arguments = callframe.arguments_old(1).slice();
         const value = if (arguments.len < 1) .js_undefined else arguments[0];
-        return printValueCatched(globalThis, value, "<red>");
+        return printValue(globalThis, value, "<red>");
     }
 
     fn matcherHint(_: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {

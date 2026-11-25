@@ -1135,6 +1135,15 @@ pub fn subscribe(
     if (!handler_callback.isCallable()) {
         return globalObject.throwInvalidArgumentType("subscribe", "listener", "function");
     }
+    if (!channel_or_many.isString() && !channel_or_many.isArray()) {
+        return globalObject.throwInvalidArgumentType("subscribe", "channel", "string or array");
+    }
+
+    client.ensureDialing();
+    if (msg := client.client.sendRejection()) {
+        const err_val = valkey.ValkeyClient.sendRejectionError(globalObject, msg);
+        return jsc.JSPromise.rejectedPromise(globalObject, err_val).toJS();
+    }
 
     // The first argument given is the channel || may be an array of channels.
     if (channel_or_many.isArray()) {
@@ -1159,7 +1168,7 @@ pub fn subscribe(
             //                      handler.
             client._subscription_ctx.upsertReceiveHandler(globalObject, channel_arg, handler_callback)?;
         }
-    } else if (channel_or_many.isString()) {
+    } else {
         // It is a single string channel
         const channel_opt = fromJS(globalObject, channel_or_many)?;
         if (channel_opt == null) {
@@ -1168,8 +1177,6 @@ pub fn subscribe(
         redis_channels.appendAssumeCapacity(channel_opt.?);
 
         client._subscription_ctx.upsertReceiveHandler(globalObject, channel_or_many, handler_callback)?;
-    } else {
-        return globalObject.throwInvalidArgumentType("subscribe", "channel", "string or array");
     }
 
     const command: Command = Command{

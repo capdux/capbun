@@ -172,7 +172,7 @@ pub struct SemverStringStorePathFormatter {
     pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         for (c of strSlice(_.str, _.buf)) {
             const n: u8 = switch (c) {
-                '/' | '\\' | ':' | '#' => u8('+'),
+                '/' | '\\' | ':' | '#' | '?' => u8('+'),
                 else => c,
             };
             writer.writeByte(n)?;

@@ -12,11 +12,12 @@ export @root struct PendingConnect {
     hostname: string,
     port: u16,
     ssl_config: *SSLConfig? = null,
+    verification: HTTPContextMod.PeerVerification = .none,
     host_header_hash: u64 = 0,
     waiters: std.ArrayListUnmanaged(*bun.http.HTTPClient) = .{},
 
-    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?, host_header_hash: u64): bool {
-        return _.port == port && _.ssl_config == ssl_config && _.host_header_hash == host_header_hash && bun.strings.eqlLong(_.hostname, hostname, true);
+    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?, verification: HTTPContextMod.PeerVerification, host_header_hash: u64): bool {
+        return _.port == port && _.ssl_config == ssl_config && verification.allows(_.verification) && _.host_header_hash == host_header_hash && bun.strings.eqlLong(_.hostname, hostname, true);
     }
 
     fn unregisterFrom(*_, ctx: *HTTPContextTLS) {

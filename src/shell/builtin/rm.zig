@@ -669,11 +669,22 @@ pub fn finishConcurrently(self: *ShellRmTask) void {
             }
     }
 
-pub fn bufJoin(self: *ShellRmTask, buf: *bun.PathBuffer, parts: []const []const u8, _: Syscall.Tag) Maybe(PathStringZ) {
+pub fn joinZBufSpill(buf: *bun.PathBuffer, spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8, comptime platform: ResolvePath.Platform) [:0]const u8 {
+            const needed = ResolvePath.joinNeeded(parts);
+            if ((needed <= buf.len)) {
+                return ResolvePath.joinZBuf(buf, parts, platform);
+            }
+            if ((spill.items.len < needed)) {
+                _ = bun.handleOom(spill.resize(bun.default_allocator, needed));
+            }
+            return ResolvePath.joinZBuf(spill.items, parts, platform);
+    }
+
+pub fn bufJoin(self: *ShellRmTask, buf: *bun.PathBuffer, spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8, _: Syscall.Tag) Maybe(PathStringZ) {
             if ((self.join_style == .posix)) {
-                return .{ .result = ResolvePath.joinZBuf(buf, parts, .posix) };
+                return .{ .result = ShellRmTask.joinZBufSpill(buf, spill, parts, .posix) };
             } else {
-                return .{ .result = ResolvePath.joinZBuf(buf, parts, .windows) };
+                return .{ .result = ShellRmTask.joinZBufSpill(buf, spill, parts, .windows) };
             }
     }
 
@@ -773,6 +784,11 @@ return .{ .err = self.errorWithPath(sys_err, path) };
             _ = &remove_child_vtable;
             var i: usize = 0;
             _ = &i;
+            var join_spill: std.ArrayListUnmanaged(u8) = .{};
+            _ = &join_spill;
+            defer {
+            _ = join_spill.deinit(bun.default_allocator);
+            }
             var loop_err: ?Syscall.Error = null;
             _ = &loop_err;
             while (true) {
@@ -802,7 +818,7 @@ _ = self.enqueue(dir_task, (if (@typeInfo(@TypeOf(current)) == .@"enum" or @type
 else => {
 const name = (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).sliceAssumeZ();
                 const join_parts: [2][]const u8 = .{ path[0..path.len], name[0..name.len] };
-                const file_path = (switch (self.bufJoin(buf, (&join_parts), .unlink)) {
+                const file_path = (switch (self.bufJoin(buf, (&join_spill), (&join_parts), .unlink)) {
 .err => |e| {
 {
                     loop_err = e;
@@ -997,7 +1013,13 @@ pub inline fn join(self: *ShellRmTask, alloc: Allocator, subdir_parts: []const [
             if ((!is_absolute)) {
                 return bun.handleOom(std.fs.path.joinZ(alloc, subdir_parts));
             }
-            const out = bun.handleOom(alloc.dupeZ(u8, bun.path.join(subdir_parts, .auto)));
+            var spill: std.ArrayListUnmanaged(u8) = .{};
+            _ = &spill;
+            defer {
+            _ = spill.deinit(bun.default_allocator);
+            }
+            const joined = bun.handleOom(ResolvePath.joinSpill((&spill), bun.default_allocator, subdir_parts, .auto));
+            const out = bun.handleOom(alloc.dupeZ(u8, joined));
             return out;
     }
 

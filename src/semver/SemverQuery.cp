@@ -365,19 +365,19 @@ pub struct QueryToken {
                             range.left.version.tag = version.tag;
                             if (major == 0) {
                                 if (minor == 0) {
-                                    range.right.version.patch = patch +| 1;
+                                    range.right = Range.Comparator.ltNextPatch(0, 0, patch);
                                 } else {
-                                    range.right.version.minor = minor +| 1;
+                                    range.right = Range.Comparator.ltNextMinor(0, minor);
                                 }
                                 done_caret = true;
                             }
                         } else if (major == 0) {
-                            range.right.version.minor = minor +| 1;
+                            range.right = Range.Comparator.ltNextMinor(0, minor);
                             done_caret = true;
                         }
                     }
                     if (!done_caret) {
-                        range.right.version.major = major +| 1;
+                        range.right = Range.Comparator.ltNextMajor(major);
                     }
                 }
                 return range;
@@ -392,19 +392,15 @@ pub struct QueryToken {
                             .major = major,
                         },
                     };
-                    range.right = .{
-                        .op = .lt,
-                    };
                     if (minor := version.minor) {
                         range.left.version.minor = minor;
                         if (patch := version.patch) {
                             range.left.version.patch = patch;
                             range.left.version.tag = version.tag;
                         }
-                        range.right.version.major = major;
-                        range.right.version.minor = minor +| 1;
+                        range.right = Range.Comparator.ltNextMinor(major, minor);
                     } else {
-                        range.right.version.major = major +| 1;
+                        range.right = Range.Comparator.ltNextMajor(major);
                     }
                 }
                 return range;
@@ -736,23 +732,31 @@ struct Query {
                             },
                             .minor => {
                                 // "1.0.0 - 1.x" --> ">=1.0.0 < 2.0.0"
-                                second_version.major = second_version.major +| 1;
-                                second_version.minor = 0;
-                                second_version.patch = 0;
+                                let right_comp = Range.Comparator.ltNextMajor(second_version.major);
+                                if (second_version.major < std.math.maxInt(u64)) {
+                                    second_version.major += 1;
+                                    second_version.minor = 0;
+                                    second_version.patch = 0;
+                                    right_comp = Range.Comparator{ op: .lt, version: second_version };
+                                }
 
                                 break :brk Range{
                                     left: .{ .op = .gte, .version = version },
-                                    right: .{ .op = .lt, .version = second_version },
+                                    right: right_comp,
                                 };
                             },
                             .patch => {
                                 // "1.0.0 - 1.0.x" --> ">=1.0.0 <1.1.0"
-                                second_version.minor = second_version.minor +| 1;
-                                second_version.patch = 0;
+                                let right_comp = Range.Comparator.ltNextMinor(second_version.major, second_version.minor);
+                                if (second_version.minor < std.math.maxInt(u64)) {
+                                    second_version.minor += 1;
+                                    second_version.patch = 0;
+                                    right_comp = Range.Comparator{ op: .lt, version: second_version };
+                                }
 
                                 break :brk Range{
                                     left: .{ .op = .gte, .version = version },
-                                    right: .{ .op = .lt, .version = second_version },
+                                    right: right_comp,
                                 };
                             },
                             .none => {

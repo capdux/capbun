@@ -7,8 +7,8 @@
 | :--- | :--- | :--- | :--- |
 | Step 1 | `cp-v1.3.14-green` & `#30412` 坐标系 | **已完成** | 已建 `../bun-ref` 只读 worktree 与 `MODULE_MAP.md` (`1217/1295` 自动匹配) |
 | Step 2 | `23427dbc12f..a215285063c` (935 commits) | **已完成** | 已筛选 356 条有效修复；Wave 1 + Wave 2 + Wave 3 已完成全部高/中优安全、泄漏、UAF、边界与 Windows/Linux 修复移植，并通过 `zig:check` 5/5 全绿校验 |
-| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | **已完成** | Wave 1 (`88f8a506fb9`) + Wave 2（`node_compat`/`napi`/`v8`/`shell`/`spawn`/`sys`/`ffi`/`install`/`pm`/`jsc`/`mock`/`Chunk.cp` 及其上游测试）全部吸收并通过 `zig:check` 5/5 全绿校验 |
-| Step 4 | `bun-v1.4.0..bun-v1.4.5` (1196 commits) | **即将启动** | `temp/audit_145.md`（408 有效修复 / 131 高优安全修复，无大规模 crate 目录搬迁） |
+| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | **功能补全中** | 高优安全修复已完成；`sql/sqlite`、`valkey/redis`、`install/pm`、`shell/spawn` 常规功能修复及测试已提交；`temp/module_map_100.md` 完成 100% 双向文件盘点；正补全 `http/fetch/ws` 与 `bundler/parser/css` 及缺失模块 |
+| Step 4 | `bun-v1.4.0..bun-v1.4.5` (1196 commits) | **Wave 1 已提交** | 已吸收 `1.4.0..1.4.1` (`net/tls/http/server/bake` + `jsc/alloc/gc`)、`1.4.2..1.4.3` (`jsc/alloc/gc`) 与 `1.4.4..1.4.5` (`zlib`/`zstd` 补丁)；待 Step 3 彻底闭合后逐版推进 `1.4.0 -> 1.4.5` |
 
 ## Step 2 Wave 1 已吸收修复摘要（`23427dbc12f..a215285063c`）
 - **解析/构建/字符串**：`#31010` & `#31234` (`SemverQuery.cp`)、`#31861` (`VLQ.cp`)、`#31700` & `#31435` (`fmt.cp`)、`#31239` (`parseStmt.cp`)、`#31304`/`#31275`/`#31280`/`#31305` (`css/*`)、`#33102` (`ParseTask.cp`)、`#31264` (`immutable.cp`)、`#31221` (`HashedString.cp`)、`#32774` (`LineOffsetTable.cp`)、`#31177` (`vendor/mimalloc/src/threadlocal.c`)、`#30875` (`transpiler.cp`/`ThreadPool.cp`/`bundle_v2.cp`)

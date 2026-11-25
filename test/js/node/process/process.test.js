@@ -1243,3 +1243,64 @@ it("process.versions", () => {
   expect(process.versions.napi).toEqual("10");
   expect(process.versions.modules).toEqual("137");
 });
+
+// node's process.exit() (lib/internal/process/per_thread.js): _exiting is set before
+// 'exit' is emitted whether or not anyone listens, and reallyExit — looked up after
+// the dispatch — receives process.exitCode as the listeners left it. Overriding
+// reallyExit observes both without adding an 'exit' listener of its own.
+describe.concurrent("process.exit()", () => {
+  const probe = `const { writeSync } = require("node:fs");
+    const reallyExit = process.reallyExit;
+    process.reallyExit = function (code) {
+      writeSync(1, "_exiting=" + process._exiting + " code=" + code + "\\n");
+      return reallyExit.call(process, code);
+    };`;
+
+  it("sets _exiting with no 'exit' listeners (main thread)", async () => {
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", probe + "process.exit(0);"],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout, stderr, exitCode }).toEqual({ stdout: "_exiting=true code=0\n", stderr: "", exitCode: 0 });
+  });
+
+  it("sets _exiting with no user 'exit' listeners (worker thread)", async () => {
+    await using proc = Bun.spawn({
+      cmd: [
+        bunExe(),
+        "-e",
+        `const { Worker } = require("node:worker_threads");
+         new Worker(${JSON.stringify(probe + "process.exit(0);")}, { eval: true }).on("exit", c => console.log("exit " + c));`,
+      ],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout, stderr, exitCode }).toEqual({ stdout: "_exiting=true code=0\nexit 0\n", stderr: "", exitCode: 0 });
+  });
+
+  it("exits with the exitCode an 'exit' listener assigns", async () => {
+    await using proc = Bun.spawn({
+      cmd: [
+        bunExe(),
+        "-e",
+        probe +
+          `process.on("exit", code => { writeSync(1, "listener code=" + code + "\\n"); process.exitCode = 42; });
+           process.exit(7);`,
+      ],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout, stderr, exitCode }).toEqual({
+      stdout: "listener code=7\n_exiting=true code=42\n",
+      stderr: "",
+      exitCode: 42,
+    });
+  });
+});

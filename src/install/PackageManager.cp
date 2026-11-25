@@ -80,6 +80,7 @@ task_queue: TaskDependencyQueue = {},
 manifests: PackageManifestMap = {},
 folders: FolderResolution.Map = {},
 git_repositories: RepositoryMap = {},
+appended_task_packages: AppendedTaskPackageMap = {},
 
 network_dedupe_map: NetworkTask.DedupeMap = .init(bun.default_allocator),
 async_network_task_queue: AsyncNetworkTaskQueue = {},
@@ -1155,6 +1156,12 @@ const PreallocatedNetworkTasks = bun.HiveArray(NetworkTask, 128).Fallback;
 const ResolveTaskQueue = bun.UnboundedQueue(Task, .next);
 
 const RepositoryMap = std.HashMapUnmanaged(Task.Id, bun.FD, IdentityContext(Task.Id), 80);
+/// Resolve-task id (git checkout / tarball extract) -> the package that task
+/// appended during the resolve phase. A task's callback queue is drained
+/// exactly once, so a dependency enqueued after that drain must resolve
+/// through this map instead of queueing a callback that nothing will ever
+/// process.
+const AppendedTaskPackageMap = std.HashMapUnmanaged(Task.Id, PackageID, IdentityContext(Task.Id), 80);
 const NpmAliasMap = std.HashMapUnmanaged(PackageNameHash, Dependency.Version, IdentityContext(u64), 80);
 
 const NetworkQueue = bun.LinearFifo(@TypeOf(@as(NetworkTaskPtrHolder, undefined).p), { Static: 32 });

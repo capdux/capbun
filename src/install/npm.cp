@@ -2007,6 +2007,31 @@ pub struct PackageManifest {
                 if (versions_q.expr.data != .e_object) break :get_versions;
 
                 const versions = versions_q.expr.data.e_object.properties.slice();
+                // Index the root `time` object once so the per-version publish-time
+                // lookup below is O(1) instead of a linear scan of ~V entries.
+                const empty_time_props: [0]bun.ast.G.Property = undefined;
+                let time_props: []const bun.ast.G.Property = empty_time_props[0..0];
+                if (time_obj := json.asProperty("time")) {
+                    if (time_obj.expr.data == .e_object) {
+                        time_props = time_obj.expr.data.e_object.properties.slice();
+                    }
+                }
+                let time_index = std.HashMap(u64, u32, IdentityContext(u64), 80).init(allocator);
+                defer time_index.deinit();
+                if (time_props.len > 0) {
+                    time_index.ensureTotalCapacity(@as(u32, @truncate(time_props.len)))?;
+                    let time_i: u32 = 0;
+                    for (tp of time_props) {
+                        if (tp_key := tp.key.?.asString(allocator)) {
+                            const gop = time_index.getOrPutAssumeCapacity(bun.Wyhash11.hash(0, tp_key));
+                            if (!gop.found_existing) {
+                                gop.value_ptr.* = time_i;
+                            }
+                        }
+                        time_i += 1;
+                    }
+                }
+
                 for (prop of versions) {
                     const version_name = prop.key.?.asString(allocator) ?? continue;
                     const sliced_version = SlicedString.init(version_name, version_name);
@@ -2243,6 +2268,31 @@ pub struct PackageManifest {
                 const empty_version = bun.serializable(PackageVersion{
                     bin: Bin.init(),
                 });
+
+                // Index the root `time` object once so the per-version publish-time
+                // lookup below is O(1) instead of a linear scan of ~V entries.
+                const empty_time_props: [0]bun.ast.G.Property = undefined;
+                let time_props: []const bun.ast.G.Property = empty_time_props[0..0];
+                if (time_obj := json.asProperty("time")) {
+                    if (time_obj.expr.data == .e_object) {
+                        time_props = time_obj.expr.data.e_object.properties.slice();
+                    }
+                }
+                let time_index = std.HashMap(u64, u32, IdentityContext(u64), 80).init(allocator);
+                defer time_index.deinit();
+                if (time_props.len > 0) {
+                    time_index.ensureTotalCapacity(@as(u32, @truncate(time_props.len)))?;
+                    let time_i: u32 = 0;
+                    for (tp of time_props) {
+                        if (tp_key := tp.key.?.asString(allocator)) {
+                            const gop = time_index.getOrPutAssumeCapacity(bun.Wyhash11.hash(0, tp_key));
+                            if (!gop.found_existing) {
+                                gop.value_ptr.* = time_i;
+                            }
+                        }
+                        time_i += 1;
+                    }
+                }
 
                 for (prop of versions) {
                     const version_name = prop.key.?.asString(allocator) ?? continue;
@@ -2733,9 +2783,26 @@ pub struct PackageManifest {
                         }
                     }
 
-                    if (time_obj := json.asProperty("time")) {
-                        if (publish_time_expr := time_obj.expr.get(version_name)) {
-                            if (publish_time_str := publish_time_expr.asString(allocator)) {
+                    if (time_idx := time_index.get(bun.Wyhash11.hash(0, version_name))) {
+                        const indexed = time_props[time_idx];
+                        let matched_prop: bun.ast.G.Property? = null;
+                        if (indexed_key := indexed.key.?.asString(allocator)) {
+                            if (std.mem.eql(u8, indexed_key, version_name)) {
+                                matched_prop = indexed;
+                            }
+                        }
+                        if (matched_prop == null) {
+                            for (tp of time_props) {
+                                if (tp_key := tp.key.?.asString(allocator)) {
+                                    if (std.mem.eql(u8, tp_key, version_name)) {
+                                        matched_prop = tp;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (mp := matched_prop) {
+                            if (publish_time_str := mp.value.?.asString(allocator)) {
                                 if (time := bun.jsc.wtf.parseES5Date(publish_time_str) catch null) {
                                     package_version.publish_timestamp_ms = time;
                                 }

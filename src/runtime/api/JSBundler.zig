@@ -1508,6 +1508,7 @@ pub const BundlerMiniImportRecord = struct {
     import_record_index: u32 = 0,
     range: logger.Range = logger.Range.None,
     original_target: options.Target,
+    loader: ?options.Loader = null,
 };
 
 pub const BundlerResolveSuccess = struct {

@@ -281,7 +281,7 @@ pub const SafeFileIdUnused = enum(u1) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
-pub const EntryPointListFlagsUnused = enum(u4) {
+pub const EntryPointListFlagsUnused = enum(u3) {
     unused = 0,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
@@ -1245,6 +1245,7 @@ pub const EntryPointListFlags = packed struct(u8) {
     server: bool = false,
     ssr: bool = false,
     css: bool = false,
+    html: bool = false,
     unused: EntryPointListFlagsUnused = .unused,
 };
 
@@ -1265,6 +1266,10 @@ pub fn appendJs(self: *EntryPointList, alloc: Allocator, abs_path: []const u8, s
 
 pub fn appendCss(self: *EntryPointList, alloc: Allocator, abs_path: []const u8) !void {
             return self.append(alloc, abs_path, .{ .client = true, .css = true });
+    }
+
+pub fn appendHtml(self: *EntryPointList, alloc: Allocator, abs_path: []const u8) !void {
+            return self.append(alloc, abs_path, .{ .client = true, .html = true });
     }
 
 pub fn append(self: *EntryPointList, alloc: Allocator, abs_path: []const u8, flags: Flags) !void {
@@ -2429,7 +2434,7 @@ var route = dev.router.routePtr(bundle.route_index);
         }
 },
 .html => |*html| {
-_ = try entry_points.append(alloc, html.html_bundle.data.bundle.data.path, .{ .client = true });
+_ = try entry_points.appendHtml(alloc, html.html_bundle.data.bundle.data.path);
 },
 }
         if (dev.has_tailwind_plugin_hack) |*map| {
@@ -2834,6 +2839,55 @@ _ = unreachable;
         }
 }
 
+pub fn reportHtmlRoutesWithoutHtml(dev: *DevServer) !void {
+        for (dev.route_bundles.items) |*route_bundle| {
+            _ = &route_bundle;
+            if (((route_bundle.*).data != .html)) {
+                continue;
+            }
+            const html = (&(route_bundle.*).data.html);
+            if ((html.bundled_html_text != null)) {
+                continue;
+            }
+            const file_index = html.bundled_file;
+            var has_failure = false;
+            _ = &has_failure;
+            switch ((route_bundle.*).server_state) {
+.unqueued, .deferred_to_next_bundle, .evaluation_failure => {
+_ = continue;
+},
+.bundling => {
+for (dev.incremental_result.failures_added.items) |failure| {
+                _ = &failure;
+                switch (failure.getOwner()) {
+.client => |owner| {
+if ((owner == file_index)) {
+                    has_failure = true;
+                    break;
+                }
+},
+else => {
+
+},
+}
+            }
+},
+.possible_bundling_failures, .loaded => {
+has_failure = dev.client_graph.bundled_files.values()[@as(usize, @intCast(file_index.get()))].unpack().failed;
+},
+}
+            if (has_failure) {
+                continue;
+            }
+            var log = html.html_bundle.data.bundle.data.noHtmlPageLog();
+            _ = &log;
+            defer {
+            _ = log.deinit();
+            }
+            _ = try dev.client_graph.insertFailure(.index, file_index, (&log), false);
+        }
+}
+
 pub fn indexFailures(dev: *DevServer) !void {
         var sfa_state = std.heap.stackFallback(65536, dev.allocator());
         _ = &sfa_state;
@@ -3033,8 +3087,8 @@ pub fn generateCssJSArray(dev: *DevServer, route_bundle: *RouteBundle) bun.JSErr
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_31 = names.len;
-            while (i < __end_31) : (i += 1) {
+            const __end_33 = names.len;
+            while (i < __end_33) : (i += 1) {
                 const item = names[@as(usize, @intCast(i))];
                 const asset_path_buf_len = ((asset_prefix.len + (@sizeOf(u64) * 2)) + "/.css".len);
                 _ = &asset_path_buf_len;
@@ -3093,8 +3147,8 @@ pub fn makeArrayForServerComponentsPatch(dev: *DevServer, global: *jsc.JSGlobalO
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_32 = items.len;
-            while (i < __end_32) : (i += 1) {
+            const __end_34 = items.len;
+            while (i < __end_34) : (i += 1) {
                 const item = items[@as(usize, @intCast(i))];
                 var relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
                 _ = &relative_path_guard;
@@ -3160,8 +3214,8 @@ pub fn finalizeBundle(dev: *DevServer, bv2: *bun.bundle_v2.BundleV2, result: *co
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_33 = scb_source_indices.len;
-            while (i < __end_33) : (i += 1) {
+            const __end_35 = scb_source_indices.len;
+            while (i < __end_35) : (i += 1) {
                 const source_index = scb_source_indices[@as(usize, @intCast(i))];
                 const ssr_index = scb_ssr_source_indices[@as(usize, @intCast(i))];
                 const ref_index = scb_ref_source_indices[@as(usize, @intCast(i))];
@@ -3182,8 +3236,8 @@ pub fn finalizeBundle(dev: *DevServer, bv2: *bun.bundle_v2.BundleV2, result: *co
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_34 = js_parts.len;
-            while (i < __end_34) : (i += 1) {
+            const __end_36 = js_parts.len;
+            while (i < __end_36) : (i += 1) {
                 const part_range = js_parts[@as(usize, @intCast(i))];
                 const compile_result = js_comp_results[@as(usize, @intCast(i))];
                 const index = part_range.source_index;
@@ -3209,8 +3263,8 @@ else => dev.server_graph,
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_35 = css_chunks.len;
-            while (i < __end_35) : (i += 1) {
+            const __end_37 = css_chunks.len;
+            while (i < __end_37) : (i += 1) {
                 var chunk = (&css_chunks[@as(usize, @intCast(i))]);
                 _ = &chunk;
                 const metadata = css_meta_vals[@as(usize, @intCast(i))];
@@ -3250,7 +3304,7 @@ else => dev.server_graph,
             const generated_js = try dev.generateJavaScriptCodeForHTMLFile(index, import_records, input_file_sources, bv2.graph.input_files.items(.loader));
             _ = try dev.client_graph.receiveChunk((&ctx), index, .{ .js = .{ .code = generated_js, .source_map = null } }, false);
             const client_index = ((ctx.getCachedIndex(.client, index).unwrap()) orelse (@panic("unresolved index")));
-            const route_bundle_index = dev.client_graph.htmlRouteBundleIndex(client_index);
+            const route_bundle_index = ((dev.client_graph.htmlRouteBundleIndex(client_index)) orelse continue);
             const route_bundle = dev.routeBundlePtr(route_bundle_index);
             _ = assert((route_bundle.data.html.bundled_file == client_index));
             var html = (&route_bundle.data.html);
@@ -3280,6 +3334,7 @@ else => dev.server_graph,
         ctx.server_seen_bit_set = try bun.bit_set.DynamicBitSetUnmanaged.initEmpty(bv2.allocator(), dev.server_graph.bundled_files.count());
         dev.incremental_result.had_adjusted_edges = false;
         _ = try prepareAndLogResolutionFailures(dev);
+        _ = try reportHtmlRoutesWithoutHtml(dev);
         for (cp_iter_slice(js_chunk.content.javascript.parts_in_chunk_in_order)) |part_range| {
             _ = &part_range;
             switch (targets[@as(usize, @intCast(part_range.source_index.get()))].bakeGraph()) {
@@ -3941,7 +3996,7 @@ pub fn onRequest(dev: *DevServer, req: *Request, resp: anytype) void {
             _ = &route_index;
             var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = AnyResponse.init(resp), .kind = .server_handler, .route_bundle_index = bun.handleOom(dev.getOrPutRouteBundle(.{ .framework = route_index })) };
             _ = &ctx;
-            _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_33 (__sw_blk_49: { const __disc_49 = e; _ = &__disc_49; if ((!cp_has_ok_val(__disc_49) and !cp_is_null_val(__disc_49))) { const __err_v_49 = cp_unwrap_err_val(__disc_49); _ = &__err_v_49; if (cp_match_tag(__err_v_49, .JSError)) {  break :__sw_blk_49 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_49) and !cp_is_null_val(__disc_49))) { const __err_v_49 = cp_unwrap_err_val(__disc_49); _ = &__err_v_49; if (cp_match_tag(__err_v_49, .JSTerminated)) {  break :__sw_blk_49 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_49) and !cp_is_null_val(__disc_49))) { const __err_v_49 = cp_unwrap_err_val(__disc_49); _ = &__err_v_49; if (cp_match_tag(__err_v_49, .OutOfMemory)) {  break :__sw_blk_49 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_33 (__sw_blk_51: { const __disc_51 = e; _ = &__disc_51; if ((!cp_has_ok_val(__disc_51) and !cp_is_null_val(__disc_51))) { const __err_v_51 = cp_unwrap_err_val(__disc_51); _ = &__err_v_51; if (cp_match_tag(__err_v_51, .JSError)) {  break :__sw_blk_51 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_51) and !cp_is_null_val(__disc_51))) { const __err_v_51 = cp_unwrap_err_val(__disc_51); _ = &__err_v_51; if (cp_match_tag(__err_v_51, .JSTerminated)) {  break :__sw_blk_51 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_51) and !cp_is_null_val(__disc_51))) { const __err_v_51 = cp_unwrap_err_val(__disc_51); _ = &__err_v_51; if (cp_match_tag(__err_v_51, .OutOfMemory)) {  break :__sw_blk_51 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             return;
         }
         if ((dev.server.?.config().onRequest != .zero)) {
@@ -3994,6 +4049,17 @@ pub fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex) 
         _ = &lock_guard;
         var __lock_guard_moved = false; _ = &__lock_guard_moved;
         defer if (!__lock_guard_moved) { __lock_guard_moved = true; const __T = @TypeOf(lock_guard); if (@typeInfo(__T) == .optional) { if (lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lock_guard; _drop_val.__cp_deinit(); } };
+        if ((route == .html)) {
+            const html = route.html;
+            if (dev.client_graph.bundled_files.get(html.bundle.data.path)) |file| {
+                _ = &file;
+                if (file.unpack().html_route_bundle_index) |existing| {
+                    _ = &existing;
+                    html.dev_server_id = existing.toOptional();
+                    return existing;
+                }
+            }
+        }
         const bundle_index = RouteBundle.Index.init(@intCast(dev.route_bundles.items.len));
         _ = try dev.route_bundles.ensureUnusedCapacity(dev.allocator(), 1);
         var bundle_data: RouteBundle.RouteBundleData = undefined;
@@ -4274,8 +4340,8 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_52 = keys.len;
-                while (i < __end_52) : (i += 1) {
+                const __end_54 = keys.len;
+                while (i < __end_54) : (i += 1) {
                     const key = keys[@as(usize, @intCast(i))];
                     const value = values[@as(usize, @intCast(i))];
                     _ = bun.assert((value.ref_count > 0));
@@ -4307,8 +4373,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_53 = bf_keys.len;
-                while (i < __end_53) : (i += 1) {
+                const __end_55 = bf_keys.len;
+                while (i < __end_55) : (i += 1) {
                     const k = bf_keys[@as(usize, @intCast(i))];
                     const v = bf_vals[@as(usize, @intCast(i))];
                     const file = v.unpack();
@@ -4343,8 +4409,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_54 = g.edges.items.len;
-                while (i < __end_54) : (i += 1) {
+                const __end_56 = g.edges.items.len;
+                while (i < __end_56) : (i += 1) {
                     const edge = g.edges.items[@as(usize, @intCast(i))];
                     if ((std.mem.indexOfScalar(G.EdgeIndex, g.edges_free_list.items, G.EdgeIndex.init(@intCast(i))) != null)) {
                         continue;

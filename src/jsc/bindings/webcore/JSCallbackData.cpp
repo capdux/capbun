@@ -83,7 +83,8 @@ JSValue JSCallbackData::invokeCallback(VM& vm, JSObject* callback, JSValue thisV
     ASSERT(!function.isEmpty());
     ASSERT(callData.type != CallData::Type::None);
 
-    ScriptExecutionContext* context = uncheckedDowncast<JSDOMGlobalObject>(lexicalGlobalObject)->scriptExecutionContext();
+    // The callback's realm may be a node:vm context, which has no ScriptExecutionContext of its own.
+    ScriptExecutionContext* context = defaultGlobalObject(lexicalGlobalObject)->scriptExecutionContext();
     // We will fail to get the context if the frame has been detached.
     if (!context)
         return JSValue();

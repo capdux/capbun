@@ -927,11 +927,21 @@ pub fn contains(self: @This(), path: []const u8) bool {
     }
 
 pub fn findResolution(self: @This(), pkg_path: []const u8, dep: *const Dependency, string_buf: []const u8, path_buf: []u8) ResolveError!T {
+            return self.findResolutionImpl(pkg_path, dep, string_buf, path_buf, null);
+    }
+
+pub fn findResolutionBoundedAtBundle(self: @This(), pkg_path: []const u8, dep: *const Dependency, string_buf: []const u8, path_buf: []u8, bundled_pkgs: *const PkgPathSet) ResolveError!T {
+            return self.findResolutionImpl(pkg_path, dep, string_buf, path_buf, bundled_pkgs);
+    }
+
+pub fn findResolutionImpl(self: @This(), pkg_path: []const u8, dep: *const Dependency, string_buf: []const u8, path_buf: []u8, bundled_pkgs: ?*const PkgPathSet) ResolveError!T {
             const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
             _ = @memcpy(path_buf[0..pkg_path.len], pkg_path);
             path_buf[cp_cast_int(usize, pkg_path.len)] = 47;
             var offset = (pkg_path.len + 1);
             _ = &offset;
+            var at_bundle_root = false;
+            _ = &at_bundle_root;
             var valid = true;
             _ = &valid;
             while (valid) {
@@ -941,8 +951,12 @@ pub fn findResolution(self: @This(), pkg_path: []const u8, dep: *const Dependenc
                     _ = &entry;
                     return entry;
                 }
-                if ((offset == 0)) {
+                if (((offset == 0) or at_bundle_root)) {
                     return error.Unresolvable;
+                }
+                if (bundled_pkgs) |bp| {
+                    _ = &bp;
+                    at_bundle_root = bp.contains(path_buf[0..(offset - 1)]);
                 }
                 const slash_opt = strings.lastIndexOfChar(path_buf[0..(offset - 1)], 47);
                 if ((slash_opt == null)) {
@@ -1697,7 +1711,7 @@ else => {
                     const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
                     const res_id_opt = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse (pkg_map.get((if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(lockfile.buffers.string_bytes.items))));
                     if ((res_id_opt == null)) {
-                        if (dep.behavior.optional) {
+                        if (mayStayUnresolved(dep)) {
                             continue;
                         }
                         _ = try dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
@@ -1737,7 +1751,7 @@ else => {
                             return error.InvalidPackageInfo; }); });
                             const res_id_opt = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse (((pkg_map.get(workspace_node_modules)) orelse (pkg_map.get(dep_name)))));
                             if ((res_id_opt == null)) {
-                                if (dep.behavior.optional) {
+                                if (mayStayUnresolved(dep)) {
                                     continue;
                                 }
                                 _ = try dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc);
@@ -1774,12 +1788,12 @@ else => {
                 while ((_dep_id < _dep_end)) : (_dep_id = (_dep_id + 1)) {
                     const dep_id: DependencyID = @intCast(_dep_id);
                     const dep = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))]);
-                    const res_id = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse ((blk_catch_7: { break :blk_catch_7 ((pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {
+                    const res_id = (((if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items)) resolvePeerDepVersionBased(dep, (&lockfile.package_index), (&lockfile.overrides), pkg_resolutions, lockfile.buffers.string_bytes.items) else null)) orelse ((blk_catch_7: { break :blk_catch_7 (((if (dep.behavior.isOptionalPeer()) pkg_map.findResolutionBoundedAtBundle(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf), (&bundled_pkgs)) else pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, (&path_buf)))) catch |e| { _ = &e; if ((e == error.InvalidPackageKey)) {
                         _ = try log.addError(source, key.loc, "Invalid package path");
                         return error.InvalidPackageKey;
                     } else {
                         if ((e == error.Unresolvable)) {
-                            if (dep.behavior.optional) {
+                            if (mayStayUnresolved(dep)) {
                                 continue;
                             }
                             _ = try dependencyResolutionFailure(dep, pkg_path, allocator, lockfile.buffers.string_bytes.items, source, log, key.loc);
@@ -1796,6 +1810,10 @@ else => {
                 return error.InvalidPackagesObject;
             } }); });
         }
+}
+
+pub fn mayStayUnresolved(dep: *const Dependency) bool {
+        return (dep.behavior.optional or dep.behavior.peer);
 }
 
 pub fn isDeferredPeer(dep: *const Dependency, string_buf: []const u8) bool {

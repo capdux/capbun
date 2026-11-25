@@ -327,8 +327,8 @@ fn expandFlat(
     tokens: []const Token,
     expansion_table: []const ExpansionVariant,
     out: []std.array_list.Managed(u8),
-    out_key: u16,
-    out_key_counter: *u16,
+    out_key: usize,
+    out_key_counter: *usize,
     depth_: u8,
     start: usize,
     end: usize,
@@ -379,8 +379,8 @@ fn expandFlat(
 fn expandNested(
     root: *AST.Group!,
     out: []std.array_list.Managed(u8),
-    out_key: u16,
-    out_key_counter: *u16,
+    out_key: usize,
+    out_key_counter: *usize,
     start: u32,
 ): ExpandError!void {
     if (root.atoms == .single) {
@@ -469,7 +469,7 @@ pub fn expand(
     out: []std.array_list.Managed(u8),
     contains_nested: bool,
 ): ExpandError!void {
-    let out_key_counter: u16 = 1;
+    let out_key_counter: usize = 1;
     if (!contains_nested) {
         let expansions_table = buildExpansionTableAlloc(allocator, tokens)?;
 
@@ -523,6 +523,11 @@ pub struct _LexerOutput {
     contains_nested: bool,
 }
 
+struct OpenBrace {
+    tok_idx: u32,
+    has_comma: bool,
+}
+
 pub fn NewLexer(comptime encoding: Encoding): type {
     const Chars = NewChars(encoding);
     return struct {
@@ -551,7 +556,7 @@ pub fn NewLexer(comptime encoding: Encoding): type {
 
         // FIXME: implement rollback on invalid brace
         fn tokenize_impl(*_): BraceLexerError!bool {
-            const BraceStack = bun.SmallList(u32, MAX_NESTED_BRACES);
+            const BraceStack = bun.SmallList(OpenBrace, MAX_NESTED_BRACES);
             let brace_stack = DeinitWithAllocGuard<BraceStack>{ val: BraceStack{}, alloc: bun.default_allocator };
 
             while (true) {
@@ -564,19 +569,34 @@ pub fn NewLexer(comptime encoding: Encoding): type {
                 if (!escaped) {
                     switch (char) {
                         '{' => {
-                            brace_stack.val.append(bun.default_allocator, @intCast(_.tokens.items.len));
+                            brace_stack.val.append(bun.default_allocator, .{
+                                tok_idx: @intCast(_.tokens.items.len),
+                                has_comma: false,
+                            });
                             _.tokens.append(.{ open: .{} })?;
                             continue;
                         },
                         '}' => {
-                            if (brace_stack.val.len() > 0) {
-                                * = brace_stack.val.pop();
-                                _.tokens.append(.close)?;
+                            if (top := brace_stack.val.pop()) {
+                                if (top.has_comma) {
+                                    _.tokens.append(.close)?;
+                                } else {
+                                    // A `{...}` group with no top-level comma is not a
+                                    // brace expansion (bash semantics): demote the Open
+                                    // back to a literal `{` and emit this `}` as text.
+                                    _.replaceTokenWithString(top.tok_idx);
+                                    const close_arr: [1]u8 = ['}'];
+                                    _.tokens.append(.{
+                                        text: SmolStr.fromSlice(_.alloc, &close_arr)?,
+                                    })?;
+                                }
                                 continue;
                             }
                         },
                         ',' => {
                             if (brace_stack.val.len() > 0) {
+                                let top = brace_stack.val.lastMut().?;
+                                top.has_comma = true;
                                 _.tokens.append(.comma)?;
                                 continue;
                             }
@@ -590,8 +610,8 @@ pub fn NewLexer(comptime encoding: Encoding): type {
 
             // Unclosed braces
             while (brace_stack.val.len() > 0) {
-                const top_idx = brace_stack.val.pop().?;
-                _.rollbackBraces(top_idx);
+                const top = brace_stack.val.pop().?;
+                _.rollbackBraces(top.tok_idx);
             }
 
             _.flattenTokens()?;
@@ -601,30 +621,31 @@ pub fn NewLexer(comptime encoding: Encoding): type {
         }
 
         fn flattenTokens(*_): Allocator.Error!void {
-            if (_.tokens.items.len == 0) return;
-            let brace_count: u32 = if (_.tokens.items[0] == .open) 1 else 0;
-            let i: u32 = 0;
-            let j: u32 = 1;
-            while (i < _.tokens.items.len && j < _.tokens.items.len) {
-                let itok = &_.tokens.items[i];
-                let jtok = &_.tokens.items[j];
-
-                if (itok.* == .text && jtok.* == .text) {
-                    itok.text.appendSlice(_.alloc, jtok.toText().slice())?;
-                    * = _.tokens.orderedRemove(j);
-                } else {
-                    if (jtok.* == .close) {
-                        brace_count -= 1;
-                    } else if (jtok.* == .open) {
+            let brace_count: u32 = 0;
+            let write: usize = 0;
+            for (read of 0.._.tokens.items.len) {
+                switch (_.tokens.items[read]) {
+                    .open => {
                         brace_count += 1;
                         if (brace_count > 1) {
                             _.contains_nested = true;
                         }
-                    }
-                    i += 1;
-                    j += 1;
+                    },
+                    .close => {
+                        brace_count -= 1;
+                    },
+                    else => {},
+                }
+                if (write > 0 && _.tokens.items[write - 1] == .text && _.tokens.items[read] == .text) {
+                    let prev = &_.tokens.items[write - 1];
+                    const cur = _.tokens.items[read];
+                    prev.text.appendSlice(_.alloc, cur.toText().slice())?;
+                } else {
+                    std.mem.swap(Token, &_.tokens.items[write], &_.tokens.items[read]);
+                    write += 1;
                 }
             }
+            _.tokens.items.len = write;
         }
 
         fn rollbackBraces(*_, starting_idx: u32) {

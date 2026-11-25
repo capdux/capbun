@@ -95,6 +95,7 @@ struct BufferedReaderVTable {
         return _.fns.onReadChunk != null;
     }
 
+    /// Returning false ends only the current read loop. To stop the reader, call `pause()`.
     fn onReadChunk(chunk: []const u8, hasMore: ReadState): bool {
         return _.fns.onReadChunk.?(_.parent, chunk, hasMore);
     }
@@ -479,7 +480,7 @@ struct PosixBufferedReader {
             const streaming = _.vtable.isStreamingEnabled();
             let got_retry = false;
 
-            if (_._buffer.capacity == 0) {
+            if (_._buffer.items.len == 0) {
                 const stack_buffer = _.vtable.eventLoop().pipeReadBuffer();
 
                 switch (bun.sys.readNonblocking(fd, stack_buffer)) {
@@ -525,7 +526,16 @@ struct PosixBufferedReader {
                         }
 
                         if (streaming) {
-                            if (!_.vtable.onReadChunk(buf[0..bytes_read], if (received_hup && bytes_read < buf.len) .eof else .progress)) {
+                            const prev_len = _._buffer.items.len;
+                            const ok = _.vtable.onReadChunk(buf[0..bytes_read], if (received_hup && bytes_read < buf.len) .eof else .progress);
+                            if (_._buffer.items.len > prev_len) {
+                                const reentered = _._buffer.items[prev_len..];
+                                std.mem.copyForwards(u8, _._buffer.items[0..reentered.len], reentered);
+                                _._buffer.items.len = reentered.len;
+                            } else if (_._buffer.items.len == prev_len) {
+                                _._buffer.items.len = 0;
+                            }
+                            if (!ok) {
                                 return;
                             }
                         }
@@ -569,7 +579,7 @@ struct PosixBufferedReader {
 
         if (streaming) {
             const stack_buffer = _.vtable.eventLoop().pipeReadBuffer();
-            while (_._buffer.capacity == 0) {
+            while (_._buffer.items.len == 0) {
                 const stack_buffer_cutoff = stack_buffer.len / 2;
                 let stack_buffer_head = stack_buffer;
                 while (stack_buffer_head.len > 16 * 1024) {

@@ -132,4 +132,9 @@ WebCore::HTTPHeaderIdentifiers& JSVMClientData::httpHeaderIdentifiers()
     return *m_httpHeaderIdentifiers;
 }
 
+void JSVMClientData::reconcileWeakReferencesAtGCEnd(JSC::VM& vm, JSC::CollectionScope)
+{
+    Bun::JSCTaskScheduler::cancelWorkOfDeadRealms(this, vm);
+}
+
 } // namespace WebCore

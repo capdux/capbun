@@ -62,7 +62,7 @@ export @root @value struct ProxyTunnel {
     socket: ProxyTunnelSocket = { none: {} },
     write_buffer: bun.io.StreamBuffer = {},
     did_have_handshaking_error: bool = false,
-    established_with_reject_unauthorized: bool = false,
+    verification: bun.http.PeerVerification = .none,
     ref_count: RefCount,
 
     static fn onOpen(client: *HTTPClient) {
@@ -391,7 +391,7 @@ export @root @value struct ProxyTunnel {
     fn detachOwner(*_, client: *HTTPClient) {
         _.socket = { none: {} };
         _.did_have_handshaking_error = client.flags.did_have_handshaking_error;
-        _.established_with_reject_unauthorized = _.established_with_reject_unauthorized || client.flags.reject_unauthorized;
+        _.verification = _.verification.max(client.targetVerification());
     }
 
     fn adopt(*_, client: *HTTPClient, comptime is_ssl: bool, socket: auto) {

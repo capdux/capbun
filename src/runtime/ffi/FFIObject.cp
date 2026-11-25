@@ -1,14 +1,8 @@
 const FFIObject = @This();
 
 pub fn newCString(globalThis: *JSGlobalObject, value: JSValue, byteOffset: JSValue?, lengthValue: JSValue?): bun.JSError!jsc.JSValue {
-    switch (FFIObject.getPtrSlice(globalThis, value, byteOffset, lengthValue)) {
-        .err e => {
-            return e;
-        },
-        .slice slice => {
-            return bun.String.createUTF8ForJS(globalThis, slice);
-        },
-    }
+    const slice = getPtrSlice(globalThis, value, byteOffset, lengthValue)?;
+    return bun.String.createUTF8ForJS(globalThis, slice);
 }
 
 pub const dom_call = DOMCall("FFI", @This(), "ptr", DOMEffect.forRead(.TypedArrayProperties));
@@ -441,24 +435,15 @@ fn ptr_(
     return jsc.JSValue.fromPtrAddress(addr);
 }
 
-union(enum) ValueOrError {
-    err: JSValue,
-    slice: []u8,
-}
-
-pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: JSValue?, byteLength: JSValue?): ValueOrError {
+pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: JSValue?, byteLength: JSValue?): bun.JSError![]u8 {
     if (!value.isNumber() || value.asNumber() < 0 || value.asNumber() > @as(f64, @as(comptime_float, std.math.maxInt(usize)))) {
-        return .{ .err = globalThis.toInvalidArguments("ptr must be a number.", {}) };
+        return globalThis.throwInvalidArguments("ptr must be a number.", {});
     }
 
     const num = value.asPtrAddress();
     if (num == 0) {
-        return .{ .err = globalThis.toInvalidArguments("ptr cannot be zero, that would segfault Bun :(", {}) };
+        return globalThis.throwInvalidArguments("ptr cannot be zero, that would segfault Bun :(", {});
     }
-
-    // if (!std.math.isFinite(num)) {
-    //     return .{ .err = globalThis.toInvalidArguments("ptr must be a finite number.", {}) };
-    // }
 
     let addr = @as(usize, @bitCast(num));
 
@@ -472,52 +457,47 @@ pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: JSVa
             }
 
             if (addr == 0) {
-                return .{ .err = globalThis.toInvalidArguments("ptr cannot be zero, that would segfault Bun :(", {}) };
+                return globalThis.throwInvalidArguments("ptr cannot be zero, that would segfault Bun :(", {});
             }
 
             if (!std.math.isFinite(byte_off.asNumber())) {
-                return .{ .err = globalThis.toInvalidArguments("ptr must be a finite number.", {}) };
+                return globalThis.throwInvalidArguments("ptr must be a finite number.", {});
             }
         } else if (!byte_off.isEmptyOrUndefinedOrNull()) {
-            // do nothing
-        } else {
-            return .{ .err = globalThis.toInvalidArguments("Expected number for byteOffset", {}) };
+            return globalThis.throwInvalidArguments("Expected number for byteOffset", {});
         }
     }
 
     if (addr == 0xDEADBEEF || addr == 0xaaaaaaaa || addr == 0xAAAAAAAA) {
-        return .{ .err = globalThis.toInvalidArguments("ptr to invalid memory, that would segfault Bun :(", {}) };
+        return globalThis.throwInvalidArguments("ptr to invalid memory, that would segfault Bun :(", {});
     }
 
     if (valueLength := byteLength) {
         if (!valueLength.isEmptyOrUndefinedOrNull()) {
             if (!valueLength.isNumber()) {
-                return .{ .err = globalThis.toInvalidArguments("length must be a number.", {}) };
+                return globalThis.throwInvalidArguments("length must be a number.", {});
             }
 
-            if (valueLength.asNumber() == 0.0) {
-                return .{ .err = globalThis.toInvalidArguments("length must be > 0. This usually means a bug in your code.", {}) };
-            }
-
+            // NaN and every value in (-1, 1) truncate to 0 and fail this check too.
             const length_i = valueLength.toInt64();
-            if (length_i < 0) {
-                return .{ .err = globalThis.toInvalidArguments("length must be > 0. This usually means a bug in your code.", {}) };
+            if (length_i <= 0) {
+                return globalThis.throwInvalidArguments("length must be > 0. This usually means a bug in your code.", {});
             }
 
             if (length_i > max_addressable_memory) {
-                return .{ .err = globalThis.toInvalidArguments("length exceeds max addressable memory. This usually means a bug in your code.", {}) };
+                return globalThis.throwInvalidArguments("length exceeds max addressable memory. This usually means a bug in your code.", {});
             }
 
             const length = @as(usize, @intCast(length_i));
-            return .{ .slice = unsafe {
+            return unsafe {
                 const p: [*]u8 = @ptrFromInt(addr);
                 p[0..length]
-            } };
+            };
         }
     }
 
     const p: [*:0]u8 = unsafe { @ptrFromInt(addr) };
-    return .{ .slice = bun.span(p) };
+    return bun.span(p);
 }
 
 fn getCPtr(value: JSValue): usize? {
@@ -543,43 +523,37 @@ pub fn toArrayBuffer(
     finalizationCtxOrPtr: JSValue?,
     finalizationCallback: JSValue?,
 ): bun.JSError!jsc.JSValue {
-    switch (getPtrSlice(globalThis, value, byteOffset, valueLength)) {
-        .err erro => {
-            return erro;
-        },
-        .slice slice => {
-            const DeallocatorFn = *const fn (*!, *!) callconv(.c) void;
-            let callback: DeallocatorFn? = null;
-            let ctx: *!? = null;
-            if (callback_value := finalizationCallback) {
-                if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
-                    callback = cb;
+    const slice = getPtrSlice(globalThis, value, byteOffset, valueLength)?;
+    const DeallocatorFn = *const fn (*!, *!) callconv(.c) void;
+    let callback: DeallocatorFn? = null;
+    let ctx: *!? = null;
+    if (callback_value := finalizationCallback) {
+        if (callback_ptr := getCPtr(callback_value)) {
+            const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
+            callback = cb;
 
-                    if (ctx_value := finalizationCtxOrPtr) {
-                        if (ctx_ptr := getCPtr(ctx_value)) {
-                            const p: *! = unsafe { @ptrFromInt(ctx_ptr) };
-                            ctx = p;
-                        } else if (!ctx_value.isUndefinedOrNull()) {
-                            return globalThis.toInvalidArguments("Expected user data to be a C pointer (number || BigInt)", {});
-                        }
-                    }
-                } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
-                    return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
-                }
-            } else if (callback_value := finalizationCtxOrPtr) {
-                if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
-                    callback = cb;
-                } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
-                    return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
+            if (ctx_value := finalizationCtxOrPtr) {
+                if (ctx_ptr := getCPtr(ctx_value)) {
+                    const p: *! = unsafe { @ptrFromInt(ctx_ptr) };
+                    ctx = p;
+                } else if (!ctx_value.isUndefinedOrNull()) {
+                    return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number || BigInt)", {});
                 }
             }
-
-            let ab = jsc.ArrayBuffer.fromBytes(slice, jsc.JSValue.JSType.ArrayBuffer);
-            return ab.toJSWithContext(globalThis, ctx, callback);
-        },
+        } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
+            return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
+        }
+    } else if (callback_value := finalizationCtxOrPtr) {
+        if (callback_ptr := getCPtr(callback_value)) {
+            const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
+            callback = cb;
+        } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
+            return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
+        }
     }
+
+    let ab = jsc.ArrayBuffer.fromBytes(slice, jsc.JSValue.JSType.ArrayBuffer);
+    return ab.toJSWithContext(globalThis, ctx, callback);
 }
 
 @callconv("c")
@@ -593,44 +567,38 @@ pub fn toBuffer(
     finalizationCtxOrPtr: JSValue?,
     finalizationCallback: JSValue?,
 ): bun.JSError!jsc.JSValue {
-    switch (getPtrSlice(globalThis, value, byteOffset, valueLength)) {
-        .err e => {
-            return e;
-        },
-        .slice slice => {
-            const DeallocatorFn = *const fn (*!, *!) callconv(.c) void;
-            let callback: DeallocatorFn? = null;
-            let ctx: *!? = null;
-            if (callback_value := finalizationCallback) {
-                if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
-                    callback = cb;
+    const slice = getPtrSlice(globalThis, value, byteOffset, valueLength)?;
+    const DeallocatorFn = *const fn (*!, *!) callconv(.c) void;
+    let callback: DeallocatorFn? = null;
+    let ctx: *!? = null;
+    if (callback_value := finalizationCallback) {
+        if (callback_ptr := getCPtr(callback_value)) {
+            const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
+            callback = cb;
 
-                    if (ctx_value := finalizationCtxOrPtr) {
-                        if (ctx_ptr := getCPtr(ctx_value)) {
-                            const p: *! = unsafe { @ptrFromInt(ctx_ptr) };
-                            ctx = p;
-                        } else if (!ctx_value.isEmptyOrUndefinedOrNull()) {
-                            return globalThis.toInvalidArguments("Expected user data to be a C pointer (number || BigInt)", {});
-                        }
-                    }
-                } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
-                    return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
-                }
-            } else if (callback_value := finalizationCtxOrPtr) {
-                if (callback_ptr := getCPtr(callback_value)) {
-                    const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
-                    callback = cb;
-                } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
-                    return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
+            if (ctx_value := finalizationCtxOrPtr) {
+                if (ctx_ptr := getCPtr(ctx_value)) {
+                    const p: *! = unsafe { @ptrFromInt(ctx_ptr) };
+                    ctx = p;
+                } else if (!ctx_value.isUndefinedOrNull()) {
+                    return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number || BigInt)", {});
                 }
             }
-
-            // No finalizer means borrow: the noop deallocator keeps GC from freeing
-            // caller-owned storage (oven-sh/bun#35405).
-            return jsc.JSValue.createBufferWithCtx(globalThis, slice, ctx, callback ?? noopBytesDeallocator);
-        },
+        } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
+            return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
+        }
+    } else if (callback_value := finalizationCtxOrPtr) {
+        if (callback_ptr := getCPtr(callback_value)) {
+            const cb: DeallocatorFn = unsafe { @ptrFromInt(callback_ptr) };
+            callback = cb;
+        } else if (!callback_value.isEmptyOrUndefinedOrNull()) {
+            return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", {});
+        }
     }
+
+    // No finalizer means borrow: the noop deallocator keeps GC from freeing
+    // caller-owned storage (oven-sh/bun#35405).
+    return jsc.JSValue.createBufferWithCtx(globalThis, slice, ctx, callback ?? noopBytesDeallocator);
 }
 
 pub fn toCStringBuffer(
@@ -639,14 +607,8 @@ pub fn toCStringBuffer(
     byteOffset: JSValue?,
     valueLength: JSValue?,
 ): jsc.JSValue {
-    switch (getPtrSlice(globalThis, value, byteOffset, valueLength)) {
-        .err e => {
-            return e;
-        },
-        .slice slice => {
-            return jsc.JSValue.createBuffer(globalThis, slice, null);
-        },
-    }
+    const slice = getPtrSlice(globalThis, value, byteOffset, valueLength) catch return .zero;
+    return jsc.JSValue.createBuffer(globalThis, slice, null);
 }
 
 pub fn getter(

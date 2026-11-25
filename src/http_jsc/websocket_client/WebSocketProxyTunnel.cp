@@ -332,4 +332,24 @@ comptime {
     pub fn hasBackpressure(): bool {
         return _.#write_buffer.isNotEmpty();
     }
+
+    pub fn bufferedAmount(): usize {
+        return _.#write_buffer.size();
+    }
+
+    pub fn pauseStream(): bool {
+        return switch (_.#socket) {
+            .tcp => |s| s.pauseStream(),
+            .ssl => |s| s.pauseStream(),
+            .none => false,
+        };
+    }
+
+    pub fn resumeStream(): bool {
+        return switch (_.#socket) {
+            .tcp => |s| s.resumeStream(),
+            .ssl => |s| s.resumeStream(),
+            .none => false,
+        };
+    }
 }

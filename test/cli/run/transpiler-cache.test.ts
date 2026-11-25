@@ -225,3 +225,58 @@ describe("transpiler cache", () => {
     expect(newCacheCount()).toBe(0); // cache hit, order doesn't matter
   });
 });
+
+test("rejects a cached entry whose sourcemap section header is corrupt", () => {
+  const SOURCEMAP_BYTE_OFFSET_AT = 54;
+  const SOURCEMAP_BYTE_LENGTH_AT = 62;
+
+  function corruptSourceMapHeader(file: string): boolean {
+    const data = readFileSync(file);
+    if (data.length < 102) return false;
+    const smOff = Number(data.readBigUInt64LE(SOURCEMAP_BYTE_OFFSET_AT));
+    const smLen = Number(data.readBigUInt64LE(SOURCEMAP_BYTE_LENGTH_AT));
+    if (smLen < 32 || smOff + smLen > data.length) return false;
+    data.writeUInt32LE(0x0fffffff, smOff + 24);
+    writeFileSync(file, data);
+    return true;
+  }
+
+  const line = `// ${Buffer.alloc(120, "x").toString()}\n`;
+  const filler = Buffer.alloc(120 * line.length, line).toString();
+  writeFileSync(
+    join(temp_dir, "boom.ts"),
+    `${filler}
+function boom(): number {
+  throw new Error("boom");
+}
+try {
+  boom();
+} catch (e) {
+  void (e as Error).stack;
+}
+console.log("OK");
+`,
+  );
+
+  const run = () => Bun.spawnSync({ cmd: [bunExe(), "./boom.ts"], cwd: temp_dir, env });
+
+  const first = run();
+  expect(first.stdout.toString()).toContain("OK");
+  expect(existsSync(cache_dir)).toBeTrue();
+  expect(first.exitCode).toBe(0);
+
+  const second = run();
+  expect(second.stdout.toString()).toContain("OK");
+  expect(second.exitCode).toBe(0);
+
+  let corrupted = 0;
+  for (const name of readdirSync(cache_dir)) {
+    if (name.endsWith(".pile") && corruptSourceMapHeader(join(cache_dir, name))) corrupted++;
+  }
+  expect(corrupted).toBeGreaterThanOrEqual(1);
+
+  const third = run();
+  expect(third.stdout.toString()).toContain("OK");
+  expect(third.signalCode).toBeUndefined();
+  expect(third.exitCode).toBe(0);
+});

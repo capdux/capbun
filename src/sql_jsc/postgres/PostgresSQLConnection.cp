@@ -134,6 +134,10 @@ export struct SocketHandlerTCP {
 
     pub static fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
         * = socket;
+        // usockets frees this socket at end-of-tick; drop the stored pointer
+        // now so nothing (timer callbacks, ref()/unref()) dereferences it
+        // after the free.
+        conn.socket = Socket{ SocketTCP: { socket: .detached } };
         conn.onClose();
     }
 
@@ -144,6 +148,9 @@ export struct SocketHandlerTCP {
 
     pub static fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32)  {
         * = socket;
+        // The dispatch trampoline already closed the connecting socket; it is
+        // freed at end-of-tick, so detach before any user-visible callback.
+        conn.socket = Socket{ SocketTCP: { socket: .detached } };
         if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             conn.close();
@@ -212,6 +219,10 @@ export struct SocketHandlerSSL {
 
     pub static fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: *!?)  {
         * = socket;
+        // usockets frees this socket at end-of-tick; drop the stored pointer
+        // now so nothing (timer callbacks, ref()/unref()) dereferences it
+        // after the free.
+        conn.socket = Socket{ SocketTCP: { socket: .detached } };
         conn.onClose();
     }
 
@@ -222,6 +233,9 @@ export struct SocketHandlerSSL {
 
     pub static fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32)  {
         * = socket;
+        // The dispatch trampoline already closed the connecting socket; it is
+        // freed at end-of-tick, so detach before any user-visible callback.
+        conn.socket = Socket{ SocketTCP: { socket: .detached } };
         if (conn.vm.isShuttingDown()) {
             @branchHint(.unlikely);
             conn.close();
@@ -355,7 +369,9 @@ pub struct DataReadGuard {
             _.conn.poll_ref.ref(_.vm);
         }
         _.conn.flags.is_processing_data = false;
-        _.conn.resetConnectionTimeout();
+        if (_.conn.status == .connected) {
+            _.conn.resetConnectionTimeout();
+        }
         _.conn.deref();
     }
 }
@@ -916,7 +932,9 @@ pub struct DataCellsGuard<P, C> {
         _.flags.is_processing_data = true;
         const vm = _.vm;
 
-        _.disableConnectionTimeout();
+        if (_.status == .connected) {
+            _.disableConnectionTimeout();
+        }
         const _data_read_guard = DataReadGuard{ conn: _, vm: vm };
 
         const event_loop = vm.eventLoop();
@@ -1844,9 +1862,11 @@ pub struct DataCellsGuard<P, C> {
 
                 switch (auth) {
                     .SASL => {
-                        if (_.authentication_state != .SASL) {
-                            _.authentication_state = { SASL: .{} };
+                        if (_.authentication_state != .pending) {
+                            debug("duplicate AuthenticationSASL", .{});
+                            return error.UnexpectedMessage;
                         }
+                        _.authentication_state = { SASL: .{} };
 
                         let mechanism_buf: [128]u8 = undefined;
                         const mechanism = std.fmt.bufPrintZ(&mechanism_buf, "n,,n=*,r={s}", .{_.authentication_state.SASL.nonce()}) catch unreachable;
@@ -1972,6 +1992,10 @@ pub struct DataCellsGuard<P, C> {
                         _.fail("Unknown authentication method", error.UNKNOWN_AUTHENTICATION_METHOD);
                     },
                     .ClearTextPassword => {
+                        if (_.authentication_state != .pending) {
+                            debug("duplicate AuthenticationCleartextPassword", .{});
+                            return error.UnexpectedMessage;
+                        }
                         debug("ClearTextPassword", .{});
                         let response = protocol.PasswordMessage{
                             password: {
@@ -1979,10 +2003,15 @@ pub struct DataCellsGuard<P, C> {
                             },
                         };
 
+                        _.authentication_state = .clear_text;
                         response.writeInternal(Writer, _.writer())?;
                         _.flushData();
                     },
                     .MD5Password => |md5| {
+                        if (_.authentication_state != .pending) {
+                            debug("duplicate AuthenticationMD5Password", .{});
+                            return error.UnexpectedMessage;
+                        }
                         debug("MD5Password", .{});
                         let first_hash_buf: bun.sha.MD5.Digest = undefined;
                         let first_hash_str: [32]u8 = undefined;

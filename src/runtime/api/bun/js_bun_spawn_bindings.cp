@@ -429,8 +429,14 @@ pub fn spawnMaybeSync(
 
             if (timeout_value := args.get(globalThis, "timeout")?) brk: {
                 if (!timeout_value.isNull()) {
-                    if (timeout_value.isNumber() && std.math.isPositiveInf(timeout_value.asNumber())) {
-                        break :brk;
+                    if (timeout_value.isNumber()) {
+                        const n = timeout_value.asNumber();
+                        if (std.math.isNan(n)) {
+                            return globalThis.throwRangeError(n, .{ .field_name = "timeout", .msg = "a non-negative integer" });
+                        }
+                        if (std.math.isPositiveInf(n)) {
+                            break :brk;
+                        }
                     }
 
                     const timeout_int = globalThis.validateIntegerRange(timeout_value, u64, 0, .{ .min = 0, .field_name = "timeout" })?;
@@ -441,6 +447,9 @@ pub fn spawnMaybeSync(
 
             if (val := args.get(globalThis, "killSignal")?) {
                 killSignal = bun.SignalCode.fromJS(val, globalThis)?;
+                if (@intFromEnum(killSignal) == 0) {
+                    return globalThis.ERR(.UNKNOWN_SIGNAL, "Unknown signal: 0", .{}).throw();
+                }
             }
 
             if (val := args.get(globalThis, "maxBuffer")?) {

@@ -1026,3 +1026,251 @@ describe("node:vm lineOffset/columnOffset at the edge of int32", () => {
     expect(position).toBeLessThanOrEqual(INT32_MAX);
   });
 });
+
+import { bunEnv, bunExe, tempDir } from "harness";
+import { totalmem } from "node:os";
+
+test.concurrent("a FinalizationRegistry cleanup job is dropped when its context dies before the job runs", async () => {
+  const fixture = /* js */ `
+    import vm from "node:vm";
+    import { edenGC, fullGC } from "bun:jsc";
+
+    const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+    const liveContextCleanedUp = Promise.withResolvers();
+    let liveContext;
+    let deadContextCleanups = 0;
+
+    function setup() {
+      const swept = Array.from({ length: 8 }, () => vm.createContext({}));
+      const contexts = Array.from({ length: 4 }, () => vm.createContext({ onCleanup: () => deadContextCleanups++ }));
+      liveContext = vm.createContext({ onCleanup: liveContextCleanedUp.resolve });
+      contexts.push(liveContext);
+      for (const context of contexts) vm.runInContext("globalThis.registry = new FinalizationRegistry(onCleanup)", context);
+      edenGC();
+      for (const context of contexts) for (let i = 0; i < 5; i++) context.registry.register({ i }, i);
+    }
+
+    await nextTurn().then(setup);
+    await nextTurn();
+    edenGC();
+    fullGC();
+    await liveContextCleanedUp.promise;
+    await nextTurn();
+    console.log({ deadContextCleanups });
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", fixture], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect({ stdout, stderr, exitCode }).toEqual({
+    stdout: "{\n  deadContextCleanups: 0,\n}\n",
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+test.concurrent("Atomics.notify does not wake the Atomics.waitAsync of a context that died", async () => {
+  const fixture = /* js */ `
+    import vm from "node:vm";
+    import { fullGC } from "bun:jsc";
+
+    const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+    const shared = new Int32Array(new SharedArrayBuffer(4));
+    const liveContextWoke = Promise.withResolvers();
+    let liveContext;
+
+    function setup() {
+      const swept = Array.from({ length: 8 }, () => vm.createContext({}));
+      const contexts = Array.from({ length: 4 }, () => vm.createContext({ shared, onWake() {} }));
+      liveContext = vm.createContext({ shared, onWake: liveContextWoke.resolve });
+      contexts.push(liveContext);
+      for (const context of contexts) vm.runInContext("Atomics.waitAsync(shared, 0, 0).value.then(onWake)", context);
+    }
+
+    await nextTurn().then(setup);
+    await nextTurn();
+    fullGC();
+    console.log("woken:", Atomics.notify(shared, 0));
+    console.log("the live context's wait resolved:", await liveContextWoke.promise);
+  `;
+  await using proc = Bun.spawn({ cmd: [bunExe(), "-e", fixture], env: bunEnv, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  expect({ stdout, stderr, exitCode }).toEqual({
+    stdout: "woken: 1\nthe live context's wait resolved: ok\n",
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
+const memoryForLongStrings = Math.min(totalmem(), process.constrainedMemory() || Infinity);
+test.skipIf(memoryForLongStrings < 10 * 1024 ** 3)(
+  "node:vm does not abort the process when text it joins passes the string length limit",
+  async () => {
+    const fixture = `
+      const vm = require("node:vm");
+      const long = "q".repeat(2 ** 31 - 10);
+
+      async function report(name, run) {
+        try {
+          console.log(name + ": " + (await run()));
+        } catch (e) {
+          console.log(name + ": " + e.name + ": " + e.message);
+        }
+      }
+
+      const half = long.slice(0, 2 ** 30);
+      await report("compileFunction params", () => typeof vm.compileFunction("", [half, half]));
+      await report("SyntheticModule#setExport", () => new vm.SyntheticModule([], () => {}).setExport(long, 1));
+      await report("import() in a context", () => vm.runInNewContext("Function")("s", "return import(s)")(long));
+
+      const keptItsStack = (error, name) =>
+        error.name === name && error.stack === long ? name + " with the stack it had" : error.name + " with another stack";
+
+      function thrownBy(code) {
+        const error = new Error("x");
+        error.stack = long;
+        try {
+          new vm.Script(code).runInNewContext({ error });
+        } catch (e) {
+          if (e !== error) throw e;
+          return keptItsStack(e, "Error");
+        }
+        return "did not throw";
+      }
+      await report("error thrown by a script", () => thrownBy("throw error"));
+      await report("error thrown from a line too long for the header", () => thrownBy("throw error;" + Buffer.alloc(2000, " ").toString()));
+
+      await report("SyntaxError from new Script", () => {
+        const prepareStackTrace = Error.prepareStackTrace;
+        Error.prepareStackTrace = () => long;
+        try {
+          new vm.Script("%%");
+        } catch (e) {
+          return keptItsStack(e, "SyntaxError");
+        } finally {
+          Error.prepareStackTrace = prepareStackTrace;
+        }
+        return "did not throw";
+      });
+    `;
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", fixture],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout: stdout.trim().split("\n"), stderr, exitCode }).toEqual({
+      stdout: [
+        "compileFunction params: RangeError: Out of memory",
+        "SyntheticModule#setExport: RangeError: Out of memory",
+        "import() in a context: RangeError: Out of memory",
+        "error thrown by a script: Error with the stack it had",
+        "error thrown from a line too long for the header: Error with the stack it had",
+        "SyntaxError from new Script: SyntaxError with the stack it had",
+      ],
+      stderr: "",
+      exitCode: 0,
+    });
+  },
+  30_000,
+);
+
+describe.concurrent("File and fs.Stats accept a newTarget that belongs to a context", () => {
+  const prelude = /*js*/ `
+    const vm = require("node:vm");
+    const fs = require("node:fs");
+    const BigIntStats = fs.statSync(".", { bigint: true }).constructor;
+    const bigintArgs = [1n, 0o100644n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 0n, 2000000n, 0n, 0n, 0n];
+  `;
+
+  test.each([
+    {
+      name: "class extends File",
+      script: /*js*/ `
+        const context = vm.createContext({ File });
+        const [Upload, upload] = vm.runInContext(
+          'class Upload extends File { get custom() { return 42; } }; [Upload, new Upload(["abc"], "a.txt")]',
+          context,
+        );
+        console.log(JSON.stringify({
+          prototype: Object.getPrototypeOf(upload) === Upload.prototype,
+          instanceof: upload instanceof File,
+          name: upload.name,
+          size: upload.size,
+          custom: upload.custom,
+        }));
+      `,
+      expected: { prototype: true, instanceof: true, name: "a.txt", size: 3, custom: 42 },
+    },
+    {
+      name: "class extends fs.Stats",
+      script: /*js*/ `
+        const context = vm.createContext({ Stats: fs.Stats });
+        const [S, stats] = vm.runInContext(
+          "class S extends Stats { get custom() { return 42; } }; [S, new S(1, 0o100644)]",
+          context,
+        );
+        console.log(JSON.stringify({
+          prototype: Object.getPrototypeOf(stats) === S.prototype,
+          instanceof: stats instanceof fs.Stats,
+          isFile: stats.isFile(),
+          mode: stats.mode,
+          custom: stats.custom,
+        }));
+      `,
+      expected: { prototype: true, instanceof: true, isFile: true, mode: 0o100644, custom: 42 },
+    },
+    {
+      name: "class extends BigIntStats",
+      script: /*js*/ `
+        const context = vm.createContext({ BigIntStats, bigintArgs });
+        const [S, stats] = vm.runInContext(
+          "class S extends BigIntStats { get custom() { return 42; } }; [S, new S(...bigintArgs)]",
+          context,
+        );
+        console.log(JSON.stringify({
+          prototype: Object.getPrototypeOf(stats) === S.prototype,
+          instanceof: stats instanceof BigIntStats,
+          isFile: stats.isFile(),
+          atimeNs: String(stats.atimeNs),
+          custom: stats.custom,
+        }));
+      `,
+      expected: { prototype: true, instanceof: true, isFile: true, atimeNs: "2000000", custom: 42 },
+    },
+    {
+      name: "Reflect.construct with a function, a bound function, and a Proxy",
+      script: /*js*/ `
+        const context = vm.createContext({});
+        const constructors = [[File, [["abc"], "a.txt"]], [fs.Stats, [1, 0o100644]], [BigIntStats, bigintArgs]];
+        const result = {};
+        for (const source of ["(function F() {})", "(function F() {}).bind(null)", "new Proxy(function F() {}, {})"]) {
+          const newTarget = vm.runInContext(source, context);
+          result[source] = constructors.map(([C, args]) => {
+            const object = Reflect.construct(C, args, newTarget);
+            return Object.getPrototypeOf(object) === (newTarget.prototype ?? C.prototype);
+          });
+        }
+        console.log(JSON.stringify(result));
+      `,
+      expected: {
+        "(function F() {})": [true, true, true],
+        "(function F() {}).bind(null)": [true, true, true],
+        "new Proxy(function F() {}, {})": [true, true, true],
+      },
+    },
+  ])("$name", async ({ script, expected }) => {
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "-e", prelude + script],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout: stdout.trim(), stderr, exitCode, signalCode: proc.signalCode }).toEqual({
+      stdout: JSON.stringify(expected),
+      stderr: "",
+      exitCode: 0,
+      signalCode: null,
+    });
+  });
+});

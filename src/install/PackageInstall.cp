@@ -223,12 +223,21 @@ fn copyFilesHardlink(
                 },
                 .file => {
                     std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0) catch e => {
+                        if (e == error.AccessDenied || e == error.PermissionDenied) {
+                            // EACCES/EPERM: FUSE (e.g. Android SDCARD) does not support hardlinks
+                            return error.NotSameFileSystem;
+                        }
                         if (e != error.PathAlreadyExists) {
                             return e;
                         }
 
                         std.posix.unlinkatZ(destination_dir.fd, entry.path, 0) catch {};
-                        std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)?;
+                        std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0) catch e2 => {
+                            if (e2 == error.AccessDenied || e2 == error.PermissionDenied) {
+                                return error.NotSameFileSystem;
+                            }
+                            return e2;
+                        };
                     };
 
                     real_file_count += 1;

@@ -1292,10 +1292,7 @@ struct IndentGuard {
             import_record_index: u32 = 0,
             range: logger.Range = logger.Range.None,
             original_target: options.Target,
-
-            // pub inline fn loader(_: *const MiniImportRecord) ?options.Loader {
-            //     return null;
-            // }
+            loader: options.Loader? = null,
         }
 
 pub struct BundlerResolveSuccess {

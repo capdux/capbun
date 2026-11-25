@@ -125,6 +125,13 @@ ref_count: RefCount = .init(),
 global: *JSGlobalObject,
 path: []const u8,
 
+pub fn noHtmlPageLog(self: HTMLBundle) bun.logger.Log {
+        var log = bun.logger.Log.init(bun.default_allocator);
+        _ = &log;
+        _ = (blk_catch_0: { break :blk_catch_0 ((log.addErrorFmt(null, bun.logger.Loc.Empty, bun.default_allocator, "Bundling {f} did not produce an html page for it. A plugin may have resolved it to another file or loaded it as something other than html.", .{ bun.fmt.quote(self.path) })) catch |__ce_0| { _ = &__ce_0;  }); });
+        return log;
+}
+
 pub fn init(global: *JSGlobalObject, path: []const u8) !*HTMLBundle {
         return bun.new(HTMLBundle, .{ .ref_count = .init(), .global = global, .path = try bun.default_allocator.dupe(u8, path) });
 }
@@ -367,6 +374,19 @@ pub fn finishBuilding(self: *Route) void {
             _ = self.server.?.onRequestComplete();
     }
 
+pub fn setBuildError(self: *Route, server: AnyServer, log: bun.logger.Log) void {
+            if (server.config().isDevelopment()) {
+                switch (bun.Output.enable_ansi_colors_stderr) {
+inline else => |enable_ansi_colors| {
+const writer = bun.Output.errorWriterBuffered();
+                _ = (blk_catch_1: { break :blk_catch_1 ((log.printWithEnableAnsiColors(writer, enable_ansi_colors)) catch |__ce_1| { _ = &__ce_1;  }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((writer.flush()) catch |__ce_2| { _ = &__ce_2;  }); });
+},
+}
+            }
+            self.state = .{ .err_val = log };
+    }
+
 pub fn onPluginsResolved(self: *Route, plugins: ?*jsc.API.JSBundler.Plugin) !void {
             const global = self.bundle.data.global;
             const server = self.server.?;
@@ -382,6 +402,13 @@ pub fn onPluginsResolved(self: *Route, plugins: ?*jsc.API.JSBundler.Plugin) !voi
             var ___cfg_guard_moved = false; _ = &___cfg_guard_moved;
             errdefer if (!___cfg_guard_moved) { ___cfg_guard_moved = true; const __T = @TypeOf(_cfg_guard); if (@typeInfo(__T) == .optional) { if (_cfg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _cfg_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _cfg_guard; _drop_val.__cp_errdeinit(); } };
             _ = try config.entry_points.insert(self.bundle.data.path);
+            var ext_slice = bun.handleOom(bun.default_allocator.alloc([]const u8, 1));
+            _ = &ext_slice;
+            ext_slice[cp_cast_int(usize, 0)] = bun.handleOom(bun.default_allocator.dupe(u8, bun.fs.PathName.init(self.bundle.data.path).ext));
+            var loader_slice = bun.handleOom(bun.default_allocator.alloc(bun.schema.api.Loader, 1));
+            _ = &loader_slice;
+            loader_slice[cp_cast_int(usize, 0)] = .html;
+            config.loaders = .{ .extensions = ext_slice, .loaders = loader_slice };
             if (vm.transpiler.options.transform_options.serve_public_path) |public_path| {
                 _ = &public_path;
                 if ((public_path.len > 0)) {
@@ -476,19 +503,14 @@ pub fn onComplete(self: *Route, completion_task: *bun.BundleV2.JSBundleCompletio
 if (bun.Environment.enable_logs) {
                 _ = debug("onComplete: err - {s}", .{ @errorName(e) });
             }
-            self.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) };
-            _ = bun.handleOom(completion_task.log.cloneToWithRecycled((&self.state.err_val), true));
+            var log = bun.logger.Log.init(bun.default_allocator);
+            _ = &log;
+            _ = bun.handleOom(completion_task.log.cloneToWithRecycled((&log), true));
             if (self.server) |server| {
                 _ = &server;
-                if (server.config().isDevelopment()) {
-                    switch (bun.Output.enable_ansi_colors_stderr) {
-inline else => |enable_ansi_colors| {
-const writer = bun.Output.errorWriterBuffered();
-                    _ = (blk_catch_0: { break :blk_catch_0 ((self.state.err_val.printWithEnableAnsiColors(writer, enable_ansi_colors)) catch |__ce_0| { _ = &__ce_0;  }); });
-                    _ = (blk_catch_1: { break :blk_catch_1 ((writer.flush()) catch |__ce_1| { _ = &__ce_1;  }); });
-},
-}
-                }
+                _ = self.setBuildError(server, log);
+            } else {
+                self.state = .{ .err_val = log };
             }
 },
 .value => |bundle| {
@@ -517,54 +539,74 @@ if (bun.Environment.enable_logs) {
                 _ = bun.Output.prettyErrorln(" <green>bundle<r> {s} <d>{d:.2} KB<r>", .{ std.fs.path.basename(self.bundle.data.path), (@as(f64, @floatFromInt(byte_length)) / 1000.0) });
                 _ = bun.Output.flush();
             }
-            var this_html_route: ?*StaticRoute = null;
-            _ = &this_html_route;
-            for (cp_mut_slice(&output_files)) |*output_file| {
-                _ = &output_file;
-                const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom((output_file.*).toBlob(bun.default_allocator, globalThis)) };
-                var headers = bun.http.Headers{ .allocator = bun.default_allocator };
-                _ = &headers;
-                const content_type = ((blob.Blob.contentTypeOrMimeType()) orelse (brk: {
-                _ = bun.debugAssert(false);
-                break :brk (if (@typeInfo(@TypeOf((output_file.*).loader.toMimeType(empty_paths[0..0]))) == .@"enum") @intFromEnum((output_file.*).loader.toMimeType(empty_paths[0..0])) else (output_file.*).loader.toMimeType(empty_paths[0..0]).value);
-}));
-                _ = bun.handleOom(headers.append("Content-Type", content_type));
-                if ((((output_file.*).loader != .html) and ((if (@typeInfo(@TypeOf((output_file.*))) == .@"enum") @intFromEnum((output_file.*)) else (output_file.*).value) == .buffer))) {
-                    var hashbuf: [64]u8 = undefined;
-                    _ = &hashbuf;
-                    const etag_str = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrint((&hashbuf), "{f}", .{ bun.fmt.hexIntLower((output_file.*).hash) })) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .NoSpaceLeft)) {  break :__sw_blk_3 cp_val(unreachable); } }  unreachable; }); }); });
-                    _ = bun.handleOom(headers.append("ETag", etag_str));
-                    if (((!server.config().isDevelopment()) and ((output_file.*).output_kind == .chunk))) {
-                        _ = bun.handleOom(headers.append("Cache-Control", "public, max-age=31536000"));
+            var html_index: ?usize = null;
+            _ = &html_index;
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_2 = output_files.len;
+                while (idx < __end_2) : (idx += 1) {
+                    if (((output_files[@as(usize, @intCast(idx))].output_kind == .@"entry-point") and (output_files[@as(usize, @intCast(idx))].loader == .html))) {
+                        html_index = @as(usize, @intCast(idx));
+                        break;
                     }
                 }
-                if (server.config().isDevelopment()) {
-                    if (((output_file.*).source_map_index != std.math.maxInt(u32))) {
-                        var route_path = output_files[@as(usize, @intCast((output_file.*).source_map_index))].dest_path;
+            }
+            if ((html_index == null)) {
+                _ = self.setBuildError(server, self.bundle.data.noHtmlPageLog());
+            } else {
+                var this_html_route: ?*StaticRoute = null;
+                _ = &this_html_route;
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_3 = output_files.len;
+                    while (i < __end_3) : (i += 1) {
+                        const output_file = (&output_files[@as(usize, @intCast(i))]);
+                        const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom(output_file.toBlob(bun.default_allocator, globalThis)) };
+                        var headers = bun.http.Headers{ .allocator = bun.default_allocator };
+                        _ = &headers;
+                        const content_type = ((blob.Blob.contentTypeOrMimeType()) orelse (brk: {
+                        _ = bun.debugAssert(false);
+                        break :brk (if (@typeInfo(@TypeOf(output_file.loader.toMimeType(empty_paths[0..0]))) == .@"enum") @intFromEnum(output_file.loader.toMimeType(empty_paths[0..0])) else output_file.loader.toMimeType(empty_paths[0..0]).value);
+}));
+                        _ = bun.handleOom(headers.append("Content-Type", content_type));
+                        if (((output_file.loader != .html) and ((if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value) == .buffer))) {
+                            var hashbuf: [64]u8 = undefined;
+                            _ = &hashbuf;
+                            const etag_str = (blk_catch_3: { break :blk_catch_3 ((std.fmt.bufPrint((&hashbuf), "{f}", .{ bun.fmt.hexIntLower(output_file.hash) })) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_4: { const __disc_4 = e; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .NoSpaceLeft)) {  break :__sw_blk_4 cp_val(unreachable); } }  unreachable; }); }); });
+                            _ = bun.handleOom(headers.append("ETag", etag_str));
+                            if (((!server.config().isDevelopment()) and (output_file.output_kind == .chunk))) {
+                                _ = bun.handleOom(headers.append("Cache-Control", "public, max-age=31536000"));
+                            }
+                        }
+                        if (server.config().isDevelopment()) {
+                            if ((output_file.source_map_index != std.math.maxInt(u32))) {
+                                var route_path = output_files[@as(usize, @intCast(output_file.source_map_index))].dest_path;
+                                _ = &route_path;
+                                if ((strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\"))) {
+                                    route_path = route_path[1..];
+                                }
+                                _ = bun.handleOom(headers.append("SourceMap", route_path));
+                            }
+                        }
+                        const static_route = bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob, .server = server, .status_code = 200, .headers = headers, .cached_blob_size = blob.size() });
+                        if ((i == html_index.?)) {
+                            this_html_route = static_route;
+                        }
+                        var route_path = output_file.dest_path;
                         _ = &route_path;
                         if ((strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\"))) {
                             route_path = route_path[1..];
                         }
-                        _ = bun.handleOom(headers.append("SourceMap", route_path));
+                        _ = bun.handleOom(server.appendStaticRoute(route_path, .{ .static = static_route }, .@"any"));
                     }
                 }
-                const static_route = bun.new(StaticRoute, .{ .ref_count = .init(), .blob = blob, .server = server, .status_code = 200, .headers = headers, .cached_blob_size = blob.size() });
-                if (((this_html_route == null) and ((output_file.*).output_kind == .@"entry-point"))) {
-                    if (((output_file.*).loader == .html)) {
-                        this_html_route = static_route;
-                    }
+                const html_route: *StaticRoute = ((this_html_route) orelse (@panic("the loop above visited html_index")));
+                const html_route_clone = bun.handleOom(html_route.clone(globalThis));
+                self.state = .{ .html = html_route_clone };
+                if ((!bun.handleOom(server.reloadStaticRoutes()))) {
                 }
-                var route_path = (output_file.*).dest_path;
-                _ = &route_path;
-                if ((strings.hasPrefixComptime(route_path, "./") or strings.hasPrefixComptime(route_path, ".\\"))) {
-                    route_path = route_path[1..];
-                }
-                _ = bun.handleOom(server.appendStaticRoute(route_path, .{ .static = static_route }, .@"any"));
-            }
-            const html_route: *StaticRoute = ((this_html_route) orelse (@panic("Internal assertion failure: HTML entry point not found in HTMLBundle.")));
-            const html_route_clone = bun.handleOom(html_route.clone(globalThis));
-            self.state = .{ .html = html_route_clone };
-            if ((!bun.handleOom(server.reloadStaticRoutes()))) {
             }
 },
 .pending => {

@@ -1366,11 +1366,17 @@ pub fn copyFilesHardlink(destination_dir: std.fs.Dir, walker: *Walker, to_copy_i
 _ = (blk_catch_45: { break :blk_catch_45 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_45| { _ = &__ce_45;  }); });
 },
 .file => {
-_ = (blk_catch_46: { break :blk_catch_46 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e| { _ = &e; if ((e != error.PathAlreadyExists)) {
+_ = (blk_catch_46: { break :blk_catch_46 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e| { _ = &e; if (((e == error.AccessDenied) or (e == error.PermissionDenied))) {
+                    return error.NotSameFileSystem;
+                }
+                if ((e != error.PathAlreadyExists)) {
                     return e;
                 }
                 _ = (blk_catch_47: { break :blk_catch_47 ((std.posix.unlinkatZ(destination_dir.fd, entry.path, 0)) catch |__ce_47| { _ = &__ce_47;  }); });
-                break :blk_catch_46 try std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0); }); });
+                break :blk_catch_46 (blk_catch_48: { break :blk_catch_48 ((std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0)) catch |e2| { _ = &e2; if (((e2 == error.AccessDenied) or (e2 == error.PermissionDenied))) {
+                    return error.NotSameFileSystem;
+                }
+                return e2; }); }); }); });
                 real_file_count = (real_file_count + 1);
 },
 else => {
@@ -1419,17 +1425,17 @@ pub fn copyFilesSymlink(destination_dir: std.fs.Dir, walker: *Walker, to_copy_in
             if (comptime Environment.isPosix) {
                 switch (entry.kind) {
 .directory => {
-_ = (blk_catch_48: { break :blk_catch_48 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_48| { _ = &__ce_48;  }); });
+_ = (blk_catch_49: { break :blk_catch_49 ((bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path)) catch |__ce_49| { _ = &__ce_49;  }); });
 },
 .file => {
 _ = @memcpy(to_copy_into2[0..entry.path.len], entry.path);
                 head2[cp_cast_int(usize, (entry.path.len + (head2.len - to_copy_into2.len)))] = 0;
                 const target: [:0]u8 = head2[0..((entry.path.len + head2.len) - to_copy_into2.len) :0];
-                _ = (blk_catch_49: { break :blk_catch_49 ((std.posix.symlinkat(target, destination_dir.fd, entry.path)) catch |e| { _ = &e; if ((e != error.PathAlreadyExists)) {
+                _ = (blk_catch_50: { break :blk_catch_50 ((std.posix.symlinkat(target, destination_dir.fd, entry.path)) catch |e| { _ = &e; if ((e != error.PathAlreadyExists)) {
                     return e;
                 }
-                _ = (blk_catch_50: { break :blk_catch_50 ((std.posix.unlinkat(destination_dir.fd, entry.path, 0)) catch |__ce_50| { _ = &__ce_50;  }); });
-                break :blk_catch_49 try std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path); }); });
+                _ = (blk_catch_51: { break :blk_catch_51 ((std.posix.unlinkat(destination_dir.fd, entry.path, 0)) catch |__ce_51| { _ = &__ce_51;  }); });
+                break :blk_catch_50 try std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path); }); });
                 real_file_count = (real_file_count + 1);
 },
 else => {
@@ -1457,7 +1463,7 @@ _ = continue;
                 switch (entry.kind) {
 .directory => {
 if ((bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0)) {
-                    _ = (blk_catch_51: { break :blk_catch_51 ((bun.MakePath.makePath(u16, destination_dir, entry.path)) catch |__ce_51| { _ = &__ce_51;  }); });
+                    _ = (blk_catch_52: { break :blk_catch_52 ((bun.MakePath.makePath(u16, destination_dir, entry.path)) catch |__ce_52| { _ = &__ce_52;  }); });
                 }
 },
 .file => {
@@ -1465,7 +1471,7 @@ switch (bun.sys.symlinkW(dest, src, .{})) {
 .err => |e| {
 if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
                     _ = &entry_dirname;
-                    _ = (blk_catch_52: { break :blk_catch_52 ((bun.MakePath.makePath(u16, destination_dir, entry_dirname)) catch |__ce_52| { _ = &__ce_52;  }); });
+                    _ = (blk_catch_53: { break :blk_catch_53 ((bun.MakePath.makePath(u16, destination_dir, entry_dirname)) catch |__ce_53| { _ = &__ce_53;  }); });
                     if ((bun.sys.symlinkW(dest, src, .{}) == .result)) {
                         continue;
                     }

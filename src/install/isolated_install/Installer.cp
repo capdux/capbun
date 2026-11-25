@@ -360,7 +360,16 @@ pub struct TopTask {
                                     switch (hardlinker.val.link()?) {
                                         .result => {},
                                         .err => |err| {
-                                            if (err.getErrno() == .XDEV) {
+                                            const errno_val = err.getErrno();
+                                            // EACCES/EPERM: FUSE (e.g. Android SDCARD) does not support hardlinks
+                                            if (errno_val == .XDEV || errno_val == .ACCES || errno_val == .PERM) {
+                                                // rewind the dir cursor the hardlink walk consumed (Windows restarts the scan itself)
+                                                if (comptime !Environment.isWindows) {
+                                                    switch (bun.sys.setFileOffset(folder_dir.fd, 0)) {
+                                                        .result => {},
+                                                        .err => |seek_err| return Yield.failure(.{ .link_package = seek_err }),
+                                                    }
+                                                }
                                                 folder_backend = .copyfile;
                                                 continue;
                                             }
@@ -594,10 +603,12 @@ pub struct TopTask {
                         switch (hardlinker.val.link()?) {
                             .result => {},
                             .err => |err| {
-                                if (err.getErrno() == .XDEV) {
+                                const errno_val = err.getErrno();
+                                // EACCES/EPERM: FUSE (e.g. Android SDCARD) does not support hardlinks
+                                if (errno_val == .XDEV || errno_val == .ACCES || errno_val == .PERM) {
                                     installer.supported_backend.store(.copyfile, .monotonic);
                                     backend = .copyfile;
-                                        continue;
+                                    continue;
                                 }
                                 if (PackageManager.verbose_install) {
                                     Output.prettyErrorln(
@@ -620,6 +631,11 @@ pub struct TopTask {
 
                     // fallthrough copyfile
                     else => {
+                        // close the fd the failed hardlink attempt left behind
+                        if (old_fd := cached_package_dir.fd) {
+                            old_fd.close();
+                            cached_package_dir.fd = null;
+                        }
                         cached_package_dir.fd = switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
                             .result => |fd| fd,
                             .err => |err| {

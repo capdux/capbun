@@ -660,7 +660,11 @@ pub struct ShellAsyncSubprocessDone {
                         // (e.g. for &>) would alias the same *Impl and double-free in deinit.
                         const flags = _.node.redirect;
                         if (flags.stdin) {
-                            spawn_args.stdio[stdin_no] = .{ .array_buffer = .{ .array_buffer = buf, .held = .create(buf.value, global) } };
+                            if (buf.byteSlice().len == 0) {
+                                spawn_args.stdio[stdin_no] = .ignore;
+                            } else {
+                                spawn_args.stdio[stdin_no] = .{ .array_buffer = .{ .array_buffer = buf, .held = .create(buf.value, global) } };
+                            }
                         }
                         if (flags.duplicate_out) {
                             spawn_args.stdio[stdout_no] = .{ .array_buffer = .{ .array_buffer = buf, .held = .create(buf.value, global) } };

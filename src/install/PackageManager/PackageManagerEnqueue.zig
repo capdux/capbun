@@ -293,7 +293,7 @@ pub fn enqueueGitForCheckout(mgr: *PackageManager, dependency_id: DependencyID, 
             if (clone_queue.found_existing) {
                 return;
             }
-            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, repository, dependency_id, (&mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))]), resolution, null)));
+            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, repository, (&mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))]), resolution, null)));
         }
 }
 
@@ -438,7 +438,7 @@ else => dependency.name_hash,
 });
         _ = &name_hash;
         const version = version: {
-        if ((dependency.version.tag == .npm)) {
+        if (((dependency.version.tag == .npm) and (!(if (@typeInfo(@TypeOf(dependency.version)) == .@"enum") @intFromEnum(dependency.version) else dependency.version.value).npm.is_alias))) {
             if (mgr.known_npm_aliases.get(name_hash)) |aliased| {
                 _ = &aliased;
                 const group = (if (@typeInfo(@TypeOf(dependency.version)) == .@"enum") @intFromEnum(dependency.version) else dependency.version.value).npm.version;
@@ -505,7 +505,11 @@ else => dependency.name_hash,
                                 _ = &fail;
                                 _ = fail(mgr, dependency, id, e);
                             } else {
-                                _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Package \"{s}\" with tag \"{s}\" not found, but package exists", .{ mgr.lockfile.str((&name)), mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.tag)) })) catch unreachable);
+                                if (dependency.behavior.isPeer()) {
+                                    _ = warnUnmetPeerDependency(mgr, name, (&version));
+                                } else {
+                                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "Package \"{s}\" with tag \"{s}\" not found, but package exists", .{ mgr.lockfile.str((&name)), mgr.lockfile.str((&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version) else version.value).dist_tag.tag)) })) catch unreachable);
+                                }
                             }
                         }
                         return;
@@ -516,7 +520,11 @@ else => dependency.name_hash,
                                     _ = &fail;
                                     _ = fail(mgr, dependency, id, e);
                                 } else {
-                                    _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(but package exists)<r>", .{ mgr.lockfile.str((&version.literal)), mgr.lockfile.str((&name)) })) catch unreachable);
+                                    if (dependency.behavior.isPeer()) {
+                                        _ = warnUnmetPeerDependency(mgr, name, (&version));
+                                    } else {
+                                        _ = ((mgr.log.addErrorFmt(null, logger.Loc.Empty, mgr.allocator, "No version matching \"{s}\" found for specifier \"{s}\"<r> <d>(but package exists)<r>", .{ mgr.lockfile.str((&version.literal)), mgr.lockfile.str((&name)) })) catch unreachable);
+                                    }
                                 }
                             }
                             return;
@@ -691,14 +699,31 @@ const dep = (&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version
         }
         if (mgr.git_repositories.get(clone_id)) |repo_fd| {
             _ = &repo_fd;
-            const resolved = try Repository.findCommit(mgr.allocator, mgr.env, mgr.log, repo_fd.stdDir(), alias, mgr.lockfile.str((&dep.committish)), clone_id);
+            const needs_ctx = (mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(id))] == invalid_package_id);
+            var pinned: ?[]const u8 = null;
+            _ = &pinned;
+            if ((!needs_ctx)) {
+                const pkg_id = mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(id))];
+                const pkg_res = mgr.lockfile.packages.items(.resolution)[@as(usize, @intCast(pkg_id))];
+                if ((pkg_res.tag == .git)) {
+                    pinned = mgr.lockfile.str((&(if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).git.resolved));
+                }
+            }
+            const resolved = ((pinned) orelse (try Repository.findCommit(mgr.allocator, mgr.env, mgr.log, repo_fd.stdDir(), alias, mgr.lockfile.str((&dep.committish)), clone_id)));
             const checkout_id = Task.Id.forGitCheckout(url, resolved);
+            if (needs_ctx) {
+                if (resolveFromAppendedTask(mgr, checkout_id, id)) |pkg_id| {
+                    _ = &pkg_id;
+                    _ = successFn(mgr, id, pkg_id);
+                    return;
+                }
+            }
             var entry = ((mgr.task_queue.getOrPutContext(mgr.allocator, checkout_id, .{})) catch unreachable);
             _ = &entry;
             if ((!entry.found_existing)) {
                 entry.value_ptr.* = .{};
             }
-            if ((mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(id))] == invalid_package_id)) {
+            if (needs_ctx) {
                 _ = try entry.value_ptr.append(mgr.allocator, ctx);
             }
             if (dependency.behavior.isPeer()) {
@@ -727,7 +752,7 @@ const dep = (&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version
             if (mgr.hasCreatedNetworkTask(clone_id, dependency.behavior.isRequired())) {
                 return;
             }
-            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, dep, id, dependency, (&res), null)));
+            _ = mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, dep, dependency, (&res), null)));
         }
 },
 .github => {
@@ -751,6 +776,13 @@ const dep = (&(if (@typeInfo(@TypeOf(version)) == .@"enum") @intFromEnum(version
         }
         if (comptime Environment.allow_assert) {
             _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {s}", .{ id, @tagName(version.tag), mgr.lockfile.str((&name)), mgr.lockfile.str((&version.literal)), url });
+        }
+        if ((mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(id))] == invalid_package_id)) {
+            if (resolveFromAppendedTask(mgr, task_id, id)) |pkg_id| {
+                _ = &pkg_id;
+                _ = successFn(mgr, id, pkg_id);
+                return;
+            }
         }
         const callback_tag = (comptime (if ((successFn == assignRootResolution)) "root_dependency" else "dependency"));
         _ = try entry.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
@@ -832,6 +864,13 @@ const res: Resolution = (switch ((if (@typeInfo(@TypeOf(version)) == .@"enum") @
         if (comptime Environment.allow_assert) {
             _ = debug("enqueueDependency({d}, {s}, {s}, {s}) = {s}", .{ id, @tagName(version.tag), mgr.lockfile.str((&name)), mgr.lockfile.str((&version.literal)), url });
         }
+        if ((mgr.lockfile.buffers.resolutions.items[@as(usize, @intCast(id))] == invalid_package_id)) {
+            if (resolveFromAppendedTask(mgr, task_id, id)) |pkg_id| {
+                _ = &pkg_id;
+                _ = successFn(mgr, id, pkg_id);
+                return;
+            }
+        }
         const callback_tag = (comptime (if ((successFn == assignRootResolution)) "root_dependency" else "dependency"));
         _ = try entry.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id));
         if (dependency.behavior.isPeer()) {
@@ -880,7 +919,37 @@ pub fn createExtractTaskForStreaming(mgr: *PackageManager, tarball: *const Extra
         return initExtractTask(mgr, tarball, network_task);
 }
 
-pub fn enqueueGitClone(mgr: *PackageManager, task_id: Task.Id, name: []const u8, repository: *const Repository, dep_id: DependencyID, dependency: *const Dependency, res: *const Resolution, patch_name_and_version_hash: ?u64) *ThreadPool.Task {
+pub fn warnUnmetPeerDependency(mgr: *PackageManager, name: String, version: *const Dependency.Version) void {
+        _ = ((mgr.log.addWarningFmt(null, logger.Loc.Empty, mgr.allocator, "No version matching \"{s}\" found for peer dependency \"{s}\"<r> <d>(but package exists)<r>", .{ mgr.lockfile.str((&version.literal)), mgr.lockfile.str((&name)) })) catch unreachable);
+}
+
+pub fn resolveFromAppendedTask(mgr: *PackageManager, task_id: Task.Id, id: DependencyID) ?PackageID {
+        const pkg_id = ((mgr.appended_task_packages.get(task_id)) orelse { return null; });
+        const pkg_name = mgr.lockfile.packages.items(.name)[@as(usize, @intCast(pkg_id))];
+        const pkg_res = mgr.lockfile.packages.items(.resolution)[@as(usize, @intCast(pkg_id))];
+        var v = (&mgr.lockfile.buffers.dependencies.items[@as(usize, @intCast(id))].version);
+        _ = &v;
+        switch (v.tag) {
+.git => {
+if ((pkg_res.tag == .git)) {
+            (if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value).git.resolved = (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).git.resolved;
+        }
+        (if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value).git.package_name = pkg_name;
+},
+.github => {
+(if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value).github.package_name = pkg_name;
+},
+.tarball => {
+(if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value).tarball.package_name = pkg_name;
+},
+else => {
+
+},
+}
+        return pkg_id;
+}
+
+pub fn enqueueGitClone(mgr: *PackageManager, task_id: Task.Id, name: []const u8, repository: *const Repository, dependency: *const Dependency, res: *const Resolution, patch_name_and_version_hash: ?u64) *ThreadPool.Task {
         var apply_patch_task: ?*PatchTask = null;
         _ = &apply_patch_task;
         if (patch_name_and_version_hash) |h| {
@@ -902,7 +971,7 @@ pub fn enqueueGitClone(mgr: *PackageManager, task_id: Task.Id, name: []const u8,
         }
         var task = mgr.preallocated_resolve_tasks.get();
         _ = &task;
-        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.git_clone, .request = .{ .git_clone = .{ .name = ((strings.StringOrTinyString.initAppendIfNeeded(name, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .url = ((strings.StringOrTinyString.initAppendIfNeeded(mgr.lockfile.str((&repository.repo)), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .env = Repository.shared_env.get(mgr.allocator, mgr.env), .dep_id = dep_id, .res = res.* } }, .id = task_id, .apply_patch_task = apply_patch_task, .data = undefined };
+        task.* = Task{ .package_manager = mgr, .log = logger.Log.init(mgr.allocator), .tag = Task.Tag.git_clone, .request = .{ .git_clone = .{ .name = ((strings.StringOrTinyString.initAppendIfNeeded(name, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .url = ((strings.StringOrTinyString.initAppendIfNeeded(mgr.lockfile.str((&repository.repo)), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch unreachable), .env = Repository.shared_env.get(mgr.allocator, mgr.env), .res = res.* } }, .id = task_id, .apply_patch_task = apply_patch_task, .data = undefined };
         return (blk: {
         break :blk (&task.threadpool_task);
 
@@ -941,18 +1010,7 @@ pub fn enqueueGitCheckout(mgr: *PackageManager, task_id: Task.Id, dir: bun.FD, d
 pub fn enqueueLocalTarball(mgr: *PackageManager, task_id: Task.Id, dependency_id: DependencyID, name: []const u8, path: []const u8, resolution: Resolution, integrity: Integrity) *ThreadPool.Task {
         var abs_buf: bun.PathBuffer = undefined;
         _ = &abs_buf;
-        const tarball_path_info = tarball_path: {
-        const workspace_pkg_id = mgr.lockfile.getWorkspacePkgIfWorkspaceDep(dependency_id);
-        if ((workspace_pkg_id == invalid_package_id)) {
-            break :tarball_path .{ path, true };
-        }
-        const workspace_res = mgr.lockfile.packages.items(.resolution)[@as(usize, @intCast(workspace_pkg_id))];
-        if ((workspace_res.tag != .workspace)) {
-            break :tarball_path .{ path, true };
-        }
-        const workspace_path = (if (@typeInfo(@TypeOf(workspace_res)) == .@"enum") @intFromEnum(workspace_res) else workspace_res.value).workspace.slice(mgr.lockfile.buffers.string_bytes.items);
-        break :tarball_path .{ Path.joinAbsStringBuf(FileSystem.instance.top_level_dir, (&abs_buf), (&.{ workspace_path, path }), .auto), false };
-};
+        const tarball_path_info = (if (localTarballBaseDir(mgr.lockfile, dependency_id, path)) |base_dir| .{ Path.joinAbsStringBuf(FileSystem.instance.top_level_dir, (&abs_buf), (&.{ base_dir, path }), .auto), false } else .{ path, true });
         const tarball_path = tarball_path_info[0];
         const normalize = tarball_path_info[1];
         var task = mgr.preallocated_resolve_tasks.get();
@@ -961,6 +1019,21 @@ pub fn enqueueLocalTarball(mgr: *PackageManager, task_id: Task.Id, dependency_id
         return (blk: {
         break :blk (&task.threadpool_task);
 
+});
+}
+
+pub fn localTarballBaseDir(lockfile: *const Lockfile, dependency_id: DependencyID, path: []const u8) ?[]const u8 {
+        const declared = (&lockfile.buffers.dependencies.items[@as(usize, @intCast(dependency_id))].version);
+        const declared_by_parent = (((declared.tag == .tarball) and ((if (@typeInfo(@TypeOf(declared)) == .@"enum") @intFromEnum(declared) else declared.value).tarball.uri == .local)) and std.mem.eql(u8, lockfile.str((&(if (@typeInfo(@TypeOf(declared)) == .@"enum") @intFromEnum(declared) else declared.value).tarball.uri.local)), path));
+        if ((!declared_by_parent)) {
+            return null;
+        }
+        const declarer = ((lockfile.getParentPkgOfDependency(dependency_id)) orelse { return null; });
+        const declarer_res = (&lockfile.packages.items(.resolution)[@as(usize, @intCast(declarer))]);
+        return (switch (declarer_res.tag) {
+.workspace => lockfile.str((&(if (@typeInfo(@TypeOf(declarer_res)) == .@"enum") @intFromEnum(declarer_res) else declarer_res.value).workspace)),
+.folder => lockfile.str((&(if (@typeInfo(@TypeOf(declarer_res)) == .@"enum") @intFromEnum(declarer_res) else declarer_res.value).folder)),
+else => null,
 });
 }
 
@@ -1155,7 +1228,7 @@ return error.TooRecentVersion;
                     }
                 }
             }
-            if (behavior.isPeer()) {
+            if ((behavior.isPeer() and (!install_peer))) {
                 return null;
             }
             return (switch (version.tag) {

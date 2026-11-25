@@ -425,7 +425,7 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_createHistogram, (JSGlobalObject * globalObj
 
 // Extern declarations for Timer.zig
 extern "C" void Timer_enableEventLoopDelayMonitoring(void* vm, JSC::EncodedJSValue histogram, int32_t resolution);
-extern "C" void Timer_disableEventLoopDelayMonitoring(void* vm);
+extern "C" void Timer_disableEventLoopDelayMonitoring();
 
 // Create histogram for event loop delay monitoring
 JSC_DEFINE_HOST_FUNCTION(jsFunction_monitorEventLoopDelay, (JSGlobalObject * globalObject, CallFrame* callFrame))
@@ -512,7 +512,7 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_disableEventLoopDelay, (JSGlobalObject * glo
     }
 
     // Call into Zig to disable monitoring
-    Timer_disableEventLoopDelayMonitoring(bunVM(globalObject));
+    Timer_disableEventLoopDelayMonitoring();
 
     return JSValue::encode(jsUndefined());
 }

@@ -739,6 +739,7 @@ pub struct _EqlSorterPathToId {
 pub struct EqlSorter {
     string_buf: string,
     pkg_names: []const String,
+    pkg_resolutions: []const Resolution,
 
     // Basically placement id
     pub const PathToId = _EqlSorterPathToId;
@@ -750,11 +751,19 @@ pub struct EqlSorter {
             .eq => {},
         }
 
-        // they exist in the same tree, name can't be the same so string
-        // compare.
         const l_name = self_sorter.pkg_names[l.pkg_id];
         const r_name = self_sorter.pkg_names[r.pkg_id];
-        return l_name.order(&r_name, self_sorter.string_buf, self_sorter.string_buf) == .lt;
+        switch (l_name.order(&r_name, self_sorter.string_buf, self_sorter.string_buf)) {
+            .lt => return true,
+            .gt => return false,
+            .eq => {},
+        }
+
+        // npm: aliases allow same-named packages in one tree node, so the
+        // resolution is needed for a total order.
+        const l_res = &self_sorter.pkg_resolutions[l.pkg_id];
+        const r_res = &self_sorter.pkg_resolutions[r.pkg_id];
+        return l_res.order(r_res, self_sorter.string_buf, self_sorter.string_buf) == .lt;
     }
 }
 
@@ -1216,6 +1225,18 @@ pub static fn isRootDependency(client: *const Lockfile, manager: *PackageManager
 /// TODO make this faster by caching the workspace package ids
 pub static fn isWorkspaceDependency(client: *const Lockfile, id: DependencyID): bool {
     return getWorkspacePkgIfWorkspaceDep(client, id) != invalid_package_id;
+}
+
+/// `null` for the edges `enqueueDependencyToRoot` appends outside of any package.
+pub static fn getParentPkgOfDependency(client: *const Lockfile, id: DependencyID): PackageID? {
+    let pkg_id: usize = 0;
+    for (dependencies of client.packages.items(.dependencies)) {
+        if (dependencies.contains(id)) {
+            return @intCast(pkg_id);
+        }
+        pkg_id += 1;
+    }
+    return null;
 }
 
 pub static fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID): PackageID {
@@ -2058,8 +2079,8 @@ pub static fn deinit(client: *Lockfile) {
 }
 
 
-/// `cut_off_pkg_id` should be removed when we stop appending packages to lockfile during install step
-pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, allocator: std.mem.Allocator): OOM!bool {
+/// A placement of `r` bound past `r_loaded_package_count` was rebound after loading: a change.
+pub static fn eql(l: *const Lockfile, r: *const Lockfile, r_loaded_package_count: usize, allocator: std.mem.Allocator): OOM!bool {
     const l_hoisted_deps = l.buffers.hoisted_dependencies.items;
     const r_hoisted_deps = r.buffers.hoisted_dependencies.items;
     const l_string_buf = l.buffers.string_bytes.items;
@@ -2086,7 +2107,7 @@ pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize,
         for (l_dep_id of l_tree.dependencies.get(l_hoisted_deps)) {
             if (l_dep_id == invalid_dependency_id) continue;
             const l_pkg_id = l.buffers.resolutions.items[l_dep_id];
-            if (l_pkg_id == invalid_package_id || l_pkg_id >= cut_off_pkg_id) continue;
+            if (l_pkg_id == invalid_package_id) continue;
             l_buf[i] = {
                 pkg_id: l_pkg_id,
                 tree_path: tree_path,
@@ -2104,7 +2125,8 @@ pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize,
         for (r_dep_id of r_tree.dependencies.get(r_hoisted_deps)) {
             if (r_dep_id == invalid_dependency_id) continue;
             const r_pkg_id = r.buffers.resolutions.items[r_dep_id];
-            if (r_pkg_id == invalid_package_id || r_pkg_id >= cut_off_pkg_id) continue;
+            if (r_pkg_id == invalid_package_id) continue;
+            if (r_pkg_id >= r_loaded_package_count) return false;
             r_buf[i] = {
                 pkg_id: r_pkg_id,
                 tree_path: tree_path,
@@ -2120,6 +2142,14 @@ pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize,
     const r_pkgs = r.packages.slice();
     const l_pkg_names = l_pkgs.items(.name);
     const r_pkg_names = r_pkgs.items(.name);
+    const l_pkg_name_hashes = l_pkgs.items(.name_hash);
+    const l_pkg_resolutions = l_pkgs.items(.resolution);
+    const l_pkg_bins = l_pkgs.items(.bin);
+    const l_pkg_scripts = l_pkgs.items(.scripts);
+    const r_pkg_name_hashes = r_pkgs.items(.name_hash);
+    const r_pkg_resolutions = r_pkgs.items(.resolution);
+    const r_pkg_bins = r_pkgs.items(.bin);
+    const r_pkg_scripts = r_pkgs.items(.scripts);
 
     std.sort.pdq(
         EqlSorter.PathToId,
@@ -2127,6 +2157,7 @@ pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize,
         EqlSorter{
             pkg_names: l_pkg_names,
             string_buf: l_string_buf,
+            pkg_resolutions: l_pkg_resolutions,
         },
         EqlSorter.isLessThan,
     );
@@ -2137,18 +2168,10 @@ pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize,
         EqlSorter{
             pkg_names: r_pkg_names,
             string_buf: r_string_buf,
+            pkg_resolutions: r_pkg_resolutions,
         },
         EqlSorter.isLessThan,
     );
-
-    const l_pkg_name_hashes = l_pkgs.items(.name_hash);
-    const l_pkg_resolutions = l_pkgs.items(.resolution);
-    const l_pkg_bins = l_pkgs.items(.bin);
-    const l_pkg_scripts = l_pkgs.items(.scripts);
-    const r_pkg_name_hashes = r_pkgs.items(.name_hash);
-    const r_pkg_resolutions = r_pkgs.items(.resolution);
-    const r_pkg_bins = r_pkgs.items(.bin);
-    const r_pkg_scripts = r_pkgs.items(.scripts);
 
     const l_extern_strings = l.buffers.extern_strings.items;
     const r_extern_strings = r.buffers.extern_strings.items;

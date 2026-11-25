@@ -236,6 +236,7 @@ task_queue: TaskDependencyQueue = .{},
 manifests: PackageManifestMap = .{},
 folders: FolderResolution.Map = .{},
 git_repositories: RepositoryMap = .{},
+appended_task_packages: AppendedTaskPackageMap = .{},
 network_dedupe_map: NetworkTask.DedupeMap = .init(bun.default_allocator),
 async_network_task_queue: AsyncNetworkTaskQueue = .{},
 network_tarball_batch: ThreadPool.Batch = .{},
@@ -522,6 +523,7 @@ const PreallocatedTaskStore = bun.HiveArray(Task, 64).Fallback;
 const PreallocatedNetworkTasks = bun.HiveArray(NetworkTask, 128).Fallback;
 const ResolveTaskQueue = bun.UnboundedQueue(Task, .next);
 const RepositoryMap = std.HashMapUnmanaged(Task.Id, bun.FD, IdentityContext(Task.Id), 80);
+const AppendedTaskPackageMap = std.HashMapUnmanaged(Task.Id, PackageID, IdentityContext(Task.Id), 80);
 const NpmAliasMap = std.HashMapUnmanaged(PackageNameHash, Dependency.Version, IdentityContext(u64), 80);
 const NetworkQueue = bun.LinearFifo(@TypeOf(@as(NetworkTaskPtrHolder, undefined).p), .{ .Static = 32 });
 const PatchTaskFifo = bun.LinearFifo(@TypeOf(@as(PatchTaskPtrHolder, undefined).p), .{ .Static = 32 });

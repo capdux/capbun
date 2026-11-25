@@ -256,7 +256,6 @@ pub fn enqueueGitForCheckout(
             clone_id,
             alias,
             repository,
-            dependency_id,
             &mgr.lockfile.buffers.dependencies.items[dependency_id],
             resolution,
             null,
@@ -481,7 +480,9 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
     };
 
     const version = version: {
-        if (dependency.version.tag == .npm) {
+        // An `npm:` alias names its registry target explicitly, so only plain
+        // dependencies may be redirected to a same-named alias elsewhere in the tree.
+        if (dependency.version.tag == .npm && !dependency.version.value.npm.is_alias) {
             if (aliased := mgr.known_npm_aliases.get(name_hash)) {
                 const group = dependency.version.value.npm.version;
                 const buf = mgr.lockfile.buffers.string_bytes.items;
@@ -576,6 +577,8 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                                         id,
                                         e,
                                     );
+                                } else if (dependency.behavior.isPeer()) {
+                                    warnUnmetPeerDependency(mgr, name, &version);
                                 } else {
                                     mgr.log.addErrorFmt(
                                         null,
@@ -600,6 +603,8 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                                         id,
                                         e,
                                     );
+                                } else if (dependency.behavior.isPeer()) {
+                                    warnUnmetPeerDependency(mgr, name, &version);
                                 } else {
                                     mgr.log.addErrorFmt(
                                         null,
@@ -906,7 +911,21 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 );
 
             if (repo_fd := mgr.git_repositories.get(clone_id)) {
-                const resolved = Repository.findCommit(
+                const needs_ctx = mgr.lockfile.buffers.resolutions.items[id] == invalid_package_id;
+
+                // An already-resolved dependency (install-phase re-enqueue
+                // after the shared clone finished) is pinned: its install
+                // context is keyed on the stored SHA, and a branch
+                // committish's current tip may differ.
+                let pinned: ([]const u8)? = null;
+                if (!needs_ctx) {
+                    const pkg_id = mgr.lockfile.buffers.resolutions.items[id];
+                    const pkg_res = mgr.lockfile.packages.items(.resolution)[pkg_id];
+                    if (pkg_res.tag == .git) {
+                        pinned = mgr.lockfile.str(&pkg_res.value.git.resolved);
+                    }
+                }
+                const resolved = pinned ?? Repository.findCommit(
                     mgr.allocator,
                     mgr.env,
                     mgr.log,
@@ -917,9 +936,16 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 )?;
                 const checkout_id = Task.Id.forGitCheckout(url, resolved);
 
+                if (needs_ctx) {
+                    if (pkg_id := resolveFromAppendedTask(mgr, checkout_id, id)) {
+                        successFn(mgr, id, pkg_id);
+                        return;
+                    }
+                }
+
                 let entry = mgr.task_queue.getOrPutContext(mgr.allocator, checkout_id, {}) catch unreachable;
                 if (!entry.found_existing) entry.value_ptr.* = {};
-                if (mgr.lockfile.buffers.resolutions.items[id] == invalid_package_id) {
+                if (needs_ctx) {
                     entry.value_ptr.append(mgr.allocator, ctx)?;
                 }
 
@@ -955,7 +981,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
 
                 if (mgr.hasCreatedNetworkTask(clone_id, dependency.behavior.isRequired())) return;
 
-                mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, dep, id, dependency, &res, null)));
+                mgr.task_batch.push(ThreadPool.Batch.@"from"(enqueueGitClone(mgr, clone_id, alias, dep, dependency, &res, null)));
             }
         },
         .github => {
@@ -992,6 +1018,13 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                         url,
                     },
                 );
+
+            if (mgr.lockfile.buffers.resolutions.items[id] == invalid_package_id) {
+                if (pkg_id := resolveFromAppendedTask(mgr, task_id, id)) {
+                    successFn(mgr, id, pkg_id);
+                    return;
+                }
+            }
 
             const callback_tag = comptime if (successFn == assignRootResolution) "root_dependency" else "dependency";
             entry.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id))?;
@@ -1166,6 +1199,13 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                     },
                 );
 
+            if (mgr.lockfile.buffers.resolutions.items[id] == invalid_package_id) {
+                if (pkg_id := resolveFromAppendedTask(mgr, task_id, id)) {
+                    successFn(mgr, id, pkg_id);
+                    return;
+                }
+            }
+
             const callback_tag = comptime if (successFn == assignRootResolution) "root_dependency" else "dependency";
             entry.value_ptr.append(mgr.allocator, @unionInit(TaskCallbackContext, callback_tag, id))?;
 
@@ -1265,12 +1305,62 @@ pub fn createExtractTaskForStreaming(
     return initExtractTask(mgr, tarball, network_task);
 }
 
+/// Unmet peers stay unresolved instead of failing the install; see `mayStayUnresolved`.
+fn warnUnmetPeerDependency(
+    mgr: *PackageManager,
+    name: String,
+    version: *const Dependency.Version,
+) {
+    mgr.log.addWarningFmt(
+        null,
+        logger.Loc.Empty,
+        mgr.allocator,
+        "No version matching \"{s}\" found for peer dependency \"{s}\"<r> <d>(but package exists)<r>",
+        .{
+            mgr.lockfile.str(&version.literal),
+            mgr.lockfile.str(&name),
+        },
+    ) catch unreachable;
+}
+
+/// A resolve task's callback queue is drained exactly once. If `task_id`
+/// already completed and appended a package, resolve `id` against it directly:
+/// a context queued now would never be processed. Applies the same
+/// `package_name` / `resolved` fix-up the completion drain applies.
+fn resolveFromAppendedTask(
+    mgr: *PackageManager,
+    task_id: Task.Id,
+    id: DependencyID,
+): PackageID? {
+    const pkg_id = mgr.appended_task_packages.get(task_id) ?? return null;
+    const pkg_name = mgr.lockfile.packages.items(.name)[pkg_id];
+    const pkg_res = mgr.lockfile.packages.items(.resolution)[pkg_id];
+    let v = &mgr.lockfile.buffers.dependencies.items[id].version;
+    // The buffer row can hold a different tag than the enqueue arm when the
+    // dependency comes from `overrides`.
+    switch (v.tag) {
+        .git => {
+            if (pkg_res.tag == .git) {
+                v.value.git.resolved = pkg_res.value.git.resolved;
+            }
+            v.value.git.package_name = pkg_name;
+        },
+        .github => {
+            v.value.github.package_name = pkg_name;
+        },
+        .tarball => {
+            v.value.tarball.package_name = pkg_name;
+        },
+        else => {},
+    }
+    return pkg_id;
+}
+
 fn enqueueGitClone(
     mgr: *PackageManager,
     task_id: Task.Id,
     name: string,
     repository: *const Repository,
-    dep_id: DependencyID,
     dependency: *const Dependency,
     res: *const Resolution,
     /// if patched then we need to do apply step after network task is done
@@ -1310,7 +1400,6 @@ fn enqueueGitClone(
                     FileSystem.FilenameStore.instance,
                 ) catch unreachable,
                 env: Repository.shared_env.get(mgr.allocator, mgr.env),
-                dep_id: dep_id,
                 res: res.*,
             },
         },
@@ -1399,30 +1488,21 @@ fn enqueueLocalTarball(
     // other dependencies (e.g. `appendPackage` / `StringBuilder.allocate`
     // in `Package.fromNPM`).
     let abs_buf: bun.PathBuffer = undefined;
-    const tarball_path_info = tarball_path: {
-        const workspace_pkg_id = mgr.lockfile.getWorkspacePkgIfWorkspaceDep(dependency_id);
-        if (workspace_pkg_id == invalid_package_id) break :tarball_path .{ path, true };
-
-        const workspace_res = mgr.lockfile.packages.items(.resolution)[workspace_pkg_id];
-        if (workspace_res.tag != .workspace) break :tarball_path .{ path, true };
-
-        // Construct an absolute path to the tarball.
-        // Normally tarball paths are always relative to the root directory, but if a
-        // workspace depends on a tarball path, it should be relative to the workspace.
-        const workspace_path = workspace_res.value.workspace.slice(mgr.lockfile.buffers.string_bytes.items);
-        break :tarball_path .{
+    const tarball_path_info = if (base_dir := localTarballBaseDir(mgr.lockfile, dependency_id, path))
+        .{
             Path.joinAbsStringBuf(
                 FileSystem.instance.top_level_dir,
                 &abs_buf,
                 &[
-                    workspace_path,
+                    base_dir,
                     path,
                 ],
                 .auto,
             ),
             false,
-        };
-    };
+        }
+    else
+        .{ path, true };
     const tarball_path = tarball_path_info[0];
     const normalize = tarball_path_info[1];
 
@@ -1498,6 +1578,30 @@ struct EnqueueClosure {
 }
 
 type NameAndNameHash = [String, PackageNameHash];
+
+/// The workspace or `file:` folder directory that `path` is relative to; `null` is the top-level dir.
+fn localTarballBaseDir(
+    lockfile: *const Lockfile,
+    dependency_id: DependencyID,
+    path: string,
+): string? {
+    const declared = &lockfile.buffers.dependencies.items[dependency_id].version;
+    const declared_by_parent = declared.tag == .tarball &&
+        declared.value.tarball.uri == .local &&
+        std.mem.eql(u8, lockfile.str(&declared.value.tarball.uri.local), path);
+    if (!declared_by_parent) {
+        // Overrides, resolutions and catalogs are all written in the root package.json.
+        return null;
+    }
+
+    const declarer = lockfile.getParentPkgOfDependency(dependency_id) ?? return null;
+    const declarer_res = &lockfile.packages.items(.resolution)[declarer];
+    return switch (declarer_res.tag) {
+        .workspace => lockfile.str(&declarer_res.value.workspace),
+        .folder => lockfile.str(&declarer_res.value.folder),
+        else => null,
+    };
+}
 
 fn updateNameAndNameHashFromVersionReplacement(
     lockfile: *const Lockfile,
@@ -1871,9 +1975,10 @@ fn getOrPutResolvedPackage(
                     }
                 }
 
-                if (behavior.isPeer()) {
-                    return null;
-                }
+                    // `null` in the peer pass makes the caller reload the manifest and retry.
+                    if (behavior.isPeer() && !install_peer) {
+                        return null;
+                    }
 
                 return switch (version.tag) {
                     .npm => error.NoMatchingVersion,

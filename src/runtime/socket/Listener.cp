@@ -1009,13 +1009,13 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
             socket.ref();
             SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
             socket.flags.allow_half_open = socket_config.allowHalfOpen;
+            // Held for the connect attempt regardless of `ref_pollref_on_connect`; `onOpen` applies that.
+            socket.poll_ref.ref(handlers.vm);
             socket.doConnect(connection) catch {
                 socket.handleConnectError(@intFromEnum(if (port == null) bun.sys.SystemErrno.ENOENT else bun.sys.SystemErrno.ECONNREFUSED)) catch {};
                 socket.deref();
                 return promise_value;
             };
-
-            if (socket.ref_pollref_on_connect) socket.poll_ref.ref(handlers.vm);
 
             return promise_value;
         }

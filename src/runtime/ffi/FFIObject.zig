@@ -61,14 +61,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-const Message = struct { __cp_no_message_sentinel: void = {} };
-fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
-pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
-pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
-pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -341,11 +333,6 @@ pub fn i64WithoutTypeChecks(global: *JSGlobalObject, _: *anyopaque, raw_addr: i6
     const dom_calls = .{ .@"u8" = DOMCall("Reader", @This(), "u8", DOMEffect.forRead(.World)), .@"u16" = DOMCall("Reader", @This(), "u16", DOMEffect.forRead(.World)), .@"u32" = DOMCall("Reader", @This(), "u32", DOMEffect.forRead(.World)), .ptr = DOMCall("Reader", @This(), "ptr", DOMEffect.forRead(.World)), .@"i8" = DOMCall("Reader", @This(), "i8", DOMEffect.forRead(.World)), .@"i16" = DOMCall("Reader", @This(), "i16", DOMEffect.forRead(.World)), .@"i32" = DOMCall("Reader", @This(), "i32", DOMEffect.forRead(.World)), .@"i64" = DOMCall("Reader", @This(), "i64", DOMEffect.forRead(.World)), .@"u64" = DOMCall("Reader", @This(), "u64", DOMEffect.forRead(.World)), .intptr = DOMCall("Reader", @This(), "intptr", DOMEffect.forRead(.World)), .@"f32" = DOMCall("Reader", @This(), "f32", DOMEffect.forRead(.World)), .@"f64" = DOMCall("Reader", @This(), "f64", DOMEffect.forRead(.World)) };
 };
 
-pub const ValueOrError = union(enum) {
-    err: JSValue,
-    slice: []u8,
-};
-
 const FFIObject = @This();
 pub const dom_call = DOMCall("FFI", @This(), "ptr", DOMEffect.forRead(.TypedArrayProperties));
 const fields = .{ .viewSource = jsc.host_fn.wrapStaticMethod(bun.api.FFI, "print", false), .dlopen = jsc.host_fn.wrapStaticMethod(bun.api.FFI, "open", false), .callback = jsc.host_fn.wrapStaticMethod(bun.api.FFI, "callback", false), .linkSymbols = jsc.host_fn.wrapStaticMethod(bun.api.FFI, "linkSymbols", false), .toBuffer = jsc.host_fn.wrapStaticMethod(@This(), "toBuffer", false), .toArrayBuffer = jsc.host_fn.wrapStaticMethod(@This(), "toArrayBuffer", false), .closeCallback = jsc.host_fn.wrapStaticMethod(bun.api.FFI, "closeCallback", false), .CString = jsc.host_fn.wrapStaticMethod(bun.api.FFIObject, "newCString", false) };
@@ -362,14 +349,8 @@ const DOMCall = jsc.host_fn.DOMCall;
 const DOMEffect = jsc.host_fn.DOMEffect;
 
 pub fn newCString(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, lengthValue: ?JSValue) bun.JSError!jsc.JSValue {
-        switch (FFIObject.getPtrSlice(globalThis, value, byteOffset, lengthValue)) {
-.err => |e| {
-return e;
-},
-.slice => |slice| {
-return bun.String.createUTF8ForJS(globalThis, slice);
-},
-}
+        const slice = try getPtrSlice(globalThis, value, byteOffset, lengthValue);
+        return bun.String.createUTF8ForJS(globalThis, slice);
 }
 
 pub fn toJS(globalObject: *jsc.JSGlobalObject) jsc.JSValue {
@@ -459,13 +440,13 @@ pub fn ptr_(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue) J
         return jsc.JSValue.fromPtrAddress(addr);
 }
 
-pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, byteLength: ?JSValue) ValueOrError {
+pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, byteLength: ?JSValue) bun.JSError![]u8 {
         if ((((!value.isNumber()) or (value.asNumber() < 0)) or (value.asNumber() > @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum" and (@typeInfo(@TypeOf(std.math.maxInt(usize))) == .int or @typeInfo(@TypeOf(std.math.maxInt(usize))) == .comptime_int)) @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize)))))))) {
-            return .{ .err = globalThis.toInvalidArguments("ptr must be a number.", .{}) };
+            return globalThis.throwInvalidArguments("ptr must be a number.", .{});
         }
         const num = value.asPtrAddress();
         if ((num == 0)) {
-            return .{ .err = globalThis.toInvalidArguments("ptr cannot be zero, that would segfault Bun :(", .{}) };
+            return globalThis.throwInvalidArguments("ptr cannot be zero, that would segfault Bun :(", .{});
         }
         var addr = @as(usize, @bitCast(num));
         _ = &addr;
@@ -479,50 +460,46 @@ pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSV
                     addr = (addr +| @as(usize, @intCast(off)));
                 }
                 if ((addr == 0)) {
-                    return .{ .err = globalThis.toInvalidArguments("ptr cannot be zero, that would segfault Bun :(", .{}) };
+                    return globalThis.throwInvalidArguments("ptr cannot be zero, that would segfault Bun :(", .{});
                 }
                 if ((!std.math.isFinite(byte_off.asNumber()))) {
-                    return .{ .err = globalThis.toInvalidArguments("ptr must be a finite number.", .{}) };
+                    return globalThis.throwInvalidArguments("ptr must be a finite number.", .{});
                 }
             } else {
                 if ((!byte_off.isEmptyOrUndefinedOrNull())) {
-                } else {
-                    return .{ .err = globalThis.toInvalidArguments("Expected number for byteOffset", .{}) };
+                    return globalThis.throwInvalidArguments("Expected number for byteOffset", .{});
                 }
             }
         }
         if ((((addr == 3735928559) or (addr == 2863311530)) or (addr == 2863311530))) {
-            return .{ .err = globalThis.toInvalidArguments("ptr to invalid memory, that would segfault Bun :(", .{}) };
+            return globalThis.throwInvalidArguments("ptr to invalid memory, that would segfault Bun :(", .{});
         }
         if (byteLength) |valueLength| {
             _ = &valueLength;
             if ((!valueLength.isEmptyOrUndefinedOrNull())) {
                 if ((!valueLength.isNumber())) {
-                    return .{ .err = globalThis.toInvalidArguments("length must be a number.", .{}) };
-                }
-                if ((valueLength.asNumber() == 0.0)) {
-                    return .{ .err = globalThis.toInvalidArguments("length must be > 0. This usually means a bug in your code.", .{}) };
+                    return globalThis.throwInvalidArguments("length must be a number.", .{});
                 }
                 const length_i = valueLength.toInt64();
-                if ((length_i < 0)) {
-                    return .{ .err = globalThis.toInvalidArguments("length must be > 0. This usually means a bug in your code.", .{}) };
+                if ((length_i <= 0)) {
+                    return globalThis.throwInvalidArguments("length must be > 0. This usually means a bug in your code.", .{});
                 }
                 if ((length_i > max_addressable_memory)) {
-                    return .{ .err = globalThis.toInvalidArguments("length exceeds max addressable memory. This usually means a bug in your code.", .{}) };
+                    return globalThis.throwInvalidArguments("length exceeds max addressable memory. This usually means a bug in your code.", .{});
                 }
                 const length = @as(usize, @intCast(length_i));
-                return .{ .slice = (blk: {
+                return (blk: {
                 const p: [*]u8 = @ptrFromInt(addr);
                 break :blk p[0..length];
 
-}) };
+});
             }
         }
         const p: [*:0]u8 = (blk: {
         break :blk @ptrFromInt(addr);
 
 });
-        return .{ .slice = bun.span(p) };
+        return bun.span(p);
 }
 
 pub fn getCPtr(value: JSValue) ?usize {
@@ -543,12 +520,9 @@ pub fn getCPtr(value: JSValue) ?usize {
 }
 
 pub fn toArrayBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, valueLength: ?JSValue, finalizationCtxOrPtr: ?JSValue, finalizationCallback: ?JSValue) bun.JSError!jsc.JSValue {
-        switch (getPtrSlice(globalThis, value, byteOffset, valueLength)) {
-.err => |erro| {
-return erro;
-},
-.slice => |slice| {
-const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
+        const slice = try getPtrSlice(globalThis, value, byteOffset, valueLength);
+        const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
+        _ = &DeallocatorFn;
         var callback: ?DeallocatorFn = null;
         _ = &callback;
         var ctx: ?*anyopaque = null;
@@ -573,13 +547,13 @@ const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
                         ctx = p;
                     } else {
                         if ((!ctx_value.isUndefinedOrNull())) {
-                            return globalThis.toInvalidArguments("Expected user data to be a C pointer (number || BigInt)", .{});
+                            return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number || BigInt)", .{});
                         }
                     }
                 }
             } else {
                 if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                    return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                    return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
                 }
             }
         } else {
@@ -594,7 +568,7 @@ const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
                     callback = cb;
                 } else {
                     if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                        return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                        return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
                     }
                 }
             }
@@ -602,20 +576,15 @@ const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
         var ab = jsc.ArrayBuffer.fromBytes(slice, jsc.JSValue.JSType.ArrayBuffer);
         _ = &ab;
         return ab.toJSWithContext(globalThis, ctx, callback);
-},
-}
 }
 
 pub fn noopBytesDeallocator(_: *anyopaque, _: *anyopaque) callconv(.c) void {
 }
 
 pub fn toBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, valueLength: ?JSValue, finalizationCtxOrPtr: ?JSValue, finalizationCallback: ?JSValue) bun.JSError!jsc.JSValue {
-        switch (getPtrSlice(globalThis, value, byteOffset, valueLength)) {
-.err => |e| {
-return e;
-},
-.slice => |slice| {
-const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
+        const slice = try getPtrSlice(globalThis, value, byteOffset, valueLength);
+        const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
+        _ = &DeallocatorFn;
         var callback: ?DeallocatorFn = null;
         _ = &callback;
         var ctx: ?*anyopaque = null;
@@ -639,14 +608,14 @@ const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
 });
                         ctx = p;
                     } else {
-                        if ((!ctx_value.isEmptyOrUndefinedOrNull())) {
-                            return globalThis.toInvalidArguments("Expected user data to be a C pointer (number || BigInt)", .{});
+                        if ((!ctx_value.isUndefinedOrNull())) {
+                            return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number || BigInt)", .{});
                         }
                     }
                 }
             } else {
                 if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                    return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                    return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
                 }
             }
         } else {
@@ -661,25 +630,17 @@ const DeallocatorFn = *const fn(*anyopaque, *anyopaque) callconv(.c) void;
                     callback = cb;
                 } else {
                     if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                        return globalThis.toInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                        return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
                     }
                 }
             }
         }
         return jsc.JSValue.createBufferWithCtx(globalThis, slice, ctx, ((callback) orelse (noopBytesDeallocator)));
-},
-}
 }
 
 pub fn toCStringBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, valueLength: ?JSValue) jsc.JSValue {
-        switch (getPtrSlice(globalThis, value, byteOffset, valueLength)) {
-.err => |e| {
-return e;
-},
-.slice => |slice| {
-return jsc.JSValue.createBuffer(globalThis, slice, null);
-},
-}
+        const slice = (blk_catch_0: { break :blk_catch_0 ((getPtrSlice(globalThis, value, byteOffset, valueLength)) catch |__ce_0| { _ = &__ce_0; return .zero; }); });
+        return jsc.JSValue.createBuffer(globalThis, slice, null);
 }
 
 pub fn getter(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {

@@ -403,8 +403,7 @@ rare_data: (*jsc.RareData)? = null,
 /// lock-free and correct). ~56 bytes — negligible on VirtualMachine.
 proxy_env_storage: jsc.RareData.ProxyEnvStorage = {},
 is_us_loop_entered: bool = false,
-pending_internal_promise: (*JSInternalPromise)? = null,
-pending_internal_promise_is_protected: bool = false,
+pending_internal_promise: jsc.Strong.Optional = .empty,
 /// hot_reload_counter value at which we last surfaced a rejected
 /// pending_internal_promise. We can't use JSPromise.isHandled() as the
 /// "already reported" sentinel any more: the C++ module loader marks every
@@ -963,10 +962,24 @@ pub fn uncaughtException(client: *jsc.VirtualMachine, globalObject: *JSGlobalObj
     return handled;
 }
 
+pub fn pendingInternalPromise(client: *const VirtualMachine): (*JSInternalPromise)? {
+    if (val := client.pending_internal_promise.get()) {
+        return val.asInternalPromise();
+    }
+    return null;
+}
+
+pub fn setPendingInternalPromise(client: *VirtualMachine, promise: (*JSInternalPromise)?) {
+    if (p := promise) {
+        client.pending_internal_promise.set(client.global, JSValue.fromCell(p));
+    } else {
+        client.pending_internal_promise.clearWithoutDeallocation();
+    }
+}
+
 pub fn reportExceptionInHotReloadedModuleIfNeeded(client: *jsc.VirtualMachine) {
     const _watcher_guard = AddMainWatcherGuard{ client: client };
-    if (client.pending_internal_promise == null) return;
-    let promise = client.pending_internal_promise.?;
+    const promise = client.pendingInternalPromise() ?? return;
 
     switch (promise.status()) {
         .pending => {
@@ -1032,7 +1045,7 @@ pub fn reload(client: *VirtualMachine, _: (*HotReloader.Task)?) {
     // overwrites source_mappings[path] in place, so a watcher event that
     // slips in between the rejection microtask and the report would remap
     // that error against the wrong sourcemap.
-    if (p := client.pending_internal_promise) {
+    if (p := client.pendingInternalPromise()) {
         switch (p.status()) {
             .pending => {
                 client.hot_reload_deferred = true;
@@ -1068,10 +1081,6 @@ pub fn reload(client: *VirtualMachine, _: (*HotReloader.Task)?) {
     jsc.API.cron.CronJob.clearAllForVM(client, .reload);
     client.global.reload() catch @panic("Failed to reload");
     client.hot_reload_counter += 1;
-    if (client.pending_internal_promise_is_protected) {
-        if (p := client.pending_internal_promise) JSValue.fromCell(p).unprotect();
-        client.pending_internal_promise_is_protected = false;
-    }
     // reloadEntryPoint() stores into pending_internal_promise on every return path.
     * = client.reloadEntryPoint(client.main) catch @panic("Failed to reload");
 }
@@ -2389,6 +2398,7 @@ pub fn deinit(client: *VirtualMachine) {
     }
     client.proxy_env_storage.deinit();
     client.overridden_main.deinit();
+    client.pending_internal_promise.deinit();
     client.entry_point.deinit();
     client.has_terminated = true;
 }
@@ -2505,20 +2515,17 @@ fn loadPreloads(client: *VirtualMachine): !(*JSInternalPromise)? {
         };
         let promise = JSModuleLoader.@"import"(client.global, &String.fromBytes(result.path().?.text))?;
 
-        client.pending_internal_promise = promise;
-        const promise_cell = JSValue.fromCell(promise);
-        promise_cell.protect();
-        const _unprotect_guard = UnprotectGuard{ val: promise_cell };
+        client.setPendingInternalPromise(promise);
 
         // pending_internal_promise can change if hot module reloading is enabled
         if (client.isWatcherEnabled()) {
             client.eventLoop().performGC();
-            switch (client.pending_internal_promise.?.status()) {
+            switch (client.pendingInternalPromise().?.status()) {
                 .pending => {
-                    while (client.pending_internal_promise.?.status() == .pending) {
+                    while (client.pendingInternalPromise().?.status() == .pending) {
                         client.eventLoop().tick();
 
-                        if (client.pending_internal_promise.?.status() == .pending) {
+                        if (client.pendingInternalPromise().?.status() == .pending) {
                             client.eventLoop().autoTick();
                         }
                     }
@@ -2579,26 +2586,37 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8): !*JSIn
     if (!client.transpiler.options.disable_transpilation) {
         if (client.preload.len > 0) {
             if (promise := client.loadPreloads()?) {
-                JSValue.fromCell(promise).ensureStillAlive();
-                JSValue.fromCell(promise).protect();
-                client.pending_internal_promise = promise;
-                client.pending_internal_promise_is_protected = true;
+                client.setPendingInternalPromise(promise);
                 return promise;
             }
 
             // Check if Module.runMain was patched
             if (client.has_patched_run_main) {
                 @branchHint(.cold);
-                client.pending_internal_promise = null;
-                client.pending_internal_promise_is_protected = false;
-                const ret = jsc.fromJSHostCall(client.global, @src(), NodeModuleModule__callOverriddenRunMain, .{ client.global, bun.String.createUTF8ForJS(client.global, main_file_name)? })?;
-                // If the override stored a promise itself, use that; otherwise
-                // wrap its return value.
-                if (stored := client.pending_internal_promise) return stored;
-                const resolved = JSInternalPromise.resolvedPromise(client.global, ret);
-                client.pending_internal_promise = resolved;
-                client.pending_internal_promise_is_protected = false;
-                return resolved;
+                client.setPendingInternalPromise(null);
+                const argv1 = bun.String.createUTF8ForJS(client.global, main_file_name)?;
+                let caught_err: JSValue? = null;
+                const ret_opt: JSValue? = jsc.fromJSHostCall(client.global, @src(), NodeModuleModule__callOverriddenRunMain, .{ client.global, argv1 }) catch e => brk: {
+                    caught_err = client.global.takeException(e);
+                    break :brk null;
+                };
+                const promise: *JSInternalPromise = if (ret := ret_opt) brk: {
+                    // If the override stored a promise itself, use that; otherwise
+                    // wrap its return value.
+                    if (stored := client.pendingInternalPromise()) return stored;
+                    break :brk JSInternalPromise.resolvedPromise(client.global, ret);
+                } else brk: {
+                    // Nobody else looks at a promise the override stored, so that stays
+                    // the entry point's, and this one is left to the rejection tracker.
+                    if (stored := client.pendingInternalPromise()) return stored;
+                    // Whoever loads the entry point reports its promise, so, like the
+                    // loader's, it is not for the rejection tracker as well.
+                    const rejected = jsc.JSPromise.rejectedPromise(client.global, caught_err.?);
+                    rejected.setHandled();
+                    break :brk unsafe { @ptrCast(rejected) };
+                };
+                client.setPendingInternalPromise(promise);
+                return promise;
             }
         }
 
@@ -2609,17 +2627,13 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8): !*JSIn
         } else
             jsc.fromJSHostCallGeneric(client.global, @src(), Bun__loadHTMLEntryPoint, .{client.global})?;
 
-        client.pending_internal_promise = promise;
-        client.pending_internal_promise_is_protected = false;
-        JSValue.fromCell(promise).ensureStillAlive();
+        client.setPendingInternalPromise(promise);
         return promise;
     } else {
         const promise_opt = JSModuleLoader.loadAndEvaluateModule(client.global, &String.fromBytes(client.main));
         if (promise_opt == null) return error.JSError;
         const promise = promise_opt.?;
-        client.pending_internal_promise = promise;
-        client.pending_internal_promise_is_protected = false;
-        JSValue.fromCell(promise).ensureStillAlive();
+        client.setPendingInternalPromise(promise);
 
         return promise;
     }
@@ -2642,9 +2656,8 @@ pub inline fn useIsolationSourceProviderCache(client: *const VirtualMachine): bo
     }
 }
 @export @c fn Bun__VirtualMachine__setOverrideModuleRunMainPromise(vm: *VirtualMachine, promise: *JSInternalPromise) {
-    if (vm.pending_internal_promise == null) {
-        vm.pending_internal_promise = promise;
-        vm.pending_internal_promise_is_protected = false;
+    if (vm.pendingInternalPromise() == null) {
+        vm.setPendingInternalPromise(promise);
     }
 }
 
@@ -2662,10 +2675,7 @@ pub fn reloadEntryPointForTestRunner(client: *VirtualMachine, entry_path: []cons
 
     if (!client.transpiler.options.disable_transpilation) {
         if (promise := client.loadPreloads()?) {
-            JSValue.fromCell(promise).ensureStillAlive();
-            client.pending_internal_promise = promise;
-            JSValue.fromCell(promise).protect();
-            client.pending_internal_promise_is_protected = true;
+            client.setPendingInternalPromise(promise);
 
             return promise;
         }
@@ -2674,9 +2684,7 @@ pub fn reloadEntryPointForTestRunner(client: *VirtualMachine, entry_path: []cons
     const promise_opt = JSModuleLoader.loadAndEvaluateModule(client.global, &String.fromBytes(client.main));
     if (promise_opt == null) return error.JSError;
     const promise = promise_opt.?;
-    client.pending_internal_promise = promise;
-    client.pending_internal_promise_is_protected = false;
-    JSValue.fromCell(promise).ensureStillAlive();
+    client.setPendingInternalPromise(promise);
 
     return promise;
 }
@@ -2693,7 +2701,7 @@ pub fn loadEntryPointForWebWorker(client: *VirtualMachine, entry_path: string): 
             return error.WorkerTerminated;
         }
     }
-    return client.pending_internal_promise.?;
+    return client.pendingInternalPromise().?;
 }
 
 pub fn loadEntryPointForTestRunner(client: *VirtualMachine, entry_path: string): anyerror!*JSInternalPromise {
@@ -2702,12 +2710,12 @@ pub fn loadEntryPointForTestRunner(client: *VirtualMachine, entry_path: string):
     // pending_internal_promise can change if hot module reloading is enabled
     if (client.isWatcherEnabled()) {
         client.eventLoop().performGC();
-        switch (client.pending_internal_promise.?.status()) {
+        switch (client.pendingInternalPromise().?.status()) {
             .pending => {
-                while (client.pending_internal_promise.?.status() == .pending) {
+                while (client.pendingInternalPromise().?.status() == .pending) {
                     client.eventLoop().tick();
 
-                    if (client.pending_internal_promise.?.status() == .pending) {
+                    if (client.pendingInternalPromise().?.status() == .pending) {
                         client.eventLoop().autoTick();
                     }
                 }
@@ -2725,7 +2733,7 @@ pub fn loadEntryPointForTestRunner(client: *VirtualMachine, entry_path: string):
 
     client.eventLoop().autoTick();
 
-    return client.pending_internal_promise.?;
+    return client.pendingInternalPromise().?;
 }
 
 pub fn loadEntryPoint(client: *VirtualMachine, entry_path: string): anyerror!*JSInternalPromise {
@@ -2734,12 +2742,12 @@ pub fn loadEntryPoint(client: *VirtualMachine, entry_path: string): anyerror!*JS
     // pending_internal_promise can change if hot module reloading is enabled
     if (client.isWatcherEnabled()) {
         client.eventLoop().performGC();
-        switch (client.pending_internal_promise.?.status()) {
+        switch (client.pendingInternalPromise().?.status()) {
             .pending => {
-                while (client.pending_internal_promise.?.status() == .pending) {
+                while (client.pendingInternalPromise().?.status() == .pending) {
                     client.eventLoop().tick();
 
-                    if (client.pending_internal_promise.?.status() == .pending) {
+                    if (client.pendingInternalPromise().?.status() == .pending) {
                         client.eventLoop().autoTick();
                     }
                 }
@@ -2755,7 +2763,7 @@ pub fn loadEntryPoint(client: *VirtualMachine, entry_path: string): anyerror!*JS
         client.waitForPromise({ internal: promise });
     }
 
-    return client.pending_internal_promise.?;
+    return client.pendingInternalPromise().?;
 }
 
 pub fn addListeningSocketForWatchMode(client: *VirtualMachine, socket: bun.FD) {
@@ -2834,25 +2842,24 @@ pub fn swapGlobalForTestIsolation(client: *VirtualMachine) {
 
     * = client.auto_killer.kill();
     client.auto_killer.clear();
+    client.timer.event_loop_delay.disable();
 
     client.test_isolation_generation = client.test_isolation_generation +% 1;
 
     client.overridden_main.deinit();
     client.entry_point_result.value.deinit();
     client.entry_point_result.cjs_set_value = false;
-    if (promise := client.pending_internal_promise) {
-        if (client.pending_internal_promise_is_protected) {
-            JSValue.fromCell(promise).unprotect();
-            client.pending_internal_promise_is_protected = false;
-        }
-        client.pending_internal_promise = null;
-    }
+    client.setPendingInternalPromise(null);
     client.has_patched_run_main = false;
     client.main = "";
     client.main_hash = 0;
     client.main_resolved_path.deref();
     client.main_resolved_path = bun.String.empty;
     client.unhandled_error_counter = 0;
+    // The finished file's plugins are dropped with its global; the next
+    // `Bun.plugin()` call reinstalls the runner against the new global.
+    client.transpiler.linker.plugin_runner = null;
+    client.plugin_runner = null;
 
     const old_global = client.global;
     const new_global = JSGlobalObject.createForTestIsolation(old_global, client.console);
@@ -2943,6 +2950,7 @@ pub struct AggregateErrorIterator<Writer> {
     writer: Writer,
     current_exception_list: (*ExceptionList)? = null,
     formatter: *ConsoleObject.Formatter,
+    printed_member: bool = false,
 
     @callconv("c")
     static fn iteratorWithColorAndSideEffects(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
@@ -2962,6 +2970,7 @@ pub struct AggregateErrorIterator<Writer> {
     }
     static fn iterator(_: *VM, _: *JSGlobalObject, nextValue: JSValue, ctx: *!?, comptime color: bool, comptime allow_side_effects: bool) {
         const this_: *AggregateErrorIterator<Writer> = unsafe { @ptrCast(@alignCast(ctx)) };
+        this_.printed_member = true;
         VirtualMachine.get().printErrorlikeObject(nextValue, null, this_.current_exception_list, this_.formatter, Writer, this_.writer, color, allow_side_effects);
     }
 }
@@ -2995,22 +3004,36 @@ pub fn printErrorlikeObject(
         allow_ansi_color: allow_ansi_color,
     };
 
-    if (value.isAggregateError(_.global)) {
+    const agg_errors = if (value.isAggregateError(_.global))
+        value.fastGet(_.global, .errors) catch {
+            _.global.clearException();
+            null;
+        }
+    else
+        null;
+    if (errors := agg_errors) {
         let iter = AggregateErrorIterator<Writer>{ writer: writer, current_exception_list: exception_list, formatter: formatter };
+        let ok = true;
         if (comptime allow_ansi_color) {
             if (comptime allow_side_effects) {
-                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
+                errors.forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorAndSideEffects) catch { ok = false; };
             } else {
-                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
+                errors.forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorNoSideEffects) catch { ok = false; };
             }
         } else {
             if (comptime allow_side_effects) {
-                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
+                errors.forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorAndSideEffects) catch { ok = false; };
             } else {
-                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
+                errors.forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorNoSideEffects) catch { ok = false; };
             }
         }
-        return;
+        if (!ok) {
+            _.global.clearException();
+        }
+        if (iter.printed_member) {
+            return;
+        }
+        // `errors` is empty or not iterable: print the AggregateError itself.
     }
 
     was_internal = _.printErrorFromMaybePrivateData(
@@ -3704,7 +3727,9 @@ fn printErrorInstance(
         (error_instance != .zero && error_instance.jsType() == .ErrorInstance);
     const code: ([]const u8)? = if (is_error_instance) code: {
         if (code_value := error_instance.uncheckedPtrCast(jsc.JSObject).getCodePropertyVMInquiry(client.global)) {
-            if (code_value.isString()) {
+            // Not `isString()`: converting a String object runs its `toString` /
+            // `Symbol.toPrimitive`. The property loop below prints one.
+            if (code_value.isStringLiteral()) {
                 const code_string = code_value.toBunString(client.global) catch {
                     // JSC::JSString to WTF::String can only fail on out of memory.
                     bun.outOfMemory();

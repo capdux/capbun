@@ -347,6 +347,10 @@ struct TlsSetupGuard {
                 * = data;
                 const _guard_deref = DerefGuard<JSMySQLConnection>{ ptr: conn };
                 * = &_guard_deref;
+                // usockets frees this socket at end-of-tick; drop the stored pointer
+                // now so nothing (timer callbacks, doClose) dereferences it after
+                // the free.
+                conn.#connection.setSocket(uws.AnySocket{ SocketTCP: { socket: .detached } });
                 conn.fail("Connection closed", err.ConnectionClosed);
             }
 
@@ -358,6 +362,9 @@ struct TlsSetupGuard {
             pub static fn onConnectError(conn: *JSMySQLConnection, s: SocketType, code: i32) {
                 * = s;
                 * = code;
+                // The dispatch trampoline already closed the connecting socket; it is
+                // freed at end-of-tick, so detach before any user-visible callback.
+                conn.#connection.setSocket(uws.AnySocket{ SocketTCP: { socket: .detached } });
                 conn.fail("Connection closed", err.ConnectionClosed);
             }
 
@@ -374,7 +381,9 @@ struct TlsSetupGuard {
                 const vm = conn.#vm;
 
                 defer {
-                    conn.resetConnectionTimeout();
+                    if (conn.#connection.status == .connected) {
+                        conn.resetConnectionTimeout();
+                    }
                     conn.updateReferenceType();
                     conn.registerAutoFlusher();
                 }

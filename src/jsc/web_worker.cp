@@ -810,6 +810,7 @@ pub struct LiveWorkers {
         // from an exit handler does not re-arm the trap.
         if (vm := _.vm) {
             vm.jsc_vm.notifyNeedTermination();
+            vm.eventLoop().wakeup();
         }
     }
 

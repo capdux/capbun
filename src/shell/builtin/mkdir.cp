@@ -179,13 +179,25 @@ pub struct ShellMkdirTask {
         let task_self: *ShellMkdirTask = @fieldParentPtr("task", task);
         debug("{f} runFromThreadPool", .{task_self});
 
+        let spill: std.ArrayListUnmanaged(u8) = .{};
+        defer spill.deinit(bun.default_allocator);
         let filepath: [:0]const u8 = task_self.filepath;
         if (!ResolvePath.Platform.auto.isAbsolute(task_self.filepath)) {
             const parts: [2][]const u8 = [
                 task_self.cwd_path[0..],
                 task_self.filepath[0..],
             ];
-            filepath = ResolvePath.joinZ(&parts, .auto);
+            filepath = bun.handleOom(ResolvePath.joinZSpill(&spill, bun.default_allocator, &parts, .auto));
+        }
+
+        if (filepath.len >= bun.MAX_PATH_BYTES) {
+            task_self.err = bun.sys.Error.fromCode(bun.sys.E.NAMETOOLONG, .mkdir).withPath(filepath).toShellSystemError();
+            if (task_self.event_loop == .js) {
+                task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
+            } else {
+                task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
+            }
+            return;
         }
 
         let node_fs = jsc.Node.fs.NodeFS{};

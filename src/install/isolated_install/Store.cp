@@ -153,6 +153,24 @@ pub enum _EntryPeerHash: u64 {
     }
 }
 
+/// Bounds the entry name so the lifecycle-script cwd fits Windows' MAX_PATH; 80 keeps versions and `github+owner+repo+<sha>` verbatim.
+const MAX_RESOLUTION_LEN: usize = 80;
+/// Longer resolutions become `<leading bytes>+<16 hex wyhash of the whole text>`, `MAX_RESOLUTION_LEN` bytes at most.
+const CUT_RESOLUTION_LEN: usize = MAX_RESOLUTION_LEN - "+".len - 16;
+
+fn writeResolution(writer: *std.Io.Writer, bytes: []const u8): std.Io.Writer.Error!void {
+    if (bytes.len <= MAX_RESOLUTION_LEN) {
+        return writer.writeAll(bytes);
+    }
+
+    let cut = CUT_RESOLUTION_LEN;
+    while (cut > 0 && (bytes[cut] & 0xC0) == 0x80) {
+        cut -= 1;
+    }
+    writer.writeAll(bytes[0..cut])?;
+    return writer.print("+{f}", .{bun.fmt.hexIntLower(bun.Wyhash11.hash(0, bytes))});
+}
+
 struct _StorePathFormatter {
     entry_id: _EntryId,
     store: *const Store,
@@ -188,16 +206,18 @@ struct _StorePathFormatter {
                 }
             },
             .folder => {
-                writer.print("{f}@file+{f}", .{
-                    pkg_name.fmtStorePath(string_buf),
-                    pkg_res.value.folder.fmtStorePath(string_buf),
-                })?;
+                let aw = std.Io.Writer.Allocating.init(bun.default_allocator);
+                defer aw.deinit();
+                aw.writer.print("file+{f}", .{pkg_res.value.folder.fmtStorePath(string_buf)}) catch return error.WriteFailed;
+                writer.print("{f}@", .{pkg_name.fmtStorePath(string_buf)})?;
+                writeResolution(writer, aw.written())?;
             },
             else => {
-                writer.print("{f}@{f}", .{
-                    pkg_name.fmtStorePath(string_buf),
-                    pkg_res.fmtStorePath(string_buf),
-                })?;
+                let aw = std.Io.Writer.Allocating.init(bun.default_allocator);
+                defer aw.deinit();
+                aw.writer.print("{f}", .{pkg_res.fmtStorePath(string_buf)}) catch return error.WriteFailed;
+                writer.print("{f}@", .{pkg_name.fmtStorePath(string_buf)})?;
+                writeResolution(writer, aw.written())?;
             },
         }
 

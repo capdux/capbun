@@ -111,6 +111,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const SplitUserinfo = struct {
+    userinfo: []const u8,
+    url_without_userinfo: []const u8,
+};
+
 pub const PackageManifestCallback = struct {
     loaded_manifest: ?Npm.PackageManifest = null,
     name: strings.StringOrTinyString,
@@ -330,6 +335,21 @@ pub fn forTarball(self: *NetworkTask, allocator: std.mem.Allocator, tarball_: *c
             _ = try self.package_manager.log.addErrorFmt(null, .{}, allocator, "Expected tarball URL to start with https:// or http://, got {f} while fetching package {f}", .{ bun.fmt.QuotedFormatter{ .text = self.url_buf }, bun.fmt.QuotedFormatter{ .text = (if (@typeInfo(@TypeOf(tarball)) == .@"enum" or @typeInfo(@TypeOf(tarball)) == .@"union") @tagName(tarball) else tarball.name).slice() } });
             return error.InvalidURL;
         }
+        var url_authorization: ?[]const u8 = null;
+        _ = &url_authorization;
+        defer {
+        if (url_authorization) |ua| {
+            _ = &ua;
+            _ = allocator.free(ua);
+        }
+        }
+        if (try splitUrlUserinfo(allocator, self.url_buf)) |split| {
+            _ = &split;
+            if ((split.userinfo.len > 0)) {
+                url_authorization = try basicAuthorizationFromUserinfo(allocator, split.userinfo);
+            }
+            self.url_buf = split.url_without_userinfo;
+        }
         self.response_buffer = MutableString.initEmpty(allocator);
         self.allocator = allocator;
         var header_builder = HeaderBuilder{  };
@@ -339,10 +359,23 @@ pub fn forTarball(self: *NetworkTask, allocator: std.mem.Allocator, tarball_: *c
         if ((authorization == .allow_authorization)) {
             _ = countAuth((&header_builder), scope);
         }
+        var use_url_auth = false;
+        _ = &use_url_auth;
+        if (url_authorization) |ua| {
+            _ = &ua;
+            if ((header_builder.header_count == 0)) {
+                _ = header_builder.count("Authorization", ua);
+                use_url_auth = true;
+            }
+        }
         if ((header_builder.header_count > 0)) {
             _ = try header_builder.allocate(allocator);
-            if ((authorization == .allow_authorization)) {
-                _ = appendAuth((&header_builder), scope);
+            if (use_url_auth) {
+                _ = header_builder.append("Authorization", url_authorization.?);
+            } else {
+                if ((authorization == .allow_authorization)) {
+                    _ = appendAuth((&header_builder), scope);
+                }
             }
             if (header_builder.content.ptr) |cptr| {
                 _ = &cptr;
@@ -448,4 +481,39 @@ pub fn countAuth(header_builder: *HeaderBuilder, scope: *const Npm.Registry.Scop
             }
         }
         _ = header_builder.count("npm-auth-type", "legacy");
+}
+
+pub fn splitUrlUserinfo(allocator: std.mem.Allocator, url: []const u8) OOM!?SplitUserinfo {
+        const scheme_end = ((strings.indexOf(url, "://")) orelse { return null; });
+        const authority_start = (scheme_end + "://".len);
+        const rest = url[authority_start..];
+        const authority_end = ((strings.indexOfAny(rest, "/?#")) orelse (rest.len));
+        const authority = rest[0..authority_end];
+        const at = ((strings.lastIndexOfChar(authority, 64)) orelse { return null; });
+        var without_userinfo = try allocator.alloc(u8, (url.len - (at + 1)));
+        _ = &without_userinfo;
+        _ = @memcpy(without_userinfo[0..authority_start], url[0..authority_start]);
+        _ = @memcpy(without_userinfo[authority_start..], rest[(at + 1)..]);
+        return SplitUserinfo{ .userinfo = rest[0..at], .url_without_userinfo = without_userinfo };
+}
+
+pub fn basicAuthorizationFromUserinfo(allocator: std.mem.Allocator, userinfo: []const u8) OOM![]const u8 {
+        const scheme: []const u8 = "Basic ";
+        const has_colon = strings.containsChar(userinfo, 58);
+        const raw_len = (userinfo.len + (if (has_colon) (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)) else (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1))));
+        var user_pass = try allocator.alloc(u8, raw_len);
+        _ = &user_pass;
+        defer {
+        _ = allocator.free(user_pass);
+        }
+        _ = @memcpy(user_pass[0..userinfo.len], userinfo);
+        if ((!has_colon)) {
+            user_pass[cp_cast_int(usize, userinfo.len)] = 58;
+        }
+        const encoded_len = std.base64.standard.Encoder.calcSize(user_pass.len);
+        var value = try allocator.alloc(u8, (scheme.len + encoded_len));
+        _ = &value;
+        _ = @memcpy(value[0..scheme.len], scheme);
+        _ = std.base64.standard.Encoder.encode(value[scheme.len..], user_pass);
+        return value;
 }

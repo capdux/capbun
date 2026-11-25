@@ -2175,39 +2175,32 @@ pub fn finalize(self: *ExpectMatcherUtils) callconv(.c) void {
             _ = VirtualMachine.get().allocator.destroy(self);
     }
 
-pub fn printValue(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ?[]const u8) !JSValue {
-            var stack_fallback = std.heap.stackFallback(512, globalThis.allocator());
+pub fn printValue(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ?[]const u8) bun.JSError!JSValue {
+            var stack_fallback = std.heap.stackFallback(2048, globalThis.allocator());
             _ = &stack_fallback;
-            var mutable_string = DeinitGuard(bun.MutableString){ .val = try bun.MutableString.init2048(stack_fallback.get()) };
-            _ = &mutable_string;
-            var __mutable_string_moved = false; _ = &__mutable_string_moved;
-            defer if (!__mutable_string_moved) { __mutable_string_moved = true; const __T = @TypeOf(mutable_string); if (@typeInfo(__T) == .optional) { if (mutable_string) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { mutable_string.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = mutable_string; _drop_val.__cp_deinit(); } };
-            var buffered_writer = bun.MutableString.BufferedWriter{ .context = (&mutable_string.val) };
-            _ = &buffered_writer;
-            var writer = buffered_writer.writer();
-            _ = &writer;
+            var alloc_writer = std.Io.Writer.Allocating.init(stack_fallback.get());
+            _ = &alloc_writer;
+            defer {
+            _ = alloc_writer.deinit();
+            }
+            const writer = (&alloc_writer.writer);
             if (color_or_null) |color| {
                 _ = &color;
                 if (Output.enable_ansi_colors_stderr) {
-                    _ = try writer.writeAll(Output.prettyFmt(color, true));
+                    _ = (blk_catch_17: { break :blk_catch_17 ((writer.writeAll(Output.prettyFmt(color, true))) catch |__ce_17| { _ = &__ce_17; return error.OutOfMemory; }); });
                 }
             }
             var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis, .quote_strings = true } };
             _ = &formatter;
             var __formatter_moved = false; _ = &__formatter_moved;
             defer if (!__formatter_moved) { __formatter_moved = true; const __T = @TypeOf(formatter); if (@typeInfo(__T) == .optional) { if (formatter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter; _drop_val.__cp_deinit(); } };
-            _ = try writer.print("{f}", .{ value.toFmt((&formatter.val)) });
+            _ = try formatter.val.formatValue(@TypeOf(writer), writer, value, globalThis, false);
             if ((color_or_null != null)) {
                 if (Output.enable_ansi_colors_stderr) {
-                    _ = try writer.writeAll(Output.prettyFmt("<r>", true));
+                    _ = (blk_catch_18: { break :blk_catch_18 ((writer.writeAll(Output.prettyFmt("<r>", true))) catch |__ce_18| { _ = &__ce_18; return error.OutOfMemory; }); });
                 }
             }
-            _ = try buffered_writer.flush();
-            return bun.String.createUTF8ForJS(globalThis, mutable_string.val.slice());
-    }
-
-pub inline fn printValueCatched(globalThis: *JSGlobalObject, value: JSValue, comptime color_or_null: ?[]const u8) JSValue {
-            return (blk_catch_17: { break :blk_catch_17 ((printValue(globalThis, value, color_or_null)) catch |__ce_17| { _ = &__ce_17; return globalThis.throwOutOfMemoryValue(); }); });
+            return bun.String.createUTF8ForJS(globalThis, alloc_writer.written());
     }
 
 pub fn stringify(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
@@ -2215,7 +2208,7 @@ pub fn stringify(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callfra
             _ = &self_ref;
             const arguments = callframe.arguments_old(1).slice();
             const value = (if ((arguments.len < 1)) .js_undefined else arguments[0]);
-            return ExpectMatcherUtils.printValueCatched(globalThis, value, null);
+            return ExpectMatcherUtils.printValue(globalThis, value, null);
     }
 
 pub fn printExpected(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
@@ -2223,7 +2216,7 @@ pub fn printExpected(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, cal
             _ = &self_ref;
             const arguments = callframe.arguments_old(1).slice();
             const value = (if ((arguments.len < 1)) .js_undefined else arguments[0]);
-            return ExpectMatcherUtils.printValueCatched(globalThis, value, "<green>");
+            return ExpectMatcherUtils.printValue(globalThis, value, "<green>");
     }
 
 pub fn printReceived(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
@@ -2231,7 +2224,7 @@ pub fn printReceived(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, cal
             _ = &self_ref;
             const arguments = callframe.arguments_old(1).slice();
             const value = (if ((arguments.len < 1)) .js_undefined else arguments[0]);
-            return ExpectMatcherUtils.printValueCatched(globalThis, value, "<red>");
+            return ExpectMatcherUtils.printValue(globalThis, value, "<red>");
     }
 
 pub fn matcherHint(self: *ExpectMatcherUtils, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
@@ -2345,7 +2338,7 @@ pub const _AllCallsWithArgsFormatter = struct {
 pub fn format(self: _AllCallsWithArgsFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             var printed_once = false;
             _ = &printed_once;
-            const calls_count = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })))));
+            const calls_count = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf((blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf((blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_19: { break :blk_catch_19 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })))));
             if ((calls_count == 0)) {
                 _ = try writer.writeAll("(no calls)");
                 return;
@@ -2358,7 +2351,7 @@ pub fn format(self: _AllCallsWithArgsFormatter, writer: *std.Io.Writer) std.Io.W
                 }
                 printed_once = true;
                 _ = try writer.print("           {d: >4}: ", .{ (i + 1) });
-                const call_args = (blk_catch_19: { break :blk_catch_19 ((self.calls.getIndex(self.globalThis, i)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                const call_args = (blk_catch_20: { break :blk_catch_20 ((self.calls.getIndex(self.globalThis, i)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
                 _ = try writer.print("{f}", .{ call_args.toFmt(self.formatter) });
             }
     }
@@ -2376,17 +2369,17 @@ pub fn format(self: _AllCallsFormatter, writer: *std.Io.Writer) std.Io.Writer.Er
             _ = &num_returns;
             var num_calls: i32 = 0;
             _ = &num_calls;
-            var iter = (blk_catch_20: { break :blk_catch_20 ((self.returns.arrayIterator(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+            var iter = (blk_catch_21: { break :blk_catch_21 ((self.returns.arrayIterator(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
             _ = &iter;
-            while ((blk_catch_21: { break :blk_catch_21 ((iter.next()) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) |item| {
+            while ((blk_catch_22: { break :blk_catch_22 ((iter.next()) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) |item| {
                 if (printed_once) {
                     _ = try writer.writeAll("\n");
                 }
                 printed_once = true;
                 num_calls = (num_calls + 1);
                 _ = try writer.print("           {d: >2}: ", .{ num_calls });
-                const value = (blk_catch_22: { break :blk_catch_22 ((mock.jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
-                switch ((blk_catch_23: { break :blk_catch_23 ((mock.jestMockReturnObject_type(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) {
+                const value = (blk_catch_23: { break :blk_catch_23 ((mock.jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                switch ((blk_catch_24: { break :blk_catch_24 ((mock.jestMockReturnObject_type(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) {
 .@"return" => {
 _ = try writer.print("{f}", .{ value.toFmt(self.formatter) });
                 num_returns = (num_returns + 1);

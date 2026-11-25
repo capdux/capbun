@@ -1,5 +1,6 @@
 #include "config.h"
 #include <JavaScriptCore/VM.h>
+#include <JavaScriptCore/HeapInlines.h>
 #include "JSCTaskScheduler.h"
 #include "BunClientData.h"
 
@@ -15,19 +16,20 @@ extern "C" void Bun__eventLoop__incrementRefConcurrently(void* bunVM, int delta)
 
 class JSCDeferredWorkTask {
 public:
-    JSCDeferredWorkTask(Ref<TicketData> ticket, Task&& task)
-        : ticket(WTF::move(ticket))
+    JSCDeferredWorkTask(WebCore::JSVMClientData* clientData, Ref<TicketData> ticket, Task&& task)
+        : clientData(clientData)
+        , ticket(WTF::move(ticket))
         , task(WTF::move(task))
     {
     }
 
+    // Not reached through the ticket: a cancelled one's cells may be freed.
+    WebCore::JSVMClientData* clientData;
     Ref<TicketData> ticket;
     Task task;
     ~JSCDeferredWorkTask()
     {
     }
-
-    JSC::VM& vm() const { return ticket->scriptExecutionOwner()->vm(); }
 
     WTF_MAKE_TZONE_ALLOCATED(JSCDeferredWorkTask);
 };
@@ -50,7 +52,7 @@ void JSCTaskScheduler::onAddPendingWork(WebCore::JSVMClientData* clientData, Ref
 }
 void JSCTaskScheduler::onScheduleWorkSoon(WebCore::JSVMClientData* clientData, Ticket ticket, Task&& task)
 {
-    auto* job = new JSCDeferredWorkTask(*ticket, WTF::move(task));
+    auto* job = new JSCDeferredWorkTask(clientData, *ticket, WTF::move(task));
     Bun__queueJSCDeferredWorkTaskConcurrently(clientData->bunVM, job);
 }
 
@@ -75,6 +77,30 @@ void JSCTaskScheduler::onCancelPendingWork(WebCore::JSVMClientData* clientData, 
     }
 }
 
+void JSCTaskScheduler::cancelWorkOfDeadRealms(WebCore::JSVMClientData* clientData, JSC::VM& vm)
+{
+    auto& scheduler = clientData->deferredWorkTimer;
+    UncheckedKeyHashSet<JSGlobalObject*> deadRealms;
+    {
+        Locker<Lock> holder { scheduler.m_lock };
+        auto collect = [&](auto& pendingTickets) {
+            for (auto& ticket : pendingTickets) {
+                if (ticket->isCancelled())
+                    continue;
+                auto* realm = ticket->target()->globalObject();
+                if (!vm.heap.isMarked(realm))
+                    deadRealms.add(realm);
+            }
+        };
+        collect(scheduler.m_pendingTicketsKeepingEventLoopAlive);
+        collect(scheduler.m_pendingTicketsOther);
+    }
+    // What ~JSGlobalObject does, too late for a global that is swept lazily. Reaches
+    // onCancelPendingWork, which takes m_lock.
+    for (auto* realm : deadRealms)
+        realm->clearWeakTickets();
+}
+
 static void runPendingWork(void* bunVM, Bun::JSCTaskScheduler& scheduler, JSCDeferredWorkTask* job)
 {
     Locker<Lock> holder { scheduler.m_lock };
@@ -95,10 +121,7 @@ static void runPendingWork(void* bunVM, Bun::JSCTaskScheduler& scheduler, JSCDef
 
 extern "C" void Bun__runDeferredWork(Bun::JSCDeferredWorkTask* job)
 {
-    auto& vm = job->vm();
-    auto clientData = WebCore::clientData(vm);
-
-    runPendingWork(clientData->bunVM, clientData->deferredWorkTimer, job);
+    runPendingWork(job->clientData->bunVM, job->clientData->deferredWorkTimer, job);
 }
 
 }

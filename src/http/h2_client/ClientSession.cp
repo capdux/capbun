@@ -2,7 +2,7 @@
 // One TCP+TLS connection running the HTTP/2 protocol for `fetch()`.
 
 import bun from "bun";
-import { HTTPContext, NewHTTPContext } from "../HTTPContext.cp";
+import { HTTPContext, NewHTTPContext, PeerVerification } from "../HTTPContext.cp";
 pub const HTTPContextTLS = NewHTTPContext(true);
 pub const Socket = HTTPContextTLS.HTTPSocket;
 pub const HTTPClient = bun.http.HTTPClient;
@@ -57,6 +57,7 @@ export @root struct ClientSession {
     port: u16,
     ssl_config: bun.api.server.ServerConfig.SSLConfig.SharedPtr? = null,
     did_have_handshaking_error: bool,
+    verification: PeerVerification = .none,
     host_header_hash: u64 = 0,
 
     write_buffer: bun.io.StreamBuffer = {},
@@ -126,6 +127,7 @@ export @root struct ClientSession {
             port: client.connected_url.getPortAuto(),
             ssl_config: ssl_config,
             did_have_handshaking_error: client.flags.did_have_handshaking_error,
+            verification: client.socketVerification(),
             host_header_hash: client.proxyAuthHash(),
         });
         bun.http.H2.live_sessions.fetchAdd(1, .monotonic);
@@ -141,8 +143,8 @@ export @root struct ClientSession {
             _.next_stream_id < H2FrameParser.MAX_STREAM_ID;
     }
 
-    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?, host_header_hash: u64): bool {
-        return _.port == port && bun.api.server.ServerConfig.SSLConfig.rawPtr(_.ssl_config) == ssl_config && _.host_header_hash == host_header_hash && bun.strings.eqlLong(_.hostname, hostname, true);
+    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?, verification: PeerVerification, host_header_hash: u64): bool {
+        return _.port == port && bun.api.server.ServerConfig.SSLConfig.rawPtr(_.ssl_config) == ssl_config && verification.allows(_.verification) && _.host_header_hash == host_header_hash && bun.strings.eqlLong(_.hostname, hostname, true);
     }
 
     fn adopt(*_, client: *HTTPClient) {
@@ -597,6 +599,7 @@ export @root struct ClientSession {
             _.ctx.releaseSocket(
                 _.socket,
                 _.did_have_handshaking_error,
+                _.verification,
                 _.hostname,
                 _.port,
                 _.ssl_config,
@@ -605,6 +608,7 @@ export @root struct ClientSession {
                 0,
                 _.host_header_hash,
                 _,
+                "",
             );
         } else {
             HTTPContextTLS.closeSocket(_.socket);

@@ -213,6 +213,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         defer_deinit_until_callback_completes: (*bool)? = null,
 
         additional_on_abort: AdditionalOnAbortCallback? = null,
+        promise_cell: jsc.JSValue = jsc.JSValue.zero,
 
         // TODO: support builtin compression
 
@@ -243,10 +244,40 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (server := _.server) server.vm.drainMicrotasks();
         }
 
+        pub fn promiseCellCollected(*_) {
+            _.promise_cell = jsc.JSValue.zero;
+        }
+
+        fn createPromiseCell(*_, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
+            bun.debugAssert(_.promise_cell == jsc.JSValue.zero);
+            _.ref();
+            const cell = NativePromiseContext.create(globalThis, _);
+            _.promise_cell = cell;
+            return cell;
+        }
+
+        pub fn reclaimPromiseCell(*_) {
+            const cell = _.promise_cell;
+            if (cell == jsc.JSValue.zero) return;
+            _.promise_cell = jsc.JSValue.zero;
+            if (taken := NativePromiseContext.take(RequestContext, cell)) {
+                taken.deref();
+            }
+        }
+
         fn setAbortHandler(*_) {
             if (_.flags.has_abort_handler) return;
             if (resp := _.resp) {
                 _.flags.has_abort_handler = true;
+                if (!http3 && resp.isClosed()) {
+                    if (req := _.req) {
+                        if (request := _.request_weakref.get()) {
+                            _.toAsyncWithoutAbortHandler(req, request);
+                        }
+                    }
+                    _.onAbort(resp);
+                    return;
+                }
                 resp.onAborted(_, RequestContext.onAbort);
             }
         }
@@ -274,6 +305,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 // was collected before a prior microtask turn reached us).
                 return JSValue.js_undefined;
             };
+            ctx.promise_cell = jsc.JSValue.zero;
             const _guard_ctx = DerefGuard<@TypeOf(ctx)>{ val: ctx };
 
             const result = arguments.ptr[0];
@@ -371,6 +403,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 if (_.flags.has_sendfile_ctx) "has sendfile context" else "no sendfile context",
             });
             return _.resp != null &&
+                !_.resp.?.isClosed() &&
                 !_.flags.aborted &&
                 !_.flags.has_marked_complete &&
                 !_.flags.has_marked_pending &&
@@ -456,6 +489,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 // was collected before a prior microtask turn reached us).
                 return JSValue.js_undefined;
             };
+            ctx.promise_cell = jsc.JSValue.zero;
             const _guard_ctx = DerefGuard<@TypeOf(ctx)>{ val: ctx };
 
             const err = arguments.ptr[0];
@@ -627,6 +661,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 _.detachResponse();
                 _.endRequestStreamingAndDrain();
                 resp.end(data, closeConnection);
+                _.reclaimPromiseCell();
             }
         }
 
@@ -642,6 +677,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 // We cannot call this function if the Content-Length header was previously set
                 if (resp.state().isResponsePending())
                     resp.endStream(closeConnection);
+                _.reclaimPromiseCell();
             }
         }
 
@@ -653,6 +689,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 _.detachResponse();
                 _.endRequestStreamingAndDrain();
                 resp.endWithoutBody(closeConnection);
+                _.reclaimPromiseCell();
             }
         }
 
@@ -662,6 +699,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 _.detachResponse();
                 _.endRequestStreamingAndDrain();
                 resp.forceClose();
+                _.reclaimPromiseCell();
             }
         }
 
@@ -805,6 +843,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             //if have sink, call onAborted on sink
             if (wrapper := _.sink) {
                 wrapper.sink.abort();
+                if (_.endRequestStreaming() catch true) {
+                    any_js_calls = true;
+                }
+                _.reclaimPromiseCell();
                 return;
             }
 
@@ -825,6 +867,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     }
                 }
             }
+            _.reclaimPromiseCell();
         }
 
         // This function may be called multiple times
@@ -1180,6 +1223,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             assert(req_ctx.server != null);
             const globalThis = req_ctx.server.?.globalThis;
 
+            if (req_ctx.server == null) return;
+            req_ctx.setAbortHandler();
             if (req_ctx.isAbortedOrEnded()) {
                 stream.cancel(globalThis);
                 req_ctx.response_body_readable_stream_ref.deinit();
@@ -1218,7 +1263,6 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             // Before `pull()` runs, not in `toAsync()`: a `server.stop(true)` inside
             // `pull()` has to reach `onAbort`, and once the stream has completed the
             // response, uWS `markDone()` drops these for good.
-            req_ctx.setAbortHandler();
 
             // We are already corked!
             const assignment_result: JSValue = ResponseStream.JSSink.assignToStream(
@@ -1310,8 +1354,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                                     .global = globalThis,
                                 },
                             };
-                            req_ctx.ref();
-                            const cell = NativePromiseContext.create(globalThis, req_ctx);
+                            const cell = req_ctx.createPromiseCell(globalThis);
                             effective_result.thenWithValue(
                                 globalThis,
                                 cell,
@@ -1351,6 +1394,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 }
             }
 
+            if (req_ctx.server == null) return;
+            req_ctx.setAbortHandler();
             if (req_ctx.isAbortedOrEnded()) {
                 response_stream.detach(globalThis);
                 stream.cancel(globalThis);
@@ -1626,6 +1671,14 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         //
         // - If you return a Promise, we drain the microtask queue once
         // - If you return a streaming Response, we drain the microtask queue (possibly the 2nd time this task!)
+        fn onConnectionClosedDuringDispatch(*_, server: *ThisServer, result: JSValue) {
+            ctxLog("connection closed during dispatch", .{});
+            if (promise := result.asAnyPromise()) {
+                promise.setHandled(server.globalThis.vm());
+            }
+            _.setAbortHandler();
+        }
+
         static fn onResponse(
             ctx: *RequestContext,
             req_ctx: *ThisServer,
@@ -1638,6 +1691,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
             if (ctx.isAbortedOrEnded()) {
                 return;
+            }
+            if (resp := ctx.resp) {
+                if (resp.isClosed()) {
+                    ctx.onConnectionClosedDuringDispatch(req_ctx, response_value);
+                    return;
+                }
             }
             // if you return a Response object or a Promise<Response>
             // but you upgraded the connection to a WebSocket
@@ -1696,8 +1755,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 let p = promise;
                 switch (p.unwrap(vm.global.vm(), .mark_handled)) {
                     .pending => {
-                        ctx.ref();
-                        const cell = NativePromiseContext.create(req_ctx.globalThis, ctx);
+                        const cell = ctx.createPromiseCell(req_ctx.globalThis);
                         response_value.thenWithValue(req_ctx.globalThis, cell, RequestContext.onResolve, RequestContext.onReject) catch {}; // TODO: properly propagate exception upwards
                         return;
                     },
@@ -1800,6 +1858,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             streamLog("onResolveStream", .{});
             const args = callframe.arguments_old(2);
             if (req := NativePromiseContext.take(RequestContext, args.ptr[args.len - 1])) {
+                req.promise_cell = jsc.JSValue.zero;
                 const _guard_req = DerefGuard<@TypeOf(req)>{ val: req };
                 req.handleResolveStream();
             }
@@ -1809,6 +1868,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             streamLog("onRejectStream", .{});
             const args = callframe.arguments_old(2);
             if (req := NativePromiseContext.take(RequestContext, args.ptr[args.len - 1])) {
+                req.promise_cell = jsc.JSValue.zero;
                 const err = args.ptr[0];
                 const _guard_req = DerefGuard<@TypeOf(req)>{ val: req };
                 req.handleRejectStream(globalThis, err);
@@ -2050,7 +2110,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
                     if (lock.onReceiveValue != null || lock.task != null) {
                         // someone else is waiting for the stream or waiting for `onStartStreaming`
-                        const readable = value.toReadableStream(globalThis) catch return; // TODO: properly propagate exception upwards
+                        const readable = value.toReadableStream(globalThis) catch |e| {
+                            _.runErrorHandler(globalThis.takeException(e));
+                            return;
+                        };
                         readable.ensureStillAlive();
                         _.doRenderWithBody(value, null);
                         return;
@@ -2213,6 +2276,15 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                         &.{value},
                     ) catch |err| server.globalThis.takeException(err);
                     const _guard_res = EnsureStillAliveGuard<@TypeOf(result)>{ val: result };
+                    if (_.isAbortedOrEnded() || _.didUpgradeWebSocket()) {
+                        return;
+                    }
+                    if (resp := _.resp) {
+                        if (resp.isClosed()) {
+                            _.onConnectionClosedDuringDispatch(server, result);
+                            return;
+                        }
+                    }
                     if (!result.isEmptyOrUndefinedOrNull()) {
                         if (err := result.toError()) {
                             _.finishRunningErrorHandler(err, status);
@@ -2245,8 +2317,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             switch (p.unwrap(vm.global.vm(), .mark_handled)) {
                 .pending => {
                     ctx.flags.is_error_promise_pending = true;
-                    ctx.ref();
-                    const cell = NativePromiseContext.create(ctx.server.?.globalThis, ctx);
+                    const cell = ctx.createPromiseCell(ctx.server.?.globalThis);
                     promise_js.thenWithValue(
                         ctx.server.?.globalThis,
                         cell,

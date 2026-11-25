@@ -453,6 +453,7 @@ pub fn onClose(conn: *JSMySQLConnection, s: SocketType, code: i32, data: ?*anyop
             var ___guard_deref_moved = false; _ = &___guard_deref_moved;
             defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
             _ = (&_guard_deref);
+            _ = conn.#connection.setSocket(uws.AnySocket{ .SocketTCP = .{ .socket = .detached } });
             _ = conn.fail("Connection closed", error.ConnectionClosed);
     }
 
@@ -464,6 +465,7 @@ pub fn onEnd(conn: *JSMySQLConnection, socket: SocketType) void {
 pub fn onConnectError(conn: *JSMySQLConnection, s: SocketType, code: i32) void {
             _ = &s;
             _ = &code;
+            _ = conn.#connection.setSocket(uws.AnySocket{ .SocketTCP = .{ .socket = .detached } });
             _ = conn.fail("Connection closed", error.ConnectionClosed);
     }
 
@@ -483,7 +485,9 @@ pub fn onData(conn: *JSMySQLConnection, s: SocketType, data: []const u8) void {
             const vm = conn.#vm;
             defer {
             {
-                _ = conn.resetConnectionTimeout();
+                if ((conn.#connection.status == .connected)) {
+                    _ = conn.resetConnectionTimeout();
+                }
                 _ = conn.updateReferenceType();
                 _ = conn.registerAutoFlusher();
             }

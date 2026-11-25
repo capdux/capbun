@@ -419,7 +419,11 @@ pub fn order(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8
             if ((repo_order != .eq)) {
                 return repo_order;
             }
-            return lhs.committish.order((&rhs.committish), lhs_buf, rhs_buf);
+            const committish_order = lhs.committish.order((&rhs.committish), lhs_buf, rhs_buf);
+            if ((committish_order != .eq)) {
+                return committish_order;
+            }
+            return lhs.resolved.order((&rhs.resolved), lhs_buf, rhs_buf);
     }
 
 pub fn count(self: Repository, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {

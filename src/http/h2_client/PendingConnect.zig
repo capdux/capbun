@@ -12,11 +12,12 @@ pub const PendingConnect = @This();
 hostname: []const u8,
 port: u16,
 ssl_config: ?*SSLConfig = null,
+verification: HTTPContextMod.PeerVerification = .none,
 host_header_hash: u64 = 0,
 waiters: std.ArrayListUnmanaged(*bun.http.HTTPClient) = .{},
 
-pub fn matches(self: PendingConnect, hostname: []const u8, port: u16, ssl_config: ?*SSLConfig, host_header_hash: u64) bool {
-        return ((((self.port == port) and (self.ssl_config == ssl_config)) and (self.host_header_hash == host_header_hash)) and bun.strings.eqlLong(self.hostname, hostname, true));
+pub fn matches(self: PendingConnect, hostname: []const u8, port: u16, ssl_config: ?*SSLConfig, verification: HTTPContextMod.PeerVerification, host_header_hash: u64) bool {
+        return (((((self.port == port) and (self.ssl_config == ssl_config)) and verification.allows(self.verification)) and (self.host_header_hash == host_header_hash)) and bun.strings.eqlLong(self.hostname, hostname, true));
 }
 
 pub fn unregisterFrom(self: *PendingConnect, ctx: *HTTPContextTLS) void {

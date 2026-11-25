@@ -277,9 +277,7 @@ pub fn onReadChunk(self: *FileResponseStream, chunk_: []const u8, state_: bun.io
             self.max_size.? = (self.max_size.? -| c.len);
             chunk = c;
             if (((state_ != .eof) and (self.max_size.? == 0))) {
-                if (comptime (!bun.Environment.isPosix)) {
-                    _ = self.reader.pause();
-                }
+                _ = self.reader.pause();
                 _ = self.ref();
                 self.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onEofTask).init(self);
                 _ = self.vm.eventLoop().enqueueTask(jsc.Task.init((&self.eof_task.?)));
@@ -301,9 +299,7 @@ var _bp_guard = self.takeReadRef();
         var ___bp_guard_moved = false; _ = &___bp_guard_moved;
         defer if (!___bp_guard_moved) { ___bp_guard_moved = true; const __T = @TypeOf(_bp_guard); if (@typeInfo(__T) == .optional) { if (_bp_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _bp_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _bp_guard; _drop_val.__cp_deinit(); } };
         _ = self.resp.onWritable(*FileResponseStream, onWritable, self);
-        if (comptime (!bun.Environment.isPosix)) {
-            _ = self.reader.pause();
-        }
+        _ = self.reader.pause();
         return false;
 },
 .want_more => {
@@ -367,6 +363,7 @@ pub fn onWritable(self: *FileResponseStream, _: u64, _: AnyResponse) bool {
         }
         _ = self.resp.timeout(self.idle_timeout);
         _ = self.holdReadRef();
+        _ = self.reader.unpause();
         _ = self.reader.read();
         return true;
 }

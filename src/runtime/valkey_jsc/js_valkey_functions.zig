@@ -1278,6 +1278,15 @@ pub fn subscribe(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
         if ((!handler_callback.isCallable())) {
             return globalObject.throwInvalidArgumentType("subscribe", "listener", "function");
         }
+        if (((!channel_or_many.isString()) and (!channel_or_many.isArray()))) {
+            return globalObject.throwInvalidArgumentType("subscribe", "channel", "string or array");
+        }
+        _ = client.ensureDialing();
+        if (client.client.sendRejection()) |msg| {
+            _ = &msg;
+            const err_val = valkey.ValkeyClient.sendRejectionError(globalObject, msg);
+            return jsc.JSPromise.rejectedPromise(globalObject, err_val).toJS();
+        }
         if (channel_or_many.isArray()) {
             if ((try channel_or_many.getLength(globalObject) == 0)) {
                 return globalObject.throwInvalidArguments("subscribe requires at least one channel", .{});
@@ -1294,16 +1303,12 @@ pub fn subscribe(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
                 _ = try client._subscription_ctx.upsertReceiveHandler(globalObject, channel_arg, handler_callback);
             }
         } else {
-            if (channel_or_many.isString()) {
-                const channel_opt = try fromJS(globalObject, channel_or_many);
-                if ((channel_opt == null)) {
-                    return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
-                }
-                _ = redis_channels.appendAssumeCapacity(channel_opt.?);
-                _ = try client._subscription_ctx.upsertReceiveHandler(globalObject, channel_or_many, handler_callback);
-            } else {
-                return globalObject.throwInvalidArgumentType("subscribe", "channel", "string or array");
+            const channel_opt = try fromJS(globalObject, channel_or_many);
+            if ((channel_opt == null)) {
+                return globalObject.throwInvalidArgumentType("subscribe", "channel", "string");
             }
+            _ = redis_channels.appendAssumeCapacity(channel_opt.?);
+            _ = try client._subscription_ctx.upsertReceiveHandler(globalObject, channel_or_many, handler_callback);
         }
         const command: Command = Command{ .command = "SUBSCRIBE", .args = .{ .args = redis_channels.items }, .meta = .{ .subscription_request = true } };
         const promise = (blk_catch_24: { break :blk_catch_24 ((valkeySend(client, globalObject, callframe.this(), (&command))) catch |e| { _ = &e; _ = try client._subscription_ctx.clearAllReceiveHandlers(globalObject);

@@ -208,6 +208,8 @@ export struct Reader {
 
     @"#auth_plugin": AuthMethod? = null,
     @"#auth_state": AuthState = .pending,
+    @"#auth_switch_count": u8 = 0,
+    @"#full_auth_requested": bool = false,
 
     @"#auth_data": ManagedByteList = ManagedByteList.init(bun.default_allocator),
     @"#database": []const u8 = "",
@@ -704,6 +706,11 @@ export struct Reader {
                                 .continue_auth => {
                                     debug("continue auth", .{});
 
+                                    if (_.@"#full_auth_requested") {
+                                        return error.UnexpectedPacket;
+                                    }
+                                    _.@"#full_auth_requested" = true;
+
                                     if (_.@"#ssl_mode" == .disable) {
                                         _.setStatus(.authentication_awaiting_pk);
                                         debug("awaiting public key", .{});
@@ -749,6 +756,11 @@ export struct Reader {
                 const _guard_auth_switch = DeinitGuard<AuthSwitchRequest>{ ptr: &auth_switch };
 
                 if (auth_method := AuthMethod.fromString(auth_switch.plugin_name.slice())) {
+                    if (_.@"#auth_switch_count" >= 2 || (_.@"#auth_switch_count" > 0 && _.@"#auth_plugin" != null && _.@"#auth_plugin".? == auth_method)) {
+                        debug("rejecting AuthSwitchRequest (count={d})", .{_.@"#auth_switch_count"});
+                        return error.UnexpectedPacket;
+                    }
+                    _.@"#auth_switch_count" += 1;
                     const auth_data = auth_switch.plugin_data.slice();
                     _.@"#auth_plugin" = auth_method;
                     _.@"#auth_data".clearRetainingCapacity();

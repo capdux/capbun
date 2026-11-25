@@ -73,9 +73,8 @@ public:
         if (constructor != newTarget) {
             auto scope = DECLARE_THROW_SCOPE(vm);
 
-            auto* functionGlobalObject = static_cast<Zig::GlobalObject*>(
-                // ShadowRealm functions belong to a different global object.
-                getFunctionRealm(lexicalGlobalObject, newTarget));
+            // ShadowRealm functions belong to a different global object.
+            auto* functionGlobalObject = defaultGlobalObject(getFunctionRealm(lexicalGlobalObject, newTarget));
             RETURN_IF_EXCEPTION(scope, {});
             structure = InternalFunction::createSubclassStructure(lexicalGlobalObject, newTarget, functionGlobalObject->JSBlobStructure());
             RETURN_IF_EXCEPTION(scope, {});

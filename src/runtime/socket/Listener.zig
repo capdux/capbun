@@ -1227,12 +1227,10 @@ else => unreachable,
                 _ = socket.ref();
                 _ = SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
                 socket.flags.allow_half_open = socket_config.allowHalfOpen;
+                _ = socket.poll_ref.ref(handlers.vm);
                 _ = (blk_catch_11: { break :blk_catch_11 ((socket.doConnect(connection)) catch |__ce_11| { _ = &__ce_11; _ = (blk_catch_12: { break :blk_catch_12 ((socket.handleConnectError(@intFromEnum((if ((port == null)) bun.sys.SystemErrno.ENOENT else bun.sys.SystemErrno.ECONNREFUSED)))) catch |__ce_12| { _ = &__ce_12;  }); });
                 _ = socket.deref();
                 return promise_value; }); });
-                if (socket.ref_pollref_on_connect) {
-                    _ = socket.poll_ref.ref(handlers.vm);
-                }
                 return promise_value;
             }
         }

@@ -208,6 +208,7 @@ pub struct WaitingResolveTask {
 pub struct TargetToCheck {
     should_dispatch: bool,
     target: options.Target,
+    loader: options.Loader? = null,
 }
 
 pub struct BundleBakeOptions {
@@ -981,10 +982,12 @@ pub struct BundleV2 {
         }
     }
 
+    /// `loader`: see `requestedFileLoader`.
     fn enqueueFileFromDevServerIncrementalGraphInvalidation(
         *_,
         path_slice: []const u8,
         target: options.Target,
+        requested_loader: options.Loader?,
     )! {
         // TODO: plugins with non-file namespaces
         const entry = _.pathToSourceIndexMap(target).getOrPut(_.allocator(), path_slice)?;
@@ -997,10 +1000,7 @@ pub struct BundleV2 {
         let path = result.path_pair.primary;
         _.incrementScanCounter();
         const source_index = Index.source(_.graph.input_files.len);
-        const loader = brk: {
-            const default = path.loader(&_.transpiler.options.loaders) ?? .file;
-            break :brk default;
-        };
+        const loader = _.requestedFileLoader(&path, requested_loader);
 
         path = bun.handleOom(_.pathWithPrettyInitialized(path, target));
         path.assertPrettyIsValid();
@@ -1042,11 +1042,18 @@ pub struct BundleV2 {
         }
     }
 
+    /// The dev server passes `.html` for the html file of a route: its extension need not be `.html`.
+    fn requestedFileLoader(*_, path: *const Fs.Path, requested_loader: options.Loader?): options.Loader {
+        return requested_loader ?? path.loader(&_.transpiler.options.loaders) ?? .file;
+    }
+
+    /// `loader`: see `requestedFileLoader`.
     fn enqueueEntryItem(
         *_,
         resolve: _resolver.Result,
         is_entry_point: bool,
         target: options.Target,
+        requested_loader: options.Loader?,
     ): !Index.Int? {
         let result = resolve;
         if (result.path() == null) return null;
@@ -1060,10 +1067,7 @@ pub struct BundleV2 {
         _.incrementScanCounter();
         const source_index = Index.source(_.graph.input_files.len);
 
-        const loader = brk: {
-            const loader = path.loader(&_.transpiler.options.loaders) ?? .file;
-            break :brk loader;
-        };
+        const loader = _.requestedFileLoader(path, requested_loader);
 
         path.* = bun.handleOom(_.pathWithPrettyInitialized(path.*, target));
         path.assertPrettyIsValid();
@@ -1311,7 +1315,7 @@ pub struct BundleV2 {
             switch (variant) {
                 .normal => {
                     for (entry_point of data) {
-                        if (_.enqueueEntryPointOnResolvePluginIfNeeded(entry_point, _.transpiler.options.target)) {
+                        if (_.enqueueEntryPointOnResolvePluginIfNeeded(entry_point, _.transpiler.options.target, null)) {
                             continue;
                         }
 
@@ -1322,6 +1326,7 @@ pub struct BundleV2 {
                                     file_map_result,
                                     true,
                                     _.transpiler.options.target,
+                                    null,
                                 )?;
                                 continue;
                             }
@@ -1350,6 +1355,7 @@ pub struct BundleV2 {
 
                                 break :brk main_target;
                             },
+                            null,
                         )?;
                     }
                 },
@@ -1366,16 +1372,17 @@ pub struct BundleV2 {
                         else
                             _.transpiler;
 
+                        const client_loader: options.Loader? = if (flags.html) .html else null;
                         const targets_to_check: [3]TargetToCheck = [
-                            TargetToCheck{ should_dispatch: flags.client, target: .browser },
-                            TargetToCheck{ should_dispatch: flags.server, target: _.transpiler.options.target },
-                            TargetToCheck{ should_dispatch: flags.ssr, target: .bake_server_components_ssr },
+                            TargetToCheck{ should_dispatch: flags.client, target: .browser, loader: client_loader },
+                            TargetToCheck{ should_dispatch: flags.server, target: _.transpiler.options.target, loader: null },
+                            TargetToCheck{ should_dispatch: flags.ssr, target: .bake_server_components_ssr, loader: null },
                         ];
 
                         let any_plugin_matched = false;
                         for (target_info of targets_to_check) {
                             if (target_info.should_dispatch) {
-                                if (_.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target_info.target)) {
+                                if (_.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target_info.target, target_info.loader)) {
                                     any_plugin_matched = true;
                                 }
                             }
@@ -1400,14 +1407,14 @@ pub struct BundleV2 {
                         };
 
                         if (flags.client) {
-                            if (source_index := _.enqueueEntryItem(resolved, true, .browser)?) {
+                            if (source_index := _.enqueueEntryItem(resolved, true, .browser, client_loader)?) {
                                 if (flags.css) {
                                     data.css_data.putNoClobber(_.allocator(), Index.init(source_index), { imported_on_server: false })?;
                                 }
                             }
                         }
-                        if (flags.server) * = _.enqueueEntryItem(resolved, true, _.transpiler.options.target)?;
-                        if (flags.ssr) * = _.enqueueEntryItem(resolved, true, .bake_server_components_ssr)?;
+                        if (flags.server) * = _.enqueueEntryItem(resolved, true, _.transpiler.options.target, null)?;
+                        if (flags.ssr) * = _.enqueueEntryItem(resolved, true, .bake_server_components_ssr, null)?;
                     }
                 },
                 .bake_production => {
@@ -1418,7 +1425,7 @@ pub struct BundleV2 {
                             .server => _.transpiler.options.target,
                         };
 
-                        if (_.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target)) {
+                        if (_.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target, null)) {
                             continue;
                         }
 
@@ -1427,7 +1434,7 @@ pub struct BundleV2 {
                             continue;
 
                         // TODO: wrap client files so the exports arent preserved.
-                        * = _.enqueueEntryItem(resolved, true, target)?;
+                        * = _.enqueueEntryItem(resolved, true, target, null)?;
                     }
                 },
                 else => comptime unreachable,
@@ -2241,7 +2248,7 @@ pub struct BundleV2 {
                         const resolved = bundle.transpilerForTarget(target).resolveEntryPoint(resolve.import_record.specifier) catch {
                             return;
                         };
-                        const source_index = bundle.enqueueEntryItem(resolved, true, target) catch {
+                        const source_index = bundle.enqueueEntryItem(resolved, true, target, resolve.import_record.loader) catch {
                             return;
                         };
 
@@ -2303,7 +2310,11 @@ pub struct BundleV2 {
                         existing.value_ptr.* = source_index.get();
                         out_source_index = source_index;
                         bundle.graph.ast.append(bundle.allocator(), JSAst.empty) catch unreachable;
-                        const loader = path.loader(&bundle.transpiler.options.loaders) ?? options.Loader.file;
+                        // A file that a plugin resolved the record to instead keeps its own loader.
+                        const loader = bundle.requestedFileLoader(
+                            &path,
+                            if (std.mem.eql(u8, path.text, resolve.import_record.specifier)) resolve.import_record.loader else null,
+                        );
 
                         bundle.graph.input_files.append(bundle.allocator(), {
                             source: {
@@ -2918,10 +2929,12 @@ pub struct BundleV2 {
         return false;
     }
 
+    /// `loader`: see `requestedFileLoader`.
     fn enqueueEntryPointOnResolvePluginIfNeeded(
         *_,
         entry_point: []const u8,
         target: options.Target,
+        loader: options.Loader?,
     ): bool {
         if (plugins := _.plugins) {
             let temp_path = Fs.Path.init(entry_point);
@@ -2941,6 +2954,7 @@ pub struct BundleV2 {
                     import_record_index: 0,
                     range: Logger.Range.None,
                     original_target: target,
+                    loader: loader,
                 });
 
                 resolve.dispatch();

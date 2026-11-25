@@ -235,7 +235,7 @@ pub fn format(self: SemverStringStorePathFormatter, writer: *std.Io.Writer) std.
             for (cp_iter_slice(strSlice(self.str, self.buf))) |c| {
                 _ = &c;
                 const n: u8 = (switch (c) {
-'/', '\\', ':', '#' => (if (comptime @typeInfo(@TypeOf(43)) == .@"enum") cp_cast_int(u8, @intFromEnum(43)) else cp_cast_int(u8, 43)),
+'/', '\\', ':', '#', '?' => (if (comptime @typeInfo(@TypeOf(43)) == .@"enum") cp_cast_int(u8, @intFromEnum(43)) else cp_cast_int(u8, 43)),
 else => c,
 });
                 _ = try writer.writeByte(n);

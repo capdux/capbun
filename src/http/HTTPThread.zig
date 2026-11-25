@@ -327,9 +327,6 @@ pub fn context(self: *HTTPThread, comptime is_ssl: bool) if (is_ssl) *HTTPContex
 }
 
 pub fn connect(self: *HTTPThread, comptime is_ssl: bool, client: *bun.http.HTTPClient) !?NewHTTPContext(is_ssl).HTTPSocket {
-        if ((client.unix_socket_path.length() > 0)) {
-            return try self.context(is_ssl).connectSocket(client, client.unix_socket_path.slice());
-        }
         if (is_ssl) {
             if (client.tls_props) |tls| {
                 _ = &tls;
@@ -340,12 +337,7 @@ pub fn connect(self: *HTTPThread, comptime is_ssl: bool, client: *bun.http.HTTPC
                         _ = &entry;
                         entry.last_used_ns = self.timer.read();
                         _ = client.setCustomSslCtx(entry.ctx);
-                        if (client.http_proxy) |url| {
-                            _ = &url;
-                            return try entry.ctx.connect(client, url.hostname, url.getPortAuto());
-                        } else {
-                            return try entry.ctx.connect(client, client.url.hostname, client.url.getPortAuto());
-                        }
+                        return HTTPThread.dial(is_ssl, entry.ctx, client);
                     }
                     var custom_context = try bun.default_allocator.create(HTTPContextTLS);
                     _ = &custom_context;
@@ -358,27 +350,27 @@ pub fn connect(self: *HTTPThread, comptime is_ssl: bool, client: *bun.http.HTTPC
                         _ = HTTPThread.evictOldestSslContext();
                     }
                     _ = client.setCustomSslCtx(custom_context);
-                    if (client.http_proxy) |url| {
-                        _ = &url;
-                        if ((((url.protocol.len == 0) or bun.strings.eqlComptime(url.protocol, "https")) or bun.strings.eqlComptime(url.protocol, "http"))) {
-                            return try custom_context.connect(client, url.hostname, url.getPortAuto());
-                        }
-                        return error.UnsupportedProxyProtocol;
-                    }
-                    return try custom_context.connect(client, client.url.hostname, client.url.getPortAuto());
+                    return HTTPThread.dial(is_ssl, custom_context, client);
                 }
             }
+        }
+        return HTTPThread.dial(is_ssl, self.context(is_ssl), client);
+}
+
+pub fn dial(comptime is_ssl: bool, ctx: *NewHTTPContext(is_ssl), client: *bun.http.HTTPClient) !?NewHTTPContext(is_ssl).HTTPSocket {
+        if ((client.unix_socket_path.length() > 0)) {
+            return try ctx.connectSocket(client, client.unix_socket_path.slice());
         }
         if (client.http_proxy) |url| {
             _ = &url;
             if ((url.href.len > 0)) {
                 if ((((url.protocol.len == 0) or bun.strings.eqlComptime(url.protocol, "https")) or bun.strings.eqlComptime(url.protocol, "http"))) {
-                    return try self.context(is_ssl).connect(client, url.hostname, url.getPortAuto());
+                    return try ctx.connect(client, url.hostname, url.getPortAuto());
                 }
                 return error.UnsupportedProxyProtocol;
             }
         }
-        return try self.context(is_ssl).connect(client, client.url.hostname, client.url.getPortAuto());
+        return try ctx.connect(client, client.url.hostname, client.url.getPortAuto());
 }
 
 pub fn evictStaleSslContexts(self: *HTTPThread) void {

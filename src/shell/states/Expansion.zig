@@ -464,33 +464,48 @@ var arena_ = Arena.init(self.base.allocator());
 });
             _ = &lexer_output;
             const expansion_count = Braces.calculateExpandedAmount(lexer_output.tokens.items[0..]);
-            const stack_max = (comptime 16);
-            comptime {
-            _ = assert(((@sizeOf(ManagedU8Slice) * stack_max) <= 256));
+            if ((expansion_count == 0)) {
+                var copy = bun.handleOom(std.array_list.Managed(u8).initCapacity(self.base.allocator(), (self.current_out.items.len + 1)));
+                _ = &copy;
+                _ = copy.appendSliceAssumeCapacity(self.current_out.items);
+                _ = copy.appendAssumeCapacity(0);
+                _ = self.outEnsureUnusedCapacity(1);
+                switch (self.out.pushResult((&copy))) {
+.copied => {
+_ = copy.deinit();
+},
+.moved => {
+_ = copy.clearRetainingCapacity();
+},
+}
+            } else {
+                const stack_max = (comptime 16);
+                comptime {
+                _ = assert(((@sizeOf(ManagedU8Slice) * stack_max) <= 256));
 
 }
-            var maybe_stack_alloc = std.heap.stackFallback((@sizeOf(ManagedU8Slice) * stack_max), arena_allocator);
-            _ = &maybe_stack_alloc;
-            const stack_alloc = maybe_stack_alloc.get();
-            var expanded_strings = bun.handleOom(stack_alloc.alloc(std.array_list.Managed(u8), expansion_count));
-            _ = &expanded_strings;
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_0 = expansion_count;
-                while (i < __end_0) : (i += 1) {
-                    expanded_strings[cp_cast_int(usize, i)] = std.array_list.Managed(u8).init(self.base.allocator());
+                var maybe_stack_alloc = std.heap.stackFallback((@sizeOf(ManagedU8Slice) * stack_max), arena_allocator);
+                _ = &maybe_stack_alloc;
+                const stack_alloc = maybe_stack_alloc.get();
+                var expanded_strings = bun.handleOom(stack_alloc.alloc(std.array_list.Managed(u8), expansion_count));
+                _ = &expanded_strings;
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = expansion_count;
+                    while (i < __end_0) : (i += 1) {
+                        expanded_strings[cp_cast_int(usize, i)] = std.array_list.Managed(u8).init(self.base.allocator());
+                    }
                 }
-            }
-            _ = (blk_catch_1: { break :blk_catch_1 ((Braces.expand(arena_allocator, lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnexpectedToken)) {  break :__sw_blk_1 cp_val(std.debug.panic("unexpected error from Braces.expand: UnexpectedToken", .{})); } }  unreachable; }); }); });
-            _ = self.outEnsureUnusedCapacity(expansion_count);
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_2 = expansion_count;
-                while (i < __end_2) : (i += 1) {
-                    _ = bun.handleOom(expanded_strings[@as(usize, @intCast(i))].append(0));
-                    switch (self.out.pushResult((&expanded_strings[@as(usize, @intCast(i))]))) {
+                _ = (blk_catch_1: { break :blk_catch_1 ((Braces.expand(arena_allocator, lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnexpectedToken)) {  break :__sw_blk_1 cp_val(std.debug.panic("unexpected error from Braces.expand: UnexpectedToken", .{})); } }  unreachable; }); }); });
+                _ = self.outEnsureUnusedCapacity(expansion_count);
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_2 = expansion_count;
+                    while (i < __end_2) : (i += 1) {
+                        _ = bun.handleOom(expanded_strings[@as(usize, @intCast(i))].append(0));
+                        switch (self.out.pushResult((&expanded_strings[@as(usize, @intCast(i))]))) {
 .copied => {
 _ = expanded_strings[@as(usize, @intCast(i))].deinit();
 },
@@ -498,6 +513,7 @@ _ = expanded_strings[@as(usize, @intCast(i))].deinit();
 _ = expanded_strings[@as(usize, @intCast(i))].clearRetainingCapacity();
 },
 }
+                    }
                 }
             }
             if (self.node.has_glob_expansion()) {

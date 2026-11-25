@@ -664,7 +664,11 @@ if ((self.base.eventLoop() != .js)) {
                     _ = &buf;
                     const flags = self.node.redirect;
                     if (flags.stdin) {
-                        spawn_args.stdio[cp_cast_int(usize, stdin_no)] = .{ .array_buffer = .{ .array_buffer = buf, .held = .create((if (@typeInfo(@TypeOf(buf)) == .@"enum") @intFromEnum(buf) else buf.value), global) } };
+                        if ((buf.byteSlice().len == 0)) {
+                            spawn_args.stdio[cp_cast_int(usize, stdin_no)] = .ignore;
+                        } else {
+                            spawn_args.stdio[cp_cast_int(usize, stdin_no)] = .{ .array_buffer = .{ .array_buffer = buf, .held = .create((if (@typeInfo(@TypeOf(buf)) == .@"enum") @intFromEnum(buf) else buf.value), global) } };
+                        }
                     }
                     if (flags.duplicate_out) {
                         spawn_args.stdio[cp_cast_int(usize, stdout_no)] = .{ .array_buffer = .{ .array_buffer = buf, .held = .create((if (@typeInfo(@TypeOf(buf)) == .@"enum") @intFromEnum(buf) else buf.value), global) } };

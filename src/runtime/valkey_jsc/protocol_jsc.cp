@@ -92,7 +92,6 @@ pub fn respValueToJSWithOptions(resp_val: *RESPValue, globalObject: *jsc.JSGloba
         .Null => return jsc.JSValue.jsNull(),
         .Double => |d| return jsc.JSValue.jsNumber(d),
         .Boolean => |b| return jsc.JSValue.jsBoolean(b),
-        .BlobError => |str| return valkeyErrorToJS(globalObject, str, protocol.RedisError.InvalidBlobError),
         .VerbatimString => |*verbatim| return valkeyStrToJSValue(globalObject, &verbatim.content, &options),
         .Map => |entries| {
             let js_obj = jsc.JSValue.createEmptyObjectWithNullPrototype(globalObject);

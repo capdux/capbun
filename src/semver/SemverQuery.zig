@@ -383,21 +383,21 @@ var range = Range{  };
                         range.left.version.tag = version.tag;
                         if ((major == 0)) {
                             if ((minor == 0)) {
-                                range.right.version.patch = (patch +| 1);
+                                range.right = Range.Comparator.ltNextPatch(0, 0, patch);
                             } else {
-                                range.right.version.minor = (minor +| 1);
+                                range.right = Range.Comparator.ltNextMinor(0, minor);
                             }
                             done_caret = true;
                         }
                     } else {
                         if ((major == 0)) {
-                            range.right.version.minor = (minor +| 1);
+                            range.right = Range.Comparator.ltNextMinor(0, minor);
                             done_caret = true;
                         }
                     }
                 }
                 if ((!done_caret)) {
-                    range.right.version.major = (major +| 1);
+                    range.right = Range.Comparator.ltNextMajor(major);
                 }
             }
             return range;
@@ -408,7 +408,6 @@ var range = Range{  };
             if (version.major) |major| {
                 _ = &major;
                 range.left = .{ .op = .gte, .version = .{ .major = major } };
-                range.right = .{ .op = .lt };
                 if (version.minor) |minor| {
                     _ = &minor;
                     range.left.version.minor = minor;
@@ -417,10 +416,9 @@ var range = Range{  };
                         range.left.version.patch = patch;
                         range.left.version.tag = version.tag;
                     }
-                    range.right.version.major = major;
-                    range.right.version.minor = (minor +| 1);
+                    range.right = Range.Comparator.ltNextMinor(major, minor);
                 } else {
-                    range.right.version.major = (major +| 1);
+                    range.right = Range.Comparator.ltNextMajor(major);
                 }
             }
             return range;
@@ -661,17 +659,27 @@ else => false,
 .major => break :brk Range{ .left = .{ .op = .gte, .version = version } },
 .minor => {
 {
-                        second_version.major = (second_version.major +| 1);
-                        second_version.minor = 0;
-                        second_version.patch = 0;
-                        break :brk Range{ .left = .{ .op = .gte, .version = version }, .right = .{ .op = .lt, .version = second_version } };
+                        var right_comp = Range.Comparator.ltNextMajor(second_version.major);
+                        _ = &right_comp;
+                        if ((second_version.major < std.math.maxInt(u64))) {
+                            second_version.major = (second_version.major + 1);
+                            second_version.minor = 0;
+                            second_version.patch = 0;
+                            right_comp = Range.Comparator{ .op = .lt, .version = second_version };
+                        }
+                        break :brk Range{ .left = .{ .op = .gte, .version = version }, .right = right_comp };
                     }
 },
 .patch => {
 {
-                        second_version.minor = (second_version.minor +| 1);
-                        second_version.patch = 0;
-                        break :brk Range{ .left = .{ .op = .gte, .version = version }, .right = .{ .op = .lt, .version = second_version } };
+                        var right_comp = Range.Comparator.ltNextMinor(second_version.major, second_version.minor);
+                        _ = &right_comp;
+                        if ((second_version.minor < std.math.maxInt(u64))) {
+                            second_version.minor = (second_version.minor + 1);
+                            second_version.patch = 0;
+                            right_comp = Range.Comparator{ .op = .lt, .version = second_version };
+                        }
+                        break :brk Range{ .left = .{ .op = .gte, .version = version }, .right = right_comp };
                     }
 },
 .none => break :brk Range{ .left = .{ .op = .gte, .version = version }, .right = .{ .op = .lte, .version = second_version } },

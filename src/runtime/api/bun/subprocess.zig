@@ -138,7 +138,7 @@ pub const Flags = packed struct(u8) {
     deref_on_stdin_destroyed: bool = false,
     is_stdin_a_readable_stream: bool = false,
     owns_terminal: bool = false,
-    _: u1 = 0,
+    abort_signal_killed: bool = false,
 };
 
 pub const WaitThreadPoll = struct {
@@ -726,6 +726,9 @@ pub fn onProcessExit(client: *Subprocess, process: *Process, status: bun.spawn.S
         }
         }
         const loop = jsc_vm.eventLoop();
+        if ((((client.event_loop_timer.state == .FIRED) or (client.exited_due_to_maxbuf != null)) or client.flags.abort_signal_killed)) {
+            _ = client.closeReadablePipes();
+        }
         if ((!is_sync)) {
             if ((this_jsvalue != .zero)) {
                 if (client.consumeExitedPromise(this_jsvalue, globalThis)) |promise| {
@@ -1009,11 +1012,15 @@ pub inline fn assertStdioResult(result: StdioResult) void {
 }
 
 pub fn onAbortSignal(subprocess_ctx: ?*anyopaque, _: jsc.JSValue) callconv(.c) void {
-        const subproc: *Subprocess = (blk: {
+        var subproc: *Subprocess = (blk: {
         break :blk @ptrCast(@alignCast(subprocess_ctx.?));
 
 });
+        _ = &subproc;
         _ = subproc.clearAbortSignal();
+        if ((!subproc.hasExited())) {
+            subproc.flags.abort_signal_killed = true;
+        }
         _ = subproc.tryKill(subproc.killSignal);
 }
 

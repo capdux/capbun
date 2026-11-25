@@ -1066,12 +1066,37 @@ fn PkgMap(comptime T: type): type {
         }
 
         fn findResolution(pkg_path: string, dep: *const Dependency, string_buf: string, path_buf: []u8): T!ResolveError {
+            return _.findResolutionImpl(pkg_path, dep, string_buf, path_buf, null);
+        }
+
+        /// Like `findResolution`, but stops the upward walk one level above a
+        /// bundled package, mirroring `Tree.hoistDependency`, which never
+        /// searches past a bundled dependency's hoist root when it re-derives
+        /// optional peer edges (#37346).
+        fn findResolutionBoundedAtBundle(
+            pkg_path: string,
+            dep: *const Dependency,
+            string_buf: string,
+            path_buf: []u8,
+            bundled_pkgs: *const PkgPathSet,
+        ): T!ResolveError {
+            return _.findResolutionImpl(pkg_path, dep, string_buf, path_buf, bundled_pkgs);
+        }
+
+        fn findResolutionImpl(
+            pkg_path: string,
+            dep: *const Dependency,
+            string_buf: string,
+            path_buf: []u8,
+            bundled_pkgs: (*const PkgPathSet)?,
+        ): T!ResolveError {
             const dep_name = dep.name.slice(string_buf);
 
             @memcpy(path_buf[0..pkg_path.len], pkg_path);
             path_buf[pkg_path.len] = '/';
             let offset = pkg_path.len + 1;
 
+            let at_bundle_root = false;
             let valid = true;
             while (valid) {
                 @memcpy(path_buf[offset..][0..dep_name.len], dep_name);
@@ -1081,8 +1106,12 @@ fn PkgMap(comptime T: type): type {
                     return entry;
                 }
 
-                if (offset == 0) {
+                if (offset == 0 || at_bundle_root) {
                     return error.Unresolvable;
+                }
+
+                if (bp := bundled_pkgs) {
+                    at_bundle_root = bp.contains(path_buf[0 .. offset - 1]);
                 }
 
                 const slash_opt = strings.lastIndexOfChar(path_buf[0 .. offset - 1], '/');
@@ -2045,7 +2074,7 @@ pub fn parseIntoBinaryLockfile(
                 else
                     null) ?? pkg_map.get(dep.name.slice(lockfile.buffers.string_bytes.items));
                 if (res_id_opt == null) {
-                    if (dep.behavior.optional) {
+                    if (mayStayUnresolved(dep)) {
                         continue;
                     }
                     dependencyResolutionFailure(dep, null, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc)?;
@@ -2093,7 +2122,7 @@ pub fn parseIntoBinaryLockfile(
                     else
                         null) ?? pkg_map.get(workspace_node_modules) ?? pkg_map.get(dep_name);
                     if (res_id_opt == null) {
-                        if (dep.behavior.optional) {
+                        if (mayStayUnresolved(dep)) {
                             continue;
                         }
                         dependencyResolutionFailure(dep, workspace_name, allocator, lockfile.buffers.string_bytes.items, source, log, root_pkg_exr.loc)?;
@@ -2142,12 +2171,15 @@ pub fn parseIntoBinaryLockfile(
                 const res_id = (if (isDeferredPeer(dep, lockfile.buffers.string_bytes.items))
                     resolvePeerDepVersionBased(dep, &lockfile.package_index, &lockfile.overrides, pkg_resolutions, lockfile.buffers.string_bytes.items)
                 else
-                    null) ?? (pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch e => {
+                    null) ?? ((if (dep.behavior.isOptionalPeer())
+                    pkg_map.findResolutionBoundedAtBundle(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf, &bundled_pkgs)
+                else
+                    pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf)) catch e => {
                     if (e == error.InvalidPackageKey) {
                         log.addError(source, key.loc, "Invalid package path")?;
                         return error.InvalidPackageKey;
                     } else if (e == error.Unresolvable) {
-                        if (dep.behavior.optional) {
+                        if (mayStayUnresolved(dep)) {
                             continue;
                         }
                         dependencyResolutionFailure(dep, pkg_path, allocator, lockfile.buffers.string_bytes.items, source, log, key.loc)?;
@@ -2168,6 +2200,11 @@ pub fn parseIntoBinaryLockfile(
             }
         };
     }
+}
+
+/// Edges a fresh install may itself leave unresolved, so bun.lock lists them without a package.
+fn mayStayUnresolved(dep: *const Dependency): bool {
+    return dep.behavior.optional || dep.behavior.peer;
 }
 
 fn isDeferredPeer(dep: *const Dependency, string_buf: string): bool {

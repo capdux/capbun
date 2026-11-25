@@ -76,6 +76,15 @@ pub const URL_module = @import("../../jsc/URL.zig");
 pub const protocol = @import("../../valkey/valkey_protocol.zig");
 pub const fns = @import("./js_valkey_functions.zig");
 pub const bun = @import("bun");
+pub const DeferredClose = enum {
+    socket,
+    without_socket,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -246,7 +255,6 @@ pub const DisconnectDerefGuard = struct {
 pub fn __cp_deinit(self: *DisconnectDerefGuard) void {
         if (self.__cp_dropped) return;
         self.__cp_dropped = true;
-            self.client.client.status = .disconnected;
             _ = self.client.updatePollRef();
             _ = self.client.deref();
     }
@@ -254,6 +262,7 @@ pub fn __cp_deinit(self: *DisconnectDerefGuard) void {
 
 pub const CloseSocketHolder = struct {
     ctx: *JSValkeyClient,
+    what: DeferredClose = .socket,
     task: jsc.AnyTask,
 
 pub fn run(self: *CloseSocketHolder) void {
@@ -262,7 +271,18 @@ pub fn run(self: *CloseSocketHolder) void {
             _ = &_destroy_guard;
             var ___destroy_guard_moved = false; _ = &___destroy_guard_moved;
             defer if (!___destroy_guard_moved) { ___destroy_guard_moved = true; const __T = @TypeOf(_destroy_guard); if (@typeInfo(__T) == .optional) { if (_destroy_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _destroy_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _destroy_guard; _drop_val.__cp_deinit(); } };
-            _ = self.ctx.client.close();
+            switch (self.what) {
+.socket => {
+_ = self.ctx.client.close();
+},
+.without_socket => {
+if (self.ctx.client.socket.isClosed()) {
+                self.ctx.client.status = .disconnected;
+                _ = (blk_catch_0: { break :blk_catch_0 ((self.ctx.client.onClose()) catch |__ce_0| { _ = &__ce_0;  }); });
+                _ = self.ctx.updatePollRef();
+            }
+},
+}
             _ = self.ctx.deref();
     }
 };
@@ -492,7 +512,7 @@ pub fn createNoJsNoPubsub(globalObject: *jsc.JSGlobalObject, arguments: []const 
                 break :get_url parsed_opt.?;
             }
             const corrected_url = get_url_slice: {
-            const written = (blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrintZ((&fallback_url_buf), "valkey://{s}", .{ url_byte_slice })) catch |__ce_1| { _ = &__ce_1; return globalObject.throwInvalidArguments("URL is too long.", .{}); }); });
+            const written = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrintZ((&fallback_url_buf), "valkey://{s}", .{ url_byte_slice })) catch |__ce_2| { _ = &__ce_2; return globalObject.throwInvalidArguments("URL is too long.", .{}); }); });
             break :get_url_slice fallback_url_buf[0..written.len];
 };
             const parsed_opt = URL.fromUTF8(corrected_url);
@@ -621,7 +641,7 @@ else => brk: {
                 hostname = b.append(hostname_slice);
                 _ = b.moveToSlice((&connection_strings));
             }
-            const database = (if ((pathname_utf8.slice().len > 1)) (blk_catch_2: { break :blk_catch_2 ((std.fmt.parseInt(u32, pathname_utf8.slice()[1..], 10)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 0; }); }) else 0);
+            const database = (if ((pathname_utf8.slice().len > 1)) (blk_catch_3: { break :blk_catch_3 ((std.fmt.parseInt(u32, pathname_utf8.slice()[1..], 10)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 0; }); }) else 0);
             bun.analytics.Features.valkey = (bun.analytics.Features.valkey + 1);
             _cs_guard.active = false;
             return JSValkeyClient.new(.{ .ref_count = .init(), ._subscription_ctx = undefined, .client = .{ .vm = vm, .address = (switch (uri) {
@@ -652,7 +672,7 @@ pub fn cloneWithoutConnecting(self: *JSValkeyClient, globalObject: *jsc.JSGlobal
             return JSValkeyClient.new(.{ .ref_count = .init(), ._subscription_ctx = undefined, .client = .{ .vm = vm, .address = (switch (self.client.protocol) {
 .standalone_unix, .standalone_tls_unix => .{ .unix = hostname },
 else => .{ .host = .{ .host = hostname, .port = self.client.address.host.port } },
-}), .protocol = self.client.protocol, .username = username, .password = password, .in_flight = .init(new_alloc), .queue = .init(new_alloc), .status = .disconnected, .connection_strings = connection_strings_copy, .socket = .{ .SocketTCP = .{ .socket = .detached } }, .tls = tls, .database = self.client.database, .allocator = new_alloc, .flags = .{ .is_authenticated = false, .is_manually_closed = self.client.flags.is_manually_closed, .enable_offline_queue = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_offline_queue else self.client.flags.enable_offline_queue), .needs_to_open_socket = true, .enable_auto_reconnect = self.client.flags.enable_auto_reconnect, .is_reconnecting = false, .enable_auto_pipelining = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_auto_pipelining else self.client.flags.enable_auto_pipelining), .finalized = self.client.flags.finalized }, .max_retries = self.client.max_retries, .connection_timeout_ms = self.client.connection_timeout_ms, .idle_timeout_interval_ms = self.client.idle_timeout_interval_ms }, .globalObject = globalObject });
+}), .protocol = self.client.protocol, .username = username, .password = password, .in_flight = .init(new_alloc), .queue = .init(new_alloc), .status = .disconnected, .connection_strings = connection_strings_copy, .socket = .{ .SocketTCP = .{ .socket = .detached } }, .tls = tls, .database = self.client.database, .allocator = new_alloc, .flags = .{ .is_authenticated = false, .enable_offline_queue = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_offline_queue else self.client.flags.enable_offline_queue), .needs_to_open_socket = true, .enable_auto_reconnect = self.client.flags.enable_auto_reconnect, .is_reconnecting = false, .enable_auto_pipelining = (if (self._subscription_ctx.is_subscriber) self._subscription_ctx.original_enable_auto_pipelining else self.client.flags.enable_auto_pipelining) }, .max_retries = self.client.max_retries, .connection_timeout_ms = self.client.connection_timeout_ms, .idle_timeout_interval_ms = self.client.idle_timeout_interval_ms }, .globalObject = globalObject });
     }
 
 pub fn addSubscription(self: *JSValkeyClient) void {
@@ -674,13 +694,13 @@ pub fn addSubscription(self: *JSValkeyClient) void {
     }
 
 pub fn removeSubscription(self: *JSValkeyClient) void {
-            _ = debug("removeSubscription: entering, has subscriptions: {}", .{ (blk_catch_3: { break :blk_catch_3 ((self._subscription_ctx.hasSubscriptions(self.globalObject)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 false; }); }) });
+            _ = debug("removeSubscription: entering, has subscriptions: {}", .{ (blk_catch_4: { break :blk_catch_4 ((self._subscription_ctx.hasSubscriptions(self.globalObject)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 false; }); }) });
             _ = self.ref();
             var _deref_guard = DerefGuard(*JSValkeyClient){ .val = self };
             _ = &_deref_guard;
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
-            if ((!(blk_catch_4: { break :blk_catch_4 ((self._subscription_ctx.hasSubscriptions(self.globalObject)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 false; }); }))) {
+            if ((!(blk_catch_5: { break :blk_catch_5 ((self._subscription_ctx.hasSubscriptions(self.globalObject)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 false; }); }))) {
                 self.client.flags.enable_offline_queue = self._subscription_ctx.original_enable_offline_queue;
                 self.client.flags.enable_auto_pipelining = self._subscription_ctx.original_enable_auto_pipelining;
                 self._subscription_ctx.is_subscriber = false;
@@ -731,16 +751,8 @@ pub fn doConnect(self: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, this_
             defer if (!___poll_guard_moved) { ___poll_guard_moved = true; const __T = @TypeOf(_poll_guard); if (@typeInfo(__T) == .optional) { if (_poll_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _poll_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _poll_guard; _drop_val.__cp_deinit(); } };
             if (self.client.flags.needs_to_open_socket) {
                 _ = self.poll_ref.ref(self.client.vm);
-                _ = (blk_catch_5: { break :blk_catch_5 ((self.connect()) catch |e| { _ = &e; _ = self.poll_ref.unref(self.client.vm);
-                self.client.flags.needs_to_open_socket = true;
-                const err_value = globalObject.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, " {s} connecting to Valkey", .{ @errorName(e) }).toJS();
-                const event_loop = self.client.vm.eventLoop();
-                _ = event_loop.enter();
-                var _exit_guard = ExitGuard(@TypeOf(event_loop)){ .val = event_loop };
-                _ = &_exit_guard;
-                var ___exit_guard_moved = false; _ = &___exit_guard_moved;
-                defer if (!___exit_guard_moved) { ___exit_guard_moved = true; const __T = @TypeOf(_exit_guard); if (@typeInfo(__T) == .optional) { if (_exit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _exit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _exit_guard; _drop_val.__cp_deinit(); } };
-                _ = try promise_ptr.reject(globalObject, err_value);
+                _ = (blk_catch_6: { break :blk_catch_6 ((self.connect()) catch |e| { _ = &e; _ = debug("first dial failed before a socket was opened: {s}", .{ @errorName(e) });
+                _ = self.closeWithoutSocketNextTick();
                 return promise; }); });
                 _ = self.resetConnectionTimeout();
                 return promise;
@@ -763,11 +775,19 @@ pub fn jsConnect(self: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
     }
 
 pub fn jsDisconnect(self: *JSValkeyClient, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
-            if ((self.client.status == .disconnected)) {
+            if (((self.client.status == .disconnected) and (!self.client.flags.is_reconnecting))) {
                 return JSValue.js_undefined;
             }
             _ = self.client.disconnect();
             return JSValue.js_undefined;
+    }
+
+pub fn cancelReconnect(self: *JSValkeyClient) void {
+            _ = bun.debugAssert((self.client.status == .disconnected));
+            if ((self.reconnect_timer.state == .ACTIVE)) {
+                _ = self.removeTimer((&self.reconnect_timer));
+            }
+            _ = (blk_catch_7: { break :blk_catch_7 ((self.client.onClose()) catch |__ce_7| { _ = &__ce_7;  }); });
     }
 
 pub fn getOnConnect(self: *JSValkeyClient, thisValue: JSValue, _: *jsc.JSGlobalObject) JSValue {
@@ -861,11 +881,11 @@ pub fn onConnectionTimeout(self: *JSValkeyClient) void {
             switch (self.client.status) {
 .connected => {
 const msg = ((std.fmt.bufPrintZ((&buf), "Idle timeout reached after {d}ms", .{ self.client.idle_timeout_interval_ms })) catch unreachable);
-            _ = (blk_catch_7: { break :blk_catch_7 ((self.clientFail(msg, protocol.RedisError.IdleTimeout)) catch |__ce_7| { _ = &__ce_7;  }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((self.clientFail(msg, protocol.RedisError.IdleTimeout)) catch |__ce_9| { _ = &__ce_9;  }); });
 },
 .disconnected, .connecting => {
 const msg = ((std.fmt.bufPrintZ((&buf), "Connection timeout reached after {d}ms", .{ self.client.connection_timeout_ms })) catch unreachable);
-            _ = (blk_catch_9: { break :blk_catch_9 ((self.clientFail(msg, protocol.RedisError.ConnectionTimeout)) catch |__ce_9| { _ = &__ce_9;  }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((self.clientFail(msg, protocol.RedisError.ConnectionTimeout)) catch |__ce_11| { _ = &__ce_11;  }); });
 },
 }
     }
@@ -882,7 +902,13 @@ pub fn onReconnectTimer(self: *JSValkeyClient) void {
     }
 
 pub fn reconnect(self: *JSValkeyClient) void {
+            if ((self.reconnect_timer.state == .ACTIVE)) {
+                _ = self.removeTimer((&self.reconnect_timer));
+            }
             if ((!self.client.flags.is_reconnecting)) {
+                return;
+            }
+            if (((self.client.status != .disconnected) or (!self.client.socket.isClosed()))) {
                 return;
             }
             const vm = self.client.vm;
@@ -898,8 +924,8 @@ pub fn reconnect(self: *JSValkeyClient) void {
             _ = self.poll_ref.disable();
             self.poll_ref = .{};
             _ = self.poll_ref.ref(vm);
-            _ = (blk_catch_10: { break :blk_catch_10 ((self.connect()) catch |e| { _ = &e; _ = self.failWithJSValue(self.globalObject.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, "{s} reconnecting", .{ @errorName(e) }).toJS());
-            _ = self.poll_ref.disable();
+            _ = (blk_catch_12: { break :blk_catch_12 ((self.connect()) catch |e| { _ = &e; _ = debug("reconnect failed before a socket was opened: {s}", .{ @errorName(e) });
+            _ = self.closeWithoutSocketNextTick();
             return; }); });
             _ = self.resetConnectionTimeout();
     }
@@ -920,8 +946,8 @@ pub fn onValkeyConnect(self: *JSValkeyClient, value: *protocol.RESPValue) bun.JS
             defer if (!___exit_guard_moved) { ___exit_guard_moved = true; const __T = @TypeOf(_exit_guard); if (@typeInfo(__T) == .optional) { if (_exit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _exit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _exit_guard; _drop_val.__cp_deinit(); } };
             if (self.this_value.tryGet()) |this_value| {
                 _ = &this_value;
-                const hello_value: JSValue = (blk_catch_11: { break :blk_catch_11 ((value.toJS(globalObject)) catch |e| { _ = &e; _ = globalObject.takeException(e);
-                break :blk_catch_11 .js_undefined; }); });
+                const hello_value: JSValue = (blk_catch_13: { break :blk_catch_13 ((value.toJS(globalObject)) catch |e| { _ = &e; _ = globalObject.takeException(e);
+                break :blk_catch_13 .js_undefined; }); });
                 _ = js.helloSetCached(this_value, globalObject, hello_value);
                 if (js.onconnectGetCached(this_value)) |on_connect| {
                     _ = &on_connect;
@@ -992,16 +1018,19 @@ pub fn onValkeyMessage(self: *JSValkeyClient, value: []protocol.RESPValue) void 
                 _ = debug("Message array has insufficient elements: {}", .{ value.len });
                 return;
             }
-            const channel_value = (blk_catch_12: { break :blk_catch_12 ((value[0].toJS(globalObject)) catch |__ce_12| { _ = &__ce_12; _ = debug("Failed to convert channel to JS", .{});
+            const channel_value = (blk_catch_14: { break :blk_catch_14 ((value[0].toJS(globalObject)) catch |__ce_14| { _ = &__ce_14; _ = debug("Failed to convert channel to JS", .{});
             return; }); });
-            const message_value = (blk_catch_13: { break :blk_catch_13 ((value[1].toJS(globalObject)) catch |__ce_13| { _ = &__ce_13; _ = debug("Failed to convert message to JS", .{});
+            const message_value = (blk_catch_15: { break :blk_catch_15 ((value[1].toJS(globalObject)) catch |__ce_15| { _ = &__ce_15; _ = debug("Failed to convert message to JS", .{});
             return; }); });
-            _ = (blk_catch_14: { break :blk_catch_14 ((self._subscription_ctx.invokeCallbacks(globalObject, channel_value, (&.{ message_value, channel_value }))) catch |__ce_14| { _ = &__ce_14; return; }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((self._subscription_ctx.invokeCallbacks(globalObject, channel_value, (&.{ message_value, channel_value }))) catch |__ce_16| { _ = &__ce_16; return; }); });
             _ = self.client.onWritable();
             _ = self.updatePollRef();
     }
 
 pub fn onValkeyReconnect(self: *JSValkeyClient) void {
+            if ((self.timer.state == .ACTIVE)) {
+                _ = self.removeTimer((&self.timer));
+            }
             if ((self.reconnect_timer.state == .ACTIVE)) {
                 _ = self.removeTimer((&self.reconnect_timer));
             }
@@ -1021,6 +1050,9 @@ pub fn onValkeyClose(self: *JSValkeyClient) bun.JSTerminated!void {
             _ = &_poll_guard;
             var ___poll_guard_moved = false; _ = &___poll_guard_moved;
             defer if (!___poll_guard_moved) { ___poll_guard_moved = true; const __T = @TypeOf(_poll_guard); if (@typeInfo(__T) == .optional) { if (_poll_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _poll_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _poll_guard; _drop_val.__cp_deinit(); } };
+            if ((self.timer.state == .ACTIVE)) {
+                _ = self.removeTimer((&self.timer));
+            }
             var this_jsvalue: JSValue = undefined;
             _ = &this_jsvalue;
             if (self.this_value.tryGet()) |v| {
@@ -1046,7 +1078,7 @@ pub fn onValkeyClose(self: *JSValkeyClient) bun.JSTerminated!void {
             }
             if (js.oncloseGetCached(this_jsvalue)) |on_close| {
                 _ = &on_close;
-                _ = (blk_catch_15: { break :blk_catch_15 ((on_close.call(globalObject, this_jsvalue, (&.{ error_value }))) catch |e| { _ = &e; break :blk_catch_15 globalObject.reportActiveExceptionAsUnhandled(e); }); });
+                _ = (blk_catch_17: { break :blk_catch_17 ((on_close.call(globalObject, this_jsvalue, (&.{ error_value }))) catch |e| { _ = &e; break :blk_catch_17 globalObject.reportActiveExceptionAsUnhandled(e); }); });
             }
     }
 
@@ -1073,21 +1105,31 @@ pub fn failWithJSValue(self: *JSValkeyClient, value: JSValue) void {
                 _ = &_exit_guard;
                 var ___exit_guard_moved = false; _ = &___exit_guard_moved;
                 defer if (!___exit_guard_moved) { ___exit_guard_moved = true; const __T = @TypeOf(_exit_guard); if (@typeInfo(__T) == .optional) { if (_exit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _exit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _exit_guard; _drop_val.__cp_deinit(); } };
-                _ = (blk_catch_16: { break :blk_catch_16 ((on_close.call(globalObject, this_value, (&.{ value }))) catch |e| { _ = &e; break :blk_catch_16 globalObject.reportActiveExceptionAsUnhandled(e); }); });
+                _ = (blk_catch_18: { break :blk_catch_18 ((on_close.call(globalObject, this_value, (&.{ value }))) catch |e| { _ = &e; break :blk_catch_18 globalObject.reportActiveExceptionAsUnhandled(e); }); });
             }
+    }
+
+pub fn closeWithoutSocketNextTick(self: *JSValkeyClient) void {
+            self.client.status = .connecting;
+            _ = self.updatePollRef();
+            _ = self.enqueueDeferredClose(.without_socket);
+    }
+
+pub fn enqueueDeferredClose(self: *JSValkeyClient, what: DeferredClose) void {
+            _ = self.ref();
+            const Holder = CloseSocketHolder;
+            var holder = bun.handleOom(bun.default_allocator.create(Holder));
+            _ = &holder;
+            holder.* = Holder{ .ctx = self, .what = what, .task = undefined };
+            holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
+            _ = self.client.vm.enqueueTask(jsc.Task.init((&holder.task)));
     }
 
 pub fn closeSocketNextTick(self: *JSValkeyClient) void {
             if (self.client.socket.isClosed()) {
                 return;
             }
-            _ = self.ref();
-            const Holder = CloseSocketHolder;
-            var holder = bun.handleOom(bun.default_allocator.create(Holder));
-            _ = &holder;
-            holder.* = Holder{ .ctx = self, .task = undefined };
-            holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
-            _ = self.client.vm.enqueueTask(jsc.Task.init((&holder.task)));
+            _ = self.enqueueDeferredClose(.socket);
     }
 
 pub fn finalize(self: *JSValkeyClient) void {
@@ -1112,6 +1154,7 @@ pub fn stopTimers(self: *JSValkeyClient) void {
     }
 
 pub fn connect(self: *JSValkeyClient) !void {
+            _ = bun.debugAssert(self.client.socket.isClosed());
             self.client.flags.needs_to_open_socket = false;
             const vm = self.client.vm;
             _ = self.ref();
@@ -1135,8 +1178,7 @@ pub fn connect(self: *JSValkeyClient) !void {
                 } else {
                     self.client.flags.enable_auto_reconnect = false;
                     _ = try self.clientFail("Failed to create TLS context", protocol.RedisError.ConnectionClosed);
-                    _ = try self.client.onValkeyClose();
-                    self.client.status = .disconnected;
+                    _ = self.closeWithoutSocketNextTick();
                     return;
                 }
             }
@@ -1154,22 +1196,18 @@ pub fn connect(self: *JSValkeyClient) !void {
             _connect_guard.active = false;
     }
 
-pub fn send(self: *JSValkeyClient, globalThis: *jsc.JSGlobalObject, _: JSValue, command: *const Command) !*jsc.JSPromise {
-            if (self.client.flags.needs_to_open_socket) {
-                @branchHint(.unlikely);
-                _ = (blk_catch_17: { break :blk_catch_17 ((self.connect()) catch |e| { _ = &e; self.client.flags.needs_to_open_socket = true;
-                const err_value = globalThis.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, " {s} connecting to Valkey", .{ @errorName(e) }).toJS();
-                const promise = jsc.JSPromise.create(globalThis);
-                const event_loop = self.client.vm.eventLoop();
-                _ = event_loop.enter();
-                var _exit_guard = ExitGuard(@TypeOf(event_loop)){ .val = event_loop };
-                _ = &_exit_guard;
-                var ___exit_guard_moved = false; _ = &___exit_guard_moved;
-                defer if (!___exit_guard_moved) { ___exit_guard_moved = true; const __T = @TypeOf(_exit_guard); if (@typeInfo(__T) == .optional) { if (_exit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _exit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _exit_guard; _drop_val.__cp_deinit(); } };
-                _ = try promise.reject(globalThis, err_value);
-                return promise; }); });
-                _ = self.resetConnectionTimeout();
+pub fn ensureDialing(self: *JSValkeyClient) void {
+            if ((!self.client.flags.needs_to_open_socket)) {
+                return;
             }
+            _ = (blk_catch_19: { break :blk_catch_19 ((self.connect()) catch |e| { _ = &e; _ = debug("first dial failed before a socket was opened: {s}", .{ @errorName(e) });
+            _ = self.closeWithoutSocketNextTick();
+            return; }); });
+            _ = self.resetConnectionTimeout();
+    }
+
+pub fn send(self: *JSValkeyClient, globalThis: *jsc.JSGlobalObject, _: JSValue, command: *const Command) !*jsc.JSPromise {
+            _ = self.ensureDialing();
             var _poll_guard = UpdatePollRefGuard(*JSValkeyClient){ .val = self };
             _ = &_poll_guard;
             var ___poll_guard_moved = false; _ = &___poll_guard_moved;
@@ -1207,7 +1245,7 @@ pub fn deinit(self: *JSValkeyClient) void {
 
 pub fn updatePollRef(self: *JSValkeyClient) void {
             const has_pending_commands = self.client.hasAnyPendingCommands();
-            const has_activity = ((has_pending_commands or (blk_catch_18: { break :blk_catch_18 ((self._subscription_ctx.hasSubscriptions(self.globalObject)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 false; }); })) or self.client.flags.is_reconnecting);
+            const has_activity = ((has_pending_commands or (blk_catch_20: { break :blk_catch_20 ((self._subscription_ctx.hasSubscriptions(self.globalObject)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 false; }); })) or self.client.flags.is_reconnecting);
             if ((has_activity or (self.client.status == .connecting))) {
                 _ = self.poll_ref.ref(self.client.vm);
             } else {
@@ -1541,11 +1579,6 @@ pub fn failHandshake(client: *JSValkeyClient, vm: *jsc.VirtualMachine, err_value
             _ = &_exit_guard;
             var ___exit_guard_moved = false; _ = &___exit_guard_moved;
             defer if (!___exit_guard_moved) { ___exit_guard_moved = true; const __T = @TypeOf(_exit_guard); if (@typeInfo(__T) == .optional) { if (_exit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _exit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _exit_guard; _drop_val.__cp_deinit(); } };
-            client.client.flags.is_manually_closed = true;
-            var _close_guard = CloseGuard(@TypeOf(&client.client)){ .val = (&client.client) };
-            _ = &_close_guard;
-            var ___close_guard_moved = false; _ = &___close_guard_moved;
-            defer if (!___close_guard_moved) { ___close_guard_moved = true; const __T = @TypeOf(_close_guard); if (@typeInfo(__T) == .optional) { if (_close_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _close_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _close_guard; _drop_val.__cp_deinit(); } };
             _ = try client.client.failWithJSValue(client.globalObject, err_value);
     }
 
@@ -1553,6 +1586,7 @@ pub fn onClose(client: *JSValkeyClient, _: SocketType, _: i32, _: ?*anyopaque) v
             _ = debug("Socket closed.", .{});
             _ = client.ref();
             client.client.socket = .{ .SocketTCP = .detached };
+            client.client.status = .disconnected;
             var _disc_guard = DisconnectDerefGuard{ .client = client };
             _ = &_disc_guard;
             var ___disc_guard_moved = false; _ = &___disc_guard_moved;
@@ -1567,6 +1601,7 @@ pub fn onEnd(client: *JSValkeyClient, socket: SocketType) void {
 
 pub fn onConnectError(client: *JSValkeyClient, _: SocketType, _: i32) bun.JSTerminated!void {
             client.client.socket = .{ .SocketTCP = .detached };
+            client.client.status = .disconnected;
             _ = client.ref();
             var _disc_guard = DisconnectDerefGuard{ .client = client };
             _ = &_disc_guard;

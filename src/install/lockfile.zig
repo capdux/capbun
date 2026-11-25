@@ -759,6 +759,7 @@ pub const _EqlSorterPathToId = struct {
 pub const EqlSorter = struct {
     string_buf: []const u8,
     pkg_names: []const String,
+    pkg_resolutions: []const Resolution,
 
 pub fn isLessThan(self_sorter: @This(), l: PathToId, r: PathToId) bool {
             switch (strings.order(l.tree_path, r.tree_path)) {
@@ -774,7 +775,20 @@ return false;
 }
             const l_name = self_sorter.pkg_names[@as(usize, @intCast(l.pkg_id))];
             const r_name = self_sorter.pkg_names[@as(usize, @intCast(r.pkg_id))];
-            return (l_name.order((&r_name), self_sorter.string_buf, self_sorter.string_buf) == .lt);
+            switch (l_name.order((&r_name), self_sorter.string_buf, self_sorter.string_buf)) {
+.lt => {
+return true;
+},
+.gt => {
+return false;
+},
+.eq => {
+
+},
+}
+            const l_res = (&self_sorter.pkg_resolutions[@as(usize, @intCast(l.pkg_id))]);
+            const r_res = (&self_sorter.pkg_resolutions[@as(usize, @intCast(r.pkg_id))]);
+            return (l_res.order(r_res, self_sorter.string_buf, self_sorter.string_buf) == .lt);
     }
     pub const PathToId = _EqlSorterPathToId;
 };
@@ -1091,6 +1105,19 @@ pub fn isRootDependency(client: *const Lockfile, manager: *PackageManager, id: D
 
 pub fn isWorkspaceDependency(client: *const Lockfile, id: DependencyID) bool {
         return (getWorkspacePkgIfWorkspaceDep(client, id) != invalid_package_id);
+}
+
+pub fn getParentPkgOfDependency(client: *const Lockfile, id: DependencyID) ?PackageID {
+        var pkg_id: usize = 0;
+        _ = &pkg_id;
+        for (cp_iter_slice(client.packages.items(.dependencies))) |dependencies| {
+            _ = &dependencies;
+            if (dependencies.contains(id)) {
+                return @intCast(pkg_id);
+            }
+            pkg_id = (pkg_id + 1);
+        }
+        return null;
 }
 
 pub fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID) PackageID {
@@ -1476,8 +1503,8 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
             var ___writer_guard_moved = false; _ = &___writer_guard_moved;
             defer if (!___writer_guard_moved) { ___writer_guard_moved = true; const __T = @TypeOf(_writer_guard); if (@typeInfo(__T) == .optional) { if (_writer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _writer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _writer_guard; _drop_val.__cp_deinit(); } };
             const writer = (&writer_allocating.writer);
-            _ = (blk_catch_15: { break :blk_catch_15 ((TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer)) catch |e| { _ = &e; break :blk_catch_15 (__sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .WriteFailed)) {  break :__sw_blk_9 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
-            _ = (blk_catch_16: { break :blk_catch_16 ((writer.flush()) catch |e| { _ = &e; break :blk_catch_16 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .WriteFailed)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_15: { break :blk_catch_15 ((TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer)) catch |e| { _ = &e; break :blk_catch_15 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .WriteFailed)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((writer.flush()) catch |e| { _ = &e; break :blk_catch_16 (__sw_blk_11: { const __disc_11 = e; _ = &__disc_11; if ((!cp_has_ok_val(__disc_11) and !cp_is_null_val(__disc_11))) { const __err_v_11 = cp_unwrap_err_val(__disc_11); _ = &__err_v_11; if (cp_match_tag(__err_v_11, .WriteFailed)) {  break :__sw_blk_11 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
             break :bytes bun.handleOom(writer_allocating.toOwnedSlice());
         }
         var bytes = std.array_list.Managed(u8).init(bun.default_allocator);
@@ -1760,7 +1787,7 @@ pub fn deinit(client: *Lockfile) void {
         _ = client.catalogs.deinit(client.allocator);
 }
 
-pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, allocator: std.mem.Allocator) OOM!bool {
+pub fn eql(l: *const Lockfile, r: *const Lockfile, r_loaded_package_count: usize, allocator: std.mem.Allocator) OOM!bool {
         const l_hoisted_deps = l.buffers.hoisted_dependencies.items;
         const r_hoisted_deps = r.buffers.hoisted_dependencies.items;
         const l_string_buf = l.buffers.string_bytes.items;
@@ -1796,7 +1823,7 @@ pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, alloca
                     continue;
                 }
                 const l_pkg_id = l.buffers.resolutions.items[@as(usize, @intCast(l_dep_id))];
-                if (((l_pkg_id == invalid_package_id) or (l_pkg_id >= cut_off_pkg_id))) {
+                if ((l_pkg_id == invalid_package_id)) {
                     continue;
                 }
                 l_buf[cp_cast_int(usize, i)] = .{ .pkg_id = l_pkg_id, .tree_path = tree_path };
@@ -1816,8 +1843,11 @@ pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, alloca
                     continue;
                 }
                 const r_pkg_id = r.buffers.resolutions.items[@as(usize, @intCast(r_dep_id))];
-                if (((r_pkg_id == invalid_package_id) or (r_pkg_id >= cut_off_pkg_id))) {
+                if ((r_pkg_id == invalid_package_id)) {
                     continue;
+                }
+                if ((r_pkg_id >= r_loaded_package_count)) {
+                    return false;
                 }
                 r_buf[cp_cast_int(usize, i)] = .{ .pkg_id = r_pkg_id, .tree_path = tree_path };
                 i = (i + 1);
@@ -1831,8 +1861,6 @@ pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, alloca
         const r_pkgs = r.packages.slice();
         const l_pkg_names = l_pkgs.items(.name);
         const r_pkg_names = r_pkgs.items(.name);
-        _ = std.sort.pdq(EqlSorter.PathToId, l_buf, EqlSorter{ .pkg_names = l_pkg_names, .string_buf = l_string_buf }, EqlSorter.isLessThan);
-        _ = std.sort.pdq(EqlSorter.PathToId, r_buf, EqlSorter{ .pkg_names = r_pkg_names, .string_buf = r_string_buf }, EqlSorter.isLessThan);
         const l_pkg_name_hashes = l_pkgs.items(.name_hash);
         const l_pkg_resolutions = l_pkgs.items(.resolution);
         const l_pkg_bins = l_pkgs.items(.bin);
@@ -1841,6 +1869,8 @@ pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, alloca
         const r_pkg_resolutions = r_pkgs.items(.resolution);
         const r_pkg_bins = r_pkgs.items(.bin);
         const r_pkg_scripts = r_pkgs.items(.scripts);
+        _ = std.sort.pdq(EqlSorter.PathToId, l_buf, EqlSorter{ .pkg_names = l_pkg_names, .string_buf = l_string_buf, .pkg_resolutions = l_pkg_resolutions }, EqlSorter.isLessThan);
+        _ = std.sort.pdq(EqlSorter.PathToId, r_buf, EqlSorter{ .pkg_names = r_pkg_names, .string_buf = r_string_buf, .pkg_resolutions = r_pkg_resolutions }, EqlSorter.isLessThan);
         const l_extern_strings = l.buffers.extern_strings.items;
         const r_extern_strings = r.buffers.extern_strings.items;
         var buf_i: usize = 0;

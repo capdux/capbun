@@ -573,7 +573,18 @@ var src = DeinitGuard(AbsPathOsAuto){ .val = .initTopLevelDirLongPath() };
 
 },
 .err => |err| {
-if ((err.getErrno() == .XDEV)) {
+const errno_val = err.getErrno();
+                        if ((((errno_val == .XDEV) or (errno_val == .ACCES)) or (errno_val == .PERM))) {
+                            if (comptime (!Environment.isWindows)) {
+                                switch (bun.sys.setFileOffset(folder_dir.fd, 0)) {
+.result => {
+
+},
+.err => |seek_err| {
+return Yield.failure(.{ .link_package = seek_err });
+},
+}
+                            }
                             folder_backend = .copyfile;
                             continue;
                         }
@@ -754,7 +765,8 @@ cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_di
 
 },
 .err => |err| {
-if ((err.getErrno() == .XDEV)) {
+const errno_val = err.getErrno();
+                    if ((((errno_val == .XDEV) or (errno_val == .ACCES)) or (errno_val == .PERM))) {
                         _ = installer.supported_backend.store(.copyfile, .monotonic);
                         backend = .copyfile;
                         continue;
@@ -770,7 +782,12 @@ if ((err.getErrno() == .XDEV)) {
                     continue :next_step_sw;
 },
 else => {
-cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
+if (cached_package_dir.fd) |old_fd| {
+                        _ = &old_fd;
+                        _ = old_fd.close();
+                        cached_package_dir.fd = null;
+                    }
+                    cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_dir_subpath_guard.val.slice())) {
 .result => |fd| fd,
 .err => |err| {
 {

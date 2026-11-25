@@ -109,7 +109,7 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
         }
 
         inline fn downcastSocket(*_): *bun.uws.us_socket_t {
-            return bun.cast(*bun.uws.us_socket_t, _);
+            return unsafe { @as(*bun.uws.us_socket_t, @ptrCast(_)) };
         }
 
         fn end(*_, data: string, close_connection: bool) {
@@ -142,6 +142,10 @@ pub fn NewResponse(comptime ssl_flag: i32): type {
 
         fn shouldCloseConnection(*_): bool {
             return _.state().isHttpConnectionClose();
+        }
+
+        fn isClosed(*_): bool {
+            return _.downcastSocket().isClosed();
         }
 
         fn prepareForSendfile(*_) {
@@ -538,6 +542,14 @@ export enum AnyResponse {
             .TCP(r) => r.shouldCloseConnection(),
             .SSL(r) => r.shouldCloseConnection(),
             .H3(r) => r.shouldCloseConnection(),
+        };
+    }
+
+    fn isClosed(): bool {
+        return switch (_) {
+            .TCP(r) => r.isClosed(),
+            .SSL(r) => r.isClosed(),
+            .H3(r) => r.isClosed(),
         };
     }
 

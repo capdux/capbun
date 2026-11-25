@@ -1,5 +1,6 @@
 import { file, spawn, version } from "bun";
 import { describe, expect, test } from "bun:test";
+import { tempDir } from "harness";
 
 const bodyTypes = [
   {
@@ -257,6 +258,56 @@ for (const { body, fn } of bodyTypes) {
         });
         test(`"${string}"`, async () => {
           expect(await fn(string).bytes()).toStrictEqual(new Uint8Array(buffer));
+        });
+      });
+
+      describe("made from a sliced Bun.file()", () => {
+        const alphabet = "abcdefghijklmnopqrstuvwxyz";
+
+        test("bytes() returns the window of the slice the stream was made from", async () => {
+          using dir = tempDir("body-file-slice-stream", { "data.txt": alphabet });
+          const f = () => Bun.file(`${dir}/data.txt`);
+          const bytesOf = async (blob: Blob) => Buffer.from(await fn(blob.stream()).bytes()).toString();
+          expect({
+            "slice(3, 8)": await bytesOf(f().slice(3, 8)),
+            "slice(21)": await bytesOf(f().slice(21)),
+            "slice(3, 1000)": await bytesOf(f().slice(3, 1000)),
+            "slice(4, 4)": await bytesOf(f().slice(4, 4)),
+            "slice(3, 20).slice(2, 6)": await bytesOf(f().slice(3, 20).slice(2, 6)),
+            "whole file": await bytesOf(f()),
+          }).toEqual({
+            "slice(3, 8)": "defgh",
+            "slice(21)": "vwxyz",
+            "slice(3, 1000)": "defghijklmnopqrstuvwxyz",
+            "slice(4, 4)": "",
+            "slice(3, 20).slice(2, 6)": "fghi",
+            "whole file": alphabet,
+          });
+        });
+
+        test("arrayBuffer() and blob() return the slice too", async () => {
+          using dir = tempDir("body-file-slice-stream-readers", { "data.txt": alphabet });
+          const slice = () => Bun.file(`${dir}/data.txt`).slice(3, 8);
+          const blob = await fn(slice().stream()).blob();
+          expect({
+            arrayBuffer: Buffer.from(await fn(slice().stream()).arrayBuffer()).toString(),
+            blob: [blob.size, await blob.text()],
+          }).toEqual({
+            arrayBuffer: "defgh",
+            blob: [5, "defgh"],
+          });
+        });
+
+        test("json() parses only the slice", async () => {
+          using dir = tempDir("body-file-slice-stream-json", { "data.json": `--{"ok":true}--` });
+          expect(await fn(Bun.file(`${dir}/data.json`).slice(2, 13).stream()).json()).toEqual({ ok: true });
+        });
+
+        test("bytes() after the body getter turned a sliced Bun.file() body into a stream", async () => {
+          using dir = tempDir("body-file-slice-body-getter", { "data.txt": alphabet });
+          const subject = fn(Bun.file(`${dir}/data.txt`).slice(3, 8));
+          expect(subject.body).toBeInstanceOf(ReadableStream);
+          expect([Buffer.from(await subject.bytes()).toString(), subject.bodyUsed]).toEqual(["defgh", true]);
         });
       });
       describe("text()", () => {

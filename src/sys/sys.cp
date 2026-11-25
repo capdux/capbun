@@ -4046,7 +4046,7 @@ pub fn dupWithFlags(fd: bun.FD, _: i32): Maybe(bun.FD) {
             process,
             &target,
             0,
-            w.TRUE,
+            w.FALSE,
             w.DUPLICATE_SAME_ACCESS,
         );
         if (out == 0) {

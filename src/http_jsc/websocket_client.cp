@@ -1235,6 +1235,22 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             return false;
         }
 
+        pub fn bufferedAmount(): usize {
+            let total: usize = _.send_buffer.count;
+            if (tunnel := _.proxy_tunnel) total += tunnel.bufferedAmount();
+            return total;
+        }
+
+        pub fn pauseStream(): bool {
+            if (tunnel := _.proxy_tunnel) return tunnel.pauseStream();
+            return _.tcp.pauseStream();
+        }
+
+        pub fn resumeStream(): bool {
+            if (tunnel := _.proxy_tunnel) return tunnel.resumeStream();
+            return _.tcp.resumeStream();
+        }
+
         @c pub static fn writeBinaryData(ws: *WebSocket,
             ptr: [*]const u8!,
             len: usize,
@@ -1558,9 +1574,24 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             return cost;
         }
 
+        @c pub static fn getBufferedAmount(ws: *WebSocket): usize {
+            return ws.bufferedAmount();
+        }
+
+        @c pub static fn pauseSocket(ws: *WebSocket): bool {
+            return ws.pauseStream();
+        }
+
+        @c pub static fn resumeSocket(ws: *WebSocket): bool {
+            return ws.resumeStream();
+        }
+
         pub static fn exportAll() {
             const name = comptime if (ssl) "WebSocketClientTLS" else "WebSocketClient";
             @export(&cancel, { name: "Bun__" ++ name ++ "__cancel" });
+            @export(&getBufferedAmount, { name: "Bun__" ++ name ++ "__bufferedAmount" });
+            @export(&pauseSocket, { name: "Bun__" ++ name ++ "__pause" });
+            @export(&resumeSocket, { name: "Bun__" ++ name ++ "__resume" });
             @export(&close, { name: "Bun__" ++ name ++ "__close" });
             @export(&finalize, { name: "Bun__" ++ name ++ "__finalize" });
             @export(&init, { name: "Bun__" ++ name ++ "__init" });

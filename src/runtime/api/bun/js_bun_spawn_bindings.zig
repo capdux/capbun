@@ -554,8 +554,14 @@ return e.throwJS(globalThis);
                     _ = &timeout_value;
                     _ = brk: {
                     if ((!timeout_value.isNull())) {
-                        if ((timeout_value.isNumber() and std.math.isPositiveInf(timeout_value.asNumber()))) {
-                            break :brk;
+                        if (timeout_value.isNumber()) {
+                            const n = timeout_value.asNumber();
+                            if (std.math.isNan(n)) {
+                                return globalThis.throwRangeError(n, .{ .field_name = "timeout", .msg = "a non-negative integer" });
+                            }
+                            if (std.math.isPositiveInf(n)) {
+                                break :brk;
+                            }
                         }
                         const timeout_int = try globalThis.validateIntegerRange(timeout_value, u64, 0, .{ .min = 0, .field_name = "timeout" });
                         if ((timeout_int > 0)) {
@@ -567,6 +573,9 @@ return e.throwJS(globalThis);
                 if (try args.get(globalThis, "killSignal")) |val| {
                     _ = &val;
                     killSignal = try bun.SignalCode.fromJS(val, globalThis);
+                    if ((@intFromEnum(killSignal) == 0)) {
+                        return globalThis.ERR(.UNKNOWN_SIGNAL, "Unknown signal: 0", .{}).throw();
+                    }
                 }
                 if (try args.get(globalThis, "maxBuffer")) |val| {
                     _ = &val;

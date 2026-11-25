@@ -338,6 +338,7 @@ pub const WaitingResolveTask = struct {
 pub const TargetToCheck = struct {
     should_dispatch: bool,
     target: options.Target,
+    loader: ?options.Loader = null,
 };
 
 pub const BundleBakeOptions = struct {
@@ -944,7 +945,7 @@ a = self.pathToSourceIndexMap(self.transpiler.options.target);
             }
     }
 
-pub fn enqueueFileFromDevServerIncrementalGraphInvalidation(self: *BundleV2, path_slice: []const u8, target: options.Target) !void {
+pub fn enqueueFileFromDevServerIncrementalGraphInvalidation(self: *BundleV2, path_slice: []const u8, target: options.Target, requested_loader: ?options.Loader) !void {
             const entry = try self.pathToSourceIndexMap(target).getOrPut(self.allocator(), path_slice);
             if (entry.found_existing) {
                 return;
@@ -958,10 +959,7 @@ pub fn enqueueFileFromDevServerIncrementalGraphInvalidation(self: *BundleV2, pat
             _ = &path;
             _ = self.incrementScanCounter();
             const source_index = Index.source(self.graph.input_files.len);
-            const loader = brk: {
-            const default = ((path.loader((&self.transpiler.options.loaders))) orelse (.file));
-            break :brk default;
-};
+            const loader = self.requestedFileLoader((&path), requested_loader);
             path = bun.handleOom(self.pathWithPrettyInitialized(path, target));
             _ = path.assertPrettyIsValid();
             entry.key_ptr.* = path.text;
@@ -992,7 +990,11 @@ pub fn enqueueFileFromDevServerIncrementalGraphInvalidation(self: *BundleV2, pat
             }
     }
 
-pub fn enqueueEntryItem(self: *BundleV2, resolve: _resolver.Result, is_entry_point: bool, target: options.Target) !?Index.Int {
+pub fn requestedFileLoader(self: *BundleV2, path: *const Fs.Path, requested_loader: ?options.Loader) options.Loader {
+            return ((requested_loader) orelse (((path.loader((&self.transpiler.options.loaders))) orelse (.file))));
+    }
+
+pub fn enqueueEntryItem(self: *BundleV2, resolve: _resolver.Result, is_entry_point: bool, target: options.Target, requested_loader: ?options.Loader) !?Index.Int {
             var result = resolve;
             _ = &result;
             if ((result.path() == null)) {
@@ -1007,10 +1009,7 @@ pub fn enqueueEntryItem(self: *BundleV2, resolve: _resolver.Result, is_entry_poi
             }
             _ = self.incrementScanCounter();
             const source_index = Index.source(self.graph.input_files.len);
-            const loader = brk: {
-            const loader = ((path.loader((&self.transpiler.options.loaders))) orelse (.file));
-            break :brk loader;
-};
+            const loader = self.requestedFileLoader(path, requested_loader);
             path.* = bun.handleOom(self.pathWithPrettyInitialized(path.*, target));
             _ = path.assertPrettyIsValid();
             entry.key_ptr.* = path.text;
@@ -1178,14 +1177,14 @@ else => (comptime unreachable),
 .normal => {
 for (cp_iter_slice(data)) |entry_point| {
                     _ = &entry_point;
-                    if (self.enqueueEntryPointOnResolvePluginIfNeeded(entry_point, self.transpiler.options.target)) {
+                    if (self.enqueueEntryPointOnResolvePluginIfNeeded(entry_point, self.transpiler.options.target, null)) {
                         continue;
                     }
                     if (self.file_map) |file_map| {
                         _ = &file_map;
                         if (file_map.resolve("", entry_point)) |file_map_result| {
                             _ = &file_map_result;
-                            _ = try self.enqueueEntryItem(file_map_result, true, self.transpiler.options.target);
+                            _ = try self.enqueueEntryItem(file_map_result, true, self.transpiler.options.target, null);
                             continue;
                         }
                     }
@@ -1205,7 +1204,7 @@ for (cp_iter_slice(data)) |entry_point| {
                         }
                     }
                     break :brk main_target;
-});
+}, null);
                 }
 },
 .dev_server => {
@@ -1219,13 +1218,14 @@ const abs_paths = data.files.set.keys();
                         const abs_path = abs_paths[@as(usize, @intCast(i))];
                         const flags = flags_list[@as(usize, @intCast(i))];
                         const transpiler = (if (((flags.client and (!flags.server)) and (!flags.ssr))) self.transpilerForTarget(.browser) else self.transpiler);
-                        const targets_to_check: [3]TargetToCheck = .{ TargetToCheck{ .should_dispatch = flags.client, .target = .browser }, TargetToCheck{ .should_dispatch = flags.server, .target = self.transpiler.options.target }, TargetToCheck{ .should_dispatch = flags.ssr, .target = .bake_server_components_ssr } };
+                        const client_loader: ?options.Loader = (if (flags.html) .html else null);
+                        const targets_to_check: [3]TargetToCheck = .{ TargetToCheck{ .should_dispatch = flags.client, .target = .browser, .loader = client_loader }, TargetToCheck{ .should_dispatch = flags.server, .target = self.transpiler.options.target, .loader = null }, TargetToCheck{ .should_dispatch = flags.ssr, .target = .bake_server_components_ssr, .loader = null } };
                         var any_plugin_matched = false;
                         _ = &any_plugin_matched;
                         for (cp_iter_slice(targets_to_check)) |target_info| {
                             _ = &target_info;
                             if (target_info.should_dispatch) {
-                                if (self.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target_info.target)) {
+                                if (self.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target_info.target, target_info.loader)) {
                                     any_plugin_matched = true;
                                 }
                             }
@@ -1238,7 +1238,7 @@ const abs_paths = data.files.set.keys();
                         _ = transpiler.log.reset();
                         continue; }); });
                         if (flags.client) {
-                            if (try self.enqueueEntryItem(resolved, true, .browser)) |source_index| {
+                            if (try self.enqueueEntryItem(resolved, true, .browser, client_loader)) |source_index| {
                                 _ = &source_index;
                                 if (flags.css) {
                                     _ = try data.css_data.putNoClobber(self.allocator(), Index.init(source_index), .{ .imported_on_server = false });
@@ -1246,10 +1246,10 @@ const abs_paths = data.files.set.keys();
                             }
                         }
                         if (flags.server) {
-                            _ = try self.enqueueEntryItem(resolved, true, self.transpiler.options.target);
+                            _ = try self.enqueueEntryItem(resolved, true, self.transpiler.options.target, null);
                         }
                         if (flags.ssr) {
-                            _ = try self.enqueueEntryItem(resolved, true, .bake_server_components_ssr);
+                            _ = try self.enqueueEntryItem(resolved, true, .bake_server_components_ssr, null);
                         }
                     }
                 }
@@ -1262,11 +1262,11 @@ for (cp_iter_slice(data.files.keys())) |key| {
 .client => options.Target.browser,
 .server => self.transpiler.options.target,
 });
-                    if (self.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target)) {
+                    if (self.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target, null)) {
                         continue;
                     }
                     const resolved = (blk_catch_19: { break :blk_catch_19 ((self.transpiler.resolveEntryPoint(abs_path)) catch |__ce_19| { _ = &__ce_19; continue; }); });
-                    _ = try self.enqueueEntryItem(resolved, true, target);
+                    _ = try self.enqueueEntryItem(resolved, true, target, null);
                 }
 },
 else => {
@@ -1770,7 +1770,7 @@ if (strings.eqlComptime(resolve.import_record.namespace, "file")) {
                 if ((resolve.import_record.kind == .entry_point_build)) {
                     const target = resolve.import_record.original_target;
                     const resolved = (blk_catch_32: { break :blk_catch_32 ((bundle.transpilerForTarget(target).resolveEntryPoint(resolve.import_record.specifier)) catch |__ce_32| { _ = &__ce_32; return; }); });
-                    const source_index = (blk_catch_33: { break :blk_catch_33 ((bundle.enqueueEntryItem(resolved, true, target)) catch |__ce_33| { _ = &__ce_33; return; }); });
+                    const source_index = (blk_catch_33: { break :blk_catch_33 ((bundle.enqueueEntryItem(resolved, true, target, resolve.import_record.loader)) catch |__ce_33| { _ = &__ce_33; return; }); });
                     if (source_index) |idx| {
                         _ = &idx;
                         _ = (blk_catch_34: { break :blk_catch_34 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_34 bun.handleOom(oom_err); }); });
@@ -1809,7 +1809,7 @@ var out_source_index: ?Index = null;
                     existing.value_ptr.* = source_index.get();
                     out_source_index = source_index;
                     _ = ((bundle.graph.ast.append(bundle.allocator(), JSAst.empty)) catch unreachable);
-                    const loader = ((path.loader((&bundle.transpiler.options.loaders))) orelse (options.Loader.file));
+                    const loader = bundle.requestedFileLoader((&path), (if (std.mem.eql(u8, path.text, resolve.import_record.specifier)) resolve.import_record.loader else null));
                     _ = ((bundle.graph.input_files.append(bundle.allocator(), .{ .source = .{ .path = path, .contents = "", .index = source_index }, .loader = loader, .side_effects = .has_side_effects })) catch unreachable);
                     var task = ((bun.default_allocator.create(ParseTask)) catch unreachable);
                     _ = &task;
@@ -2223,7 +2223,7 @@ pub fn enqueueOnResolvePluginIfNeeded(self: *BundleV2, source_index: Index.Int, 
             return false;
     }
 
-pub fn enqueueEntryPointOnResolvePluginIfNeeded(self: *BundleV2, entry_point: []const u8, target: options.Target) bool {
+pub fn enqueueEntryPointOnResolvePluginIfNeeded(self: *BundleV2, entry_point: []const u8, target: options.Target, loader: ?options.Loader) bool {
             if (self.plugins) |plugins| {
                 _ = &plugins;
                 var temp_path = Fs.Path.init(entry_point);
@@ -2234,7 +2234,7 @@ pub fn enqueueEntryPointOnResolvePluginIfNeeded(self: *BundleV2, entry_point: []
                     var resolve: *jsc.API.JSBundler.Resolve = ((bun.default_allocator.create(jsc.API.JSBundler.Resolve)) catch unreachable);
                     _ = &resolve;
                     _ = self.incrementScanCounter();
-                    resolve.* = jsc.API.JSBundler.Resolve.init(self, .{ .kind = .entry_point_build, .source_file = "", .namespace = "file", .specifier = entry_point, .importer_source_index = std.math.maxInt(u32), .import_record_index = 0, .range = Logger.Range.None, .original_target = target });
+                    resolve.* = jsc.API.JSBundler.Resolve.init(self, .{ .kind = .entry_point_build, .source_file = "", .namespace = "file", .specifier = entry_point, .importer_source_index = std.math.maxInt(u32), .import_record_index = 0, .range = Logger.Range.None, .original_target = target, .loader = loader });
                     _ = resolve.dispatch();
                     return true;
                 }

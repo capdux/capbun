@@ -991,6 +991,11 @@ pub fn onOpen(self: *@This(), socket: Socket) void {
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             self.socket = socket;
+            self.flags.is_paused = false;
+            if ((!self.ref_pollref_on_connect)) {
+                self.ref_pollref_on_connect = true;
+                _ = self.poll_ref.unref(jsc.VirtualMachine.get());
+            }
             _ = jsc.markBinding(@src());
             if (comptime ssl) {
                 if (self.socket.ssl()) |ssl_ptr| {
@@ -1928,22 +1933,21 @@ if ((result.wrote == result.total)) {
 
 pub fn jsRef(self: *@This(), globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
             _ = jsc.markBinding(@src());
-            if (self.socket.isDetached()) {
+            if (self.socket.isEstablished()) {
+                _ = self.poll_ref.ref(globalObject.bunVM());
+            } else {
                 self.ref_pollref_on_connect = true;
             }
-            if (self.socket.isDetached()) {
-                return JSValue.js_undefined;
-            }
-            _ = self.poll_ref.ref(globalObject.bunVM());
             return JSValue.js_undefined;
     }
 
 pub fn jsUnref(self: *@This(), globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
             _ = jsc.markBinding(@src());
-            if (self.socket.isDetached()) {
+            if (self.socket.isEstablished()) {
+                _ = self.poll_ref.unref(globalObject.bunVM());
+            } else {
                 self.ref_pollref_on_connect = false;
             }
-            _ = self.poll_ref.unref(globalObject.bunVM());
             return JSValue.js_undefined;
     }
 

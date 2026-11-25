@@ -271,11 +271,15 @@ extern "C" unsigned getJSCBytecodeCacheVersion()
 extern "C" void Bun__REPRL__registerFuzzilliFunctions(Zig::GlobalObject*);
 #endif
 
+// bun_icu_default_locale.cpp
+extern "C" void Bun__ensureICUDefaultLocale();
+
 extern "C" void JSCInitialize(const char* envp[], size_t envc, void (*onCrash)(const char* ptr, size_t length), bool evalMode)
 {
     static std::once_flag jsc_init_flag;
     // NOLINTBEGIN
     std::call_once(jsc_init_flag, [evalMode, envp, envc, onCrash]() {
+        Bun__ensureICUDefaultLocale();
         JSC::Config::enableRestrictedOptions();
 
         std::set_terminate([]() { Zig__GlobalObject__onCrash(); });
@@ -624,9 +628,18 @@ extern "C" JSC::JSGlobalObject* Zig__GlobalObject__createForTestIsolation(Zig::G
     // new global and adopt the refs before unprotecting the old one.
     globalObject->adoptNapiEnvsForTestIsolation(oldGlobal);
 
-    // Drop the permanent root on the previous global so its module registry,
-    // require.cache, and user objects become collectable. JSC's CodeCache and
-    // Bun's RuntimeTranspilerCache are VM/process scoped and survive.
+    // The plugin registries hold Strong<> roots into the old realm; owned by the global itself,
+    // they would keep it (and everything it loaded) alive for the rest of the run.
+    oldGlobal->onLoadPlugins.clear();
+    oldGlobal->onResolvePlugins.clear();
+    // Drop the finished file's module registry and require.cache now rather than whenever the
+    // old global happens to die. JSC's CodeCache and Bun's RuntimeTranspilerCache are VM/process
+    // scoped and survive.
+    {
+        auto scope = DECLARE_TOP_EXCEPTION_SCOPE(vm);
+        oldGlobal->clearModuleRegistry();
+        scope.assertNoExceptionExceptTermination();
+    }
     oldGlobal->isThreadLocalDefaultGlobalObject = false;
     JSC::gcUnprotect(oldGlobal);
 
@@ -3277,12 +3290,22 @@ template void GlobalObject::visitOutputConstraints(JSCell*, SlotVisitor&);
 
 // DEFINE_VISIT_CHILDREN(Zig::GlobalObject);
 
+void GlobalObject::clearModuleRegistry()
+{
+    {
+        auto* moduleLoader = this->moduleLoader();
+        // JSModuleLoader::visitChildrenImpl iterates these maps on the GC thread under cellLock().
+        WTF::Locker locker { moduleLoader->cellLock() };
+        moduleLoader->clearAll();
+    }
+    this->requireMap()->clear(this);
+}
+
 void GlobalObject::reload()
 {
     auto& vm = this->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
-    this->moduleLoader()->clearAll();
-    this->requireMap()->clear(this);
+    this->clearModuleRegistry();
     RETURN_IF_EXCEPTION(scope, );
 
     // If we run the GC every time, we will never get the SourceProvider cache hit.

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { bunEnv, bunExe } from "harness";
 
 // Constants matching the upstream slice-ansi test suite
 const ESCAPE = "\u001B";
@@ -1269,6 +1270,66 @@ describe("Bun.sliceAnsi", () => {
       expect(Bun.sliceAnsi(utf16, 6, 11)).toBe("world");
       expect(Bun.sliceAnsi(utf16)).toBe(utf16);
       expect(Bun.sliceAnsi(utf16, 0, 5, "\u2026")).toBe("hell\u2026");
+    });
+  });
+});
+
+// Inside the range, sliceAnsi keeps one 24-byte list entry for each escape sequence until the next visible
+// character arrives, and the input decides how many. A 64 KiB synthetic allocation limit: 2730 entries.
+describe("Bun.sliceAnsi: a list of waiting escape sequences that cannot grow", () => {
+  const outOfMemory = "RangeError: Out of memory";
+
+  test("throws a RangeError", async () => {
+    await using proc = Bun.spawn({
+      cmd: [
+        bunExe(),
+        "-e",
+        `const sgr = "\\x1b[m";
+        const link = "\\x1b]8;;http://example.com\\x07";
+        const cases = {
+          sgrAtBound: ["a" + sgr.repeat(2730) + "b", 0, 2],
+          sgrPastBound: ["a" + sgr.repeat(2731) + "b", 0, 2],
+          wideSgrAtBound: ["あ" + sgr.repeat(2730) + "b", 0, 3],
+          wideSgrPastBound: ["あ" + sgr.repeat(2731) + "b", 0, 3],
+          c1AtBound: ["a" + "\\x9c".repeat(2730) + "b", 0, 2],
+          c1PastBound: ["a" + "\\x9c".repeat(2731) + "b", 0, 2],
+          linksAtBound: ["a" + link.repeat(2730) + "b", 0, 2],
+          linksPastBound: ["a" + link.repeat(2731) + "b", 0, 2],
+          trailingPastBound: ["a" + sgr.repeat(2731), 0, 2],
+          runsUnderBound: [("a" + sgr.repeat(2000)).repeat(3), 0, 4],
+          beforeTheRange: ["a" + sgr.repeat(10000) + "bcd", 2, 4],
+        };
+        const results = {};
+        for (const [name, args] of Object.entries(cases)) {
+          try {
+            results[name] = Bun.sliceAnsi(...args).length;
+          } catch (e) {
+            results[name] = e.name + ": " + e.message;
+          }
+        }
+        console.log(JSON.stringify(results));`,
+      ],
+      env: { ...bunEnv, BUN_FEATURE_FLAG_SYNTHETIC_MEMORY_LIMIT: String(64 * 1024) },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout: JSON.parse(stdout || "null"), stderr, exitCode }).toEqual({
+      stdout: {
+        sgrAtBound: 8192,
+        sgrPastBound: outOfMemory,
+        wideSgrAtBound: 8192,
+        wideSgrPastBound: outOfMemory,
+        c1AtBound: 2732,
+        c1PastBound: outOfMemory,
+        linksAtBound: 65528,
+        linksPastBound: outOfMemory,
+        trailingPastBound: outOfMemory,
+        runsUnderBound: 18003,
+        beforeTheRange: 2,
+      },
+      stderr: "",
+      exitCode: 0,
     });
   });
 });

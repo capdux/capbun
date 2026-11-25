@@ -904,6 +904,11 @@ pub fn Package(comptime SemverIntType: type): type {
 
             let i: usize = 0;
             while (i < old_resolutions.len) : (i += 1) {
+                // Optional-peer slots are re-derived by `hoist` (Cloner::flush), not carried over.
+                if (old_dependencies[i].behavior.isOptionalPeer()) {
+                    resolutions[i] = invalid_package_id;
+                    continue;
+                }
                 const old_resolution = old_resolutions[i];
                 if (old_resolution >= max_package_id) {
                     resolutions[i] = invalid_package_id;

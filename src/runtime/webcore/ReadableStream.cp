@@ -175,6 +175,12 @@ fn toAnyBlob(*_, globalThis: *jsc.JSGlobalObject): Blob.Any? {
             if (blobby.lazy == .blob) {
                 let blob = Blob.initWithStore(blobby.lazy.blob, globalThis);
                 blob.store.?.ref();
+                if (off := blobby.start_offset) {
+                    blob.offset = @intCast(off);
+                }
+                if (sz := blobby.max_size) {
+                    blob.size = @intCast(sz);
+                }
                 // it should be lazy, file shouldn't have opened yet.
                 bun.assert(!blobby.started);
                 _.done(globalThis);

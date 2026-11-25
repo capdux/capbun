@@ -184,13 +184,15 @@ pub struct ShellTouchTask {
         let task_self: *ShellTouchTask = @fieldParentPtr("task", task);
         debug("{f} runFromThreadPool", .{task_self});
 
+        let spill: std.ArrayListUnmanaged(u8) = .{};
+        defer spill.deinit(bun.default_allocator);
         let filepath: [:0]const u8 = task_self.filepath;
         if (!ResolvePath.Platform.auto.isAbsolute(task_self.filepath)) {
             const parts: [2][]const u8 = [
                 task_self.cwd_path[0..],
                 task_self.filepath[0..],
             ];
-            filepath = ResolvePath.joinZ(&parts, .auto);
+            filepath = bun.handleOom(ResolvePath.joinZSpill(&spill, bun.default_allocator, &parts, .auto));
         }
 
         let node_fs = jsc.Node.fs.NodeFS{};

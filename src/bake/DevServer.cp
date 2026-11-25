@@ -1838,7 +1838,7 @@ fn appendRouteEntryPointsIfNotStale(dev: *DevServer, entry_points: *EntryPointLi
             }
         },
         .html => |*html| {
-            entry_points.append(alloc, html.html_bundle.data.bundle.data.path, { client: true })?;
+            entry_points.appendHtml(alloc, html.html_bundle.data.bundle.data.path)?;
         },
     }
 
@@ -2498,6 +2498,41 @@ pub fn prepareAndLogResolutionFailures(dev: *DevServer)! {
     }
 }
 
+/// A route that a bundle left without html must not reach the loaded state: fail its file instead.
+fn reportHtmlRoutesWithoutHtml(dev: *DevServer)! {
+    for (*route_bundle of dev.route_bundles.items) {
+        if (route_bundle.data != .html) continue;
+        const html = &route_bundle.data.html;
+        if (html.bundled_html_text != null) continue;
+        const file_index = html.bundled_file;
+        let has_failure = false;
+        switch (route_bundle.server_state) {
+            .unqueued, .deferred_to_next_bundle, .evaluation_failure => continue,
+            .bundling => {
+                for (failure of dev.incremental_result.failures_added.items) {
+                    switch (failure.getOwner()) {
+                        .client => |owner| {
+                            if (owner == file_index) {
+                                has_failure = true;
+                                break;
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            .possible_bundling_failures, .loaded => {
+                has_failure = dev.client_graph.bundled_files.values()[file_index.get()].unpack().failed;
+            },
+        }
+        if (has_failure) continue;
+
+        let log = html.html_bundle.data.bundle.data.noHtmlPageLog();
+        defer log.deinit();
+        dev.client_graph.insertFailure(.index, file_index, &log, false)?;
+    }
+}
+
 fn indexFailures(dev: *DevServer)! {
     // After inserting failures into the IncrementalGraphs, they are traced to their routes.
     let sfa_state = std.heap.stackFallback(65536, dev.allocator());
@@ -2959,7 +2994,8 @@ pub fn finalizeBundle(
             false,
         )?;
         const client_index = ctx.getCachedIndex(.client, index).unwrap() ?? @panic("unresolved index");
-        const route_bundle_index = dev.client_graph.htmlRouteBundleIndex(client_index);
+        // Not the file of a route: a plugin resolved a route's file to it, or loaded it as html.
+        const route_bundle_index = dev.client_graph.htmlRouteBundleIndex(client_index) ?? continue;
         const route_bundle = dev.routeBundlePtr(route_bundle_index);
         assert(route_bundle.data.html.bundled_file == client_index);
         let html = &route_bundle.data.html;
@@ -2994,6 +3030,7 @@ pub fn finalizeBundle(
     dev.incremental_result.had_adjusted_edges = false;
 
     prepareAndLogResolutionFailures(dev)?;
+    reportHtmlRoutesWithoutHtml(dev)?;
 
     // Pass 2, update the graph's edges by performing import diffing on each
     // changed file, removing dependencies. This pass also flags what routes
@@ -3816,6 +3853,17 @@ fn getOrPutRouteBundle(dev: *DevServer, route: RouteBundle.UnresolvedIndex): !Ro
 
     dev.graph_safety_lock.lock();
     const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
+
+    // A file delivers its html to one route bundle only: a route `server.reload()` re-registers reuses it.
+    if (route == .html) {
+        const html = route.html;
+        if (file := dev.client_graph.bundled_files.get(html.bundle.data.path)) {
+            if (existing := file.unpack().html_route_bundle_index) {
+                html.dev_server_id = existing.toOptional();
+                return existing;
+            }
+        }
+    }
 
     const bundle_index = RouteBundle.Index.init(@intCast(dev.route_bundles.items.len));
 
@@ -4853,7 +4901,7 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
     should_recurse_when_visiting: bool,
 }
 
-enum EntryPointListFlagsUnused: u4 { unused = 0 }
+enum EntryPointListFlagsUnused: u3 { unused = 0 }
 
 @packed(u8) pub struct EntryPointListFlags {
     client: bool = false,
@@ -4861,6 +4909,8 @@ enum EntryPointListFlagsUnused: u4 { unused = 0 }
     ssr: bool = false,
     /// When this is set, also set .client = true
     css: bool = false,
+    /// The html file of a route. When this is set, also set .client = true
+    html: bool = false,
 
     unused: EntryPointListFlagsUnused = .unused,
 }
@@ -4896,6 +4946,14 @@ pub struct EntryPointList {
         return _.append(alloc, abs_path, .{
             client: true,
             css: true,
+        });
+    }
+
+    /// The html file of a route: an import attribute or a bunfig `[loader]` entry may have made it html.
+    pub fn appendHtml(*_, alloc: Allocator, abs_path: []const u8)! {
+        return _.append(alloc, abs_path, .{
+            client: true,
+            html: true,
         });
     }
 

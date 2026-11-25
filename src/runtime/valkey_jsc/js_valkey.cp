@@ -123,21 +123,35 @@ pub struct ConnectErrGuard {
 pub struct DisconnectDerefGuard {
     client: *JSValkeyClient,
     ~init() {
-        _.client.client.status = .disconnected;
         _.client.updatePollRef();
         _.client.deref();
     }
 }
 
+pub enum DeferredClose {
+    socket,
+    without_socket,
+}
+
 pub struct CloseSocketHolder {
     ctx: *JSValkeyClient,
+    what: DeferredClose = .socket,
     task: jsc.AnyTask,
 
     pub fn run(*_) {
         const self_ptr = _;
         const _destroy_guard = DestroyGuard<@TypeOf(self_ptr)>{ val: self_ptr };
 
-        _.ctx.client.close();
+        switch (_.what) {
+            .socket => _.ctx.client.close(),
+            .without_socket => {
+                if (_.ctx.client.socket.isClosed()) {
+                    _.ctx.client.status = .disconnected;
+                    _.ctx.client.onClose() catch {};
+                    _.ctx.updatePollRef();
+                }
+            },
+        }
         _.ctx.deref();
     }
 }
@@ -691,9 +705,6 @@ pub struct JSValkeyClient {
                 .flags = .{
                     // Because this starts in the disconnected state, we need to reset some flags.
                     .is_authenticated = false,
-                    // If the user manually closed the connection, then duplicating a closed client
-                    // means the new client remains finalized.
-                    .is_manually_closed = _.client.flags.is_manually_closed,
                     .enable_offline_queue = if (_._subscription_ctx.is_subscriber)
                         _._subscription_ctx.original_enable_offline_queue
                     else
@@ -705,8 +716,6 @@ pub struct JSValkeyClient {
                         _._subscription_ctx.original_enable_auto_pipelining
                     else
                         _.client.flags.enable_auto_pipelining,
-                    // Duplicating a finalized client means it stays finalized.
-                    .finalized = _.client.flags.finalized,
                 },
                 .max_retries = _.client.max_retries,
                 .connection_timeout_ms = _.client.connection_timeout_ms,
@@ -804,13 +813,8 @@ pub struct JSValkeyClient {
             _.poll_ref.ref(_.client.vm);
 
             _.connect() catch e => {
-                _.poll_ref.unref(_.client.vm);
-                _.client.flags.needs_to_open_socket = true;
-                const err_value = globalObject.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, " {s} connecting to Valkey", .{@errorName(e)}).toJS();
-                const event_loop = _.client.vm.eventLoop();
-                event_loop.enter();
-                const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
-                promise_ptr.reject(globalObject, err_value)?;
+                debug("first dial failed before a socket was opened: {s}", .{@errorName(e)});
+                _.closeWithoutSocketNextTick();
                 return promise;
             };
 
@@ -835,11 +839,19 @@ pub struct JSValkeyClient {
     }
 
     pub fn jsDisconnect(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): JSValue ! bun.JSError {
-        if (_.client.status == .disconnected) {
+        if (_.client.status == .disconnected && !_.client.flags.is_reconnecting) {
             return JSValue.js_undefined;
         }
         _.client.disconnect();
         return JSValue.js_undefined;
+    }
+
+    pub fn cancelReconnect(*_) {
+        bun.debugAssert(_.client.status == .disconnected);
+        if (_.reconnect_timer.state == .ACTIVE) {
+            _.removeTimer(&_.reconnect_timer);
+        }
+        _.client.onClose() catch {};
     }
 
     pub fn getOnConnect(*_, thisValue: JSValue, _: *jsc.JSGlobalObject): JSValue {
@@ -972,7 +984,13 @@ pub struct JSValkeyClient {
     }
 
     pub fn reconnect(*_) {
+        if (_.reconnect_timer.state == .ACTIVE) {
+            _.removeTimer(&_.reconnect_timer);
+        }
         if (!_.client.flags.is_reconnecting) {
+            return;
+        }
+        if (_.client.status != .disconnected || !_.client.socket.isClosed()) {
             return;
         }
 
@@ -993,8 +1011,8 @@ pub struct JSValkeyClient {
         _.poll_ref.ref(vm);
 
         _.connect() catch e => {
-            _.failWithJSValue(_.globalObject.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, "{s} reconnecting", .{@errorName(e)}).toJS());
-            _.poll_ref.disable();
+            debug("reconnect failed before a socket was opened: {s}", .{@errorName(e)});
+            _.closeWithoutSocketNextTick();
             return;
         };
 
@@ -1116,6 +1134,9 @@ pub struct JSValkeyClient {
 
     // Callback for when Valkey client needs to reconnect
     pub fn onValkeyReconnect(*_) {
+        if (_.timer.state == .ACTIVE) {
+            _.removeTimer(&_.timer);
+        }
         // Schedule reconnection using our safe timer methods
         if (_.reconnect_timer.state == .ACTIVE) {
             _.removeTimer(&_.reconnect_timer);
@@ -1134,6 +1155,10 @@ pub struct JSValkeyClient {
         // Update poll reference to allow garbage collection of disconnected clients
         const _deref_guard = DerefGuard<*JSValkeyClient>{ val: _ };
         const _poll_guard = UpdatePollRefGuard<*JSValkeyClient>{ val: _ };
+
+        if (_.timer.state == .ACTIVE) {
+            _.removeTimer(&_.timer);
+        }
 
         let this_jsvalue: JSValue = undefined;
         if (v := _.this_value.tryGet()) {
@@ -1191,20 +1216,30 @@ pub struct JSValkeyClient {
         }
     }
 
-    fn closeSocketNextTick(*_) {
-        if (_.client.socket.isClosed()) return;
+    fn closeWithoutSocketNextTick(*_) {
+        _.client.status = .connecting;
+        _.updatePollRef();
+        _.enqueueDeferredClose(.without_socket);
+    }
 
+    fn enqueueDeferredClose(*_, what: DeferredClose) {
         _.ref();
         // socket close can potentially call JS so we need to enqueue the deinit
         const Holder = CloseSocketHolder;
         let holder = bun.handleOom(bun.default_allocator.create(Holder));
         holder.* = Holder{
             ctx: _,
+            what: what,
             task: undefined,
         };
         holder.task = jsc.AnyTask.New(Holder, Holder.run).init(holder);
 
         _.client.vm.enqueueTask(jsc.Task.init(&holder.task));
+    }
+
+    fn closeSocketNextTick(*_) {
+        if (_.client.socket.isClosed()) return;
+        _.enqueueDeferredClose(.socket);
     }
 
     pub fn finalize(*_) {
@@ -1233,6 +1268,7 @@ pub struct JSValkeyClient {
     }
 
     fn connect(*_): !void {
+        bun.debugAssert(_.client.socket.isClosed());
         _.client.flags.needs_to_open_socket = false;
         const vm = _.client.vm;
 
@@ -1258,8 +1294,7 @@ pub struct JSValkeyClient {
                     } else {
                         _.client.flags.enable_auto_reconnect = false;
                         _.clientFail("Failed to create TLS context", protocol.RedisError.ConnectionClosed)?;
-                        _.client.onValkeyClose()?;
-                        _.client.status = .disconnected;
+                        _.closeWithoutSocketNextTick();
                         return;
                     }
                 }
@@ -1277,22 +1312,21 @@ pub struct JSValkeyClient {
         _connect_guard.active = false;
     }
 
-    pub fn send(*_, globalThis: *jsc.JSGlobalObject, _: JSValue, command: *const Command): !*jsc.JSPromise {
-        if (_.client.flags.needs_to_open_socket) {
-            @branchHint(.unlikely);
-
-            _.connect() catch e => {
-                _.client.flags.needs_to_open_socket = true;
-                const err_value = globalThis.ERR(.SOCKET_CLOSED_BEFORE_CONNECTION, " {s} connecting to Valkey", .{@errorName(e)}).toJS();
-                const promise = jsc.JSPromise.create(globalThis);
-                const event_loop = _.client.vm.eventLoop();
-                event_loop.enter();
-                const _exit_guard = ExitGuard<@TypeOf(event_loop)>{ val: event_loop };
-                promise.reject(globalThis, err_value)?;
-                return promise;
-            };
-            _.resetConnectionTimeout();
+    pub fn ensureDialing(*_) {
+        if (!_.client.flags.needs_to_open_socket) {
+            return;
         }
+
+        _.connect() catch e => {
+            debug("first dial failed before a socket was opened: {s}", .{@errorName(e)});
+            _.closeWithoutSocketNextTick();
+            return;
+        };
+        _.resetConnectionTimeout();
+    }
+
+    pub fn send(*_, globalThis: *jsc.JSGlobalObject, _: JSValue, command: *const Command): !*jsc.JSPromise {
+        _.ensureDialing();
 
         const _poll_guard = UpdatePollRefGuard<*JSValkeyClient>{ val: _ };
         const send_fn = valkey.ValkeyClient.send;
@@ -1650,8 +1684,6 @@ pub fn SocketHandler(comptime ssl: bool): type {
             const loop = vm.eventLoop();
             loop.enter();
             const _exit_guard = ExitGuard<@TypeOf(loop)>{ val: loop };
-            client.client.flags.is_manually_closed = true;
-            const _close_guard = CloseGuard<@TypeOf(&client.client)>{ val: &client.client };
             (client.client.failWithJSValue(client.globalObject, err_value))?;
         }
 
@@ -1664,6 +1696,7 @@ pub fn SocketHandler(comptime ssl: bool): type {
             client.ref();
             // Ensure the socket pointer is updated.
             client.client.socket = .{ .SocketTCP = .detached };
+            client.client.status = .disconnected;
             const _disc_guard = DisconnectDerefGuard{ client: client };
 
             client.client.onClose() catch {}; // TODO: properly propagate exception upwards
@@ -1680,6 +1713,7 @@ pub fn SocketHandler(comptime ssl: bool): type {
         pub static fn onConnectError(client: *JSValkeyClient, _: SocketType, _: i32): void ! bun.JSTerminated {
             // Ensure the socket pointer is updated.
             client.client.socket = .{ .SocketTCP = .detached };
+            client.client.status = .disconnected;
             client.ref();
             const _disc_guard = DisconnectDerefGuard{ client: client };
 

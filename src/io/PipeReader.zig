@@ -560,7 +560,7 @@ pub fn readBlockingPipe(self: *PosixBufferedReader, fd: bun.FD, unused_hint: isi
                 const streaming = self.vtable.isStreamingEnabled();
                 var got_retry = false;
                 _ = &got_retry;
-                if ((self._buffer.capacity == 0)) {
+                if ((self._buffer.items.len == 0)) {
                     const stack_buffer = self.vtable.eventLoop().pipeReadBuffer();
                     switch (bun.sys.readNonblocking(fd, stack_buffer)) {
 .result => |bytes_read| {
@@ -609,7 +609,18 @@ if (self.maxbuf) |l| {
                         return;
                     }
                     if (streaming) {
-                        if ((!self.vtable.onReadChunk(buf[0..bytes_read], (if ((received_hup and (bytes_read < buf.len))) .eof else .progress)))) {
+                        const prev_len = self._buffer.items.len;
+                        const ok = self.vtable.onReadChunk(buf[0..bytes_read], (if ((received_hup and (bytes_read < buf.len))) .eof else .progress));
+                        if ((self._buffer.items.len > prev_len)) {
+                            const reentered = self._buffer.items[prev_len..];
+                            _ = std.mem.copyForwards(u8, self._buffer.items[0..reentered.len], reentered);
+                            self._buffer.items.len = reentered.len;
+                        } else {
+                            if ((self._buffer.items.len == prev_len)) {
+                                self._buffer.items.len = 0;
+                            }
+                        }
+                        if ((!ok)) {
                             return;
                         }
                     }
@@ -651,7 +662,7 @@ pub fn readWithFn(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, rece
             const streaming = self.vtable.isStreamingEnabled();
             if (streaming) {
                 const stack_buffer = self.vtable.eventLoop().pipeReadBuffer();
-                while ((self._buffer.capacity == 0)) {
+                while ((self._buffer.items.len == 0)) {
                     const stack_buffer_cutoff = (stack_buffer.len / 2);
                     var stack_buffer_head = stack_buffer;
                     _ = &stack_buffer_head;

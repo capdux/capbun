@@ -6,6 +6,7 @@ pub union(enum) AuthenticationState {
     ok: void,
     SASL: SASL,
     md5: void,
+    clear_text: void,
 
     pub fn zero(*_) {
         switch (unsafe { _.* }) {

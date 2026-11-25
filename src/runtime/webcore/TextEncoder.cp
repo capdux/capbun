@@ -202,17 +202,18 @@ class RopeStringEncoder {
 }
 
 @export @c fn TextEncoder__encodeInto16(
-    input_ptr: [*]const u16,
+    input_ptr: ([*]const u16)?,
     input_len: usize,
-    buf_ptr: [*]u8,
+    buf_ptr: ([*]u8)?,
     buf_len: usize,
 ): u64 {
-    const output = unsafe { buf_ptr[0..buf_len] };
-    const input = unsafe { input_ptr[0..input_len] };
+    if (buf_len == 0 || input_len == 0 || buf_ptr == null || input_ptr == null) return 0;
+    const output = unsafe { buf_ptr.?[0..buf_len] };
+    const input = unsafe { input_ptr.?[0..input_len] };
     let result: strings.EncodeIntoResult = strings.copyUTF16IntoUTF8(output, input);
     if (output.len >= 3 && (result.read == 0 || result.written == 0)) {
         const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
-        @memcpy(unsafe { buf_ptr[0..replacement_char.len] }, &replacement_char);
+        @memcpy(unsafe { buf_ptr.?[0..replacement_char.len] }, &replacement_char);
         result.read = 1;
         result.written = 3;
     }
@@ -221,13 +222,14 @@ class RopeStringEncoder {
 }
 
 @export @c fn TextEncoder__encodeInto8(
-    input_ptr: [*]const u8,
+    input_ptr: ([*]const u8)?,
     input_len: usize,
-    buf_ptr: [*]u8,
+    buf_ptr: ([*]u8)?,
     buf_len: usize,
 ): u64 {
-    const output = unsafe { buf_ptr[0..buf_len] };
-    const input = unsafe { input_ptr[0..input_len] };
+    if (buf_len == 0 || input_len == 0 || buf_ptr == null || input_ptr == null) return 0;
+    const output = unsafe { buf_ptr.?[0..buf_len] };
+    const input = unsafe { input_ptr.?[0..input_len] };
     const result: strings.EncodeIntoResult =
         strings.copyLatin1IntoUTF8(output, input);
     const sized: [2]u32 = .{ result.read, result.written };

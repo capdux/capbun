@@ -461,9 +461,13 @@ _ = Output.prettyError("<r><red>error<r> migrating lockfile:<r> {s}\n<r>", .{ @e
         const not_in_workspace_root = (manager.root_package_id.get(lockfile, manager.workspace_name_hash) != 0);
         var free_argument = false;
         _ = &free_argument;
-        argument = (if ((((arg_kind == .path) and not_in_workspace_root) and ((!bun.path.Platform.posix.isAbsolute(argument)) or (bun.Environment.isWindows and (!bun.path.Platform.windows.isAbsolute(argument)))))) brk: {
+        argument = (if ((((arg_kind == .path) and not_in_workspace_root) and (!bun.path.Platform.auto.isAbsolute(argument)))) brk: {
         if (pathArgumentRelativeToRootWorkspacePackage(manager, lockfile, argument)) |rel_path| {
             _ = &rel_path;
+            if (((!isRealDirNotSymlink(rel_path)) and isRealDirNotSymlink(argument))) {
+                _ = manager.allocator.free(rel_path);
+                break :brk argument;
+            }
             free_argument = true;
             break :brk rel_path;
         }
@@ -871,7 +875,7 @@ pub fn preparePatch(manager: *PackageManager) !void {
         const not_in_workspace_root = (manager.root_package_id.get(manager.lockfile, manager.workspace_name_hash) != 0);
         var free_argument = false;
         _ = &free_argument;
-        argument = (if ((((arg_kind == .path) and not_in_workspace_root) and ((!bun.path.Platform.posix.isAbsolute(argument)) or (bun.Environment.isWindows and (!bun.path.Platform.windows.isAbsolute(argument)))))) brk: {
+        argument = (if ((((arg_kind == .path) and not_in_workspace_root) and (!bun.path.Platform.auto.isAbsolute(argument)))) brk: {
         if (pathArgumentRelativeToRootWorkspacePackage(manager, manager.lockfile, argument)) |rel_path| {
             _ = &rel_path;
             free_argument = true;
@@ -1032,6 +1036,39 @@ pub fn preparePatch(manager: *PackageManager) !void {
             _ = Output.pretty("\nOnce you're done with your changes, run:\n\n  <cyan>bun patch --commit '{s}'<r>\n", .{ module_folder });
         }
         return;
+}
+
+pub fn isRealDirNotSymlink(path: []const u8) bool {
+        var native_buf: bun.PathBuffer = undefined;
+        _ = &native_buf;
+        const native = (if (comptime Environment.isWindows) native: {
+        if ((path.len > native_buf.len)) {
+            return false;
+        }
+        _ = @memcpy(native_buf[0..path.len], path);
+        const slice = native_buf[0..path.len];
+        _ = bun.path.posixToPlatformInPlace(u8, slice);
+        break :native slice;
+} else path);
+        var p = bun.Path(.{ .sep = .auto }).@"from"(native);
+        _ = &p;
+        var _guard_p = DeinitGuard(*@TypeOf(p)){ .ptr = (&p) };
+        _ = &_guard_p;
+        var ___guard_p_moved = false; _ = &___guard_p_moved;
+        defer if (!___guard_p_moved) { ___guard_p_moved = true; const __T = @TypeOf(_guard_p); if (@typeInfo(__T) == .optional) { if (_guard_p) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_p.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_p; _drop_val.__cp_deinit(); } };
+        if (comptime Environment.isWindows) {
+            if (bun.sys.getFileAttributes(p.sliceZ())) |attrs| {
+                _ = &attrs;
+                return (attrs.is_directory and (!attrs.is_reparse_point));
+            }
+            return false;
+        } else {
+            if (bun.sys.lstat(p.sliceZ()).asValue()) |st| {
+                _ = &st;
+                return std.posix.S.ISDIR(@as(std.posix.mode_t, @intCast(st.mode)));
+            }
+            return false;
+        }
 }
 
 pub fn detachModuleFolderFromSharedStore(module_folder: []const u8) void {

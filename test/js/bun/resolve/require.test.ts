@@ -1,4 +1,4 @@
-import { bunRun, tempDirWithFiles } from "harness";
+import { bunRun, tempDir, tempDirWithFiles } from "harness";
 import fs from "node:fs";
 import path from "node:path";
 const fixture = (...segs: string[]): string => path.join(import.meta.dirname, "fixtures", "require", ...segs);
@@ -40,6 +40,49 @@ describe("require(specifier)", () => {
     it.todo("require('*.html') synchronously produces a string");
     it.todo("require('*.wasm') produces a WebAssembly.Module");
     it.todo("require('*.db') wraps a sqlite file in a Database object and exports it");
+  });
+
+  describe("when the module throws after its require.cache entry was deleted", () => {
+    const evictsItself = {
+      "thrower.cjs": `
+        globalThis.runs = (globalThis.runs ?? 0) + 1;
+        delete require.cache[__filename];
+        throw new Error("boom " + globalThis.runs);
+      `,
+    };
+    const evictedByChild = {
+      "thrower.cjs": `
+        globalThis.runs = (globalThis.runs ?? 0) + 1;
+        require("./child.cjs");
+        throw new Error("boom " + globalThis.runs);
+      `,
+      "child.cjs": `delete require.cache[module.parent.filename];`,
+    };
+    it.concurrent.each([
+      ["by the module itself", evictsItself, "index.cjs"],
+      ["by a module it required", evictedByChild, "index.cjs"],
+    ])("%s, the error is catchable and the next require() runs the module again", async (_, files, entry) => {
+      using dir = tempDir("bun-test-require-evicted", {
+        ...files,
+        "index.cjs": `
+          const id = require.resolve("./thrower.cjs");
+          for (let i = 0; i < 2; i++) {
+            try {
+              require(id);
+              console.log("no error");
+            } catch (e) {
+              console.log(e.message, id in require.cache);
+            }
+          }
+        `,
+      });
+      expect(await bunRun(path.join(String(dir), entry))).toEqual({
+        stdout: `boom 1 false\nboom 2 false`,
+        stderr: "",
+        exitCode: 0,
+        signalCode: null,
+      });
+    });
   });
 
   describe("require.main", () => {

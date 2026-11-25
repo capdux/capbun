@@ -68,6 +68,7 @@ pub const AuthenticationState = union(enum) {
     ok: void,
     SASL: SASL,
     md5: void,
+    clear_text: void,
 
 pub fn zero(self: *AuthenticationState) void {
             switch ((blk: {

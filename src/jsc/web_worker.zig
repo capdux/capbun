@@ -676,6 +676,7 @@ pub fn exit(self: *WebWorker) void {
         if (self.vm) |vm| {
             _ = &vm;
             _ = vm.jsc_vm.notifyNeedTermination();
+            _ = vm.eventLoop().wakeup();
         }
 }
 

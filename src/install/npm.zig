@@ -1600,6 +1600,36 @@ pub fn parse(allocator: std.mem.Allocator, scope: *const Registry.Scope, log: *l
                     break :get_versions;
                 }
                 const versions = versions_q.expr.data.e_object.properties.slice();
+                const empty_time_props: [0]bun.ast.G.Property = undefined;
+                var time_props: []const bun.ast.G.Property = empty_time_props[0..0];
+                _ = &time_props;
+                if (json.asProperty("time")) |time_obj| {
+                    _ = &time_obj;
+                    if ((time_obj.expr.data == .e_object)) {
+                        time_props = time_obj.expr.data.e_object.properties.slice();
+                    }
+                }
+                var time_index = std.HashMap(u64, u32, IdentityContext(u64), 80).init(allocator);
+                _ = &time_index;
+                defer {
+                _ = time_index.deinit();
+                }
+                if ((time_props.len > 0)) {
+                    _ = try time_index.ensureTotalCapacity(@as(u32, @truncate(time_props.len)));
+                    var time_i: u32 = 0;
+                    _ = &time_i;
+                    for (cp_iter_slice(time_props)) |tp| {
+                        _ = &tp;
+                        if (tp.key.?.asString(allocator)) |tp_key| {
+                            _ = &tp_key;
+                            const gop = time_index.getOrPutAssumeCapacity(bun.Wyhash11.hash(0, tp_key));
+                            if ((!gop.found_existing)) {
+                                gop.value_ptr.* = time_i;
+                            }
+                        }
+                        time_i = (time_i + 1);
+                    }
+                }
                 for (cp_iter_slice(versions)) |prop| {
                     _ = &prop;
                     const version_name = ((prop.key.?.asString(allocator)) orelse continue);
@@ -1864,6 +1894,36 @@ else => {
                 var prev_extern_bin_group: ?[]ExternalString = null;
                 _ = &prev_extern_bin_group;
                 const empty_version = bun.serializable(PackageVersion{ .bin = Bin.init() });
+                const empty_time_props: [0]bun.ast.G.Property = undefined;
+                var time_props: []const bun.ast.G.Property = empty_time_props[0..0];
+                _ = &time_props;
+                if (json.asProperty("time")) |time_obj| {
+                    _ = &time_obj;
+                    if ((time_obj.expr.data == .e_object)) {
+                        time_props = time_obj.expr.data.e_object.properties.slice();
+                    }
+                }
+                var time_index = std.HashMap(u64, u32, IdentityContext(u64), 80).init(allocator);
+                _ = &time_index;
+                defer {
+                _ = time_index.deinit();
+                }
+                if ((time_props.len > 0)) {
+                    _ = try time_index.ensureTotalCapacity(@as(u32, @truncate(time_props.len)));
+                    var time_i: u32 = 0;
+                    _ = &time_i;
+                    for (cp_iter_slice(time_props)) |tp| {
+                        _ = &tp;
+                        if (tp.key.?.asString(allocator)) |tp_key| {
+                            _ = &tp_key;
+                            const gop = time_index.getOrPutAssumeCapacity(bun.Wyhash11.hash(0, tp_key));
+                            if ((!gop.found_existing)) {
+                                gop.value_ptr.* = time_i;
+                            }
+                        }
+                        time_i = (time_i + 1);
+                    }
+                }
                 for (cp_iter_slice(versions)) |prop| {
                     _ = &prop;
                     const version_name = ((prop.key.?.asString(allocator)) orelse continue);
@@ -2293,11 +2353,32 @@ else => {
                             }
                         }
                     }
-                    if (json.asProperty("time")) |time_obj| {
-                        _ = &time_obj;
-                        if (time_obj.expr.get(version_name)) |publish_time_expr| {
-                            _ = &publish_time_expr;
-                            if (publish_time_expr.asString(allocator)) |publish_time_str| {
+                    if (time_index.get(bun.Wyhash11.hash(0, version_name))) |time_idx| {
+                        _ = &time_idx;
+                        const indexed = time_props[@as(usize, @intCast(time_idx))];
+                        var matched_prop: ?bun.ast.G.Property = null;
+                        _ = &matched_prop;
+                        if (indexed.key.?.asString(allocator)) |indexed_key| {
+                            _ = &indexed_key;
+                            if (std.mem.eql(u8, indexed_key, version_name)) {
+                                matched_prop = indexed;
+                            }
+                        }
+                        if ((matched_prop == null)) {
+                            for (cp_iter_slice(time_props)) |tp| {
+                                _ = &tp;
+                                if (tp.key.?.asString(allocator)) |tp_key| {
+                                    _ = &tp_key;
+                                    if (std.mem.eql(u8, tp_key, version_name)) {
+                                        matched_prop = tp;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (matched_prop) |mp| {
+                            _ = &mp;
+                            if ((if (@typeInfo(@TypeOf(mp)) == .@"enum") @intFromEnum(mp) else mp.value).?.asString(allocator)) |publish_time_str| {
                                 _ = &publish_time_str;
                                 if ((blk_catch_11: { break :blk_catch_11 ((bun.jsc.wtf.parseES5Date(publish_time_str)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); })) |time| {
                                     _ = &time;

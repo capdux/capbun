@@ -1,5 +1,7 @@
 import { heapStats } from "bun:jsc";
 import { describe, expect, test } from "bun:test";
+import { bunEnv, bunExe } from "harness";
+import { totalmem } from "node:os";
 import stripAnsi from "strip-ansi";
 
 describe("Bun.stripANSI", () => {
@@ -479,3 +481,73 @@ describe("Bun.stripANSI", () => {
     expect(Bun.stripANSI(undefined as any)).toBe("undefined");
   });
 });
+
+describe("Bun.stripANSI: an output buffer that cannot be allocated", () => {
+  const outOfMemory = "RangeError: Out of memory";
+
+  test("throws a RangeError", async () => {
+    await using proc = Bun.spawn({
+      cmd: [
+        bunExe(),
+        "-e",
+        `const red = "\\x1b[31m";
+        const cases = {
+          atLimit: red + "a".repeat(65531),
+          pastLimit: red + "a".repeat(65532),
+          wideAtLimit: red + "あ".repeat(65531),
+          widePastLimit: red + "あ".repeat(65532),
+          nothingToStrip: "a".repeat(70000),
+        };
+        const results = {};
+        for (const [name, input] of Object.entries(cases)) {
+          try {
+            results[name] = Bun.stripANSI(input).length;
+          } catch (e) {
+            results[name] = e.name + ": " + e.message;
+          }
+        }
+        console.log(JSON.stringify(results));`,
+      ],
+      env: { ...bunEnv, BUN_FEATURE_FLAG_SYNTHETIC_MEMORY_LIMIT: String(64 * 1024) },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout: JSON.parse(stdout || "null"), stderr, exitCode }).toEqual({
+      stdout: {
+        atLimit: 65531,
+        pastLimit: outOfMemory,
+        wideAtLimit: 65531,
+        widePastLimit: outOfMemory,
+        nothingToStrip: 70000,
+      },
+      stderr: "",
+      exitCode: 0,
+    });
+  });
+});
+
+test.skipIf(Math.min(totalmem(), process.constrainedMemory() || Infinity) < 8 * 1024 ** 3)(
+  "Bun.stripANSI: strips a 16-bit string of more than 2^30 code units",
+  async () => {
+    await using proc = Bun.spawn({
+      cmd: [
+        bunExe(),
+        "-e",
+        `const input = "\\x1b(あ".repeat(357913942);
+        console.log(JSON.stringify({ input: input.length, output: Bun.stripANSI(input).length }));`,
+      ],
+      env: bunEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect({ stdout: JSON.parse(stdout || "null"), stderr, exitCode, signalCode: proc.signalCode }).toEqual({
+      stdout: { input: 1073741826, output: 0 },
+      stderr: "",
+      exitCode: 0,
+      signalCode: null,
+    });
+  },
+  30_000,
+);

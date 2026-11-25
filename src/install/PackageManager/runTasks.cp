@@ -831,6 +831,9 @@ pub fn runTasks(
                         else => @compileError("unexpected context type"),
                     }
                 } else if (pkg := manager.processExtractedTarballPackage(&package_id, dependency_id, resolution, &task.data.extract, log_level)) {
+                    // Record the appended package so a later-enqueued dependency
+                    // on this same tarball can resolve; see `AppendedTaskPackageMap`.
+                    manager.appended_task_packages.put(manager.allocator, task.id, pkg.meta.id) catch unreachable;
                     // In the middle of an install, you could end up needing to downlaod the github tarball for a dependency
                     // We need to make sure we resolve the dependencies first before calling the onExtract callback
                     // TODO: move this into a separate function
@@ -901,8 +904,6 @@ pub fn runTasks(
                 const repo_fd = task.data.git_clone;
                 const name = clone.name.slice();
                 const url = clone.url.slice();
-
-                manager.git_repositories.put(manager.allocator, task.id, repo_fd) catch unreachable;
 
                 if (task.status == .fail) {
                     const e = task.err ?? error.Failed;
@@ -982,41 +983,42 @@ pub fn runTasks(
                     continue;
                 }
 
+                manager.git_repositories.put(manager.allocator, task.id, repo_fd) catch unreachable;
+
                 if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{})) && (@typeInfo(Ctx) == .pointer && @typeInfo(Ctx).pointer.child == PackageInstaller)) {
-                    // Installing!
-                    // this dependency might be something other than a git dependency! only need the name and
-                    // behavior, use the resolution from the task.
-                    const dep_id = clone.dep_id;
-                    const dep = manager.lockfile.buffers.dependencies.items[dep_id];
-                    const dep_name = dep.name.slice(manager.lockfile.buffers.string_bytes.items);
-
-                    const git = clone.res.value.git;
-                    const committish = git.committish.slice(manager.lockfile.buffers.string_bytes.items);
-                    const repo = git.repo.slice(manager.lockfile.buffers.string_bytes.items);
-
-                    const resolved = Repository.findCommit(
-                        manager.allocator,
-                        manager.env,
-                        manager.log,
-                        task.data.git_clone.stdDir(),
-                        dep_name,
-                        committish,
-                        task.id,
-                    )?;
-
-                    const checkout_id = Task.Id.forGitCheckout(repo, resolved);
-
-                    if (manager.hasCreatedNetworkTask(checkout_id, dep.behavior.isRequired())) continue;
-
-                    manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueGitCheckout(
-                        checkout_id,
-                        repo_fd,
-                        dep_id,
-                        dep_name,
-                        clone.res,
-                        resolved,
-                        null,
-                    )));
+                    // Installing! The clone task is shared by every dependency on
+                    // this repo URL; enqueue a checkout per waiter, not just one.
+                    if (removed := manager.task_queue.fetchRemove(task.id)) {
+                        let waiters = removed.value;
+                        const _waiters_guard = DeinitWithAllocGuard<@TypeOf(waiters)>{ ptr: &waiters, alloc: manager.allocator };
+                        const pkg_resolutions = manager.lockfile.packages.items(.resolution);
+                        for (waiter of waiters.items) {
+                            const dep_id = switch (waiter) {
+                                .dependency id => id,
+                                else => continue,
+                            };
+                            const dep = manager.lockfile.buffers.dependencies.items[dep_id];
+                            const pkg_id = manager.lockfile.buffers.resolutions.items[dep_id];
+                            if (pkg_id == invalid_package_id) continue;
+                            const res = pkg_resolutions[pkg_id];
+                            if (res.tag != .git) continue;
+                            const string_buf = manager.lockfile.buffers.string_bytes.items;
+                            const dep_name = dep.name.slice(string_buf);
+                            const repo = res.value.git.repo.slice(string_buf);
+                            const resolved = res.value.git.resolved.slice(string_buf);
+                            const checkout_id = Task.Id.forGitCheckout(repo, resolved);
+                            if (manager.hasCreatedNetworkTask(checkout_id, dep.behavior.isRequired())) continue;
+                            manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueGitCheckout(
+                                checkout_id,
+                                repo_fd,
+                                dep_id,
+                                dep_name,
+                                res,
+                                resolved,
+                                null,
+                            )));
+                        }
+                    }
                 } else {
                     // Resolving!
                     const dependency_list_entry = manager.task_queue.getEntry(task.id).?;
@@ -1100,6 +1102,9 @@ pub fn runTasks(
                     &task.data.git_checkout,
                     log_level,
                 )) {
+                    // Record the appended package so a later-enqueued dependency
+                    // on this same repo+commit can resolve; see `AppendedTaskPackageMap`.
+                    manager.appended_task_packages.put(manager.allocator, task.id, pkg.meta.id) catch unreachable;
                     let any_root = false;
                     if (dependency_list_entry := manager.task_queue.getEntry(task.id)) {
                         let dependency_list = dependency_list_entry.value_ptr.*;

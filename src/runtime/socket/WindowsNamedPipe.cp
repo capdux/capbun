@@ -97,6 +97,9 @@ export class WindowsNamedPipe {
 
     fn onRead(*_, buffer: []const u8) {
         log("onRead ({})", .{buffer.len});
+        _.ref();
+        const _keep_alive = DerefGuard(*WindowsNamedPipe){ .val = _ };
+        * = &_keep_alive;
         _.incoming.len += @as(u32, @truncate(buffer.len));
         bun.assert(_.incoming.len <= _.incoming.cap);
         bun.assert(bun.isSliceInBuffer(buffer, _.incoming.allocatedSlice()));
@@ -131,6 +134,9 @@ export class WindowsNamedPipe {
 
     fn onReadError(*_, err: bun.sys.E) {
         log("onReadError", .{});
+        _.ref();
+        const _keep_alive = DerefGuard(*WindowsNamedPipe){ .val = _ };
+        * = &_keep_alive;
         if (err == .EOF) {
             _.handlers.onEnd(_.handlers.ctx);
         } else {
@@ -141,6 +147,9 @@ export class WindowsNamedPipe {
 
     fn onError(*_, err: bun.sys.Error) {
         log("onError", .{});
+        _.ref();
+        const _keep_alive = DerefGuard(*WindowsNamedPipe){ .val = _ };
+        * = &_keep_alive;
         _.handlers.onError(_.handlers.ctx, err);
         _.close();
     }
@@ -157,6 +166,9 @@ export class WindowsNamedPipe {
 
     fn onHandshake(*_, handshake_success: bool, ssl_error: uws.us_bun_verify_error_t) {
         log("onHandshake", .{});
+        _.ref();
+        const _keep_alive = DerefGuard(*WindowsNamedPipe){ .val = _ };
+        * = &_keep_alive;
 
         _.ssl_error = .{
             .error_no = ssl_error.error_no,
@@ -305,6 +317,9 @@ export class WindowsNamedPipe {
 
     pub fn getAcceptedBy(*_, server: *uv.Pipe, ssl_ctx: *BoringSSL.SSL_CTX?): bun.sys.Maybe(void) {
         bun.assert(_.pipe != null);
+        _.ref();
+        const _keep_alive = DerefGuard(*WindowsNamedPipe){ .val = _ };
+        * = &_keep_alive;
         _.flags.disconnected = true;
 
         if (tls := ssl_ctx) {

@@ -31,6 +31,7 @@ export enum InternalSocket {
         switch (_) {
             .detached => return true,
             .connected(socket) => {
+                if (!socket.isEstablished()) return false;
                 if (pause) socket.pause() else socket.resumeSocket();
                 return true;
             },

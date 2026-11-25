@@ -250,6 +250,7 @@ pub const Flags = packed struct(u32) {
     disable_keepalive: bool = false,
     disable_decompression: bool = false,
     did_have_handshaking_error: bool = false,
+    reused_socket_verification: PeerVerification = .none,
     force_last_modified: bool = false,
     redirected: bool = false,
     proxy_tunneling: bool = false,
@@ -263,7 +264,7 @@ pub const Flags = packed struct(u32) {
     force_http1: bool = false,
     force_http3: bool = false,
     h3_retried: bool = false,
-    _: u13 = 0,
+    _: u11 = 0,
 };
 
 pub const ThreadlocalAsyncHTTP = struct {
@@ -346,11 +347,29 @@ pub fn deinit(self: *HTTPClient) void {
         self.unix_socket_path = bun.jsc.ZigString.Slice.empty;
 }
 
+pub fn targetVerification(self: HTTPClient) PeerVerification {
+        if ((!self.flags.reject_unauthorized)) {
+            return .none;
+        }
+        if (self.signals.get(.cert_errors)) {
+            return .callback;
+        }
+        return .native;
+}
+
+pub fn socketVerification(self: HTTPClient) PeerVerification {
+        if ((self.http_proxy != null)) {
+            return (if (self.flags.reject_unauthorized) .native else .none);
+        }
+        return self.targetVerification();
+}
+
+pub fn pooledSocketVerification(self: HTTPClient) PeerVerification {
+        return self.flags.reused_socket_verification.max(self.socketVerification());
+}
+
 pub fn isKeepAlivePossible(self: HTTPClient) bool {
         if (comptime bun.FeatureFlags.enable_keepalive) {
-            if ((self.unix_socket_path.length() > 0)) {
-                return false;
-            }
             if ((self.state.flags.allow_keepalive and (!self.flags.disable_keepalive))) {
                 return true;
             }
@@ -964,8 +983,9 @@ pub fn start_(self: *HTTPClient, comptime is_ssl: bool) void {
 pub fn onPreconnect(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) void {
         _ = log("onPreconnect({})", .{ self.url });
         _ = self.unregisterAbortTracker();
+        const verification = self.pooledSocketVerification();
         const ctx = self.getSslCtx(is_ssl);
-        _ = ctx.releaseSocket(socket, (self.flags.did_have_handshaking_error and (!self.flags.reject_unauthorized)), self.url.hostname, self.url.getPortAuto(), self.tls_props, null, "", 0, 0, null);
+        _ = ctx.releaseSocket(socket, (self.flags.did_have_handshaking_error and (!self.flags.reject_unauthorized)), verification, self.url.hostname, self.url.getPortAuto(), self.tls_props, null, "", 0, 0, null, self.unix_socket_path.slice());
         _ = self.state.reset(self.allocator);
         self.state.response_stage = .done;
         self.state.request_stage = .done;
@@ -1613,7 +1633,7 @@ pub fn sendProgressUpdateWithoutStageCheck(self: *HTTPClient, comptime is_ssl: b
                     _ = &t;
                     _ = t.detachOwner(self);
                 }
-                _ = ctx.releaseSocket(socket, (self.flags.did_have_handshaking_error and (!self.flags.reject_unauthorized)), self.connected_url.hostname, self.connected_url.getPortAuto(), self.tls_props, tunnel, (if ((tunnel != null)) self.url.hostname else ""), (if ((tunnel != null)) self.url.getPortAuto() else 0), (if ((tunnel != null)) self.proxyAuthHash() else 0), null);
+                _ = ctx.releaseSocket(socket, (self.flags.did_have_handshaking_error and (!self.flags.reject_unauthorized)), self.pooledSocketVerification(), self.connected_url.hostname, self.connected_url.getPortAuto(), self.tls_props, tunnel, (if ((tunnel != null)) self.url.hostname else ""), (if ((tunnel != null)) self.url.getPortAuto() else 0), (if ((tunnel != null)) self.proxyAuthHash() else 0), null, self.unix_socket_path.slice());
             } else {
                 if (self.proxy_tunnel) |tunnel| {
                     _ = &tunnel;
@@ -1664,8 +1684,6 @@ pub fn doRedirect(self: *HTTPClient, comptime is_ssl: bool, ctx: *NewHTTPContext
         if ((self.state.original_request_body == .stream)) {
             self.flags.is_streaming_request_body = false;
         }
-        _ = self.unix_socket_path.deinit();
-        self.unix_socket_path = jsc.ZigString.Slice.empty;
         const request_body = (if ((self.state.flags.resend_request_body_on_redirect and (self.state.original_request_body == .bytes))) self.state.original_request_body.bytes else "");
         _ = self.state.response_message_buffer.deinit();
         const body_out_str = self.state.body_out_str.?;
@@ -1684,11 +1702,13 @@ pub fn doRedirect(self: *HTTPClient, comptime is_ssl: bool, ctx: *NewHTTPContext
             if (((((self.state.request_stage == .done) and self.isKeepAlivePossible()) and (!socket.isClosedOrHasError())) and (((!is_ssl) or (self.http_proxy != null)) or (self.hostname == null)))) {
                 _ = log("Keep-Alive release in redirect", .{});
                 _ = assert((self.connected_url.hostname.len > 0));
-                _ = ctx.releaseSocket(socket, (self.flags.did_have_handshaking_error and (!self.flags.reject_unauthorized)), self.connected_url.hostname, self.connected_url.getPortAuto(), self.tls_props, null, "", 0, 0, null);
+                _ = ctx.releaseSocket(socket, (self.flags.did_have_handshaking_error and (!self.flags.reject_unauthorized)), self.pooledSocketVerification(), self.connected_url.hostname, self.connected_url.getPortAuto(), self.tls_props, null, "", 0, 0, null, self.unix_socket_path.slice());
             } else {
                 _ = NewHTTPContext(is_ssl).closeSocket(socket);
             }
         }
+        _ = self.unix_socket_path.deinit();
+        self.unix_socket_path = jsc.ZigString.Slice.empty;
         self.connected_url = bun.URL{  };
         if ((self.prev_redirect.len > 0)) {
             _ = bun.default_allocator.free(self.prev_redirect);
@@ -2383,6 +2403,7 @@ pub const end_of_chunked_http1_1_encoding_response_body = "0\r\n\r\n";
 pub const default_redirect_count = 127;
 pub const _CallbackFunction = *const fn(ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
 pub const _ReleaseAtShutdownFn = *const fn(ctx: HttpCallbackCtx) void;
+pub const PeerVerification = HTTPContextMod.PeerVerification;
 pub const SOCKET_FLAGS: u32 = (if (bun.Environment.isLinux) (std.posix.SOCK.CLOEXEC | std.posix.MSG.NOSIGNAL) else std.posix.SOCK.CLOEXEC);
 pub const OPEN_SOCKET_FLAGS = std.posix.SOCK.CLOEXEC;
 pub const extremely_verbose = false;

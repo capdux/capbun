@@ -330,9 +330,14 @@ pub fn doPatchCommit(
     let free_argument = false;
     argument = if (arg_kind == .path &&
         not_in_workspace_root &&
-        (!bun.path.Platform.posix.isAbsolute(argument) || (bun.Environment.isWindows && !bun.path.Platform.windows.isAbsolute(argument))))
+        !bun.path.Platform.auto.isAbsolute(argument))
     brk: {
         if (rel_path := pathArgumentRelativeToRootWorkspacePackage(manager, lockfile, argument)) {
+            // preparePatch detaches symlinks; a symlink here means the prepared copy is at the root
+            if (!isRealDirNotSymlink(rel_path) && isRealDirNotSymlink(argument)) {
+                manager.allocator.free(rel_path);
+                break :brk argument;
+            }
             free_argument = true;
             break :brk rel_path;
         }
@@ -802,7 +807,7 @@ pub fn preparePatch(manager: *PackageManager)! {
     let free_argument = false;
     argument = if (arg_kind == .path &&
         not_in_workspace_root &&
-        (!bun.path.Platform.posix.isAbsolute(argument) || (bun.Environment.isWindows && !bun.path.Platform.windows.isAbsolute(argument))))
+        !bun.path.Platform.auto.isAbsolute(argument))
     brk: {
         if (rel_path := pathArgumentRelativeToRootWorkspacePackage(manager, manager.lockfile, argument)) {
             free_argument = true;
@@ -992,6 +997,31 @@ pub fn preparePatch(manager: *PackageManager)! {
     }
 
     return;
+}
+
+fn isRealDirNotSymlink(path: []const u8): bool {
+    let native_buf: bun.PathBuffer = undefined;
+    const native = if (comptime Environment.isWindows) native: {
+        if (path.len > native_buf.len) return false;
+        @memcpy(native_buf[0..path.len], path);
+        const slice = native_buf[0..path.len];
+        bun.path.posixToPlatformInPlace(u8, slice);
+        break :native slice;
+    } else path;
+
+    let p = bun.Path({ sep: .auto }).@"from"(native);
+    const _guard_p = DeinitGuard<*@TypeOf(p)!>{ ptr: &p };
+    if (comptime Environment.isWindows) {
+        if (attrs := bun.sys.getFileAttributes(p.sliceZ())) {
+            return attrs.is_directory && !attrs.is_reparse_point;
+        }
+        return false;
+    } else {
+        if (st := bun.sys.lstat(p.sliceZ()).asValue()) {
+            return std.posix.S.ISDIR(@as(std.posix.mode_t, @intCast(st.mode)));
+        }
+        return false;
+    }
 }
 
 fn detachModuleFolderFromSharedStore(module_folder: []const u8) {

@@ -51,6 +51,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const bun = @import("bun");
 const HTTPContext = @import("../HTTPContext.zig").HTTPContext;
 const NewHTTPContext = @import("../HTTPContext.zig").NewHTTPContext;
+const PeerVerification = @import("../HTTPContext.zig").PeerVerification;
 const Stream = @import("./Stream.zig").Stream;
 pub const dispatch = @import("./dispatch.zig");
 pub const encode = @import("./encode.zig");
@@ -110,6 +111,7 @@ hostname: []const u8,
 port: u16,
 ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr = null,
 did_have_handshaking_error: bool,
+verification: PeerVerification = .none,
 host_header_hash: u64 = 0,
 write_buffer: bun.io.StreamBuffer = .{},
 read_buffer: std.ArrayListUnmanaged(u8) = .{},
@@ -171,7 +173,7 @@ pub fn create(ctx: *HTTPContextTLS, socket: Socket, client: *HTTPClient) *Client
             _ = &p;
             ssl_config = p.clone();
         }
-        const session = ClientSession.new(.{ .ref_count = RefCount.init(), .hpack = HPACK.init(4096), .socket = socket, .ctx = ctx, .hostname = bun.handleOom(bun.default_allocator.dupe(u8, client.connected_url.hostname)), .port = client.connected_url.getPortAuto(), .ssl_config = ssl_config, .did_have_handshaking_error = client.flags.did_have_handshaking_error, .host_header_hash = client.proxyAuthHash() });
+        const session = ClientSession.new(.{ .ref_count = RefCount.init(), .hpack = HPACK.init(4096), .socket = socket, .ctx = ctx, .hostname = bun.handleOom(bun.default_allocator.dupe(u8, client.connected_url.hostname)), .port = client.connected_url.getPortAuto(), .ssl_config = ssl_config, .did_have_handshaking_error = client.flags.did_have_handshaking_error, .verification = client.socketVerification(), .host_header_hash = client.proxyAuthHash() });
         _ = bun.http.H2.live_sessions.fetchAdd(1, .monotonic);
         _ = ctx.registerH2(session);
         return session;
@@ -181,8 +183,8 @@ pub fn hasHeadroom(self: ClientSession) bool {
         return (((((!self.goaway_received) and (!self.encoder_poisoned)) and (self.fatal_error == null)) and (self.streams.count() < self.remote_max_concurrent_streams)) and (self.next_stream_id < H2FrameParser.MAX_STREAM_ID));
 }
 
-pub fn matches(self: ClientSession, hostname: []const u8, port: u16, ssl_config: ?*SSLConfig, host_header_hash: u64) bool {
-        return ((((self.port == port) and (bun.api.server.ServerConfig.SSLConfig.rawPtr(self.ssl_config) == ssl_config)) and (self.host_header_hash == host_header_hash)) and bun.strings.eqlLong(self.hostname, hostname, true));
+pub fn matches(self: ClientSession, hostname: []const u8, port: u16, ssl_config: ?*SSLConfig, verification: PeerVerification, host_header_hash: u64) bool {
+        return (((((self.port == port) and (bun.api.server.ServerConfig.SSLConfig.rawPtr(self.ssl_config) == ssl_config)) and verification.allows(self.verification)) and (self.host_header_hash == host_header_hash)) and bun.strings.eqlLong(self.hostname, hostname, true));
 }
 
 pub fn adopt(self: *ClientSession, client: *HTTPClient) void {
@@ -662,7 +664,7 @@ pub fn maybeRelease(self: *ClientSession) void {
         }
         _ = self.ctx.unregisterH2(self);
         if ((self.canPool() and (!self.socket.isClosedOrHasError()))) {
-            _ = self.ctx.releaseSocket(self.socket, self.did_have_handshaking_error, self.hostname, self.port, self.ssl_config, null, "", 0, self.host_header_hash, self);
+            _ = self.ctx.releaseSocket(self.socket, self.did_have_handshaking_error, self.verification, self.hostname, self.port, self.ssl_config, null, "", 0, self.host_header_hash, self, "");
         } else {
             _ = HTTPContextTLS.closeSocket(self.socket);
             _ = self.deref();

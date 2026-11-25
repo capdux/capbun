@@ -63,7 +63,7 @@ pub const spawn = js_bun_spawn_bindings.spawn;
     /// by the caller). Owned terminals are closed when the subprocess exits
     /// so the exit callback fires; borrowed terminals are left open for reuse.
     owns_terminal: bool = false,
-    _: u1 = 0,
+    abort_signal_killed: bool = false,
 }
 
 pub const SignalCode = bun.SignalCode;
@@ -149,8 +149,11 @@ pub const NewStaticPipeWriter = StaticPipeWriterMod.NewStaticPipeWriter;
 pub const StaticPipeWriter = NewStaticPipeWriter(Subprocess);
 
 @c pub fn onAbortSignal(subprocess_ctx: *!?, _: jsc.JSValue) {
-    const subproc: *Subprocess = unsafe { @ptrCast(@alignCast(subprocess_ctx.?)) };
+    let subproc: *Subprocess = unsafe { @ptrCast(@alignCast(subprocess_ctx.?)) };
     subproc.clearAbortSignal();
+    if (!subproc.hasExited()) {
+        subproc.flags.abort_signal_killed = true;
+    }
     * = subproc.tryKill(subproc.killSignal);
 }
 
@@ -711,6 +714,10 @@ pub struct TestingAPIs {
         defer if (!did_update_has_pending_activity) client.updateHasPendingActivity();
 
         const loop = jsc_vm.eventLoop();
+
+        if (client.event_loop_timer.state == .FIRED || client.exited_due_to_maxbuf != null || client.flags.abort_signal_killed) {
+            client.closeReadablePipes();
+        }
 
         if (!is_sync) {
             if (this_jsvalue != .zero) {

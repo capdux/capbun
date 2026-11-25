@@ -41,6 +41,66 @@ export struct Comparator {
     op: Op = .unset,
     version: Version = .{},
 
+    export static fn ltNextMajor(major: u64): Comparator {
+        if (major < std.math.maxInt(u64)) {
+            return Comparator{
+                op: Op.lt,
+                version: Version{
+                    major: major + 1,
+                },
+            };
+        }
+        return Comparator{
+            op: Op.lte,
+            version: Version{
+                major: std.math.maxInt(u64),
+                minor: std.math.maxInt(u64),
+                patch: std.math.maxInt(u64),
+            },
+        };
+    }
+
+    export static fn ltNextMinor(major: u64, minor: u64): Comparator {
+        if (minor < std.math.maxInt(u64)) {
+            return Comparator{
+                op: Op.lt,
+                version: Version{
+                    major: major,
+                    minor: minor + 1,
+                },
+            };
+        }
+        return Comparator{
+            op: Op.lte,
+            version: Version{
+                major: major,
+                minor: std.math.maxInt(u64),
+                patch: std.math.maxInt(u64),
+            },
+        };
+    }
+
+    export static fn ltNextPatch(major: u64, minor: u64, patch: u64): Comparator {
+        if (patch < std.math.maxInt(u64)) {
+            return Comparator{
+                op: Op.lt,
+                version: Version{
+                    major: major,
+                    minor: minor,
+                    patch: patch + 1,
+                },
+            };
+        }
+        return Comparator{
+            op: Op.lte,
+            version: Version{
+                major: major,
+                minor: minor,
+                patch: std.math.maxInt(u64),
+            },
+        };
+    }
+
     export static fn eql(lhs: Comparator, rhs: Comparator): bool {
         return lhs.op == rhs.op && lhs.version.eql(rhs.version);
     }
@@ -132,40 +192,25 @@ export @root struct Range {
                 };
             },
             .minor => {
-                const lhs = Version{
-                    .major = version.major +| 1,
-                };
-                const rhs = Version{
-                    .major = version.major,
-                };
                 return .{
-                    .left = .{
-                        .op = Op.lt,
-                        .version = lhs,
-                    },
+                    .left = Comparator.ltNextMajor(version.major),
                     .right = .{
                         .op = Op.gte,
-                        .version = rhs,
+                        .version = Version{
+                            .major = version.major,
+                        },
                     },
                 };
             },
             .patch => {
-                const lhs = Version{
-                    .major = version.major,
-                    .minor = version.minor +| 1,
-                };
-                const rhs = Version{
-                    .major = version.major,
-                    .minor = version.minor,
-                };
                 return Range{
-                    .left = .{
-                        .op = Op.lt,
-                        .version = lhs,
-                    },
+                    .left = Comparator.ltNextMinor(version.major, version.minor),
                     .right = .{
                         .op = Op.gte,
-                        .version = rhs,
+                        .version = Version{
+                            .major = version.major,
+                            .minor = version.minor,
+                        },
                     },
                 };
             },

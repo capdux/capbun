@@ -76,7 +76,23 @@ pub fn take(comptime T: type, cell: jsc.JSValue): (*T)? {
 /// defer that work to the event loop.
 @callconv("c")
 @export pub fn Bun__NativePromiseContext__destroy(ctx: *!, tag: u8) {
-    DeferredDerefTask.schedule(ctx, @enumFromInt(tag));
+    const t: Tag = @enumFromInt(tag);
+    clearRememberedCell(ctx, t);
+    DeferredDerefTask.schedule(ctx, t);
+}
+
+fn clearRememberedCell(ctx: *!, tag: Tag) {
+    unsafe {
+        switch (tag) {
+            .HTTPServerRequestContext => @as(*server.HTTPServer.RequestContext, ctx).promiseCellCollected(),
+            .HTTPSServerRequestContext => @as(*server.HTTPSServer.RequestContext, ctx).promiseCellCollected(),
+            .DebugHTTPServerRequestContext => @as(*server.DebugHTTPServer.RequestContext, ctx).promiseCellCollected(),
+            .DebugHTTPSServerRequestContext => @as(*server.DebugHTTPSServer.RequestContext, ctx).promiseCellCollected(),
+            .HTTPSServerH3RequestContext => @as(*server.HTTPSServer.H3RequestContext, ctx).promiseCellCollected(),
+            .DebugHTTPSServerH3RequestContext => @as(*server.DebugHTTPSServer.H3RequestContext, ctx).promiseCellCollected(),
+            .BodyValueBufferer => {},
+        }
+    }
 }
 
 comptime {

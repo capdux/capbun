@@ -1033,6 +1033,9 @@ return error.InvalidSign;
             while ((idx <= uweight)) {
                 const digit = (if ((idx < undigits)) try reader.readInt(u16, .big) else 0);
                 _ = log("digit: {d}", .{ digit });
+                if ((digit >= 10000)) {
+                    return error.InvalidBuffer;
+                }
                 var digit_str: [4]u8 = undefined;
                 _ = &digit_str;
                 const digit_len = std.fmt.printInt((&digit_str), digit, 10, .lower, .{ .width = 4, .fill = 48 });
@@ -1064,6 +1067,9 @@ return error.InvalidSign;
                 if (((idx >= 0) and (idx < dscale))) {
                     const digit = (blk_catch_16: { break :blk_catch_16 ((reader.readInt(u16, .big)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 0; }); });
                     _ = log("dscale digit: {d}", .{ digit });
+                    if ((digit >= 10000)) {
+                        return error.InvalidBuffer;
+                    }
                     var digit_str: [4]u8 = undefined;
                     _ = &digit_str;
                     const digit_len = std.fmt.printInt((&digit_str), digit, 10, .lower, .{ .width = 4, .fill = 48 });

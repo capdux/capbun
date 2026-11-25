@@ -115,7 +115,6 @@ pub const RESPType = enum(u8) {
     Null = 95,
     Double = 44,
     Boolean = 35,
-    BlobError = 33,
     VerbatimString = 61,
     Map = 37,
     Set = 126,
@@ -137,7 +136,6 @@ pub fn fromByte(byte: u8) ?RESPType {
 @intFromEnum(RESPType.Null) => .Null,
 @intFromEnum(RESPType.Double) => .Double,
 @intFromEnum(RESPType.Boolean) => .Boolean,
-@intFromEnum(RESPType.BlobError) => .BlobError,
 @intFromEnum(RESPType.VerbatimString) => .VerbatimString,
 @intFromEnum(RESPType.Map) => .Map,
 @intFromEnum(RESPType.Set) => .Set,
@@ -285,7 +283,6 @@ pub const RESPValue = union(RESPType) {
     Null: void,
     Double: f64,
     Boolean: bool,
-    BlobError: []const u8,
     VerbatimString: VerbatimString,
     Map: []MapEntry,
     Set: []RESPValue,
@@ -325,9 +322,6 @@ for (cp_mut_slice(&array)) |*value| {
 },
 .Boolean => {
 
-},
-.BlobError => |str| {
-_ = allocator.free(str);
 },
 .VerbatimString => |*verbatim| {
 _ = allocator.free(verbatim.format);
@@ -400,9 +394,6 @@ _ = try writer.print("{d}", .{ d });
 },
 .Boolean => |b| {
 _ = try writer.print("{}", .{ b });
-},
-.BlobError => |str| {
-_ = try writer.print("Error: {s}", .{ str });
 },
 .VerbatimString => |verbatim| {
 _ = try writer.print("{s}:{s}", .{ verbatim.format, verbatim.content });
@@ -578,6 +569,24 @@ pub fn readValue(self: *ValkeyReader, allocator: std.mem.Allocator) RedisError!R
 
 pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, depth: usize) RedisError!RESPValue {
             const type_byte = try self.readByte();
+            if ((type_byte == 33)) {
+                const len = try self.readInteger();
+                if (((len < 0) or (len > max_bulk_len))) {
+                    return error.InvalidBlobError;
+                }
+                const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
+                if (((self.pos + ulen) > self.buffer.len)) {
+                    return error.InvalidBlobError;
+                }
+                const str = self.buffer[self.pos..(self.pos + ulen)];
+                self.pos = (self.pos + ulen);
+                const crlf = try self.readUntilCRLF();
+                if ((crlf.len != 0)) {
+                    return error.InvalidBlobError;
+                }
+                const owned = try allocator.dupe(u8, str);
+                return RESPValue{ .Error = owned };
+            }
             const resp_type_opt = RESPType.fromByte(type_byte);
             if ((resp_type_opt == null)) {
                 return error.InvalidResponseType;
@@ -634,7 +643,7 @@ pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, dep
                 }
                 const len = try self.readInteger();
                 if ((len < 0)) {
-                    return RESPValue{ .Array = empty_resp_array };
+                    return null_resp_value;
                 }
                 var array = try allocator.alloc(RESPValue, (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len)));
                 _ = &array;
@@ -657,7 +666,10 @@ pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, dep
 },
 .Null => {
 {
-                _ = try self.readUntilCRLF();
+                const crlf = try self.readUntilCRLF();
+                if ((crlf.len != 0)) {
+                    return error.InvalidNull;
+                }
                 return null_resp_value;
             }
 },
@@ -671,26 +683,6 @@ pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, dep
 {
                 const b = try self.readBoolean();
                 return RESPValue{ .Boolean = b };
-            }
-},
-.BlobError => {
-{
-                const len = try self.readInteger();
-                if (((len < 0) or (len > max_bulk_len))) {
-                    return error.InvalidBlobError;
-                }
-                const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
-                if (((self.pos + ulen) > self.buffer.len)) {
-                    return error.InvalidBlobError;
-                }
-                const str = self.buffer[self.pos..(self.pos + ulen)];
-                self.pos = (self.pos + ulen);
-                const crlf = try self.readUntilCRLF();
-                if ((crlf.len != 0)) {
-                    return error.InvalidBlobError;
-                }
-                const owned = try allocator.dupe(u8, str);
-                return RESPValue{ .BlobError = owned };
             }
 },
 .VerbatimString => {

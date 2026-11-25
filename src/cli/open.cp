@@ -412,6 +412,15 @@ pub struct EditorContext {
         )?;
     }
 
+    /// `detectEditor` records `Editor.none` when nothing was found so the
+    /// search is not repeated; to callers that means "no editor".
+    fn found(): Editor? {
+        if (e := _.editor) {
+            if (e != .none) return e;
+        }
+        return null;
+    }
+
     fn autoDetectEditor(*_, env: *DotEnv.Loader) {
         if (_.editor == null) {
             _.detectEditor(env);

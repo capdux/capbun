@@ -469,6 +469,11 @@ pub struct _Entry {
                 return error.MissingData;
             }
 
+            // `InternalSourceMap.find` trusts these header offsets.
+            if (!bun.SourceMap.InternalSourceMap.isValidBlob(sourcemap.slice)) {
+                return error.InvalidSourceMap;
+            }
+
             _.sourcemap = sourcemap.take();
         }
         errdefer if (_.sourcemap.len > 0) sourcemap_allocator.free(_.sourcemap);

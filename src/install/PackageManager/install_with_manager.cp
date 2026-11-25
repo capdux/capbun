@@ -141,6 +141,7 @@ pub fn installWithManager(
     // this defaults to false
     // but we force allowing updates to the lockfile when you do bun add
     let had_any_diffs = false;
+    let loaded_package_count: usize = 0;
     manager.progress = {};
 
     switch (load_result) {
@@ -176,6 +177,7 @@ pub fn installWithManager(
             if (manager.options.enable.fail_early) Global.crash();
         },
         .ok => {
+            loaded_package_count = manager.lockfile.packages.len;
             if (manager.subcommand == .update) {
                 // existing lockfile, get the original version is updating
                 const lockfile = manager.lockfile;
@@ -805,7 +807,7 @@ pub fn installWithManager(
 
     if (manager.options.enable.frozen_lockfile && load_result != .not_found) frozen_lockfile: {
         if (load_result.loadedFromTextLockfile()) {
-            if (bun.handleOom(manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator))) {
+            if (bun.handleOom(manager.lockfile.eql(lockfile_before_clean, loaded_package_count, manager.allocator))) {
                 break :frozen_lockfile;
             }
         } else {
@@ -905,7 +907,7 @@ pub fn installWithManager(
         // If the lockfile was frozen, we already checked it
         !manager.options.enable.frozen_lockfile &&
         if (load_result.loadedFromTextLockfile())
-            !(manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)?)
+            !(manager.lockfile.eql(lockfile_before_clean, loaded_package_count, manager.allocator)?)
         else
             manager.lockfile.hasMetaHashChanged(
                 PackageManager.verbose_install || manager.options.do.print_meta_hash_string,

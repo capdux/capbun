@@ -634,6 +634,7 @@ _ = @compileError("unexpected context type");
             } else {
                 if (manager.processExtractedTarballPackage((&package_id), dependency_id, resolution, (&task.data.extract), log_level)) |pkg| {
                     _ = &pkg;
+                    _ = ((manager.appended_task_packages.put(manager.allocator, task.id, pkg.meta.id)) catch unreachable);
                     var any_root = false;
                     _ = &any_root;
                     if (manager.task_queue.getEntry(task.id)) |dependency_list_entry| {
@@ -705,7 +706,6 @@ const clone = (&task.request.git_clone);
             const repo_fd = task.data.git_clone;
             const name = (if (@typeInfo(@TypeOf(clone)) == .@"enum" or @typeInfo(@TypeOf(clone)) == .@"union") @tagName(clone) else clone.name).slice();
             const url = clone.url.slice();
-            _ = ((manager.git_repositories.put(manager.allocator, task.id, repo_fd)) catch unreachable);
             if ((task.status == .fail)) {
                 const e = ((task.err) orelse (error.Failed));
                 if (((@TypeOf(callbacks.onPackageManifestError) != void) and (@TypeOf(callbacks.onPackageManifestError) != @TypeOf(.{})))) {
@@ -754,19 +754,43 @@ else => continue,
                 }
                 continue;
             }
+            _ = ((manager.git_repositories.put(manager.allocator, task.id, repo_fd)) catch unreachable);
             if (comptime (((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{}))) and ((@typeInfo(Ctx) == .pointer) and (@typeInfo(Ctx).pointer.child == PackageInstaller)))) {
-                const dep_id = clone.dep_id;
-                const dep = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
-                const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(manager.lockfile.buffers.string_bytes.items);
-                const git = (if (@typeInfo(@TypeOf(clone.res)) == .@"enum") @intFromEnum(clone.res) else clone.res.value).git;
-                const committish = git.committish.slice(manager.lockfile.buffers.string_bytes.items);
-                const repo = git.repo.slice(manager.lockfile.buffers.string_bytes.items);
-                const resolved = try Repository.findCommit(manager.allocator, manager.env, manager.log, task.data.git_clone.stdDir(), dep_name, committish, task.id);
-                const checkout_id = Task.Id.forGitCheckout(repo, resolved);
-                if (manager.hasCreatedNetworkTask(checkout_id, dep.behavior.isRequired())) {
-                    continue;
+                if (manager.task_queue.fetchRemove(task.id)) |removed| {
+                    _ = &removed;
+                    var waiters = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
+                    _ = &waiters;
+                    var _waiters_guard = DeinitWithAllocGuard(@TypeOf(waiters)){ .ptr = (&waiters), .alloc = manager.allocator };
+                    _ = &_waiters_guard;
+                    var ___waiters_guard_moved = false; _ = &___waiters_guard_moved;
+                    defer if (!___waiters_guard_moved) { ___waiters_guard_moved = true; const __T = @TypeOf(_waiters_guard); if (@typeInfo(__T) == .optional) { if (_waiters_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _waiters_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _waiters_guard; _drop_val.__cp_deinit(); } };
+                    const pkg_resolutions = manager.lockfile.packages.items(.resolution);
+                    for (waiters.items) |waiter| {
+                        _ = &waiter;
+                        const dep_id = (switch (waiter) {
+.dependency => |id| id,
+else => continue,
+});
+                        const dep = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
+                        const pkg_id = manager.lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                        if ((pkg_id == invalid_package_id)) {
+                            continue;
+                        }
+                        const res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+                        if ((res.tag != .git)) {
+                            continue;
+                        }
+                        const string_buf = manager.lockfile.buffers.string_bytes.items;
+                        const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                        const repo = (if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).git.repo.slice(string_buf);
+                        const resolved = (if (@typeInfo(@TypeOf(res)) == .@"enum") @intFromEnum(res) else res.value).git.resolved.slice(string_buf);
+                        const checkout_id = Task.Id.forGitCheckout(repo, resolved);
+                        if (manager.hasCreatedNetworkTask(checkout_id, dep.behavior.isRequired())) {
+                            continue;
+                        }
+                        _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueGitCheckout(checkout_id, repo_fd, dep_id, dep_name, res, resolved, null)));
+                    }
                 }
-                _ = manager.task_batch.push(ThreadPool.Batch.@"from"(manager.enqueueGitCheckout(checkout_id, repo_fd, dep_id, dep_name, clone.res, resolved, null)));
             } else {
                 const dependency_list_entry = (manager.task_queue.getEntry(task.id)).?;
                 const dependency_list = dependency_list_entry.value_ptr.*;
@@ -791,7 +815,7 @@ const git_checkout = (&task.request.git_checkout);
                 if ((((@TypeOf(callbacks.onPackageDownloadError) != void) and (@TypeOf(callbacks.onPackageDownloadError) != @TypeOf(.{}))) and (Ctx == *Store.Installer))) {
                     _ = callbacks.onPackageDownloadError(extract_ctx, task.id, alias.slice(), resolution, e, manager.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).git.repo)));
                 } else {
-                    _ = (blk_catch_16: { break :blk_catch_16 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} checking out repository for <b>{s}<r>", .{ @errorName(e), alias.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_16 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((manager.log.addErrorFmt(null, logger.Loc.Empty, manager.allocator, "{s} checking out repository for <b>{s}<r>", .{ @errorName(e), alias.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_17 bun.handleOom(oom_err); }); });
                 }
                 continue;
             }
@@ -807,6 +831,7 @@ _ = @compileError("unexpected context type");
             } else {
                 if (manager.processExtractedTarballPackage((&package_id), git_checkout.dependency_id, resolution, (&task.data.git_checkout), log_level)) |pkg| {
                     _ = &pkg;
+                    _ = ((manager.appended_task_packages.put(manager.allocator, task.id, pkg.meta.id)) catch unreachable);
                     var any_root = false;
                     _ = &any_root;
                     if (manager.task_queue.getEntry(task.id)) |dependency_list_entry| {
@@ -899,7 +924,7 @@ pub fn doFlushDependencyQueue(client: *PackageManager) void {
             const end = (dependencies_list.off + dependencies_list.len);
             while ((i < end)) : (i = (i + 1)) {
                 const dependency = lockfile.buffers.dependencies.items[@as(usize, @intCast(i))];
-                _ = (blk_catch_18: { break :blk_catch_18 ((client.enqueueDependencyWithMain(i, (&dependency), lockfile.buffers.resolutions.items[@as(usize, @intCast(i))], false)) catch |__ce_18| { _ = &__ce_18;  }); });
+                _ = (blk_catch_20: { break :blk_catch_20 ((client.enqueueDependencyWithMain(i, (&dependency), lockfile.buffers.resolutions.items[@as(usize, @intCast(i))], false)) catch |__ce_20| { _ = &__ce_20;  }); });
             }
         }
         _ = client.flushNetworkQueue();
@@ -1005,7 +1030,7 @@ pub fn generateNetworkTaskForTarball(client: *PackageManager, task_id: Task.Id, 
         }
         network_task.* = .{ .task_id = task_id, .callback = undefined, .allocator = client.allocator, .package_manager = client, .apply_patch_task = apply_patch_task };
         const scope = client.scopeForPackageName(client.lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))));
-        _ = try network_task.forTarball(client.allocator, (&.{ .package_manager = client, .name = (blk_catch_20: { break :blk_catch_20 ((strings.StringOrTinyString.initAppendIfNeeded(client.lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch |oom_err| { _ = &oom_err; break :blk_catch_20 bun.handleOom(oom_err); }); }), .resolution = package.resolution, .cache_dir = client.getCacheDirectory(), .temp_dir = client.getTemporaryDirectory().handle, .dependency_id = dependency_id, .integrity = package.@"meta".integrity, .url = (blk_catch_21: { break :blk_catch_21 ((strings.StringOrTinyString.initAppendIfNeeded(url, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch |oom_err| { _ = &oom_err; break :blk_catch_21 bun.handleOom(oom_err); }); }) }), scope, authorization);
+        _ = try network_task.forTarball(client.allocator, (&.{ .package_manager = client, .name = (blk_catch_22: { break :blk_catch_22 ((strings.StringOrTinyString.initAppendIfNeeded(client.lockfile.str((&(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))), *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch |oom_err| { _ = &oom_err; break :blk_catch_22 bun.handleOom(oom_err); }); }), .resolution = package.resolution, .cache_dir = client.getCacheDirectory(), .temp_dir = client.getTemporaryDirectory().handle, .dependency_id = dependency_id, .integrity = package.@"meta".integrity, .url = (blk_catch_23: { break :blk_catch_23 ((strings.StringOrTinyString.initAppendIfNeeded(url, *FileSystem.FilenameStore, FileSystem.FilenameStore.instance)) catch |oom_err| { _ = &oom_err; break :blk_catch_23 bun.handleOom(oom_err); }); }) }), scope, authorization);
         if (ExtractTarball.usesStreamingExtraction()) {
             const extract_task = client.createExtractTaskForStreaming((&network_task.callback.extract), network_task);
             network_task.streaming_extract_task = extract_task;

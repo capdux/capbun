@@ -1218,20 +1218,7 @@ pub struct ConsoleZigFormatter {
     pub const WriteError = error{UhOh};
 
     pub fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
-        let single_val: [1]JSValue = [_.value];
-        _.formatter.remaining_values = single_val[0..1];
-        const _rem_g = RestoreRemainingValuesGuard{ fmt: _.formatter };
-        const tag = Formatter.Tag.get(_.value, _.formatter.globalThis) catch e => {
-            return bun.deprecated.jsErrorToWriteError(e);
-        };
-        _.formatter.format(
-            tag,
-            @TypeOf(writer),
-            writer,
-            _.value,
-            _.formatter.globalThis,
-            false,
-        ) catch e => {
+        _.formatter.formatValue(@TypeOf(writer), writer, _.value, _.formatter.globalThis, false) catch e => {
             return bun.deprecated.jsErrorToWriteError(e);
         };
     }
@@ -3771,6 +3758,16 @@ pub struct Formatter {
         if (slice.len > max + 1) {
             writer.print(comptime Output.prettyFmt(more, enable_ansi_colors), [ slice.len - max - 1]);
         }
+    }
+
+    pub fn formatValue(*_, comptime Writer: type, writer: Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool): bun.JSError!void {
+        const _gt_g = RestoreGlobalThisGuard{ fmt: _, prev: _.globalThis };
+        _.globalThis = globalThis;
+        let single_val: [1]JSValue = [value];
+        _.remaining_values = single_val[0..1];
+        const _rem_g = RestoreRemainingValuesGuard{ fmt: _ };
+        const tag = Tag.get(value, globalThis)?;
+        _.format(tag, Writer, writer, value, globalThis, enable_ansi_colors)?;
     }
 
     fn format(*_, result: Tag.Result, comptime Writer: type, writer: Writer, value: JSValue, globalThis: *JSGlobalObject, comptime enable_ansi_colors: bool): bun.JSError!void {

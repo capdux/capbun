@@ -59,6 +59,18 @@ struct PendingRespGuard {
     global: *JSGlobalObject,
     path: []const u8,
 
+    pub fn noHtmlPageLog(): bun.logger.Log {
+        let log = bun.logger.Log.init(bun.default_allocator);
+        log.addErrorFmt(
+            null,
+            bun.logger.Loc.Empty,
+            bun.default_allocator,
+            "Bundling {f} did not produce an html page for it. A plugin may have resolved it to another file or loaded it as something other than html.",
+            .{bun.fmt.quote(_.path)},
+        ) catch {};
+        return log;
+    }
+
     /// Initialize an HTMLBundle given a path.
     static fn init(global: *JSGlobalObject, path: []const u8): (*HTMLBundle)! {
         return bun.new(HTMLBundle, .{
@@ -306,6 +318,20 @@ pub struct Route {
         _.server.?.onRequestComplete();
     }
 
+    /// Production keeps the reason to itself, see `resumePendingResponses`.
+    fn setBuildError(*_, server: AnyServer, log: bun.logger.Log) {
+        if (server.config().isDevelopment()) {
+            switch (bun.Output.enable_ansi_colors_stderr) {
+                inline else => |enable_ansi_colors| {
+                    const writer = bun.Output.errorWriterBuffered();
+                    log.printWithEnableAnsiColors(writer, enable_ansi_colors) catch {};
+                    writer.flush() catch {};
+                },
+            }
+        }
+        _.state = .{ .err_val = log };
+    }
+
     fn onPluginsResolved(*_, plugins: (*jsc.API.JSBundler.Plugin)?): ! {
         const global = _.bundle.data.global;
         const server = _.server.?;
@@ -315,6 +341,15 @@ pub struct Route {
         let config: JSBundler.Config = .{};
         const _cfg_guard = ConfigErrGuard{ cfg: unsafe { &config } };
         config.entry_points.insert(_.bundle.data.path)?;
+        // An import attribute or a bunfig `[loader]` entry may have made this html. `ext` is `""` without one.
+        let ext_slice = bun.handleOom(bun.default_allocator.alloc([]const u8, 1));
+        ext_slice[0] = bun.handleOom(bun.default_allocator.dupe(u8, bun.fs.PathName.init(_.bundle.data.path).ext));
+        let loader_slice = bun.handleOom(bun.default_allocator.alloc(bun.schema.api.Loader, 1));
+        loader_slice[0] = .html;
+        config.loaders = .{
+            .extensions = ext_slice,
+            .loaders = loader_slice,
+        };
         if (public_path := vm.transpiler.options.transform_options.serve_public_path) {
             if (public_path.len > 0) {
                 config.public_path.appendSlice(public_path)?;
@@ -405,19 +440,12 @@ pub struct Route {
             .err e => {
                 if (bun.Environment.enable_logs)
                     debug("onComplete: err - {s}", .{@errorName(e)});
-                _.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) };
-                bun.handleOom(completion_task.log.cloneToWithRecycled(&_.state.err_val, true));
-
+                let log = bun.logger.Log.init(bun.default_allocator);
+                bun.handleOom(completion_task.log.cloneToWithRecycled(&log, true));
                 if (server := _.server) {
-                    if (server.config().isDevelopment()) {
-                        switch (bun.Output.enable_ansi_colors_stderr) {
-                            inline else => |enable_ansi_colors| {
-                                const writer = bun.Output.errorWriterBuffered();
-                                _.state.err_val.printWithEnableAnsiColors(writer, enable_ansi_colors) catch {};
-                                writer.flush() catch {};
-                            },
-                        }
-                    }
+                    _.setBuildError(server, log);
+                } else {
+                    _.state = .{ .err_val = log };
                 }
             },
             .value bundle => {
@@ -444,9 +472,21 @@ pub struct Route {
                     bun.Output.flush();
                 }
 
+                // A plugin can resolve or load the entry point as something other than html.
+                let html_index: usize? = null;
+                for (idx of 0..output_files.len) {
+                    if (output_files[idx].output_kind == .@"entry-point" && output_files[idx].loader == .html) {
+                        html_index = @as(usize, @intCast(idx));
+                        break;
+                    }
+                }
+                if (html_index == null) {
+                    _.setBuildError(server, _.bundle.data.noHtmlPageLog());
+                } else {
                 let this_html_route: (*StaticRoute)? = null;
 
-                for (*output_file of output_files) {
+                for (i of 0..output_files.len) {
+                    const output_file = &output_files[i];
                     const blob = jsc.WebCore.Blob.Any{ .Blob = bun.handleOom(output_file.toBlob(bun.default_allocator, globalThis)) };
                     let headers = bun.http.Headers{ .allocator = bun.default_allocator };
                     const content_type = blob.Blob.contentTypeOrMimeType() ?? brk: {
@@ -487,10 +527,8 @@ pub struct Route {
                         .cached_blob_size = blob.size(),
                     });
 
-                    if (this_html_route == null && output_file.output_kind == .@"entry-point") {
-                        if (output_file.loader == .html) {
-                            this_html_route = static_route;
-                        }
+                    if (i == html_index.?) {
+                        this_html_route = static_route;
                     }
 
                     let route_path = output_file.dest_path;
@@ -502,11 +540,12 @@ pub struct Route {
                     bun.handleOom(server.appendStaticRoute(route_path, .{ .static = static_route }, .@"any"));
                 }
 
-                const html_route: *StaticRoute = this_html_route ?? @panic("Internal assertion failure: HTML entry point not found in HTMLBundle.");
+                const html_route: *StaticRoute = this_html_route ?? @panic("the loop above visited html_index");
                 const html_route_clone = bun.handleOom(html_route.clone(globalThis));
                 _.state = .{ .html = html_route_clone };
 
                 if (!bun.handleOom(server.reloadStaticRoutes())) {
+                }
                 }
             },
             .pending => unreachable,

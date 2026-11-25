@@ -251,6 +251,8 @@ statements: PreparedStatementsMap = PreparedStatementsMap{  },
 @"#status_flags": StatusFlags = StatusFlags{  },
 @"#auth_plugin": ?AuthMethod = null,
 @"#auth_state": AuthState = .pending,
+@"#auth_switch_count": u8 = 0,
+@"#full_auth_requested": bool = false,
 @"#auth_data": ManagedByteList = ManagedByteList.init(bun.default_allocator),
 @"#database": []const u8 = "",
 @"#user": []const u8 = "",
@@ -710,6 +712,10 @@ _ = debug("fast auth success, awaiting OK packet", .{});
 },
 .continue_auth => {
 _ = debug("continue auth", .{});
+            if (self.@"#full_auth_requested") {
+                return error.UnexpectedPacket;
+            }
+            self.@"#full_auth_requested" = true;
             if ((self.@"#ssl_mode" == .disable)) {
                 _ = self.setStatus(.authentication_awaiting_pk);
                 _ = debug("awaiting public key", .{});
@@ -765,6 +771,11 @@ var auth_switch = AuthSwitchRequest{ .packet_size = header_length };
         defer if (!___guard_auth_switch_moved) { ___guard_auth_switch_moved = true; const __T = @TypeOf(_guard_auth_switch); if (@typeInfo(__T) == .optional) { if (_guard_auth_switch) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_auth_switch.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_auth_switch; _drop_val.__cp_deinit(); } };
         if (AuthMethod.get(auth_switch.plugin_name.slice())) |auth_method| {
             _ = &auth_method;
+            if (((self.@"#auth_switch_count" >= 2) or (((self.@"#auth_switch_count" > 0) and (self.@"#auth_plugin" != null)) and (self.@"#auth_plugin".? == auth_method)))) {
+                _ = debug("rejecting AuthSwitchRequest (count={d})", .{ self.@"#auth_switch_count" });
+                return error.UnexpectedPacket;
+            }
+            self.@"#auth_switch_count" = (self.@"#auth_switch_count" + 1);
             const auth_data = auth_switch.plugin_data.slice();
             self.@"#auth_plugin" = auth_method;
             _ = self.@"#auth_data".clearRetainingCapacity();

@@ -224,13 +224,6 @@ pub union(enum) State {
             bun.assert(_.reader.isDone() || _.state == .@"err");
         }
 
-        if (comptime Environment.isWindows) {
-            if (_.state == .@"err" && _.reader.source != null && !_.reader.source.?.isClosed()) {
-                _.reader.closeImpl(false);
-            }
-            bun.assert(_.reader.source == null || _.reader.source.?.isClosed());
-        }
-
         if (_.state == .done) {
             bun.default_allocator.free(_.state.done);
         }

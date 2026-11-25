@@ -735,3 +735,72 @@ describe("Bun.file in serve routes", () => {
     });
   });
 });
+
+test("file routes frame a slice that reaches or starts past EOF by the bytes they serve", async () => {
+  using dir = tempDir("serve-file-route-slice-framing", { "partial.txt": "0123456789ABCDEF" });
+  const file = () => Bun.file(join(String(dir), "partial.txt"));
+  const windows = {
+    "slice(5, 10)": () => file().slice(5, 10),
+    "slice(10)": () => file().slice(10),
+    "slice(10, 100)": () => file().slice(10, 100),
+    "slice(5, 5)": () => file().slice(5, 5),
+    "slice(100)": () => file().slice(100),
+    "whole file": () => file(),
+  };
+  const names = Object.keys(windows) as (keyof typeof windows)[];
+  await using server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    routes: Object.fromEntries(
+      names.flatMap((name, i) => [
+        [`/blob/${i}`, new Response(windows[name]())],
+        [`/stream/${i}`, new Response(windows[name]().stream())],
+      ]),
+    ),
+    fetch: () => new Response("fallback", { status: 404 }),
+  });
+
+  async function wire(path: string) {
+    const { promise, resolve } = Promise.withResolvers<string>();
+    let captured = "";
+    await Bun.connect({
+      hostname: "127.0.0.1",
+      port: server.port,
+      socket: {
+        open(socket) {
+          socket.write(`GET ${path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`);
+        },
+        data(_socket, chunk) {
+          captured += Buffer.from(chunk).toString("latin1");
+        },
+        close() {
+          resolve(captured);
+        },
+        error() {
+          resolve(captured);
+        },
+      },
+    });
+    const raw = await promise;
+    const headEnd = raw.indexOf("\r\n\r\n");
+    return {
+      contentLength: /^content-length:\s*(\d+)/im.exec(raw.slice(0, headEnd))?.[1] ?? null,
+      body: raw.slice(headEnd + 4),
+    };
+  }
+
+  const results: Record<string, unknown> = {};
+  for (const [i, name] of names.entries()) {
+    results[name] = { blob: await wire(`/blob/${i}`), stream: await wire(`/stream/${i}`) };
+  }
+
+  const exactly = (body: string) => ({ contentLength: String(body.length), body });
+  expect(results).toEqual({
+    "slice(5, 10)": { blob: exactly("56789"), stream: exactly("56789") },
+    "slice(10)": { blob: exactly("ABCDEF"), stream: exactly("ABCDEF") },
+    "slice(10, 100)": { blob: exactly("ABCDEF"), stream: exactly("ABCDEF") },
+    "slice(5, 5)": { blob: exactly(""), stream: exactly("") },
+    "slice(100)": { blob: exactly(""), stream: exactly("") },
+    "whole file": { blob: exactly("0123456789ABCDEF"), stream: exactly("0123456789ABCDEF") },
+  });
+});

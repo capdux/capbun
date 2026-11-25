@@ -331,13 +331,8 @@ export function requireESM(this, resolved: string) {
 
 export function requireESMFromHijackedExtension(this: JSCommonJSModule, id: string) {
   $assert(this);
-  try {
-    $requireESM(id);
-  } catch (exception) {
-    // Since the ESM code is mostly JS, we need to handle exceptions here.
-    $requireMap.$delete(id);
-    throw exception;
-  }
+  // Runs inside `$require`, which removes the require map entry if the user's handler lets this throw.
+  $requireESM(id);
 
   // If we can pull out a ModuleNamespaceObject, let's do it.
   const namespace = $esmNamespaceForCjs(id);

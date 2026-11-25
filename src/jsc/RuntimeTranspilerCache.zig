@@ -512,6 +512,9 @@ else => @panic("Unexpected output encoding"),
                 if ((read_bytes != self.metadata.sourcemap_byte_length)) {
                     return error.MissingData;
                 }
+                if ((!bun.SourceMap.InternalSourceMap.isValidBlob(sourcemap.slice))) {
+                    return error.InvalidSourceMap;
+                }
                 self.sourcemap = sourcemap.take();
             }
             errdefer {

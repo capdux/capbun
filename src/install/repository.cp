@@ -331,7 +331,11 @@ pub struct TopFormatter {
         const repo_order = lhs.repo.order(&rhs.repo, lhs_buf, rhs_buf);
         if (repo_order != .eq) return repo_order;
 
-        return lhs.committish.order(&rhs.committish, lhs_buf, rhs_buf);
+        const committish_order = lhs.committish.order(&rhs.committish, lhs_buf, rhs_buf);
+        if (committish_order != .eq) return committish_order;
+        // Unconditional so the order stays transitive; an empty `resolved` is
+        // an ordinary value here, not a wildcard like in `eql`.
+        return lhs.resolved.order(&rhs.resolved, lhs_buf, rhs_buf);
     }
 
     pub fn count(buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) {

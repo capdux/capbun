@@ -166,6 +166,7 @@ pub fn onOpen(conn: *PostgresSQLConnection, socket: SocketType) void {
 
 pub fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: ?*anyopaque) void {
             _ = &socket;
+            conn.socket = Socket{ .SocketTCP = .{ .socket = .detached } };
             _ = conn.onClose();
     }
 
@@ -176,6 +177,7 @@ pub fn onEnd(conn: *PostgresSQLConnection, socket: SocketType) void {
 
 pub fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32) void {
             _ = &socket;
+            conn.socket = Socket{ .SocketTCP = .{ .socket = .detached } };
             if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
                 _ = conn.close();
@@ -243,6 +245,7 @@ pub fn onHandshake_(conn: *PostgresSQLConnection, _: anytype, success: i32, ssl_
 
 pub fn onClose(conn: *PostgresSQLConnection, socket: SocketType, _: i32, _: ?*anyopaque) void {
             _ = &socket;
+            conn.socket = Socket{ .SocketTCP = .{ .socket = .detached } };
             _ = conn.onClose();
     }
 
@@ -253,6 +256,7 @@ pub fn onEnd(conn: *PostgresSQLConnection, socket: SocketType) void {
 
 pub fn onConnectError(conn: *PostgresSQLConnection, socket: SocketType, _: i32) void {
             _ = &socket;
+            conn.socket = Socket{ .SocketTCP = .{ .socket = .detached } };
             if (conn.vm.isShuttingDown()) {
                 @branchHint(.unlikely);
                 _ = conn.close();
@@ -452,7 +456,9 @@ pub fn __cp_deinit(self: *DataReadGuard) void {
                 }
             }
             self.conn.flags.is_processing_data = false;
-            _ = self.conn.resetConnectionTimeout();
+            if ((self.conn.status == .connected)) {
+                _ = self.conn.resetConnectionTimeout();
+            }
             _ = self.conn.deref();
     }
 };
@@ -1020,7 +1026,9 @@ pub fn onData(self: *PostgresSQLConnection, data: []const u8) void {
         _ = self.ref();
         self.flags.is_processing_data = true;
         const vm = self.vm;
-        _ = self.disableConnectionTimeout();
+        if ((self.status == .connected)) {
+            _ = self.disableConnectionTimeout();
+        }
         var _data_read_guard = DataReadGuard{ .conn = self, .vm = vm };
         _ = &_data_read_guard;
         var ___data_read_guard_moved = false; _ = &___data_read_guard_moved;
@@ -2001,9 +2009,11 @@ var auth: protocol.Authentication = undefined;
         defer if (!___auth_deinit_guard_moved) { ___auth_deinit_guard_moved = true; const __T = @TypeOf(_auth_deinit_guard); if (@typeInfo(__T) == .optional) { if (_auth_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _auth_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _auth_deinit_guard; _drop_val.__cp_deinit(); } };
         switch (auth) {
 .SASL => {
-if ((self.authentication_state != .SASL)) {
-            self.authentication_state = .{ .SASL = .{} };
+if ((self.authentication_state != .pending)) {
+            _ = debug("duplicate AuthenticationSASL", .{});
+            return error.UnexpectedMessage;
         }
+        self.authentication_state = .{ .SASL = .{} };
         var mechanism_buf: [128]u8 = undefined;
         _ = &mechanism_buf;
         const mechanism = ((std.fmt.bufPrintZ((&mechanism_buf), "n,,n=*,r={s}", .{ self.authentication_state.SASL.nonce() })) catch unreachable);
@@ -2106,14 +2116,23 @@ if ((self.authentication_state == .SASL)) {
 _ = self.fail("Unknown authentication method", error.UNKNOWN_AUTHENTICATION_METHOD);
 },
 .ClearTextPassword => {
-_ = debug("ClearTextPassword", .{});
+if ((self.authentication_state != .pending)) {
+            _ = debug("duplicate AuthenticationCleartextPassword", .{});
+            return error.UnexpectedMessage;
+        }
+        _ = debug("ClearTextPassword", .{});
         var response = protocol.PasswordMessage{ .password = .{ .temporary = self.password } };
         _ = &response;
+        self.authentication_state = .clear_text;
         _ = try response.writeInternal(Writer, self.writer());
         _ = self.flushData();
 },
 .MD5Password => |md5| {
-_ = debug("MD5Password", .{});
+if ((self.authentication_state != .pending)) {
+            _ = debug("duplicate AuthenticationMD5Password", .{});
+            return error.UnexpectedMessage;
+        }
+        _ = debug("MD5Password", .{});
         var first_hash_buf: bun.sha.MD5.Digest = undefined;
         _ = &first_hash_buf;
         var first_hash_str: [32]u8 = undefined;

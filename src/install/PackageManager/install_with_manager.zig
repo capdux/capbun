@@ -258,6 +258,8 @@ pub fn installWithManager(manager: *PackageManager, ctx: Command.Context, root_p
         manager.options.enable.force_save_lockfile = ((manager.options.enable.force_save_lockfile or changed_config_version) or ((load_result == .ok) and ((load_result.ok.migrated != .none) or ((load_result.ok.format == .binary) and ((manager.options.save_text_lockfile) orelse (false))))));
         var had_any_diffs = false;
         _ = &had_any_diffs;
+        var loaded_package_count: usize = 0;
+        _ = &loaded_package_count;
         manager.progress = .{};
         switch (load_result) {
 .err => |cause| {
@@ -291,7 +293,8 @@ _ = Output.err((if (@typeInfo(@TypeOf(cause)) == .@"enum") @intFromEnum(cause) e
         }
 },
 .ok => {
-if ((manager.subcommand == .update)) {
+loaded_package_count = manager.lockfile.packages.len;
+        if ((manager.subcommand == .update)) {
             const lockfile = manager.lockfile;
             const packages = lockfile.packages.slice();
             const resolutions = packages.items(.resolution);
@@ -813,7 +816,7 @@ else => {
         if ((manager.options.enable.frozen_lockfile and (load_result != .not_found))) {
             _ = frozen_lockfile: {
             if (load_result.loadedFromTextLockfile()) {
-                if (bun.handleOom(manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator))) {
+                if (bun.handleOom(manager.lockfile.eql(lockfile_before_clean, loaded_package_count, manager.allocator))) {
                     break :frozen_lockfile;
                 }
             } else {
@@ -877,7 +880,7 @@ else => {
         if ((had_errors_before_cleaning_lockfile or manager.log.hasErrors())) {
             _ = Global.crash();
         }
-        const did_meta_hash_change = ((!manager.options.enable.frozen_lockfile) and (if (load_result.loadedFromTextLockfile()) (!try manager.lockfile.eql(lockfile_before_clean, packages_len_before_install, manager.allocator)) else try manager.lockfile.hasMetaHashChanged((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), @min(packages_len_before_install, manager.lockfile.packages.len))));
+        const did_meta_hash_change = ((!manager.options.enable.frozen_lockfile) and (if (load_result.loadedFromTextLockfile()) (!try manager.lockfile.eql(lockfile_before_clean, loaded_package_count, manager.allocator)) else try manager.lockfile.hasMetaHashChanged((PackageManager.verbose_install or manager.options.do.print_meta_hash_string), @min(packages_len_before_install, manager.lockfile.packages.len))));
         const should_save_lockfile = (((load_result == .ok) and ((load_result.ok.format == .binary) and (save_format == .text))) or (manager.options.do.save_lockfile and (((((did_meta_hash_change or had_any_diffs) or (manager.update_requests.len > 0)) or ((load_result == .ok) and (load_result.ok.serializer_result.packages_need_update or load_result.ok.serializer_result.migrated_from_lockb_v2))) or manager.lockfile.isEmpty()) or manager.options.enable.force_save_lockfile)));
         if (should_save_lockfile) {
             _ = try manager.saveLockfile((&load_result), save_format, had_any_diffs, lockfile_before_install, packages_len_before_install, log_level);

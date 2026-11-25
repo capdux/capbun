@@ -256,6 +256,59 @@ describe.concurrent("bun test --isolate", () => {
     expect(exitCode).toBe(0);
   });
 
+  test("with --isolate, a leaked monitorEventLoopDelay() is disabled before next file", async () => {
+    const monitorFixtures = {
+      "a-monitor.test.ts": `
+        import { test, expect } from "bun:test";
+        import { monitorEventLoopDelay } from "node:perf_hooks";
+        test("leak an enabled monitor", () => {
+          expect(monitorEventLoopDelay({ resolution: 1 }).enable()).toBe(true);
+        });
+      `,
+      "b-histogram.test.ts": `
+        import { test, expect } from "bun:test";
+        import { createHistogram, monitorEventLoopDelay } from "node:perf_hooks";
+        test("previous file's monitor is gone and this file's own works", async () => {
+          Bun.gc(true);
+          const decoys = Array.from({ length: 8 }, () => createHistogram());
+
+          const own = monitorEventLoopDelay({ resolution: 1 });
+          expect(own.enable()).toBe(true);
+          const deadline = Date.now() + 5000;
+          while (own.count === 0 && Date.now() < deadline) {
+            const until = Date.now() + 10;
+            while (Date.now() < until) {}
+            await Bun.sleep(2);
+          }
+          own.disable();
+
+          expect(decoys.map(h => h.count)).toEqual(decoys.map(() => 0));
+          expect(own.count).toBeGreaterThan(0);
+        });
+      `,
+    };
+    const files = ["./a-monitor.test.ts", "./b-histogram.test.ts"];
+
+    using isolated = tempDir("isolate-event-loop-delay", monitorFixtures);
+    const serial = await runTests(String(isolated), ["--isolate", "--timeout=10000"], files);
+    expect(normalizeBunSnapshot(serial.stderr, isolated)).toContain("2 pass");
+    expect(normalizeBunSnapshot(serial.stderr, isolated)).toContain("0 fail");
+    expect(serial.exitCode).toBe(0);
+
+    using parallel = tempDir("isolate-event-loop-delay-parallel", monitorFixtures);
+    await using proc = Bun.spawn({
+      cmd: [bunExe(), "test", "--parallel=2", "--timeout=10000", ...files],
+      env: { ...bunEnv, BUN_TEST_PARALLEL_SCALE_MS: "60000" },
+      cwd: String(parallel),
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+    expect(normalizeBunSnapshot(stderr, parallel)).toContain("2 pass");
+    expect(normalizeBunSnapshot(stderr, parallel)).toContain("0 fail");
+    expect(exitCode).toBe(0);
+  });
+
   test("leaked subprocesses are killed for every isolated file, not just the first", async () => {
     using dir = tempDir("isolate-subprocess", {
       "a-spawn.test.ts": `

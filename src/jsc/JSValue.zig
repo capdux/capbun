@@ -126,6 +126,7 @@ pub const _BuiltinName = enum(u8) {
     @"type",
     signal,
     cmd,
+    errors,
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
 
 pub fn has(property: []const u8) bool {
@@ -578,10 +579,6 @@ pub fn asPromisePtr(self: JSValue, comptime T: type) *T {
 
 pub fn createRopeString(self: JSValue, rhs: JSValue, globalThis: *jsc.JSGlobalObject) JSValue {
             return JSC__JSValue__createRopeString(self, rhs, globalThis);
-    }
-
-pub fn getErrorsProperty(self: JSValue, globalObject: *JSGlobalObject) JSValue {
-            return JSC__JSValue__getErrorsProperty(self, globalObject);
     }
 
 pub fn createBufferFromLength(globalObject: *JSGlobalObject, len: usize) bun.JSError!JSValue {
@@ -2239,8 +2236,6 @@ extern "c" fn Bun__JSValue__unprotect(value: JSValue) callconv(.c) void;
 extern "c" fn JSC__JSValue__createObject2(global: *JSGlobalObject, key1: *const ZigString, key2: *const ZigString, value1: JSValue, value2: JSValue) callconv(.c) JSValue;
 
 extern "c" fn JSC__JSValue__createRopeString(val: JSValue, rhs: JSValue, globalThis: *jsc.JSGlobalObject) callconv(.c) JSValue;
-
-extern "c" fn JSC__JSValue__getErrorsProperty(val: JSValue, globalObject: *JSGlobalObject) callconv(.c) JSValue;
 
 extern "c" fn JSBuffer__bufferFromLength(global: *JSGlobalObject, len: i64) callconv(.c) JSValue;
 

@@ -524,6 +524,11 @@ pub fn NewSocket(comptime ssl: bool): type {
             const _deref_guard = DerefGuard<This>{ ptr: _ };
 
             _.socket = socket;
+            _.flags.is_paused = false;
+            if (!_.ref_pollref_on_connect) {
+                _.ref_pollref_on_connect = true;
+                _.poll_ref.unref(jsc.VirtualMachine.get());
+            }
             jsc.markBinding(@src());
 
             if (comptime ssl) {
@@ -1468,16 +1473,22 @@ pub fn NewSocket(comptime ssl: bool): type {
 
         pub fn jsRef(*_, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
             jsc.markBinding(@src());
-            if (_.socket.isDetached()) _.ref_pollref_on_connect = true;
-            if (_.socket.isDetached()) return JSValue.js_undefined;
-            _.poll_ref.ref(globalObject.bunVM());
+            if (_.socket.isEstablished()) {
+                _.poll_ref.ref(globalObject.bunVM());
+            } else {
+                // `connect` holds the loop until then; `onOpen` applies this.
+                _.ref_pollref_on_connect = true;
+            }
             return JSValue.js_undefined;
         }
 
         pub fn jsUnref(*_, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
             jsc.markBinding(@src());
-            if (_.socket.isDetached()) _.ref_pollref_on_connect = false;
-            _.poll_ref.unref(globalObject.bunVM());
+            if (_.socket.isEstablished()) {
+                _.poll_ref.unref(globalObject.bunVM());
+            } else {
+                _.ref_pollref_on_connect = false;
+            }
             return JSValue.js_undefined;
         }
 

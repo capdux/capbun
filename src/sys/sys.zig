@@ -3633,7 +3633,7 @@ pub fn dupWithFlags(fd: bun.FD, _: i32) Maybe(bun.FD) {
             var target: windows.HANDLE = undefined;
             _ = &target;
             const process = kernel32.GetCurrentProcess();
-            const out = kernel32.DuplicateHandle(process, fd.cast(), process, (&target), 0, w.TRUE, w.DUPLICATE_SAME_ACCESS);
+            const out = kernel32.DuplicateHandle(process, fd.cast(), process, (&target), 0, w.FALSE, w.DUPLICATE_SAME_ACCESS);
             if ((out == 0)) {
                 if (Maybe(bun.FD).errnoSysFd(0, .dup, fd)) |e| {
                     _ = &e;

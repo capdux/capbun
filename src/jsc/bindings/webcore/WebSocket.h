@@ -179,6 +179,12 @@ public:
 
     ExceptionOr<void> close(std::optional<unsigned short> code, const String& reason);
     ExceptionOr<void> terminate();
+    // Receive-side flow control (non-standard; mirrors Bun.Socket). pause()
+    // stops kernel reads so TCP backpressure reaches the peer; frames already
+    // decoded still dispatch. Before OPEN it latches and applies on connect.
+    bool pause();
+    bool resume();
+    bool isPaused() const { return m_paused; }
 
     void setProtocol(const String& protocol);
 
@@ -316,6 +322,7 @@ private:
     void sendWebSocketString(const String& message, const Opcode opcode);
     void sendWebSocketData(const char* data, size_t length, const Opcode opcode);
     void setExtensionsFromDeflateParams(const PerMessageDeflateParams* deflate_params);
+    bool applyPauseToConnectedClient();
 
     enum class BinaryType { Blob,
         ArrayBuffer,
@@ -337,6 +344,7 @@ private:
     void* m_upgradeClient { nullptr };
     ConnectionType m_connectionType { ConnectionType::Plain };
     bool m_rejectUnauthorized { false };
+    bool m_paused { false };
     // Default matches pre-existing behavior: advertise permessage-deflate in the upgrade
     // request. Set to false by ws.WebSocket callers passing `perMessageDeflate: false`.
     bool m_offerPerMessageDeflate { true };

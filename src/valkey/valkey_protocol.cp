@@ -115,7 +115,6 @@ pub enum RESPType: u8 {
     Null = '_',
     Double = ',',
     Boolean = '#',
-    BlobError = '!',
     VerbatimString = '=',
     Map = '%',
     Set = '~',
@@ -133,7 +132,6 @@ pub enum RESPType: u8 {
             @intFromEnum(RESPType.Null) => .Null,
             @intFromEnum(RESPType.Double) => .Double,
             @intFromEnum(RESPType.Boolean) => .Boolean,
-            @intFromEnum(RESPType.BlobError) => .BlobError,
             @intFromEnum(RESPType.VerbatimString) => .VerbatimString,
             @intFromEnum(RESPType.Map) => .Map,
             @intFromEnum(RESPType.Set) => .Set,
@@ -157,7 +155,6 @@ pub union(RESPType) RESPValue {
     Null: void,
     Double: f64,
     Boolean: bool,
-    BlobError: []const u8,
     VerbatimString: VerbatimString,
     Map: []MapEntry,
     Set: []RESPValue,
@@ -182,7 +179,6 @@ pub union(RESPType) RESPValue {
             .Null => {},
             .Double => {},
             .Boolean => {},
-            .BlobError str => allocator.free(str),
             .VerbatimString => |*verbatim| {
                 allocator.free(verbatim.format);
                 allocator.free(verbatim.content);
@@ -234,7 +230,6 @@ pub union(RESPType) RESPValue {
             .Null => writer.writeAll("(nil)")?,
             .Double d => writer.print("{d}", [d])?,
             .Boolean b => writer.print("{}", [b])?,
-            .BlobError str => writer.print("Error: {s}", [str])?,
             .VerbatimString verbatim => writer.print("{s}:{s}", [verbatim.format, verbatim.content])?,
             .Map entries => {
                 writer.writeAll("{")?;
@@ -393,6 +388,18 @@ pub struct ValkeyReader {
 
     fn readValueWithDepth(*_, allocator: std.mem.Allocator, depth: usize): RESPValue ! RedisError {
         const type_byte = _.readByte()?;
+        if (type_byte == '!') {
+            const len = _.readInteger()?;
+            if (len < 0 || len > max_bulk_len) return error.InvalidBlobError;
+            const ulen = len as usize;
+            if (_.pos + ulen > _.buffer.len) return error.InvalidBlobError;
+            const str = _.buffer[_.pos .. _.pos + ulen];
+            _.pos += ulen;
+            const crlf = _.readUntilCRLF()?;
+            if (crlf.len != 0) return error.InvalidBlobError;
+            const owned = allocator.dupe(u8, str)?;
+            return RESPValue{ Error: owned };
+        }
         const resp_type_opt = RESPType.fromByte(type_byte);
         if (resp_type_opt == null) return error.InvalidResponseType;
         const resp_type = resp_type_opt.?;
@@ -429,7 +436,7 @@ pub struct ValkeyReader {
             .Array => {
                 if (depth >= max_nesting_depth) return error.NestingDepthExceeded;
                 const len = _.readInteger()?;
-                if (len < 0) return RESPValue{ Array: empty_resp_array };
+                if (len < 0) return null_resp_value;
                 let array = allocator.alloc(RESPValue, len as usize)?;
                 let i: usize = 0;
                 let _array_guard = SliceDeinitGuard<RESPValue>{ slice: array, count: unsafe { &i }, alloc: allocator };
@@ -443,7 +450,8 @@ pub struct ValkeyReader {
 
             // RESP3 types
             .Null => {
-                * = _.readUntilCRLF()?; // Read and discard CRLF
+                const crlf = _.readUntilCRLF()?;
+                if (crlf.len != 0) return error.InvalidNull;
                 return null_resp_value;
             },
             .Double => {
@@ -453,18 +461,6 @@ pub struct ValkeyReader {
             .Boolean => {
                 const b = _.readBoolean()?;
                 return RESPValue{ Boolean: b };
-            },
-            .BlobError => {
-                const len = _.readInteger()?;
-                if (len < 0 || len > max_bulk_len) return error.InvalidBlobError;
-                const ulen = len as usize;
-                if (_.pos + ulen > _.buffer.len) return error.InvalidBlobError;
-                const str = _.buffer[_.pos .. _.pos + ulen];
-                _.pos += ulen;
-                const crlf = _.readUntilCRLF()?;
-                if (crlf.len != 0) return error.InvalidBlobError;
-                const owned = allocator.dupe(u8, str)?;
-                return RESPValue{ BlobError: owned };
             },
             .VerbatimString => {
                 return RESPValue{ VerbatimString: _.readVerbatimString(allocator)? };

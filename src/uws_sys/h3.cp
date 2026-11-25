@@ -242,6 +242,7 @@ export @opaque struct Response {
     fn hasResponded(*_): bool { return uws_h3_res_has_responded(_); }
     fn state(*_): State { return uws_h3_res_state(_); }
     fn shouldCloseConnection(*_): bool { return _.state().isHttpConnectionClose(); }
+    fn isClosed(*_): bool { return false; }
     fn isCorked(*_): bool { return false; }
     fn uncork(*_) {}
     fn isConnectRequest(*_): bool { return false; }

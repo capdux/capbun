@@ -507,12 +507,10 @@ pub struct ValkeyClient {
     fn failWithJSValue(*_, globalThis: *jsc.JSGlobalObject, jsvalue: jsc.JSValue): bun.JSTerminated!void {
         if (_.flags.failed) return;
         _.flags.failed = true;
+        _.flags.is_reconnecting = false;
         const val = rejectAllPendingCommands(&_.in_flight, &_.queue, globalThis, _.allocator, jsvalue);
 
-        if (!_.connectionReady()) {
-            _.flags.is_manually_closed = true;
-            _.close();
-        }
+        _.close();
         return val;
     }
 
@@ -526,10 +524,11 @@ pub struct ValkeyClient {
     fn onClose(*_): bun.JSTerminated!void {
         _.unregisterAutoFlusher();
         _.write_buffer.clearAndFree(_.allocator);
+        _.read_buffer.clearAndFree(_.allocator);
 
-        // If manually closing, don't attempt to reconnect
-        if (_.flags.is_manually_closed) {
-            debug("skip reconnecting since the connection is manually closed", .{});
+        // If manually closing or failed, don't attempt to reconnect
+        if (_.flags.is_manually_closed || _.flags.failed) {
+            debug("skip reconnecting since the connection is manually closed or failed", .{});
             _.fail("Connection closed", protocol.RedisError.ConnectionClosed)?;
             _.onValkeyClose()?;
             return;
@@ -601,6 +600,7 @@ pub struct ValkeyClient {
     /// Caller refs / derefs.
     fn onData(*_, data: []const u8): bun.JSTerminated!void {
         debug("Low-level onData called with {d} bytes: {s}", .{ data.len, data });
+        const old_socket = _.socket;
         // Path 1: Buffer already has data, append and process from buffer
         if (_.read_buffer.remaining().len > 0) {
             _.read_buffer.write(_.allocator, data) catch @panic("failed to write to read buffer");
@@ -644,7 +644,7 @@ pub struct ValkeyClient {
                     return;
                 };
 
-                if (_.status == .disconnected || _.flags.failed) {
+                if (!std.meta.eql(_.socket, old_socket)) {
                     return;
                 }
                 _.sendNextCommand();
@@ -696,7 +696,7 @@ pub struct ValkeyClient {
             };
 
             // Check connection status after handling
-            if (_.status == .disconnected || _.flags.failed) {
+            if (!std.meta.eql(_.socket, old_socket)) {
                 return;
             }
 
@@ -1183,50 +1183,49 @@ pub struct ValkeyClient {
         let promise = Command.Promise.create(globalThis, checked_command.meta);
 
         const js_promise = promise.promise.get();
-        if (_.flags.failed) {
-            promise.reject(globalThis, globalThis.ERR(.REDIS_CONNECTION_CLOSED, "Connection has failed", .{}).toJS())?;
+        if (msg := _.sendRejection()) {
+            promise.reject(globalThis, ValkeyClient.sendRejectionError(globalThis, msg))?;
         } else {
-            // Handle disconnected state with offline queue
-            switch (_.status) {
-                .connected => {
-                    _.enqueue(&checked_command, &promise)?;
+            _.enqueue(&checked_command, &promise)?;
 
-                    // Schedule auto-flushing to process this command if pipelining is enabled
-                    if (_.flags.enable_auto_pipelining &&
-                        checked_command.meta.supports_auto_pipelining &&
-                        _.status == .connected &&
-                        _.queue.readableLength() > 0)
-                    {
-                        _.registerAutoFlusher(_.vm);
-                    }
-                },
-                .connecting, .disconnected => {
-                    // Only queue if offline queue is enabled
-                    if (_.flags.enable_offline_queue) {
-                        _.enqueue(&checked_command, &promise)?;
-                    } else {
-                        promise.reject(
-                            globalThis,
-                            globalThis.ERR(
-                                .REDIS_CONNECTION_CLOSED,
-                                "Connection is closed and offline queue is disabled",
-                                {},
-                            ).toJS(),
-                        )?;
-                    }
-                },
+            // Schedule auto-flushing to process this command if pipelining is enabled
+            if (_.flags.enable_auto_pipelining &&
+                checked_command.meta.supports_auto_pipelining &&
+                _.status == .connected &&
+                _.queue.readableLength() > 0)
+            {
+                _.registerAutoFlusher(_.vm);
             }
         }
 
         return js_promise;
     }
 
+    pub fn sendRejection(*_): ([]const u8)? {
+        if (_.flags.failed) {
+            return "Connection has failed";
+        }
+        if (_.status != .connected && !_.flags.enable_offline_queue) {
+            return "Connection is closed and offline queue is disabled";
+        }
+        return null;
+    }
+
+    pub static fn sendRejectionError(globalThis: *jsc.JSGlobalObject, message: []const u8): jsc.JSValue {
+        return globalThis.ERR(.REDIS_CONNECTION_CLOSED, "{s}", .{message}).toJS();
+    }
+
     /// Close the Valkey connection
     fn disconnect(*_) {
         _.flags.is_manually_closed = true;
         _.unregisterAutoFlusher();
-        if (_.status == .connected || _.status == .connecting) {
-            _.close();
+        switch (_.status) {
+            .connected, .connecting => _.close(),
+            .disconnected => {
+                if (_.flags.is_reconnecting) {
+                    _.parent().cancelReconnect();
+                }
+            },
         }
     }
 

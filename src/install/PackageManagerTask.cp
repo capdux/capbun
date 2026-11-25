@@ -122,7 +122,6 @@ pub struct GitCloneRequest {
     name: strings.StringOrTinyString,
     url: strings.StringOrTinyString,
     env: DotEnv.Map,
-    dep_id: DependencyID,
     res: Resolution,
 }
 
@@ -330,6 +329,25 @@ fn readAndExtract(
                             task_ptr.id,
                             name,
                             ssh,
+                            attempt,
+                        ) catch e => {
+                            task_ptr.@"err" = e;
+                            task_ptr.status = Status.fail;
+                            task_ptr.data = { git_clone: bun.invalid_fd };
+                            return;
+                        };
+                    } else if (task_ptr.status != Status.fail) {
+                        // Neither matcher recognized the URL (`file://`,
+                        // `git://`, ...); clone with the URL as written
+                        // instead of finishing with zeroed task data.
+                        dir_opt = Repository.download(
+                            manager.allocator,
+                            task_ptr.request.git_clone.env,
+                            &task_ptr.log,
+                            manager.getCacheDirectory(),
+                            task_ptr.id,
+                            name,
+                            url,
                             attempt,
                         ) catch e => {
                             task_ptr.@"err" = e;

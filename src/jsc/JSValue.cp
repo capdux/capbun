@@ -91,6 +91,7 @@ pub enum _BuiltinName: u8 {
     @"type",
     signal,
     cmd,
+    errors,
 
     static fn has(property: []const u8): bool {
         return bun.ComptimeEnumMap(_BuiltinName).has(property);
@@ -199,7 +200,6 @@ pub struct _exposed_to_ffi {
     fn Bun__JSValue__unprotect(value: JSValue);
     fn JSC__JSValue__createObject2(global: *JSGlobalObject, key1: *const ZigString, key2: *const ZigString, value1: JSValue, value2: JSValue): JSValue;
     fn JSC__JSValue__createRopeString(val: JSValue, rhs: JSValue, globalThis: *jsc.JSGlobalObject): JSValue;
-    fn JSC__JSValue__getErrorsProperty(val: JSValue, globalObject: *JSGlobalObject): JSValue;
     fn JSBuffer__bufferFromLength(global: *JSGlobalObject, len: i64): JSValue;
     fn JSC__JSValue__createUninitializedUint8Array(globalObject: *JSGlobalObject, len: usize): JSValue;
     fn JSBuffer__bufferFromPointerAndLengthAndDeinit(global: *JSGlobalObject, ptr: [*]u8, len: usize, ctx: *!?, deallocator: jsc.C.JSTypedArrayBytesDeallocator): JSValue;
@@ -782,10 +782,6 @@ pub enum JSValue: i64 {
 
     pub fn createRopeString(rhs: JSValue, globalThis: *jsc.JSGlobalObject): JSValue {
         return JSC__JSValue__createRopeString(_, rhs, globalThis);
-    }
-
-    pub fn getErrorsProperty(globalObject: *JSGlobalObject): JSValue {
-        return JSC__JSValue__getErrorsProperty(_, globalObject);
     }
 
     pub static fn createBufferFromLength(globalObject: *JSGlobalObject, len: usize): bun.JSError!JSValue {

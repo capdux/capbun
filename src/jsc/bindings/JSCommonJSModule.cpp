@@ -234,10 +234,11 @@ bool JSCommonJSModule::load(JSC::VM& vm, Zig::GlobalObject* globalObject)
     if (auto exception = scope.exception()) {
         (void)scope.tryClearException();
 
-        // On error, remove the module from the require map/
+        // On error, remove the module from the require map
         // so that it can be re-evaluated on the next require.
-        bool wasRemoved = globalObject->requireMap()->remove(globalObject, this->filename());
-        ASSERT(wasRemoved);
+        // The entry can already be gone: `delete require.cache[__filename]; throw ...`.
+        globalObject->requireMap()->remove(globalObject, this->filename());
+        RETURN_IF_EXCEPTION(scope, false);
 
         scope.throwException(globalObject, exception);
         return false;
@@ -1236,10 +1237,11 @@ ALWAYS_INLINE EncodedJSValue finishRequireWithError(Zig::GlobalObject* globalObj
     ASSERT(exception);
     (void)throwScope.tryClearException();
 
-    // On error, remove the module from the require map/
+    // On error, remove the module from the require map
     // so that it can be re-evaluated on the next require.
-    bool wasRemoved = globalObject->requireMap()->remove(globalObject, specifierValue);
-    ASSERT(wasRemoved);
+    // The entry can already be gone: `delete require.cache[__filename]; throw ...`.
+    globalObject->requireMap()->remove(globalObject, specifierValue);
+    RETURN_IF_EXCEPTION(throwScope, {});
 
     throwScope.throwException(globalObject, exception);
     RELEASE_AND_RETURN(throwScope, {});

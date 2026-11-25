@@ -582,8 +582,9 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
             return _.bundled_files.values()[index.get()].unpack();
         }
 
-        fn htmlRouteBundleIndex(index: FileIndex): RouteBundle.Index {
-            return _.getFileByIndex(index).html_route_bundle_index.?;
+        /// `null` for an html file that is not the file of a route.
+        fn htmlRouteBundleIndex(index: FileIndex): RouteBundle.Index? {
+            return _.getFileByIndex(index).html_route_bundle_index;
         }
 
         /// Tracks a bundled code chunk for cross-bundle chunks,
@@ -1674,12 +1675,14 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
                 it = dep.next_dependency.unwrap();
                 assert(dep.imported == index);
 
+                const dep_file = _.getFileByIndex(dep.dependency);
                 bv2.enqueueFileFromDevServerIncrementalGraphInvalidation(
                     keys[dep.dependency.get()],
                     switch (side) {
                         .client => .browser,
                         .server => .bun,
                     },
+                    if (side == .client && dep_file.html_route_bundle_index != null) .html else null,
                 ) catch e => bun.handleOom(e);
             }
 
@@ -1769,6 +1772,8 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
                                 // files, though that could be reconsidered.
                                 if (dep_file.content == .css_root) {
                                     entry_points.appendCss(alloc, keys[dep.get()])?;
+                                } else if (dep_file.html_route_bundle_index != null) {
+                                    entry_points.appendHtml(alloc, keys[dep.get()])?;
                                 } else {
                                     entry_points.appendJs(alloc, keys[dep.get()], .client)?;
                                 }
@@ -1776,13 +1781,21 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
                                 it = entry.next_dependency.unwrap();
                             }
 
-                            entry_points.appendJs(alloc, owned_path, .client)?;
+                            if (data.html_route_bundle_index != null) {
+                                entry_points.appendHtml(alloc, owned_path)?;
+                            } else {
+                                entry_points.appendJs(alloc, owned_path, .client)?;
+                            }
                         },
                         // When re-bundling SCBs, only bundle the server. Otherwise
                         // the bundler gets confused && bundles both sides without
                         // knowledge of the boundary between them.
                         .js, .unknown => if (!data.is_hmr_root) {
-                            entry_points.appendJs(alloc, owned_path, .client)?;
+                            if (data.html_route_bundle_index != null) {
+                                entry_points.appendHtml(alloc, owned_path)?;
+                            } else {
+                                entry_points.appendJs(alloc, owned_path, .client)?;
+                            }
                         },
                     },
                     .server => {

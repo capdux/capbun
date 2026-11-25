@@ -1999,6 +1999,7 @@ pub fn onUpgrade(self: *@This(), globalThis: *jsc.JSGlobalObject, object: jsc.JS
             _ = resp.clearOnData();
             _ = resp.clearOnWritable();
             _ = resp.clearTimeout();
+            _ = upgrader.reclaimPromiseCell();
             _ = upgrader.deref();
             _ = resp.upgrade(_Ptrs.ServerWebSocketPtr, ws, sec_websocket_key_str.slice(), sec_websocket_protocol_str.slice(), sec_websocket_extensions_str.slice(), ctx);
             return JSValue.true;
@@ -2684,6 +2685,11 @@ pub fn deinit(self: *@This()) void {
                 _ = (user_route.*).deinit();
             }
             _ = self.user_routes.deinit(bun.default_allocator);
+            if (self.dev_server) |dev_server| {
+                _ = &dev_server;
+                self.dev_server = null;
+                _ = dev_server.deinit();
+            }
             _ = self.config.deinit();
             _ = self.on_clienterror.deinit();
             if (comptime has_h3) {
@@ -2702,10 +2708,6 @@ pub fn deinit(self: *@This()) void {
                 _ = &app;
                 self.app = null;
                 _ = app.destroy();
-            }
-            if (self.dev_server) |dev_server| {
-                _ = &dev_server;
-                _ = dev_server.deinit();
             }
             if (self.plugins) |plugins| {
                 _ = &plugins;
