@@ -208,6 +208,8 @@ JSC_DEFINE_HOST_FUNCTION(constructCipher, (JSC::JSGlobalObject * globalObject, J
     if (cipher.isSupportedAuthenticatedMode()) {
         initAuthenticated(globalObject, scope, ctx, cipherString, cipherKind, ivLen, authTagLength, maxMessageSize);
         RETURN_IF_EXCEPTION(scope, {});
+    } else {
+        authTagLength = std::nullopt;
     }
 
     if (!ctx.setKeyLength(keyData.size())) {

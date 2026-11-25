@@ -104,6 +104,7 @@ pub const RedisError = error{
     ConnectionTimeout,
     IdleTimeout,
     NestingDepthExceeded,
+    ServerError,
 };
 
 pub const RESPType = enum(u8) {
@@ -542,7 +543,7 @@ pub fn readVerbatimString(self: *ValkeyReader, allocator: std.mem.Allocator) Red
             }
             const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
             if (((self.pos + ulen) > self.buffer.len)) {
-                return error.InvalidVerbatimString;
+                return error.InvalidResponse;
             }
             const content_with_format = self.buffer[self.pos..(self.pos + ulen)];
             self.pos = (self.pos + ulen);
@@ -576,7 +577,7 @@ pub fn readValueWithDepth(self: *ValkeyReader, allocator: std.mem.Allocator, dep
                 }
                 const ulen = (if (comptime @typeInfo(@TypeOf(len)) == .@"enum") cp_cast_int(usize, @intFromEnum(len)) else cp_cast_int(usize, len));
                 if (((self.pos + ulen) > self.buffer.len)) {
-                    return error.InvalidBlobError;
+                    return error.InvalidResponse;
                 }
                 const str = self.buffer[self.pos..(self.pos + ulen)];
                 self.pos = (self.pos + ulen);

@@ -863,7 +863,7 @@ pub struct JSValkeyClient {
 
     pub fn setOnConnect(*_, thisValue: JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) {
         * = &_.client;
-        js.onconnectSetCached(thisValue, globalObject, value);
+        js.onconnectSetCached(thisValue, globalObject, if (value.isCallable()) value else .zero);
     }
 
     pub fn getOnClose(*_, thisValue: JSValue, _: *jsc.JSGlobalObject): JSValue {
@@ -875,7 +875,7 @@ pub struct JSValkeyClient {
 
     pub fn setOnClose(*_, thisValue: JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) {
         * = &_.client;
-        js.oncloseSetCached(thisValue, globalObject, value);
+        js.oncloseSetCached(thisValue, globalObject, if (value.isCallable()) value else .zero);
     }
 
     /// Safely add a timer with proper reference counting and event loop keepalive
@@ -1217,6 +1217,7 @@ pub struct JSValkeyClient {
     }
 
     fn closeWithoutSocketNextTick(*_) {
+        _.ref();
         _.client.status = .connecting;
         _.updatePollRef();
         _.enqueueDeferredClose(.without_socket);
@@ -1603,6 +1604,14 @@ pub fn SocketHandler(comptime ssl: bool): type {
         }
         pub static fn onOpen(client: *JSValkeyClient, socket: SocketType): void ! bun.JSTerminated {
             client.client.socket = to_socket(socket);
+            if (comptime ssl) {
+                if (client.client.tls == .custom) {
+                    if (sn := client.client.tls.custom.server_name) {
+                        const ssl_ptr: *BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
+                        * = BoringSSL.c.SSL_set_tlsext_host_name(ssl_ptr, sn);
+                    }
+                }
+            }
             (client.client.onOpen(to_socket(socket)))?;
         }
 

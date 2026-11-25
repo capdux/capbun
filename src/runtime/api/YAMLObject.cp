@@ -522,16 +522,18 @@ pub struct Stringifier {
                     first = false;
 
                     _.appendString(prop_name);
-                    _.builder.append(.latin1, ": ");
-
-                    _.indent += 1;
-
-                    if (Stringifier.propValueNeedsNewline(iter_props.value)) {
+                    if (Stringifier.propValueNeedsNewline(global, iter_props.value)?) {
+                        _.builder.append(.lchar, ':');
+                        _.indent += 1;
                         _.newline();
+                        _.stringifyValue(global, iter_props.value)?;
+                        _.indent -= 1;
+                    } else {
+                        _.builder.append(.latin1, ": ");
+                        _.indent += 1;
+                        _.stringifyValue(global, iter_props.value)?;
+                        _.indent -= 1;
                     }
-
-                    _.stringifyValue(global, iter_props.value)?;
-                    _.indent -= 1;
                 }
                 if (first) {
                     _.builder.append(.latin1, "{}");
@@ -540,9 +542,36 @@ pub struct Stringifier {
         }
     }
 
-    /// Does this object property value need a newline? True for arrays and objects.
-    static fn propValueNeedsNewline(value: JSValue): bool {
-        return !value.isNumber() && !value.isBoolean() && !value.isNull() && !value.isString();
+    /// Does this object property value need a newline? True for non-empty arrays and objects.
+    static fn propValueNeedsNewline(global: *JSGlobalObject, value: JSValue): JSError!bool {
+        if (value.isNumber() || value.isBoolean() || value.isNull() || value.isString()) {
+            return false;
+        }
+        const unwrapped = value.unwrapBoxedPrimitive(global) catch return false;
+        if (unwrapped.isNumber() || unwrapped.isBoolean() || unwrapped.isNull() || unwrapped.isString()) {
+            return false;
+        }
+        if (unwrapped.isArray()) {
+            let iter = unwrapped.arrayIterator(global)?;
+            while (item := iter.next()?) {
+                if (!item.isUndefined() && !item.isSymbol() && !item.isFunction()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        let iter_props: PropIter = (PropIter.init(
+            global,
+            (unwrapped.toObject(global))?,
+        ))?;
+        let _iter_props_guard = DeinitGuard<PropIter>{ ptr: unsafe { &iter_props } };
+        while (prop := iter_props.next()?) {
+            * = prop;
+            if (!iter_props.value.isUndefined() && !iter_props.value.isSymbol() && !iter_props.value.isFunction()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     fn newline(*_) {
@@ -618,8 +647,8 @@ pub struct Stringifier {
                 0x7f => _.builder.append(.latin1, "\\x7f"), // delete
                 0x85 => _.builder.append(.latin1, "\\N"), // next line
                 0xa0 => _.builder.append(.latin1, "\\_"), // non-breaking space
-                0xa8 => _.builder.append(.latin1, "\\L"), // line separator
-                0xa9 => _.builder.append(.latin1, "\\P"), // paragraph separator
+                0x2028 => _.builder.append(.latin1, "\\L"), // line separator
+                0x2029 => _.builder.append(.latin1, "\\P"), // paragraph separator
 
                 else => _.builder.append(.uchar, c),
             }
@@ -809,7 +838,7 @@ pub struct Stringifier {
                     i += 1;
                 },
 
-                '0'...'9' => {
+                '0'..='9' => {
                     if (i == 0 && stringIsNumber(str)) {
                         return true;
                     }
@@ -824,13 +853,14 @@ pub struct Stringifier {
                     i += 1;
                 },
 
-                0x00...0x1f,
+                0x00..=0x1f,
                 0x22,
                 0x7f,
                 0x85,
                 0xa0,
-                0xa8,
-                0xa9
+                0x2028,
+                0x2029,
+                0xfeff
                 => { return true; },
 
                 else => {
@@ -959,6 +989,12 @@ pub struct Stringifier {
 
     const input_value = callFrame.argumentsAsArray(1)[0];
 
+    if (blob := input_value.@"as"(jsc.WebCore.Blob)) {
+        if (blob.needsToReadFile() || blob.isS3()) {
+            return global.throwInvalidArguments("File blob cannot be used here", .{});
+        }
+    }
+
     const maybe_input = jsc.Node.BlobOrStringOrBuffer.fromJS(global, arena_allocator.allocator(), input_value)?;
     let input: jsc.Node.BlobOrStringOrBuffer = undefined;
     if (v := maybe_input) {
@@ -970,7 +1006,12 @@ pub struct Stringifier {
     }
     let _input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
 
-    const input_bytes = input.slice();
+    let input_bytes = input.slice();
+    if (ab := input_value.asArrayBuffer(global)) {
+        if (ab.shared) {
+            input_bytes = bun.handleOom(arena_allocator.allocator().dupe(u8, input_bytes));
+        }
+    }
     if (input_bytes.len > std.math.maxInt(i32)) {
         return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
     }

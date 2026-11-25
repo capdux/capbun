@@ -32,6 +32,7 @@ pub fn valkeyErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?
         error.ConnectionTimeout => .REDIS_CONNECTION_TIMEOUT,
         error.IdleTimeout => .REDIS_IDLE_TIMEOUT,
         error.NestingDepthExceeded => .REDIS_INVALID_RESPONSE,
+        error.ServerError => .REDIS_SERVER_ERROR,
         error.JSError => { return globalObject.takeException(error.JSError); },
         error.OutOfMemory => {
             if (globalObject.throwOutOfMemory() == error.JSError) {}
@@ -56,12 +57,7 @@ pub struct ToJSOptions {
 
 fn valkeyStrToJSValue(globalObject: *jsc.JSGlobalObject, str: *[]const u8, options: *const ToJSOptions): bun.JSError!jsc.JSValue {
     if (options.return_as_buffer) {
-        // The parser's payload is an owned allocation that is only converted
-        // once; adopt it as the Buffer backing store instead of copying it
-        // into a fresh ArrayBuffer.
-        const bytes = str.*;
-        str.* = "";
-        return jsc.JSValue.createBuffer(globalObject, unsafe { @constCast(bytes) });
+        return (jsc.ArrayBuffer.createBuffer(globalObject, str.*))?;
     } else {
         return bun.String.createUTF8ForJS(globalObject, str.*);
     }
@@ -70,7 +66,7 @@ fn valkeyStrToJSValue(globalObject: *jsc.JSGlobalObject, str: *[]const u8, optio
 pub fn respValueToJSWithOptions(resp_val: *RESPValue, globalObject: *jsc.JSGlobalObject, options: ToJSOptions): bun.JSError!jsc.JSValue {
     switch (resp_val.*) {
         .SimpleString => |*str| return valkeyStrToJSValue(globalObject, str, &options),
-        .Error => |str| return valkeyErrorToJS(globalObject, str, protocol.RedisError.InvalidResponse),
+        .Error => |str| return valkeyErrorToJS(globalObject, str, protocol.RedisError.ServerError),
         .Integer => |int| return jsc.JSValue.jsNumber(int),
         .BulkString => |*maybe_str| {
             if (maybe_str.* != null) {
@@ -142,13 +138,11 @@ pub fn respValueToJSWithOptions(resp_val: *RESPValue, globalObject: *jsc.JSGloba
             return js_obj;
         },
         .BigNumber => |str| {
-            // Try to parse as number if possible
-            if (int := std.fmt.parseInt(i64, str, 10) catch null) {
-                return jsc.JSValue.jsNumber(int);
-            } else {
-                // If it doesn't fit in an i64, return as string
-                return bun.String.createUTF8ForJS(globalObject, str);
+            const bigint = jsc.JSBigInt.fromDecimalString(globalObject, str);
+            if (!bigint.isUndefined()) {
+                return bigint;
             }
+            return bun.String.createUTF8ForJS(globalObject, str);
         },
     }
 }

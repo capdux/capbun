@@ -1384,8 +1384,12 @@ _ = self.finishRequest(request);
 
 pub fn refAndClose(self: *PostgresSQLConnection, js_reason: ?jsc.JSValue) void {
         if ((!self.socket.isClosed())) {
-            _ = self.poll_ref.ref(self.vm);
-            _ = self.socket.close();
+            if ((self.status == .failed)) {
+                _ = self.socket.terminate();
+            } else {
+                _ = self.poll_ref.ref(self.vm);
+                _ = self.socket.close();
+            }
         }
         _ = self.cleanUpRequests(js_reason);
 }
@@ -1396,6 +1400,10 @@ pub fn disconnect(self: *PostgresSQLConnection) void {
         if ((self.status == .connected)) {
             self.status = .disconnected;
             _ = self.refAndClose(null);
+        } else {
+            if (((self.status != .disconnected) and (self.status != .failed))) {
+                _ = self.fail("Connection closed", error.ConnectionClosed);
+            }
         }
 }
 

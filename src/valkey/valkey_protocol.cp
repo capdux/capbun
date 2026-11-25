@@ -96,6 +96,7 @@ pub err RedisError {
     ConnectionTimeout,
     IdleTimeout,
     NestingDepthExceeded,
+    ServerError,
 }
 
 pub const valkeyErrorToJS = protocol_jsc.valkeyErrorToJS;
@@ -357,7 +358,7 @@ pub struct ValkeyReader {
         const len = _.readInteger()?;
         if (len < 0 || len > max_bulk_len) return error.InvalidVerbatimString;
         const ulen = len as usize;
-        if (_.pos + ulen > _.buffer.len) return error.InvalidVerbatimString;
+        if (_.pos + ulen > _.buffer.len) return error.InvalidResponse;
 
         const content_with_format = _.buffer[_.pos .. _.pos + ulen];
         _.pos += ulen;
@@ -392,7 +393,7 @@ pub struct ValkeyReader {
             const len = _.readInteger()?;
             if (len < 0 || len > max_bulk_len) return error.InvalidBlobError;
             const ulen = len as usize;
-            if (_.pos + ulen > _.buffer.len) return error.InvalidBlobError;
+            if (_.pos + ulen > _.buffer.len) return error.InvalidResponse;
             const str = _.buffer[_.pos .. _.pos + ulen];
             _.pos += ulen;
             const crlf = _.readUntilCRLF()?;

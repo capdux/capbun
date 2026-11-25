@@ -68,10 +68,20 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
     const is_binary_input = input_value.isObject() && (input_value.as(jsc.WebCore.Blob) != null || input_value.asArrayBuffer(global) != null);
 
     if (is_binary_input) {
+        if (blob := input_value.as(jsc.WebCore.Blob)) {
+            if (blob.needsToReadFile() || blob.isS3()) {
+                return global.throwInvalidArguments("File blob cannot be used here", .{});
+            }
+        }
         let blob_or_str = (jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value))?;
         if (*input := blob_or_str) {
             const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
-            const input_bytes = input.slice();
+            let input_bytes = input.slice();
+            if (ab := input_value.asArrayBuffer(global)) {
+                if (ab.shared) {
+                    input_bytes = bun.handleOom(allocator.dupe(u8, input_bytes));
+                }
+            }
             if (input_bytes.len > std.math.maxInt(i32)) {
                 return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
             }

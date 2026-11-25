@@ -940,6 +940,12 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         defer if (!__log_guard_moved) { __log_guard_moved = true; const __T = @TypeOf(log_guard); if (@typeInfo(__T) == .optional) { if (log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = log_guard; _drop_val.__cp_deinit(); } };
         const is_binary_input = (input_value.isObject() and ((input_value.as(jsc.WebCore.Blob) != null) or (input_value.asArrayBuffer(global) != null)));
         if (is_binary_input) {
+            if (input_value.as(jsc.WebCore.Blob)) |blob| {
+                _ = &blob;
+                if ((blob.needsToReadFile() or blob.isS3())) {
+                    return global.throwInvalidArguments("File blob cannot be used here", .{});
+                }
+            }
             var blob_or_str = try jsc.Node.BlobOrStringOrBuffer.fromJS(global, allocator, input_value);
             _ = &blob_or_str;
             if (blob_or_str) |*input| {
@@ -951,7 +957,14 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
                 _ = &input_guard;
                 var __input_guard_moved = false; _ = &__input_guard_moved;
                 defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-                const input_bytes = (input.*).slice();
+                var input_bytes = (input.*).slice();
+                _ = &input_bytes;
+                if (input_value.asArrayBuffer(global)) |ab| {
+                    _ = &ab;
+                    if (ab.shared) {
+                        input_bytes = bun.handleOom(allocator.dupe(u8, input_bytes));
+                    }
+                }
                 if ((input_bytes.len > std.math.maxInt(i32))) {
                     return global.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
                 }

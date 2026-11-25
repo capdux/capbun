@@ -580,7 +580,7 @@ class PooledPostgresConnection {
     try {
       // user code; a throw must not abort the pool bookkeeping below
       // (the exception keeps propagating after the finally block runs)
-      if (connectionInfo?.onclose) {
+      if (connectionInfo?.onclose && (this.flags & PooledConnectionFlags.canBeConnected)) {
         connectionInfo.onclose(err);
       }
     } finally {
@@ -621,6 +621,9 @@ class PooledPostgresConnection {
       this.#onConnected.bind(this),
       this.#onClose.bind(this),
     );
+    if (this.onFinish && this.connection && this.state === PooledConnectionState.pending) {
+      this.connection.close();
+    }
   }
 
   onClose(onClose: (err: Error) => void) {

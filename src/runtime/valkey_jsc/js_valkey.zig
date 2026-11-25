@@ -801,7 +801,7 @@ pub fn getOnConnect(self: *JSValkeyClient, thisValue: JSValue, _: *jsc.JSGlobalO
 
 pub fn setOnConnect(self: *JSValkeyClient, thisValue: JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
             _ = (&self.client);
-            _ = js.onconnectSetCached(thisValue, globalObject, value);
+            _ = js.onconnectSetCached(thisValue, globalObject, (if (value.isCallable()) value else .zero));
     }
 
 pub fn getOnClose(self: *JSValkeyClient, thisValue: JSValue, _: *jsc.JSGlobalObject) JSValue {
@@ -815,7 +815,7 @@ pub fn getOnClose(self: *JSValkeyClient, thisValue: JSValue, _: *jsc.JSGlobalObj
 
 pub fn setOnClose(self: *JSValkeyClient, thisValue: JSValue, globalObject: *jsc.JSGlobalObject, value: JSValue) void {
             _ = (&self.client);
-            _ = js.oncloseSetCached(thisValue, globalObject, value);
+            _ = js.oncloseSetCached(thisValue, globalObject, (if (value.isCallable()) value else .zero));
     }
 
 pub fn addTimer(self: *JSValkeyClient, timer: *Timer.EventLoopTimer, next_timeout_ms: u32) void {
@@ -1110,6 +1110,7 @@ pub fn failWithJSValue(self: *JSValkeyClient, value: JSValue) void {
     }
 
 pub fn closeWithoutSocketNextTick(self: *JSValkeyClient) void {
+            _ = self.ref();
             self.client.status = .connecting;
             _ = self.updatePollRef();
             _ = self.enqueueDeferredClose(.without_socket);
@@ -1515,6 +1516,15 @@ pub fn to_socket(s: SocketType) Socket {
 
 pub fn onOpen(client: *JSValkeyClient, socket: SocketType) bun.JSTerminated!void {
             client.client.socket = to_socket(socket);
+            if (comptime ssl) {
+                if ((client.client.tls == .custom)) {
+                    if (client.client.tls.custom.server_name) |sn| {
+                        _ = &sn;
+                        const ssl_ptr: *BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
+                        _ = BoringSSL.c.SSL_set_tlsext_host_name(ssl_ptr, sn);
+                    }
+                }
+            }
             _ = try client.client.onOpen(to_socket(socket));
     }
 

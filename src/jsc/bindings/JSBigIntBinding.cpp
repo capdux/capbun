@@ -80,3 +80,11 @@ extern "C" BunString JSC__JSBigInt__toString(JSBigInt* bigInt, JSGlobalObject* g
 
     return toStringRef(result);
 }
+
+extern "C" EncodedJSValue JSC__JSBigInt__fromDecimalString(JSGlobalObject* globalObject, const uint8_t* ptr, size_t len)
+{
+    auto& vm = globalObject->vm();
+    StringView view(std::span<const uint8_t>(ptr, len));
+    JSValue result = JSBigInt::parseInt(globalObject, vm, view, 10, JSBigInt::ErrorParseMode::IgnoreExceptions, JSBigInt::ParseIntSign::Signed);
+    return JSValue::encode(result ? result : jsUndefined());
+}

@@ -1353,25 +1353,44 @@ return;
 },
 }
                 const start = parser.pos;
-                var decimal = (parser.next() == 46);
-                _ = &decimal;
-                var x = false;
-                _ = &x;
-                var o = false;
-                _ = &o;
-                var e = false;
-                _ = &e;
-                var @"+" = false;
-                _ = &@"+";
-                var @"-" = false;
-                _ = &@"-";
-                var hex = false;
-                _ = &hex;
+                var has_digits = false;
+                _ = &has_digits;
+                var has_dot = false;
+                _ = &has_dot;
+                var has_e = false;
+                _ = &has_e;
+                var e_digits = false;
+                _ = &e_digits;
+                var e_sign = false;
+                _ = &e_sign;
+                var is_hex = false;
+                _ = &is_hex;
+                var is_oct = false;
+                _ = &is_oct;
                 if (((first_char != .negative) and (first_char != .positive))) {
-                    _ = parser.inc(1);
+                    const c0 = parser.next();
+                    if (((c0 == 48) and (parser.peek(1) == 120))) {
+                        is_hex = true;
+                        _ = parser.inc(2);
+                    } else {
+                        if (((c0 == 48) and (parser.peek(1) == 111))) {
+                            is_oct = true;
+                            _ = parser.inc(2);
+                        } else {
+                            if ((c0 == 46)) {
+                                has_dot = true;
+                                _ = parser.inc(1);
+                            } else {
+                                if (((c0 >= 48) and (c0 <= 57))) {
+                                    has_digits = true;
+                                    _ = parser.inc(1);
+                                } else {
+                                    _ = parser.inc(1);
+                                }
+                            }
+                        }
+                    }
                 }
-                var first = true;
-                _ = &first;
                 var end: Pos = parser.pos;
                 _ = &end;
                 var valid: bool = false;
@@ -1381,21 +1400,15 @@ return;
                 end_sw: while (true) {
                     switch (end_ch) {
 ' ', 9, 0, 10, 13, ':' => {
-if ((first and ((first_char == .positive) or (first_char == .negative)))) {
-                        end = parser.pos;
-                        valid = false;
-                        break :end_sw;
-                    }
-                    end = parser.pos;
-                    valid = true;
+end = parser.pos;
+                    valid = (has_digits and ((!has_e) or e_digits));
                     break :end_sw;
 },
 ',', ']', '}' => {
-first = false;
-                    switch (parser.context.get()) {
+switch (parser.context.get()) {
 .flow_in, .flow_key => {
 end = parser.pos;
-                    valid = true;
+                    valid = (has_digits and ((!has_e) or e_digits));
                     break :end_sw;
 },
 .block_in, .block_out => {
@@ -1405,120 +1418,73 @@ end = parser.pos;
 },
 }
 },
-'0' => {
-defer {
-                    first = false;
-                    }
-                    _ = parser.inc(1);
-                    if (first) {
-                        switch (parser.next()) {
-'b', 'B' => {
-end = parser.pos;
+48...57 => |c| {
+if ((is_oct and (c > 55))) {
+                        end = parser.pos;
                         valid = false;
                         break :end_sw;
-},
-else => |c| {
-end_ch = c;
-                        continue :end_sw;
-},
-}
                     }
-                    end_ch = parser.next();
-                    continue :end_sw;
-},
-49...57 => {
-first = false;
+                    if (has_e) {
+                        e_digits = true;
+                    } else {
+                        has_digits = true;
+                    }
                     _ = parser.inc(1);
                     end_ch = parser.next();
                     continue :end_sw;
 },
 'e', 'E' => {
-first = false;
-                    if (e) {
-                        hex = true;
+if (is_hex) {
+                        has_digits = true;
+                        _ = parser.inc(1);
+                        end_ch = parser.next();
+                        continue :end_sw;
                     }
-                    e = true;
-                    _ = parser.inc(1);
-                    end_ch = parser.next();
-                    continue :end_sw;
-},
-97...100, 'f', 65...68, 'F' => |c| {
-hex = true;
-                    if (first) {
-                        if (((c == 98) or (c == 66))) {
-                            end = parser.pos;
-                            valid = false;
-                            break :end_sw;
-                        }
-                    }
-                    first = false;
-                    _ = parser.inc(1);
-                    end_ch = parser.next();
-                    continue :end_sw;
-},
-'x' => {
-first = false;
-                    if (x) {
+                    if ((has_e or (!has_digits))) {
                         end = parser.pos;
                         valid = false;
                         break :end_sw;
                     }
-                    x = true;
+                    has_e = true;
                     _ = parser.inc(1);
                     end_ch = parser.next();
                     continue :end_sw;
 },
-'o' => {
-first = false;
-                    if (o) {
+97...100, 'f', 65...68, 'F' => {
+if ((!is_hex)) {
                         end = parser.pos;
                         valid = false;
                         break :end_sw;
                     }
-                    o = true;
+                    has_digits = true;
                     _ = parser.inc(1);
                     end_ch = parser.next();
                     continue :end_sw;
 },
 '.' => {
-first = false;
-                    if (decimal) {
+if ((((is_hex or is_oct) or has_dot) or has_e)) {
                         end = parser.pos;
                         valid = false;
                         break :end_sw;
                     }
-                    decimal = true;
+                    has_dot = true;
                     _ = parser.inc(1);
                     end_ch = parser.next();
                     continue :end_sw;
 },
-'+' => {
-first = false;
-                    if (x) {
+'+', '-' => {
+if ((((!has_e) or e_sign) or e_digits)) {
                         end = parser.pos;
                         valid = false;
                         break :end_sw;
                     }
-                    @"+" = true;
-                    _ = parser.inc(1);
-                    end_ch = parser.next();
-                    continue :end_sw;
-},
-'-' => {
-first = false;
-                    if (@"-") {
-                        end = parser.pos;
-                        valid = false;
-                        break :end_sw;
-                    }
-                    @"-" = true;
+                    e_sign = true;
                     _ = parser.inc(1);
                     end_ch = parser.next();
                     continue :end_sw;
 },
 else => {
-first = false;
-                    end = parser.pos;
+end = parser.pos;
                     valid = false;
                     break :end_sw;
 },
@@ -1529,7 +1495,7 @@ first = false;
                     return;
                 }
                 var scalar: NodeScalar = scalar: {
-                if (((x or o) or hex)) {
+                if ((is_hex or is_oct)) {
                     const unsigned = (blk_catch_2: { break :blk_catch_2 ((std.fmt.parseUnsigned(u64, parser.slice(start, end), 0)) catch |__ce_2| { _ = &__ce_2; return; }); });
                     break :scalar .{ .number = @floatFromInt(unsigned) };
                 }
@@ -3036,6 +3002,7 @@ if ((self.peek(1) == 10)) {
 10 => {
 total = (total + 1);
                     _ = self.newline();
+                    self.tab_after_indent = false;
                     _ = self.inc(1);
                     sw_v_11 = self.next();
                     continue :sw_11;
@@ -3049,12 +3016,16 @@ var indent: Indent = Indent.@"from"(1);
                         _ = indent.inc(1);
                     }
                     self.line_indent = indent;
+                    if ((self.next() == 9)) {
+                        self.tab_after_indent = true;
+                    }
                     _ = self.skipSWhite();
                     sw_v_11 = self.next();
                     continue :sw_11;
 },
 9 => {
-_ = self.inc(1);
+self.tab_after_indent = true;
+                    _ = self.inc(1);
                     _ = self.skipSWhite();
                     sw_v_11 = self.next();
                     continue :sw_11;
@@ -3994,6 +3965,34 @@ return error.UnexpectedCharacter;
                 } else {
                     return error.UnexpectedCharacter;
                 }
+                if ((((escape == .u) and (cp_u21 >= 55296)) and (cp_u21 <= 56319))) {
+                    if (((self.peek(1) == 92) and (self.peek(2) == 117))) {
+                        var low: u21 = 0;
+                        _ = &low;
+                        var ok = true;
+                        _ = &ok;
+                        const ds: [4]enc.unit() = .{ self.peek(3), self.peek(4), self.peek(5), self.peek(6) };
+                        for (cp_iter_slice(ds)) |d| {
+                            _ = &d;
+                            const n: u21 = (switch (d) {
+48...57 => @intCast((d - 48)),
+97...102 => @intCast(((d - 97) + 10)),
+65...70 => @intCast(((d - 65) + 10)),
+else => {
+{
+                                ok = false;
+                                break;
+                            }
+},
+});
+                            low = ((low * 16) + n);
+                        }
+                        if (((ok and (low >= 56320)) and (low <= 57343))) {
+                            _ = self.inc(6);
+                            cp_u21 = ((65536 + cp_shl((cp_u21 - 55296), 10)) + (low - 56320));
+                        }
+                    }
+                }
                 switch (enc) {
 .utf8 => {
 var buf: [4]u8 = undefined;
@@ -4596,7 +4595,10 @@ pub fn trySkipToNewLine(self: *@This()) UnexpectedCharacterError!void {
                         return error.UnexpectedCharacter;
                     }
                     _ = self.inc(1);
-                    while (((!self.isChar(10)) and (!self.isChar(13)))) {
+                    while (((self.pos.isLessThan(self.input.len) and (!self.isChar(10))) and (!self.isChar(13)))) {
+                        if ((self.next() == 0)) {
+                            return error.UnexpectedCharacter;
+                        }
                         _ = self.inc(1);
                     }
                 }

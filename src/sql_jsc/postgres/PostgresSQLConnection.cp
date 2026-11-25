@@ -1273,8 +1273,12 @@ pub struct DataCellsGuard<P, C> {
 
     fn refAndClose(*_, js_reason: jsc.JSValue?)  {
         if (!_.socket.isClosed()) {
-            _.poll_ref.ref(_.vm);
-            _.socket.close();
+            if (_.status == .failed) {
+                _.socket.terminate();
+            } else {
+                _.poll_ref.ref(_.vm);
+                _.socket.close();
+            }
         }
 
         _.cleanUpRequests(js_reason);
@@ -1286,6 +1290,8 @@ pub struct DataCellsGuard<P, C> {
         if (_.status == .connected) {
             _.status = .disconnected;
             _.refAndClose(null);
+        } else if (_.status != .disconnected && _.status != .failed) {
+            _.fail("Connection closed", error.ConnectionClosed);
         }
     }
 

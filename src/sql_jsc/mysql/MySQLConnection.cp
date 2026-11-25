@@ -330,7 +330,11 @@ export struct Reader {
     }
 
     pub fn close(*_)  {
-        _.@"#socket".close();
+        if (_.status != .connected) {
+            _.@"#socket".terminate();
+        } else {
+            _.@"#socket".close();
+        }
         _.@"#write_buffer".clearAndFree(bun.default_allocator);
     }
 

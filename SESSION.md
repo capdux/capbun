@@ -1004,3 +1004,10 @@
 - **`xml.test.ts`**：修复 `XMLObject.cp` 生命周期、`xml.cp` UTF-16 `E.String` 长度/报错、`xml_scanner.cp` `formatUnits` `toUTF8AllocWithType` 避免 `simdutf` SEGV、`bindings.cpp` `toISOString` 拷贝 -> **59 pass, 2 fail**（ASan SEGV 消除）。
 - **`h2-conformance.test.ts`**：修复 `h2_frame_parser.cp` `CONTINUATION` 分片重组与 `freeResources` 二次 `deinit` 清零 -> `CONTINUATION` 全过，ASan `negative-size-param` 消除。
 - **`sqlite.test.js`**：修复 `sqlite.ts`、`JSSQLStatement.cpp`、`sqlite3_error_codes.h`（`open mode`、`ArrayBuffer` `deserialize`、`transaction` 异步回滚、`SQLITE_ERROR`、空/重复列名、`detached TypedArray`、`2 GiB blob`），大幅收敛。
+
+### 2026-11-26 Batch 2 测试修复与验证（`xml` / `crypto` / `yaml` / `valkey` / `sql`）
+- **`xml.test.ts`**：`XMLObject.cp` 拷贝 `SharedArrayBuffer` 与拦截 `blob.isS3()` -> **61 pass, 0 fail**（100% 通过）。
+- **`cipheriv-decipheriv.test.ts`**：`JSCipherConstructor.cpp` 非认证模式重置 `authTagLength = std::nullopt` -> **14 pass, 0 fail**（100% 通过）。
+- **`yaml`**：`yaml.cp` & `YAMLObject.cp` 修复 Core schema 数字状态机、NUL 字节、代理对、tab 缩进、`\L`/`\P` (`0x2028`/`0x2029`) 及非空集合换行。
+- **`valkey`**：`valkey_protocol.cp`, `protocol_jsc.cp`, `js_valkey.cp`, `JSBigInt.cp`, `JSBigIntBinding.cpp`, `ErrorCode.ts`, `generate-classes.ts` 消除 ASan `use-after-poison`、修复分包解码、`ERR_REDIS_SERVER_ERROR`、`getBuffer` GC、SNI 与 `onconnect`/`onclose` 校验。
+- **`sql`**：`postgres.ts`, `mysql.ts`, `PostgresSQLConnection.cp`, `MySQLConnection.cp` 修复 `mysql` 与 `postgres` 连接超时及 TLS 关闭，收敛至仅余 3 fail。

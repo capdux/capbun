@@ -1254,19 +1254,32 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
 
         const start = parser.pos;
 
-        let decimal = parser.next() == '.';
-        let x = false;
-        let o = false;
-        let e = false;
-        let @"+" = false;
-        let @"-" = false;
-        let hex = false;
+        let has_digits = false;
+        let has_dot = false;
+        let has_e = false;
+        let e_digits = false;
+        let e_sign = false;
+        let is_hex = false;
+        let is_oct = false;
 
         if (first_char != .negative && first_char != .positive) {
-            parser.inc(1);
+            const c0 = parser.next();
+            if (c0 == '0' && parser.peek(1) == 'x') {
+                is_hex = true;
+                parser.inc(2);
+            } else if (c0 == '0' && parser.peek(1) == 'o') {
+                is_oct = true;
+                parser.inc(2);
+            } else if (c0 == '.') {
+                has_dot = true;
+                parser.inc(1);
+            } else if (c0 >= '0' && c0 <= '9') {
+                has_digits = true;
+                parser.inc(1);
+            } else {
+                parser.inc(1);
+            }
         }
-
-        let first = true;
 
         let end: Pos = parser.pos;
         let valid: bool = false;
@@ -1288,23 +1301,25 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
             '\r',
             ':'
             => {
-                if (first && (first_char == .positive || first_char == .negative)) {
-                    end = parser.pos; valid = false; break :end_sw;
-                }
-                end = parser.pos; valid = true; break :end_sw;
+                end = parser.pos;
+                valid = has_digits && (!has_e || e_digits);
+                break :end_sw;
             },
 
             ',',
             ']',
             '}'
             => {
-                first = false;
                 switch (parser.context.get()) {
                     // it's valid for ',' ']' '}' to end the scalar
                     // in flow context
                     .flow_in,
                     .flow_key
-                    => { end = parser.pos; valid = true; break :end_sw; },
+                    => {
+                        end = parser.pos;
+                        valid = has_digits && (!has_e || e_digits);
+                        break :end_sw;
+                    },
 
                     .block_in,
                     .block_out
@@ -1312,27 +1327,15 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
                 }
             },
 
-            '0' => {
-                defer first = false;
-                parser.inc(1);
-                if (first) {
-                    switch (parser.next()) {
-                        'b',
-                        'B'
-                        => {
-                            end = parser.pos; valid = false; break :end_sw;
-                        },
-                        else => |c| {
-                            end_ch = c; continue :end_sw;
-                        },
-                    }
+            '0'..='9' => |c| {
+                if (is_oct && c > '7') {
+                    end = parser.pos; valid = false; break :end_sw;
                 }
-                end_ch = parser.next(); continue :end_sw;
-            },
-
-            '1'..='9'
-            => {
-                first = false;
+                if (has_e) {
+                    e_digits = true;
+                } else {
+                    has_digits = true;
+                }
                 parser.inc(1);
                 end_ch = parser.next(); continue :end_sw;
             },
@@ -1340,11 +1343,15 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
             'e',
             'E'
             => {
-                first = false;
-                if (e) {
-                    hex = true;
+                if (is_hex) {
+                    has_digits = true;
+                    parser.inc(1);
+                    end_ch = parser.next(); continue :end_sw;
                 }
-                e = true;
+                if (has_e || !has_digits) {
+                    end = parser.pos; valid = false; break :end_sw;
+                }
+                has_e = true;
                 parser.inc(1);
                 end_ch = parser.next(); continue :end_sw;
             },
@@ -1353,73 +1360,35 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
             'f',
             'A'..='D',
             'F'
-            => |c| {
-                hex = true;
-
-                if (first) {
-                    if (c == 'b' || c == 'B') {
-                        end = parser.pos; valid = false; break :end_sw;
-                    }
-                }
-                first = false;
-
-                parser.inc(1);
-                end_ch = parser.next(); continue :end_sw;
-            },
-
-            'x' => {
-                first = false;
-                if (x) {
+            => {
+                if (!is_hex) {
                     end = parser.pos; valid = false; break :end_sw;
                 }
-
-                x = true;
-                parser.inc(1);
-                end_ch = parser.next(); continue :end_sw;
-            },
-
-            'o' => {
-                first = false;
-                if (o) {
-                    end = parser.pos; valid = false; break :end_sw;
-                }
-
-                o = true;
+                has_digits = true;
                 parser.inc(1);
                 end_ch = parser.next(); continue :end_sw;
             },
 
             '.' => {
-                first = false;
-                if (decimal) {
+                if (is_hex || is_oct || has_dot || has_e) {
                     end = parser.pos; valid = false; break :end_sw;
                 }
-
-                decimal = true;
+                has_dot = true;
                 parser.inc(1);
                 end_ch = parser.next(); continue :end_sw;
             },
 
-            '+' => {
-                first = false;
-                if (x) {
+            '+',
+            '-'
+            => {
+                if (!has_e || e_sign || e_digits) {
                     end = parser.pos; valid = false; break :end_sw;
                 }
-                @"+" = true;
-                parser.inc(1);
-                end_ch = parser.next(); continue :end_sw;
-            },
-            '-' => {
-                first = false;
-                if (@"-") {
-                    end = parser.pos; valid = false; break :end_sw;
-                }
-                @"-" = true;
+                e_sign = true;
                 parser.inc(1);
                 end_ch = parser.next(); continue :end_sw;
             },
             else => {
-                first = false;
                 end = parser.pos; valid = false; break :end_sw;
             },
             }
@@ -1432,7 +1401,7 @@ struct ParserScalarResolverCtx<const enc: Encoding> {
         }
 
         let scalar: NodeScalar = scalar: {
-            if (x || o || hex) {
+            if (is_hex || is_oct) {
                 const unsigned = std.fmt.parseUnsigned(u64, parser.slice(start, end), 0) catch {
                     return;
                 };
@@ -3306,6 +3275,7 @@ pub struct Parser<const enc: Encoding> {
             '\n' => {
                 total += 1;
                 _.newline();
+                _.tab_after_indent = false;
                 _.inc(1);
                 sw_v_11 = _.next(); continue :sw_11;
             },
@@ -3319,12 +3289,16 @@ pub struct Parser<const enc: Encoding> {
 
                 _.line_indent = indent;
 
+                if (_.next() == '\t') {
+                    _.tab_after_indent = true;
+                }
                 _.skipSWhite();
                 sw_v_11 = _.next(); continue :sw_11;
             },
             '\t' => {
                 // there's no indentation, but we still skip
                 // the whitespace
+                _.tab_after_indent = true;
                 _.inc(1);
                 _.skipSWhite();
                 sw_v_11 = _.next(); continue :sw_11;
@@ -4326,6 +4300,27 @@ pub struct Parser<const enc: Encoding> {
             return error.UnexpectedCharacter;
         }
 
+        if (escape == .u && cp_u21 >= 0xD800 && cp_u21 <= 0xDBFF) {
+            if (_.peek(1) == '\\' && _.peek(2) == 'u') {
+                let low: u21 = 0;
+                let ok = true;
+                const ds: [4]enc.unit() = [ _.peek(3), _.peek(4), _.peek(5), _.peek(6) ];
+                for (d of ds) {
+                    const n: u21 = switch (d) {
+                        '0'..='9' => @intCast(d - '0'),
+                        'a'..='f' => @intCast(d - 'a' + 10),
+                        'A'..='F' => @intCast(d - 'A' + 10),
+                        else => { ok = false; break; },
+                    };
+                    low = low * 16 + n;
+                }
+                if (ok && low >= 0xDC00 && low <= 0xDFFF) {
+                    _.inc(6);
+                    cp_u21 = 0x10000 + ((cp_u21 - 0xD800) << 10) + (low - 0xDC00);
+                }
+            }
+        }
+
         switch (enc) {
             .utf8 => {
                 let buf: [4]u8 = undefined;
@@ -5205,7 +5200,10 @@ pub struct Parser<const enc: Encoding> {
                 return error.UnexpectedCharacter;
             }
             _.inc(1);
-            while (!_.isChar('\n') && !_.isChar('\r')) {
+            while (_.pos.isLessThan(_.input.len) && !_.isChar('\n') && !_.isChar('\r')) {
+                if (_.next() == 0) {
+                    return error.UnexpectedCharacter;
+                }
                 _.inc(1);
             }
         }

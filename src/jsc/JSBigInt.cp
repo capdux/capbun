@@ -5,9 +5,13 @@
     fn JSC__JSBigInt__orderInt64(val: *JSBigInt, num: i64): i8;
     fn JSC__JSBigInt__toInt64(val: *JSBigInt): i64;
     fn JSC__JSBigInt__toString(val: *JSBigInt, global: *JSGlobalObject): bun.String;
+    fn JSC__JSBigInt__fromDecimalString(global: *JSGlobalObject, ptr: [*]const u8!, len: usize): JSValue;
 }
 
 @opaque pub struct JSBigInt {
+    pub static fn fromDecimalString(global: *JSGlobalObject, str: []const u8): JSValue {
+        return JSC__JSBigInt__fromDecimalString(global, str.ptr, str.len);
+    }
     static fn fromJS(value: JSValue): (*JSBigInt)? {
         return JSC__JSBigInt__fromJS(value);
     }

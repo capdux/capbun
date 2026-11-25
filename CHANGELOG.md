@@ -2368,3 +2368,11 @@
 - `src/jsc/bindings/webcrypto/CryptoKeyOKP.cpp`
 - `src/js/bun/sqlite.ts`, `src/jsc/bindings/sqlite/JSSQLStatement.cpp`, `src/jsc/bindings/sqlite/sqlite3_error_codes.h`
 - `CP_PITFALLS.md`, `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 2 测试收敛提交
+- `src/runtime/api/XMLObject.cp` (.zig), `src/runtime/api/YAMLObject.cp` (.zig), `src/interchange/yaml.cp` (.zig)
+- `src/jsc/bindings/node/crypto/JSCipherConstructor.cpp`
+- `src/valkey/valkey_protocol.cp` (.zig), `src/jsc/JSBigInt.cp` (.zig), `src/jsc/bindings/JSBigIntBinding.cpp`, `src/jsc/bindings/ErrorCode.ts`
+- `src/runtime/valkey_jsc/protocol_jsc.cp` (.zig), `src/runtime/valkey_jsc/js_valkey.cp` (.zig), `src/codegen/generate-classes.ts`
+- `src/js/internal/sql/postgres.ts`, `src/js/internal/sql/mysql.ts`, `src/sql_jsc/postgres/PostgresSQLConnection.cp` (.zig), `src/sql_jsc/mysql/MySQLConnection.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`
