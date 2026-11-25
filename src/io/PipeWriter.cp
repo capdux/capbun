@@ -364,8 +364,9 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
                 _.handle = .{ .fd = fd };
                 return .success;
             }
+            const existing_poll = _.getPoll();
             let poll: *Async.FilePoll = undefined;
-            if (p := _.getPoll()) {
+            if (p := existing_poll) {
                 poll = p;
             } else {
                 _.handle = .{ .poll = _.createPoll(fd) };
@@ -375,6 +376,10 @@ pub fn PosixBufferedWriter(@comptime Parent: type, @comptime function_table: any
 
             switch (poll.registerWithFd(loop, .writable, .dispatch, fd)) {
                 .err e => {
+                    if (existing_poll == null) {
+                        poll.deinit();
+                        _.handle = .closed;
+                    }
                     return .initErr(e);
                 },
                 .result => {
@@ -764,8 +769,9 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
             }
 
             const loop = _.parent.eventLoop();
+            const existing_poll = _.getPoll();
             let poll: *Async.FilePoll = undefined;
-            if (p := _.getPoll()) {
+            if (p := existing_poll) {
                 poll = p;
             } else {
                 _.handle = .{ .poll = Async.FilePoll.init(loop, fd, .{}, PosixWriter, _) };
@@ -774,6 +780,10 @@ pub fn PosixStreamingWriter(@comptime Parent: type, @comptime function_table: an
 
             switch (poll.registerWithFd(loop.loop(), .writable, .dispatch, fd)) {
                 .err e => {
+                    if (existing_poll == null) {
+                        poll.deinit();
+                        _.handle = .closed;
+                    }
                     return .{ .err = e };
                 },
                 .result => {},

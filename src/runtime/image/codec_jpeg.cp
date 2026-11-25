@@ -38,6 +38,7 @@ const TJPARAM_QUALITY = 3;
 const TJPARAM_SUBSAMP = 4;
 pub const TJPARAM_JPEGWIDTH = 5;
 pub const TJPARAM_JPEGHEIGHT = 6;
+const TJPARAM_COLORSPACE = 8;
 const TJPARAM_PROGRESSIVE = 12;
 const TJPARAM_MAXPIXELS = 24;
 /// `2` = save only APP2/ICC_PROFILE markers (enough for colour management,
@@ -45,6 +46,9 @@ const TJPARAM_MAXPIXELS = 24;
 /// parser keeps the profile around for `tj3GetICCProfile`.
 const TJPARAM_SAVEMARKERS = 25;
 const TJPF_RGBA = 7;
+const TJPF_CMYK = 11;
+const TJCS_CMYK = 3;
+const TJCS_YCCK = 4;
 const TJSAMP_420 = 2;
 
 struct TjHandleGuard {
@@ -86,6 +90,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     const src_w: u32 = @intCast(rw);
     const src_h: u32 = @intCast(rh);
     codecs.guard(src_w, src_h, max_pixels)?;
+    const cs = tj3Get(h, TJPARAM_COLORSPACE);
+    const cmyk = cs == TJCS_CMYK || cs == TJCS_YCCK;
 
     let w = src_w;
     let ht = src_h;
@@ -120,29 +126,19 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
         }
     }
 
-    // `bytes` may alias a JS ArrayBuffer; the contract is "don't mutate while
-    // a terminal is pending" (SharedArrayBuffer is refused at construction),
-    // so the honest path costs nothing. Hardening here is so a hostile
-    // mid-decode swap degrades to DecodeFailed, not OOB/heap-leak:
-    // tj3DecompressHeader ends with `jpeg_abort_decompress`, so
-    // tj3Decompress8 re-runs `jpeg_read_header` and derives row count /
-    // stride from a fresh parse. Bound the WRITE REGION to OUR alloc with
-    //   • TJPARAM_MAXPIXELS — second-parse w'·h' > w·h fails before output
-    //     (turbojpeg-mp.c:183)
-    //   • explicit pitch — stride can't grow with w'
-    //   • croppingRegion {0,0,w,ht} — `croppedHeight = ht` regardless of h'
-    //     (turbojpeg-mp.c:222), so an aspect-swap (4096×1→1×4096) that
-    //     passes the product check still can't write more rows than fit
-    // and post-check the second-parse dims so a smaller swap (which would
-    // leave rows unfilled with raw mimalloc bytes) is treated as corrupt.
+    // Hardening against hostile mid-decode swap (tj3DecompressHeader -> tj3Decompress8):
+    // bind write region with TJPARAM_MAXPIXELS, pitch, and croppingRegion.
     * = tj3Set(h, TJPARAM_MAXPIXELS, std.math.cast(c_int, src_w * src_h) ?? std.math.maxInt(c_int));
     * = tj3SetCroppingRegion(h, { x: 0, y: 0, w: @intCast(w), h: @intCast(ht) });
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * ht * 4)?;
     const out_guard = SliceFreeGuard{ slice: out };
-    if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), TJPF_RGBA) != 0)
+    if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), if (cmyk) TJPF_CMYK else TJPF_RGBA) != 0)
         return error.DecodeFailed;
     if (tj3Get(h, TJPARAM_JPEGWIDTH) != rw || tj3Get(h, TJPARAM_JPEGHEIGHT) != rh)
         return error.DecodeFailed;
+    if (cmyk) {
+        codecs.cmykToRgba(out);
+    }
 
     // Extract the APP2 ICC profile (if the source carried one). The marker
     // parser ran during tj3DecompressHeader, so this is a copy-out of
@@ -157,6 +153,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     let icc_ptr: OptU8ManyPtr = null;
     let icc_size: usize = 0;
     const icc: ([]u8)? = icc_blk: {
+        if (cmyk) break :icc_blk null;
         if (tj3GetICCProfile(h, &icc_ptr, &icc_size) != 0 || icc_size == 0) break :icc_blk null;
         const icc_guard = TjFreeGuard{ ptr: icc_ptr };
         if (p := icc_guard.ptr) {

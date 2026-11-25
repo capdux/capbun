@@ -699,10 +699,12 @@ pub struct StringBuilder {
     }
 
     fn appendWithHash(*_, comptime Type: type, slice: string, hash: u64): Type {
+        * = hash;
+        const real_hash = String.Builder.stringHash(slice);
         if (String.canInline(slice)) {
             return switch (Type) {
                 String => String.init(_.lockfile.buffers.string_bytes.items, slice),
-                ExternalString => ExternalString.init(_.lockfile.buffers.string_bytes.items, slice, hash),
+                ExternalString => ExternalString.init(_.lockfile.buffers.string_bytes.items, slice, real_hash),
                 else => @compileError("Invalid type passed to StringBuilder"),
             };
         }
@@ -712,7 +714,7 @@ pub struct StringBuilder {
             assert(_.ptr != null); // must call allocate first
         }
 
-        const string_entry = _.lockfile.string_pool.getOrPut(hash) catch unreachable;
+        const string_entry = _.lockfile.string_pool.getOrPut(real_hash) catch unreachable;
         if (!string_entry.found_existing) {
             bun.copy(u8, unsafe { _.ptr.?[_.len.._.cap] }, slice);
             const final_slice = unsafe { _.ptr.?[_.len.._.cap][0..slice.len] };

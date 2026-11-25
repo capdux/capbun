@@ -14,6 +14,7 @@ extern fn spng_set_trns(ctx: *spng_ctx, trns: *const Trns): c_int ;
 extern fn spng_encode_image(ctx: *spng_ctx, img: [*]const u8, len: usize, fmt: c_int, flags: c_int): c_int ;
 extern fn spng_get_png_buffer(ctx: *spng_ctx, len: *usize, e: *c_int): ([*]u8)? ;
 extern fn spng_set_option(ctx: *spng_ctx, opt: c_int, value: c_int): c_int ;
+extern fn spng_set_crc_action(ctx: *spng_ctx, critical: c_int, ancillary: c_int): c_int ;
 /// iCCP chunk read/write — PNG carries an optional ICC profile alongside
 /// the pixels for every colour type (including indexed). `spng_get_iccp`
 /// returns non-zero when the source has no iCCP (or the chunk was
@@ -45,7 +46,9 @@ extern fn spng_set_iccp(ctx: *spng_ctx, iccp: *const Iccp): c_int ;
     interlace_method: u8 = 0,
 }
 
+const SPNG_CTX_IGNORE_ADLER32 = 1;
 const SPNG_CTX_ENCODER = 2;
+const SPNG_CRC_USE = 2;
 const SPNG_FMT_RGBA8 = 1;
 const SPNG_FMT_PNG = 256;
 const SPNG_DECODE_TRNS = 1; // apply tRNS chunk so paletted/grey get real alpha
@@ -91,10 +94,11 @@ struct DeinitGuard<T> {
 }
 
 pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
-    const ctx_opt = spng_ctx_new(0);
+    const ctx_opt = spng_ctx_new(SPNG_CTX_IGNORE_ADLER32);
     if (ctx_opt == null) return error.OutOfMemory;
     const ctx = ctx_opt.?;
     const ctx_guard = SpngCtxGuard{ ctx: ctx };
+    * = spng_set_crc_action(ctx, SPNG_CRC_USE, SPNG_CRC_USE);
     if (spng_set_png_buffer(ctx, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
     let ihdr: Ihdr = undefined;
     if (spng_get_ihdr(ctx, &ihdr) != 0) return error.DecodeFailed;

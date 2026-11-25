@@ -556,9 +556,10 @@ pub fn start(self: *@This(), rawfd: anytype, pollable: bool) bun.sys.Maybe(void)
                 self.handle = .{ .fd = fd };
                 return .success;
             }
+            const existing_poll = self.getPoll();
             var poll: *Async.FilePoll = undefined;
             _ = &poll;
-            if (self.getPoll()) |p| {
+            if (existing_poll) |p| {
                 _ = &p;
                 poll = p;
             } else {
@@ -568,7 +569,11 @@ pub fn start(self: *@This(), rawfd: anytype, pollable: bool) bun.sys.Maybe(void)
             const loop = @as(*Parent, @ptrCast(@alignCast(self.parent))).eventLoop().loop();
             switch (poll.registerWithFd(loop, .writable, .dispatch, fd)) {
 .err => |e| {
-return .initErr(e);
+if ((existing_poll == null)) {
+                _ = poll.deinit();
+                self.handle = .closed;
+            }
+            return .initErr(e);
 },
 .result => {
 _ = self.enableKeepingProcessAlive(@as(*Parent, @ptrCast(@alignCast(self.parent))).eventLoop());
@@ -918,9 +923,10 @@ pub fn start(self: *@This(), fd: bun.FD, is_pollable: bool) bun.sys.Maybe(void) 
                 return .success;
             }
             const loop = self.parent.eventLoop();
+            const existing_poll = self.getPoll();
             var poll: *Async.FilePoll = undefined;
             _ = &poll;
-            if (self.getPoll()) |p| {
+            if (existing_poll) |p| {
                 _ = &p;
                 poll = p;
             } else {
@@ -929,7 +935,11 @@ pub fn start(self: *@This(), fd: bun.FD, is_pollable: bool) bun.sys.Maybe(void) 
             }
             switch (poll.registerWithFd(loop.loop(), .writable, .dispatch, fd)) {
 .err => |e| {
-return .{ .err = e };
+if ((existing_poll == null)) {
+                _ = poll.deinit();
+                self.handle = .closed;
+            }
+            return .{ .err = e };
 },
 .result => {
 

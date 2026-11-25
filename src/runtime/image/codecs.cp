@@ -464,6 +464,11 @@ extern fn bun_image_resize_rgba8(
 extern fn bun_image_rotate_rgba8(src: [*]const u8, w: i32, h: i32, dst: [*]u8, deg: i32) ;
 extern fn bun_image_flip_rgba8(src: [*]const u8, w: i32, h: i32, dst: [*]u8, horiz: i32) ;
 extern fn bun_image_modulate_rgba8(buf: [*]u8, len: usize, brightness: f32, saturation: f32) ;
+extern fn bun_image_cmyk_to_rgba8(buf: [*]u8, len: usize) ;
+
+pub fn cmykToRgba(px: []u8) {
+    bun_image_cmyk_to_rgba8(px.ptr, px.len);
+}
 
 /// In-place brightness/saturation. brightness multiplies V (so 1.0 is
 /// identity); saturation linearly interpolates each channel toward the pixel's

@@ -727,14 +727,16 @@ pub fn appendWithoutPool(self: *StringBuilder, comptime Type: type, slice: []con
     }
 
 pub fn appendWithHash(self: *StringBuilder, comptime Type: type, slice: []const u8, hash: u64) Type {
+            _ = &hash;
+            const real_hash = String.Builder.stringHash(slice);
             if (String.canInline(slice)) {
-                return (if (Type == String) String.init(self.lockfile.buffers.string_bytes.items, slice) else if (Type == ExternalString) ExternalString.init(self.lockfile.buffers.string_bytes.items, slice, hash) else @compileError("Invalid type passed to StringBuilder"));
+                return (if (Type == String) String.init(self.lockfile.buffers.string_bytes.items, slice) else if (Type == ExternalString) ExternalString.init(self.lockfile.buffers.string_bytes.items, slice, real_hash) else @compileError("Invalid type passed to StringBuilder"));
             }
             if (comptime Environment.allow_assert) {
                 _ = assert((self.len <= self.cap));
                 _ = assert((self.ptr != null));
             }
-            const string_entry = ((self.lockfile.string_pool.getOrPut(hash)) catch unreachable);
+            const string_entry = ((self.lockfile.string_pool.getOrPut(real_hash)) catch unreachable);
             if ((!string_entry.found_existing)) {
                 _ = bun.copy(u8, (blk: {
                 break :blk self.ptr.?[self.len..self.cap];
