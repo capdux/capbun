@@ -46,7 +46,6 @@
 #include "JSDOMGlobalObjectInlines.h"
 #include "JSDOMWrapperCache.h"
 #include "ScriptExecutionContext.h"
-#include "streams/WebStreamsInspectCustom.h"
 #include "WebCoreJSClientData.h"
 #include "WebCoreOpaqueRoot.h"
 #include <JavaScriptCore/FunctionPrototype.h>
@@ -179,7 +178,6 @@ void JSCryptoKeyPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSCryptoKey::info(), JSCryptoKeyPrototypeTableValues, *this);
-    Bun::WebStreams::installInspectCustom(vm, this, jsCryptoKeyPrototype_inspectCustom);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 
@@ -325,7 +323,7 @@ JSC_DEFINE_HOST_FUNCTION(jsCryptoKeyPrototype_inspectCustom, (JSGlobalObject * l
     RETURN_IF_EXCEPTION(scope, {});
     data->putDirect(vm, Identifier::fromString(vm, "usages"_s), usages, 0);
 
-    RELEASE_AND_RETURN(scope, Bun::WebStreams::customInspect(lexicalGlobalObject, callFrame, thisValue, "CryptoKey"_s, data));
+    RELEASE_AND_RETURN(scope, JSValue::encode(data));
 }
 
 JSC::GCClient::IsoSubspace* JSCryptoKey::subspaceForImpl(JSC::VM& vm)

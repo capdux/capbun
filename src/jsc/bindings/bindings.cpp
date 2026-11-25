@@ -5776,6 +5776,11 @@ extern "C" JSC::EncodedJSValue WebCore__AbortSignal__abortReason(WebCore::AbortS
     return JSC::JSValue::encode(abortSignal->reason().getValue(jsNull()));
 }
 
+extern "C" JSC::EncodedJSValue WebCore__AbortSignal__jsReason(WebCore::AbortSignal* signal, JSC::JSGlobalObject* globalObject)
+{
+    return JSC::JSValue::encode(signal->reason().getValue(jsNull()));
+}
+
 extern "C" WebCore::AbortSignalTimeout WebCore__AbortSignal__getTimeout(WebCore::AbortSignal* arg0)
 {
     WebCore::AbortSignal* abortSignal = reinterpret_cast<WebCore::AbortSignal*>(arg0);

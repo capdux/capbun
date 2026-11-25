@@ -446,6 +446,7 @@ long us_ssl_ctx_live_count(void);
 /* Per-SSL session sink: each resumable session reaching the new-session
  * callback is SSL_SESSION_up_ref'd and handed to on_new_session (which takes
  * ownership of that reference). on_free(owner) runs once on SSL_free. */
+struct ssl_session_st;
 void us_ssl_set_session_sink(struct ssl_st *ssl, void *owner,
                              void (*on_new_session)(void *, struct ssl_session_st *),
                              void (*on_free)(void *));

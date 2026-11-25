@@ -501,7 +501,7 @@ extern "C" [[ZIG_EXPORT(zero_is_throw)]] JSC::EncodedJSValue BunString__toJSON(
     BunString* bunString)
 {
     auto scope = DECLARE_THROW_SCOPE(globalObject->vm());
-    WTF::String string = !bunString->isDead() && bunString->isEmpty() ? emptyString() : bunString->toWTFString();
+    WTF::String string = bunString->tag != BunStringTag::Dead && bunString->isEmpty() ? emptyString() : bunString->toWTFString();
     JSC::JSValue result = JSC::JSONParseWithException(globalObject, string);
 
     if (!result && !scope.exception()) {

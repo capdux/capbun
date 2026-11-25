@@ -130,7 +130,7 @@ public:
     // after every swap.
     WTF::UncheckedKeyHashMap<WTF::String, RefPtr<JSC::SourceProvider>> isolationSourceProviderCache;
 
-    void reconcileWeakReferencesAtGCEnd(JSC::VM&, JSC::CollectionScope) final;
+    void reconcileWeakReferencesAtGCEnd(JSC::VM&, JSC::CollectionScope);
 
     void addClient(JSVMClientDataClient& client) { m_clients.add(client); }
 

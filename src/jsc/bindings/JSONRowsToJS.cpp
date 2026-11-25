@@ -178,11 +178,11 @@ private:
     {
         JSString* result;
         if constexpr (encoding == RowEncoding::Utf16)
-            result = m_vm.jsonAtomStringCache.tryMakeJSString(utf16(s));
+            result = m_vm.jsonAtomStringCache.makeJSString(utf16(s));
         else {
             if (encoding == RowEncoding::Utf8 && !charactersAreAllASCII(s.span())) [[unlikely]]
                 return utf8(s);
-            result = m_vm.jsonAtomStringCache.tryMakeJSString(s.span());
+            result = m_vm.jsonAtomStringCache.makeJSString(s.span());
         }
         if (!result) [[unlikely]] {
             auto scope = DECLARE_THROW_SCOPE(m_vm);

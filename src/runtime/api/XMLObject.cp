@@ -49,7 +49,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
         if (!options_val.isObject() || options_val.isArray()) {
             return global.throwInvalidArguments("XML.parse options must be an object", {});
         }
-        if (c_val := options_val.getOptional(global, "compact", bool)?) {
+        if (c_val := options_val.getBooleanLoose(global, "compact")?) {
             compact = c_val;
         }
     }
@@ -70,7 +70,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSErro
     let root_expr: Expr = undefined;
 
     if (*input := blob_or_str) {
-        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { input } };
+        const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
         is_bytes = true;
         const input_bytes = input.slice();
         if (input_bytes.len > std.math.maxInt(i32)) {
@@ -185,9 +185,6 @@ fn isNode(global: *jsc.JSGlobalObject, value: JSValue): bun.JSError!bool {
     if (!name_val.isString()) return false;
     if ((value.get(global, "children"))? != null) return true;
     if ((value.get(global, "attributes"))? != null) return true;
-    const obj = value.toObject(global);
-    if (obj.hasOwnProperty(global, "children")) return true;
-    if (obj.hasOwnProperty(global, "attributes")) return true;
     return false;
 }
 
@@ -200,7 +197,7 @@ pub union(enum) Space {
         const space = space_value.unwrapBoxedPrimitive(global)?;
         if (space.isNumber()) {
             const n = space.asNumber();
-            if (std.math.isNan(n) || n < 1.0) return .{ .minified = {} };
+            if (std.math.isNan(n) || n < 1.0) return .{ minified: undefined };
             const clamped: u32 = if (n > 10.0) 10 else @as(u32, @intFromFloat(n));
             return .{ .number = clamped };
         }
@@ -208,11 +205,11 @@ pub union(enum) Space {
             let str = space.toBunString(global)?;
             if (str.length() == 0) {
                 str.deref();
-                return .{ .minified = {} };
+                return .{ minified: undefined };
             }
             return .{ .str = str };
         }
-        return .{ .minified = {} };
+        return .{ minified: undefined };
     }
 
     fn deinit(*_) {
@@ -244,7 +241,7 @@ struct Stringifier {
     builder: wtf.StringBuilder.StringBuilder,
     indent: usize,
     space: Space,
-    visiting: std.AutoHashMapUnmanaged(u64, void),
+    visiting: std.AutoHashMapUnmanaged(i64, void),
     depth: usize,
 
     static fn init(global: *jsc.JSGlobalObject, space_value: JSValue): bun.JSError!Stringifier {
@@ -293,15 +290,15 @@ struct Stringifier {
         const name_guard = DerefGuard<bun.String>{ ptr: unsafe { &name } };
         _.checkName(global, &name, "element")?;
 
-        _.builder.appendLChar('<');
-        _.builder.appendString(name);
+        _.builder.append(.lchar, '<');
+        _.builder.append(.string, name);
 
         if (attrs := node.get(global, "attributes")?) {
             if (!attrs.isNull()) {
                 if (!attrs.isObject() || attrs.isArray()) {
                     return global.throw("XML.stringify: a node's attributes must be an object", {});
                 }
-                let iter = PropIter.init(global, attrs.toObject(), .{})?;
+                let iter = PropIter.init(global, attrs.toObject(global)?)?;
                 defer iter.deinit();
                 while (attr_name := iter.next()?) {
                     const sc = _.scalar(global, iter.value, "an attribute value")?;
@@ -326,7 +323,7 @@ struct Stringifier {
             }
         }
         if (children_opt == null) {
-            _.builder.appendLatin1("/>");
+            _.builder.append(.latin1, "/>");
             return;
         }
         const children = children_opt.?;
@@ -345,10 +342,10 @@ struct Stringifier {
             }
         }
         if (count == 0) {
-            _.builder.appendLatin1("/>");
+            _.builder.append(.latin1, "/>");
             return;
         }
-        _.builder.appendLChar('>');
+        _.builder.append(.lchar, '>');
         const pretty = _.space.isPretty() && !has_text;
         if (pretty) _.indent += 1;
         let iter = children.arrayIterator(global)?;
@@ -391,7 +388,7 @@ struct Stringifier {
         defer {
             if (*rn := root_name) rn.deref();
         }
-        let iter = PropIter.init(global, document.toObject(), .{})?;
+        let iter = PropIter.init(global, document.toObject(global)?)?;
         defer iter.deinit();
         while (key := iter.next()?) {
             const val = iter.value.unwrapBoxedPrimitive(global)?;
@@ -469,9 +466,9 @@ struct Stringifier {
                 if (t.length() == 0) {
                     _.appendEmptyElement(name.*);
                 } else {
-                    _.builder.appendLChar('<');
-                    _.builder.appendString(name.*);
-                    _.builder.appendLChar('>');
+                    _.builder.append(.lchar, '<');
+                    _.builder.append(.string, name.*);
+                    _.builder.append(.lchar, '>');
                     _.appendText(global, &t)?;
                     _.appendEndTag(name.*);
                 }
@@ -481,13 +478,13 @@ struct Stringifier {
 
     fn stringifyCompactObject(*_, global: *jsc.JSGlobalObject, name: *const bun.String, value: JSValue): StringifyError!void {
         _.checkName(global, name, "element")?;
-        const obj = value.toObject();
-        _.builder.appendLChar('<');
-        _.builder.appendString(name.*);
+        const obj = value.toObject(global)?;
+        _.builder.append(.lchar, '<');
+        _.builder.append(.string, name.*);
         let has_elements = false;
         let has_text = false;
         {
-            let iter = PropIter.init(global, obj, .{})?;
+            let iter = PropIter.init(global, obj)?;
             defer iter.deinit();
             while (key := iter.next()?) {
                 const child = iter.value;
@@ -522,14 +519,14 @@ struct Stringifier {
             }
         }
         if (!has_elements && !has_text) {
-            _.builder.appendLatin1("/>");
+            _.builder.append(.latin1, "/>");
             return;
         }
-        _.builder.appendLChar('>');
+        _.builder.append(.lchar, '>');
         const pretty = _.space.isPretty() && !has_text;
         if (pretty) _.indent += 1;
         {
-            let iter = PropIter.init(global, obj, .{})?;
+            let iter = PropIter.init(global, obj)?;
             defer iter.deinit();
             while (key := iter.next()?) {
                 const child = iter.value;
@@ -557,19 +554,20 @@ struct Stringifier {
 
     fn scalar(*_, global: *jsc.JSGlobalObject, value: JSValue, what: string): StringifyError!Scalar {
         const val = value.unwrapBoxedPrimitive(global)?;
-        if (skipped(val)) return .{ .skip = {} };
-        if (val.isNull()) return .{ .empty = {} };
+        if (skipped(val)) return .{ skip: undefined };
+        if (val.isNull()) return .{ empty: undefined };
         if (val.isString() || val.isNumber() || val.isBoolean() || val.isBigInt()) {
             return .{ .text = val.toBunString(global)? };
         }
         if (val.isDate()) {
-            let buf: [64]u8 = @splat(0);
-            if (iso := val.toISOString(global, &buf)) {
+            let buf: [28]u8 = @splat(0);
+            const iso = val.toISOString(global, &buf);
+            if (iso.len > 0) {
                 return .{ .text = bun.String.cloneUTF8(iso) };
             }
             return global.throw("XML.stringify cannot serialize an invalid Date", {});
         }
-        return global.throwFmt("XML.stringify: {s} must be a string, number, boolean, bigint, Date, or null", .{what});
+        return global.throw("XML.stringify: {s} must be a string, number, boolean, bigint, Date, or null", .{what});
     }
 
     fn checkName(*_, global: *jsc.JSGlobalObject, name: *const bun.String, what: string): StringifyError!void {
@@ -584,29 +582,29 @@ struct Stringifier {
             i += width;
         }
         if (!valid) {
-            return global.throwFmt("XML.stringify: invalid XML {s} name", .{what});
+            return global.throw("XML.stringify: invalid XML {s} name", .{what});
         }
     }
 
     fn appendEmptyElement(*_, name: bun.String) {
-        _.builder.appendLChar('<');
-        _.builder.appendString(name);
-        _.builder.appendLatin1("/>");
+        _.builder.append(.lchar, '<');
+        _.builder.append(.string, name);
+        _.builder.append(.latin1, "/>");
     }
 
     fn appendEndTag(*_, name: bun.String) {
-        _.builder.appendLatin1("</");
-        _.builder.appendString(name);
-        _.builder.appendLChar('>');
+        _.builder.append(.latin1, "</");
+        _.builder.append(.string, name);
+        _.builder.append(.lchar, '>');
     }
 
     fn appendAttribute(*_, global: *jsc.JSGlobalObject, name: *const bun.String, value: *const bun.String): StringifyError!void {
         _.checkName(global, name, "attribute")?;
-        _.builder.appendLChar(' ');
-        _.builder.appendString(name.*);
-        _.builder.appendLatin1("=\"");
+        _.builder.append(.lchar, ' ');
+        _.builder.append(.string, name.*);
+        _.builder.append(.latin1, "=\"");
         _.appendEscaped(global, value, true)?;
-        _.builder.appendLChar('"');
+        _.builder.append(.lchar, '"');
     }
 
     fn appendText(*_, global: *jsc.JSGlobalObject, text: *const bun.String): StringifyError!void {
@@ -622,26 +620,26 @@ struct Stringifier {
             const width = pair[1];
             i += width;
             if (cp == 0x26) {
-                _.builder.appendLatin1("&amp;");
+                _.builder.append(.latin1, "&amp;");
             } else if (cp == 0x3C) {
-                _.builder.appendLatin1("&lt;");
+                _.builder.append(.latin1, "&lt;");
             } else if (cp == 0x3E) {
-                _.builder.appendLatin1("&gt;");
+                _.builder.append(.latin1, "&gt;");
             } else if (cp == 0x22 && attribute) {
-                _.builder.appendLatin1("&quot;");
+                _.builder.append(.latin1, "&quot;");
             } else if (cp == 0x09 && attribute) {
-                _.builder.appendLatin1("&#x9;");
+                _.builder.append(.latin1, "&#x9;");
             } else if (cp == 0x0A && attribute) {
-                _.builder.appendLatin1("&#xA;");
+                _.builder.append(.latin1, "&#xA;");
             } else if (cp == 0x0D) {
-                _.builder.appendLatin1("&#xD;");
+                _.builder.append(.latin1, "&#xD;");
             } else if (!xml.isXmlChar(cp)) {
-                return global.throwFmt("XML.stringify: XML cannot represent the character U+{X:0>4}", .{cp});
+                return global.throw("XML.stringify: XML cannot represent the character U+{X:0>4}", .{cp});
             } else if (cp >= 0x10000) {
-                _.builder.appendUChar(text.charAt(i - 2));
-                _.builder.appendUChar(text.charAt(i - 1));
+                _.builder.append(.uchar, text.charAt(i - 2));
+                _.builder.append(.uchar, text.charAt(i - 1));
             } else {
-                _.builder.appendUChar(@as(u16, @intCast(cp)));
+                _.builder.append(.uchar, @as(u16, @intCast(cp)));
             }
         }
     }
@@ -650,19 +648,19 @@ struct Stringifier {
         switch (_.space) {
             .minified => {},
             .number n => {
-                _.builder.appendLChar('\n');
+                _.builder.append(.lchar, '\n');
                 let k: usize = 0;
                 const total = _.indent * @as(usize, n);
                 while (k < total) : (k += 1) {
-                    _.builder.appendLChar(' ');
+                    _.builder.append(.lchar, ' ');
                 }
             },
             .str s => {
-                _.builder.appendLChar('\n');
+                _.builder.append(.lchar, '\n');
                 const clamped = if (s.length() > 10) s.substringWithLen(0, 10) else s;
                 let k: usize = 0;
                 while (k < _.indent) : (k += 1) {
-                    _.builder.appendString(clamped);
+                    _.builder.append(.string, clamped);
                 }
             },
         }

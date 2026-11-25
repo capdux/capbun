@@ -98,3 +98,12 @@ pub fn stringToJS(s: *E.String, allocator: std.mem.Allocator, globalObject: *jsc
     @memcpy(chars, s.slice16());
     return out.transferToJS(globalObject);
 }
+
+@export @c fn Bun__JSONRows__wtf8ToJS(
+    global: *jsc.JSGlobalObject,
+    ptr: [*]const u8,
+    len: usize,
+): jsc.JSValue {
+    const bytes = unsafe { ptr[0..len] };
+    return bun.String.createUTF8ForJS(global, bytes) catch return .zero;
+}

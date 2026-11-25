@@ -837,7 +837,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
         }
 
         fn parsePseudoAttribute(*_, name: string): XMLError!(struct { val: Slice, pos: usize })? {
-            if (_.scanner.tok.kind != .name || !UT.eqAscii(_.scanner.tok.kind.name, name)) {
+            if (_.scanner.tok.kind != .name || !UT.eqAscii(_.scanner.tok.kind.@"name", name)) {
                 return null;
             }
             _.requireSpaced()?;
@@ -861,7 +861,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             * = _.expectName("the document type name")?;
             _.requireSpaced()?;
             _.advance()?;
-            if (_.scanner.tok.kind == .name && (UT.eqAscii(_.scanner.tok.kind.name, "SYSTEM") || UT.eqAscii(_.scanner.tok.kind.name, "PUBLIC"))) {
+            if (_.scanner.tok.kind == .name && (UT.eqAscii(_.scanner.tok.kind.@"name", "SYSTEM") || UT.eqAscii(_.scanner.tok.kind.@"name", "PUBLIC"))) {
                 _.requireSpaced()?;
                 _.parseExternalId(false)?;
                 _.scanner.has_external_subset = true;
@@ -879,7 +879,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
         }
 
         fn parseExternalId(*_, notation: bool): XMLError!void {
-            if (_.scanner.tok.kind == .name && UT.eqAscii(_.scanner.tok.kind.name, "SYSTEM")) {
+            if (_.scanner.tok.kind == .name && UT.eqAscii(_.scanner.tok.kind.@"name", "SYSTEM")) {
                 _.advanceLiteral(.System)?;
                 if (_.scanner.tok.kind != .literal) {
                     return _.unexpected("a quoted system identifier after SYSTEM");
@@ -1202,7 +1202,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
                     if (UT.eqAscii(n, "SYSTEM") || UT.eqAscii(n, "PUBLIC")) {
                         _.requireSpaced()?;
                         _.parseExternalId(false)?;
-                        if (_.scanner.tok.kind == .name && UT.eqAscii(_.scanner.tok.kind.name, "NDATA")) {
+                        if (_.scanner.tok.kind == .name && UT.eqAscii(_.scanner.tok.kind.@"name", "NDATA")) {
                             _.requireSpaced()?;
                             if (parameter) {
                                 return _.scanner.errMsg(_.scanner.tok.pos, "Parameter entities cannot have NDATA");
@@ -1237,7 +1237,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             * = _.expectName("a notation name after '<!NOTATION'")?;
             _.requireSpaced()?;
             _.advance()?;
-            if (_.scanner.tok.kind != .name || (!UT.eqAscii(_.scanner.tok.kind.name, "SYSTEM") && !UT.eqAscii(_.scanner.tok.kind.name, "PUBLIC"))) {
+            if (_.scanner.tok.kind != .name || (!UT.eqAscii(_.scanner.tok.kind.@"name", "SYSTEM") && !UT.eqAscii(_.scanner.tok.kind.@"name", "PUBLIC"))) {
                 return _.unexpected("SYSTEM or PUBLIC in the notation declaration");
             }
             _.requireSpaced()?;

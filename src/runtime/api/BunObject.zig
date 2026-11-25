@@ -296,6 +296,7 @@ pub fn exportAll() void {
             _ = @export((&@field(BunObject, "markdown")), .{ .name = lazyPropertyCallbackName("markdown") });
             _ = @export((&@field(BunObject, "TOML")), .{ .name = lazyPropertyCallbackName("TOML") });
             _ = @export((&@field(BunObject, "JSON5")), .{ .name = lazyPropertyCallbackName("JSON5") });
+            _ = @export((&@field(BunObject, "XML")), .{ .name = lazyPropertyCallbackName("XML") });
             _ = @export((&@field(BunObject, "YAML")), .{ .name = lazyPropertyCallbackName("YAML") });
             _ = @export((&@field(BunObject, "Glob")), .{ .name = lazyPropertyCallbackName("Glob") });
             _ = @export((&@field(BunObject, "Image")), .{ .name = lazyPropertyCallbackName("Image") });

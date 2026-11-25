@@ -307,6 +307,7 @@ pub struct BunObject {
         @export(&@field(BunObject, "markdown"), { name: lazyPropertyCallbackName("markdown") });
         @export(&@field(BunObject, "TOML"), { name: lazyPropertyCallbackName("TOML") });
         @export(&@field(BunObject, "JSON5"), { name: lazyPropertyCallbackName("JSON5") });
+        @export(&@field(BunObject, "XML"), { name: lazyPropertyCallbackName("XML") });
         @export(&@field(BunObject, "YAML"), { name: lazyPropertyCallbackName("YAML") });
         @export(&@field(BunObject, "Glob"), { name: lazyPropertyCallbackName("Glob") });
         @export(&@field(BunObject, "Image"), { name: lazyPropertyCallbackName("Image") });

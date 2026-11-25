@@ -795,7 +795,9 @@ extern "C" {
 // Using both "default" visibility and "weak" ensures our implementation is used
 // throughout the entire program when linked, not just in this object file
 __attribute__((visibility("default"), weak, used)) void* memmem(const void* haystack, size_t haystacklen, const void* needle, size_t needlelen)
-    __attribute__((alias("highway_memmem")));
+{
+    return bun::highway_memmem(reinterpret_cast<const uint8_t*>(haystack), haystacklen, reinterpret_cast<const uint8_t*>(needle), needlelen);
+}
 }
 
 #endif

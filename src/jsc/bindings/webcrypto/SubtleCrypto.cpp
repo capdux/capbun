@@ -100,6 +100,24 @@ enum class Operations {
 
 static ExceptionOr<std::unique_ptr<CryptoAlgorithmParameters>> normalizeCryptoAlgorithmParameters(JSGlobalObject&, WebCore::SubtleCrypto::AlgorithmIdentifier, Operations);
 
+static bool isAcceptableVectorSource(const BufferSource& data)
+{
+    return WTF::isValidCapacityForVector<uint8_t>(data.length());
+}
+
+static bool isAcceptableVectorSource(const std::optional<BufferSource::VariantType>& data)
+{
+    if (!data)
+        return true;
+    auto length = std::visit([](auto& buffer) -> size_t { return buffer ? buffer->byteLength() : 0; }, *data);
+    return WTF::isValidCapacityForVector<uint8_t>(length);
+}
+
+static bool isAcceptableVectorSource(const RefPtr<Uint8Array>& data)
+{
+    return !data || WTF::isValidCapacityForVector<uint8_t>(data->byteLength());
+}
+
 static ExceptionOr<CryptoAlgorithmIdentifier> toHashIdentifier(JSGlobalObject& state, SubtleCrypto::AlgorithmIdentifier algorithmIdentifier)
 {
     auto digestParams = normalizeCryptoAlgorithmParameters(state, algorithmIdentifier, Operations::Digest);
@@ -1064,7 +1082,12 @@ void SubtleCrypto::deriveKey(JSC::JSGlobalObject& state, AlgorithmIdentifier&& a
         promise->reject(result.releaseException().code(), "Cannot get key length from derivedKeyType"_s);
         return;
     }
-    size_t length = result.releaseReturnValue();
+    auto optLength = result.releaseReturnValue();
+    if (!optLength) {
+        promise->reject(NotSupportedError, "Cannot get key length from derivedKeyType"_s);
+        return;
+    }
+    size_t length = *optLength;
 
     auto importAlgorithm = CryptoAlgorithmRegistry::singleton().create(importParams->identifier);
     auto algorithm = CryptoAlgorithmRegistry::singleton().create(params->identifier);
@@ -1815,9 +1838,7 @@ void SubtleCrypto::decapsulateBits(JSC::JSGlobalObject& state, AlgorithmIdentifi
     }
     auto params = paramsOrException.releaseReturnValue();
 
-    auto ciphertext = copyToVector(WTF::move(ciphertextBufferSource), promise);
-    if (!ciphertext)
-        return;
+    auto ciphertext = copyToVector(WTF::move(ciphertextBufferSource));
 
     if (params->identifier != decapsulationKey.algorithmIdentifier()) {
         promise->reject(InvalidAccessError, "key algorithm mismatch"_s);
@@ -1843,7 +1864,7 @@ void SubtleCrypto::decapsulateBits(JSC::JSGlobalObject& state, AlgorithmIdentifi
             rejectWithException(promise.releaseNonNull(), ec, msg);
     };
 
-    RELEASE_AND_RETURN(scope, algorithm->decapsulate(decapsulationKey, WTF::move(*ciphertext), WTF::move(callback), WTF::move(exceptionCallback)));
+    RELEASE_AND_RETURN(scope, algorithm->decapsulate(decapsulationKey, WTF::move(ciphertext), WTF::move(callback), WTF::move(exceptionCallback)));
 }
 
 void SubtleCrypto::decapsulateKey(JSC::JSGlobalObject& state, AlgorithmIdentifier&& algorithmIdentifier, CryptoKey& decapsulationKey, BufferSource&& ciphertextBufferSource, AlgorithmIdentifier&& sharedKeyAlgorithm, bool extractable, Vector<CryptoKeyUsage>&& keyUsages, Ref<DeferredPromise>&& promise)
@@ -1866,9 +1887,7 @@ void SubtleCrypto::decapsulateKey(JSC::JSGlobalObject& state, AlgorithmIdentifie
     }
     auto importParams = importParamsOrException.releaseReturnValue();
 
-    auto ciphertext = copyToVector(WTF::move(ciphertextBufferSource), promise);
-    if (!ciphertext)
-        return;
+    auto ciphertext = copyToVector(WTF::move(ciphertextBufferSource));
 
     auto keyUsagesBitmap = toCryptoKeyUsageBitmap(keyUsages);
 
@@ -1913,7 +1932,7 @@ void SubtleCrypto::decapsulateKey(JSC::JSGlobalObject& state, AlgorithmIdentifie
             rejectWithException(promise.releaseNonNull(), ec, msg);
     };
 
-    RELEASE_AND_RETURN(scope, algorithm->decapsulate(decapsulationKey, WTF::move(*ciphertext), WTF::move(callback), WTF::move(exceptionCallback)));
+    RELEASE_AND_RETURN(scope, algorithm->decapsulate(decapsulationKey, WTF::move(ciphertext), WTF::move(callback), WTF::move(exceptionCallback)));
 }
 
 ExceptionOr<std::unique_ptr<CryptoAlgorithmParameters>> SubtleCrypto::normalizeImportParameters(JSC::JSGlobalObject& state, AlgorithmIdentifier&& algorithmIdentifier)

@@ -86,18 +86,18 @@ static JSC::JSPromise* resolvedInternalPromise(JSC::JSGlobalObject* globalObject
 }
 
 // Converts an object from InternalModuleRegistry into { ...obj, default: obj }
-static JSC::SyntheticSourceProvider::LazySyntheticSourceGenerator generateInternalModuleSourceCode(JSC::JSGlobalObject* globalObject, InternalModuleRegistry::Field moduleId)
+static JSC::SyntheticSourceProvider::SyntheticSourceGenerator generateInternalModuleSourceCode(JSC::JSGlobalObject* globalObject, InternalModuleRegistry::Field moduleId)
 {
     return [moduleId](JSC::JSGlobalObject* lexicalGlobalObject,
                JSC::Identifier moduleKey,
                Vector<JSC::Identifier, 4>& exportNames,
-               JSC::MarkedArgumentBuffer& exportValues) -> JSC::JSObject* {
+               JSC::MarkedArgumentBuffer& exportValues) -> void {
         auto& vm = JSC::getVM(lexicalGlobalObject);
         GlobalObject* globalObject = uncheckedDowncast<GlobalObject>(lexicalGlobalObject);
         auto throwScope = DECLARE_THROW_SCOPE(vm);
 
         JSValue requireResult = globalObject->internalModuleRegistry()->requireId(globalObject, vm, moduleId);
-        RETURN_IF_EXCEPTION(throwScope, nullptr);
+        RETURN_IF_EXCEPTION(throwScope, void());
         auto* object = requireResult.getObject();
         ASSERT_WITH_MESSAGE(object, "Expected object from requireId %s", moduleKey.string().string().utf8().data());
 
@@ -105,14 +105,13 @@ static JSC::SyntheticSourceProvider::LazySyntheticSourceGenerator generateIntern
 
         PropertyNameArrayBuilder properties(vm, PropertyNameMode::Strings, PrivateSymbolMode::Exclude);
         object->getOwnPropertyNames(object, globalObject, properties, DontEnumPropertiesMode::Exclude);
-        RETURN_IF_EXCEPTION(throwScope, nullptr);
+        RETURN_IF_EXCEPTION(throwScope, void());
 
         auto len = properties.size() + 1;
         exportNames.reserveCapacity(len);
         exportValues.ensureCapacity(len);
 
         bool hasDefault = false;
-        bool hasLazyExports = false;
 
         for (auto& entry : properties) {
             if (entry == vm.propertyNames->defaultKeyword) [[unlikely]] {
@@ -120,18 +119,8 @@ static JSC::SyntheticSourceProvider::LazySyntheticSourceGenerator generateIntern
             }
             exportNames.append(entry);
 
-            PropertySlot slot(object, PropertySlot::InternalMethodType::GetOwnProperty);
-            bool hasOwn = object->methodTable()->getOwnPropertySlot(object, globalObject, entry, slot);
-            RETURN_IF_EXCEPTION(throwScope, nullptr);
-            if (hasOwn && !slot.isValue()) {
-                // Accessors are how builtins defer loading (fs.ReadStream pulls in node:stream); JSC reads them off `object` on first binding.
-                exportValues.append(JSValue());
-                hasLazyExports = true;
-                continue;
-            }
-
-            JSValue value = hasOwn ? slot.getValue(globalObject, entry) : object->get(globalObject, entry);
-            RETURN_IF_EXCEPTION(throwScope, nullptr);
+            JSValue value = object->get(globalObject, entry);
+            RETURN_IF_EXCEPTION(throwScope, void());
             exportValues.append(value);
         }
 
@@ -139,8 +128,6 @@ static JSC::SyntheticSourceProvider::LazySyntheticSourceGenerator generateIntern
             exportNames.append(vm.propertyNames->defaultKeyword);
             exportValues.append(object);
         }
-
-        return hasLazyExports ? object : nullptr;
     };
 }
 
@@ -1059,7 +1046,7 @@ static JSValue fetchESMSourceCode(
         default: {
             if (tag & SyntheticModuleType::InternalModuleRegistryFlag) {
                 constexpr auto mask = (SyntheticModuleType::InternalModuleRegistryFlag - 1);
-                auto source = JSC::SourceCode(JSC::SyntheticSourceProvider::createWithLazyExports(generateInternalModuleSourceCode(globalObject, static_cast<InternalModuleRegistry::Field>(tag & mask)), JSC::SourceOrigin(URL(makeString("builtins://"_s, moduleKey))), moduleKey));
+                auto source = JSC::SourceCode(JSC::SyntheticSourceProvider::create(generateInternalModuleSourceCode(globalObject, static_cast<InternalModuleRegistry::Field>(tag & mask)), JSC::SourceOrigin(URL(makeString("builtins://"_s, moduleKey))), moduleKey));
                 RELEASE_AND_RETURN(scope, rejectOrResolve(JSSourceCode::create(vm, WTF::move(source))));
             } else {
                 auto&& provider = Zig::SourceProvider::create(globalObject, res->result.value, JSC::SourceProviderSourceType::Module, true);

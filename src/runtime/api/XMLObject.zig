@@ -121,7 +121,7 @@ pub fn init(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Space
             if (space.isNumber()) {
                 const n = space.asNumber();
                 if ((std.math.isNan(n) or (n < 1.0))) {
-                    return .{ .minified = .{} };
+                    return .{ .minified = undefined };
                 }
                 const clamped: u32 = (if ((n > 10.0)) 10 else @as(u32, @intFromFloat(n)));
                 return .{ .number = clamped };
@@ -131,11 +131,11 @@ pub fn init(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Space
                 _ = &str;
                 if ((str.length() == 0)) {
                     _ = str.deref();
-                    return .{ .minified = .{} };
+                    return .{ .minified = undefined };
                 }
                 return .{ .str = str };
             }
-            return .{ .minified = .{} };
+            return .{ .minified = undefined };
     }
 
 pub fn deinit(self: *Space) void {
@@ -164,7 +164,7 @@ pub const Stringifier = struct {
     builder: wtf.StringBuilder.StringBuilder,
     indent: usize,
     space: Space,
-    visiting: std.AutoHashMapUnmanaged(u64, void),
+    visiting: std.AutoHashMapUnmanaged(i64, void),
     depth: usize,
 
 pub fn init(global: *jsc.JSGlobalObject, space_value: JSValue) bun.JSError!Stringifier {
@@ -219,15 +219,15 @@ pub fn stringifyNodeInner(self: *Stringifier, global: *jsc.JSGlobalObject, node:
             var __name_guard_moved = false; _ = &__name_guard_moved;
             defer if (!__name_guard_moved) { __name_guard_moved = true; const __T = @TypeOf(name_guard); if (@typeInfo(__T) == .optional) { if (name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { name_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = name_guard; _drop_val.__cp_deinit(); } };
             _ = try self.checkName(global, (&name), "element");
-            _ = self.builder.appendLChar(60);
-            _ = self.builder.appendString(name);
+            _ = self.builder.append(.lchar, 60);
+            _ = self.builder.append(.string, name);
             if (try node.get(global, "attributes")) |attrs| {
                 _ = &attrs;
                 if ((!attrs.isNull())) {
                     if (((!attrs.isObject()) or attrs.isArray())) {
                         return global.throw("XML.stringify: a node's attributes must be an object", .{});
                     }
-                    var iter = try PropIter.init(global, attrs.toObject(), .{});
+                    var iter = try PropIter.init(global, try attrs.toObject(global));
                     _ = &iter;
                     defer {
                     _ = iter.deinit();
@@ -267,7 +267,7 @@ var t = mut_t;
                 }
             }
             if ((children_opt == null)) {
-                _ = self.builder.appendLatin1("/>");
+                _ = self.builder.append(.latin1, "/>");
                 return;
             }
             const children = children_opt.?;
@@ -290,10 +290,10 @@ var t = mut_t;
                 }
             }
             if ((count == 0)) {
-                _ = self.builder.appendLatin1("/>");
+                _ = self.builder.append(.latin1, "/>");
                 return;
             }
-            _ = self.builder.appendLChar(62);
+            _ = self.builder.append(.lchar, 62);
             const pretty = (self.space.isPretty() and (!has_text));
             if (pretty) {
                 self.indent = (self.indent + 1);
@@ -363,7 +363,7 @@ pub fn stringifyCompactDocumentInner(self: *Stringifier, global: *jsc.JSGlobalOb
                 }
             }
             }
-            var iter = try PropIter.init(global, document.toObject(), .{});
+            var iter = try PropIter.init(global, try document.toObject(global));
             _ = &iter;
             defer {
             _ = iter.deinit();
@@ -477,9 +477,9 @@ var t = mut_t;
             if ((t.length() == 0)) {
                 _ = self.appendEmptyElement(name.*);
             } else {
-                _ = self.builder.appendLChar(60);
-                _ = self.builder.appendString(name.*);
-                _ = self.builder.appendLChar(62);
+                _ = self.builder.append(.lchar, 60);
+                _ = self.builder.append(.string, name.*);
+                _ = self.builder.append(.lchar, 62);
                 _ = try self.appendText(global, (&t));
                 _ = self.appendEndTag(name.*);
             }
@@ -489,15 +489,15 @@ var t = mut_t;
 
 pub fn stringifyCompactObject(self: *Stringifier, global: *jsc.JSGlobalObject, name: *const bun.String, value: JSValue) StringifyError!void {
             _ = try self.checkName(global, name, "element");
-            const obj = value.toObject();
-            _ = self.builder.appendLChar(60);
-            _ = self.builder.appendString(name.*);
+            const obj = try value.toObject(global);
+            _ = self.builder.append(.lchar, 60);
+            _ = self.builder.append(.string, name.*);
             var has_elements = false;
             _ = &has_elements;
             var has_text = false;
             _ = &has_text;
             {
-                var iter = try PropIter.init(global, obj, .{});
+                var iter = try PropIter.init(global, obj);
                 _ = &iter;
                 defer {
                 _ = iter.deinit();
@@ -570,16 +570,16 @@ else => {
                 }
             }
             if (((!has_elements) and (!has_text))) {
-                _ = self.builder.appendLatin1("/>");
+                _ = self.builder.append(.latin1, "/>");
                 return;
             }
-            _ = self.builder.appendLChar(62);
+            _ = self.builder.append(.lchar, 62);
             const pretty = (self.space.isPretty() and (!has_text));
             if (pretty) {
                 self.indent = (self.indent + 1);
             }
             {
-                var iter = try PropIter.init(global, obj, .{});
+                var iter = try PropIter.init(global, obj);
                 _ = &iter;
                 defer {
                 _ = iter.deinit();
@@ -625,24 +625,24 @@ pub fn scalar(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue, w
         _ = self;
             const val = try value.unwrapBoxedPrimitive(global);
             if (skipped(val)) {
-                return .{ .skip = .{} };
+                return .{ .skip = undefined };
             }
             if (val.isNull()) {
-                return .{ .empty = .{} };
+                return .{ .empty = undefined };
             }
             if ((((val.isString() or val.isNumber()) or val.isBoolean()) or val.isBigInt())) {
                 return .{ .text = try val.toBunString(global) };
             }
             if (val.isDate()) {
-                var buf: [64]u8 = @splat(0);
+                var buf: [28]u8 = @splat(0);
                 _ = &buf;
-                if (val.toISOString(global, (&buf))) |iso| {
-                    _ = &iso;
+                const iso = val.toISOString(global, (&buf));
+                if ((iso.len > 0)) {
                     return .{ .text = bun.String.cloneUTF8(iso) };
                 }
                 return global.throw("XML.stringify cannot serialize an invalid Date", .{});
             }
-            return global.throwFmt("XML.stringify: {s} must be a string, number, boolean, bigint, Date, or null", .{ what });
+            return global.throw("XML.stringify: {s} must be a string, number, boolean, bigint, Date, or null", .{ what });
     }
 
 pub fn checkName(self: *Stringifier, global: *jsc.JSGlobalObject, name: *const bun.String, what: []const u8) StringifyError!void {
@@ -660,29 +660,29 @@ pub fn checkName(self: *Stringifier, global: *jsc.JSGlobalObject, name: *const b
                 i = (i + width);
             }
             if ((!valid)) {
-                return global.throwFmt("XML.stringify: invalid XML {s} name", .{ what });
+                return global.throw("XML.stringify: invalid XML {s} name", .{ what });
             }
     }
 
 pub fn appendEmptyElement(self: *Stringifier, name: bun.String) void {
-            _ = self.builder.appendLChar(60);
-            _ = self.builder.appendString(name);
-            _ = self.builder.appendLatin1("/>");
+            _ = self.builder.append(.lchar, 60);
+            _ = self.builder.append(.string, name);
+            _ = self.builder.append(.latin1, "/>");
     }
 
 pub fn appendEndTag(self: *Stringifier, name: bun.String) void {
-            _ = self.builder.appendLatin1("</");
-            _ = self.builder.appendString(name);
-            _ = self.builder.appendLChar(62);
+            _ = self.builder.append(.latin1, "</");
+            _ = self.builder.append(.string, name);
+            _ = self.builder.append(.lchar, 62);
     }
 
 pub fn appendAttribute(self: *Stringifier, global: *jsc.JSGlobalObject, name: *const bun.String, value: *const bun.String) StringifyError!void {
             _ = try self.checkName(global, name, "attribute");
-            _ = self.builder.appendLChar(32);
-            _ = self.builder.appendString(name.*);
-            _ = self.builder.appendLatin1("=\"");
+            _ = self.builder.append(.lchar, 32);
+            _ = self.builder.append(.string, name.*);
+            _ = self.builder.append(.latin1, "=\"");
             _ = try self.appendEscaped(global, value, true);
-            _ = self.builder.appendLChar(34);
+            _ = self.builder.append(.lchar, 34);
     }
 
 pub fn appendText(self: *Stringifier, global: *jsc.JSGlobalObject, text: *const bun.String) StringifyError!void {
@@ -699,34 +699,34 @@ pub fn appendEscaped(self: *Stringifier, global: *jsc.JSGlobalObject, text: *con
                 const width = pair[1];
                 i = (i + width);
                 if ((cp == 38)) {
-                    _ = self.builder.appendLatin1("&amp;");
+                    _ = self.builder.append(.latin1, "&amp;");
                 } else {
                     if ((cp == 60)) {
-                        _ = self.builder.appendLatin1("&lt;");
+                        _ = self.builder.append(.latin1, "&lt;");
                     } else {
                         if ((cp == 62)) {
-                            _ = self.builder.appendLatin1("&gt;");
+                            _ = self.builder.append(.latin1, "&gt;");
                         } else {
                             if (((cp == 34) and attribute)) {
-                                _ = self.builder.appendLatin1("&quot;");
+                                _ = self.builder.append(.latin1, "&quot;");
                             } else {
                                 if (((cp == 9) and attribute)) {
-                                    _ = self.builder.appendLatin1("&#x9;");
+                                    _ = self.builder.append(.latin1, "&#x9;");
                                 } else {
                                     if (((cp == 10) and attribute)) {
-                                        _ = self.builder.appendLatin1("&#xA;");
+                                        _ = self.builder.append(.latin1, "&#xA;");
                                     } else {
                                         if ((cp == 13)) {
-                                            _ = self.builder.appendLatin1("&#xD;");
+                                            _ = self.builder.append(.latin1, "&#xD;");
                                         } else {
                                             if ((!xml.isXmlChar(cp))) {
-                                                return global.throwFmt("XML.stringify: XML cannot represent the character U+{X:0>4}", .{ cp });
+                                                return global.throw("XML.stringify: XML cannot represent the character U+{X:0>4}", .{ cp });
                                             } else {
                                                 if ((cp >= 65536)) {
-                                                    _ = self.builder.appendUChar(text.charAt((i - 2)));
-                                                    _ = self.builder.appendUChar(text.charAt((i - 1)));
+                                                    _ = self.builder.append(.uchar, text.charAt((i - 2)));
+                                                    _ = self.builder.append(.uchar, text.charAt((i - 1)));
                                                 } else {
-                                                    _ = self.builder.appendUChar(@as(u16, @intCast(cp)));
+                                                    _ = self.builder.append(.uchar, @as(u16, @intCast(cp)));
                                                 }
                                             }
                                         }
@@ -745,21 +745,21 @@ pub fn newline(self: *Stringifier) void {
 
 },
 .number => |n| {
-_ = self.builder.appendLChar(10);
+_ = self.builder.append(.lchar, 10);
             var k: usize = 0;
             _ = &k;
             const total = (self.indent * (if (comptime @typeInfo(@TypeOf(n)) == .@"enum") cp_cast_int(usize, @intFromEnum(n)) else cp_cast_int(usize, n)));
             while ((k < total)) : (k = (k + 1)) {
-                _ = self.builder.appendLChar(32);
+                _ = self.builder.append(.lchar, 32);
             }
 },
 .str => |s| {
-_ = self.builder.appendLChar(10);
+_ = self.builder.append(.lchar, 10);
             const clamped = (if ((s.length() > 10)) s.substringWithLen(0, 10) else s);
             var k: usize = 0;
             _ = &k;
             while ((k < self.indent)) : (k = (k + 1)) {
-                _ = self.builder.appendString(clamped);
+                _ = self.builder.append(.string, clamped);
             }
 },
 }
@@ -792,7 +792,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
             if (((!options_val.isObject()) or options_val.isArray())) {
                 return global.throwInvalidArguments("XML.parse options must be an object", .{});
             }
-            if (try options_val.getOptional(global, "compact", bool)) |c_val| {
+            if (try options_val.getBooleanLoose(global, "compact")) |c_val| {
                 _ = &c_val;
                 compact = c_val;
             }
@@ -828,7 +828,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         if (blob_or_str) |*input| {
             _ = &input;
             var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
-            break :blk (input.*);
+            break :blk (&(input.*));
 
 }) };
             _ = &input_guard;
@@ -950,13 +950,6 @@ pub fn isNode(global: *jsc.JSGlobalObject, value: JSValue) bun.JSError!bool {
             return true;
         }
         if ((try value.get(global, "attributes") != null)) {
-            return true;
-        }
-        const obj = value.toObject(global);
-        if (obj.hasOwnProperty(global, "children")) {
-            return true;
-        }
-        if (obj.hasOwnProperty(global, "attributes")) {
             return true;
         }
         return false;

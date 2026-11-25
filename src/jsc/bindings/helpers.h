@@ -387,7 +387,7 @@ static JSC::JSValue getErrorInstance(const ZigString* str, JSC::JSGlobalObject* 
     }
 
     // Not JSC::createError(): it asserts the message is not empty, and `new Error("")` is valid.
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::Error), message, JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::Error, true);
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::Error), message, JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::Error, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;
@@ -395,7 +395,7 @@ static JSC::JSValue getErrorInstance(const ZigString* str, JSC::JSGlobalObject* 
 
 static JSC::JSValue getTypeErrorInstance(const ZigString* str, JSC::JSGlobalObject* globalObject)
 {
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::TypeError), toStringCopy(*str), JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::TypeError, true);
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::TypeError), toStringCopy(*str), JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::TypeError, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;
@@ -403,7 +403,7 @@ static JSC::JSValue getTypeErrorInstance(const ZigString* str, JSC::JSGlobalObje
 
 static JSC::JSValue getSyntaxErrorInstance(const ZigString* str, JSC::JSGlobalObject* globalObject)
 {
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::SyntaxError), toStringCopy(*str), JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::SyntaxError, true);
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::SyntaxError), toStringCopy(*str), JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::SyntaxError, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;
@@ -411,7 +411,7 @@ static JSC::JSValue getSyntaxErrorInstance(const ZigString* str, JSC::JSGlobalOb
 
 static JSC::JSValue getRangeErrorInstance(const ZigString* str, JSC::JSGlobalObject* globalObject)
 {
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::RangeError), toStringCopy(*str), JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::RangeError, true);
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::RangeError), toStringCopy(*str), JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::RangeError, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;

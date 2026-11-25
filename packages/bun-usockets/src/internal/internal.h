@@ -186,6 +186,7 @@ void us_internal_async_wakeup(struct us_internal_async *a);
 size_t us_internal_accept_poll_event(struct us_poll_t *p);
 int us_internal_poll_type(struct us_poll_t *p);
 void us_internal_poll_set_type(struct us_poll_t *p, int poll_type);
+uint64_t us_internal_monotonic_ns(void);
 
 /* SSL loop data */
 void us_internal_init_loop_ssl_data(us_loop_r loop);

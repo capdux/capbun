@@ -883,7 +883,7 @@ return self.unexpected("'?>' to end the XML declaration");
     }
 
 pub fn parsePseudoAttribute(self: *@This(), name: []const u8) XMLError!?struct { val: Slice, pos: usize } {
-            if (((self.scanner.tok.kind != .name) or (!UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), name)))) {
+            if (((self.scanner.tok.kind != .name) or (!UT.eqAscii(self.scanner.tok.kind.@"name", name)))) {
                 return null;
             }
             _ = try self.requireSpaced();
@@ -907,7 +907,7 @@ pub fn parseDoctype(self: *@This()) XMLError!void {
             _ = try self.expectName("the document type name");
             _ = try self.requireSpaced();
             _ = try self.advance();
-            if (((self.scanner.tok.kind == .name) and (UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "SYSTEM") or UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "PUBLIC")))) {
+            if (((self.scanner.tok.kind == .name) and (UT.eqAscii(self.scanner.tok.kind.@"name", "SYSTEM") or UT.eqAscii(self.scanner.tok.kind.@"name", "PUBLIC")))) {
                 _ = try self.requireSpaced();
                 _ = try self.parseExternalId(false);
                 self.scanner.has_external_subset = true;
@@ -929,7 +929,7 @@ return self.unexpected("SYSTEM, PUBLIC, '[' or '>' in the document type declarat
     }
 
 pub fn parseExternalId(self: *@This(), notation: bool) XMLError!void {
-            if (((self.scanner.tok.kind == .name) and UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "SYSTEM"))) {
+            if (((self.scanner.tok.kind == .name) and UT.eqAscii(self.scanner.tok.kind.@"name", "SYSTEM"))) {
                 _ = try self.advanceLiteral(.System);
                 if ((self.scanner.tok.kind != .literal)) {
                     return self.unexpected("a quoted system identifier after SYSTEM");
@@ -1341,7 +1341,7 @@ _ = try self.requireSpaced();
 if ((UT.eqAscii(n, "SYSTEM") or UT.eqAscii(n, "PUBLIC"))) {
                 _ = try self.requireSpaced();
                 _ = try self.parseExternalId(false);
-                if (((self.scanner.tok.kind == .name) and UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "NDATA"))) {
+                if (((self.scanner.tok.kind == .name) and UT.eqAscii(self.scanner.tok.kind.@"name", "NDATA"))) {
                     _ = try self.requireSpaced();
                     if (parameter) {
                         return self.scanner.errMsg(self.scanner.tok.pos, "Parameter entities cannot have NDATA");
@@ -1378,7 +1378,7 @@ pub fn parseNotationDecl(self: *@This()) XMLError!u32 {
             _ = try self.expectName("a notation name after '<!NOTATION'");
             _ = try self.requireSpaced();
             _ = try self.advance();
-            if (((self.scanner.tok.kind != .name) or ((!UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "SYSTEM")) and (!UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "PUBLIC"))))) {
+            if (((self.scanner.tok.kind != .name) or ((!UT.eqAscii(self.scanner.tok.kind.@"name", "SYSTEM")) and (!UT.eqAscii(self.scanner.tok.kind.@"name", "PUBLIC"))))) {
                 return self.unexpected("SYSTEM or PUBLIC in the notation declaration");
             }
             _ = try self.requireSpaced();
