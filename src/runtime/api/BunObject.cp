@@ -1859,7 +1859,7 @@ pub struct JSZlib {
                 }
                 let decompressor: *bun.libdeflate.Decompressor = decompressor_opt.?;
                 const _decomp_g = DeinitGuard<*bun.libdeflate.Decompressor>{ val: decompressor };
-                const max_output: usize = jsc.ArrayBuffer.MAX_SIZE;
+                const max_output: usize = std.math.maxInt(i32);
                 while (true) {
                     const result = decompressor.decompress(compressed, list.allocatedSlice(), if (is_gzip) .gzip else .deflate);
 

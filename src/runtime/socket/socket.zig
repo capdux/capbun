@@ -906,7 +906,7 @@ pub fn handleConnectError(self: *@This(), errno: c_int) bun.JSError!void {
 else => @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED),
 });
             _ = &errno_;
-            const code_ = (if (bun.sys.SystemErrno.init(@intCast(errno_))) |sys_e| bun.String.static(@tagName(sys_e)) else bun.String.static("ECONNREFUSED"));
+            const code_ = (if (bun.sys.SystemErrno.init(errno_)) |sys_e| bun.String.static(@tagName(sys_e)) else bun.String.static("ECONNREFUSED"));
             if (Environment.isWindows) {
                 errno_ = (switch (errno_) {
 @intFromEnum(bun.sys.SystemErrno.ENOENT) => @intFromEnum(bun.sys.SystemErrno.UV_ENOENT),

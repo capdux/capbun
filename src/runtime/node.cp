@@ -18,6 +18,9 @@ pub import fs from "./node/node_fs.zig";
 pub import path from "./node/path.zig";
 /// node:crypto
 pub import crypto from "./node/node_crypto_binding.zig";
+/// node:quic
+pub import quic from "./node/quic/quic.zig";
+pub import node_quic_binding from "./node/node_quic_binding.zig";
 /// node:os
 pub import os from "./node/node_os.zig";
 /// node:process

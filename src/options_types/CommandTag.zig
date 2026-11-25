@@ -96,6 +96,8 @@ pub const Tag = enum {
     PublishCommand,
     AuditCommand,
     WhyCommand,
+    DedupeCommand,
+    PruneCommand,
     FuzzilliCommand,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
@@ -135,20 +137,22 @@ pub fn char(self: Tag) u8 {
 .PublishCommand => 107,
 .AuditCommand => 65,
 .WhyCommand => 87,
+.DedupeCommand => 100,
+.PruneCommand => 113,
 .FuzzilliCommand => 70,
 });
     }
 
 pub fn readGlobalConfig(self: Tag) bool {
             return (switch (self) {
-.BunxCommand, .PackageManagerCommand, .InstallCommand, .AddCommand, .RemoveCommand, .UpdateCommand, .PatchCommand, .PatchCommitCommand, .OutdatedCommand, .PublishCommand, .AuditCommand => true,
+.BunxCommand, .PackageManagerCommand, .InstallCommand, .AddCommand, .RemoveCommand, .UpdateCommand, .PatchCommand, .PatchCommitCommand, .OutdatedCommand, .PublishCommand, .AuditCommand, .DedupeCommand, .PruneCommand => true,
 else => false,
 });
     }
 
 pub fn isNPMRelated(self: Tag) bool {
             return (switch (self) {
-.BunxCommand, .LinkCommand, .UnlinkCommand, .PackageManagerCommand, .InstallCommand, .AddCommand, .RemoveCommand, .UpdateCommand, .PatchCommand, .PatchCommitCommand, .OutdatedCommand, .PublishCommand, .AuditCommand => true,
+.BunxCommand, .LinkCommand, .UnlinkCommand, .PackageManagerCommand, .InstallCommand, .AddCommand, .RemoveCommand, .UpdateCommand, .PatchCommand, .PatchCommitCommand, .OutdatedCommand, .PublishCommand, .AuditCommand, .DedupeCommand, .PruneCommand => true,
 else => false,
 });
     }

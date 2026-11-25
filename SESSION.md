@@ -968,3 +968,10 @@
 - **2026-11-26 01:23~02:00 用户指令 <-> 主智能体回应（`1.4.0` 锁定收口方案 + 测试全量同步 + 立即提交固化资产）**：
   - 用户要求在 `#30412` 100% 文件对应关系基础上分析直接锁定 `bun-v1.4.0` 与分段吸收的优劣并给出方案，批准全力执行、测试目录与上游保持同步，并指示立即执行 `git commit` 固化当前资产。
   - 主智能体回应与落地：明确 `#30412..a215285063c`（935 commits）已 100% 提交，`a215285063c..1.4.0` 高优安全已全量提交且 `consolidation` 位于 `1.4.0` 之后；完成 Step 3 `http/fetch/ws`（13 `.cp`）、`bundler/parser/css`（28 `.cp`）、`net/tls/usockets`（8 `.cp`）、`webcore/streams`（7 `.cp`）、`node_compat/jsc/dotenv/libdeflate`（5 `.cp` + 10 C++/TS）、`bun-v1.4.0` 新增模块 Batch 1~3（`DirectoryRoute.cp`、`DevErrorPage.cp`、`compress_body.cp`、`session_cache.cp`、`libc_check.cp`、`memory_pressure.cp`、`Bun.XML` 全套 5 `.cp` + Highway SIMD、`Timings.cp` + `--timings`/`--no-isolate`），并同步 `test/js/node/test/` 及各模块对应测试至 `bun-v1.4.0`，立即原子提交固化。
+
+- **2026-11-26 02:36~02:58 跨 AGY 提单与结单验收（`bun_agy <-> cp_agy`）**：
+  - 提单 `task-bun-20261126-type-alias-int-literal`（repro: `/data/dev/cp/temp/repro_type_alias_int_literal.cp`）：报告 `const CodePoint = i32; let v: CodePoint = 0;` 触发 `E0207`。
+  - 结单验收：`cp_agy` 在 `cpc/src/sema/mod.rs` 与 `stmt_expr.rs` 新增 `extract_const_type_alias` 并在 Pass 3 预收集顶层/局部别名类型、通过 `resolve_type` 解析完成；本地复现 `cpc --lib` + `zig ast-check` 0 报错验收通过（`REPRO_VERIFIED_PASS`），已执行 `ack`。
+
+- **2026-11-26 04:49 跨 AGY 结单验收（`cp_agy -> bun_agy`）**：`task-bun-20261126-type-alias-int-literal` 已由 `cp_agy` 修复结单（`cpc/src/sema/mod.rs & stmt_expr.rs` 支持类型别名变量绑定整数字面量）；本地 `cpc --lib /data/dev/cp/temp/repro_type_alias_int_literal.cp` + `zig ast-check` 验证通过，已确认 `ack`。
+- **2026-11-26 04:49 `bun-v1.4.0` 全量同步闭合 & `zig:check` 5/5 绿灯**：完成 `node:quic`、`collections`、`FileReader`/`compress_body`/`s3`/`DirectoryRoute`/`RequestContext`/`memory_pressure`/`h2_frame_parser`/`http`/`jsc`/`xml`/`Timings`/`test_command`/`PackageManager`/`npm_lock`/`dedupe`/`update_scope`/`update_transitive`/`audit_fix`/`prune`/`pack_command`/`pm_diff_*`/`pm_licenses_command` 等全部 `bun-v1.4.0` 新增与修复模块的 CP 纯化编译与全仓联调，`bun run zig:check` 5/5 步全部通过（`check success`）；执行原子提交并打标签 `cp-v1.4.0-sync`，随后切换至 `bun-v1.4.1` 继续逐版吸收。

@@ -789,6 +789,10 @@ pub const NpmPackage = extern struct {
 pub const PackageManifestFindResult = struct {
     version: Semver.Version,
     package: *const PackageVersion,
+
+pub fn tarballURL(self: *const PackageManifestFindResult, manifest: *const PackageManifest) []const u8 {
+            return self.package.tarball_url.slice(manifest.string_buf);
+    }
 };
 
 pub const PackageManifestFindVersionFiltered = struct {
@@ -1202,6 +1206,18 @@ pub fn findByVersion(self: PackageManifest, version: Semver.Version) ?FindResult
                 return FindResult{ .version = keys[@as(usize, @intCast(index))], .package = (&values[@as(usize, @intCast(index))]) };
             }
             return null;
+    }
+
+pub fn releaseVersions(self: *const PackageManifest) []const Semver.Version {
+            return self.pkg.releases.keys.get(self.versions);
+    }
+
+pub fn distTagTags(self: *const PackageManifest) []const ExternalString {
+            return self.pkg.dist_tags.tags.get(self.external_strings);
+    }
+
+pub fn distTagVersions(self: *const PackageManifest) []const Semver.Version {
+            return self.pkg.dist_tags.versions.get(self.versions);
     }
 
 pub fn findByDistTag(self: PackageManifest, tag: []const u8) ?FindResult {

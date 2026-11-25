@@ -229,10 +229,10 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
     
     pub fn takeText(self: *@This(), mark: usize) XMLError!Slice {
                 const runs = self.text_runs.items[mark..];
-                var out_text: Slice = (&&.{});
+                var out_text: Slice = &.{};
                 _ = &out_text;
                 if ((runs.len == 0)) {
-                    out_text = (&&.{});
+                    out_text = &.{};
                 } else {
                     if ((runs.len == 1)) {
                         out_text = UT.trimWs(runs[0]);
@@ -270,7 +270,7 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
                 }
                 const kept = runs[first..last];
                 if ((kept.len == 0)) {
-                    return (&&.{});
+                    return &.{};
                 }
                 if ((kept.len == 1)) {
                     return kept[0];
@@ -397,7 +397,7 @@ pub fn makeArrayExpr(allocator: std.mem.Allocator, items: []const Expr, loc: Loc
                     const g = self.group_of.items[@as(usize, @intCast(i))];
                     const grp = (&self.groups.items[@as(usize, @intCast(g))]);
                     if ((grp.count > 1)) {
-                        self.gathered.items[cp_cast_int(usize, grp.cursor)] = (if (@typeInfo(@TypeOf(children[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(children[@as(usize, @intCast(i))]) else children[@as(usize, @intCast(i))].value);
+                        self.gathered.items[cp_cast_int(usize, grp.cursor)] = (if (@typeInfo(@TypeOf(children[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(children[@as(usize, @intCast(i))]) else children[@as(usize, @intCast(i))].value).?;
                         grp.cursor = (grp.cursor + 1);
                     }
                 }
@@ -613,7 +613,7 @@ pub fn init(source: *const bun.logger.Source, contents: Slice, log: *bun.logger.
             if (comptime is_wide) {
                 sc.transcoded = true;
             }
-            const empty_attrs: [LINEAR_ATTRIBUTE_LIMIT]Slice = @splat((&&.{}));
+            const empty_attrs: [LINEAR_ATTRIBUTE_LIMIT]Slice = @splat(&.{});
             return Self{ .scanner = sc, .in_dtd = false, .sink = sink, .attlists = .{}, .open = .{}, .attribute_first = empty_attrs, .attribute_names = .{}, .attribute_count = 0, .depth = 0 };
     }
 
@@ -633,12 +633,13 @@ pub fn __cp_deinit(self: *@This()) void {
     }
 
 pub fn stackOverflow(self: *@This()) XMLError {
-            _ = self.scanner.errMsg(self.scanner.tok.pos, "Nesting is too deep");
+            if ((self.scanner.errMsg(self.scanner.tok.pos, "Nesting is too deep") == error.OutOfMemory)) {
+            }
             return error.StackOverflow;
     }
 
 pub fn advance(self: *@This()) XMLError!void {
-            return self.scanner.next(.{ .None = .{} });
+            return self.scanner.next(.None);
     }
 
 pub fn advanceLiteral(self: *@This(), literal: types.Literal) XMLError!void {
@@ -891,7 +892,7 @@ pub fn parsePseudoAttribute(self: *@This(), name: []const u8) XMLError!?struct {
             if ((self.scanner.tok.kind != .eq)) {
                 return self.unexpected("'=' after the name in the XML declaration");
             }
-            _ = try self.advanceLiteral(.{ .Plain = .{} });
+            _ = try self.advanceLiteral(.Plain);
             if ((self.scanner.tok.kind != .literal)) {
                 return self.unexpected("a quoted value in the XML declaration");
             }
@@ -929,19 +930,19 @@ return self.unexpected("SYSTEM, PUBLIC, '[' or '>' in the document type declarat
 
 pub fn parseExternalId(self: *@This(), notation: bool) XMLError!void {
             if (((self.scanner.tok.kind == .name) and UT.eqAscii((if (@typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"enum" or @typeInfo(@TypeOf(self.scanner.tok.kind)) == .@"union") @tagName(self.scanner.tok.kind) else self.scanner.tok.kind.name), "SYSTEM"))) {
-                _ = try self.advanceLiteral(.{ .System = .{} });
+                _ = try self.advanceLiteral(.System);
                 if ((self.scanner.tok.kind != .literal)) {
                     return self.unexpected("a quoted system identifier after SYSTEM");
                 }
                 _ = try self.requireSpaced();
                 return self.advance();
             }
-            _ = try self.advanceLiteral(.{ .Pubid = .{} });
+            _ = try self.advanceLiteral(.Pubid);
             if ((self.scanner.tok.kind != .literal)) {
                 return self.unexpected("a quoted public identifier after PUBLIC");
             }
             _ = try self.requireSpaced();
-            _ = try self.advanceLiteral(.{ .System = .{} });
+            _ = try self.advanceLiteral(.System);
             if ((self.scanner.tok.kind == .literal)) {
                 _ = try self.requireSpaced();
                 return self.advance();
@@ -1192,7 +1193,7 @@ pub fn parseAttlistDecl(self: *@This()) XMLError!u32 {
             _ = try self.requireSpaced();
             while (true) {
                 _ = try self.advance();
-                var attr_name: Slice = (&&.{});
+                var attr_name: Slice = &.{};
                 _ = &attr_name;
                 switch (self.scanner.tok.kind) {
 .gt => {
@@ -1327,8 +1328,8 @@ pub fn parseEntityDecl(self: *@This()) XMLError!u32 {
             }
             const name = try self.expectName((if (parameter) "the parameter entity name after '%'" else "an entity name or '%' after '<!ENTITY'"));
             _ = try self.requireSpaced();
-            _ = try self.advanceLiteral(.{ .EntityValue = .{} });
-            var val: ST.EntityValue = .{ .external = .{} };
+            _ = try self.advanceLiteral(.EntityValue);
+            var val: ST.EntityValue = .external;
             _ = &val;
             switch (self.scanner.tok.kind) {
 .literal => |v| {
@@ -1349,9 +1350,9 @@ if ((UT.eqAscii(n, "SYSTEM") or UT.eqAscii(n, "PUBLIC"))) {
                     _ = try self.expectName("a notation name after NDATA");
                     _ = try self.requireSpaced();
                     _ = try self.advance();
-                    val = .{ .unparsed = .{} };
+                    val = .unparsed;
                 } else {
-                    val = .{ .external = .{} };
+                    val = .external;
                 }
             } else {
                 return self.unexpected("a quoted entity value, SYSTEM or PUBLIC");
@@ -1463,7 +1464,7 @@ pub fn closeElement(self: *@This(), name: Slice, frame: u32, end_name: Slice, cu
             if ((!UT.nameEq(end_name, name))) {
                 const s1 = self.scanner.formatUnits(name);
                 const s2 = self.scanner.formatUnits(end_name);
-                return self.scanner.errFmt(cur_pos, "Expected closing tag </{s}> but found </{s}>", .{ s1, s2 });
+                return self.scanner.errFmt(cur_pos, "Expected closing tag \\</{s}> but found \\</{s}>", .{ s1, s2 });
             }
             if ((end_frame != frame)) {
                 return self.scanner.errNamed(cur_pos, "Element", name, " must start and end within the same entity");
@@ -1539,8 +1540,8 @@ if (self.hasAttribute((if (@typeInfo(@TypeOf(a)) == .@"enum" or @typeInfo(@TypeO
 },
 }
                 }
-                _ = try self.scanner.next(.{ .None = .{} });
-                var attr_name: Slice = (&&.{});
+                _ = try self.scanner.next(.None);
+                var attr_name: Slice = &.{};
                 _ = &attr_name;
                 switch (self.scanner.tok.kind) {
 .gt => {
@@ -1563,7 +1564,7 @@ return self.unexpected("an attribute name, '>' or '/>' in the start tag");
                 if (self.hasAttribute(attr_name)) {
                     return self.scanner.errNamed(cur_pos, "Duplicate attribute", attr_name, "");
                 }
-                _ = try self.scanner.next(.{ .None = .{} });
+                _ = try self.scanner.next(.None);
                 if ((self.scanner.tok.kind != .eq)) {
                     return self.unexpected("'=' after the attribute name");
                 }
@@ -1614,14 +1615,15 @@ pub fn pushAttribute(self: *@This(), name: Slice, value: Slice) XMLError!void {
     }
 
 pub fn spillAttributeName(self: *@This(), name: Slice) XMLError!void {
+            const empty_void: void = undefined;
             if ((self.attribute_count == LINEAR_ATTRIBUTE_LIMIT)) {
                 _ = self.attribute_names.clearRetainingCapacity();
                 for (cp_iter_slice(self.attribute_first)) |first| {
                     _ = &first;
-                    _ = (blk_catch_3: { break :blk_catch_3 ((self.attribute_names.put(self.scanner.allocator, first, .{})) catch |__ce_3| { _ = &__ce_3; return error.OutOfMemory; }); });
+                    _ = (blk_catch_3: { break :blk_catch_3 ((self.attribute_names.put(self.scanner.allocator, first, empty_void)) catch |__ce_3| { _ = &__ce_3; return error.OutOfMemory; }); });
                 }
             }
-            _ = (blk_catch_4: { break :blk_catch_4 ((self.attribute_names.put(self.scanner.allocator, name, .{})) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((self.attribute_names.put(self.scanner.allocator, name, empty_void)) catch |__ce_4| { _ = &__ce_4; return error.OutOfMemory; }); });
     }
     const Self = @This();
     const AttDef = struct {

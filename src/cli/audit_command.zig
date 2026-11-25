@@ -228,8 +228,113 @@ pub fn exec(ctx: Command.Context) !noreturn {
             }
             return e; }); });
             const manager = init_res[0];
+            if (((ctx.positionals.len > 0) and std.mem.eql(u8, ctx.positionals[0], "fix"))) {
+                const fix_code = try auditFix(ctx, manager, manager.options.json_output, cli.audit_level, cli.production, cli.audit_ignore_list);
+                _ = Global.exit(fix_code);
+            }
             const code = try audit(ctx, manager, manager.options.json_output, cli.audit_level, cli.production, cli.audit_ignore_list);
             _ = Global.exit(code);
+    }
+
+pub fn auditFix(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit_level: ?AuditLevel, audit_prod_only: bool, ignore_list: []const []const u8) !u32 {
+            const audit_fix = bun.install.audit_fix;
+            if (((!json_output) and (pm.options.log_level != .silent))) {
+                _ = Output.prettyError((comptime Output.prettyFmt((("<r><b>bun audit fix <r><d>v" ++ Global.package_json_version_with_sha) ++ "<r>\n\n"), true)), .{});
+                _ = Output.flush();
+            }
+            const load_lockfile = pm.lockfile.loadFromCwd(pm, ctx.allocator, ctx.log, true);
+            _ = PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
+            _ = try audit_fix.exitUnlessLockfileMatchesPackageJson(pm);
+            _ = audit_fix.exitUnlessLockfileWritable(pm);
+            var packages_result = try collectPackagesForAudit(ctx.allocator, pm, audit_prod_only);
+            _ = &packages_result;
+            var _guard_audit_body = FreeGuard(u8){ .allocator = ctx.allocator, .slice = packages_result.audit_body };
+            _ = &_guard_audit_body;
+            var ___guard_audit_body_moved = false; _ = &___guard_audit_body_moved;
+            defer if (!___guard_audit_body_moved) { ___guard_audit_body_moved = true; const __T = @TypeOf(_guard_audit_body); if (@typeInfo(__T) == .optional) { if (_guard_audit_body) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_audit_body.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_audit_body; _drop_val.__cp_deinit(); } };
+            var _guard_skipped = SkippedPackagesGuard{ .allocator = ctx.allocator, .list = (blk: {
+            break :blk (&packages_result.skipped_packages);
+
+}) };
+            _ = &_guard_skipped;
+            var ___guard_skipped_moved = false; _ = &___guard_skipped_moved;
+            defer if (!___guard_skipped_moved) { ___guard_skipped_moved = true; const __T = @TypeOf(_guard_skipped); if (@typeInfo(__T) == .optional) { if (_guard_skipped) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_skipped.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_skipped; _drop_val.__cp_deinit(); } };
+            var advisories = std.array_list.Managed(audit_fix.Advisory).init(ctx.allocator);
+            _ = &advisories;
+            defer {
+            _ = advisories.deinit();
+            }
+            if ((!std.mem.eql(u8, packages_result.audit_body, "{}"))) {
+                const response_text = try sendAuditRequest(ctx.allocator, pm, packages_result.audit_body);
+                if ((response_text.len > 0)) {
+                    const source = (&logger.Source.initPathString("audit-response.json", response_text));
+                    const root = (blk_catch_2: { break :blk_catch_2 ((bun.json.parse(source, ctx.log, ctx.allocator, true)) catch |__ce_2| { _ = &__ce_2; _ = Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
+                    break :blk_catch_2 Global.exit(1); }); });
+                    if ((root.data == .e_object)) {
+                        for (cp_iter_slice(root.data.e_object.properties.slice())) |prop| {
+                            _ = &prop;
+                            const pkg_name = (if (prop.key) |k| ((k.asString(ctx.allocator)) orelse continue) else continue);
+                            const val = (((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value)) orelse continue);
+                            if ((val.data != .e_array)) {
+                                continue;
+                            }
+                            for (cp_iter_slice(val.data.e_array.items.slice())) |item| {
+                                _ = &item;
+                                if ((item.data != .e_object)) {
+                                    continue;
+                                }
+                                var vuln_vers: []const u8 = "*";
+                                _ = &vuln_vers;
+                                if (item.get("vulnerable_versions")) |vv| {
+                                    _ = &vv;
+                                    if (vv.asString(ctx.allocator)) |s| {
+                                        _ = &s;
+                                        vuln_vers = s;
+                                    }
+                                }
+                                var ignore_tok: []const u8 = "";
+                                _ = &ignore_tok;
+                                if (item.get("id")) |id_expr| {
+                                    _ = &id_expr;
+                                    if ((id_expr.data == .e_number)) {
+                                        ignore_tok = (blk_catch_3: { break :blk_catch_3 ((std.fmt.allocPrint(ctx.allocator, "{d}", .{ @as(u64, @intFromFloat((if (@typeInfo(@TypeOf(id_expr.data.e_number)) == .@"enum") @intFromEnum(id_expr.data.e_number) else id_expr.data.e_number.value))) })) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 ""; }); });
+                                    } else {
+                                        if (id_expr.asString(ctx.allocator)) |s| {
+                                            _ = &s;
+                                            ignore_tok = s;
+                                        }
+                                    }
+                                }
+                                if (((audit_level != null) or (ignore_list.len > 0))) {
+                                    var skip_ignore = false;
+                                    _ = &skip_ignore;
+                                    for (cp_iter_slice(ignore_list)) |ig| {
+                                        _ = &ig;
+                                        if (std.mem.eql(u8, ig, ignore_tok)) {
+                                            skip_ignore = true;
+                                            break;
+                                        }
+                                    }
+                                    if (skip_ignore) {
+                                        continue;
+                                    }
+                                }
+                                _ = (blk_catch_4: { break :blk_catch_4 ((advisories.append(audit_fix.Advisory{ .package_name = pkg_name, .vulnerable_versions = vuln_vers, .ignore_token = ignore_tok })) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 bun.outOfMemory(); }); });
+                            }
+                        }
+                    }
+                }
+            }
+            var plan = try audit_fix.planFixes(pm, advisories.items);
+            _ = &plan;
+            if ((!json_output)) {
+                _ = plan.printSections();
+            }
+            if ((pm.options.dry_run or (plan.fixes.items.len == 0))) {
+                return plan.finishPlanned(json_output, pm.options.dry_run);
+            }
+            _ = try audit_fix.prepareInstall(pm, (&plan));
+            return plan.finishPlanned(json_output, false);
     }
 
 pub fn audit(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit_level: ?AuditLevel, audit_prod_only: bool, ignore_list: []const []const u8) bun.OOM!u32 {
@@ -265,8 +370,8 @@ pub fn audit(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit
             var ___guard_resp_text_moved = false; _ = &___guard_resp_text_moved;
             defer if (!___guard_resp_text_moved) { ___guard_resp_text_moved = true; const __T = @TypeOf(_guard_resp_text); if (@typeInfo(__T) == .optional) { if (_guard_resp_text) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_resp_text.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_resp_text; _drop_val.__cp_deinit(); } };
             if (json_output) {
-                _ = (blk_catch_2: { break :blk_catch_2 ((Output.writer().writeAll(response_text)) catch |__ce_2| { _ = &__ce_2;  }); });
-                _ = (blk_catch_3: { break :blk_catch_3 ((Output.writer().writeByte(10)) catch |__ce_3| { _ = &__ce_3;  }); });
+                _ = (blk_catch_5: { break :blk_catch_5 ((Output.writer().writeAll(response_text)) catch |__ce_5| { _ = &__ce_5;  }); });
+                _ = (blk_catch_6: { break :blk_catch_6 ((Output.writer().writeByte(10)) catch |__ce_6| { _ = &__ce_6;  }); });
                 if ((response_text.len > 0)) {
                     const source = (&logger.Source.initPathString("audit-response.json", response_text));
                     var log = logger.Log.init(ctx.allocator);
@@ -278,7 +383,7 @@ pub fn audit(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit
                     _ = &_guard_log;
                     var ___guard_log_moved = false; _ = &___guard_log_moved;
                     defer if (!___guard_log_moved) { ___guard_log_moved = true; const __T = @TypeOf(_guard_log); if (@typeInfo(__T) == .optional) { if (_guard_log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_log; _drop_val.__cp_deinit(); } };
-                    const expr = (blk_catch_4: { break :blk_catch_4 ((bun.json.parse(source, (&log), ctx.allocator, true)) catch |__ce_4| { _ = &__ce_4; _ = Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
+                    const expr = (blk_catch_7: { break :blk_catch_7 ((bun.json.parse(source, (&log), ctx.allocator, true)) catch |__ce_7| { _ = &__ce_7; _ = Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
                     return 1; }); });
                     if (((expr.data == .e_object) and (expr.data.e_object.properties.len == 0))) {
                         return 0;
@@ -529,35 +634,35 @@ pub fn collectPackagesForAudit(allocator: std.mem.Allocator, pm: *PackageManager
         defer {
         _ = body.deinit();
         }
-        _ = (blk_catch_5: { break :blk_catch_5 ((body.appendChar(123)) catch |__ce_5| { _ = &__ce_5;  }); });
+        _ = (blk_catch_8: { break :blk_catch_8 ((body.appendChar(123)) catch |__ce_8| { _ = &__ce_8;  }); });
         var pkg_i: usize = 0;
         _ = &pkg_i;
         for (packages_list.items) |package| {
             _ = &package;
             if ((pkg_i > 0)) {
-                _ = (blk_catch_6: { break :blk_catch_6 ((body.appendChar(44)) catch |__ce_6| { _ = &__ce_6;  }); });
+                _ = (blk_catch_9: { break :blk_catch_9 ((body.appendChar(44)) catch |__ce_9| { _ = &__ce_9;  }); });
             }
             pkg_i = (pkg_i + 1);
-            _ = (blk_catch_7: { break :blk_catch_7 ((body.appendChar(34)) catch |__ce_7| { _ = &__ce_7;  }); });
-            _ = (blk_catch_8: { break :blk_catch_8 ((body.appendSlice((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))) catch |__ce_8| { _ = &__ce_8;  }); });
-            _ = (blk_catch_9: { break :blk_catch_9 ((body.appendChar(34)) catch |__ce_9| { _ = &__ce_9;  }); });
-            _ = (blk_catch_10: { break :blk_catch_10 ((body.appendChar(58)) catch |__ce_10| { _ = &__ce_10;  }); });
-            _ = (blk_catch_11: { break :blk_catch_11 ((body.appendChar(91)) catch |__ce_11| { _ = &__ce_11;  }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((body.appendChar(34)) catch |__ce_10| { _ = &__ce_10;  }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((body.appendSlice((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name))) catch |__ce_11| { _ = &__ce_11;  }); });
+            _ = (blk_catch_12: { break :blk_catch_12 ((body.appendChar(34)) catch |__ce_12| { _ = &__ce_12;  }); });
+            _ = (blk_catch_13: { break :blk_catch_13 ((body.appendChar(58)) catch |__ce_13| { _ = &__ce_13;  }); });
+            _ = (blk_catch_14: { break :blk_catch_14 ((body.appendChar(91)) catch |__ce_14| { _ = &__ce_14;  }); });
             var ver_i: usize = 0;
             _ = &ver_i;
             for (package.versions.items) |version| {
                 _ = &version;
                 if ((ver_i > 0)) {
-                    _ = (blk_catch_12: { break :blk_catch_12 ((body.appendChar(44)) catch |__ce_12| { _ = &__ce_12;  }); });
+                    _ = (blk_catch_15: { break :blk_catch_15 ((body.appendChar(44)) catch |__ce_15| { _ = &__ce_15;  }); });
                 }
                 ver_i = (ver_i + 1);
-                _ = (blk_catch_13: { break :blk_catch_13 ((body.appendChar(34)) catch |__ce_13| { _ = &__ce_13;  }); });
-                _ = (blk_catch_14: { break :blk_catch_14 ((body.appendSlice(version)) catch |__ce_14| { _ = &__ce_14;  }); });
-                _ = (blk_catch_15: { break :blk_catch_15 ((body.appendChar(34)) catch |__ce_15| { _ = &__ce_15;  }); });
+                _ = (blk_catch_16: { break :blk_catch_16 ((body.appendChar(34)) catch |__ce_16| { _ = &__ce_16;  }); });
+                _ = (blk_catch_17: { break :blk_catch_17 ((body.appendSlice(version)) catch |__ce_17| { _ = &__ce_17;  }); });
+                _ = (blk_catch_18: { break :blk_catch_18 ((body.appendChar(34)) catch |__ce_18| { _ = &__ce_18;  }); });
             }
-            _ = (blk_catch_16: { break :blk_catch_16 ((body.appendChar(93)) catch |__ce_16| { _ = &__ce_16;  }); });
+            _ = (blk_catch_19: { break :blk_catch_19 ((body.appendChar(93)) catch |__ce_19| { _ = &__ce_19;  }); });
         }
-        _ = (blk_catch_17: { break :blk_catch_17 ((body.appendChar(125)) catch |__ce_17| { _ = &__ce_17;  }); });
+        _ = (blk_catch_20: { break :blk_catch_20 ((body.appendChar(125)) catch |__ce_20| { _ = &__ce_20;  }); });
         return PackagesForAuditResult{ .audit_body = try allocator.dupe(u8, body.slice()), .skipped_packages = skipped_packages };
 }
 
@@ -623,8 +728,8 @@ pub fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body:
         }
         var req = http.AsyncHTTP.initSync(allocator, .POST, url, headers.entries, (if (headers.content.ptr) |p| p[0..headers.content.len] else ""), (&response_buf), final_compressed_body, http_proxy, null, .follow);
         _ = &req;
-        const res = (blk_catch_18: { break :blk_catch_18 ((req.sendSync()) catch |e| { _ = &e; _ = Output.err(e, "audit request failed", .{});
-        break :blk_catch_18 Global.crash(); }); });
+        const res = (blk_catch_21: { break :blk_catch_21 ((req.sendSync()) catch |e| { _ = &e; _ = Output.err(e, "audit request failed", .{});
+        break :blk_catch_21 Global.crash(); }); });
         if ((res.status_code >= 400)) {
             _ = Output.prettyErrorln("<red>error<r>: audit request failed (status {d})", .{ res.status_code });
             _ = Global.crash();
@@ -864,8 +969,8 @@ pub fn printEnhancedAuditReport(allocator: std.mem.Allocator, response_text: []c
         _ = &_guard_log;
         var ___guard_log_moved = false; _ = &___guard_log_moved;
         defer if (!___guard_log_moved) { ___guard_log_moved = true; const __T = @TypeOf(_guard_log); if (@typeInfo(__T) == .optional) { if (_guard_log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_log; _drop_val.__cp_deinit(); } };
-        const expr = (blk_catch_19: { break :blk_catch_19 ((bun.json.parse(source, (&log), allocator, true)) catch |__ce_19| { _ = &__ce_19; _ = (blk_catch_20: { break :blk_catch_20 ((Output.writer().writeAll(response_text)) catch |__ce_20| { _ = &__ce_20;  }); });
-        _ = (blk_catch_21: { break :blk_catch_21 ((Output.writer().writeByte(10)) catch |__ce_21| { _ = &__ce_21;  }); });
+        const expr = (blk_catch_22: { break :blk_catch_22 ((bun.json.parse(source, (&log), allocator, true)) catch |__ce_22| { _ = &__ce_22; _ = (blk_catch_23: { break :blk_catch_23 ((Output.writer().writeAll(response_text)) catch |__ce_23| { _ = &__ce_23;  }); });
+        _ = (blk_catch_24: { break :blk_catch_24 ((Output.writer().writeByte(10)) catch |__ce_24| { _ = &__ce_24;  }); });
         return 1; }); });
         if (((expr.data == .e_object) and (expr.data.e_object.properties.len == 0))) {
             _ = Output.prettyln("<green>No vulnerabilities found<r>", .{});
@@ -1061,8 +1166,8 @@ pub fn printEnhancedAuditReport(allocator: std.mem.Allocator, response_text: []c
                 return 1;
             }
         } else {
-            _ = (blk_catch_22: { break :blk_catch_22 ((Output.writer().writeAll(response_text)) catch |__ce_22| { _ = &__ce_22;  }); });
-            _ = (blk_catch_23: { break :blk_catch_23 ((Output.writer().writeByte(10)) catch |__ce_23| { _ = &__ce_23;  }); });
+            _ = (blk_catch_25: { break :blk_catch_25 ((Output.writer().writeAll(response_text)) catch |__ce_25| { _ = &__ce_25;  }); });
+            _ = (blk_catch_26: { break :blk_catch_26 ((Output.writer().writeByte(10)) catch |__ce_26| { _ = &__ce_26;  }); });
         }
         return 0;
 }

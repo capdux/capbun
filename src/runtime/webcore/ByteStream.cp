@@ -390,7 +390,7 @@ struct FreeSliceGuard {
         }
     }
 
-    pub fn memoryCost(ctx: *const ByteStream): usize {
+    pub static fn memoryCost(ctx: *const ByteStream): usize {
         return ctx.buffer.capacity;
     }
 

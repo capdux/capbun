@@ -78,6 +78,7 @@ pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) 
 pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const h2 = @import("./h2/h2.zig");
 pub const lshpack = @import("../../../http/lshpack.zig");
 pub const bun = @import("bun");
 pub const PaddingStrategy = enum {
@@ -618,7 +619,7 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, thisValue: j
             if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
                 return globalObject.throwInvalidArguments("Expected \"handlers\" to be an object", .{});
             }
-            const pairs: struct { struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 } } = .{ .{ "onStreamStart", "streamStart" }, .{ "onStreamHeaders", "streamHeaders" }, .{ "onStreamEnd", "streamEnd" }, .{ "onStreamData", "streamData" }, .{ "onStreamError", "streamError" }, .{ "onRemoteSettings", "remoteSettings" }, .{ "onLocalSettings", "localSettings" }, .{ "onWantTrailers", "wantTrailers" }, .{ "onPing", "ping" }, .{ "onEnd", "end" }, .{ "onGoAway", "goaway" }, .{ "onAborted", "aborted" }, .{ "onWrite", "write" }, .{ "onAltSvc", "altsvc" }, .{ "onOrigin", "origin" }, .{ "onFrameError", "frameError" } };
+            const pairs: struct { struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 }, struct { []const u8, []const u8 } } = .{ .{ "onStreamStart", "streamStart" }, .{ "onStreamHeaders", "streamHeaders" }, .{ "onStreamEnd", "streamEnd" }, .{ "onStreamData", "streamData" }, .{ "onStreamError", "streamError" }, .{ "onRemoteSettings", "remoteSettings" }, .{ "onLocalSettings", "localSettings" }, .{ "onWantTrailers", "wantTrailers" }, .{ "onPing", "ping" }, .{ "onEnd", "end" }, .{ "onGoAway", "goaway" }, .{ "onAborted", "aborted" }, .{ "onWrite", "write" }, .{ "onAltSvc", "altsvc" }, .{ "onOrigin", "origin" }, .{ "onFrameError", "frameError" }, .{ "onStreamPush", "streamPush" } };
             inline for (pairs) |pair| {
                 if (try opts.getTruthy(globalObject, pair[1])) |callback_value| {
                     _ = &callback_value;
@@ -1130,6 +1131,17 @@ pub const H2FrameParser = struct {
     ref_count: RefCount,
     auto_flusher: AutoFlusher = .{},
     paddingStrategy: PaddingStrategy = .none,
+    engine: ?h2.Connection = null,
+    engine_busy: bool = false,
+    rewrite_tail: ByteList = .{},
+    rewrite_pending_push: u32 = 0,
+    pending_recv_window_growth: i64 = 0,
+    pending_send_window_consumed: u64 = 0,
+    pending_stream_send_consumed: StreamConsumeList = .{},
+    pending_engine_stream_closes: U32List = .{},
+    hdr_entries: HdrEntryList = .{},
+    maxSettings: u32 = 32,
+    maxSessionInvalidFrames: u32 = 1000,
 
 pub fn encodeHeaderIntoList(self: *H2FrameParser, encoded_headers: *std.ArrayListUnmanaged(u8), alloc: std.mem.Allocator, name: []const u8, value: []const u8, never_index: bool) !usize {
             const required = (((encoded_headers.items.len + name.len) + value.len) + HPACK_ENTRY_OVERHEAD);
@@ -3303,6 +3315,7 @@ pub fn sendData(self: *H2FrameParser, stream: *Stream, payload: []const u8, clos
                         _ = log("padding: {d} size: {d} max_size: {d} payload_size: {d}", .{ padding, size, max_size, payload_size });
                         stream.remoteUsedWindowSize = (stream.remoteUsedWindowSize + payload_size);
                         self.remoteUsedWindowSize = (self.remoteUsedWindowSize + payload_size);
+                        _ = self.noteEngineSendConsumed(stream_id, payload_size);
                         var flags: u8 = (if (end_stream) @intFromEnum(DataFrameFlags.END_STREAM) else 0);
                         _ = &flags;
                         if ((padding != 0)) {
@@ -4273,12 +4286,8 @@ pub fn read(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: 
             _ = buffer.ensureStillAlive();
             if (buffer.asArrayBuffer(globalObject)) |array_buffer| {
                 _ = &array_buffer;
-                var bytes = array_buffer.byteSlice();
-                _ = &bytes;
-                while ((bytes.len > 0)) {
-                    const result = try self.readBytes(bytes);
-                    bytes = bytes[result..];
-                }
+                const bytes = array_buffer.byteSlice();
+                _ = self.rewriteRead(bytes);
                 return JSValue.js_undefined;
             }
             return globalObject.throw("Expected data to be a Buffer or ArrayBuffer", .{});
@@ -4295,12 +4304,7 @@ pub fn onNativeRead(self: *H2FrameParser, data: []const u8) bun.JSError!void {
             _ = &_win_guard;
             var ___win_guard_moved = false; _ = &___win_guard_moved;
             defer if (!___win_guard_moved) { ___win_guard_moved = true; const __T = @TypeOf(_win_guard); if (@typeInfo(__T) == .optional) { if (_win_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _win_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _win_guard; _drop_val.__cp_deinit(); } };
-            var bytes = data;
-            _ = &bytes;
-            while ((bytes.len > 0)) {
-                const result = try self.readBytes(bytes);
-                bytes = bytes[result..];
-            }
+            _ = self.rewriteRead(data);
     }
 
 pub fn onNativeWritable(self: *H2FrameParser) void {
@@ -4556,6 +4560,510 @@ pub fn detach(self: *H2FrameParser) void {
             }
     }
 
+pub fn rewriteLocalSettings(self: H2FrameParser) h2.Settings {
+            return h2.Settings{ .header_table_size = self.localSettings.headerTableSize, .enable_push = self.localSettings.enablePush, .max_concurrent_streams = self.localSettings.maxConcurrentStreams, .initial_window_size = self.localSettings.initialWindowSize, .max_frame_size = self.localSettings.maxFrameSize, .max_header_list_size = self.localSettings.maxHeaderListSize, .enable_connect_protocol = self.localSettings.enableConnectProtocol };
+    }
+
+pub fn ensureEngine(self: *H2FrameParser) void {
+            if ((self.engine == null)) {
+                self.engine = h2.Connection.init(self.allocator, self.isServer, self.rewriteLocalSettings());
+            }
+    }
+
+pub fn rewriteStreamCtx(self: H2FrameParser, stream_id: u32) JSValue {
+            if (self.streams.get(stream_id)) |stream| {
+                _ = &stream;
+                if (stream.jsContext.get()) |ctx| {
+                    _ = &ctx;
+                    return ctx;
+                }
+            }
+            return .js_undefined;
+    }
+
+pub fn noteEngineSendConsumed(self: *H2FrameParser, stream_id: u32, n: u64) void {
+            if ((n == 0)) {
+                return;
+            }
+            self.pending_send_window_consumed = (self.pending_send_window_consumed + n);
+            const len = self.pending_stream_send_consumed.items.len;
+            if (((len > 0) and (self.pending_stream_send_consumed.items[@as(usize, @intCast((len - 1)))].id == stream_id))) {
+                self.pending_stream_send_consumed.items[@as(usize, @intCast((len - 1)))].n = (self.pending_stream_send_consumed.items[@as(usize, @intCast((len - 1)))].n + n);
+            } else {
+                _ = (blk_catch_52: { break :blk_catch_52 ((self.pending_stream_send_consumed.append(self.allocator, StreamConsumeItem{ .id = stream_id, .n = n })) catch |__ce_52| { _ = &__ce_52;  }); });
+            }
+    }
+
+pub fn rewriteRead(self: *H2FrameParser, bytes: []const u8) void {
+            if (self.engine_busy) {
+                _ = (blk_catch_53: { break :blk_catch_53 ((self.rewrite_tail.appendSlice(self.allocator, bytes)) catch |__ce_53| { _ = &__ce_53;  }); });
+                return;
+            }
+            self.engine_busy = true;
+            defer {
+            self.engine_busy = false;
+            }
+            _ = self.ensureEngine();
+            if (self.engine) |*eng| {
+                _ = &eng;
+                (eng.*).local_settings = self.rewriteLocalSettings();
+                (eng.*).max_header_list_pairs = self.maxHeaderListPairs;
+                (eng.*).max_settings = self.maxSettings;
+                (eng.*).max_invalid_frames = self.maxSessionInvalidFrames;
+                if ((self.pending_recv_window_growth > 0)) {
+                    _ = (eng.*).recv_window.grow(self.pending_recv_window_growth);
+                    self.pending_recv_window_growth = 0;
+                }
+                if ((self.pending_send_window_consumed > 0)) {
+                    _ = (eng.*).send_window.consume(@as(i64, @intCast(self.pending_send_window_consumed)));
+                    self.pending_send_window_consumed = 0;
+                }
+                var write_idx: usize = 0;
+                _ = &write_idx;
+                for (self.pending_stream_send_consumed.items) |item| {
+                    _ = &item;
+                    if ((eng.*).streams.getPtr(item.id)) |s| {
+                        _ = &s;
+                        _ = s.send_window.consume(@as(i64, @intCast(item.n)));
+                    } else {
+                        if (self.streams.contains(item.id)) {
+                            self.pending_stream_send_consumed.items[cp_cast_int(usize, write_idx)] = item;
+                            write_idx = (write_idx + 1);
+                        }
+                    }
+                }
+                _ = self.pending_stream_send_consumed.shrinkRetainingCapacity(write_idx);
+                for (self.pending_engine_stream_closes.items) |id| {
+                    _ = &id;
+                    _ = (eng.*).closeStream(id);
+                }
+                _ = self.pending_engine_stream_closes.clearRetainingCapacity();
+            }
+            if ((self.rewrite_tail.items.len == 0)) {
+                var feed = h2.Feed{ .consumed = 0, .fatal = false };
+                _ = &feed;
+                if (self.engine) |*eng| {
+                    _ = &eng;
+                    feed = (eng.*).receive(self, bytes);
+                }
+                if (feed.fatal) {
+                    _ = self.rewrite_tail.clearRetainingCapacity();
+                    _ = self.flush();
+                    return;
+                }
+                if ((feed.consumed < bytes.len)) {
+                    _ = (blk_catch_54: { break :blk_catch_54 ((self.rewrite_tail.insertSlice(self.allocator, 0, bytes[feed.consumed..])) catch |__ce_54| { _ = &__ce_54;  }); });
+                }
+            } else {
+                _ = (blk_catch_55: { break :blk_catch_55 ((self.rewrite_tail.appendSlice(self.allocator, bytes)) catch |__ce_55| { _ = &__ce_55;  }); });
+                var combined = (blk_catch_56: { break :blk_catch_56 ((self.rewrite_tail.toOwnedSlice(self.allocator)) catch |__ce_56| { _ = &__ce_56; return; }); });
+                _ = &combined;
+                defer {
+                _ = self.allocator.free(combined);
+                }
+                var feed = h2.Feed{ .consumed = 0, .fatal = false };
+                _ = &feed;
+                if (self.engine) |*eng| {
+                    _ = &eng;
+                    feed = (eng.*).receive(self, combined);
+                }
+                if (feed.fatal) {
+                    _ = self.rewrite_tail.clearRetainingCapacity();
+                    _ = self.flush();
+                    return;
+                }
+                if ((feed.consumed < combined.len)) {
+                    _ = (blk_catch_57: { break :blk_catch_57 ((self.rewrite_tail.insertSlice(self.allocator, 0, combined[feed.consumed..])) catch |__ce_57| { _ = &__ce_57;  }); });
+                }
+            }
+            while ((self.rewrite_tail.items.len > 0)) {
+                var pending = (blk_catch_58: { break :blk_catch_58 ((self.rewrite_tail.toOwnedSlice(self.allocator)) catch |__ce_58| { _ = &__ce_58; break; }); });
+                _ = &pending;
+                defer {
+                _ = self.allocator.free(pending);
+                }
+                var feed = h2.Feed{ .consumed = 0, .fatal = false };
+                _ = &feed;
+                if (self.engine) |*eng| {
+                    _ = &eng;
+                    feed = (eng.*).receive(self, pending);
+                }
+                if (feed.fatal) {
+                    _ = self.rewrite_tail.clearRetainingCapacity();
+                    _ = self.flush();
+                    return;
+                }
+                if ((feed.consumed < pending.len)) {
+                    _ = (blk_catch_59: { break :blk_catch_59 ((self.rewrite_tail.insertSlice(self.allocator, 0, pending[feed.consumed..])) catch |__ce_59| { _ = &__ce_59;  }); });
+                }
+                if ((feed.consumed == 0)) {
+                    break;
+                }
+            }
+            _ = self.flush();
+    }
+
+pub fn sinkWrite(self: *H2FrameParser, bytes: []const u8) h2.WriteResult {
+            if (self.write(bytes)) {
+                return .Sent;
+            }
+            return .Queued;
+    }
+
+pub fn sinkOnError(self: *H2FrameParser, code: u32, _last: u32, debug: []const u8) void {
+            _ = &_last;
+            const chunk = (blk_catch_60: { break :blk_catch_60 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_60| { _ = &__ce_60; break :blk_catch_60 JSValue.js_undefined; }); });
+            if ((code != 0)) {
+                _ = self.dispatchWith2Extra(.onError, JSValue.jsNumber(code), JSValue.jsNumber(self.lastStreamID), chunk);
+            }
+            _ = self.dispatchWithExtra(.onEnd, JSValue.jsNumber(self.lastStreamID), chunk);
+    }
+
+pub fn sinkOnTooManyInvalidFrames(self: *H2FrameParser) void {
+            const code_js = jsc.ZigString.init("ERR_HTTP2_TOO_MANY_INVALID_FRAMES").toJS(self.globalThis);
+            _ = self.dispatchWith2Extra(.onError, code_js, JSValue.jsNumber(self.lastStreamID), JSValue.js_undefined);
+    }
+
+pub fn settingsToJS(self: H2FrameParser, s: *const h2.Settings, globalObject: *jsc.JSGlobalObject) JSValue {
+        _ = self;
+            var payload = FullSettingsPayload{ .headerTableSize = s.header_table_size, .enablePush = s.enable_push, .maxConcurrentStreams = s.max_concurrent_streams, .initialWindowSize = s.initial_window_size, .maxFrameSize = s.max_frame_size, .maxHeaderListSize = s.max_header_list_size, .enableConnectProtocol = s.enable_connect_protocol };
+            _ = &payload;
+            _ = std.mem.byteSwapAllFields(FullSettingsPayload, (&payload));
+            const bytes = std.mem.asBytes((&payload))[0..FullSettingsPayload.byteSize];
+            const bt: BinaryType = .Buffer;
+            return (blk_catch_61: { break :blk_catch_61 ((bt.toJS(bytes, globalObject)) catch |__ce_61| { _ = &__ce_61; break :blk_catch_61 JSValue.js_undefined; }); });
+    }
+
+pub fn sinkOnLocalSettings(self: *H2FrameParser, s: *const h2.Settings) void {
+            self.outstandingSettings = (self.outstandingSettings -| 1);
+            const js_val = self.settingsToJS(s, self.globalThis);
+            _ = self.dispatch(.onLocalSettings, js_val);
+    }
+
+pub fn sinkOnRemoteSettings(self: *H2FrameParser, s: *const h2.Settings) void {
+            self.remoteSettings = FullSettingsPayload{ .headerTableSize = s.header_table_size, .enablePush = s.enable_push, .maxConcurrentStreams = s.max_concurrent_streams, .initialWindowSize = s.initial_window_size, .maxFrameSize = s.max_frame_size, .maxHeaderListSize = s.max_header_list_size, .enableConnectProtocol = s.enable_connect_protocol };
+            var it = self.streams.valueIterator();
+            _ = &it;
+            while (it.next()) |item| {
+                const stream = item.*;
+                if (((if (comptime @typeInfo(@TypeOf(s.initial_window_size)) == .@"enum") cp_cast_int(u64, @intFromEnum(s.initial_window_size)) else cp_cast_int(u64, s.initial_window_size)) >= stream.remoteWindowSize)) {
+                    stream.remoteWindowSize = s.initial_window_size;
+                }
+            }
+            _ = self.flush();
+            const js_val = self.settingsToJS(s, self.globalThis);
+            _ = self.dispatch(.onRemoteSettings, js_val);
+    }
+
+pub fn sinkOnPing(self: *H2FrameParser, payload: []const u8, is_ack: bool) void {
+            if (is_ack) {
+                self.outStandingPings = (self.outStandingPings -| 1);
+            }
+            const buffer = (blk_catch_62: { break :blk_catch_62 ((self.handlers.binary_type.toJS(payload, self.globalThis)) catch |__ce_62| { _ = &__ce_62; return; }); });
+            _ = self.dispatchWithExtra(.onPing, buffer, JSValue.jsBoolean(is_ack));
+    }
+
+pub fn sinkOnGoAway(self: *H2FrameParser, code: u32, last: u32, debug: []const u8) void {
+            const chunk = (blk_catch_63: { break :blk_catch_63 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_63| { _ = &__ce_63; break :blk_catch_63 JSValue.js_undefined; }); });
+            _ = self.dispatchWith2Extra(.onGoAway, JSValue.jsNumber(code), JSValue.jsNumber(last), chunk);
+    }
+
+pub fn sinkOnWindowUpdate(self: *H2FrameParser, stream_id: u32, increment: u32) void {
+            if ((stream_id == 0)) {
+                self.remoteWindowSize = (self.remoteWindowSize + (if (comptime @typeInfo(@TypeOf(increment)) == .@"enum") cp_cast_int(u64, @intFromEnum(increment)) else cp_cast_int(u64, increment)));
+            } else {
+                if (self.streams.get(stream_id)) |stream| {
+                    _ = &stream;
+                    stream.remoteWindowSize = (stream.remoteWindowSize + (if (comptime @typeInfo(@TypeOf(increment)) == .@"enum") cp_cast_int(u64, @intFromEnum(increment)) else cp_cast_int(u64, increment)));
+                }
+            }
+            _ = self.flush();
+    }
+
+pub fn sinkOnAltsvc(self: *H2FrameParser, stream_id: u32, origin_bytes: []const u8, value: []const u8) void {
+            const origin_js = jsc.ZigString.init(origin_bytes).toJS(self.globalThis);
+            const value_js = jsc.ZigString.init(value).toJS(self.globalThis);
+            _ = self.dispatchWith2Extra(.onAltSvc, origin_js, value_js, JSValue.jsNumber(stream_id));
+    }
+
+pub fn sinkIsLocalStream(self: H2FrameParser, stream_id: u32) bool {
+            return self.streams.contains(stream_id);
+    }
+
+pub fn sinkOnPushPromise(self: *H2FrameParser, _parent_id: u32, promised_id: u32) void {
+            _ = &_parent_id;
+            self.rewrite_pending_push = promised_id;
+    }
+
+pub fn sinkOnOrigin(self: *H2FrameParser, payload: []const u8) void {
+            var origin_value = JSValue.js_undefined;
+            _ = &origin_value;
+            var count: u32 = 0;
+            _ = &count;
+            var rest = payload;
+            _ = &rest;
+            while ((rest.len >= 2)) {
+                const len = (if (comptime @typeInfo(@TypeOf(std.mem.readInt(u16, rest[0..2], .big))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.mem.readInt(u16, rest[0..2], .big))) else cp_cast_int(usize, std.mem.readInt(u16, rest[0..2], .big)));
+                if (((2 + len) > rest.len)) {
+                    break;
+                }
+                const origin_bytes = rest[2..(2 + len)];
+                const origin_js = jsc.ZigString.init(origin_bytes).toJS(self.globalThis);
+                if ((count == 0)) {
+                    origin_value = origin_js;
+                    _ = origin_value.ensureStillAlive();
+                } else {
+                    if ((count == 1)) {
+                        const array = (blk_catch_64: { break :blk_catch_64 ((JSValue.createEmptyArray(self.globalThis, 0)) catch |__ce_64| { _ = &__ce_64; return; }); });
+                        _ = array.ensureStillAlive();
+                        _ = (blk_catch_65: { break :blk_catch_65 ((array.push(self.globalThis, origin_value)) catch |__ce_65| { _ = &__ce_65;  }); });
+                        _ = (blk_catch_66: { break :blk_catch_66 ((array.push(self.globalThis, origin_js)) catch |__ce_66| { _ = &__ce_66;  }); });
+                        origin_value = array;
+                    } else {
+                        _ = (blk_catch_67: { break :blk_catch_67 ((origin_value.push(self.globalThis, origin_js)) catch |__ce_67| { _ = &__ce_67;  }); });
+                    }
+                }
+                count = (count + 1);
+                rest = rest[(2 + len)..];
+            }
+            if ((count == 0)) {
+                return;
+            }
+            _ = self.dispatch(.onOrigin, origin_value);
+    }
+
+pub fn sinkOnStreamOpen(self: *H2FrameParser, stream_id: u32) void {
+            _ = self.handleReceivedStreamID(stream_id);
+    }
+
+pub fn sinkOnHeader(self: *H2FrameParser, _stream_id: u32, name: []const u8, value: []const u8, never_index: bool) void {
+            _ = &_stream_id;
+            const name_copy = (blk_catch_68: { break :blk_catch_68 ((self.allocator.dupe(u8, name)) catch |__ce_68| { _ = &__ce_68; return; }); });
+            const value_copy = (blk_catch_69: { break :blk_catch_69 ((self.allocator.dupe(u8, value)) catch |__ce_69| { _ = &__ce_69; _ = self.allocator.free(name_copy);
+            return; }); });
+            _ = (blk_catch_70: { break :blk_catch_70 ((self.hdr_entries.append(self.allocator, HdrEntry{ .name = name_copy, .value = value_copy, .never_index = never_index })) catch |__ce_70| { _ = &__ce_70; _ = self.allocator.free(name_copy);
+            break :blk_catch_70 self.allocator.free(value_copy); }); });
+    }
+
+pub fn clearHdrEntries(self: *H2FrameParser) void {
+            for (self.hdr_entries.items) |entry| {
+                _ = &entry;
+                _ = self.allocator.free((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
+                _ = self.allocator.free((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value));
+            }
+            _ = self.hdr_entries.clearRetainingCapacity();
+    }
+
+pub fn materializeHeadersTuple(self: *H2FrameParser) !JSValue {
+            defer {
+            _ = self.clearHdrEntries();
+            }
+            const g = self.globalThis;
+            const raw_array = try JSValue.createEmptyArray(g, (self.hdr_entries.items.len * 2));
+            _ = raw_array.ensureStillAlive();
+            const headers_obj = JSValue.createEmptyObject(g, 0);
+            _ = headers_obj.ensureStillAlive();
+            var sensitive_array = JSValue.js_undefined;
+            _ = &sensitive_array;
+            for (self.hdr_entries.items) |entry| {
+                _ = &entry;
+                const js_name = jsc.ZigString.init((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)).toJS(g);
+                const js_val = jsc.ZigString.init((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value)).toJS(g);
+                _ = try raw_array.push(g, js_name);
+                _ = try raw_array.push(g, js_val);
+                if (entry.never_index) {
+                    if ((sensitive_array == .js_undefined)) {
+                        sensitive_array = try JSValue.createEmptyArray(g, 0);
+                        _ = sensitive_array.ensureStillAlive();
+                    }
+                    _ = try sensitive_array.push(g, js_name);
+                }
+                if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), "set-cookie")) {
+                    if (try headers_obj.getOwn(g, "set-cookie")) |existing| {
+                        _ = &existing;
+                        _ = try existing.push(g, js_val);
+                    } else {
+                        const arr = try JSValue.createEmptyArray(g, 1);
+                        _ = try arr.push(g, js_val);
+                        _ = headers_obj.put(g, "set-cookie", arr);
+                    }
+                } else {
+                    if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), "cookie")) {
+                        if (try headers_obj.getOwn(g, "cookie")) |existing| {
+                            _ = &existing;
+                            const prev = try existing.toSlice(g, self.allocator);
+                            defer {
+                            _ = prev.deinit();
+                            }
+                            const joined = (blk_catch_71: { break :blk_catch_71 ((std.fmt.allocPrint(self.allocator, "{s}; {s}", .{ prev.slice(), (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) })) catch |__ce_71| { _ = &__ce_71; break :blk_catch_71 null; }); });
+                            if (joined) |j| {
+                                _ = &j;
+                                defer {
+                                _ = self.allocator.free(j);
+                                }
+                                _ = headers_obj.put(g, "cookie", jsc.ZigString.init(j).toJS(g));
+                            }
+                        } else {
+                            _ = headers_obj.put(g, "cookie", js_val);
+                        }
+                    } else {
+                        const existing = try headers_obj.getOwn(g, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
+                        if ((existing == null)) {
+                            _ = headers_obj.put(g, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), js_val);
+                        }
+                    }
+                }
+            }
+            const tuple = try JSValue.createEmptyArray(g, 3);
+            _ = tuple.ensureStillAlive();
+            _ = try tuple.push(g, raw_array);
+            _ = try tuple.push(g, headers_obj);
+            _ = try tuple.push(g, sensitive_array);
+            return tuple;
+    }
+
+pub fn sinkOnHeadersComplete(self: *H2FrameParser, stream_id: u32, end_stream: bool, f: u8) void {
+            if (self.streams.get(stream_id)) |stream| {
+                _ = &stream;
+                stream.endAfterHeaders = end_stream;
+            }
+            const tuple = (blk_catch_72: { break :blk_catch_72 ((self.materializeHeadersTuple()) catch |__ce_72| { _ = &__ce_72; return; }); });
+            if (((self.rewrite_pending_push == stream_id) and (stream_id != 0))) {
+                self.rewrite_pending_push = 0;
+                _ = self.dispatchWith2Extra(.onStreamPush, JSValue.jsNumber(stream_id), tuple, JSValue.jsNumber(f));
+            } else {
+                const stream_ctx = self.rewriteStreamCtx(stream_id);
+                _ = self.dispatchWith2Extra(.onStreamHeaders, stream_ctx, tuple, JSValue.jsNumber(f));
+            }
+    }
+
+pub fn sinkOnData(self: *H2FrameParser, stream_id: u32, data: []const u8) void {
+            const stream_ctx = self.rewriteStreamCtx(stream_id);
+            const chunk = (blk_catch_73: { break :blk_catch_73 ((self.handlers.binary_type.toJS(data, self.globalThis)) catch |__ce_73| { _ = &__ce_73; return; }); });
+            _ = self.dispatchWithExtra(.onStreamData, stream_ctx, chunk);
+    }
+
+pub fn sinkOnStreamEnd(self: *H2FrameParser, stream_id: u32, state: u8) void {
+            var effective = state;
+            _ = &effective;
+            if (self.streams.get(stream_id)) |stream| {
+                _ = &stream;
+                if (((state == 6) and ((stream.state == .HALF_CLOSED_LOCAL) or (stream.state == .CLOSED)))) {
+                    effective = 7;
+                }
+                if ((effective == 5)) {
+                    stream.state = .HALF_CLOSED_LOCAL;
+                } else {
+                    if ((effective == 6)) {
+                        stream.state = .HALF_CLOSED_REMOTE;
+                    } else {
+                        if ((effective == 7)) {
+                            stream.state = .CLOSED;
+                        }
+                    }
+                }
+            }
+            const stream_ctx = self.rewriteStreamCtx(stream_id);
+            _ = self.dispatchWithExtra(.onStreamEnd, stream_ctx, JSValue.jsNumber(effective));
+            if ((effective == 7)) {
+                if (self.streams.get(stream_id)) |stream| {
+                    _ = &stream;
+                    _ = stream.freeResources(self, false);
+                }
+            }
+    }
+
+pub fn sinkOnStreamRejected(self: *H2FrameParser, stream_id: u32) void {
+            self.rejectedStreams = (self.rejectedStreams + 1);
+            if ((self.maxRejectedStreams <= self.rejectedStreams)) {
+                _ = self.sendGoAway(stream_id, .ENHANCE_YOUR_CALM, "ENHANCE_YOUR_CALM", self.lastStreamID, true);
+            }
+    }
+
+pub fn sinkOnStreamReset(self: *H2FrameParser, stream_id: u32, code: u32) void {
+            _ = self.clearHdrEntries();
+            if (((self.rewrite_pending_push == stream_id) and (stream_id != 0))) {
+                self.rewrite_pending_push = 0;
+            }
+            var old_state: u8 = @intFromEnum(StreamState.OPEN);
+            _ = &old_state;
+            if (self.streams.get(stream_id)) |stream| {
+                _ = &stream;
+                old_state = @intFromEnum(stream.state);
+                stream.state = .CLOSED;
+                stream.rstCode = code;
+            }
+            const stream_ctx = self.rewriteStreamCtx(stream_id);
+            if ((code == 8)) {
+                _ = self.dispatchWith2Extra(.onAborted, stream_ctx, JSValue.js_undefined, JSValue.jsNumber(old_state));
+            } else {
+                _ = self.dispatchWithExtra(.onStreamError, stream_ctx, JSValue.jsNumber(code));
+            }
+    }
+
+pub fn pushPromise(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+            _ = jsc.markBinding(@src());
+            if ((!self.isServer)) {
+                return globalObject.throw("Push streams can only be created by servers", .{});
+            }
+            const args_list = callframe.arguments_old(4);
+            if ((args_list.len < 4)) {
+                return globalObject.throw("Expected parentId, promisedId, headers and sensitiveHeaders arguments", .{});
+            }
+            const parent_id = args_list.ptr[0].toU32();
+            const promised_id = args_list.ptr[1].toU32();
+            const headers_arg = args_list.ptr[2];
+            const sensitive_arg = args_list.ptr[3];
+            if ((promised_id > h2.MAX_STREAM_ID)) {
+                return JSValue.jsNumber(-1);
+            }
+            const headers_obj = ((headers_arg.getObject()) orelse { return globalObject.throw("Expected headers to be an object", .{}); });
+            _ = self.ensureEngine();
+            if (self.engine) |*eng| {
+                _ = &eng;
+                _ = (eng.*).beginHeaderBlock();
+                var name_buf: [4096]u8 = undefined;
+                _ = &name_buf;
+                var iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(globalObject, headers_obj);
+                _ = &iter;
+                defer {
+                _ = iter.deinit();
+                }
+                while (try iter.next()) |header_name| {
+                    if ((header_name.length() == 0)) {
+                        continue;
+                    }
+                    const name_slice = header_name.toUTF8(bun.default_allocator);
+                    defer {
+                    _ = name_slice.deinit();
+                    }
+                    const validated_name = (blk_catch_74: { break :blk_catch_74 ((H2FrameParser.toValidHeaderName(name_slice.slice(), (&name_buf))) catch |__ce_74| { _ = &__ce_74; return globalObject.throwInvalidArguments("The arguments Header name is invalid", .{}); }); });
+                    const js_val = (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value);
+                    if (js_val.isEmptyOrUndefinedOrNull()) {
+                        continue;
+                    }
+                    const val_str = try js_val.toJSString(globalObject);
+                    const val_slice = val_str.toSlice(globalObject, bun.default_allocator);
+                    defer {
+                    _ = val_slice.deinit();
+                    }
+                    var never_index = false;
+                    _ = &never_index;
+                    if ((!sensitive_arg.isEmptyOrUndefinedOrNull())) {
+                        if (try sensitive_arg.getTruthy(globalObject, validated_name)) |sv| {
+                            _ = &sv;
+                            _ = &sv;
+                            never_index = true;
+                        }
+                    }
+                    _ = (eng.*).encodeHeader(validated_name, val_slice.slice(), never_index);
+                }
+                _ = (eng.*).sendPushPromise(self, parent_id, promised_id);
+                _ = self.flush();
+            }
+            return JSValue.js_undefined;
+    }
+
 pub fn deinit(self: *H2FrameParser) void {
             _ = log("deinit", .{});
             var _destroy_guard = ParserDestroyGuard{ .parser = self };
@@ -4564,6 +5072,16 @@ pub fn deinit(self: *H2FrameParser) void {
             defer if (!___destroy_guard_moved) { ___destroy_guard_moved = true; const __T = @TypeOf(_destroy_guard); if (@typeInfo(__T) == .optional) { if (_destroy_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _destroy_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _destroy_guard; _drop_val.__cp_deinit(); } };
             _ = self.detach();
             _ = self.strong_this.deinit();
+            if (self.engine) |*eng| {
+                _ = &eng;
+                _ = (eng.*).deinit();
+                self.engine = null;
+            }
+            _ = self.rewrite_tail.deinit(self.allocator);
+            _ = self.pending_stream_send_consumed.deinit(self.allocator);
+            _ = self.pending_engine_stream_closes.deinit(self.allocator);
+            _ = self.clearHdrEntries();
+            _ = self.hdr_entries.deinit(self.allocator);
             var it = self.streams.valueIterator();
             _ = &it;
             while (it.next()) |item| {
@@ -4632,6 +5150,19 @@ threadlocal var CORK_OFFSET: u16 = 0;
 threadlocal var CORKED_H2: ?*H2FrameParser = null;
 threadlocal var h2_pool: ?*H2FrameParserHiveAllocator = null;
 threadlocal var shared_request_buffer: [16384]u8 = undefined;
+const HdrEntry = struct {
+    name: []u8,
+    value: []u8,
+    never_index: bool,
+};
+const HdrEntryList = std.ArrayListUnmanaged(HdrEntry);
+const ByteList = std.ArrayListUnmanaged(u8);
+const U32List = std.ArrayListUnmanaged(u32);
+const StreamConsumeItem = struct {
+    id: u32,
+    n: u64,
+};
+const StreamConsumeList = std.ArrayListUnmanaged(StreamConsumeItem);
 const Allocator = std.mem.Allocator;
 const MutableString = bun.MutableString;
 const Output = bun.Output;

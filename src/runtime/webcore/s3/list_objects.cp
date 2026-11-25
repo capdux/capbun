@@ -138,7 +138,9 @@ export struct S3ListObjectsV2Result {
                 }
 
                 if (checksum_algorithme := item.checksum_algorithme) {
-                    objectInfo.put(globalObject, ZigString.static("checksumAlgorithme"), BunString.createUTF8ForJS(globalObject, checksum_algorithme)?);
+                    const js_alg = BunString.createUTF8ForJS(globalObject, checksum_algorithme)?;
+                    objectInfo.put(globalObject, ZigString.static("checksumAlgorithm"), js_alg);
+                    objectInfo.put(globalObject, ZigString.static("checksumAlgorithme"), js_alg);
                 }
 
                 if (checksum_type := item.checksum_type) {

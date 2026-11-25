@@ -1552,7 +1552,7 @@ export @root @value struct HTTPClient {
             const input = _.state.original_request_body.bytes;
             if (input.len == 0) return;
 
-            const deflater = HTTPThread.http_thread.deflater();
+            const deflater = http_thread.deflater();
             const out = CompressBodyMod.compressInto(deflater, input, opt, &_.compressed_request_body)?;
             let slice: []const u8 = undefined;
             switch (out) {

@@ -413,6 +413,7 @@ pub struct LiveWorkers {
         _.vm_lock.lock();
         const _guard_vm_lock = UnlockGuard<bun.Mutex>{ ptr: &_.vm_lock };
         if (vm := _.vm) {
+            vm.forbidScript();
             vm.jsc_vm.notifyNeedTermination();
             vm.eventLoop().wakeup();
         }
@@ -753,11 +754,15 @@ pub struct LiveWorkers {
             target_vm.jsc_vm.clearHasTerminationRequest();
             target_vm.is_shutting_down = true;
             target_vm.onExit();
+            target_vm.forbidScript();
             jsc.API.cron.CronJob.clearAllForVM(target_vm, .teardown);
             // Embedded socket groups must drain while JSC is still alive —
             // closeAll() fires on_close → JS callbacks. RareData.deinit() runs
             // after teardownJSCVM and only deinit()s (asserts empty in debug).
             if (rare := target_vm.rare_data) rare.closeAllSocketGroups(target_vm);
+            if (h := target_vm.handle) {
+                h.closeAndWait(target_vm, jsc.VirtualMachine.serviceDuringTeardown);
+            }
             exit_code = target_vm.exit_handler.exit_code;
             globalObject = target_vm.global;
         }
@@ -809,6 +814,7 @@ pub struct LiveWorkers {
         // `vm.onExit()` (shutdown nulls it first), so a re-entrant process.exit()
         // from an exit handler does not re-arm the trap.
         if (vm := _.vm) {
+            vm.forbidScript();
             vm.jsc_vm.notifyNeedTermination();
             vm.eventLoop().wakeup();
         }

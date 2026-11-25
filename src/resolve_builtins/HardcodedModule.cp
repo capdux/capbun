@@ -66,7 +66,7 @@ pub struct HardcodedModuleAlias {
     }
 }
 
-const common_alias_kvs: [[string, HardcodedModuleAlias]; 137] = [
+const common_alias_kvs: [[string, HardcodedModuleAlias]; 139] = [
     HardcodedModuleAlias.nodeEntry("node:assert"),
     HardcodedModuleAlias.nodeEntry("node:assert/strict"),
     HardcodedModuleAlias.nodeEntry("node:async_hooks"),
@@ -121,6 +121,8 @@ const common_alias_kvs: [[string, HardcodedModuleAlias]; 137] = [
     HardcodedModuleAlias.nodeEntry("node:worker_threads"),
     HardcodedModuleAlias.nodeEntry("node:zlib"),
     // New Node.js builtins only resolve from the prefixed one.
+    HardcodedModuleAlias.nodeEntryOnlyPrefix("node:quic"),
+    HardcodedModuleAlias.nodeEntryOnlyPrefix("node:sqlite"),
     HardcodedModuleAlias.nodeEntryOnlyPrefix("node:test"),
 
     HardcodedModuleAlias.nodeEntry("assert"),
@@ -251,7 +253,7 @@ const bun_test_extra_alias_kvs: [[string, HardcodedModuleAlias]; 2] = [
     ["vitest", HardcodedModuleAlias{ path: "bun:test" }],
 ];
 
-const hardcoded_module_map_kvs: [[string, HardcodedModule]; 83] = [
+const hardcoded_module_map_kvs: [[string, HardcodedModule]; 85] = [
     // Bun
     ["bun", .bun],
     ["bun:app", .@"bun:app"],
@@ -287,6 +289,7 @@ const hardcoded_module_map_kvs: [[string, HardcodedModule]; 83] = [
     ["node:inspector/promises", .@"node:inspector/promises"],
     ["node:module", .@"node:module"],
     ["node:net", .@"node:net"],
+    ["node:quic", .@"node:quic"],
     ["node:readline", .@"node:readline"],
     ["node:test", .@"node:test"],
     ["node:os", .@"node:os"],
@@ -299,6 +302,7 @@ const hardcoded_module_map_kvs: [[string, HardcodedModule]; 83] = [
     ["node:querystring", .@"node:querystring"],
     ["node:readline/promises", .@"node:readline/promises"],
     ["node:repl", .@"node:repl"],
+    ["node:sqlite", .@"node:sqlite"],
     ["node:stream", .@"node:stream"],
     ["node:stream/consumers", .@"node:stream/consumers"],
     ["node:stream/promises", .@"node:stream/promises"],
@@ -374,9 +378,11 @@ pub enum HardcodedModule {
     @"node:path/win32",
     @"node:perf_hooks",
     @"node:process",
+    @"node:quic",
     @"node:querystring",
     @"node:readline",
     @"node:readline/promises",
+    @"node:sqlite",
     @"node:stream",
     @"node:stream/consumers",
     @"node:stream/promises",

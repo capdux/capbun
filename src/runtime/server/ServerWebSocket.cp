@@ -1029,10 +1029,10 @@ fn pong(
 const MAX_CONTROL_FRAME_PAYLOAD: usize = 125;
 
 fn throwControlFrameTooLarge(globalThis: *jsc.JSGlobalObject, len: usize): bun.JSError {
-    return globalThis.throwRangeError(
+    return globalThis.throwValue(globalThis.createRangeError(
         "The data size must not be greater than {d} bytes. Received {d} bytes.",
         .{ MAX_CONTROL_FRAME_PAYLOAD, len },
-    );
+    ));
 }
 
 inline fn sendPing(

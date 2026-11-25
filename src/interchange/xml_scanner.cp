@@ -27,7 +27,7 @@ pub fn ScannerTypes(comptime U: type): type {
     return struct {
         const Slice = []const U;
 
-        const Kind = union(enum) {
+        pub const Kind = union(enum) {
             eof: Slice?,
             name: Slice,
             nmtoken: Slice,
@@ -58,7 +58,7 @@ pub fn ScannerTypes(comptime U: type): type {
             unexpected: u32,
         };
 
-        const Token = struct {
+        pub const Token = struct {
             kind: Kind,
             pos: usize,
             frame: u32,
@@ -75,13 +75,13 @@ pub fn ScannerTypes(comptime U: type): type {
             slow: void,
         };
 
-        const EntityValue = union(enum) {
+        pub const EntityValue = union(enum) {
             internal: Slice,
             external: void,
             unparsed: void,
         };
 
-        const SliceCtx = struct {
+        pub const SliceCtx = struct {
             static fn hash(_ctx: SliceCtx, key: Slice): u64 {
                 * = _ctx;
                 return std.hash.Wyhash.hash(0, UT.unitBytes(key));
@@ -166,7 +166,7 @@ pub fn ScannerTypes(comptime U: type): type {
             return out.items;
         }
 
-        const Scanner = struct {
+        pub const Scanner = struct {
             src: Slice,
             pos: usize,
             frame_id: u32,
@@ -509,14 +509,14 @@ pub fn ScannerTypes(comptime U: type): type {
                         .external => if (in_attribute)
                             _.errNamed(ref_pos, "Attribute values cannot reference external entity", name, "")
                         else
-                            Resolved{ .unexpanded = {} },
+                            Resolved.unexpanded,
                         .unparsed => _.errNamed(ref_pos, "Unparsed entity", name, " cannot be referenced"),
                     };
                 }
                 if (_.standalone || !(_.has_external_subset || _.saw_pe_reference)) {
                     return _.errNamed(ref_pos, "Entity", name, " is not declared");
                 }
-                return Resolved{ .unexpanded = {} };
+                return Resolved.unexpanded;
             }
 
             static fn pushReference(allocator: std.mem.Allocator, buf: *std.ArrayListUnmanaged(U), name: Slice): XMLError!void {
@@ -797,7 +797,7 @@ pub fn ScannerTypes(comptime U: type): type {
                 src: Slice,
                 start: usize,
                 end: usize,
-                buf: *std.ArrayListUnmanaged(U)?,
+                buf: *(std.ArrayListUnmanaged(U)?),
             ): XMLError!*std.ArrayListUnmanaged(U) {
                 if (buf.* == null) {
                     let b: std.ArrayListUnmanaged(U) = .{};
@@ -1085,9 +1085,9 @@ pub fn ScannerTypes(comptime U: type): type {
                         if (nxt == '?') {
                             _.pos += 2;
                             if (_.scanPi(cur_pos)?) {
-                                kind = .{ .xml_decl = {} };
+                                kind = .xml_decl;
                             } else {
-                                kind = .{ .pi = {} };
+                                kind = .pi;
                             }
                             break;
                         }
@@ -1101,7 +1101,7 @@ pub fn ScannerTypes(comptime U: type): type {
                             if (_.hasPrefix("<!--")) {
                                 _.pos += 4;
                                 _.scanComment(cur_pos)?;
-                                kind = .{ .comment = {} };
+                                kind = .comment;
                                 break;
                             }
                             if (_.hasPrefix("<!DOCTYPE")) {
@@ -1166,25 +1166,25 @@ pub fn ScannerTypes(comptime U: type): type {
                             },
                         }
                     }
-                    if (c == '=') { _.pos += 1; kind = .{ .eq = {} }; break; }
-                    if (c == '>') { _.pos += 1; if (_.inDocument()) _.tag_degraded = false; kind = .{ .gt = {} }; break; }
+                    if (c == '=') { _.pos += 1; kind = .eq; break; }
+                    if (c == '>') { _.pos += 1; if (_.inDocument()) _.tag_degraded = false; kind = .gt; break; }
                     if (c == '/') {
                         _.pos += 1;
                         if (_.peek() != '>') return _.errHere("Expected '>' after '/' but found");
                         _.pos += 1;
                         if (_.inDocument()) _.tag_degraded = false;
-                        kind = .{ .slash_gt = {} };
+                        kind = .slash_gt;
                         break;
                     }
-                    if (c == '(') { _.pos += 1; kind = .{ .paren_open = {} }; break; }
-                    if (c == ')') { _.pos += 1; kind = .{ .paren_close = {} }; break; }
-                    if (c == '|') { _.pos += 1; kind = .{ .bar = {} }; break; }
-                    if (c == ',') { _.pos += 1; kind = .{ .comma = {} }; break; }
-                    if (c == '?') { _.pos += 1; kind = .{ .question = {} }; break; }
-                    if (c == '*') { _.pos += 1; kind = .{ .star = {} }; break; }
-                    if (c == '+') { _.pos += 1; kind = .{ .plus = {} }; break; }
-                    if (c == '[') { _.pos += 1; kind = .{ .bracket_open = {} }; break; }
-                    if (c == ']') { _.pos += 1; kind = .{ .bracket_close = {} }; break; }
+                    if (c == '(') { _.pos += 1; kind = .paren_open; break; }
+                    if (c == ')') { _.pos += 1; kind = .paren_close; break; }
+                    if (c == '|') { _.pos += 1; kind = .bar; break; }
+                    if (c == ',') { _.pos += 1; kind = .comma; break; }
+                    if (c == '?') { _.pos += 1; kind = .question; break; }
+                    if (c == '*') { _.pos += 1; kind = .star; break; }
+                    if (c == '+') { _.pos += 1; kind = .plus; break; }
+                    if (c == '[') { _.pos += 1; kind = .bracket_open; break; }
+                    if (c == ']') { _.pos += 1; kind = .bracket_close; break; }
                     if (c == '#') {
                         _.pos += 1;
                         const kw = _.scanName("Expected a keyword after '#' but found")?;
@@ -1194,7 +1194,7 @@ pub fn ScannerTypes(comptime U: type): type {
                     if (c == '%') {
                         _.pos += 1;
                         if (!_.atNameStart()) {
-                            kind = .{ .percent = {} };
+                            kind = .percent;
                             break;
                         }
                         const name = _.scanName("Expected a parameter entity name after '%' but found")?;
@@ -1244,10 +1244,10 @@ pub fn ScannerTypes(comptime U: type): type {
                     const name_start = p;
                     p += 1;
                     while (types.isNameCharAscii(_.peekAt(p))) : (p += 1) {}
-                    if (_.peekAt(p) >= 0x80) return TagStep{ .slow = {} };
+                    if (_.peekAt(p) >= 0x80) return TagStep.slow;
                     const name = _.src[name_start..p];
                     while (types.isWs(_.peekAt(p))) : (p += 1) {}
-                    if (_.peekAt(p) != '=') return TagStep{ .slow = {} };
+                    if (_.peekAt(p) != '=') return TagStep.slow;
                     p += 1;
                     while (types.isWs(_.peekAt(p))) : (p += 1) {}
                     const q = _.peekAt(p);
@@ -1256,7 +1256,7 @@ pub fn ScannerTypes(comptime U: type): type {
                         return TagStep{ .attr = .{ name: name, pos: name_start, quote: q } };
                     }
                 }
-                return TagStep{ .slow = {} };
+                return TagStep.slow;
             }
 
             fn takeGt(*_): bool {
@@ -1404,7 +1404,7 @@ pub fn ScannerTypes(comptime U: type): type {
             }
 
             fn finishText(*_, start: usize, buf: std.ArrayListUnmanaged(U)?, pos: usize): XMLError!void {
-                let text: Slice = &[];
+                let text: Slice = [];
                 if (mut_b := buf) {
                     let b = mut_b;
                     b.appendSlice(_.allocator, _.src[start.._.pos]) catch return error.OutOfMemory;

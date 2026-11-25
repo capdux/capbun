@@ -137,6 +137,10 @@ import init_command_mod from "./init_command.zig";
 pub const InitCommand = init_command_mod.InitCommand;
 import why_command_mod from "./why_command.zig";
 pub const WhyCommand = why_command_mod.WhyCommand;
+import dedupe_command_mod from "./dedupe_command.zig";
+pub const DedupeCommand = dedupe_command_mod.DedupeCommand;
+import prune_command_mod from "./prune_command.zig";
+pub const PruneCommand = prune_command_mod.PruneCommand;
 import fuzzilli_command_mod from "./fuzzilli_command.zig";
 pub const FuzzilliCommand = fuzzilli_command_mod.FuzzilliCommand;
 import repl_command_mod from "./repl_command.zig";
@@ -487,9 +491,11 @@ pub struct Command {
         if (cmd_m == RootCommandMatcher.case("publish")) return .PublishCommand;
         if (cmd_m == RootCommandMatcher.case("audit")) return .AuditCommand;
         if (cmd_m == RootCommandMatcher.case("info")) return .InfoCommand;
-        if (cmd_m == RootCommandMatcher.case("deploy") || cmd_m == RootCommandMatcher.case("cloud") || cmd_m == RootCommandMatcher.case("config") || cmd_m == RootCommandMatcher.case("use") || cmd_m == RootCommandMatcher.case("auth") || cmd_m == RootCommandMatcher.case("login") || cmd_m == RootCommandMatcher.case("logout") || cmd_m == RootCommandMatcher.case("prune")) return .ReservedCommand;
+        if (cmd_m == RootCommandMatcher.case("deploy") || cmd_m == RootCommandMatcher.case("cloud") || cmd_m == RootCommandMatcher.case("config") || cmd_m == RootCommandMatcher.case("use") || cmd_m == RootCommandMatcher.case("auth") || cmd_m == RootCommandMatcher.case("login") || cmd_m == RootCommandMatcher.case("logout")) return .ReservedCommand;
         if (cmd_m == RootCommandMatcher.case("whoami") || cmd_m == RootCommandMatcher.case("list")) return .PackageManagerCommand;
         if (cmd_m == RootCommandMatcher.case("why")) return .WhyCommand;
+        if (cmd_m == RootCommandMatcher.case("dedupe")) return .DedupeCommand;
+        if (cmd_m == RootCommandMatcher.case("prune")) return .PruneCommand;
         if (cmd_m == RootCommandMatcher.case("fuzzilli")) return if (bun.Environment.enable_fuzzilli) .FuzzilliCommand else .AutoCommand;
         return .AutoCommand;
     }
@@ -688,6 +694,16 @@ pub struct Command {
             .WhyCommand => {
                 const ctx = Command.init(allocator, log, .WhyCommand)?;
                 WhyCommand.exec(ctx)?;
+                return;
+            },
+            .DedupeCommand => {
+                const ctx = Command.init(allocator, log, .DedupeCommand)?;
+                DedupeCommand.exec(ctx)?;
+                return;
+            },
+            .PruneCommand => {
+                const ctx = Command.init(allocator, log, .PruneCommand)?;
+                PruneCommand.exec(ctx)?;
                 return;
             },
             .BunxCommand => {
@@ -1128,6 +1144,8 @@ pub struct Command {
                 Output.pretty(intro_text, {});
                 Output.flush();
             },
+            .DedupeCommand => PackageManager.CommandLineArguments.printHelp(.dedupe),
+            .PruneCommand => PackageManager.CommandLineArguments.printHelp(.prune),
             else => {
                 HelpCommand.printWithReason(.explicit, false);
             },

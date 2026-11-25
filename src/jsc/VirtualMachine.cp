@@ -486,6 +486,44 @@ test_isolation_generation: u32 = 0,
 /// When true, listening sockets and subprocesses are tracked so they can
 /// be force-closed between test files. Set by `bun test --isolate`.
 test_isolation_enabled: bool = false,
+/// Thread-safe handle for off-thread work and ordered VM teardown.
+handle: jsc.VmHandle? = null,
+}
+
+pub fn vmHandle(client: *VirtualMachine): jsc.VmHandle {
+    return client.handle.?.clone();
+}
+
+pub fn handleRef(client: *VirtualMachine): *jsc.VmHandle {
+    return &client.handle.?;
+}
+
+pub fn currentLoopKind(client: *VirtualMachine): jsc.VmLoopKind {
+    return if (client.macro_mode) .macro else .regular;
+}
+
+pub fn ticket(client: *VirtualMachine): jsc.Ticket {
+    return client.handleRef().issueTicket(client.currentLoopKind());
+}
+
+pub fn scriptAllowed(client: *VirtualMachine): bool {
+    if (h := client.handle) {
+        return h.scriptAllowed();
+    }
+    return !client.is_shutting_down;
+}
+
+pub fn forbidScript(client: *VirtualMachine) {
+    if (h := client.handle) {
+        h.stop();
+    }
+}
+
+pub fn serviceDuringTeardown(client: *VirtualMachine) {
+    client.regular_event_loop.tickConcurrent();
+    if (client.has_enabled_macro_mode) {
+        client.macro_event_loop.tickConcurrent();
+    }
 }
 
 @c {
@@ -1233,6 +1271,7 @@ pub fn onExit(client: *VirtualMachine) {
 
 pub fn globalExit(client: *VirtualMachine): noreturn {
     bun.assert(client.isShuttingDown());
+    client.forbidScript();
     // FIXME: we should be doing this, but we're not, but unfortunately doing it
     //        causes like 50+ tests to break
     // this.eventLoop().tick();
@@ -1253,6 +1292,9 @@ pub fn globalExit(client: *VirtualMachine): noreturn {
         // / postgres / etc. socket is an LSAN leak under
         // BUN_DESTRUCT_VM_ON_EXIT.
         if (rare := client.rare_data) rare.closeAllSocketGroups(client);
+        if (h := client.handle) {
+            h.closeAndWait(client, serviceDuringTeardown);
+        }
         Zig__GlobalObject__destructOnExit(client.global);
         // lastChanceToFinalize() above runs Listener/Server finalize → their
         // own embedded group.closeAll() → sockets land in loop.closed_head.
@@ -1754,6 +1796,7 @@ pub fn initWorker(
     uws.Loop.get().internal_loop_data.jsc_vm = vm.jsc_vm;
     vm.transpiler.setAllocator(allocator);
     vm.body_value_hive_allocator = Body.Value.HiveAllocator.init(bun.typedAllocator(jsc.WebCore.Body.Value));
+    vm.handle = jsc.VmHandle.init(vm);
 
     return vm;
 }
@@ -2410,6 +2453,10 @@ pub fn deinit(client: *VirtualMachine) {
     client.overridden_main.deinit();
     client.pending_internal_promise.deinit();
     client.entry_point.deinit();
+    if (*h := client.handle) {
+        h.deinit();
+        client.handle = null;
+    }
     client.has_terminated = true;
 }
 
@@ -4452,6 +4499,7 @@ pub fn bustDirCache(vm: *VirtualMachine, path: []const u8): bool {
     fn Process__dispatchOnBeforeExit(global: *JSGlobalObject, code: u8);
     fn Process__dispatchOnExit(global: *JSGlobalObject, code: u8);
     fn Bun__closeAllSQLiteDatabasesForTermination();
+    fn Bun__closeAllNodeSqliteDatabasesForTermination(global: *JSGlobalObject);
     fn Bun__WebView__closeAllForTermination();
 }
 
@@ -4472,6 +4520,7 @@ pub struct ExitHandler {
         Process__dispatchOnExit(vm.global, _.exit_code);
         if (vm.isMainThread()) {
             Bun__closeAllSQLiteDatabasesForTermination();
+            Bun__closeAllNodeSqliteDatabasesForTermination(vm.global);
             Bun__WebView__closeAllForTermination();
         }
     }

@@ -1,6 +1,7 @@
 // S3 HTTP streaming download task in CP
 import S3ErrorMod from "../../../s3_signing/error.zig";
 import CredentialsMod from "../../../s3_signing/credentials.zig";
+import * as xml_response from "./xml_response.zig";
 import bun from "bun";
 
 const S3Error = S3ErrorMod.S3Error;
@@ -113,6 +114,9 @@ export class S3HttpDownloadStreamingTask {
         let s3_err: S3Error? = null;
         let failed = false;
 
+        let parsed_err: xml_response.ErrorBody? = null;
+        defer if (*e := parsed_err) e.deinit(bun.default_allocator);
+
         const chunk = brk: {
             switch (state.status_code) {
                 200, 204, 206 => {
@@ -124,31 +128,19 @@ export class S3HttpDownloadStreamingTask {
             }
             if (failed) {
                 if (!has_more) {
-                    let has_body_code = false;
-                    let has_body_message = false;
-
                     let code: string = "UnknownError";
                     let message: string = "an unexpected error has occurred";
                     if (state.request_error != 0) {
                         const req_err = @errorFromInt(state.request_error);
                         code = @errorName(req_err);
-                        has_body_code = true;
                     } else {
                         const bytes: string = _.reported_response_buffer.list.items;
                         if (bytes.len > 0) {
                             message = bytes;
-
-                            if (start := strings.indexOf(bytes, "<Code>")) {
-                                if (end := strings.indexOf(bytes, "</Code>")) {
-                                    code = bytes[start + "<Code>".len .. end];
-                                    has_body_code = true;
-                                }
-                            }
-                            if (start := strings.indexOf(bytes, "<Message>")) {
-                                if (end := strings.indexOf(bytes, "</Message>")) {
-                                    message = bytes[start + "<Message>".len .. end];
-                                    has_body_message = true;
-                                }
+                            parsed_err = xml_response.parseError(bytes);
+                            if (err_body := parsed_err) {
+                                if (c := err_body.code) code = c;
+                                if (m := err_body.message) message = m;
                             }
                         }
                     }

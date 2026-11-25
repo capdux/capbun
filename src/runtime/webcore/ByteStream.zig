@@ -403,8 +403,7 @@ pub fn onCancel(self: *ByteStream) void {
         }
 }
 
-pub fn memoryCost(self: ByteStream, ctx: *const ByteStream) usize {
-    _ = self;
+pub fn memoryCost(ctx: *const ByteStream) usize {
         return ctx.buffer.capacity;
 }
 

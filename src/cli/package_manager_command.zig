@@ -74,6 +74,8 @@ pub const cli = @import("./cli.zig");
 pub const pm_pkg_cmd = @import("./pm_pkg_command.zig");
 pub const pm_ver_cmd = @import("./pm_version_command.zig");
 pub const pm_why_cmd = @import("./pm_why_command.zig");
+pub const pm_licenses_cmd = @import("./pm_licenses_command.zig");
+pub const PmDiffCommand = @import("./pm_diff_command.zig");
 pub const pm_trusted_cmd = @import("./pm_trusted_command.zig");
 pub const pack_cmd = @import("./pack_command.zig");
 pub const scan_cmd = @import("./scan_command.zig");
@@ -495,13 +497,25 @@ pub fn exec(ctx: Command.Context) !void {
                                                                             _ = try why_exec(ctx, pm, pm.options.positionals);
                                                                             _ = Global.exit(0);
                                                                         } else {
-                                                                            if (strings.eqlComptime(subcommand, "pkg")) {
-                                                                                const pkg_exec = PmPkgCommand.exec;
-                                                                                _ = try pkg_exec(ctx, pm, pm.options.positionals, cwd);
+                                                                            if (strings.eqlComptime(subcommand, "diff")) {
+                                                                                const diff_exec = PmDiffCommand.exec;
+                                                                                _ = try diff_exec(ctx.allocator, pm, pm.options.positionals, cli_args.diff_args, .{ .raw = cli_args.diff_raw, .json = cli_args.json_output, .unminify = cli_args.diff_unminify, .minify = cli_args.diff_minify, .ignore_space = cli_args.diff_ignore_space, .name_only = cli_args.diff_name_only, .stat = cli_args.diff_stat, .context = ((cli_args.diff_context) orelse (3)) }, cwd);
                                                                                 _ = Global.exit(0);
                                                                             } else {
-                                                                                _ = Output.errGeneric("unknown subcommand: \"{s}\"", .{ subcommand });
-                                                                                _ = Global.exit(1);
+                                                                                if (strings.eqlComptime(subcommand, "licenses")) {
+                                                                                    const licenses_exec = PmLicensesCommand.exec;
+                                                                                    _ = try licenses_exec(pm, pm.options.positionals, cwd, .{ .dev_only = cli_args.licenses_dev, .long = cli_args.licenses_long });
+                                                                                    _ = Global.exit(0);
+                                                                                } else {
+                                                                                    if (strings.eqlComptime(subcommand, "pkg")) {
+                                                                                        const pkg_exec = PmPkgCommand.exec;
+                                                                                        _ = try pkg_exec(ctx, pm, pm.options.positionals, cwd);
+                                                                                        _ = Global.exit(0);
+                                                                                    } else {
+                                                                                        _ = Output.errGeneric("unknown subcommand: \"{s}\"", .{ subcommand });
+                                                                                        _ = Global.exit(1);
+                                                                                    }
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
@@ -527,6 +541,7 @@ const Command = cli.Command;
 const PmPkgCommand = pm_pkg_cmd.PmPkgCommand;
 const PmVersionCommand = pm_ver_cmd.PmVersionCommand;
 const PmWhyCommand = pm_why_cmd.PmWhyCommand;
+const PmLicensesCommand = pm_licenses_cmd.PmLicensesCommand;
 const DefaultTrustedCommand = pm_trusted_cmd.DefaultTrustedCommand;
 const TrustCommand = pm_trusted_cmd.TrustCommand;
 const UntrustedCommand = pm_trusted_cmd.UntrustedCommand;

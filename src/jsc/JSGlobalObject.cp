@@ -529,7 +529,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn createRangeError(*_, comptime fmt: [:0]const u8, args: auto): JSValue {
-        const e = createErrorInstance(_, fmt, args);
+        const e = _.createErrorInstance(fmt, args);
         if (e == .zero) {
             bun.assert(_.hasException());
             return .zero;

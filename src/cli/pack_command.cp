@@ -528,11 +528,85 @@ pub struct PackCommand {
 
     const PackQueueContext = _PackQueueContext;
 
-    const PackQueueItem = _PackQueueItem;
+    pub const PackQueueItem = _PackQueueItem;
 
-    const PackQueue = std.PriorityQueue(PackQueueItem, void, PackQueueContext.lessThan);
+    pub const PackQueue = std.PriorityQueue(PackQueueItem, void, PackQueueContext.lessThan);
 
     type DirInfo = [std.fs.Dir, string, usize];
+
+    pub static fn publishedFiles(
+        allocator: std.mem.Allocator,
+        root_dir: std.fs.Dir,
+        json_root: Expr,
+        log_level: LogLevel,
+    ): PackQueue! {
+        const void_val: void = undefined;
+        let pack_queue = PackQueue.init(allocator, void_val);
+        errdefer pack_queue.deinit();
+
+        const bins_guard = BinsGuard{
+            bins: getPackageBins(allocator, json_root)?,
+            allocator: allocator,
+        };
+        const bins = bins_guard.bins;
+
+        for (bin of bins) {
+            switch (bin.@"type") {
+                .file => {
+                    pack_queue.add({ path: bin.path, optional: true })?;
+                },
+                .dir => {
+                    const bin_dir = root_dir.openDir(bin.path, { iterate: true }) catch {
+                        continue;
+                    };
+                    iterateProjectTree(allocator, &pack_queue, [], .{ bin_dir, bin.path, 2 }, log_level)?;
+                },
+            }
+        }
+
+        if (files := json_root.get("files")) {
+            if (_files_array := files.asArray()) {
+                let includes_guard = PatternListGuard{ allocator: allocator };
+                let excludes_guard = PatternListGuard{ allocator: allocator };
+                let path_buf: PathBuffer = undefined;
+                let files_array = _files_array;
+                while (files_entry := files_array.next()) {
+                    if (file_entry_str := files_entry.asString(allocator)) {
+                        const normalized = bun.path.normalizeBuf(file_entry_str, &path_buf, .posix);
+                        const maybe_p = Pattern.fromUTF8(allocator, normalized) catch continue;
+                        if (maybe_p == null) continue;
+                        const parsed = maybe_p.?;
+                        if (parsed.flags.negated) {
+                            excludes_guard.list.append(allocator, parsed)?;
+                        } else {
+                            includes_guard.list.append(allocator, parsed)?;
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                iterateIncludedProjectTree(
+                    allocator,
+                    &pack_queue,
+                    bins,
+                    includes_guard.list.items,
+                    excludes_guard.list.items,
+                    root_dir,
+                    log_level,
+                )?;
+                return pack_queue;
+            }
+        }
+
+        iterateProjectTree(
+            allocator,
+            &pack_queue,
+            bins,
+            .{ root_dir, "", 1 },
+            log_level,
+        )?;
+        return pack_queue;
+    }
 
     static fn iterateIncludedProjectTree(
         allocator: std.mem.Allocator,

@@ -1,5 +1,6 @@
 // S3 simple request executor in CP
 import * as ListObjects from "./list_objects.zig";
+import * as xml_response from "./xml_response.zig";
 import * as S3Acl from "../../../s3_signing/acl.zig";
 import * as S3StorageClass from "../../../s3_signing/storage_class.zig";
 import * as S3CredentialsMod from "../../../s3_signing/credentials.zig";
@@ -246,6 +247,8 @@ export class S3HttpSimpleTask {
         let code: string = "UnknownError";
         let message: string = "an unexpected error has occurred";
         let has_error_code = false;
+        let parsed_err: xml_response.ErrorBody? = null;
+        defer if (*e := parsed_err) e.deinit(bun.default_allocator);
 
         if (req_err := _.result.fail) {
             code = @errorName(req_err);
@@ -254,15 +257,14 @@ export class S3HttpSimpleTask {
             const bytes: string = body.list.items;
             if (bytes.len > 0) {
                 message = bytes;
-                if (start := strings.indexOf(bytes, "<Code>")) {
-                    if (end := strings.indexOf(bytes, "</Code>")) {
-                        code = bytes[start + "<Code>".len .. end];
+                parsed_err = xml_response.parseError(bytes);
+                if (err_body := parsed_err) {
+                    if (c := err_body.code) {
+                        code = c;
                         has_error_code = true;
                     }
-                }
-                if (start := strings.indexOf(bytes, "<Message>")) {
-                    if (end := strings.indexOf(bytes, "</Message>")) {
-                        message = bytes[start + "<Message>".len .. end];
+                    if (m := err_body.message) {
+                        message = m;
                     }
                 }
             }
@@ -282,29 +284,22 @@ export class S3HttpSimpleTask {
     fn failIfContainsError(*_, status: u32): JSTerminatedError!bool {
         let code: string = "UnknownError";
         let message: string = "an unexpected error has occurred";
+        let parsed_err: xml_response.ErrorBody? = null;
+        defer if (*e := parsed_err) e.deinit(bun.default_allocator);
 
         if (req_err := _.result.fail) {
             code = @errorName(req_err);
         } else if (body := _.result.body) {
             const bytes: string = body.list.items;
-            let has_error = false;
             if (bytes.len > 0) {
                 message = bytes;
-                if (strings.indexOf(bytes, "<Error>") != null) {
-                    has_error = true;
-                    if (start := strings.indexOf(bytes, "<Code>")) {
-                        if (end := strings.indexOf(bytes, "</Code>")) {
-                            code = bytes[start + "<Code>".len .. end];
-                        }
-                    }
-                    if (start := strings.indexOf(bytes, "<Message>")) {
-                        if (end := strings.indexOf(bytes, "</Message>")) {
-                            message = bytes[start + "<Message>".len .. end];
-                        }
-                    }
+                parsed_err = xml_response.parseError(bytes);
+                if (err_body := parsed_err) {
+                    if (c := err_body.code) code = c;
+                    if (m := err_body.message) message = m;
                 }
             }
-            if ((!has_error && status == 200) || status == 206) {
+            if ((parsed_err == null && status == 200) || status == 206) {
                 return false;
             }
         } else if (status == 200 || status == 206) {

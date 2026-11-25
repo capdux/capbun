@@ -580,7 +580,7 @@ pub fn createRangeErrorInstance(self: *JSGlobalObject, comptime fmt: [:0]const u
     }
 
 pub fn createRangeError(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) JSValue {
-            const e = self.createErrorInstance(self, fmt, args);
+            const e = self.createErrorInstance(fmt, args);
             if ((e == .zero)) {
                 _ = bun.assert(self.hasException());
                 return .zero;

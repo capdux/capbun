@@ -41,6 +41,8 @@ export enum Tag {
     PublishCommand,
     AuditCommand,
     WhyCommand,
+    DedupeCommand,
+    PruneCommand,
     FuzzilliCommand,
 
     /// Used by crash reports.
@@ -79,20 +81,22 @@ export enum Tag {
             .PublishCommand => 'k',
             .AuditCommand => 'A',
             .WhyCommand => 'W',
+            .DedupeCommand => 'd',
+            .PruneCommand => 'q',
             .FuzzilliCommand => 'F',
         };
     }
 
     pub fn readGlobalConfig(): bool {
         return switch (_) {
-            .BunxCommand | .PackageManagerCommand | .InstallCommand | .AddCommand | .RemoveCommand | .UpdateCommand | .PatchCommand | .PatchCommitCommand | .OutdatedCommand | .PublishCommand | .AuditCommand => true,
+            .BunxCommand | .PackageManagerCommand | .InstallCommand | .AddCommand | .RemoveCommand | .UpdateCommand | .PatchCommand | .PatchCommitCommand | .OutdatedCommand | .PublishCommand | .AuditCommand | .DedupeCommand | .PruneCommand => true,
             else => false,
         };
     }
 
     pub fn isNPMRelated(): bool {
         return switch (_) {
-            .BunxCommand | .LinkCommand | .UnlinkCommand | .PackageManagerCommand | .InstallCommand | .AddCommand | .RemoveCommand | .UpdateCommand | .PatchCommand | .PatchCommitCommand | .OutdatedCommand | .PublishCommand | .AuditCommand => true,
+            .BunxCommand | .LinkCommand | .UnlinkCommand | .PackageManagerCommand | .InstallCommand | .AddCommand | .RemoveCommand | .UpdateCommand | .PatchCommand | .PatchCommitCommand | .OutdatedCommand | .PublishCommand | .AuditCommand | .DedupeCommand | .PruneCommand => true,
             else => false,
         };
     }

@@ -23,6 +23,7 @@ export enum PerfEvent: i32 {
     @"Bundler.ParseJSON5",
     @"Bundler.ParseTOML",
     @"Bundler.ParseYAML",
+    @"Bundler.ParseXML",
     @"Bundler.postProcessJSChunk",
     @"Bundler.readFile",
     @"Bundler.renameSymbolsInChunk",

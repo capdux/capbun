@@ -1,11 +1,16 @@
-import { MultiArrayList } from "./multi_array_list.zig";
+import multi_array_list from "./multi_array_list.zig";
 import baby_list from "./baby_list.zig";
 import bit_set from "./bit_set.zig";
-import { HiveArray } from "./hive_array.zig";
-import { BoundedArray } from "./bounded_array.zig";
+import hive_array from "./hive_array.zig";
+import bounded_array from "./bounded_array.zig";
 import array_list from "./array_list.zig";
+import index_sort from "./index_sort.zig";
 
-export { MultiArrayList, baby_list, bit_set, HiveArray, BoundedArray, array_list };
+export { baby_list, bit_set, array_list, index_sort };
+
+pub const MultiArrayList = multi_array_list.MultiArrayList;
+pub const HiveArray = hive_array.HiveArray;
+pub const BoundedArray = bounded_array.BoundedArray;
 
 pub const BabyList = baby_list.BabyList;
 pub const ByteList = baby_list.ByteList; // alias of BabyList(u8)

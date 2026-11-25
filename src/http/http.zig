@@ -1028,7 +1028,7 @@ pub fn compressBodyForSend(self: *HTTPClient, into_shared: bool) !void {
         if ((input.len == 0)) {
             return;
         }
-        const deflater = HTTPThread.http_thread.deflater();
+        const deflater = http_thread.deflater();
         const out = try CompressBodyMod.compressInto(deflater, input, opt, (&self.compressed_request_body));
         var slice: []const u8 = undefined;
         _ = &slice;

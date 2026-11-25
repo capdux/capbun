@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { bunEnv, bunExe, tempDir } from "harness";
+import { readdirSync } from "node:fs";
 import { ESBUILD, itBundled } from "./expectBundled";
 
 describe("bundler", () => {
@@ -192,6 +193,49 @@ describe("bundler", () => {
       },
     ],
   });
+  itBundled("naming/EntryNamingTarget", {
+    files: {
+      "/src/entry.js": /* js */ `
+        console.log(1);
+      `,
+    },
+    root: "/src",
+    target: "bun",
+    entryNaming: "[target]/[name].[ext]",
+    entryPointsRaw: ["./src/entry.js"],
+    onAfterBundle(api) {
+      expect(readdirSync(api.outdir)).toEqual(["bun"]);
+    },
+    run: {
+      file: "/out/bun/entry.js",
+      stdout: "1",
+    },
+  });
+  itBundled("naming/AssetNamingTarget", {
+    files: {
+      "/src/entry.js": /* js */ `
+        import file from "./data.file";
+        console.log(file);
+      `,
+      "/src/data.file": `
+        this is a file
+      `,
+    },
+    root: "/src",
+    target: "bun",
+    assetNaming: "[target]/[name].[ext]",
+    entryPointsRaw: ["./src/entry.js"],
+    loader: {
+      ".file": "file",
+    },
+    onAfterBundle(api) {
+      expect(readdirSync(api.outdir).sort()).toEqual(["bun", "entry.js"]);
+    },
+    run: {
+      file: "/out/entry.js",
+      stdout: "./bun/data.file",
+    },
+  });
   itBundled("naming/AssetNoOverwrite", {
     todo: true,
     files: {
@@ -303,6 +347,29 @@ describe("bundler", () => {
       },
     ],
   });
+  // A non-ASCII ID_Continue basename char is preserved in the generated
+  // CommonJS wrapper symbol, not replaced per-code-point (nor per-UTF-8-byte,
+  // which once regressed to `require_caf__utils`).
+  itBundled("naming/NonAsciiSourceFilenameSymbol", {
+    files: {
+      "/entry.js": /* js */ `
+        const u = require("./café-utils.js");
+        console.log(u.hi);
+      `,
+      "/café-utils.js": /* js */ `
+        module.exports = { hi: 1 };
+      `,
+    },
+    target: "bun",
+    onAfterBundle(api) {
+      // target: "bun" prints identifiers ASCII-only, so "é" is escaped.
+      api.expectFile("/out.js").toContain("require_caf\\u{e9}_utils");
+      api.expectFile("/out.js").not.toContain("require_caf__utils");
+      api.expectFile("/out.js").not.toContain("require_caf_utils");
+    },
+    run: { stdout: "1" },
+  });
+  // Unterminated `[` used to panic path_template_print; CLI backend isolates the crash.
   for (const unterminated of ["[name", "[dir", "[ext", "[hash", "[target", "a[b.js", "[name]-[hash.js"]) {
     itBundled(`naming/UnterminatedPlaceholder/${unterminated}`, {
       backend: "cli",
@@ -334,6 +401,7 @@ describe("bundler", () => {
       },
     });
   }
+  // An unknown `[placeholder]` is kept verbatim in the output path.
   itBundled("naming/UnknownPlaceholderIsLiteral", {
     backend: "cli",
     files: {
@@ -349,6 +417,7 @@ describe("bundler", () => {
   });
 });
 
+// Bun.build({ naming: "[name" }) used to SIGABRT; validation now rejects it.
 describe("bundler", () => {
   for (const [naming, option] of [
     [`"[name"`, "naming"],

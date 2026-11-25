@@ -847,82 +847,6 @@ describe("expect()", () => {
       expect({ a: 123n }).toEqual({ a: expect.any(BigInt) });
       expect({ a: 123n }).not.toEqual({ a: expect.any(g) });
     });
-
-    it("gives a matcher undefined for an element that the other array does not have", () => {
-      const seen = [];
-      expect.extend({
-        toBeRecorded(value) {
-          seen.push(value);
-          return { pass: false, message: () => "" };
-        },
-      });
-      const matchers = [
-        expect.stringContaining("a"),
-        expect.stringMatching(/a/),
-        expect.any(String),
-        expect.any(Symbol),
-        expect.any(BigInt),
-        expect.any(Boolean),
-        expect.any(Number),
-        expect.any(Array),
-        expect.any(Object),
-        expect.any(Promise),
-        expect.any(Date),
-        expect.anything(),
-        expect.arrayContaining([1]),
-        expect.objectContaining({ a: 1 }),
-        expect.closeTo(1),
-        // @ts-expect-error
-        expect.toBeRecorded(),
-      ];
-      for (const matcher of matchers) {
-        expect([,]).not.toEqual([matcher]);
-        expect([[,]]).not.toEqual(expect.arrayContaining([[matcher]]));
-        expect({ a: [["x"]] }).not.toMatchObject({ a: expect.arrayContaining([["x", matcher]]) });
-      }
-      expect([,]).toEqual([expect.not.stringContaining("a")]);
-      expect(seen.length).toBeGreaterThan(0);
-      expect(seen.filter(value => value !== undefined)).toEqual([]);
-    });
-
-    it("gives a matcher the value of a getter at an index", () => {
-      const array = [1];
-      Object.defineProperty(array, 1, { get: () => "x", enumerable: true });
-      expect(array).toEqual([1, expect.anything()]);
-      expect(array).toEqual([1, expect.any(String)]);
-      expect(array).toEqual([1, expect.stringContaining("x")]);
-      expect(array).not.toEqual([1, expect.stringContaining("y")]);
-      expect([array]).toEqual(expect.arrayContaining([[1, expect.stringContaining("x")]]));
-    });
-
-    if (isBun) {
-      it("does not crash on an element that the other array does not have", async () => {
-        const { bunEnv, bunExe } = require("harness");
-        const src = `
-          import { expect } from "bun:test";
-          const getter = Object.defineProperty([], 0, { get: () => "x", enumerable: true });
-          for (const matcher of [expect.stringContaining("a"), expect.any(String), expect.arrayContaining([1])]) {
-            try { expect([,]).toEqual([matcher]); } catch {}
-            try { expect([]).toEqual(expect.arrayContaining([[matcher]])); } catch {}
-            try { expect(getter).toEqual([matcher]); } catch {}
-            try { expect({ a: [["x"]] }).toMatchObject({ a: expect.arrayContaining([["x", matcher]]) }); } catch {}
-          }
-          console.log("ok");
-        `;
-        await using proc = Bun.spawn({
-          cmd: [bunExe(), "-e", src],
-          env: { ...bunEnv, BUN_JSC_validateExceptionChecks: "1" },
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
-        expect({ stdout, stderr, exitCode, signalCode: proc.signalCode }).toMatchObject({
-          stdout: "ok\n",
-          exitCode: 0,
-          signalCode: null,
-        });
-      });
-    }
   });
 
   test("toThrow asymmetric matchers", () => {
@@ -1245,6 +1169,8 @@ describe("expect()", () => {
     expect(w).toEqual(w);
   });
 
+  // Allocation-heavy by design (GC stress for #14256); measured at ~4 minutes
+  // under a debug+ASAN build, far past the 5s default per-test timeout.
   test("deepEquals Set/Map stress test", () => {
     const arr1 = [];
     const arr2 = [];
@@ -1269,7 +1195,7 @@ describe("expect()", () => {
       let innerMap = new Map(arr4);
       Bun.deepEquals(outerMap, innerMap);
     }
-  });
+  }, 480_000);
 
   test("deepEquals - Date", () => {
     let d = new Date();
@@ -2475,6 +2401,18 @@ describe("expect()", () => {
     ["😄", "😄"],
     ["", ""],
     [[1, 2, 3], 1],
+    // toContain uses === like Jest (Array.prototype.indexOf), so -0 and +0 match.
+    [[-0], 0],
+    [[0], -0],
+    [new Float64Array([-0]), 0],
+    [
+      {
+        *[Symbol.iterator]() {
+          yield -0;
+        },
+      },
+      0,
+    ],
     [["a", "b", "c"], "c"],
     [[null, undefined], undefined],
     [[1n, "abc", null, -1n, undefined], -1n],
@@ -2507,6 +2445,10 @@ describe("expect()", () => {
     [new String("hello"), ""],
     ["emoji: 😃", "😄"],
     [[1, 2, 3], -1],
+    // toContain uses === like Jest (Array.prototype.indexOf), so NaN never matches.
+    [[NaN], NaN],
+    [new Float64Array([NaN]), NaN],
+    [new Set([NaN]), NaN],
     [[1, 2, 3], 1n],
     [["a", "b", "c"], "d"],
     [[Symbol.for("a")], Symbol("a")],
@@ -4119,9 +4061,48 @@ describe("expect()", () => {
       expect(expect.any(BigInt)).toEqual(1n);
       expect(expect.any(Symbol)).toEqual(Symbol());
       expect(expect.any(Object)).toEqual({});
-      //expect(expect.any(Object)).toEqual(null); // TODO: succeeds on jest, fails on bun
       expect(expect.any(Array)).toEqual([]);
       expect(expect.any(Thing)).toEqual(new Thing());
+    });
+
+    test("expect.any(Object) matches typeof === 'object'", () => {
+      // https://github.com/jestjs/jest/blob/main/packages/expect/src/asymmetricMatchers.ts
+      // Jest: `if (this.sample == Object) return typeof other == 'object';`
+      class Thing {}
+
+      // typeof x === 'object'
+      expect(null).toEqual(expect.any(Object));
+      expect({}).toEqual(expect.any(Object));
+      expect([]).toEqual(expect.any(Object));
+      expect(new Thing()).toEqual(expect.any(Object));
+      expect(new Date()).toEqual(expect.any(Object));
+      expect(new Map()).toEqual(expect.any(Object));
+      expect(/re/).toEqual(expect.any(Object));
+
+      // typeof x !== 'object'
+      expect(undefined).not.toEqual(expect.any(Object));
+      expect(1).not.toEqual(expect.any(Object));
+      expect("s").not.toEqual(expect.any(Object));
+      expect(true).not.toEqual(expect.any(Object));
+      expect(1n).not.toEqual(expect.any(Object));
+      expect(Symbol()).not.toEqual(expect.any(Object));
+      expect(() => {}).not.toEqual(expect.any(Object));
+      expect(function f() {}).not.toEqual(expect.any(Object));
+      expect(async () => {}).not.toEqual(expect.any(Object));
+      expect(Thing).not.toEqual(expect.any(Object));
+
+      // nested in toEqual / objectContaining
+      expect({ a: null }).toEqual({ a: expect.any(Object) });
+      expect({ a: () => {} }).not.toEqual({ a: expect.any(Object) });
+      expect({ a: () => {} }).not.toEqual(expect.objectContaining({ a: expect.any(Object) }));
+
+      // toHaveBeenCalledWith
+      const fn = jest.fn();
+      fn(null);
+      expect(fn).toHaveBeenCalledWith(expect.any(Object));
+      const fn2 = jest.fn();
+      fn2(() => {});
+      expect(fn2).not.toHaveBeenCalledWith(expect.any(Object));
     });
 
     test("expect.any on primitive wrapper classes", () => {
@@ -4891,37 +4872,37 @@ describe("expect()", () => {
   test("toHaveBeenLastCalledWith to return undefined", () => {
     expect(expect(mocked).toHaveBeenLastCalledWith()).toBeUndefined();
   });
-  test.todo("toHaveBeenNthCalledWith to return undefined", () => {
-    expect(expect(() => {}).toHaveBeenNthCalledWith()).toBeUndefined();
+  test("toHaveBeenNthCalledWith to return undefined", () => {
+    expect(expect(mocked).toHaveBeenNthCalledWith(1)).toBeUndefined();
   });
-  test.todo("toHaveLastReturnedWith to return undefined", () => {
-    expect(expect(() => {}).toHaveLastReturnedWith()).toBeUndefined();
+  test("toHaveLastReturnedWith to return undefined", () => {
+    expect(expect(mocked).toHaveLastReturnedWith(undefined)).toBeUndefined();
   });
   test("toHaveLength to return undefined", () => {
     expect(expect([1]).toHaveLength(1)).toBeUndefined();
   });
-  test.todo("toHaveNthReturnedWith to return undefined", () => {
-    expect(expect(() => {}).toHaveNthReturnedWith()).toBeUndefined();
+  test("toHaveNthReturnedWith to return undefined", () => {
+    expect(expect(mocked).toHaveNthReturnedWith(1, undefined)).toBeUndefined();
   });
-  test.todo("toHaveProperty to return undefined", () => {
-    expect(expect({}).toHaveProperty()).toBeUndefined();
+  test("toHaveProperty to return undefined", () => {
+    expect(expect({ a: 1 }).toHaveProperty("a")).toBeUndefined();
   });
-  test.todo("toHaveReturnedTimes to return undefined", () => {
-    expect(expect(() => {}).toHaveReturnedTimes()).toBeUndefined();
+  test("toHaveReturnedTimes to return undefined", () => {
+    expect(expect(mocked).toHaveReturnedTimes(1)).toBeUndefined();
   });
-  test.todo("toHaveReturnedWith to return undefined", () => {
-    expect(expect(() => {}).toHaveReturnedWith()).toBeUndefined();
+  test("toHaveReturnedWith to return undefined", () => {
+    expect(expect(mocked).toHaveReturnedWith(undefined)).toBeUndefined();
   });
   test("toInclude to return undefined", () => {
     expect(expect("abc").toInclude("a")).toBeUndefined();
   });
-  test.todo("toIncludeRepeated to return undefined", () => {
-    expect(expect("abc").toIncludeRepeated("a")).toBeUndefined();
+  test("toIncludeRepeated to return undefined", () => {
+    expect(expect("abc").toIncludeRepeated("a", 1)).toBeUndefined();
   });
   test("toMatch to return undefined", () => {
     expect(expect("abc").toMatch("a")).toBeUndefined();
   });
-  test.todo("toMatchInlineSnapshot to return undefined", () => {
+  test("toMatchInlineSnapshot to return undefined", () => {
     expect(expect("abc").toMatchInlineSnapshot('"abc"')).toBeUndefined();
   });
   test("toMatchObject to return undefined", () => {

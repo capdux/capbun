@@ -259,7 +259,7 @@ const less_than_loc = p.lexer.loc();
                 _ = try p.lexer.nextInsideJSXElement();
                 const end_tag = try JSXTag.parse(P, p);
                 if ((!strings.eql((if (@typeInfo(@TypeOf(end_tag)) == .@"enum" or @typeInfo(@TypeOf(end_tag)) == .@"union") @tagName(end_tag) else end_tag.name), (if (@typeInfo(@TypeOf(tag)) == .@"enum" or @typeInfo(@TypeOf(tag)) == .@"union") @tagName(tag) else tag.name)))) {
-                    _ = try p.log.addRangeErrorFmtWithNote(p.source, end_tag.range, p.allocator, "Expected closing JSX tag to match opening tag \"<{s}>\"", .{ (if (@typeInfo(@TypeOf(tag)) == .@"enum" or @typeInfo(@TypeOf(tag)) == .@"union") @tagName(tag) else tag.name) }, "Opening tag here:", .{}, tag.range);
+                    _ = try p.log.addRangeErrorFmtWithNote(p.source, end_tag.range, p.allocator, "Expected closing JSX tag to match opening tag \"\\<{s}\\>\"", .{ (if (@typeInfo(@TypeOf(tag)) == .@"enum" or @typeInfo(@TypeOf(tag)) == .@"union") @tagName(tag) else tag.name) }, "Opening tag here:", .{}, tag.range);
                     return error.SyntaxError;
                 }
                 if ((p.lexer.token != .t_greater_than)) {

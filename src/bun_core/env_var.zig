@@ -249,6 +249,7 @@ pub const CI_JOB_URL = New(kind.string, "CI_JOB_URL", StringCtorOptions{  });
 pub const CLAUDE_CODE_AGENT_RULE_DISABLED = New(kind.boolean, "CLAUDE_CODE_AGENT_RULE_DISABLED", BoolCtorOptions{ .default = false });
 pub const CLAUDECODE = New(kind.boolean, "CLAUDECODE", BoolCtorOptions{ .default = false });
 pub const COLORTERM = New(kind.string, "COLORTERM", StringCtorOptions{  });
+pub const COLUMNS = New(kind.unsigned, "COLUMNS", UnsignedCtorOptions{  });
 pub const CURSOR_AGENT_RULE_DISABLED = New(kind.boolean, "CURSOR_AGENT_RULE_DISABLED", BoolCtorOptions{ .default = false });
 pub const CURSOR_TRACE_ID = New(kind.boolean, "CURSOR_TRACE_ID", BoolCtorOptions{ .default = false });
 pub const DO_NOT_TRACK = New(kind.boolean, "DO_NOT_TRACK", BoolCtorOptions{ .default = false });

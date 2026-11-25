@@ -68,13 +68,11 @@ read_inside_on_pull: ReadDuringJSOnPullResult = .{ .none = {} },
 highwater_mark: usize = 16384,
 flowing: bool = true,
 
-pub fn eventLoop(self: FileReader, ctx: *const FileReader) jsc.EventLoopHandle {
-    _ = self;
+pub fn eventLoop(ctx: *const FileReader) jsc.EventLoopHandle {
         return ctx.event_loop;
 }
 
-pub fn loop(self: *const FileReader, ctx: *const FileReader) *bun.Async.Loop {
-    _ = self;
+pub fn loop(ctx: *const FileReader) *bun.Async.Loop {
         if (bun.Environment.isWindows) {
             return ctx.eventLoop().loop().uv_loop;
         } else {
@@ -547,8 +545,7 @@ pub fn setFlowing(self: *FileReader, flag: bool) void {
         }
 }
 
-pub fn memoryCost(self: FileReader, ctx: *const FileReader) usize {
-    _ = self;
+pub fn memoryCost(ctx: *const FileReader) usize {
         return (ctx.reader.memoryCost() + ctx.buffered.capacity);
 }
 pub const IOReader = bun.io.BufferedReader;

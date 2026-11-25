@@ -77,9 +77,10 @@ pub const install_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("--optional                        Add dependency to \"optionalDependencies\"") catch unreachable,
     clap.parseParam("--peer                        Add dependency to \"peerDependencies\"") catch unreachable,
     clap.parseParam("-E, --exact                  Add the exact version instead of the ^range") catch unreachable,
-    clap.parseParam("--filter <STR>...                 Install packages for the matching workspaces") catch unreachable,
+    clap.parseParam("-F, --filter <STR>...             Install packages for the matching workspaces") catch unreachable,
     clap.parseParam("-a, --analyze                   Analyze & install all dependencies of files passed as arguments recursively (using Bun's bundler)") catch unreachable,
     clap.parseParam("--only-missing                  Only add dependencies to package.json if they are not already present") catch unreachable,
+    clap.parseParam("--catalog <STR>?                Add the resolved version to the root package.json catalog and depend on it as \"catalog:\" (use --catalog=NAME for a named catalog)") catch unreachable,
     clap.parseParam("<POS> ...                         ") catch unreachable,
 ]);
 
@@ -94,7 +95,9 @@ pub const update_params: []const ParamType = &(shared_params ++ [
 pub const pm_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("-a, --all") catch unreachable,
     clap.parseParam("--json                              Output in JSON format") catch unreachable,
-    // clap.parseParam("--filter <STR>...                      Pack each matching workspace") catch unreachable,
+    clap.parseParam("--filter <STR>...                   Filter workspaces") catch unreachable,
+    clap.parseParam("--dev                               List only devDependencies (bun pm licenses)") catch unreachable,
+    clap.parseParam("--long                              Show extended license metadata (bun pm licenses)") catch unreachable,
     clap.parseParam("--destination <STR>                    The directory the tarball will be saved in") catch unreachable,
     clap.parseParam("--filename <STR>                       The filename of the tarball") catch unreachable,
     clap.parseParam("--gzip-level <STR>                     Specify a custom compression level for gzip. Default is 9.") catch unreachable,
@@ -105,6 +108,15 @@ pub const pm_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("--preid <STR>                          Identifier to be used to prefix premajor, preminor, prepatch or prerelease version increments") catch unreachable,
     clap.parseParam("--top                                Show only the first level of dependencies") catch unreachable,
     clap.parseParam("--depth <NUM>                          Maximum depth of the dependency tree to display") catch unreachable,
+    clap.parseParam("--diff <STR>...                        A package spec or path to compare (bun pm diff; may be given twice)") catch unreachable,
+    clap.parseParam("--raw                                  Compare file bytes as-is; skip the JS/CSS/JSON re-print (bun pm diff)") catch unreachable,
+    clap.parseParam("--unformatted                          Alias of --raw (bun pm diff)") catch unreachable,
+    clap.parseParam("--unminify                             Rename short locals in lockstep in every JS file, not only ones that look minified (bun pm diff)") catch unreachable,
+    clap.parseParam("--minify                               Also normalise syntax (!0 vs true, quotes, parens…) so equivalent spellings collapse (bun pm diff)") catch unreachable,
+    clap.parseParam("-w, --ignore-space                     Show files that differ only in whitespace as 'whitespace only' instead of hunks (bun pm diff)") catch unreachable,
+    clap.parseParam("--name-only                            Only list the files that differ (bun pm diff)") catch unreachable,
+    clap.parseParam("--stat                                 Show a per-file change summary instead of hunks (bun pm diff)") catch unreachable,
+    clap.parseParam("-U, --unified <STR>                    Lines of context around each change (bun pm diff, default 3)") catch unreachable,
     clap.parseParam("<POS> ...                         ") catch unreachable,
 ]);
 
@@ -114,12 +126,15 @@ pub const add_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("--optional                        Add dependency to \"optionalDependencies\"") catch unreachable,
     clap.parseParam("--peer                        Add dependency to \"peerDependencies\"") catch unreachable,
     clap.parseParam("-E, --exact                  Add the exact version instead of the ^range") catch unreachable,
+    clap.parseParam("-F, --filter <STR>...            Add the package(s) to the matching workspaces instead of the current package") catch unreachable,
     clap.parseParam("-a, --analyze                   Recursively analyze & install dependencies of files passed as arguments (using Bun's bundler)") catch unreachable,
     clap.parseParam("--only-missing                  Only add dependencies to package.json if they are not already present") catch unreachable,
+    clap.parseParam("--catalog <STR>?                Add the resolved version to the root package.json catalog and depend on it as \"catalog:\" (use --catalog=NAME for a named catalog)") catch unreachable,
     clap.parseParam("<POS> ...                         \"name\" or \"name@version\" of package(s) to install") catch unreachable,
 ]);
 
 pub const remove_params: []const ParamType = &(shared_params ++ [
+    clap.parseParam("-F, --filter <STR>...            Remove the package(s) from the matching workspaces instead of the current package") catch unreachable,
     clap.parseParam("<POS> ...                         \"name\" of package(s) to remove from package.json") catch unreachable,
 ]);
 
@@ -153,7 +168,8 @@ const audit_params: []const ParamType = &([
     clap.parseParam("<POS> ...                              Check installed packages for vulnerabilities") catch unreachable,
     clap.parseParam("--json                                 Output in JSON format") catch unreachable,
     clap.parseParam("--audit-level <STR>                    Only print advisories with severity greater than or equal to <level> (low, moderate, high, critical)") catch unreachable,
-    clap.parseParam("--ignore <STR>...                      Ignore specific CVE IDs from audit") catch unreachable,
+    clap.parseParam("--ignore <STR>...                      Ignore advisories by GHSA or numeric advisory ID (repeatable)") catch unreachable,
+    clap.parseParam("-L, --latest                           Also apply fixes your declared ranges exclude, rewriting package.json") catch unreachable,
 ]);
 
 const info_params: []const ParamType = &(shared_params ++ [
@@ -183,6 +199,16 @@ const why_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("<POS> ...                              Package name to explain why it's installed") catch unreachable,
     clap.parseParam("--top                                  Show only the top dependency tree instead of nested ones") catch unreachable,
     clap.parseParam("--depth <NUM>                          Maximum depth of the dependency tree to display") catch unreachable,
+]);
+
+const dedupe_params: []const ParamType = &(shared_params ++ [
+    clap.parseParam("--check                                Check for duplicates without modifying bun.lock or node_modules (exits 1 if duplicates exist)") catch unreachable,
+    clap.parseParam("<POS> ...") catch unreachable,
+]);
+
+const prune_params: []const ParamType = &(shared_params ++ [
+    clap.parseParam("--filter <STR>...                      Keep dependencies of unselected workspaces") catch unreachable,
+    clap.parseParam("<POS> ...") catch unreachable,
 ]);
 
 pub enum AuditLevel {
@@ -258,6 +284,7 @@ interactive: bool = false,
 json_output: bool = false,
 recursive: bool = false,
 filters: []const string = [],
+add_catalog: string? = null,
 
 pack_destination: string = "",
 pack_filename: string = "",
@@ -305,6 +332,23 @@ depth: usize? = null,
 // `bun audit` options
 audit_level: AuditLevel? = null,
 audit_ignore_list: []const string = [],
+
+// `bun dedupe` & `bun pm licenses` options
+dedupe_check: bool = false,
+licenses_dev: bool = false,
+licenses_long: bool = false,
+
+// `bun pm diff` options
+diff_args: []const string = [],
+diff_name_only: bool = false,
+diff_raw: bool = false,
+/// The subcommand only needs registry configuration; a missing package.json is not an error.
+no_project_ok: bool = false,
+diff_unminify: bool = false,
+diff_minify: bool = false,
+diff_ignore_space: bool = false,
+diff_stat: bool = false,
+diff_context: usize? = null,
 
 // CPU and OS overrides for optional dependencies
 cpu: Npm.Architecture = Npm.Architecture.current,
@@ -766,6 +810,16 @@ pub static fn printHelp(subcommand: Subcommand) {
             Output.pretty(outro_text, {});
             Output.flush();
         },
+        .dedupe => {
+            Output.pretty("\n<b>Usage<r>: <b><green>bun dedupe<r> <cyan>[flags]<r>\n\n  Deduplicate dependencies in bun.lock and node_modules.\n\n<b>Flags:<r>\n", .{});
+            clap.simpleHelp(dedupe_params);
+            Output.flush();
+        },
+        .prune => {
+            Output.pretty("\n<b>Usage<r>: <b><green>bun prune<r> <cyan>[flags]<r>\n\n  Remove extraneous packages from node_modules.\n\n<b>Flags:<r>\n", .{});
+            clap.simpleHelp(prune_params);
+            Output.flush();
+        },
     }
 }
 
@@ -792,6 +846,8 @@ pub static fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcomman
         .audit => shared_params ++ audit_params,
         .info => info_params,
         .scan => pm_params, // scan uses the same params as pm command
+        .dedupe => dedupe_params,
+        .prune => prune_params,
     };
 
     let diag = clap.Diagnostic{};
@@ -989,6 +1045,15 @@ pub static fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcomman
         }
 
         cli.audit_ignore_list = args.options("--ignore");
+        cli.latest = args.flag("--latest");
+    }
+
+    if (comptime subcommand == .add || subcommand == .install) {
+        if (args.flag("--catalog")) {
+            cli.add_catalog = args.option("--catalog") ?? "";
+        } else if (cat := args.option("--catalog")) {
+            cli.add_catalog = cat;
+        }
     }
 
     if (opt := args.option("--config")) {
@@ -1128,7 +1193,16 @@ pub static fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcomman
         Global.crash();
     }
 
+    if (comptime subcommand == .dedupe) {
+        cli.dedupe_check = args.flag("--check");
+        if (cli.dedupe_check) {
+            cli.dry_run = true;
+        }
+    }
+
     if (comptime subcommand == .pm) {
+        cli.licenses_dev = args.flag("--dev");
+        cli.licenses_long = args.flag("--long");
         // `bun pm version` command options
         if (git_tag_version := args.option("--git-tag-version")) {
             if (strings.eqlComptime(git_tag_version, "true")) {
@@ -1147,6 +1221,21 @@ pub static fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcomman
         }
         if (message := args.option("--message")) {
             cli.message = message;
+        }
+        // `bun pm diff` options
+        cli.diff_args = args.options("--diff");
+        cli.diff_name_only = args.flag("--name-only");
+        cli.diff_raw = args.flag("--raw") || args.flag("--unformatted");
+        cli.no_project_ok = cli.positionals.len > 1 && strings.eqlComptime(cli.positionals[1], "diff");
+        cli.diff_unminify = args.flag("--unminify");
+        cli.diff_minify = args.flag("--minify");
+        cli.diff_ignore_space = args.flag("--ignore-space");
+        cli.diff_stat = args.flag("--stat");
+        if (n := args.option("--unified")) {
+            cli.diff_context = std.fmt.parseInt(usize, n, 10) catch {
+                Output.errGeneric("invalid --unified value: {s}, expected a non-negative integer", .{n});
+                Global.exit(1);
+            };
         }
     }
 

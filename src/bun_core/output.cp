@@ -764,6 +764,11 @@ noinline fn writeBytes(dest: Destination, bytes: []const u8) {
     destWriter(dest).writeAll(bytes) catch {};
 }
 
+/// Bytes to stdout exactly as given (no UTF-8 replacement), through the same writer `print` uses.
+pub fn printBytes(bytes: []const u8) {
+    writeBytes(.stdout, bytes);
+}
+
 struct EmptyArgs {}
 
 inline fn hasNoArgs(comptime Args: type): bool {

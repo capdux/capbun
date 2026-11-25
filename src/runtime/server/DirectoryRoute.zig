@@ -206,7 +206,7 @@ return global.throwValue(try e.toJS(global));
             cache = bun.handleOom(bun.default_allocator.alloc(StatCacheEntry, slots));
             for (cp_mut_slice(&cache)) |*entry| {
                 _ = &entry;
-                (entry.*).* = StatCacheEntry{  };
+                (entry.*) = StatCacheEntry{  };
             }
         }
         return bun.new(DirectoryRoute, DirectoryRoute{ .ref_count = .init(), .server = null, .root_fd = root_fd, .url_prefix = owned_prefix, .stat_cache = cache, .stat_cache_path_bytes = 0 });
@@ -439,7 +439,7 @@ pub fn openSubpath(self: *DirectoryRoute, rel: []const u8, had_trailing_slash: b
             break :blk buf_guard.buf[0..];
 
 });
-            const joined = bun.resolve_path.joinStringBuf(buf_slice, .{ rel, "index.html" }, .posix);
+            const joined = bun.path.joinStringBuf(buf_slice, .{ rel, "index.html" }, .posix);
             const idx_res = ((self.openAndStat(joined)) orelse { return null; });
             if (bun.S.ISREG(@intCast(idx_res.stat.mode))) {
                 return .{ .file = OpenFileResult{ .fd = idx_res.fd, .stat = idx_res.stat, .is_index = true } };
@@ -468,7 +468,7 @@ pub fn openBeneath(self: *DirectoryRoute, rel: []const u8) ?bun.FD {
         _ = &buf_guard;
         var __buf_guard_moved = false; _ = &__buf_guard_moved;
         defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
-        const zrel = bun.resolve_path.z(rel, buf_guard.buf);
+        const zrel = bun.path.z(rel, buf_guard.buf);
         const flags: i32 = (if (comptime bun.Environment.isWindows) (bun.O.RDONLY | bun.O.CLOEXEC) else ((bun.O.RDONLY | bun.O.CLOEXEC) | bun.O.NONBLOCK));
         const fd_res = (if (comptime bun.Environment.isLinux) bun.sys.openat2InRoot(self.root_fd, zrel, flags, 0) else bun.sys.openat(self.root_fd, zrel, flags, 0));
         const fd = (switch (fd_res) {
@@ -740,7 +740,7 @@ pub fn pathAndQuery(url: []const u8) PathAndQuery {
             query = url[i..];
         }
         if (((path.len > 0) and (path[0] != 47))) {
-            const skip: usize = (if (strings.hasPrefixComptimeType(path, "http://")) 7 else (if (strings.hasPrefixComptimeType(path, "https://")) 8 else 0));
+            const skip: usize = (if (strings.hasPrefixComptimeType(u8, path, "http://")) 7 else (if (strings.hasPrefixComptimeType(u8, path, "https://")) 8 else 0));
             if ((skip > 0)) {
                 if (strings.indexOfChar(path[skip..], 47)) |i| {
                     _ = &i;
@@ -807,7 +807,7 @@ i = (i + 1);
         var stream = std.io.fixedBufferStream(out[0..after_prefix.len]);
         _ = &stream;
         const writer = stream.writer();
-        const decoded_len = (blk_catch_4: { break :blk_catch_4 ((bun.url.PercentEncoding.decode(@TypeOf(writer), writer, after_prefix)) catch |__ce_4| { _ = &__ce_4; return null; }); });
+        const decoded_len = (blk_catch_4: { break :blk_catch_4 ((bun.url_mod.PercentEncoding.decode(@TypeOf(writer), writer, after_prefix)) catch |__ce_4| { _ = &__ce_4; return null; }); });
         const decoded = out[0..decoded_len];
         if ((strings.countChar(decoded, 47) != raw_slashes)) {
             return null;

@@ -1180,6 +1180,31 @@ BIOPointer X509View::getValidTo() const
     return bio;
 }
 
+std::optional<std::string_view> X509View::getSignatureAlgorithm() const
+{
+    if (cert_ == nullptr) return std::nullopt;
+    int nid = X509_get_signature_nid(cert_);
+    if (nid == NID_undef) return std::nullopt;
+    const char* ln = OBJ_nid2ln(nid);
+    if (ln == nullptr) return std::nullopt;
+    return std::string_view(ln);
+}
+
+std::optional<std::string> X509View::getSignatureAlgorithmOID() const
+{
+    if (cert_ == nullptr) return std::nullopt;
+    const X509_ALGOR* alg = nullptr;
+    X509_get0_signature(nullptr, &alg, cert_);
+    if (alg == nullptr) return std::nullopt;
+    const ASN1_OBJECT* obj = nullptr;
+    X509_ALGOR_get0(&obj, nullptr, nullptr, alg);
+    if (obj == nullptr) return std::nullopt;
+    char buf[128] {};
+    int len = OBJ_obj2txt(buf, sizeof(buf), obj, 1);
+    if (len < 0 || static_cast<size_t>(len) >= sizeof(buf)) return std::nullopt;
+    return std::string(buf, static_cast<size_t>(len));
+}
+
 int64_t X509View::getValidToTime() const
 {
 #ifdef OPENSSL_IS_BORINGSSL
@@ -2124,8 +2149,7 @@ DataPointer pbkdf2(const Digest& md,
 
 EVPKeyPointer::PrivateKeyEncodingConfig::PrivateKeyEncodingConfig(
     const PrivateKeyEncodingConfig& other)
-    : PrivateKeyEncodingConfig(
-          other.output_key_object, other.format, other.type)
+    : AsymmetricKeyEncodingConfig(other)
 {
     cipher = other.cipher;
     if (other.passphrase.has_value()) {
@@ -4972,3 +4996,11 @@ const Digest Digest::FromName(WTF::StringView name)
 }
 
 } // namespace ncrypto
+
+// `X509_V_ERR_*` -> the code name node reports for a peer-certificate
+// validation failure (crypto::GetValidationErrorCode -> X509Pointer::ErrorCode).
+// Every arm returns a string literal, so the pointer outlives any caller.
+extern "C" const char* Bun__X509__validationErrorCode(int32_t err)
+{
+    return ncrypto::X509Pointer::ErrorCode(err).characters();
+}

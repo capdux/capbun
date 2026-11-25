@@ -1020,6 +1020,10 @@ pub @c struct NpmPackage {
 pub struct PackageManifestFindResult {
     version: Semver.Version,
     package: *const PackageVersion,
+
+    pub fn tarballURL(manifest: *const PackageManifest): string {
+        return _.package.tarball_url.slice(manifest.string_buf);
+    }
 }
 
 pub struct PackageManifestFindVersionFiltered {
@@ -1548,6 +1552,18 @@ pub struct PackageManifest {
             };
         }
         return null;
+    }
+
+    pub fn releaseVersions(): []const Semver.Version {
+        return _.pkg.releases.keys.get(_.versions);
+    }
+
+    pub fn distTagTags(): []const ExternalString {
+        return _.pkg.dist_tags.tags.get(_.external_strings);
+    }
+
+    pub fn distTagVersions(): []const Semver.Version {
+        return _.pkg.dist_tags.versions.get(_.versions);
     }
 
     fn findByDistTag(tag: string): FindResult? {

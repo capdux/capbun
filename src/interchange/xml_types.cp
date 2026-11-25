@@ -29,6 +29,7 @@ pub fn isWs(c: u8): bool {
 }
 
 fn buildNameAscii(): [256]u8 {
+    @setEvalBranchQuota(10000);
     let t: [256]u8 = @splat(0);
     let c: usize = 0;
     while (c < 0x80) : (c += 1) {

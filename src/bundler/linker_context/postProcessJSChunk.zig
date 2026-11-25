@@ -300,7 +300,6 @@ else => continue,
             const all_parts = c.graph.ast.items(.parts);
             const all_flags = c.graph.meta.items(.flags);
             const all_import_records = c.graph.ast.items(.import_records);
-            const all_parts_live = c.graph.parts_live.slice();
             for (cp_iter_slice(chunk.content.javascript.parts_in_chunk_in_order)) |part_range| {
                 _ = &part_range;
                 if ((all_flags[@as(usize, @intCast(part_range.source_index.get()))].wrap == .cjs)) {
@@ -308,11 +307,10 @@ else => continue,
                 }
                 const source_parts = all_parts[@as(usize, @intCast(part_range.source_index.get()))].slice();
                 const source_import_records = all_import_records[@as(usize, @intCast(part_range.source_index.get()))].slice();
-                const parts_live = all_parts_live[@as(usize, @intCast(part_range.source_index.get()))];
                 var part_i = part_range.part_index_begin;
                 _ = &part_i;
                 while ((part_i < part_range.part_index_end)) : (part_i = (part_i + 1)) {
-                    if ((!parts_live.isSet(part_i))) {
+                    if ((!source_parts[@as(usize, @intCast(part_i))].is_live)) {
                         continue;
                     }
                     for (cp_iter_slice(source_parts[@as(usize, @intCast(part_i))].stmts)) |stmt| {

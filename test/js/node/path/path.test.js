@@ -114,3 +114,30 @@ console.log(results.join("\\n"));`,
   expect({ lines: stdout.trim().split("\n"), stderr }).toEqual({ lines: expected, stderr: "" });
   expect(exitCode).toBe(0);
 });
+
+test.if(isWindows)("Bun.which skips PATH segments longer than the Windows wide-path buffer", async () => {
+  // A single PATH segment longer than the fixed 32767-element wide-character
+  // path buffer must be skipped instead of being transcoded into it, and the
+  // remaining segments must still be searched. Run in a subprocess so the
+  // assertion is on the child's output and exit code.
+  await using proc = Bun.spawn({
+    cmd: [
+      bunExe(),
+      "-e",
+      `const path = require("node:path");
+const dir = path.dirname(process.execPath);
+const name = path.basename(process.execPath, ".exe");
+const oversized = Buffer.alloc(70000, "a").toString();
+console.log(Bun.which(name, { PATH: oversized }));
+const found = Bun.which(name, { PATH: oversized + ";" + dir });
+console.log(found !== null && path.basename(found).toLowerCase() === (name + ".exe").toLowerCase());`,
+    ],
+    env: bunEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, exitCode] = await Promise.all([proc.stdout.text(), proc.exited]);
+  assert.strictEqual(stdout.split(/\r?\n/).filter(Boolean).join("\n"), "null\ntrue");
+  assert.strictEqual(exitCode, 0);
+});

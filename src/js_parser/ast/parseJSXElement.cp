@@ -253,7 +253,7 @@ pub fn ParseJSXElement(
                                 p.source,
                                 end_tag.range,
                                 p.allocator,
-                                "Expected closing JSX tag to match opening tag \"<{s}>\"",
+                                "Expected closing JSX tag to match opening tag \"\\<{s}\\>\"",
                                 .{ tag.name },
                                 "Opening tag here:",
                                 .{},

@@ -214,6 +214,40 @@ pub fn randomUUID(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
             return str.transferToJS(global);
     }
 
+pub fn randomUUIDv7(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSValue {
+            const args = callFrame.arguments();
+            var disable_entropy_cache = false;
+            _ = &disable_entropy_cache;
+            if ((args.len > 0)) {
+                const options = args[0];
+                if ((!options.isUndefined())) {
+                    _ = try validators.validateObject(global, options, "options", .{}, .{});
+                    if (try options.get(global, "disableEntropyCache")) |disable_entropy_cache_value| {
+                        _ = &disable_entropy_cache_value;
+                        disable_entropy_cache = try validators.validateBoolean(global, disable_entropy_cache_value, "options.disableEntropyCache", .{});
+                    }
+                }
+            }
+            const now_ms: u64 = @as(u64, @intCast(@max(std.time.milliTimestamp(), 0)));
+            var entropy: [8]u8 = undefined;
+            _ = &entropy;
+            if (disable_entropy_cache) {
+                _ = BoringSSL.RAND_bytes((&entropy), entropy.len);
+            } else {
+                const slice = global.bunVM().rareData().entropySlice(8);
+                _ = @memcpy((&entropy), slice[0..8]);
+            }
+            const uuid = bun.UUID.UUID7.init(now_ms, (&entropy));
+            var str_bytes = String.createUninitialized(.latin1, 36);
+            _ = &str_bytes;
+            var str = str_bytes[0];
+            _ = &str;
+            var bytes = str_bytes[1];
+            _ = &bytes;
+            _ = uuid.print(bytes[0..36]);
+            return str.transferToJS(global);
+    }
+
 pub fn assertOffset(global: *JSGlobalObject, offset_value: JSValue, element_size: u8, length: usize) JSError!u32 {
             if ((!offset_value.isNumber())) {
                 return global.throwInvalidArgumentTypeValue("offset", "number", offset_value);
@@ -845,13 +879,14 @@ pub fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
 }
 
 pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject) jsc.JSValue {
-        const crypto = jsc.JSValue.createEmptyObject(global, 15);
+        const crypto = jsc.JSValue.createEmptyObject(global, 16);
         _ = crypto.put(global, String.init("pbkdf2"), jsc.JSFunction.create(global, "pbkdf2", pbkdf2, 5, .{}));
         _ = crypto.put(global, String.init("pbkdf2Sync"), jsc.JSFunction.create(global, "pbkdf2Sync", pbkdf2Sync, 5, .{}));
         _ = crypto.put(global, String.init("randomInt"), jsc.JSFunction.create(global, "randomInt", random.randomInt, 2, .{}));
         _ = crypto.put(global, String.init("randomFill"), jsc.JSFunction.create(global, "randomFill", random.randomFill, 4, .{}));
         _ = crypto.put(global, String.init("randomFillSync"), jsc.JSFunction.create(global, "randomFillSync", random.randomFillSync, 3, .{}));
         _ = crypto.put(global, String.init("randomUUID"), jsc.JSFunction.create(global, "randomUUID", random.randomUUID, 1, .{}));
+        _ = crypto.put(global, String.init("randomUUIDv7"), jsc.JSFunction.create(global, "randomUUIDv7", random.randomUUIDv7, 1, .{}));
         _ = crypto.put(global, String.init("randomBytes"), jsc.JSFunction.create(global, "randomBytes", random.randomBytes, 2, .{}));
         _ = crypto.put(global, String.init("timingSafeEqual"), jsc.JSFunction.create(global, "timingSafeEqual", timingSafeEqual, 2, .{}));
         _ = crypto.put(global, String.init("secureHeapUsed"), jsc.JSFunction.create(global, "secureHeapUsed", secureHeapUsed, 0, .{}));

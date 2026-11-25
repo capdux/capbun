@@ -246,6 +246,9 @@ pub fn installWithManager(manager: *PackageManager, ctx: Command.Context, root_p
         }
         var load_result: Lockfile.LoadResult = (if (manager.options.do.load_lockfile) manager.lockfile.loadFromCwd(manager, manager.allocator, manager.log, true) else .not_found);
         _ = &load_result;
+        if ((manager.subcommand == .dedupe)) {
+            _ = try bun.install.dedupe.dedupeBeforeInstall(manager, (&load_result));
+        }
         _ = try manager.updateLockfileIfNeeded(load_result);
         const config_version_result = load_result.chooseConfigVersion();
         const config_version = config_version_result[0];
@@ -256,8 +259,29 @@ pub fn installWithManager(manager: *PackageManager, ctx: Command.Context, root_p
         var needs_new_lockfile = ((load_result != .ok) or ((load_result.ok.lockfile.buffers.dependencies.items.len == 0) and (manager.update_requests.len > 0)));
         _ = &needs_new_lockfile;
         manager.options.enable.force_save_lockfile = ((manager.options.enable.force_save_lockfile or changed_config_version) or ((load_result == .ok) and ((load_result.ok.migrated != .none) or ((load_result.ok.format == .binary) and ((manager.options.save_text_lockfile) orelse (false))))));
+        const bare_update = ((manager.subcommand == .update) and (manager.update_requests.len == 0));
+        var transitive = bun.install.update_transitive.TransitiveUpdate.initEmpty(manager.allocator);
+        _ = &transitive;
+        defer {
+        _ = transitive.deinit();
+        }
+        if ((manager.to_update and (load_result == .ok))) {
+            var scope = bun.install.update_scope.UpdateScope.of(manager);
+            _ = &scope;
+            defer {
+            _ = scope.deinit();
+            }
+            if ((!scope.isWholeWorkspace())) {
+                _ = bun.install.update_scope.planNamed(manager);
+            }
+        }
         var had_any_diffs = false;
         _ = &had_any_diffs;
+        var direct_deps_before = bun.install.update_transitive.DirectDependencies.init(manager.allocator);
+        _ = &direct_deps_before;
+        defer {
+        _ = direct_deps_before.deinit();
+        }
         var loaded_package_count: usize = 0;
         _ = &loaded_package_count;
         manager.progress = .{};
@@ -385,6 +409,9 @@ loaded_package_count = manager.lockfile.packages.len;
         _ = @memset(mapping, invalid_package_id);
         manager.summary = try Package.Diff.generate(manager, manager.allocator, manager.log, manager.lockfile, (&lockfile), (&root), (&maybe_root), (if (manager.to_update) manager.update_requests else null), mapping);
         had_any_diffs = manager.summary.hasDiffs();
+        if (had_any_diffs) {
+            direct_deps_before = bun.install.update_transitive.DirectDependencies.snapshot(manager.allocator, manager.lockfile);
+        }
         if ((!had_any_diffs)) {
             var builder_ = manager.lockfile.stringBuilder();
             _ = &builder_;
@@ -394,6 +421,10 @@ loaded_package_count = manager.lockfile.packages.len;
             _ = try builder.allocate();
             manager.lockfile.packages.items(.scripts)[cp_cast_int(usize, 0)] = maybe_root.scripts.clone(lockfile.buffers.string_bytes.items, *Lockfile.StringBuilder, builder);
             _ = builder.clamp();
+            if (bare_update) {
+                transitive = try bun.install.update_transitive.TransitiveUpdate.plan(manager, (&direct_deps_before));
+                _ = try transitive.enqueue(manager);
+            }
         } else {
             var builder_ = manager.lockfile.stringBuilder();
             _ = &builder_;
@@ -554,6 +585,10 @@ loaded_package_count = manager.lockfile.packages.len;
                 }
             }
             _ = builder.clamp();
+            if (bare_update) {
+                transitive = try bun.install.update_transitive.TransitiveUpdate.plan(manager, (&direct_deps_before));
+                _ = try transitive.enqueue(manager);
+            }
             if ((manager.summary.overrides_changed and (all_name_hashes.len > 0))) {
                 const dependencies_len = manager.lockfile.buffers.dependencies.items.len;
                 {
@@ -608,6 +643,9 @@ loaded_package_count = manager.lockfile.packages.len;
             }
         }
 };
+        if ((manager.subcommand == .dedupe)) {
+            _ = bun.install.dedupe.dedupeAfterDiffer(manager);
+        }
 },
 else => {
 
@@ -711,8 +749,17 @@ else => {
         const had_errors_before_cleaning_lockfile = manager.log.hasErrors();
         _ = try manager.log.print(Output.errorWriter());
         _ = manager.log.reset();
+        if (bare_update) {
+            _ = transitive.redirectDependents(manager.lockfile);
+        }
+        _ = bun.install.update_transitive.printKeptPatched(manager);
+        _ = transitive.printPlan(manager, (&direct_deps_before), &.{});
         const lockfile_before_clean = manager.lockfile;
         manager.lockfile = try manager.lockfile.cleanWithLogger(manager, manager.update_requests, manager.log, manager.options.enable.exact_versions, log_level);
+        if (((manager.subcommand == .update) and (!manager.options.dry_run))) {
+            _ = Output.flush();
+            _ = bun.install.update_transitive.warnOrphanedPatches(manager, root_package_json_path);
+        }
         if ((manager.lockfile.packages.len > 0)) {
             root = manager.lockfile.packages.get(0);
         }
@@ -960,6 +1007,10 @@ _ = try Lockfile.Printer.Tree.print((&printer), manager, @TypeOf(writer), writer
                 manager.summary.remove = 0;
                 manager.summary.add = 0;
                 manager.summary.update = 0;
+            }
+            if ((manager.subcommand == .dedupe)) {
+                _ = bun.install.dedupe.printDedupeSummary(manager, install_summary.success, ctx.start_time);
+                return;
             }
             if ((install_summary.success > 0)) {
                 const update_reqs_len: u32 = @truncate(manager.update_requests.len);

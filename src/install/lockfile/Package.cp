@@ -75,6 +75,10 @@ pub struct DiffSummary {
         _.update += that.update;
     }
 
+    inline fn changesDependencies(): bool {
+        return _.add > 0 || _.remove > 0 || _.update > 0 || _.overrides_changed || _.catalogs_changed;
+    }
+
     inline fn hasDiffs(): bool {
         return _.add > 0 || _.remove > 0 || _.update > 0 || _.overrides_changed || _.catalogs_changed ||
             _.added_trusted_dependencies.count() > 0 ||
@@ -771,7 +775,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
         const PackageType = @This();
 
-        const Resolution = ResolutionType(SemverIntType);
+        pub const Resolution = ResolutionType(SemverIntType);
 
         pub const Scripts = _ScriptsMod.Scripts;
         pub const Meta = _MetaMod.Meta;

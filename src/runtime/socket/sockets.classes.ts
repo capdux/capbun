@@ -7,6 +7,7 @@ function generate(ssl) {
     noConstructor: true,
     configurable: false,
     memoryCost: true,
+    values: ["handlers"],
     proto: {
       getAuthorizationError: {
         fn: "getAuthorizationError",
@@ -252,6 +253,7 @@ export default [
     name: "Listener",
     noConstructor: true,
     JSType: "0b11101110",
+    values: ["handlers"],
     proto: {
       stop: {
         fn: "stop",

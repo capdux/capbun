@@ -696,7 +696,7 @@ const decompressor_opt = bun.libdeflate.Decompressor.alloc();
             _ = &_decomp_g;
             var ___decomp_g_moved = false; _ = &___decomp_g_moved;
             defer if (!___decomp_g_moved) { ___decomp_g_moved = true; const __T = @TypeOf(_decomp_g); if (@typeInfo(__T) == .optional) { if (_decomp_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _decomp_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _decomp_g; _drop_val.__cp_deinit(); } };
-            const max_output: usize = jsc.ArrayBuffer.MAX_SIZE;
+            const max_output: usize = std.math.maxInt(i32);
             while (true) {
                 const result = decompressor.decompress(compressed, list.allocatedSlice(), (if (is_gzip) .gzip else .deflate));
                 list.items.len = result.written;

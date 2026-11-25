@@ -614,6 +614,7 @@ has_mutated_built_in_extensions: u32 = 0,
 initial_script_execution_context_identifier: i32,
 test_isolation_generation: u32 = 0,
 test_isolation_enabled: bool = false,
+handle: ?jsc.VmHandle = null,
 pub const VMHolder = struct {
     pub threadlocal var vm: ?*VirtualMachine = null;
     pub threadlocal var cached_global_object: ?*JSGlobalObject = null;
@@ -867,6 +868,7 @@ pub fn dispatchOnExit(self: *ExitHandler) void {
             _ = Process__dispatchOnExit(vm.global, self.exit_code);
             if (vm.isMainThread()) {
                 _ = Bun__closeAllSQLiteDatabasesForTermination();
+                _ = Bun__closeAllNodeSqliteDatabasesForTermination(vm.global);
                 _ = Bun__WebView__closeAllForTermination();
             }
     }
@@ -957,6 +959,44 @@ const MacroEntryPoint = bun.transpiler.EntryPoints.MacroEntryPoint;
 const ServerEntryPoint = bun.transpiler.EntryPoints.ServerEntryPoint;
 const webcore = bun.webcore;
 const Body = webcore.Body;
+
+pub fn vmHandle(client: *VirtualMachine) jsc.VmHandle {
+        return client.handle.?.clone();
+}
+
+pub fn handleRef(client: *VirtualMachine) *jsc.VmHandle {
+        return (&client.handle.?);
+}
+
+pub fn currentLoopKind(client: *VirtualMachine) jsc.VmLoopKind {
+        return (if (client.macro_mode) .macro else .regular);
+}
+
+pub fn ticket(client: *VirtualMachine) jsc.Ticket {
+        return client.handleRef().issueTicket(client.currentLoopKind());
+}
+
+pub fn scriptAllowed(client: *VirtualMachine) bool {
+        if (client.handle) |h| {
+            _ = &h;
+            return h.scriptAllowed();
+        }
+        return (!client.is_shutting_down);
+}
+
+pub fn forbidScript(client: *VirtualMachine) void {
+        if (client.handle) |h| {
+            _ = &h;
+            _ = h.stop();
+        }
+}
+
+pub fn serviceDuringTeardown(client: *VirtualMachine) void {
+        _ = client.regular_event_loop.tickConcurrent();
+        if (client.has_enabled_macro_mode) {
+            _ = client.macro_event_loop.tickConcurrent();
+        }
+}
 
 extern "c" fn Bake__getAsyncLocalStorage(globalObject: *JSGlobalObject) callconv(jsc.conv) jsc.JSValue;
 
@@ -1594,6 +1634,7 @@ extern "c" fn Zig__GlobalObject__destructOnExit(global: *JSGlobalObject) callcon
 
 pub fn globalExit(client: *VirtualMachine) noreturn {
         _ = bun.assert(client.isShuttingDown());
+        _ = client.forbidScript();
         if (client.shouldDestructMainThreadOnExit()) {
             if (client.eventLoop().forever_timer) |t| {
                 _ = &t;
@@ -1603,6 +1644,10 @@ pub fn globalExit(client: *VirtualMachine) noreturn {
             if (client.rare_data) |rare| {
                 _ = &rare;
                 _ = rare.closeAllSocketGroups(client);
+            }
+            if (client.handle) |h| {
+                _ = &h;
+                _ = h.closeAndWait(client, serviceDuringTeardown);
             }
             _ = Zig__GlobalObject__destructOnExit(client.global);
             _ = uws.Loop.get().drainClosedSockets();
@@ -1895,6 +1940,7 @@ pub fn initWorker(worker: *webcore.WebWorker, opts: Options) anyerror!*VirtualMa
         uws.Loop.get().internal_loop_data.jsc_vm = vm.jsc_vm;
         _ = vm.transpiler.setAllocator(allocator);
         vm.body_value_hive_allocator = Body.Value.HiveAllocator.init(bun.typedAllocator(jsc.WebCore.Body.Value));
+        vm.handle = jsc.VmHandle.init(vm);
         return vm;
 }
 
@@ -2347,6 +2393,11 @@ pub fn deinit(client: *VirtualMachine) void {
         _ = client.overridden_main.deinit();
         _ = client.pending_internal_promise.deinit();
         _ = client.entry_point.deinit();
+        if (client.handle) |*h| {
+            _ = &h;
+            _ = (h.*).deinit();
+            client.handle = null;
+        }
         client.has_terminated = true;
 }
 
@@ -3901,5 +3952,7 @@ extern "c" fn Process__dispatchOnBeforeExit(global: *JSGlobalObject, code: u8) c
 extern "c" fn Process__dispatchOnExit(global: *JSGlobalObject, code: u8) callconv(.c) void;
 
 extern "c" fn Bun__closeAllSQLiteDatabasesForTermination() callconv(.c) void;
+
+extern "c" fn Bun__closeAllNodeSqliteDatabasesForTermination(global: *JSGlobalObject) callconv(.c) void;
 
 extern "c" fn Bun__WebView__closeAllForTermination() callconv(.c) void;

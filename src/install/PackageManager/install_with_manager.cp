@@ -117,6 +117,10 @@ pub fn installWithManager(
     else
         .not_found;
 
+    if (manager.subcommand == .dedupe) {
+        bun.install.dedupe.dedupeBeforeInstall(manager, *load_result)?;
+    }
+
     manager.updateLockfileIfNeeded(load_result)?;
 
     const config_version_result = load_result.chooseConfigVersion();
@@ -138,9 +142,22 @@ pub fn installWithManager(
                 (load_result.ok.format == .binary &&
                     manager.options.save_text_lockfile ?? false)));
 
+    const bare_update = manager.subcommand == .update && manager.update_requests.len == 0;
+    let transitive = bun.install.update_transitive.TransitiveUpdate.initEmpty(manager.allocator);
+    defer transitive.deinit();
+    if (manager.to_update && load_result == .ok) {
+        let scope = bun.install.update_scope.UpdateScope.of(manager);
+        defer scope.deinit();
+        if (!scope.isWholeWorkspace()) {
+            bun.install.update_scope.planNamed(manager);
+        }
+    }
+
     // this defaults to false
     // but we force allowing updates to the lockfile when you do bun add
     let had_any_diffs = false;
+    let direct_deps_before = bun.install.update_transitive.DirectDependencies.init(manager.allocator);
+    defer direct_deps_before.deinit();
     let loaded_package_count: usize = 0;
     manager.progress = {};
 
@@ -288,6 +305,9 @@ pub fn installWithManager(
                 )?;
 
                 had_any_diffs = manager.summary.hasDiffs();
+                if (had_any_diffs) {
+                    direct_deps_before = bun.install.update_transitive.DirectDependencies.snapshot(manager.allocator, manager.lockfile);
+                }
 
                 if (!had_any_diffs) {
                     // always grab latest scripts for root package
@@ -302,6 +322,10 @@ pub fn installWithManager(
                         builder,
                     );
                     builder.clamp();
+                    if (bare_update) {
+                        transitive = bun.install.update_transitive.TransitiveUpdate.plan(manager, &direct_deps_before)?;
+                        transitive.enqueue(manager)?;
+                    }
                 } else {
                     let builder_ = manager.lockfile.stringBuilder();
                     // ensure we use one pointer to reference it instead of creating new ones and potentially aliasing
@@ -463,6 +487,11 @@ pub fn installWithManager(
                     // `enqueueDependencyWithMain` can reach `Lockfile.Package.fromNPM`,
                     // which grows `buffers.dependencies` and may reallocate it.
                     // Iterate by index against a snapshot of the original length and
+                    if (bare_update) {
+                        transitive = bun.install.update_transitive.TransitiveUpdate.plan(manager, &direct_deps_before)?;
+                        transitive.enqueue(manager)?;
+                    }
+
                     // copy each entry to the stack so neither the loop nor the callee
                     // ever reads through a pointer into the old backing storage.
                     if (manager.summary.overrides_changed && all_name_hashes.len > 0) {
@@ -527,6 +556,9 @@ pub fn installWithManager(
 
                     if (manager.summary.update > 0) root.scripts = {};
                 }
+            }
+            if (manager.subcommand == .dedupe) {
+                bun.install.dedupe.dedupeAfterDiffer(manager);
             }
         },
         else => {},
@@ -652,6 +684,12 @@ pub fn installWithManager(
     manager.log.print(Output.errorWriter())?;
     manager.log.reset();
 
+    if (bare_update) {
+        transitive.redirectDependents(manager.lockfile);
+    }
+    bun.install.update_transitive.printKeptPatched(manager);
+    transitive.printPlan(manager, &direct_deps_before, []);
+
     // This operation doesn't perform any I/O, so it should be relatively cheap.
     const lockfile_before_clean = manager.lockfile;
 
@@ -662,6 +700,11 @@ pub fn installWithManager(
         manager.options.enable.exact_versions,
         log_level,
     )?;
+
+    if (manager.subcommand == .update && !manager.options.dry_run) {
+        Output.flush();
+        bun.install.update_transitive.warnOrphanedPatches(manager, root_package_json_path);
+    }
 
     if (manager.lockfile.packages.len > 0) {
         root = manager.lockfile.packages.get(0);
@@ -1027,6 +1070,11 @@ fn printInstallSummary(
             manager.summary.remove = 0;
             manager.summary.add = 0;
             manager.summary.update = 0;
+        }
+
+        if (manager.subcommand == .dedupe) {
+            bun.install.dedupe.printDedupeSummary(manager, install_summary.success, ctx.start_time);
+            return;
         }
 
         if (install_summary.success > 0) {

@@ -149,7 +149,7 @@ pub fn loadOne(path: []const u8, map: *bun.StringArrayHashMap(u32)) void {
         defer {
         _ = log.deinit();
         }
-        const root = (blk_catch_1: { break :blk_catch_1 ((bun.json.parseUTF8((&source), (&log), bun.default_allocator)) catch |__ce_1| { _ = &__ce_1; _ = log.print(bun.Output.errorWriter());
+        const root = (blk_catch_1: { break :blk_catch_1 ((bun.json.parseUTF8((&source), (&log), bun.default_allocator)) catch |__ce_1| { _ = &__ce_1; _ = (blk_catch_2: { break :blk_catch_2 ((log.print(bun.Output.errorWriter())) catch |__ce_2| { _ = &__ce_2;  }); });
         _ = bun.Output.prettyErrorln("<r><red>error<r>: --timings file <b>{s}<r> is not valid JSON", .{ path });
         break :blk_catch_1 bun.Global.exit(1); }); });
         var version_ok = false;
@@ -166,16 +166,16 @@ pub fn loadOne(path: []const u8, map: *bun.StringArrayHashMap(u32)) void {
             _ = bun.Output.prettyErrorln("<r><red>error<r>: --timings file <b>{s}<r> must look like {{ \"version\": 1, \"files\": {{ \"path\": milliseconds }} }}", .{ path });
             _ = bun.Global.exit(1);
         }
-        for (cp_iter_slice(files_opt.?.properties.slice())) |prop| {
+        for (cp_iter_slice(files_opt.?.data.e_object.properties.slice())) |prop| {
             _ = &prop;
             const key = ((prop.key.?.asString(bun.default_allocator)) orelse continue);
             if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asNumber()) |ms| {
                 _ = &ms;
                 if ((std.math.isFinite(ms) and (ms >= 0.0))) {
                     const clamped: u32 = @as(u32, @intFromFloat(@min(@round(ms), @as(f64, @floatFromInt(std.math.maxInt(u32))))));
-                    const gop = (blk_catch_2: { break :blk_catch_2 ((map.getOrPut(key)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 bun.outOfMemory(); }); });
+                    const gop = (blk_catch_3: { break :blk_catch_3 ((map.getOrPut(key)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 bun.outOfMemory(); }); });
                     if ((!gop.found_existing)) {
-                        gop.key_ptr.* = (blk_catch_3: { break :blk_catch_3 ((bun.default_allocator.dupe(u8, key)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 bun.outOfMemory(); }); });
+                        gop.key_ptr.* = (blk_catch_4: { break :blk_catch_4 ((bun.default_allocator.dupe(u8, key)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 bun.outOfMemory(); }); });
                     }
                     gop.value_ptr.* = clamped;
                 }
@@ -208,20 +208,20 @@ pub fn record(self: *Timings, abs_path: []const u8, ms: u32) void {
         var buf: bun.PathBuffer = undefined;
         _ = &buf;
         const key = Timings.keyFor(abs_path, (&buf));
-        const gop1 = (blk_catch_4: { break :blk_catch_4 ((self.map.getOrPut(key)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 bun.outOfMemory(); }); });
+        const gop1 = (blk_catch_5: { break :blk_catch_5 ((self.map.getOrPut(key)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 bun.outOfMemory(); }); });
         if ((!gop1.found_existing)) {
-            gop1.key_ptr.* = (blk_catch_5: { break :blk_catch_5 ((bun.default_allocator.dupe(u8, key)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 bun.outOfMemory(); }); });
+            gop1.key_ptr.* = (blk_catch_6: { break :blk_catch_6 ((bun.default_allocator.dupe(u8, key)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 bun.outOfMemory(); }); });
         }
         gop1.value_ptr.* = ms;
-        const gop2 = (blk_catch_6: { break :blk_catch_6 ((self.measured.getOrPut(key)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 bun.outOfMemory(); }); });
+        const gop2 = (blk_catch_7: { break :blk_catch_7 ((self.measured.getOrPut(key)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 bun.outOfMemory(); }); });
         if ((!gop2.found_existing)) {
-            gop2.key_ptr.* = (blk_catch_7: { break :blk_catch_7 ((bun.default_allocator.dupe(u8, key)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 bun.outOfMemory(); }); });
+            gop2.key_ptr.* = (blk_catch_8: { break :blk_catch_8 ((bun.default_allocator.dupe(u8, key)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 bun.outOfMemory(); }); });
         }
         gop2.value_ptr.* = ms;
 }
 
 pub fn recordSince(self: *Timings, abs_path: []const u8, started_ms: i64) void {
-        const elapsed = @max((bun.milliTimestamp() - started_ms), 0);
+        const elapsed = @max((std.time.milliTimestamp() - started_ms), 0);
         const ms: u32 = (if ((elapsed > std.math.maxInt(u32))) std.math.maxInt(u32) else @as(u32, @intCast(elapsed)));
         _ = self.record(abs_path, ms);
 }
@@ -231,7 +231,7 @@ pub fn cost(self: Timings, abs_path: []const u8) u64 {
 }
 
 pub fn costs(self: *const Timings, files: []const PathString, allocator: std.mem.Allocator) []u64 {
-        var out = (blk_catch_8: { break :blk_catch_8 ((allocator.alloc(u64, files.len)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 bun.outOfMemory(); }); });
+        var out = (blk_catch_9: { break :blk_catch_9 ((allocator.alloc(u64, files.len)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 bun.outOfMemory(); }); });
         _ = &out;
         var idx: usize = 0;
         _ = &idx;
@@ -254,7 +254,7 @@ pub fn partition(self: *const Timings, files: []const PathString, k: u32, alloca
             _ = &c;
             remaining = (remaining + c);
         }
-        var ranges = (blk_catch_9: { break :blk_catch_9 ((allocator.alloc(FileRange, k)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 bun.outOfMemory(); }); });
+        var ranges = (blk_catch_10: { break :blk_catch_10 ((allocator.alloc(FileRange, k)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 bun.outOfMemory(); }); });
         _ = &ranges;
         var i: u32 = 0;
         _ = &i;
@@ -294,17 +294,17 @@ pub fn sortSlowestFirst(self: Timings, files: []PathString) void {
         if ((files.len <= 1)) {
             return;
         }
-        var known = (blk_catch_10: { break :blk_catch_10 ((bun.default_allocator.alloc(u64, files.len)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 bun.outOfMemory(); }); });
+        var known = (blk_catch_11: { break :blk_catch_11 ((bun.default_allocator.alloc(u64, files.len)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 bun.outOfMemory(); }); });
         _ = &known;
         defer {
         _ = bun.default_allocator.free(known);
         }
-        var order = (blk_catch_11: { break :blk_catch_11 ((bun.default_allocator.alloc(usize, files.len)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 bun.outOfMemory(); }); });
+        var order = (blk_catch_12: { break :blk_catch_12 ((bun.default_allocator.alloc(usize, files.len)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 bun.outOfMemory(); }); });
         _ = &order;
         defer {
         _ = bun.default_allocator.free(order);
         }
-        var copy = (blk_catch_12: { break :blk_catch_12 ((bun.default_allocator.dupe(PathString, files)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 bun.outOfMemory(); }); });
+        var copy = (blk_catch_13: { break :blk_catch_13 ((bun.default_allocator.dupe(PathString, files)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 bun.outOfMemory(); }); });
         _ = &copy;
         defer {
         _ = bun.default_allocator.free(copy);
@@ -330,24 +330,24 @@ pub fn write(self: *Timings, only_measured: bool) void {
         _ = out.deinit();
         }
         const writer = out.writer();
-        _ = (blk_catch_13: { break :blk_catch_13 ((writer.writeAll("{\n  \"version\": 1,\n  \"files\": {")) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 bun.outOfMemory(); }); });
+        _ = (blk_catch_14: { break :blk_catch_14 ((writer.writeAll("{\n  \"version\": 1,\n  \"files\": {")) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 bun.outOfMemory(); }); });
         const keys = map.keys();
         const vals = map.values();
         var i: usize = 0;
         _ = &i;
         while ((i < keys.len)) : (i = (i + 1)) {
             if ((i > 0)) {
-                _ = (blk_catch_14: { break :blk_catch_14 ((writer.writeByte(44)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 bun.outOfMemory(); }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((writer.writeByte(44)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 bun.outOfMemory(); }); });
             }
-            _ = (blk_catch_15: { break :blk_catch_15 ((writer.print("\n    {f}: {d}", .{ bun.fmt.formatJSONStringUTF8(keys[@as(usize, @intCast(i))], .{}), vals[@as(usize, @intCast(i))] })) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 bun.outOfMemory(); }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((writer.print("\n    {f}: {d}", .{ bun.fmt.formatJSONStringUTF8(keys[@as(usize, @intCast(i))], .{}), vals[@as(usize, @intCast(i))] })) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 bun.outOfMemory(); }); });
         }
-        _ = (blk_catch_16: { break :blk_catch_16 ((writer.writeAll((if ((keys.len > 0)) "\n  }\n}\n" else "}\n}\n"))) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 bun.outOfMemory(); }); });
+        _ = (blk_catch_17: { break :blk_catch_17 ((writer.writeAll((if ((keys.len > 0)) "\n  }\n}\n" else "}\n}\n"))) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 bun.outOfMemory(); }); });
         var tmp_buf: bun.PathBuffer = undefined;
         _ = &tmp_buf;
-        const tmp_slice = (blk_catch_17: { break :blk_catch_17 ((std.fmt.bufPrintZ((&tmp_buf), "{s}.{d}.tmp", .{ self.path, bun.c.getpid() })) catch |__ce_17| { _ = &__ce_17; return; }); });
+        const tmp_slice = (blk_catch_18: { break :blk_catch_18 ((std.fmt.bufPrintZ((&tmp_buf), "{s}.{d}.tmp", .{ self.path, bun.c.getpid() })) catch |__ce_18| { _ = &__ce_18; return; }); });
         var dest_buf: bun.PathBuffer = undefined;
         _ = &dest_buf;
-        const dest_slice = (blk_catch_18: { break :blk_catch_18 ((std.fmt.bufPrintZ((&dest_buf), "{s}", .{ self.path })) catch |__ce_18| { _ = &__ce_18; return; }); });
+        const dest_slice = (blk_catch_19: { break :blk_catch_19 ((std.fmt.bufPrintZ((&dest_buf), "{s}", .{ self.path })) catch |__ce_19| { _ = &__ce_19; return; }); });
         const flags = (((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC) | bun.O.CLOEXEC);
         switch (bun.sys.File.open(tmp_slice, flags, 438)) {
 .result => |file| {
@@ -378,14 +378,13 @@ _ = bun.Output.err(e, "Failed to write --timings file {s}", .{ self.path });
 }
 const string = []const u8;
 const FileRange = @import("./parallel/FileRange.zig");
-const ShardOptions = bun.options_types.Context.ShardOptions;
+const ShardOptions = @import("../../options_types/Context.zig").ShardOptions_;
 const PathString = bun.PathString;
 const SlowestSortCtx = struct {
     known: []const u64,
     files: []const PathString,
 
-pub fn lessThan(self: @This(), ctx: SlowestSortCtx, a: usize, b: usize) bool {
-        _ = self;
+pub fn lessThan(ctx: SlowestSortCtx, a: usize, b: usize) bool {
             if ((ctx.known[@as(usize, @intCast(a))] != ctx.known[@as(usize, @intCast(b))])) {
                 return (ctx.known[@as(usize, @intCast(a))] > ctx.known[@as(usize, @intCast(b))]);
             }

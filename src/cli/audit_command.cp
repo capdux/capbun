@@ -165,8 +165,93 @@ pub struct AuditCommand {
         };
         const manager = init_res[0];
 
+        if (ctx.positionals.len > 0 && std.mem.eql(u8, ctx.positionals[0], "fix")) {
+            const fix_code = auditFix(ctx, manager, manager.options.json_output, cli.audit_level, cli.production, cli.audit_ignore_list)?;
+            Global.exit(fix_code);
+        }
+
         const code = audit(ctx, manager, manager.options.json_output, cli.audit_level, cli.production, cli.audit_ignore_list)?;
         Global.exit(code);
+    }
+
+    static fn auditFix(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit_level: AuditLevel?, audit_prod_only: bool, ignore_list: []const []const u8): !u32 {
+        const audit_fix = bun.install.audit_fix;
+        if (!json_output && pm.options.log_level != .silent) {
+            Output.prettyError(comptime Output.prettyFmt("<r><b>bun audit fix <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>\n\n", true), .{});
+            Output.flush();
+        }
+
+        const load_lockfile = pm.lockfile.loadFromCwd(pm, ctx.allocator, ctx.log, true);
+        PackageManagerCommand.handleLoadLockfileErrors(load_lockfile, pm);
+
+        audit_fix.exitUnlessLockfileMatchesPackageJson(pm)?;
+        audit_fix.exitUnlessLockfileWritable(pm);
+
+        let packages_result = collectPackagesForAudit(ctx.allocator, pm, audit_prod_only)?;
+        const _guard_audit_body = FreeGuard<u8>{ allocator: ctx.allocator, slice: packages_result.audit_body };
+        const _guard_skipped = SkippedPackagesGuard{ allocator: ctx.allocator, list: unsafe { &packages_result.skipped_packages } };
+
+        let advisories = std.array_list.Managed(audit_fix.Advisory).init(ctx.allocator);
+        defer advisories.deinit();
+
+        if (!std.mem.eql(u8, packages_result.audit_body, "{}")) {
+            const response_text = sendAuditRequest(ctx.allocator, pm, packages_result.audit_body)?;
+            if (response_text.len > 0) {
+                const source = &logger.Source.initPathString("audit-response.json", response_text);
+                const root = bun.json.parse(source, ctx.log, ctx.allocator, true) catch {
+                    Output.prettyErrorln("<red>error<r>: audit request failed to parse json. Is the registry down?", .{});
+                    Global.exit(1);
+                };
+                if (root.data == .e_object) {
+                    for (prop of root.data.e_object.properties.slice()) {
+                        const pkg_name = if (k := prop.key) (k.asString(ctx.allocator) ?? continue) else continue;
+                        const val = prop.value ?? continue;
+                        if (val.data != .e_array) continue;
+                        for (item of val.data.e_array.items.slice()) {
+                            if (item.data != .e_object) continue;
+                            let vuln_vers: []const u8 = "*";
+                            if (vv := item.get("vulnerable_versions")) {
+                                if (s := vv.asString(ctx.allocator)) vuln_vers = s;
+                            }
+                            let ignore_tok: []const u8 = "";
+                            if (id_expr := item.get("id")) {
+                                if (id_expr.data == .e_number) {
+                                    ignore_tok = std.fmt.allocPrint(ctx.allocator, "{d}", .{@as(u64, @intFromFloat(id_expr.data.e_number.value))}) catch "";
+                                } else if (s := id_expr.asString(ctx.allocator)) {
+                                    ignore_tok = s;
+                                }
+                            }
+                            if (audit_level != null || ignore_list.len > 0) {
+                                let skip_ignore = false;
+                                for (ig of ignore_list) {
+                                    if (std.mem.eql(u8, ig, ignore_tok)) {
+                                        skip_ignore = true;
+                                        break;
+                                    }
+                                }
+                                if (skip_ignore) continue;
+                            }
+                            advisories.append(audit_fix.Advisory{
+                                package_name: pkg_name,
+                                vulnerable_versions: vuln_vers,
+                                ignore_token: ignore_tok,
+                            }) catch bun.outOfMemory();
+                        }
+                    }
+                }
+            }
+        }
+
+        let plan = audit_fix.planFixes(pm, advisories.items)?;
+        if (!json_output) {
+            plan.printSections();
+        }
+        if (pm.options.dry_run || plan.fixes.items.len == 0) {
+            return plan.finishPlanned(json_output, pm.options.dry_run);
+        }
+
+        audit_fix.prepareInstall(pm, &plan)?;
+        return plan.finishPlanned(json_output, false);
     }
 
     static fn audit(ctx: Command.Context, pm: *PackageManager, json_output: bool, audit_level: AuditLevel?, audit_prod_only: bool, ignore_list: []const []const u8): bun.OOM!u32 {

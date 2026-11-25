@@ -62,6 +62,8 @@ public:
     using VoidCallback = Function<void()>;
     using ExceptionCallback = Function<void(ExceptionCode, const String&)>;
     using KeyDataCallback = Function<void(CryptoKeyFormat, KeyData&&)>;
+    // sharedKey, ciphertext
+    using VectorPairCallback = Function<void(Vector<uint8_t>&&, Vector<uint8_t>&&)>;
 
     virtual void encrypt(const CryptoAlgorithmParameters&, Ref<CryptoKey>&&, Vector<uint8_t>&&, VectorCallback&&, ExceptionCallback&&, ScriptExecutionContext&, WorkQueue&);
     virtual void decrypt(const CryptoAlgorithmParameters&, Ref<CryptoKey>&&, Vector<uint8_t>&&, VectorCallback&&, ExceptionCallback&&, ScriptExecutionContext&, WorkQueue&);
@@ -75,7 +77,9 @@ public:
     virtual void exportKey(CryptoKeyFormat, Ref<CryptoKey>&&, KeyDataCallback&&, ExceptionCallback&&);
     virtual void wrapKey(Ref<CryptoKey>&&, Vector<uint8_t>&&, VectorCallback&&, ExceptionCallback&&);
     virtual void unwrapKey(Ref<CryptoKey>&&, Vector<uint8_t>&&, VectorCallback&&, ExceptionCallback&&);
-    virtual ExceptionOr<size_t> getKeyLength(const CryptoAlgorithmParameters&);
+    virtual void encapsulate(Ref<CryptoKey>&&, VectorPairCallback&&, ExceptionCallback&&);
+    virtual void decapsulate(Ref<CryptoKey>&&, Vector<uint8_t>&& ciphertext, VectorCallback&&, ExceptionCallback&&);
+    virtual ExceptionOr<std::optional<size_t>> getKeyLength(const CryptoAlgorithmParameters&);
 
     static void dispatchOperationInWorkQueue(WorkQueue&, ScriptExecutionContext&, VectorCallback&&, ExceptionCallback&&, Function<ExceptionOr<Vector<uint8_t>>()>&&);
     static void dispatchOperationInWorkQueue(WorkQueue&, ScriptExecutionContext&, BoolCallback&&, ExceptionCallback&&, Function<ExceptionOr<bool>()>&&);

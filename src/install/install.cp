@@ -298,3 +298,18 @@ pub const PatchedDep = Lockfile.PatchedDep;
 
 import patch from "./patch_install.zig";
 pub const PatchTask = patch.PatchTask;
+
+import dedupe_mod from "./dedupe.zig";
+pub const dedupe = dedupe_mod;
+
+import prune_mod from "./prune.zig";
+pub const prune = prune_mod;
+
+import audit_fix_mod from "./audit_fix.zig";
+pub const audit_fix = audit_fix_mod;
+
+import update_scope_mod from "./update_scope.zig";
+pub const update_scope = update_scope_mod;
+
+import update_transitive_mod from "./update_transitive.zig";
+pub const update_transitive = update_transitive_mod;

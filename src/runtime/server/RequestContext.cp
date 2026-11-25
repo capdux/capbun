@@ -2187,7 +2187,9 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 if (status == 304) {
                     if (headers := response.getInitHeaders()) {
                         if (cl := headers.fastGet(.ContentLength)) {
-                            app_content_length = std.fmt.parseInt(u64, cl, 10) catch null;
+                            const cl_slice = cl.toSlice(_.server.?.allocator);
+                            defer cl_slice.deinit();
+                            app_content_length = std.fmt.parseInt(u64, cl_slice.slice(), 10) catch null;
                         }
                     }
                 }

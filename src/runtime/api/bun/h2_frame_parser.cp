@@ -752,6 +752,7 @@ struct Handlers {
             .{ "onAltSvc", "altsvc" },
             .{ "onOrigin", "origin" },
             .{ "onFrameError", "frameError" },
+            .{ "onStreamPush", "streamPush" },
         };
 
         inline for (pair of pairs) {
@@ -1320,6 +1321,20 @@ struct MemoryWriter {
     }
 }
 
+const HdrEntry = struct {
+    name: []u8,
+    value: []u8,
+    never_index: bool,
+};
+const HdrEntryList = std.ArrayListUnmanaged(HdrEntry);
+const ByteList = std.ArrayListUnmanaged(u8);
+const U32List = std.ArrayListUnmanaged(u32);
+const StreamConsumeItem = struct {
+    id: u32,
+    n: u64,
+};
+const StreamConsumeList = std.ArrayListUnmanaged(StreamConsumeItem);
+
 pub struct H2FrameParser {
     pub const log = h2_log;
     const Self = @This();
@@ -1388,6 +1403,18 @@ pub struct H2FrameParser {
 
     auto_flusher: AutoFlusher = {},
     paddingStrategy: PaddingStrategy = .none,
+
+    engine: h2.Connection? = null,
+    engine_busy: bool = false,
+    rewrite_tail: ByteList = .{},
+    rewrite_pending_push: u32 = 0,
+    pending_recv_window_growth: i64 = 0,
+    pending_send_window_consumed: u64 = 0,
+    pending_stream_send_consumed: StreamConsumeList = .{},
+    pending_engine_stream_closes: U32List = .{},
+    hdr_entries: HdrEntryList = .{},
+    maxSettings: u32 = 32,
+    maxSessionInvalidFrames: u32 = 1000,
 
 
     /// Encodes a single header into the ArrayList, growing if needed.
@@ -3717,6 +3744,7 @@ pub struct H2FrameParser {
                     log("padding: {d} size: {d} max_size: {d} payload_size: {d}", .{ padding, size, max_size, payload_size });
                     stream.remoteUsedWindowSize += payload_size;
                     _.remoteUsedWindowSize += payload_size;
+                    _.noteEngineSendConsumed(stream_id, payload_size);
                     let flags: u8 = if (end_stream) @intFromEnum(DataFrameFlags.END_STREAM) else 0;
                     if (padding != 0) {
                         flags |= @intFromEnum(DataFrameFlags.PADDED);
@@ -4845,12 +4873,8 @@ pub struct H2FrameParser {
         const buffer = args_list.ptr[0];
         buffer.ensureStillAlive();
         if (array_buffer := buffer.asArrayBuffer(globalObject)) {
-            let bytes = array_buffer.byteSlice();
-            // read all the bytes
-            while (bytes.len > 0) {
-                const result = _.readBytes(bytes)?;
-                bytes = bytes[result..];
-            }
+            const bytes = array_buffer.byteSlice();
+            _.rewriteRead(bytes);
             return JSValue.js_undefined;
         }
         return globalObject.throw("Expected data to be a Buffer or ArrayBuffer", {});
@@ -4861,11 +4885,7 @@ pub struct H2FrameParser {
         _.ref();
         const _deref_guard = DerefGuard<H2FrameParser>{ ptr: _ };
         const _win_guard = IncrementWindowGuard{ parser: _ };
-        let bytes = data;
-        while (bytes.len > 0) {
-            const result = _.readBytes(bytes)?;
-            bytes = bytes[result..];
-        }
+        _.rewriteRead(data);
     }
 
     fn onNativeWritable(*_) {
@@ -5129,12 +5149,482 @@ pub struct H2FrameParser {
         }
     }
 
+    fn rewriteLocalSettings(): h2.Settings {
+        return h2.Settings{
+            header_table_size: _.localSettings.headerTableSize,
+            enable_push: _.localSettings.enablePush,
+            max_concurrent_streams: _.localSettings.maxConcurrentStreams,
+            initial_window_size: _.localSettings.initialWindowSize,
+            max_frame_size: _.localSettings.maxFrameSize,
+            max_header_list_size: _.localSettings.maxHeaderListSize,
+            enable_connect_protocol: _.localSettings.enableConnectProtocol,
+        };
+    }
+
+    fn ensureEngine(*_) {
+        if (_.engine == null) {
+            _.engine = h2.Connection.init(_.allocator, _.isServer, _.rewriteLocalSettings());
+        }
+    }
+
+    fn rewriteStreamCtx(stream_id: u32): JSValue {
+        if (stream := _.streams.get(stream_id)) {
+            if (ctx := stream.jsContext.get()) return ctx;
+        }
+        return .js_undefined;
+    }
+
+    fn noteEngineSendConsumed(*_, stream_id: u32, n: u64) {
+        if (n == 0) return;
+        _.pending_send_window_consumed += n;
+        const len = _.pending_stream_send_consumed.items.len;
+        if (len > 0 && _.pending_stream_send_consumed.items[len - 1].id == stream_id) {
+            _.pending_stream_send_consumed.items[len - 1].n += n;
+        } else {
+            _.pending_stream_send_consumed.append(_.allocator, StreamConsumeItem{ id: stream_id, n: n }) catch {};
+        }
+    }
+
+    fn rewriteRead(*_, bytes: []const u8) {
+        if (_.engine_busy) {
+            _.rewrite_tail.appendSlice(_.allocator, bytes) catch {};
+            return;
+        }
+        _.engine_busy = true;
+        defer _.engine_busy = false;
+        _.ensureEngine();
+        if (*eng := _.engine) {
+            eng.local_settings = _.rewriteLocalSettings();
+            eng.max_header_list_pairs = _.maxHeaderListPairs;
+            eng.max_settings = _.maxSettings;
+            eng.max_invalid_frames = _.maxSessionInvalidFrames;
+            if (_.pending_recv_window_growth > 0) {
+                eng.recv_window.grow(_.pending_recv_window_growth);
+                _.pending_recv_window_growth = 0;
+            }
+            if (_.pending_send_window_consumed > 0) {
+                eng.send_window.consume(@as(i64, @intCast(_.pending_send_window_consumed)));
+                _.pending_send_window_consumed = 0;
+            }
+            let write_idx: usize = 0;
+            for (item of _.pending_stream_send_consumed.items) {
+                if (s := eng.streams.getPtr(item.id)) {
+                    s.send_window.consume(@as(i64, @intCast(item.n)));
+                } else if (_.streams.contains(item.id)) {
+                    _.pending_stream_send_consumed.items[write_idx] = item;
+                    write_idx += 1;
+                }
+            }
+            _.pending_stream_send_consumed.shrinkRetainingCapacity(write_idx);
+            for (id of _.pending_engine_stream_closes.items) {
+                eng.closeStream(id);
+            }
+            _.pending_engine_stream_closes.clearRetainingCapacity();
+        }
+
+        if (_.rewrite_tail.items.len == 0) {
+            let feed = h2.Feed{ consumed: 0, fatal: false };
+            if (*eng := _.engine) {
+                feed = eng.receive(_, bytes);
+            }
+            if (feed.fatal) {
+                _.rewrite_tail.clearRetainingCapacity();
+                * = _.flush();
+                return;
+            }
+            if (feed.consumed < bytes.len) {
+                _.rewrite_tail.insertSlice(_.allocator, 0, bytes[feed.consumed..]) catch {};
+            }
+        } else {
+            _.rewrite_tail.appendSlice(_.allocator, bytes) catch {};
+            let combined = _.rewrite_tail.toOwnedSlice(_.allocator) catch return;
+            defer _.allocator.free(combined);
+            let feed = h2.Feed{ consumed: 0, fatal: false };
+            if (*eng := _.engine) {
+                feed = eng.receive(_, combined);
+            }
+            if (feed.fatal) {
+                _.rewrite_tail.clearRetainingCapacity();
+                * = _.flush();
+                return;
+            }
+            if (feed.consumed < combined.len) {
+                _.rewrite_tail.insertSlice(_.allocator, 0, combined[feed.consumed..]) catch {};
+            }
+        }
+
+        while (_.rewrite_tail.items.len > 0) {
+            let pending = _.rewrite_tail.toOwnedSlice(_.allocator) catch break;
+            defer _.allocator.free(pending);
+            let feed = h2.Feed{ consumed: 0, fatal: false };
+            if (*eng := _.engine) {
+                feed = eng.receive(_, pending);
+            }
+            if (feed.fatal) {
+                _.rewrite_tail.clearRetainingCapacity();
+                * = _.flush();
+                return;
+            }
+            if (feed.consumed < pending.len) {
+                _.rewrite_tail.insertSlice(_.allocator, 0, pending[feed.consumed..]) catch {};
+            }
+            if (feed.consumed == 0) break;
+        }
+        * = _.flush();
+    }
+
+    // ---- Sink callbacks for h2.Connection ----
+
+    fn sinkWrite(*_, bytes: []const u8): h2.WriteResult {
+        if (_.write(bytes)) return .Sent;
+        return .Queued;
+    }
+
+    fn sinkOnError(*_, code: u32, _last: u32, debug: []const u8) {
+        * = _last;
+        const chunk = _.handlers.binary_type.toJS(debug, _.globalThis) catch JSValue.js_undefined;
+        if (code != 0) {
+            _.dispatchWith2Extra(.onError, JSValue.jsNumber(code), JSValue.jsNumber(_.lastStreamID), chunk);
+        }
+        _.dispatchWithExtra(.onEnd, JSValue.jsNumber(_.lastStreamID), chunk);
+    }
+
+    fn sinkOnTooManyInvalidFrames(*_) {
+        const code_js = jsc.ZigString.init("ERR_HTTP2_TOO_MANY_INVALID_FRAMES").toJS(_.globalThis);
+        _.dispatchWith2Extra(.onError, code_js, JSValue.jsNumber(_.lastStreamID), JSValue.js_undefined);
+    }
+
+    fn settingsToJS(s: *const h2.Settings, globalObject: *jsc.JSGlobalObject): JSValue {
+        let payload = FullSettingsPayload{
+            headerTableSize: s.header_table_size,
+            enablePush: s.enable_push,
+            maxConcurrentStreams: s.max_concurrent_streams,
+            initialWindowSize: s.initial_window_size,
+            maxFrameSize: s.max_frame_size,
+            maxHeaderListSize: s.max_header_list_size,
+            enableConnectProtocol: s.enable_connect_protocol,
+        };
+        std.mem.byteSwapAllFields(FullSettingsPayload, &payload);
+        const bytes = std.mem.asBytes(&payload)[0..FullSettingsPayload.byteSize];
+        const bt: BinaryType = .Buffer;
+        return bt.toJS(bytes, globalObject) catch JSValue.js_undefined;
+    }
+
+    fn sinkOnLocalSettings(*_, s: *const h2.Settings) {
+        _.outstandingSettings -|= 1;
+        const js_val = settingsToJS(s, _.globalThis);
+        _.dispatch(.onLocalSettings, js_val);
+    }
+
+    fn sinkOnRemoteSettings(*_, s: *const h2.Settings) {
+        _.remoteSettings = FullSettingsPayload{
+            headerTableSize: s.header_table_size,
+            enablePush: s.enable_push,
+            maxConcurrentStreams: s.max_concurrent_streams,
+            initialWindowSize: s.initial_window_size,
+            maxFrameSize: s.max_frame_size,
+            maxHeaderListSize: s.max_header_list_size,
+            enableConnectProtocol: s.enable_connect_protocol,
+        };
+        let it = _.streams.valueIterator();
+        while (item := it.next()) {
+            const stream = item.*;
+            if (@as(u64, s.initial_window_size) >= stream.remoteWindowSize) {
+                stream.remoteWindowSize = s.initial_window_size;
+            }
+        }
+        * = _.flush();
+        const js_val = settingsToJS(s, _.globalThis);
+        _.dispatch(.onRemoteSettings, js_val);
+    }
+
+    fn sinkOnPing(*_, payload: []const u8, is_ack: bool) {
+        if (is_ack) {
+            _.outStandingPings -|= 1;
+        }
+        const buffer = _.handlers.binary_type.toJS(payload, _.globalThis) catch return;
+        _.dispatchWithExtra(.onPing, buffer, JSValue.jsBoolean(is_ack));
+    }
+
+    fn sinkOnGoAway(*_, code: u32, last: u32, debug: []const u8) {
+        const chunk = _.handlers.binary_type.toJS(debug, _.globalThis) catch JSValue.js_undefined;
+        _.dispatchWith2Extra(.onGoAway, JSValue.jsNumber(code), JSValue.jsNumber(last), chunk);
+    }
+
+    fn sinkOnWindowUpdate(*_, stream_id: u32, increment: u32) {
+        if (stream_id == 0) {
+            _.remoteWindowSize += @as(u64, increment);
+        } else if (stream := _.streams.get(stream_id)) {
+            stream.remoteWindowSize += @as(u64, increment);
+        }
+        * = _.flush();
+    }
+
+    fn sinkOnAltsvc(*_, stream_id: u32, origin_bytes: []const u8, value: []const u8) {
+        const origin_js = jsc.ZigString.init(origin_bytes).toJS(_.globalThis);
+        const value_js = jsc.ZigString.init(value).toJS(_.globalThis);
+        _.dispatchWith2Extra(.onAltSvc, origin_js, value_js, JSValue.jsNumber(stream_id));
+    }
+
+    fn sinkIsLocalStream(stream_id: u32): bool {
+        return _.streams.contains(stream_id);
+    }
+
+    fn sinkOnPushPromise(*_, _parent_id: u32, promised_id: u32) {
+        * = _parent_id;
+        _.rewrite_pending_push = promised_id;
+    }
+
+    fn sinkOnOrigin(*_, payload: []const u8) {
+        let origin_value = JSValue.js_undefined;
+        let count: u32 = 0;
+        let rest = payload;
+        while (rest.len >= 2) {
+            const len = @as(usize, std.mem.readInt(u16, rest[0..2], .big));
+            if (2 + len > rest.len) break;
+            const origin_bytes = rest[2 .. 2 + len];
+            const origin_js = jsc.ZigString.init(origin_bytes).toJS(_.globalThis);
+            if (count == 0) {
+                origin_value = origin_js;
+                origin_value.ensureStillAlive();
+            } else if (count == 1) {
+                const array = JSValue.createEmptyArray(_.globalThis, 0) catch return;
+                array.ensureStillAlive();
+                array.push(_.globalThis, origin_value) catch {};
+                array.push(_.globalThis, origin_js) catch {};
+                origin_value = array;
+            } else {
+                origin_value.push(_.globalThis, origin_js) catch {};
+            }
+            count += 1;
+            rest = rest[2 + len ..];
+        }
+        if (count == 0) return;
+        _.dispatch(.onOrigin, origin_value);
+    }
+
+    fn sinkOnStreamOpen(*_, stream_id: u32) {
+        * = _.handleReceivedStreamID(stream_id);
+    }
+
+    fn sinkOnHeader(*_, _stream_id: u32, name: []const u8, value: []const u8, never_index: bool) {
+        * = _stream_id;
+        const name_copy = _.allocator.dupe(u8, name) catch return;
+        const value_copy = _.allocator.dupe(u8, value) catch {
+            _.allocator.free(name_copy);
+            return;
+        };
+        _.hdr_entries.append(_.allocator, HdrEntry{
+            name: name_copy,
+            value: value_copy,
+            never_index: never_index,
+        }) catch {
+            _.allocator.free(name_copy);
+            _.allocator.free(value_copy);
+        };
+    }
+
+    fn clearHdrEntries(*_) {
+        for (entry of _.hdr_entries.items) {
+            _.allocator.free(entry.name);
+            _.allocator.free(entry.value);
+        }
+        _.hdr_entries.clearRetainingCapacity();
+    }
+
+    fn materializeHeadersTuple(*_): JSValue! {
+        defer _.clearHdrEntries();
+        const g = _.globalThis;
+        const raw_array = JSValue.createEmptyArray(g, _.hdr_entries.items.len * 2)?;
+        raw_array.ensureStillAlive();
+        const headers_obj = JSValue.createEmptyObject(g, 0);
+        headers_obj.ensureStillAlive();
+        let sensitive_array = JSValue.js_undefined;
+
+        for (entry of _.hdr_entries.items) {
+            const js_name = jsc.ZigString.init(entry.name).toJS(g);
+            const js_val = jsc.ZigString.init(entry.value).toJS(g);
+            raw_array.push(g, js_name)?;
+            raw_array.push(g, js_val)?;
+
+            if (entry.never_index) {
+                if (sensitive_array == .js_undefined) {
+                    sensitive_array = JSValue.createEmptyArray(g, 0)?;
+                    sensitive_array.ensureStillAlive();
+                }
+                sensitive_array.push(g, js_name)?;
+            }
+
+            if (std.mem.eql(u8, entry.name, "set-cookie")) {
+                if (existing := headers_obj.getOwn(g, "set-cookie")?) {
+                    existing.push(g, js_val)?;
+                } else {
+                    const arr = JSValue.createEmptyArray(g, 1)?;
+                    arr.push(g, js_val)?;
+                    headers_obj.put(g, "set-cookie", arr);
+                }
+            } else if (std.mem.eql(u8, entry.name, "cookie")) {
+                if (existing := headers_obj.getOwn(g, "cookie")?) {
+                    const prev = existing.toSlice(g, _.allocator)?;
+                    defer prev.deinit();
+                    const joined = std.fmt.allocPrint(_.allocator, "{s}; {s}", .{ prev.slice(), entry.value }) catch null;
+                    if (j := joined) {
+                        defer _.allocator.free(j);
+                        headers_obj.put(g, "cookie", jsc.ZigString.init(j).toJS(g));
+                    }
+                } else {
+                    headers_obj.put(g, "cookie", js_val);
+                }
+            } else {
+                const existing = headers_obj.getOwn(g, entry.name)?;
+                if (existing == null) {
+                    headers_obj.put(g, entry.name, js_val);
+                }
+            }
+        }
+
+        const tuple = JSValue.createEmptyArray(g, 3)?;
+        tuple.ensureStillAlive();
+        tuple.push(g, raw_array)?;
+        tuple.push(g, headers_obj)?;
+        tuple.push(g, sensitive_array)?;
+        return tuple;
+    }
+
+    fn sinkOnHeadersComplete(*_, stream_id: u32, end_stream: bool, f: u8) {
+        if (stream := _.streams.get(stream_id)) {
+            stream.endAfterHeaders = end_stream;
+        }
+        const tuple = _.materializeHeadersTuple() catch return;
+        if (_.rewrite_pending_push == stream_id && stream_id != 0) {
+            _.rewrite_pending_push = 0;
+            _.dispatchWith2Extra(.onStreamPush, JSValue.jsNumber(stream_id), tuple, JSValue.jsNumber(f));
+        } else {
+            const stream_ctx = _.rewriteStreamCtx(stream_id);
+            _.dispatchWith2Extra(.onStreamHeaders, stream_ctx, tuple, JSValue.jsNumber(f));
+        }
+    }
+
+    fn sinkOnData(*_, stream_id: u32, data: []const u8) {
+        const stream_ctx = _.rewriteStreamCtx(stream_id);
+        const chunk = _.handlers.binary_type.toJS(data, _.globalThis) catch return;
+        _.dispatchWithExtra(.onStreamData, stream_ctx, chunk);
+    }
+
+    fn sinkOnStreamEnd(*_, stream_id: u32, state: u8) {
+        let effective = state;
+        if (stream := _.streams.get(stream_id)) {
+            if (state == 6 && (stream.state == .HALF_CLOSED_LOCAL || stream.state == .CLOSED)) {
+                effective = 7;
+            }
+            if (effective == 5) {
+                stream.state = .HALF_CLOSED_LOCAL;
+            } else if (effective == 6) {
+                stream.state = .HALF_CLOSED_REMOTE;
+            } else if (effective == 7) {
+                stream.state = .CLOSED;
+            }
+        }
+        const stream_ctx = _.rewriteStreamCtx(stream_id);
+        _.dispatchWithExtra(.onStreamEnd, stream_ctx, JSValue.jsNumber(effective));
+        if (effective == 7) {
+            if (stream := _.streams.get(stream_id)) {
+                stream.freeResources(_, false);
+            }
+        }
+    }
+
+    fn sinkOnStreamRejected(*_, stream_id: u32) {
+        _.rejectedStreams += 1;
+        if (_.maxRejectedStreams <= _.rejectedStreams) {
+            _.sendGoAway(stream_id, .ENHANCE_YOUR_CALM, "ENHANCE_YOUR_CALM", _.lastStreamID, true);
+        }
+    }
+
+    fn sinkOnStreamReset(*_, stream_id: u32, code: u32) {
+        _.clearHdrEntries();
+        if (_.rewrite_pending_push == stream_id && stream_id != 0) {
+            _.rewrite_pending_push = 0;
+        }
+        let old_state: u8 = @intFromEnum(StreamState.OPEN);
+        if (stream := _.streams.get(stream_id)) {
+            old_state = @intFromEnum(stream.state);
+            stream.state = .CLOSED;
+            stream.rstCode = code;
+        }
+        const stream_ctx = _.rewriteStreamCtx(stream_id);
+        if (code == 8) {
+            _.dispatchWith2Extra(.onAborted, stream_ctx, JSValue.js_undefined, JSValue.jsNumber(old_state));
+        } else {
+            _.dispatchWithExtra(.onStreamError, stream_ctx, JSValue.jsNumber(code));
+        }
+    }
+
+    fn pushPromise(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
+        jsc.markBinding(@src());
+        if (!_.isServer) {
+            return globalObject.throw("Push streams can only be created by servers", {});
+        }
+        const args_list = callframe.arguments_old(4);
+        if (args_list.len < 4) {
+            return globalObject.throw("Expected parentId, promisedId, headers and sensitiveHeaders arguments", {});
+        }
+        const parent_id = args_list.ptr[0].toU32();
+        const promised_id = args_list.ptr[1].toU32();
+        const headers_arg = args_list.ptr[2];
+        const sensitive_arg = args_list.ptr[3];
+        if (promised_id > h2.MAX_STREAM_ID) {
+            return JSValue.jsNumber(-1);
+        }
+        const headers_obj = headers_arg.getObject() ?? return globalObject.throw("Expected headers to be an object", {});
+        _.ensureEngine();
+        if (*eng := _.engine) {
+            eng.beginHeaderBlock();
+            let name_buf: [4096]u8 = undefined;
+            let iter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(globalObject, headers_obj)?;
+            defer iter.deinit();
+            while (header_name := iter.next()?) {
+                if (header_name.length() == 0) continue;
+                const name_slice = header_name.toUTF8(bun.default_allocator);
+                defer name_slice.deinit();
+                const validated_name = toValidHeaderName(name_slice.slice(), &name_buf) catch {
+                    return globalObject.throwInvalidArguments("The arguments Header name is invalid", {});
+                };
+                const js_val = iter.value;
+                if (js_val.isEmptyOrUndefinedOrNull()) continue;
+                const val_str = js_val.toJSString(globalObject)?;
+                const val_slice = val_str.toSlice(globalObject, bun.default_allocator);
+                defer val_slice.deinit();
+                let never_index = false;
+                if (!sensitive_arg.isEmptyOrUndefinedOrNull()) {
+                    if (sv := sensitive_arg.getTruthy(globalObject, validated_name)?) {
+                        * = sv;
+                        never_index = true;
+                    }
+                }
+                * = eng.encodeHeader(validated_name, val_slice.slice(), never_index);
+            }
+            eng.sendPushPromise(_, parent_id, promised_id);
+            * = _.flush();
+        }
+        return JSValue.js_undefined;
+    }
+
     fn deinit(*_) {
         log("deinit", {});
 
         const _destroy_guard = ParserDestroyGuard{ parser: _ };
         _.detach();
         _.strong_this.deinit();
+        if (*eng := _.engine) {
+            eng.deinit();
+            _.engine = null;
+        }
+        _.rewrite_tail.deinit(_.allocator);
+        _.pending_stream_send_consumed.deinit(_.allocator);
+        _.pending_engine_stream_closes.deinit(_.allocator);
+        _.clearHdrEntries();
+        _.hdr_entries.deinit(_.allocator);
         let it = _.streams.valueIterator();
         while (item := it.next()) {
             let stream = item.*;
@@ -5156,6 +5646,7 @@ pub struct H2FrameParser {
     fn Bun__wrapAbortError(globalObject: *jsc.JSGlobalObject, cause: jsc.JSValue): jsc.JSValue;
 }
 
+import h2 from "./h2/h2.zig";
 import lshpack from "../../../http/lshpack.zig";
 const Allocator = std.mem.Allocator;
 

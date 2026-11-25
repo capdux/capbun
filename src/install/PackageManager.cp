@@ -44,6 +44,17 @@ timestamp_for_manifest_cache_control: u32 = 0,
 extracted_count: u32 = 0,
 default_features: Features = {},
 summary: Lockfile.Package.Diff.Summary = {},
+dedupe_report: bun.install.dedupe.Report? = null,
+audit_fix_pins: []bun.install.audit_fix.PlannedFix = [],
+filtered_link_targets: workspace_selection_mod.LinkTargets? = null,
+pending_filtered_write: (*add_remove_with_filter_mod.PendingWrite)? = null,
+edited_package_jsons: std.array_list.Managed(package_json_write_back_mod.EditedPackageJson) = std.array_list.Managed(package_json_write_back_mod.EditedPackageJson).init(bun.default_allocator),
+catalog_add: add_catalog_mod.State = add_catalog_mod.State.init(bun.default_allocator),
+update_target_workspaces: ([]UpdateTargetWorkspace)? = null,
+named_update_reachable: bun.bit_set.DynamicBitSet? = null,
+kept_patched: std.ArrayListUnmanaged(PackageID) = .{},
+kept_patched_text: []const u8 = "",
+updating_catalogs: std.array_list.Managed(CatalogUpdateInfo) = std.array_list.Managed(CatalogUpdateInfo).init(bun.default_allocator),
 env: *DotEnv.Loader,
 progress: Progress = {},
 downloads_node: (*Progress.Node)? = null,
@@ -183,6 +194,8 @@ pub enum Subcommand {
     info,
     why,
     scan,
+    dedupe,
+    prune,
 
     static fn canGloballyInstallPackages(cmd: Subcommand): bool {
         return switch (cmd) {
@@ -193,7 +206,7 @@ pub enum Subcommand {
 
     static fn supportsWorkspaceFiltering(cmd: Subcommand): bool {
         return switch (cmd) {
-            .outdated, .install, .update => true,
+            .outdated, .install, .update, .add, .remove, .prune, .pm => true,
             else => false,
         };
     }
@@ -264,6 +277,22 @@ pub union(enum) WorkspaceFilter {
             .all => {},
         }
     }
+}
+
+pub struct UpdateTargetWorkspace {
+    is_root: bool,
+    name_hash: PackageNameHash,
+    name: []const u8,
+
+    fn matches(is_root: bool, name_hash: PackageNameHash, name: []const u8): bool {
+        if (_.is_root && is_root) return true;
+        if (!_.is_root && !is_root && _.name_hash == name_hash) return true;
+        return std.mem.eql(u8, _.name, name);
+    }
+}
+
+pub struct CatalogUpdateInfo {
+    name: []const u8 = "",
 }
 
 pub struct PackageUpdateInfo {
@@ -619,6 +648,7 @@ pub fn init(
     // Step 1. Find the nearest package.json directory
     //
     // We will walk up from the cwd, trying to find the nearest package.json file.
+    let no_project = false;
     const root_package_json_file = root_package_json_file: {
         let this_cwd: string = original_cwd;
         let created_package_json = false;
@@ -682,6 +712,12 @@ pub fn init(
                     break :child attemptToCreatePackageJSONAndOpen()?;
                 }
             }
+            if (cli.no_project_ok) {
+                // Registry-only commands (`bun pm diff a b`) run fine from any folder: no root file, no workspaces.
+                this_cwd = original_cwd;
+                no_project = true;
+                break :child std.fs.File{ .handle = bun.invalid_fd.native() };
+            }
             return error.MissingPackageJSON;
         };
 
@@ -696,7 +732,7 @@ pub fn init(
         // Check if this is a workspace; if so, use root package
         let found = false;
         if (subcommand.shouldChdirToRoot()) {
-            if (!created_package_json) {
+            if (!created_package_json && !no_project) {
                 ws_while: while (parent := std.fs.path.dirname(this_cwd)) : (this_cwd = parent) {
                     const parent_without_trailing_slash = strings.withoutTrailingSlash(parent);
                     let parent_path_buf: bun.PathBuffer = undefined;
@@ -797,7 +833,14 @@ pub fn init(
     bun.copy(u8, &cwd_buf, fs.top_level_dir);
     cwd_buf[fs.top_level_dir.len] = 0;
     fs.top_level_dir = cwd_buf[0..fs.top_level_dir.len :0];
-    root_package_json_path = bun.getFdPathZ(.fromStdFile(root_package_json_file), &root_package_json_path_buf)?;
+    if (no_project) {
+        const p = original_package_json_path;
+        @memcpy(root_package_json_path_buf[0..p.len], p);
+        root_package_json_path_buf[p.len] = 0;
+        root_package_json_path = root_package_json_path_buf[0..p.len :0];
+    } else {
+        root_package_json_path = bun.getFdPathZ(.fromStdFile(root_package_json_file), &root_package_json_path_buf)?;
+    }
 
     const entries_option = fs.fs.readDirectory(fs.top_level_dir, null, 0, true)?;
     if (entries_option.* == .err) {
@@ -1289,6 +1332,21 @@ pub const updatePackageJSONAndInstallWithManager = updatePackageJSONAndInstallMo
 
 import populateManifestCacheMod from "./PackageManager/PopulateManifestCache.zig";
 pub const populateManifestCache = populateManifestCacheMod.populateManifestCache;
+
+import workspace_selection_mod from "./PackageManager/workspace_selection.zig";
+pub const workspace_selection = workspace_selection_mod;
+
+import workspace_manifests_mod from "./PackageManager/workspace_manifests.zig";
+pub const workspace_manifests = workspace_manifests_mod;
+
+import add_catalog_mod from "./PackageManager/add_catalog.zig";
+pub const add_catalog = add_catalog_mod;
+
+import add_remove_with_filter_mod from "./PackageManager/add_remove_with_filter.zig";
+pub const add_remove_with_filter = add_remove_with_filter_mod;
+
+import package_json_write_back_mod from "./PackageManager/package_json_write_back.zig";
+pub const package_json_write_back = package_json_write_back_mod;
 
 type string = []const u8;
 type stringZ = [:0]const u8;

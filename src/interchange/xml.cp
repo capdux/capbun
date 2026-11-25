@@ -149,9 +149,9 @@ fn SinkTypes(comptime U: type): type {
 
             fn takeText(*_, mark: usize): XMLError!Slice {
                 const runs = _.text_runs.items[mark..];
-                let out_text: Slice = &[];
+                let out_text: Slice = [];
                 if (runs.len == 0) {
-                    out_text = &[];
+                    out_text = [];
                 } else if (runs.len == 1) {
                     out_text = UT.trimWs(runs[0]);
                 } else {
@@ -184,7 +184,7 @@ fn SinkTypes(comptime U: type): type {
                     }
                 }
                 const kept = runs[first..last];
-                if (kept.len == 0) return &[];
+                if (kept.len == 0) return [];
                 if (kept.len == 1) return kept[0];
                 let total_len: usize = 0;
                 for (r of kept) total_len += r.len;
@@ -290,7 +290,7 @@ fn SinkTypes(comptime U: type): type {
                     const g = _.group_of.items[i];
                     const grp = &_.groups.items[g];
                     if (grp.count > 1) {
-                        _.gathered.items[grp.cursor] = children[i].value;
+                        _.gathered.items[grp.cursor] = children[i].value.?;
                         grp.cursor += 1;
                     }
                 }
@@ -592,7 +592,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
         ): Self {
             let sc = Scanner.init(allocator, source, contents, log, options.encoding);
             if (comptime is_wide) sc.transcoded = true;
-            const empty_attrs: [LINEAR_ATTRIBUTE_LIMIT]Slice = @splat(&[]);
+            const empty_attrs: [LINEAR_ATTRIBUTE_LIMIT]Slice = @splat([]);
             return Self{
                 scanner: sc,
                 in_dtd: false,
@@ -619,12 +619,12 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
         }
 
         fn stackOverflow(*_): XMLError {
-            * = _.scanner.errMsg(_.scanner.tok.pos, "Nesting is too deep");
+            if (_.scanner.errMsg(_.scanner.tok.pos, "Nesting is too deep") == error.OutOfMemory) {}
             return error.StackOverflow;
         }
 
         fn advance(*_): XMLError!void {
-            return _.scanner.next(.{ .None = {} });
+            return _.scanner.next(.None);
         }
 
         fn advanceLiteral(*_, literal: types.Literal): XMLError!void {
@@ -846,7 +846,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             if (_.scanner.tok.kind != .eq) {
                 return _.unexpected("'=' after the name in the XML declaration");
             }
-            _.advanceLiteral(.{ .Plain = {} })?;
+            _.advanceLiteral(.Plain)?;
             if (_.scanner.tok.kind != .literal) {
                 return _.unexpected("a quoted value in the XML declaration");
             }
@@ -880,19 +880,19 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
 
         fn parseExternalId(*_, notation: bool): XMLError!void {
             if (_.scanner.tok.kind == .name && UT.eqAscii(_.scanner.tok.kind.name, "SYSTEM")) {
-                _.advanceLiteral(.{ .System = {} })?;
+                _.advanceLiteral(.System)?;
                 if (_.scanner.tok.kind != .literal) {
                     return _.unexpected("a quoted system identifier after SYSTEM");
                 }
                 _.requireSpaced()?;
                 return _.advance();
             }
-            _.advanceLiteral(.{ .Pubid = {} })?;
+            _.advanceLiteral(.Pubid)?;
             if (_.scanner.tok.kind != .literal) {
                 return _.unexpected("a quoted public identifier after PUBLIC");
             }
             _.requireSpaced()?;
-            _.advanceLiteral(.{ .System = {} })?;
+            _.advanceLiteral(.System)?;
             if (_.scanner.tok.kind == .literal) {
                 _.requireSpaced()?;
                 return _.advance();
@@ -1080,7 +1080,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             _.requireSpaced()?;
             while (true) {
                 _.advance()?;
-                let attr_name: Slice = &[];
+                let attr_name: Slice = [];
                 switch (_.scanner.tok.kind) {
                     .gt => return _.scanner.tok.frame,
                     .name n => attr_name = n,
@@ -1190,8 +1190,8 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             }
             const name = _.expectName(if (parameter) "the parameter entity name after '%'" else "an entity name or '%' after '<!ENTITY'")?;
             _.requireSpaced()?;
-            _.advanceLiteral(.{ .EntityValue = {} })?;
-            let val: ST.EntityValue = .{ .external = {} };
+            _.advanceLiteral(.EntityValue)?;
+            let val: ST.EntityValue = .external;
             switch (_.scanner.tok.kind) {
                 .literal v => {
                     _.requireSpaced()?;
@@ -1211,9 +1211,9 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
                             * = _.expectName("a notation name after NDATA")?;
                             _.requireSpaced()?;
                             _.advance()?;
-                            val = .{ .unparsed = {} };
+                            val = .unparsed;
                         } else {
-                            val = .{ .external = {} };
+                            val = .external;
                         }
                     } else {
                         return _.unexpected("a quoted entity value, SYSTEM or PUBLIC");
@@ -1316,7 +1316,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
             if (!UT.nameEq(end_name, name)) {
                 const s1 = _.scanner.formatUnits(name);
                 const s2 = _.scanner.formatUnits(end_name);
-                return _.scanner.errFmt(cur_pos, "Expected closing tag </{s}> but found </{s}>", .{ s1, s2 });
+                return _.scanner.errFmt(cur_pos, "Expected closing tag \\</{s}> but found \\</{s}>", .{ s1, s2 });
             }
             if (end_frame != frame) {
                 return _.scanner.errNamed(cur_pos, "Element", name, " must start and end within the same entity");
@@ -1395,8 +1395,8 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
                         .slow => {},
                     }
                 }
-                _.scanner.next(.{ .None = {} })?;
-                let attr_name: Slice = &[];
+                _.scanner.next(.None)?;
+                let attr_name: Slice = [];
                 switch (_.scanner.tok.kind) {
                     .gt => { empty = false; break; },
                     .slash_gt => { empty = true; break; },
@@ -1408,7 +1408,7 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
                 if (_.hasAttribute(attr_name)) {
                     return _.scanner.errNamed(cur_pos, "Duplicate attribute", attr_name, "");
                 }
-                _.scanner.next(.{ .None = {} })?;
+                _.scanner.next(.None)?;
                 if (_.scanner.tok.kind != .eq) {
                     return _.unexpected("'=' after the attribute name");
                 }
@@ -1453,13 +1453,14 @@ fn ParserType(comptime U: type, comptime Sink: type): type {
         }
 
         fn spillAttributeName(*_, name: Slice): XMLError!void {
+            const empty_void: void = undefined;
             if (_.attribute_count == LINEAR_ATTRIBUTE_LIMIT) {
                 _.attribute_names.clearRetainingCapacity();
                 for (first of _.attribute_first) {
-                    _.attribute_names.put(_.scanner.allocator, first, {}) catch return error.OutOfMemory;
+                    _.attribute_names.put(_.scanner.allocator, first, empty_void) catch return error.OutOfMemory;
                 }
             }
-            _.attribute_names.put(_.scanner.allocator, name, {}) catch return error.OutOfMemory;
+            _.attribute_names.put(_.scanner.allocator, name, empty_void) catch return error.OutOfMemory;
         }
     };
 }

@@ -156,6 +156,7 @@ pub union(enum) PatchFeatures {
     positionals: []const string = [],
     update: Update = {},
     dry_run: bool = false,
+    dedupe_check: bool = false,
     link_workspace_packages: bool = true,
     remote_package_features: Features = {
         optional_dependencies: true,
@@ -168,6 +169,7 @@ pub union(enum) PatchFeatures {
     patch_features: PatchFeatures = PatchFeatures{ nothing: {} },
 
     filter_patterns: []const string = [],
+    add_catalog: string? = null,
     pack_destination: string = "",
     pack_filename: string = "",
     pack_gzip_level: string? = null,
@@ -588,12 +590,14 @@ pub union(enum) PatchFeatures {
                 _.do.write_package_json = false;
                 _.do.save_lockfile = false;
             }
+            _.dedupe_check = cli.dedupe_check;
 
             if (cli.no_summary || cli.silent) {
                 _.do.summary = false;
             }
 
             _.filter_patterns = cli.filters;
+            _.add_catalog = cli.add_catalog;
             _.pack_destination = cli.pack_destination;
             _.pack_filename = cli.pack_filename;
             _.pack_gzip_level = cli.pack_gzip_level;

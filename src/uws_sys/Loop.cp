@@ -18,6 +18,7 @@ pub type OptLoopVoidCb = LoopVoidCbFn?;
     fn us_loop_free(loop: (*Loop)?);
     fn us_loop_ext(loop: (*Loop)?): *!?;
     fn us_quic_loop_flush_if_pending(loop: *Loop);
+    fn us_nq_loop_drain(loop: *Loop);
     fn us_loop_run(loop: (*Loop)?);
     fn us_loop_pump(loop: (*Loop)?);
     fn us_wakeup_loop(loop: (*Loop)?);
@@ -134,6 +135,9 @@ export @c struct PosixLoop {
     }
 
     fn drainQuicIfNecessary(*_) {
+        if (_.internal_loop_data.nq_head != null) {
+            us_nq_loop_drain(_ as *Loop);
+        }
         if (_.internal_loop_data.quic_head == null) return;
         us_quic_loop_flush_if_pending(_ as *Loop);
     }
@@ -257,6 +261,9 @@ export @c struct WindowsLoop {
     }
 
     fn drainQuicIfNecessary(*_) {
+        if (_.internal_loop_data.nq_head != null) {
+            us_nq_loop_drain(_ as *Loop);
+        }
         if (_.internal_loop_data.quic_head == null) return;
         us_quic_loop_flush_if_pending(_ as *Loop);
     }

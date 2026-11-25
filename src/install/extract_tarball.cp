@@ -136,7 +136,7 @@ struct DirnameReader {
         );
     }
 
-    static fn buildURLWithPrinter(
+    pub static fn buildURLWithPrinter(
         registry_: string,
         full_name_: strings.StringOrTinyString,
         version: Semver.Version,

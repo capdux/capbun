@@ -90,7 +90,7 @@ pub union(enum) ImportWatcher {
         package_json: (*bun.PackageJSON)?,
         comptime copy_file_path: bool,
     ): bun.sys.Maybe(Watcher.FdOwnership) {
-        if (_.* == .none) return { result: .caller };
+        if (_ == .none) return { result: .caller };
         return switch (_) {
             .hot watcher => watcher.addFile(
                 fd,

@@ -797,8 +797,23 @@ pub struct serialize {
                     css.serializer.serializeIdentifier(v.value, scratch_writer) catch return dest.addFmtError();
                     const id_len = dest.scratchbuf.items.len;
 
-                    let count_writer = std.io.countingWriter(std.io.null_writer);
-                    css.serializer.serializeString(v.value, count_writer.writer()) catch return dest.addFmtError();
+                    const NullCountingWriter = struct {
+                        bytes_written: usize = 0,
+                        pub fn writeAll(*_, bytes: []const u8)! {
+                            _.bytes_written += bytes.len;
+                        }
+                        pub fn writeByte(*_, _: u8)! {
+                            _.bytes_written += 1;
+                        }
+                        pub fn writeBytesNTimes(*_, bytes: []const u8, n: usize)! {
+                            _.bytes_written += bytes.len * n;
+                        }
+                        pub fn print(*_, comptime fmt: []const u8, args: auto)! {
+                            _.bytes_written += std.fmt.count(fmt, args);
+                        }
+                    };
+                    let count_writer = NullCountingWriter{};
+                    css.serializer.serializeString(v.value, &count_writer) catch return dest.addFmtError();
 
                     if (id_len > 0 && id_len < count_writer.bytes_written) {
                         dest.writeScratchbuf(0, id_len)?;

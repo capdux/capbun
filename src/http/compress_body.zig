@@ -235,7 +235,7 @@ pub fn compressBrotli(state: *HTTPThread.LibdeflateState, input: []const u8, lev
 
 pub fn compressZstd(state: *HTTPThread.LibdeflateState, input: []const u8, level_opt: ?i32, spill: *std.ArrayListUnmanaged(u8)) !CompressOutput {
         const bound = bun.zstd.compressBound(input.len);
-        if (bun.zstd.isError(bound)) {
+        if ((bun.c.ZSTD_isError(bound) != 0)) {
             return error.CompressionFailed;
         }
         if ((bound <= state.shared_buffer.len)) {

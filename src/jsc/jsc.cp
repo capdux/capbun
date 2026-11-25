@@ -1,9 +1,5 @@
-//! Bindings to JavaScriptCore and other JavaScript primatives such as
-//! VirtualMachine, JSGlobalObject (Zig::GlobalObject), and the event loop.
-//!
-//! Web and runtime-specific APIs should go in `bun.webcore` and `bun.api`.
-//!
-//! TODO: Remove remaining aliases to `webcore` and `api`
+/// Bindings to JavaScriptCore and other JavaScript primatives such as
+/// VirtualMachine, JSGlobalObject (Zig::GlobalObject), and the event loop.
 
 /// The calling convention used for JavaScript functions <> Native
 pub const conv: std.builtin.CallingConvention = if (bun.Environment.isWindows && bun.Environment.isX64)
@@ -207,6 +203,14 @@ pub const WorkPool = EventLoop.WorkPool;
 pub const WorkPoolTask = EventLoop.WorkPoolTask;
 pub const WorkTask = EventLoop.WorkTask;
 
+import VmHandleMod from "./VmHandle.zig";
+pub const VmHandle = VmHandleMod.VmHandle;
+pub const Ticket = VmHandleMod.Ticket;
+pub const VmLoopKind = VmHandleMod.LoopKind;
+pub const Posted = VmHandleMod.Posted;
+pub const ConcurrentPoster = VmHandleMod.ConcurrentPoster;
+pub const IsolatedPosterInner = VmHandleMod.IsolatedPosterInner;
+
 /// Deprecated: Avoid using this in new code.
 import C from "./javascript_core_c_api.zig";
 /// Deprecated: Remove all of these please.
@@ -284,7 +288,7 @@ pub const OpaqueCallback = *const fn (current: *!?) callconv(.c) void;
 pub fn OpaqueWrap(comptime Context: type, comptime Function: auto): OpaqueCallback {
     return struct {
         @callconv("c")
-        pub fn callback(ctx: *!?) {
+        static fn callback(ctx: *!?) {
             const context: *Context = @ptrCast(@alignCast(ctx.?));
             Function(context);
         }

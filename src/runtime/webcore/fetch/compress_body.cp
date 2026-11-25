@@ -59,37 +59,29 @@ pub fn fromJS(global: *JSGlobalObject, value: JSValue): bun.JSError!CompressOpti
                 return global.throwInvalidArgumentTypeValue("compress.encoding", "string", enc);
             }
         } else {
-            return global.throwInvalidArgumentTypeValue("compress.encoding", "string", JSValue.jsUndefined());
+            return global.throwInvalidArgumentTypeValue("compress.encoding", "string", JSValue.js_undefined);
         }
 
         let level: i32? = null;
         if (lvl := value.get(global, "level")?) {
             if (!lvl.isUndefinedOrNull()) {
-                let min_val: i32 = 0;
-                let max_val: i32 = 12;
-                let default_val: i32 = DEFAULT_DEFLATE_LEVEL;
-                switch (encoding) {
-                    .gzip, .deflate => {
-                        min_val = 0;
-                        max_val = 12;
-                        default_val = DEFAULT_DEFLATE_LEVEL;
-                    },
-                    .br => {
-                        min_val = bun.brotli.c.BROTLI_MIN_QUALITY;
-                        max_val = bun.brotli.c.BROTLI_MAX_QUALITY;
-                        default_val = DEFAULT_BROTLI_QUALITY;
-                    },
-                    .zstd => {
-                        min_val = 1;
-                        max_val = 22;
-                        default_val = DEFAULT_ZSTD_LEVEL;
-                    },
-                }
-                level = global.validateIntegerRange(lvl, i32, default_val, .{
-                    .min = min_val,
-                    .max = max_val,
-                    .field_name = "compress.level",
-                })?;
+                level = switch (encoding) {
+                    .gzip, .deflate => global.validateIntegerRange(lvl, i32, DEFAULT_DEFLATE_LEVEL, .{
+                        min: 0,
+                        max: 12,
+                        field_name: "compress.level",
+                    })?,
+                    .br => global.validateIntegerRange(lvl, i32, DEFAULT_BROTLI_QUALITY, .{
+                        min: bun.brotli.c.BROTLI_MIN_QUALITY,
+                        max: bun.brotli.c.BROTLI_MAX_QUALITY,
+                        field_name: "compress.level",
+                    })?,
+                    .zstd => global.validateIntegerRange(lvl, i32, DEFAULT_ZSTD_LEVEL, .{
+                        min: 1,
+                        max: 22,
+                        field_name: "compress.level",
+                    })?,
+                };
             }
         }
         return CompressOption{

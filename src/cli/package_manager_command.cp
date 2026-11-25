@@ -14,6 +14,9 @@ import pm_ver_cmd from "./pm_version_command.zig";
 const PmVersionCommand = pm_ver_cmd.PmVersionCommand;
 import pm_why_cmd from "./pm_why_command.zig";
 const PmWhyCommand = pm_why_cmd.PmWhyCommand;
+import pm_licenses_cmd from "./pm_licenses_command.zig";
+const PmLicensesCommand = pm_licenses_cmd.PmLicensesCommand;
+import PmDiffCommand from "./pm_diff_command.zig";
 
 import pm_trusted_cmd from "./pm_trusted_command.zig";
 const DefaultTrustedCommand = pm_trusted_cmd.DefaultTrustedCommand;
@@ -473,6 +476,26 @@ pub struct PackageManagerCommand {
         } else if (strings.eqlComptime(subcommand, "why")) {
             const why_exec = PmWhyCommand.exec;
             why_exec(ctx, pm, pm.options.positionals)?;
+            Global.exit(0);
+        } else if (strings.eqlComptime(subcommand, "diff")) {
+            const diff_exec = PmDiffCommand.exec;
+            diff_exec(ctx.allocator, pm, pm.options.positionals, cli_args.diff_args, .{
+                raw: cli_args.diff_raw,
+                json: cli_args.json_output,
+                unminify: cli_args.diff_unminify,
+                minify: cli_args.diff_minify,
+                ignore_space: cli_args.diff_ignore_space,
+                name_only: cli_args.diff_name_only,
+                stat: cli_args.diff_stat,
+                context: cli_args.diff_context ?? 3,
+            }, cwd)?;
+            Global.exit(0);
+        } else if (strings.eqlComptime(subcommand, "licenses")) {
+            const licenses_exec = PmLicensesCommand.exec;
+            licenses_exec(pm, pm.options.positionals, cwd, .{
+                dev_only: cli_args.licenses_dev,
+                long: cli_args.licenses_long,
+            })?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "pkg")) {
             const pkg_exec = PmPkgCommand.exec;

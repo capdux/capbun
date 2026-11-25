@@ -384,6 +384,7 @@ pub fn notifyNeedTermination(self: *WebWorker) callconv(.c) void {
         defer if (!___guard_vm_lock_moved) { ___guard_vm_lock_moved = true; const __T = @TypeOf(_guard_vm_lock); if (@typeInfo(__T) == .optional) { if (_guard_vm_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_vm_lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_vm_lock; _drop_val.__cp_deinit(); } };
         if (self.vm) |vm| {
             _ = &vm;
+            _ = vm.forbidScript();
             _ = vm.jsc_vm.notifyNeedTermination();
             _ = vm.eventLoop().wakeup();
         }
@@ -632,10 +633,15 @@ pub fn shutdown(self: *WebWorker) noreturn {
             _ = target_vm.jsc_vm.clearHasTerminationRequest();
             target_vm.is_shutting_down = true;
             _ = target_vm.onExit();
+            _ = target_vm.forbidScript();
             _ = jsc.API.cron.CronJob.clearAllForVM(target_vm, .teardown);
             if (target_vm.rare_data) |rare| {
                 _ = &rare;
                 _ = rare.closeAllSocketGroups(target_vm);
+            }
+            if (target_vm.handle) |h| {
+                _ = &h;
+                _ = h.closeAndWait(target_vm, jsc.VirtualMachine.serviceDuringTeardown);
             }
             exit_code = target_vm.exit_handler.exit_code;
             globalObject = target_vm.global;
@@ -675,6 +681,7 @@ pub fn exit(self: *WebWorker) void {
         _ = self.setRequestedTerminate();
         if (self.vm) |vm| {
             _ = &vm;
+            _ = vm.forbidScript();
             _ = vm.jsc_vm.notifyNeedTermination();
             _ = vm.eventLoop().wakeup();
         }

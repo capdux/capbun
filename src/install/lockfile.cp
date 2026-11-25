@@ -22,6 +22,9 @@ import YarnPrinter from "./lockfile/printer/Yarn.zig";
 import LockfileJsonStringify from "./lockfile/lockfile_json_stringify_for_debugging.zig";
 import PaddingChecker from "./padding_checker.zig";
 import PackageMod from "./lockfile/Package.zig";
+import reachable_mod from "./lockfile/reachable.zig";
+import override_selector_mod from "./lockfile/override_selector.zig";
+import pruned_workspaces_mod from "./lockfile/pruned_workspaces.zig";
 
 type string = []const u8;
 type stringZ = [:0]const u8;
@@ -2423,6 +2426,9 @@ pub const PatchedDependenciesMap = std.ArrayHashMapUnmanaged(PackageNameAndVersi
 const MetaHash = [std.crypto.hash.sha2.Sha512T256.digest_length]u8;
 const zero_hash = std.mem.zeroes(MetaHash);
 pub const StringPool = String.Builder.StringPool;
+pub const reachable = reachable_mod;
+pub const override_selector = override_selector_mod;
+pub const pruned_workspaces = pruned_workspaces_mod;
 
 
 }

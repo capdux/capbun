@@ -147,6 +147,7 @@ pub fn isWs(c: u8) bool {
 }
 
 pub fn buildNameAscii() [256]u8 {
+        _ = @setEvalBranchQuota(10000);
         var t: [256]u8 = @splat(0);
         _ = &t;
         var c: usize = 0;

@@ -826,6 +826,10 @@ pub noinline fn writeBytes(dest: Destination, bytes: []const u8) void {
         _ = (blk_catch_10: { break :blk_catch_10 ((destWriter(dest).writeAll(bytes)) catch |__ce_10| { _ = &__ce_10;  }); });
 }
 
+pub fn printBytes(bytes: []const u8) void {
+        _ = writeBytes(.stdout, bytes);
+}
+
 pub inline fn hasNoArgs(comptime Args: type) bool {
         const info = @typeInfo(Args);
         if ((Args == void)) {

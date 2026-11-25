@@ -92,6 +92,9 @@ pub struct Classes {
     pub const HTMLBundle = api.HTMLBundle;
     pub const RedisClient = api.Valkey;
     pub const BlockList = api.BlockList;
+    pub const QuicEndpoint = api.node.quic.QuicEndpoint;
+    pub const QuicSession = api.node.quic.QuicSession;
+    pub const QuicStream = api.node.quic.QuicStream;
     pub const NativeZstd = api.NativeZstd;
     pub const SourceMap = bun.SourceMap.JSSourceMap;
 }

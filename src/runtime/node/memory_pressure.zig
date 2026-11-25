@@ -239,9 +239,9 @@ pub fn registerOsWatch(global: *jsc.JSGlobalObject, watcher: *MemoryPressureWatc
         }
         var vm = global.bunVM();
         _ = &vm;
-        var poll = FilePoll.init(vm, fd, .{}, watcher);
+        var poll = FilePoll.init(vm, fd, .{}, MemoryPressureWatcher, watcher);
         _ = &poll;
-        const loop = vm.platformEventLoop();
+        const loop = jsc.EventLoopHandle.init(vm.eventLoop()).platformEventLoop();
         switch (poll.register(loop, .memory_pressure, false)) {
 .result => {
 return poll;

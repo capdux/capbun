@@ -422,6 +422,7 @@ pub enum StdinFdType: i32 {
     aws_signature_cache: AWSSignatureCache = .{},
 
     s3_default_client: jsc.Strong.Optional = .empty,
+    node_quic_callbacks: jsc.Strong.Optional = .empty,
     default_csrf_secret: []const u8 = "",
 
     valkey_context: ValkeyContext = .{},

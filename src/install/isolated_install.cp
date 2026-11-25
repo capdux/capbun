@@ -1,38 +1,33 @@
 const log = Output.scoped(.IsolatedInstall, .visible);
 
-/// Runs on main thread
-pub fn installIsolatedPackages(
-    manager: *PackageManager,
-    command_ctx: Command.Context,
+pub fn buildStore(
+    manager: *const PackageManager,
+    lockfile: *const Lockfile,
     install_root_dependencies: bool,
     workspace_filters: []const WorkspaceFilter,
     packages_to_install: ([]const PackageID)?,
-): OOM!PackageInstall.Summary {
-    bun.analytics.Features.isolated_bun_install += 1;
+    silent: bool,
+): OOM!Store {
+    let timer = std.time.Timer.start() catch unreachable;
+    const pkgs = lockfile.packages.slice();
+    const pkg_dependency_slices = pkgs.items(.dependencies);
+    const pkg_resolutions = pkgs.items(.resolution);
+    const pkg_names = pkgs.items(.name);
 
-    const lockfile = manager.lockfile;
+    const resolutions = lockfile.buffers.resolutions.items;
+    const dependencies = lockfile.buffers.dependencies.items;
+    const string_buf = lockfile.buffers.string_bytes.items;
 
-    const store: Store = store: {
-        let timer = std.time.Timer.start() catch unreachable;
-        const pkgs = lockfile.packages.slice();
-        const pkg_dependency_slices = pkgs.items(.dependencies);
-        const pkg_resolutions = pkgs.items(.resolution);
-        const pkg_names = pkgs.items(.name);
+    let nodes: Store.Node.List = .empty;
 
-        const resolutions = lockfile.buffers.resolutions.items;
-        const dependencies = lockfile.buffers.dependencies.items;
-        const string_buf = lockfile.buffers.string_bytes.items;
+    const QueuedNode = QueuedNode_;
 
-        let nodes: Store.Node.List = .empty;
+    // DFS so a deduplicated node's full subtree (and therefore its `peers`)
+    // is finalized before any later sibling encounters it.
+    let node_queue: std.ArrayListUnmanaged(QueuedNode) = .empty;
+    const _node_queue_guard = QueuedNodeListGuard_{ list: &node_queue, allocator: lockfile.allocator };
 
-        const QueuedNode = QueuedNode_;
-
-        // DFS so a deduplicated node's full subtree (and therefore its `peers`)
-        // is finalized before any later sibling encounters it.
-        let node_queue: std.ArrayListUnmanaged(QueuedNode) = .empty;
-        const _node_queue_guard = QueuedNodeListGuard_{ list: &node_queue, allocator: lockfile.allocator };
-
-        node_queue.append(lockfile.allocator, {
+    node_queue.append(lockfile.allocator, {
             parent_id: .invalid,
             dep_id: invalid_dependency_id,
             pkg_id: 0,
@@ -838,16 +833,39 @@ pub fn installIsolatedPackages(
             }
         }
 
-        if (manager.options.log_level.isVerbose()) {
+        if (!silent && manager.options.log_level.isVerbose()) {
             const dedupe_end = timer.read();
             Output.prettyErrorln("Created store [{f}]", .{bun.fmt.fmtDurationOneDecimal(dedupe_end)});
         }
 
-        break :store {
+        return Store{
             entries: store,
             nodes: nodes,
         };
-    };
+}
+
+/// Runs on main thread
+pub fn installIsolatedPackages(
+    manager: *PackageManager,
+    command_ctx: Command.Context,
+    install_root_dependencies: bool,
+    workspace_filters: []const WorkspaceFilter,
+    packages_to_install: ([]const PackageID)?,
+): OOM!PackageInstall.Summary {
+    bun.analytics.Features.isolated_bun_install += 1;
+
+    const lockfile = manager.lockfile;
+
+    const store: Store = buildStore(
+        manager,
+        lockfile,
+        install_root_dependencies,
+        workspace_filters,
+        packages_to_install,
+        false,
+    )?;
+
+    // Compute entry_hash for the global virtual store. The hash makes a
 
     // Compute entry_hash for the global virtual store. The hash makes a
     // global-store directory name unique to this entry's *resolved* dependency

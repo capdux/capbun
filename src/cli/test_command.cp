@@ -151,7 +151,7 @@ struct RunAllTestsContext {
         if (files.len > 1) {
             for (i of 0..(files.len - 1)) {
                 const file_name = files[i];
-                const started = bun.milliTimestamp();
+                const started = std.time.milliTimestamp();
                 TestCommand.run(reporter, vm, file_name.slice(), {
                     first: isolate || i == 0,
                     last: isolate,
@@ -169,7 +169,7 @@ struct RunAllTestsContext {
         }
 
         const last_file = files[files.len - 1];
-        const last_started = bun.milliTimestamp();
+        const last_started = std.time.milliTimestamp();
         TestCommand.run(reporter, vm, last_file.slice(), {
             first: isolate || files.len == 1,
             last: true,
@@ -218,7 +218,7 @@ pub fn escapeXml(str: string, writer: auto)! {
                 writer.print("&#{d};", .{c})?;
                 last = i + 1;
             },
-            0..=0x1f => {
+            0..=8, 11..=12, 14..=0x1f => {
                 // Any other C0 control character is not a valid XML 1.0 Char and
                 // cannot be represented even as a numeric reference, so drop it.
                 if (i > last) {
@@ -423,13 +423,13 @@ pub struct JunitReporter {
             _.last_failure = JunitFailure{};
         }
         const failure = &_.last_failure.?;
-        const name_utf8 = exception.name.toUTF8(allocator);
-        const _name_guard = DeinitGuard<@TypeOf(name_utf8)>{ val: name_utf8 };
-        const raw_message = exception.message.toUTF8(allocator);
-        const _msg_guard = DeinitGuard<@TypeOf(raw_message)>{ val: raw_message };
+        let name_utf8 = exception.name.toUTF8(allocator);
+        defer name_utf8.deinit();
+        let raw_message = exception.message.toUTF8(allocator);
+        defer raw_message.deinit();
 
         let message: std.ArrayListUnmanaged(u8) = {};
-        const _msg_list_guard = DeinitGuard<std.ArrayListUnmanaged(u8)>{ ptr: &message, alloc: allocator };
+        defer message.deinit(allocator);
         bun.handleOom(pushStrippingAnsi(&message, allocator, raw_message.slice()));
 
         const name_slice = name_utf8.slice();
@@ -468,11 +468,11 @@ pub struct JunitReporter {
         const dir = bun.fs.FileSystem.instance.top_level_dir;
         const body_writer = body.writer(allocator);
         for (frame of exception.stack.frames()) {
-            const source_url = frame.source_url.toUTF8(allocator);
-            const _src_guard = DeinitGuard<@TypeOf(source_url)>{ val: source_url };
+            let source_url = frame.source_url.toUTF8(allocator);
+            defer source_url.deinit();
             const file = bun.path.relative(dir, source_url.slice());
-            const func = frame.function_name.toUTF8(allocator);
-            const _func_guard = DeinitGuard<@TypeOf(func)>{ val: func };
+            let func = frame.function_name.toUTF8(allocator);
+            defer func.deinit();
             if (file.len == 0 && func.slice().len == 0) {
                 continue;
             }

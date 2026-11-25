@@ -168,7 +168,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
             return out.items;
     }
     const Slice = []const U;
-    const Kind = union(enum) {
+    pub const Kind = union(enum) {
         eof: ?Slice,
         name: Slice,
         nmtoken: Slice,
@@ -198,7 +198,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         text: Slice,
         unexpected: u32,
     };
-    const Token = struct {
+    pub const Token = struct {
         kind: Kind,
         pos: usize,
         frame: u32,
@@ -213,12 +213,12 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 },
         slow: void,
     };
-    const EntityValue = union(enum) {
+    pub const EntityValue = union(enum) {
         internal: Slice,
         external: void,
         unparsed: void,
     };
-    const SliceCtx = struct {
+    pub const SliceCtx = struct {
     
     pub fn hash(_ctx: SliceCtx, key: Slice) u64 {
                 _ = &_ctx;
@@ -258,7 +258,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         entity_is_pe: bool,
         report_pos: usize,
     };
-    const Scanner = struct {
+    pub const Scanner = struct {
         src: Slice,
         pos: usize,
         frame_id: u32,
@@ -579,14 +579,14 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     _ = &ev;
                     return (switch (ev) {
     .internal => |text| Resolved{ .text = text },
-    .external => (if (in_attribute) self.errNamed(ref_pos, "Attribute values cannot reference external entity", name, "") else Resolved{ .unexpanded = .{} }),
+    .external => (if (in_attribute) self.errNamed(ref_pos, "Attribute values cannot reference external entity", name, "") else Resolved.unexpanded),
     .unparsed => self.errNamed(ref_pos, "Unparsed entity", name, " cannot be referenced"),
     });
                 }
                 if ((self.standalone or (!(self.has_external_subset or self.saw_pe_reference)))) {
                     return self.errNamed(ref_pos, "Entity", name, " is not declared");
                 }
-                return Resolved{ .unexpanded = .{} };
+                return Resolved.unexpanded;
         }
     
     pub fn pushReference(allocator: std.mem.Allocator, buf: *std.ArrayListUnmanaged(U), name: Slice) XMLError!void {
@@ -899,7 +899,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                 _ = (blk_catch_15: { break :blk_catch_15 ((buf.appendSlice(self.allocator, tmp[0..n])) catch |__ce_15| { _ = &__ce_15; return error.OutOfMemory; }); });
         }
     
-    pub fn materialize(allocator: std.mem.Allocator, src: Slice, start: usize, end: usize, buf: ?*std.ArrayListUnmanaged(U)) XMLError!*std.ArrayListUnmanaged(U) {
+    pub fn materialize(allocator: std.mem.Allocator, src: Slice, start: usize, end: usize, buf: *?std.ArrayListUnmanaged(U)) XMLError!*std.ArrayListUnmanaged(U) {
                 if ((buf.* == null)) {
                     var b: std.ArrayListUnmanaged(U) = .{};
                     _ = &b;
@@ -1245,9 +1245,9 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         if ((nxt == 63)) {
                             self.pos = (self.pos + 2);
                             if (try self.scanPi(cur_pos)) {
-                                kind = .{ .xml_decl = .{} };
+                                kind = .xml_decl;
                             } else {
-                                kind = .{ .pi = .{} };
+                                kind = .pi;
                             }
                             break;
                         }
@@ -1261,7 +1261,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                             if (self.hasPrefix("<!--")) {
                                 self.pos = (self.pos + 4);
                                 _ = try self.scanComment(cur_pos);
-                                kind = .{ .comment = .{} };
+                                kind = .comment;
                                 break;
                             }
                             if (self.hasPrefix("<!DOCTYPE")) {
@@ -1328,7 +1328,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     }
                     if ((c == 61)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .eq = .{} };
+                        kind = .eq;
                         break;
                     }
                     if ((c == 62)) {
@@ -1336,7 +1336,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         if (self.inDocument()) {
                             self.tag_degraded = false;
                         }
-                        kind = .{ .gt = .{} };
+                        kind = .gt;
                         break;
                     }
                     if ((c == 47)) {
@@ -1348,52 +1348,52 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         if (self.inDocument()) {
                             self.tag_degraded = false;
                         }
-                        kind = .{ .slash_gt = .{} };
+                        kind = .slash_gt;
                         break;
                     }
                     if ((c == 40)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .paren_open = .{} };
+                        kind = .paren_open;
                         break;
                     }
                     if ((c == 41)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .paren_close = .{} };
+                        kind = .paren_close;
                         break;
                     }
                     if ((c == 124)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .bar = .{} };
+                        kind = .bar;
                         break;
                     }
                     if ((c == 44)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .comma = .{} };
+                        kind = .comma;
                         break;
                     }
                     if ((c == 63)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .question = .{} };
+                        kind = .question;
                         break;
                     }
                     if ((c == 42)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .star = .{} };
+                        kind = .star;
                         break;
                     }
                     if ((c == 43)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .plus = .{} };
+                        kind = .plus;
                         break;
                     }
                     if ((c == 91)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .bracket_open = .{} };
+                        kind = .bracket_open;
                         break;
                     }
                     if ((c == 93)) {
                         self.pos = (self.pos + 1);
-                        kind = .{ .bracket_close = .{} };
+                        kind = .bracket_close;
                         break;
                     }
                     if ((c == 35)) {
@@ -1405,7 +1405,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     if ((c == 37)) {
                         self.pos = (self.pos + 1);
                         if ((!self.atNameStart())) {
-                            kind = .{ .percent = .{} };
+                            kind = .percent;
                             break;
                         }
                         const name = try self.scanName("Expected a parameter entity name after '%' but found");
@@ -1462,13 +1462,13 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                     while (types.isNameCharAscii(self.peekAt(p))) : (p = (p + 1)) {
                     }
                     if ((self.peekAt(p) >= 128)) {
-                        return TagStep{ .slow = .{} };
+                        return TagStep.slow;
                     }
                     const name = self.src[name_start..p];
                     while (types.isWs(self.peekAt(p))) : (p = (p + 1)) {
                     }
                     if ((self.peekAt(p) != 61)) {
-                        return TagStep{ .slow = .{} };
+                        return TagStep.slow;
                     }
                     p = (p + 1);
                     while (types.isWs(self.peekAt(p))) : (p = (p + 1)) {
@@ -1479,7 +1479,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
                         return TagStep{ .attr = .{ .name = name, .pos = name_start, .quote = q } };
                     }
                 }
-                return TagStep{ .slow = .{} };
+                return TagStep.slow;
         }
     
     pub fn takeGt(self: *@This()) bool {
@@ -1641,7 +1641,7 @@ pub fn collapseSpaces(allocator: std.mem.Allocator, value: Slice) XMLError!Slice
         }
     
     pub fn finishText(self: *@This(), start: usize, buf: ?std.ArrayListUnmanaged(U), pos: usize) XMLError!void {
-                var text: Slice = (&&.{});
+                var text: Slice = &.{};
                 _ = &text;
                 if (buf) |mut_b| {
                     _ = &mut_b;

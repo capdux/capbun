@@ -106,6 +106,11 @@ export const lsquic: Dependency = {
     "patches/lsquic/allow-no-sni.patch",
     "patches/lsquic/skip-priority-walk.patch",
     "patches/lsquic/disable-gquic.patch",
+    "patches/lsquic/abort-error-tickable.patch",
+    "patches/lsquic/coalesce-batch-drop.patch",
+    "patches/lsquic/connection-close-pns.patch",
+    "patches/lsquic/hash-nested-iter.patch",
+    "patches/lsquic/node-quic-accessors.patch",
   ],
 
   fetchDeps: ["zlib", "lshpack", "lsqpack", "boringssl"],

@@ -651,10 +651,7 @@ const AutoRelPath = bun.RelPath(.{ .sep = .auto });
 const AutoRelPathU16 = bun.RelPath(.{ .sep = .auto, .unit = .@"u16" });
 const AutoAbsPath_ = bun.AbsPath(.{});
 
-pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Context, install_root_dependencies: bool, workspace_filters: []const WorkspaceFilter, packages_to_install: ?[]const PackageID) OOM!PackageInstall.Summary {
-        bun.analytics.Features.isolated_bun_install = (bun.analytics.Features.isolated_bun_install + 1);
-        const lockfile = manager.lockfile;
-        const store: Store = store: {
+pub fn buildStore(manager: *const PackageManager, lockfile: *const Lockfile, install_root_dependencies: bool, workspace_filters: []const WorkspaceFilter, packages_to_install: ?[]const PackageID, silent: bool) OOM!Store {
         var timer = ((std.time.Timer.start()) catch unreachable);
         _ = &timer;
         const pkgs = lockfile.packages.slice();
@@ -805,6 +802,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             }
         }
         const EarlyDedupeKey = EarlyDedupeKey_;
+        _ = &EarlyDedupeKey;
         var early_dedupe: std.AutoHashMap(EarlyDedupeKey, Store.Node.Id) = .init(lockfile.allocator);
         _ = &early_dedupe;
         var _early_dedupe_guard = EarlyDedupeGuard_{ .map = (&early_dedupe) };
@@ -1116,6 +1114,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
             _ = Output.prettyErrorln("Resolved peers [{f}]", .{ bun.fmt.fmtDurationOneDecimal(full_tree_end) });
         }
         const DedupeInfo = DedupeInfo_;
+        _ = &DedupeInfo;
         var dedupe: std.AutoHashMapUnmanaged(PackageID, std.ArrayListUnmanaged(DedupeInfo)) = .empty;
         _ = &dedupe;
         var _dedupe_guard = DedupeMapGuard_{ .map = (&dedupe), .allocator = lockfile.allocator };
@@ -1136,6 +1135,7 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
         var store: Store.Entry.List = .empty;
         _ = &store;
         const QueuedEntry = QueuedEntry_;
+        _ = &QueuedEntry;
         var entry_queue: bun.LinearFifo(QueuedEntry, .Dynamic) = .init(lockfile.allocator);
         _ = &entry_queue;
         var _entry_queue_guard = EntryQueueGuard_{ .fifo = (&entry_queue) };
@@ -1295,12 +1295,17 @@ pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Co
                 _ = try entry_queue.writeItem(.{ .node_id = node_id, .entry_parent_id = new_entry_id });
             }
         }
-        if (manager.options.log_level.isVerbose()) {
+        if (((!silent) and manager.options.log_level.isVerbose())) {
             const dedupe_end = timer.read();
             _ = Output.prettyErrorln("Created store [{f}]", .{ bun.fmt.fmtDurationOneDecimal(dedupe_end) });
         }
-        break :store .{ .entries = store, .nodes = nodes };
-};
+        return Store{ .entries = store, .nodes = nodes };
+}
+
+pub fn installIsolatedPackages(manager: *PackageManager, command_ctx: Command.Context, install_root_dependencies: bool, workspace_filters: []const WorkspaceFilter, packages_to_install: ?[]const PackageID) OOM!PackageInstall.Summary {
+        bun.analytics.Features.isolated_bun_install = (bun.analytics.Features.isolated_bun_install + 1);
+        const lockfile = manager.lockfile;
+        const store: Store = try buildStore(manager, lockfile, install_root_dependencies, workspace_filters, packages_to_install, false);
         const WyhashWriter = WyhashWriter_;
         const global_store_path: ?[:0]const u8 = (if (manager.options.enable.global_virtual_store) global_store_path: {
         const entries = store.entries.slice();

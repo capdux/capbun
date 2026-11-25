@@ -19,6 +19,7 @@ export @extern class InternalLoopData {
     head: (*SocketGroup)? = null,
     quic_head: *!? = null,
     quic_next_tick_us: i64 = 0,
+    nq_head: *!? = null,
     quic_timer: *Timer? = null,
     iterator: *SocketGroup? = null,
     recv_buf: [*]u8!,

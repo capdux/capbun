@@ -77,6 +77,11 @@ pub const processDependencyListMod = @import("./PackageManager/processDependency
 pub const runTasksMod = @import("./PackageManager/runTasks.zig");
 pub const updatePackageJSONAndInstallMod = @import("./PackageManager/updatePackageJSONAndInstall.zig");
 pub const populateManifestCacheMod = @import("./PackageManager/PopulateManifestCache.zig");
+pub const workspace_selection_mod = @import("./PackageManager/workspace_selection.zig");
+pub const workspace_manifests_mod = @import("./PackageManager/workspace_manifests.zig");
+pub const add_catalog_mod = @import("./PackageManager/add_catalog.zig");
+pub const add_remove_with_filter_mod = @import("./PackageManager/add_remove_with_filter.zig");
+pub const package_json_write_back_mod = @import("./PackageManager/package_json_write_back.zig");
 pub const DirInfo = @import("../resolver/dir_info.zig");
 pub const resolution = @import("./PackageManager/PackageManagerResolution.zig");
 pub const lifecycle = @import("./PackageManager/PackageManagerLifecycle.zig");
@@ -98,6 +103,8 @@ pub const Subcommand = enum {
     info,
     why,
     scan,
+    dedupe,
+    prune,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -112,7 +119,7 @@ else => false,
 
 pub fn supportsWorkspaceFiltering(cmd: Subcommand) bool {
             return (switch (cmd) {
-.outdated, .install, .update => true,
+.outdated, .install, .update, .add, .remove, .prune, .pm => true,
 else => false,
 });
     }
@@ -215,6 +222,17 @@ timestamp_for_manifest_cache_control: u32 = 0,
 extracted_count: u32 = 0,
 default_features: Features = .{},
 summary: Lockfile.Package.Diff.Summary = .{},
+dedupe_report: ?bun.install.dedupe.Report = null,
+audit_fix_pins: []bun.install.audit_fix.PlannedFix = &.{},
+filtered_link_targets: ?workspace_selection_mod.LinkTargets = null,
+pending_filtered_write: ?*add_remove_with_filter_mod.PendingWrite = null,
+edited_package_jsons: std.array_list.Managed(package_json_write_back_mod.EditedPackageJson) = std.array_list.Managed(package_json_write_back_mod.EditedPackageJson).init(bun.default_allocator),
+catalog_add: add_catalog_mod.State = add_catalog_mod.State.init(bun.default_allocator),
+update_target_workspaces: ?[]UpdateTargetWorkspace = null,
+named_update_reachable: ?bun.bit_set.DynamicBitSet = null,
+kept_patched: std.ArrayListUnmanaged(PackageID) = .{},
+kept_patched_text: []const u8 = "",
+updating_catalogs: std.array_list.Managed(CatalogUpdateInfo) = std.array_list.Managed(CatalogUpdateInfo).init(bun.default_allocator),
 env: *DotEnv.Loader,
 progress: Progress = .{},
 downloads_node: ?*Progress.Node = null,
@@ -327,6 +345,26 @@ _ = allocator.free(pattern);
 },
 }
     }
+};
+
+pub const UpdateTargetWorkspace = struct {
+    is_root: bool,
+    name_hash: PackageNameHash,
+    name: []const u8,
+
+pub fn matches(self: UpdateTargetWorkspace, is_root: bool, name_hash: PackageNameHash, name: []const u8) bool {
+            if ((self.is_root and is_root)) {
+                return true;
+            }
+            if ((((!self.is_root) and (!is_root)) and (self.name_hash == name_hash))) {
+                return true;
+            }
+            return std.mem.eql(u8, self.name, name);
+    }
+};
+
+pub const CatalogUpdateInfo = struct {
+    name: []const u8 = "",
 };
 
 pub const PackageUpdateInfo = struct {
@@ -622,6 +660,11 @@ pub const scheduleTasks = runTasksMod.scheduleTasks;
 pub const updatePackageJSONAndInstallCatchError = updatePackageJSONAndInstallMod.updatePackageJSONAndInstallCatchError;
 pub const updatePackageJSONAndInstallWithManager = updatePackageJSONAndInstallMod.updatePackageJSONAndInstallWithManager;
 pub const populateManifestCache = populateManifestCacheMod.populateManifestCache;
+pub const workspace_selection = workspace_selection_mod;
+pub const workspace_manifests = workspace_manifests_mod;
+pub const add_catalog = add_catalog_mod;
+pub const add_remove_with_filter = add_remove_with_filter_mod;
+pub const package_json_write_back = package_json_write_back_mod;
 const PosixAbsPath = bun.AbsPath(.{ .sep = .posix });
 const updatePackageJSONAndInstall = updatePackageJSONAndInstallMod.updatePackageJSONAndInstall;
 const LifecycleScriptTimeLog = lifecycle.LifecycleScriptTimeLog;
@@ -830,6 +873,8 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
         _ = &workspace_name_hash;
         var root_package_json_name_at_time_of_init: []const u8 = "";
         _ = &root_package_json_name_at_time_of_init;
+        var no_project = false;
+        _ = &no_project;
         const root_package_json_file = root_package_json_file: {
         var this_cwd: []const u8 = original_cwd;
         _ = &this_cwd;
@@ -874,6 +919,11 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
                 break :child try attemptToCreatePackageJSONAndOpen();
             }
         }
+        if (cli.no_project_ok) {
+            this_cwd = original_cwd;
+            no_project = true;
+            break :child std.fs.File{ .handle = bun.invalid_fd.native() };
+        }
         return error.MissingPackageJSON;
 };
         _ = bun.assertWithLocation(strings.eqlLong(original_package_json_path_buf.items[0..this_cwd.len], this_cwd, true), @src());
@@ -885,7 +935,7 @@ pub fn init(ctx: Command.Context, cli: CommandLineArguments, subcommand: Subcomm
         var found = false;
         _ = &found;
         if (subcommand.shouldChdirToRoot()) {
-            if ((!created_package_json)) {
+            if (((!created_package_json) and (!no_project))) {
                 ws_while: while (std.fs.path.dirname(this_cwd)) |parent| : (this_cwd = parent) {
                     const parent_without_trailing_slash = strings.withoutTrailingSlash(parent);
                     var parent_path_buf: bun.PathBuffer = undefined;
@@ -986,7 +1036,14 @@ else => null,
         _ = bun.copy(u8, (&cwd_buf), fs.top_level_dir);
         cwd_buf[cp_cast_int(usize, fs.top_level_dir.len)] = 0;
         fs.top_level_dir = cwd_buf[0..fs.top_level_dir.len :0];
-        root_package_json_path = try bun.getFdPathZ(.fromStdFile(root_package_json_file), (&root_package_json_path_buf));
+        if (no_project) {
+            const p = original_package_json_path;
+            _ = @memcpy(root_package_json_path_buf[0..p.len], p);
+            root_package_json_path_buf[cp_cast_int(usize, p.len)] = 0;
+            root_package_json_path = root_package_json_path_buf[0..p.len :0];
+        } else {
+            root_package_json_path = try bun.getFdPathZ(.fromStdFile(root_package_json_file), (&root_package_json_path_buf));
+        }
         const entries_option = try fs.fs.readDirectory(fs.top_level_dir, null, 0, true);
         if ((entries_option.* == .err)) {
             return entries_option.err.canonical_error;

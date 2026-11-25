@@ -9,7 +9,7 @@ type string = []const u8;
 
 import bun from "bun";
 const FileRange = @import("./parallel/FileRange.zig");
-const ShardOptions = bun.options_types.Context.ShardOptions;
+const ShardOptions = @import("../../options_types/Context.zig").ShardOptions_;
 const PathString = bun.PathString;
 
 fn sortU32Asc(_: void, a: u32, b: u32): bool {
@@ -24,7 +24,7 @@ const SlowestSortCtx = struct {
     known: []const u64,
     files: []const PathString,
 
-    pub fn lessThan(ctx: SlowestSortCtx, a: usize, b: usize): bool {
+    static fn lessThan(ctx: SlowestSortCtx, a: usize, b: usize): bool {
         if (ctx.known[a] != ctx.known[b]) {
             return ctx.known[a] > ctx.known[b];
         }
@@ -101,7 +101,7 @@ const SlowestSortCtx = struct {
         defer log.deinit();
 
         const root = bun.json.parseUTF8(&source, &log, bun.default_allocator) catch {
-            * = log.print(bun.Output.errorWriter());
+            log.print(bun.Output.errorWriter()) catch {};
             bun.Output.prettyErrorln("<r><red>error<r>: --timings file <b>{s}<r> is not valid JSON", .{path});
             bun.Global.exit(1);
         };
@@ -121,7 +121,7 @@ const SlowestSortCtx = struct {
             bun.Global.exit(1);
         }
 
-        for (prop of files_opt.?.properties.slice()) {
+        for (prop of files_opt.?.data.e_object.properties.slice()) {
             const key = prop.key.?.asString(bun.default_allocator) ?? continue;
             if (ms := prop.value.?.asNumber()) {
                 if (std.math.isFinite(ms) && ms >= 0.0) {
@@ -173,7 +173,7 @@ const SlowestSortCtx = struct {
     }
 
     pub fn recordSince(*_, abs_path: []const u8, started_ms: i64) {
-        const elapsed = @max(bun.milliTimestamp() - started_ms, 0);
+        const elapsed = @max(std.time.milliTimestamp() - started_ms, 0);
         const ms: u32 = if (elapsed > std.math.maxInt(u32)) std.math.maxInt(u32) else @as(u32, @intCast(elapsed));
         _.record(abs_path, ms);
     }

@@ -171,11 +171,11 @@ pub union(enum) Lazy {
     pub const Poll = IOReader;
     pub const tag = ReadableStream.Tag.File;
 
-    pub fn eventLoop(ctx: *const FileReader): jsc.EventLoopHandle {
+    pub static fn eventLoop(ctx: *const FileReader): jsc.EventLoopHandle {
         return ctx.event_loop;
     }
 
-    pub fn loop(ctx: *const FileReader): *bun.Async.Loop {
+    pub static fn loop(ctx: *const FileReader): *bun.Async.Loop {
         if (bun.Environment.isWindows) {
             return ctx.eventLoop().loop().uv_loop;
         } else {
@@ -654,7 +654,7 @@ pub union(enum) Lazy {
         }
     }
 
-    pub fn memoryCost(ctx: *const FileReader): usize {
+    pub static fn memoryCost(ctx: *const FileReader): usize {
         return ctx.reader.memoryCost() + ctx.buffered.capacity;
     }
 

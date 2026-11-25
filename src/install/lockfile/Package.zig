@@ -162,6 +162,10 @@ pub inline fn sum(self: *DiffSummary, that: DiffSummary) void {
             self.update = (self.update + that.update);
     }
 
+pub inline fn changesDependencies(self: DiffSummary) bool {
+            return (((((self.add > 0) or (self.remove > 0)) or (self.update > 0)) or self.overrides_changed) or self.catalogs_changed);
+    }
+
 pub inline fn hasDiffs(self: DiffSummary) bool {
             return ((((((((self.add > 0) or (self.remove > 0)) or (self.update > 0)) or self.overrides_changed) or self.catalogs_changed) or (self.added_trusted_dependencies.count() > 0)) or (self.removed_trusted_dependencies.count() > 0)) or self.patched_dependencies_changed);
     }
@@ -1927,7 +1931,7 @@ else => .init(.uninitialized),
             }
     }
     const PackageType = @This();
-    const Resolution = ResolutionType(SemverIntType);
+    pub const Resolution = ResolutionType(SemverIntType);
     pub const Scripts = _ScriptsMod.Scripts;
     pub const Meta = _MetaMod.Meta;
     pub const WorkspaceMap = _WorkspaceMapMod;

@@ -298,9 +298,28 @@ _ = try dest.writeChar(91);
                 const scratch_writer = dest.scratchbuf.writer();
                 _ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier((if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value), scratch_writer)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });
                 const id_len = dest.scratchbuf.items.len;
-                var count_writer = std.io.countingWriter(std.io.null_writer);
+                const NullCountingWriter = struct {
+    bytes_written: usize = 0,
+
+pub fn writeAll(self: *@This(), bytes: []const u8) !void {
+            self.bytes_written = (self.bytes_written + bytes.len);
+    }
+
+pub fn writeByte(self: *@This(), _: u8) !void {
+            self.bytes_written = (self.bytes_written + 1);
+    }
+
+pub fn writeBytesNTimes(self: *@This(), bytes: []const u8, n: usize) !void {
+            self.bytes_written = (self.bytes_written + (bytes.len * n));
+    }
+
+pub fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+            self.bytes_written = (self.bytes_written + std.fmt.count(fmt, args));
+    }
+};
+                var count_writer = NullCountingWriter{  };
                 _ = &count_writer;
-                _ = (blk_catch_1: { break :blk_catch_1 ((css.serializer.serializeString((if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value), count_writer.writer())) catch |__ce_1| { _ = &__ce_1; return dest.addFmtError(); }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((css.serializer.serializeString((if (@typeInfo(@TypeOf(v)) == .@"enum") @intFromEnum(v) else v.value), (&count_writer))) catch |__ce_1| { _ = &__ce_1; return dest.addFmtError(); }); });
                 if (((id_len > 0) and (id_len < count_writer.bytes_written))) {
                     _ = try dest.writeScratchbuf(0, id_len);
                 } else {

@@ -953,7 +953,7 @@ pub fn pong(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: 
 
 pub fn throwControlFrameTooLarge(self: ServerWebSocket, globalThis: *jsc.JSGlobalObject, len: usize) bun.JSError {
     _ = self;
-        return globalThis.throwRangeError("The data size must not be greater than {d} bytes. Received {d} bytes.", .{ MAX_CONTROL_FRAME_PAYLOAD, len });
+        return globalThis.throwValue(globalThis.createRangeError("The data size must not be greater than {d} bytes. Received {d} bytes.", .{ MAX_CONTROL_FRAME_PAYLOAD, len }));
 }
 
 pub inline fn sendPing(self: *ServerWebSocket, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, comptime name: []const u8, comptime opcode: uws.Opcode) bun.JSError!JSValue {

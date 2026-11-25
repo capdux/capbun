@@ -451,7 +451,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                 @intFromEnum(bun.sys.SystemErrno.EAFNOSUPPORT) => normalized_errno,
                 else => @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED),
             };
-            const code_ = if (sys_e := bun.sys.SystemErrno.init(@intCast(errno_))) bun.String.static(@tagName(sys_e)) else bun.String.static("ECONNREFUSED");
+            const code_ = if (sys_e := bun.sys.SystemErrno.init(errno_)) bun.String.static(@tagName(sys_e)) else bun.String.static("ECONNREFUSED");
             if (Environment.isWindows) {
                 errno_ = switch (errno_) {
                     @intFromEnum(bun.sys.SystemErrno.ENOENT) => @intFromEnum(bun.sys.SystemErrno.UV_ENOENT),

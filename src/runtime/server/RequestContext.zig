@@ -2238,7 +2238,11 @@ pub fn doRenderNullBodyStatusCorked(self: *@This()) void {
                         _ = &headers;
                         if (headers.fastGet(.ContentLength)) |cl| {
                             _ = &cl;
-                            app_content_length = (blk_catch_16: { break :blk_catch_16 ((std.fmt.parseInt(u64, cl, 10)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
+                            const cl_slice = cl.toSlice(self.server.?.allocator);
+                            defer {
+                            _ = cl_slice.deinit();
+                            }
+                            app_content_length = (blk_catch_16: { break :blk_catch_16 ((std.fmt.parseInt(u64, cl_slice.slice(), 10)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
                         }
                     }
                 }

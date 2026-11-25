@@ -54,6 +54,7 @@ pub enum Tag {
     BunTest,
     EventLoopDelayMonitor,
     CronJob,
+    QuicEndpoint,
 
     static fn Type(comptime T: Tag): type {
         return switch (T) {
@@ -79,6 +80,7 @@ pub enum Tag {
             .BunTest => jsc.Jest.bun_test.BunTest,
             .EventLoopDelayMonitor => jsc.API.Timer.EventLoopDelayMonitor,
             .CronJob => bun.api.cron.CronJob,
+            .QuicEndpoint => bun.api.node.quic.QuicEndpoint,
         };
     }
 
@@ -88,7 +90,8 @@ pub enum Tag {
             .BunTest,
             .EventLoopDelayMonitor,
             .StatWatcherScheduler,
-            .CronJob => false,
+            .CronJob,
+            .QuicEndpoint => false,
             else => true,
         };
     }
@@ -245,6 +248,10 @@ pub enum State {
                 .CronJob => {
                     const job: *bun.api.cron.CronJob = @alignCast(@fieldParentPtr("event_loop_timer", _));
                     job.onTimerFire(vm);
+                },
+                .QuicEndpoint => {
+                    const ep: *bun.api.node.quic.QuicEndpoint = @alignCast(@fieldParentPtr("event_loop_timer", _));
+                    ep.onTimerFire(vm);
                 },
                 .TimeoutObject => {
                     const container: *TimeoutObject = @alignCast(@fieldParentPtr("event_loop_timer", _));

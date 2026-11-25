@@ -21,6 +21,15 @@ function checkToml(toml) {
   expect(toml.install.scopes["@mybigcompany3"].three).toBe(4);
   expect(toml.install.cache.dir).toBe("C:\\Windows\\System32");
   expect(toml.install.cache.dir2).toBe("C:\\Windows\\System32\\🏳️‍🌈");
+  // Imported date/time values are the same Temporal objects TOML.parse returns.
+  expect(toml.dates.odt).toBeInstanceOf(Temporal.Instant);
+  expect(toml.dates.odt.toString()).toBe("1979-05-27T07:32:00Z");
+  expect(toml.dates.ldt).toBeInstanceOf(Temporal.PlainDateTime);
+  expect(toml.dates.ldt.toString()).toBe("1979-05-27T07:32:00");
+  expect(toml.dates.ld).toBeInstanceOf(Temporal.PlainDate);
+  expect(toml.dates.ld.toString()).toBe("1979-05-27");
+  expect(toml.dates.lt).toBeInstanceOf(Temporal.PlainTime);
+  expect(toml.dates.lt.toString()).toBe("07:32:00");
 }
 
 it("via dynamic import", async () => {
@@ -106,11 +115,17 @@ q1 = 1
 });
 
 it("Bun.TOML.parse throws on deeply nested inline tables instead of crashing", () => {
-  const depth = 25_000;
-  const deepToml = "a = " + "{ b = ".repeat(depth) + "1" + " }".repeat(depth);
+  // Calibrated to exhaust the 18 MB main-thread stack at the smallest expected
+  // per-recursion frame size (~100 B in release builds). Previously 25_000.
+  const depth = 200_000;
+  const deepToml =
+    "a = " + Buffer.alloc(depth * 6, "{ b = ").toString() + "1" + Buffer.alloc(depth * 2, " }").toString();
   expect(() => Bun.TOML.parse(deepToml)).toThrow(RangeError);
 });
 
+// Dotted paths (table headers and keys) nest iteratively in the parser, so the
+// depth limit is only hit when the parsed AST is converted to a JS object at
+// import time.
 const deepDottedToml = "[" + Buffer.alloc(250_000 * 2, "a.").toString() + "a]\nd = 1\n";
 const deepDottedKeyToml = Buffer.alloc(250_000 * 2, "a.").toString() + "a = 1\n";
 
@@ -172,6 +187,9 @@ it.concurrent("importing a deeply nested dotted key throws instead of crashing",
 });
 
 it.concurrent("a moderately nested table header imports correctly", async () => {
+  // 1000 segments: comfortably below every stack limit, far above any real
+  // document. Pins the success side so a future parse-time cap can't regress
+  // legitimate depth.
   const depth = 1000;
   using dir = tempDir("toml-deep-ok", {
     "deep.toml": "[" + Buffer.alloc((depth - 1) * 2, "a.").toString() + "a]\nd = 1\n",

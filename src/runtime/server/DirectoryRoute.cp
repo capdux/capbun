@@ -125,7 +125,7 @@ struct StatLookupResult {
         if (slots > 0) {
             cache = bun.handleOom(bun.default_allocator.alloc(StatCacheEntry, slots));
             for (*entry of cache) {
-                entry.* = StatCacheEntry{};
+                entry = StatCacheEntry{};
             }
         }
 
@@ -355,7 +355,7 @@ struct StatLookupResult {
             }
             let buf_guard = PathBufGuard{ buf: bun.path_buffer_pool.get() };
             const buf_slice: []u8 = unsafe { buf_guard.buf[0..] };
-            const joined = bun.resolve_path.joinStringBuf(buf_slice, .{ rel, "index.html" }, .posix);
+            const joined = bun.path.joinStringBuf(buf_slice, .{ rel, "index.html" }, .posix);
             const idx_res = _.openAndStat(joined) ?? return null;
             if (bun.S.ISREG(@intCast(idx_res.stat.mode))) {
                 return .{ .file = OpenFileResult{ fd: idx_res.fd, stat: idx_res.stat, is_index: true } };
@@ -373,7 +373,7 @@ struct StatLookupResult {
 
     fn openBeneath(*_, rel: []const u8): bun.FD? {
         let buf_guard = PathBufGuard{ buf: bun.path_buffer_pool.get() };
-        const zrel = bun.resolve_path.z(rel, buf_guard.buf);
+        const zrel = bun.path.z(rel, buf_guard.buf);
         const flags: i32 = if (comptime bun.Environment.isWindows)
             bun.O.RDONLY | bun.O.CLOEXEC
         else
@@ -580,9 +580,9 @@ fn pathAndQuery(url: []const u8): PathAndQuery {
         query = url[i..];
     }
     if (path.len > 0 && path[0] != '/') {
-        const skip: usize = if (strings.hasPrefixComptimeType(path, "http://"))
+        const skip: usize = if (strings.hasPrefixComptimeType(u8, path, "http://"))
             7
-        else if (strings.hasPrefixComptimeType(path, "https://"))
+        else if (strings.hasPrefixComptimeType(u8, path, "https://"))
             8
         else
             0;
@@ -648,7 +648,7 @@ fn resolveSubpath(url: []const u8, url_prefix: []const u8, out: []u8): SubpathPa
 
     let stream = std.io.fixedBufferStream(out[0..after_prefix.len]);
     const writer = stream.writer();
-    const decoded_len = bun.url.PercentEncoding.decode(@TypeOf(writer), writer, after_prefix) catch return null;
+    const decoded_len = bun.url_mod.PercentEncoding.decode(@TypeOf(writer), writer, after_prefix) catch return null;
     const decoded = out[0..decoded_len];
 
     if (strings.countChar(decoded, '/') != raw_slashes) {

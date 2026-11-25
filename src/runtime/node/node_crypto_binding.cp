@@ -353,6 +353,37 @@ pub struct random {
         return str.transferToJS(global);
     }
 
+    static fn randomUUIDv7(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSValue {
+        const args = callFrame.arguments();
+
+        let disable_entropy_cache = false;
+        if (args.len > 0) {
+            const options = args[0];
+            if (!options.isUndefined()) {
+                validators.validateObject(global, options, "options", .{}, .{})?;
+                if (disable_entropy_cache_value := options.get(global, "disableEntropyCache")?) {
+                    disable_entropy_cache = validators.validateBoolean(global, disable_entropy_cache_value, "options.disableEntropyCache", .{})?;
+                }
+            }
+        }
+
+        const now_ms: u64 = @as(u64, @intCast(@max(std.time.milliTimestamp(), 0)));
+        let entropy: [8]u8 = undefined;
+        if (disable_entropy_cache) {
+            * = BoringSSL.RAND_bytes(&entropy, entropy.len);
+        } else {
+            const slice = global.bunVM().rareData().entropySlice(8);
+            @memcpy(&entropy, slice[0..8]);
+        }
+        const uuid = bun.UUID.UUID7.init(now_ms, &entropy);
+
+        let str_bytes = String.createUninitialized(.latin1, 36);
+        let str = str_bytes[0];
+        let bytes = str_bytes[1];
+        uuid.print(bytes[0..36]);
+        return str.transferToJS(global);
+    }
+
     static fn assertOffset(global: *JSGlobalObject, offset_value: JSValue, element_size: u8, length: usize): JSError!u32 {
         if (!offset_value.isNumber()) {
             return global.throwInvalidArgumentTypeValue("offset", "number", offset_value);
@@ -868,7 +899,7 @@ fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSVal
 }
 
 pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject): jsc.JSValue {
-    const crypto = jsc.JSValue.createEmptyObject(global, 15);
+    const crypto = jsc.JSValue.createEmptyObject(global, 16);
 
     crypto.put(global, String.init("pbkdf2"), jsc.JSFunction.create(global, "pbkdf2", pbkdf2, 5, .{}));
     crypto.put(global, String.init("pbkdf2Sync"), jsc.JSFunction.create(global, "pbkdf2Sync", pbkdf2Sync, 5, .{}));
@@ -876,6 +907,7 @@ pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject): jsc.JSValue {
     crypto.put(global, String.init("randomFill"), jsc.JSFunction.create(global, "randomFill", random.randomFill, 4, .{}));
     crypto.put(global, String.init("randomFillSync"), jsc.JSFunction.create(global, "randomFillSync", random.randomFillSync, 3, .{}));
     crypto.put(global, String.init("randomUUID"), jsc.JSFunction.create(global, "randomUUID", random.randomUUID, 1, .{}));
+    crypto.put(global, String.init("randomUUIDv7"), jsc.JSFunction.create(global, "randomUUIDv7", random.randomUUIDv7, 1, .{}));
     crypto.put(global, String.init("randomBytes"), jsc.JSFunction.create(global, "randomBytes", random.randomBytes, 2, .{}));
     crypto.put(global, String.init("timingSafeEqual"), jsc.JSFunction.create(global, "timingSafeEqual", timingSafeEqual, 2, .{}));
 
