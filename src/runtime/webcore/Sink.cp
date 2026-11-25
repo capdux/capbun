@@ -558,6 +558,20 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         pub static fn start(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
+            // Option getters can run user JS that closes the sink, so read them
+            // before resolving `this`.
+            const config: streams.Start = if (callframe.argumentsCount() > 0)
+                if (comptime @hasField(streams.Start, abi_name))
+                    streams.Start.fromJSWithTag(
+                        globalThis,
+                        callframe.argument(0),
+                        comptime @field(streams.StartTag, abi_name),
+                    )?
+                else
+                    streams.Start.fromJS(globalThis, callframe.argument(0))?
+            else
+                .empty;
+
             const inst = getThis(globalThis, callframe)?;
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
@@ -566,25 +580,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                 }
             }
 
-            if (comptime @hasField(streams.Start, abi_name)) {
-                return inst.sink.start(
-                    if (callframe.argumentsCount() > 0)
-                        streams.Start.fromJSWithTag(
-                            globalThis,
-                            callframe.argument(0),
-                            comptime @field(streams.StartTag, abi_name),
-                        )?
-                    else
-                        .empty,
-                ).toJS(globalThis);
-            }
-
-            return inst.sink.start(
-                if (callframe.argumentsCount() > 0)
-                    streams.Start.fromJS(globalThis, callframe.argument(0))?
-                else
-                    .empty,
-            ).toJS(globalThis);
+            return inst.sink.start(config).toJS(globalThis);
         }
 
         pub static fn end(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {

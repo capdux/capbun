@@ -1770,7 +1770,7 @@ pub struct RealFS {
             const dir = _dir;
             let combo: [2]string = [dir, base];
             let outpath: bun.PathBuffer = undefined;
-            const entry_path = path_handler.joinAbsStringBuf(fs.cwd, &outpath, &combo, .auto);
+            const entry_path = path_handler.joinAbsStringBufChecked(fs.cwd, outpath[0 .. outpath.len - 2], &combo, .auto) ?? return error.ENAMETOOLONG;
 
             outpath[entry_path.len + 1] = 0;
             outpath[entry_path.len] = 0;

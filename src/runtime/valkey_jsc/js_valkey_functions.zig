@@ -673,7 +673,14 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
         _ = &_key_deinit_guard;
         var ___key_deinit_guard_moved = false; _ = &___key_deinit_guard_moved;
         defer if (!___key_deinit_guard_moved) { ___key_deinit_guard_moved = true; const __T = @TypeOf(_key_deinit_guard); if (@typeInfo(__T) == .optional) { if (_key_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _key_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _key_deinit_guard; _drop_val.__cp_deinit(); } };
-        const seconds = try globalObject.validateIntegerRange(callframe.argument(1), i32, 0, .{ .min = 0, .max = 2147483647, .field_name = "seconds" });
+        const seconds_value = callframe.argument(1);
+        if (seconds_value.isUndefined()) {
+            return globalObject.throwInvalidPropertyTypeValue("seconds", "number", seconds_value);
+        }
+        if ((seconds_value.isNumber() and std.math.isNan(seconds_value.asNumber()))) {
+            return globalObject.throwInvalidPropertyTypeValue("seconds", "integer", seconds_value);
+        }
+        const seconds = try globalObject.validateIntegerRange(seconds_value, i32, 0, .{ .min = 0, .max = 2147483647, .field_name = "seconds" });
         var int_buf: [64]u8 = undefined;
         _ = &int_buf;
         const seconds_len = std.fmt.printInt((&int_buf), seconds, 10, .lower, .{});

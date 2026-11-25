@@ -1251,10 +1251,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             const overflow_len = remain_buf.len;
             let overflow: []u8 = empty_u8[0..0];
             if (overflow_len > 0) {
-                overflow = bun.default_allocator.alloc(u8, overflow_len) catch {
-                    _.terminate(ErrorCode.invalid_response);
-                    return;
-                };
+                overflow = bun.default_allocator.alloc(u8, overflow_len) catch bun.outOfMemory();
                 @memcpy(overflow, remain_buf);
             }
             let _guard_overflow = FreeGuard<u8>{ allocator: bun.default_allocator, slice: if (overflow_len > 0) overflow else null };

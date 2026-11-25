@@ -730,8 +730,7 @@ pub fn consume(self: *@This(), data_: []const u8, left_in_fragment: usize, kind:
             _ = bun.assert((data_.len <= left_in_fragment));
             if (self.receiving_compressed) {
                 if ((data_.len > 0)) {
-                    var writable = (blk_catch_2: { break :blk_catch_2 ((self.receive_buffer.writableWithSize(data_.len)) catch |__ce_2| { _ = &__ce_2; _ = self.terminate(ErrorCode.closed);
-                    return 0; }); });
+                    var writable = (blk_catch_2: { break :blk_catch_2 ((self.receive_buffer.writableWithSize(data_.len)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 bun.outOfMemory(); }); });
                     _ = &writable;
                     _ = @memcpy(writable[0..data_.len], data_);
                     _ = self.receive_buffer.update(data_.len);
@@ -767,7 +766,7 @@ pub fn consume(self: *@This(), data_: []const u8, left_in_fragment: usize, kind:
             if ((data_.len == 0)) {
                 return 0;
             }
-            var writable = ((self.receive_buffer.writableWithSize(data_.len)) catch unreachable);
+            var writable = (blk_catch_3: { break :blk_catch_3 ((self.receive_buffer.writableWithSize(data_.len)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 bun.outOfMemory(); }); });
             _ = &writable;
             _ = @memcpy(writable[0..data_.len], data_);
             _ = self.receive_buffer.update(data_.len);
@@ -1175,7 +1174,7 @@ pub fn sendData(self: *@This(), bytes: Copy, do_write: bool, opcode: Opcode) boo
                     defer if (!___compressed_guard_moved) { ___compressed_guard_moved = true; const __T = @TypeOf(_compressed_guard); if (@typeInfo(__T) == .optional) { if (_compressed_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _compressed_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _compressed_guard; _drop_val.__cp_deinit(); } };
                     _ = (blk_catch_7: { break :blk_catch_7 ((self.deflate.?.compress(content_to_compress, (&compressed))) catch |__ce_7| { _ = &__ce_7; return self.sendDataUncompressed(bytes, do_write, opcode); }); });
                     const frame_size = WebsocketHeader.frameSizeIncludingMask(compressed.items.len);
-                    const writable = (blk_catch_8: { break :blk_catch_8 ((self.send_buffer.writableWithSize(frame_size)) catch |__ce_8| { _ = &__ce_8; return false; }); });
+                    const writable = (blk_catch_8: { break :blk_catch_8 ((self.send_buffer.writableWithSize(frame_size)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 bun.outOfMemory(); }); });
                     _ = Copy.copyCompressed(self.globalThis, writable[0..frame_size], compressed.items, opcode, true);
                     _ = self.send_buffer.update(frame_size);
                 }
@@ -1202,7 +1201,7 @@ pub fn sendDataUncompressed(self: *@This(), bytes: Copy, do_write: bool, opcode:
             _ = &content_byte_len;
             const write_len = mut_bytes.len((&content_byte_len));
             _ = bun.assert((write_len > 0));
-            const writable = ((self.send_buffer.writableWithSize(write_len)) catch unreachable);
+            const writable = (blk_catch_9: { break :blk_catch_9 ((self.send_buffer.writableWithSize(write_len)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 bun.outOfMemory(); }); });
             _ = mut_bytes.copy(self.globalThis, writable[0..write_len], content_byte_len, opcode);
             _ = self.send_buffer.update(write_len);
             if (do_write) {

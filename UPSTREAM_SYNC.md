@@ -7,7 +7,7 @@
 | :--- | :--- | :--- | :--- |
 | Step 1 | `cp-v1.3.14-green` & `#30412` 坐标系 | **已完成** | 已建 `../bun-ref` 只读 worktree 与 `MODULE_MAP.md` (`1217/1295` 自动匹配) |
 | Step 2 | `23427dbc12f..a215285063c` (935 commits) | **已完成** | 已筛选 356 条有效修复；Wave 1 + Wave 2 + Wave 3 已完成全部高/中优安全、泄漏、UAF、边界与 Windows/Linux 修复移植，并通过 `zig:check` 5/5 全绿校验 |
-| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | **即将启动** | `temp/audit_1097.md`（491 有效修复 / 141 高优，仅 2 处路径重命名） |
+| Step 3 | `a215285063c..bun-v1.4.0` (1097 commits) | **Wave 1 已提交** | 已完成 `http/fetch/h2`、`net/tls/usockets/server/sql`、`bundler/parser/css`、`valkey`、`WaitGroup`、`bun.lock`、`WorkspaceMap`、`Sink`、`c-bindings` 及其上游测试吸收；Wave 2 (`node_compat`/`shell`/`spawn`/`sys`/`ffi`) 并发推进中 |
 | Step 4 | `bun-v1.4.0..bun-v1.4.5` (1501 commits) | 待推进 | 小步快跑逐版本吸收至 CP 1.4.5 |
 
 ## Step 2 Wave 1 已吸收修复摘要（`23427dbc12f..a215285063c`）

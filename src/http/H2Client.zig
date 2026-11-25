@@ -30,6 +30,7 @@ pub const _PendingConnect = @import("./h2_client/PendingConnect.zig");
 pub const headers_jsc = @import("../http_jsc/headers_jsc.zig");
 pub const local_initial_window_size: u31 = cp_shl(1, 24);
 pub const local_max_header_list_size: u32 = (256 * 1024);
+pub const local_max_continuations: u8 = 8;
 pub const write_buffer_high_water: usize = (256 * 1024);
 pub const write_buffer_control_limit: usize = (1024 * 1024);
 pub var live_sessions = std.atomic.Value(i32).init(0);

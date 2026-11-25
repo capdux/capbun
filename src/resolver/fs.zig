@@ -1647,7 +1647,7 @@ pub fn kind(fs: *RealFS, _dir: []const u8, base: []const u8, existing_fd: FD, st
             _ = &combo;
             var outpath: bun.PathBuffer = undefined;
             _ = &outpath;
-            const entry_path = path_handler.joinAbsStringBuf(fs.cwd, (&outpath), (&combo), .auto);
+            const entry_path = ((path_handler.joinAbsStringBufChecked(fs.cwd, outpath[0..(outpath.len - 2)], (&combo), .auto)) orelse { return error.ENAMETOOLONG; });
             outpath[cp_cast_int(usize, (entry_path.len + 1))] = 0;
             outpath[cp_cast_int(usize, entry_path.len)] = 0;
             const absolute_path_c: [:0]const u8 = outpath[0..entry_path.len :0];

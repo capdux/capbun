@@ -1543,14 +1543,26 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         }
 
         if (entry_naming := args.option("--entry-naming")) {
+            if (u := options.findUnterminatedPlaceholder(entry_naming)) {
+                bun.Output.errGeneric("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "--entry-naming", u.tail, u.pos });
+                Global.exit(1);
+            }
             ctx.bundler_options.entry_naming = strings.concat(allocator, &.{ "./", bun.strings.removeLeadingDotSlash(entry_naming) })?;
         }
 
         if (chunk_naming := args.option("--chunk-naming")) {
+            if (u := options.findUnterminatedPlaceholder(chunk_naming)) {
+                bun.Output.errGeneric("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "--chunk-naming", u.tail, u.pos });
+                Global.exit(1);
+            }
             ctx.bundler_options.chunk_naming = strings.concat(allocator, &.{ "./", bun.strings.removeLeadingDotSlash(chunk_naming) })?;
         }
 
         if (asset_naming := args.option("--asset-naming")) {
+            if (u := options.findUnterminatedPlaceholder(asset_naming)) {
+                bun.Output.errGeneric("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "--asset-naming", u.tail, u.pos });
+                Global.exit(1);
+            }
             ctx.bundler_options.asset_naming = strings.concat(allocator, &.{ "./", bun.strings.removeLeadingDotSlash(asset_naming) })?;
         }
 

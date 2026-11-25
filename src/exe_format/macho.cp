@@ -66,6 +66,15 @@ pub struct Shifter {
     }
 }
 
+fn readMachoHeader(obj: []const u8): macho.mach_header_64! {
+    const header_size: usize = @sizeOf(macho.mach_header_64);
+    if (obj.len < header_size) return err.InvalidObject;
+    const header = unsafe { std.mem.bytesAsValue(macho.mach_header_64, obj[0..header_size]).* };
+    const cmds_end = std.math.add(usize, @as(usize, header.sizeofcmds), header_size) catch return err.InvalidObject;
+    if (cmds_end > obj.len) return err.InvalidObject;
+    return header;
+}
+
 pub struct MachoSigner {
     data: std.array_list.Managed(u8),
     sig_off: usize,
@@ -77,11 +86,11 @@ pub struct MachoSigner {
     allocator: Allocator,
 
     pub static fn init(allocator: Allocator, obj: []const u8): (*MachoSigner!)! {
+        const header_size: usize = @sizeOf(macho.mach_header_64);
+        const header = readMachoHeader(obj)?;
+
         let res = allocator.create(MachoSigner)?;
         let res_guard = DestroyGuard<MachoSigner>{ allocator: allocator, ptr: res };
-
-        const header_size: usize = @sizeOf(macho.mach_header_64);
-        const header = unsafe { std.mem.bytesAsValue(macho.mach_header_64, obj[0..header_size]).* };
 
         let sig_off: usize = 0;
         let sig_sz: usize = 0;
@@ -98,7 +107,7 @@ pub struct MachoSigner {
 
         while (cmd := it.next()) {
             if (cmd.cmd() == .SEGMENT_64) {
-                const seg = cmd.cast(macho.segment_command_64).?;
+                const seg = cmd.cast(macho.segment_command_64) ?? return err.InvalidObject;
                 if (strings.eqlComptime(seg.segName(), SEG_LINKEDIT)) {
                     linkedit_seg = seg;
                     linkedit_off = unsafe { @intFromPtr(cmd.data.ptr) - @intFromPtr(obj.ptr) };
@@ -119,7 +128,7 @@ pub struct MachoSigner {
         while (cmd := it.next()) {
             switch (cmd.cmd()) {
                 .CODE_SIGNATURE => {
-                    const cs = cmd.cast(macho.linkedit_data_command).?;
+                    const cs = cmd.cast(macho.linkedit_data_command) ?? return err.InvalidObject;
                     sig_off = cs.dataoff;
                     sig_sz = cs.datasize;
                     cs_cmd_off = unsafe { @intFromPtr(cmd.data.ptr) - @intFromPtr(obj.ptr) };
@@ -266,12 +275,12 @@ pub struct MachoFile {
     allocator: Allocator,
 
     pub static fn init(allocator: Allocator, obj_file: []const u8, blob_to_embed_length: usize): (*MachoFile!)! {
+        const header = readMachoHeader(obj_file)?;
+
         let data_guard = DeinitGuard<std.array_list.Managed(u8)>{
             val: std.array_list.Managed(u8).initCapacity(allocator, obj_file.len + blob_to_embed_length)?,
         };
         data_guard.val.appendSlice(obj_file)?;
-
-        const header = unsafe { std.mem.bytesAsValue(macho.mach_header_64, data_guard.val.items[0..@sizeOf(macho.mach_header_64)]).* };
 
         let res = allocator.create(MachoFile)?;
         let res_guard = DestroyGuard<MachoFile>{ allocator: allocator, ptr: res };
@@ -320,7 +329,7 @@ pub struct MachoFile {
             const cmd = entry.hdr;
             switch (cmd.cmd) {
                 .SEGMENT_64 => {
-                    const command = entry.cast(macho.segment_command_64).?;
+                    const command = entry.cast(macho.segment_command_64) ?? return err.InvalidObject;
                     if (strings.eqlComptime(command.segName(), "__BUN")) {
                         if (command.nsects > 0) {
                             const section_offset = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(_.data.items.ptr) };
@@ -541,7 +550,7 @@ pub struct MachoFile {
         while (entry := iter.next()) {
             const cmd = entry.hdr;
             if (cmd.cmd == .SEGMENT_64) {
-                const seg = entry.cast(macho.segment_command_64).?;
+                const seg = entry.cast(macho.segment_command_64) ?? return err.InvalidObject;
                 if (seg.fileoff < prev_end) {
                     return err.OverlappingSegments;
                 }

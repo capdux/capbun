@@ -384,7 +384,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
     }
 
     static fn fromBytes(bytes: []u8, typed_array_type: jsc.JSValue.JSType): ArrayBuffer {
-        return ArrayBuffer{ len: @as(u32, @intCast(bytes.len)), byte_len: @as(u32, @intCast(bytes.len)), typed_array_type: typed_array_type, ptr: bytes.ptr };
+        return ArrayBuffer{ len: bytes.len, byte_len: bytes.len, typed_array_type: typed_array_type, ptr: bytes.ptr };
     }
 
     fn toJSUnchecked(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {

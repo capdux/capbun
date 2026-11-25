@@ -596,6 +596,7 @@ return globalThis.throwValue(try e.toJS(globalThis));
 
 pub fn start(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
+            const config: streams.Start = (if ((callframe.argumentsCount() > 0)) (if (comptime @hasField(streams.Start, abi_name)) try streams.Start.fromJSWithTag(globalThis, callframe.argument(0), (comptime @field(streams.StartTag, abi_name))) else try streams.Start.fromJS(globalThis, callframe.argument(0))) else .empty);
             const inst = try getThis(globalThis, callframe);
             if (comptime @hasDecl(SinkType, "getPendingError")) {
                 if (inst.sink.getPendingError()) |e| {
@@ -603,10 +604,7 @@ pub fn start(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSV
                     return globalThis.throwValue(e);
                 }
             }
-            if (comptime @hasField(streams.Start, abi_name)) {
-                return inst.sink.start((if ((callframe.argumentsCount() > 0)) try streams.Start.fromJSWithTag(globalThis, callframe.argument(0), (comptime @field(streams.StartTag, abi_name))) else .empty)).toJS(globalThis);
-            }
-            return inst.sink.start((if ((callframe.argumentsCount() > 0)) try streams.Start.fromJS(globalThis, callframe.argument(0)) else .empty)).toJS(globalThis);
+            return inst.sink.start(config).toJS(globalThis);
     }
 
 pub fn end(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {

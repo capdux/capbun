@@ -287,11 +287,23 @@ pub struct Route {
     }
 
     fn scheduleBundle(*_, server: AnyServer): ! {
-        switch (server.getOrLoadPlugins(.{ .html_bundle_route = _ })) {
+        let srv = server;
+        switch (srv.getOrLoadPlugins(.{ .html_bundle_route = _ })) {
             .err => _.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) },
-            .ready => |plugins| _.onPluginsResolved(plugins)?,
-            .pending => _.state = .{ .building = null },
+            .ready => |plugins| {
+                srv.onPendingRequest();
+                _.onPluginsResolved(plugins)?;
+            },
+            .pending => {
+                srv.onPendingRequest();
+                _.state = .{ .building = null };
+            },
         }
+    }
+
+    fn finishBuilding(*_) {
+        _.resumePendingResponses();
+        _.server.?.onRequestComplete();
     }
 
     fn onPluginsResolved(*_, plugins: (*jsc.API.JSBundler.Plugin)?): ! {
@@ -383,7 +395,7 @@ pub struct Route {
     fn onPluginsRejected(*_): ! {
         unsafe { debug("HTMLBundleRoute(0x{x}) plugins rejected", .{@intFromPtr(_)}); }
         _.state = .{ .err_val = bun.logger.Log.init(bun.default_allocator) };
-        _.resumePendingResponses();
+        _.finishBuilding();
     }
 
     fn onComplete(*_, completion_task: *bun.BundleV2.JSBundleCompletionTask) {
@@ -500,7 +512,7 @@ pub struct Route {
             .pending => unreachable,
         }
 
-        _.resumePendingResponses();
+        _.finishBuilding();
     }
 
     fn resumePendingResponses(*_) {
@@ -531,10 +543,12 @@ pub struct Route {
                         * = log;
                     }
                     resp.writeStatus("500 Build Failed");
-                    resp.endWithoutBody(false);
+                    resp.writeHeaderInt("Content-Length", 0);
+                    resp.endWithoutBody(true);
                 },
                 else => {
-                    resp.endWithoutBody(false);
+                    resp.writeHeaderInt("Content-Length", 0);
+                    resp.endWithoutBody(true);
                 },
             }
         }

@@ -1641,20 +1641,23 @@ pub fn parseIntoBinaryLockfile(
     }
 
     const pkgs_expr_opt = root.get("packages");
-    if (pkgs_expr_opt == null) {
-        // packages is empty, but there might be empty workspace packages
-        if (workspace_pkgs_len == 0) {
-            lockfile.initEmpty(allocator);
-        }
+    if (pkgs_expr_opt == null && workspace_pkgs_len == 0) {
+        lockfile.initEmpty(allocator);
         return;
     }
-    const pkgs_expr = pkgs_expr_opt.?;
 
     {
-        if (!pkgs_expr.isObject()) {
-            log.addError(source, pkgs_expr.loc, "Expected an object")?;
-            return error.InvalidPackagesObject;
+        if (pkgs_expr := pkgs_expr_opt) {
+            if (!pkgs_expr.isObject()) {
+                log.addError(source, pkgs_expr.loc, "Expected an object")?;
+                return error.InvalidPackagesObject;
+            }
         }
+        const empty_props: [0]bun.ast.G.Property = undefined;
+        const pkg_props: []const bun.ast.G.Property = if (pkgs_expr := pkgs_expr_opt)
+            pkgs_expr.data.e_object.properties.slice()
+        else
+            empty_props[0..0];
 
         // find the bundle roots.
         //
@@ -1668,7 +1671,7 @@ pub fn parseIntoBinaryLockfile(
         // the bundled map, and mark the dependency bundled if it exists. This works
         // because package's direct bundled dependencies can only exist at the top
         // level of it's node_modules.
-        for (prop of pkgs_expr.data.e_object.properties.slice()) {
+        for (prop of pkg_props) {
             const key = prop.key.?;
             const value = prop.value.?;
 
@@ -1693,7 +1696,7 @@ pub fn parseIntoBinaryLockfile(
             bundled_pkgs.put(pkg_path, undefined)?;
         }
 
-        for (prop of pkgs_expr.data.e_object.properties.slice()) {
+        for (prop of pkg_props) {
             const key = prop.key.?;
             const value = prop.value.?;
 
@@ -2110,7 +2113,7 @@ pub fn parseIntoBinaryLockfile(
         }
 
         // then each package dependency
-        for (prop of pkgs_expr.data.e_object.properties.slice()) {
+        for (prop of pkg_props) {
             const key = prop.key.?;
 
             const pkg_path = key.asString(allocator).?;

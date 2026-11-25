@@ -691,10 +691,32 @@ class MySQLAdapter
         this.totalQueries++;
         // we have a connection waiting for a reserved connection lets prioritize it
         pendingReserved(connection.storedError, connection);
+        // the reservation may have been draining a different connection
+        this.#dropExcessPreReservations();
         return;
       }
     }
     this.readyConnections.add(connection);
+    this.flushConcurrentQueries();
+  }
+
+  #dropExcessPreReservations() {
+    const preReserved: MySQLPooledConnection[] = [];
+    const pollSize = this.connections.length;
+    for (let i = 0; i < pollSize; i++) {
+      const connection = this.connections[i];
+      if (connection && connection.flags & PooledConnectionFlags.preReserved) {
+        preReserved.push(connection);
+      }
+    }
+    const excess = preReserved.length - this.reservedQueue.length;
+    if (excess <= 0) {
+      return;
+    }
+    preReserved.sort((a, b) => b.queryCount - a.queryCount);
+    for (let i = 0; i < excess; i++) {
+      preReserved[i].flags &= ~PooledConnectionFlags.preReserved;
+    }
     this.flushConcurrentQueries();
   }
 

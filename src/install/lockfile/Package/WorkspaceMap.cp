@@ -389,6 +389,18 @@ pub fn processNamesArray(
                     }
                 }
 
+                if (cwd.len + entry_dir.len + "package.json".len + 3 > filepath_buf.len) {
+                    const entry_base: []const u8 = Path.basename(matched_path);
+                    log.addErrorFmt(
+                        source,
+                        logger.Loc.Empty,
+                        allocator,
+                        "ENAMETOOLONG reading package.json for workspace package \"{s}\" from \"{s}\"",
+                        [ entry_dir, entry_base ],
+                    ) catch {};
+                    continue;
+                }
+
                 const abs_package_json_path: stringZ = Path.joinAbsStringBufZ(
                     cwd,
                     filepath_buf,

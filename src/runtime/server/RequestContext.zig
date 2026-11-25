@@ -1280,6 +1280,26 @@ pub fn handleFirstStreamWrite(self: *@This()) void {
             }
     }
 
+pub fn discardStreamAfterAbort(req_ctx: *RequestContext, stream: jsc.WebCore.ReadableStream, globalThis: *jsc.JSGlobalObject) void {
+            _ = streamLog("aborted while attaching the stream", .{});
+            var response_body_readable_stream_ref = req_ctx.response_body_readable_stream_ref;
+            _ = &response_body_readable_stream_ref;
+            req_ctx.response_body_readable_stream_ref = .{};
+            if (req_ctx.sink) |response_stream| {
+                _ = &response_stream;
+                _ = response_stream.detach(globalThis);
+                _ = stream.cancel(globalThis);
+                _ = response_stream.sink.markDone();
+                response_stream.sink.onFirstWrite = null;
+                _ = response_stream.sink.finalize();
+                req_ctx.sink = null;
+                _ = response_stream.sink.destroy();
+            }
+            var ref_mut = response_body_readable_stream_ref;
+            _ = &ref_mut;
+            _ = ref_mut.deinit();
+    }
+
 pub fn doRenderStream(pair: *StreamPair) void {
             _ = ctxLog("doRenderStream", .{});
             var req_ctx = pair.this;
@@ -1310,17 +1330,22 @@ pub fn doRenderStream(pair: *StreamPair) void {
             if ((!req_ctx.flags.has_written_status)) {
                 _ = req_ctx.renderMetadata();
             }
+            _ = req_ctx.setAbortHandler();
             const assignment_result: JSValue = ResponseStream.JSSink.assignToStream(globalThis, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), response_stream, (blk: {
             break :blk @as(**anyopaque, @alignCast(@ptrCast((&sink_signal.ptr))));
 
 }));
             _ = assignment_result.ensureStillAlive();
+            req_ctx.flags.aborted = (req_ctx.flags.aborted or response_stream.sink.aborted);
+            if ((req_ctx.resp == null)) {
+                _ = discardStreamAfterAbort(req_ctx, stream, globalThis);
+                return;
+            }
             if (comptime Environment.allow_assert) {
                 if (App.Response.hasResponded(resp)) {
                     _ = streamLog("responded", .{});
                 }
             }
-            req_ctx.flags.aborted = (req_ctx.flags.aborted or response_stream.sink.aborted);
             if (assignment_result.toError()) |err_value| {
                 _ = &err_value;
                 _ = streamLog("returned an error", .{});
@@ -1353,6 +1378,10 @@ pub fn doRenderStream(pair: *StreamPair) void {
                     _ = &promise;
                     _ = streamLog("returned a promise", .{});
                     _ = req_ctx.drainMicrotasks();
+                    if ((req_ctx.resp == null)) {
+                        _ = discardStreamAfterAbort(req_ctx, stream, globalThis);
+                        return;
+                    }
                     switch (promise.status()) {
 .pending => {
 _ = streamLog("promise still Pending", .{});

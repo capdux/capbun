@@ -169,18 +169,20 @@ pub struct SubscriptionCtx {
         return unsafe { @alignCast(@fieldParentPtr("_subscription_ctx", _)) };
     }
 
-    fn subscriptionCallbackMap(*_): *jsc.JSMap {
-        const parent_this = _.parent().this_value.tryGet().?;
+    fn trySubscriptionCallbackMap(*_): (*jsc.JSMap)? {
+        const parent_this = _.parent().this_value.tryGet() ?? return null;
+        const value_js = ParentJS.gc.get(.subscriptionCallbackMap, parent_this) ?? return null;
+        return jsc.JSMap.fromJS(value_js);
+    }
 
-        const value_js = ParentJS.gc.get(.subscriptionCallbackMap, parent_this).?;
-        return jsc.JSMap.fromJS(value_js).?;
+    fn subscriptionCallbackMap(*_): *jsc.JSMap {
+        return _.trySubscriptionCallbackMap().?;
     }
 
     /// Get the total number of channels that this subscription context is subscribed to.
     pub fn channelsSubscribedToCount(*_, globalObject: *jsc.JSGlobalObject): u32 ! bun.JSError {
-        const count = _.subscriptionCallbackMap().size(globalObject)?;
-
-        return count;
+        const map = _.trySubscriptionCallbackMap() ?? return 0;
+        return map.size(globalObject)?;
     }
 
     /// Test whether this context has any subscriptions. It is mandatory to
@@ -1336,19 +1338,9 @@ pub struct JSValkeyClient {
         // This is a mess beyond belief and it is incredibly fragile.
         const has_pending_commands = _.client.hasAnyPendingCommands();
 
-        // isDeletable may throw an exception, and if it does, we have to assume
-        // that the object still has references. Best we can do is hope nothing
-        // catastrophic happens.
-        //
-        // Once the JS wrapper has been finalized, the subscription callback map
-        // (stored on the JS object) is gone. Reading it would hit `unreachable`
-        // in `subscriptionCallbackMap()` because `this_value.tryGet()` returns
-        // null for a finalized ref. Short-circuit here: a finalized client has
-        // no subscriptions by definition.
-        const subs_deletable: bool = _.client.flags.finalized ||
-            !(_._subscription_ctx.hasSubscriptions(_.globalObject) catch false);
-
-        const has_activity = has_pending_commands || !subs_deletable || _.client.flags.is_reconnecting;
+        const has_activity = has_pending_commands ||
+            (_._subscription_ctx.hasSubscriptions(_.globalObject) catch false) ||
+            _.client.flags.is_reconnecting;
 
         // There's a couple cases to handle here:
         if (has_activity || _.client.status == .connecting) {

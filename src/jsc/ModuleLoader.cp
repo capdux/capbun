@@ -480,11 +480,18 @@ pub fn transpileSourceCode(
                     };
                 }
 
+                const js_global = globalObject ?? jsc_vm.global;
+                const js_val = parse_result.ast.parts.at(0).stmts[0].data.s_expr.value.toJS(allocator, js_global) catch e => {
+                    if (e == error.JSError) return error.JSError;
+                    if (e == error.JSTerminated) return error.JSTerminated;
+                    if (e == error.OutOfMemory) return js_global.throwOutOfMemory();
+                    return js_global.throwError(e, "converting module to JavaScript");
+                };
                 return ResolvedSource{
                     allocator: null,
                     specifier: input_specifier,
                     source_url: input_specifier.createIfDifferent(path.text),
-                    jsvalue_for_export: parse_result.ast.parts.at(0).stmts[0].data.s_expr.value.toJS(allocator, globalObject ?? jsc_vm.global) catch e => std.debug.panic("Unexpected JS error: {s}", .{@errorName(e)}),
+                    jsvalue_for_export: js_val,
                     tag: .exports_object,
                 };
             }

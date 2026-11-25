@@ -406,48 +406,47 @@ pub fn exportKeyingMaterial(*_: *This, globalObject: *jsc.JSGlobalObject, callfr
     let label = label_arg.toSliceOrNull(globalObject)?;
     let _label_guard = DeinitGuard<@TypeOf(label)>{ ptr: unsafe { &label } };
     const label_slice = label.slice();
+
+    // Converting `context` can run user JS (toString / Symbol.toPrimitive)
+    // that closes the socket, so do it before fetching the SSL*.
+    let arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
+    let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
+    let has_context = args.len > 2;
+    let context_sb: jsc.Node.StringOrBuffer? = null;
+    if (has_context) {
+        const context_arg = args.ptr[2];
+        if (sb := jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), context_arg)?) {
+            context_sb = sb;
+        } else {
+            return globalObject.throw("Expected context to be a string, Buffer or TypedArray", .{});
+        }
+    }
+    let _sb_guard = DeinitGuard<jsc.Node.StringOrBuffer?>{ ptr: unsafe { &context_sb } };
+    let context_ptr: ([*c]const u8)? = null;
+    let context_len: usize = 0;
+    let use_context: c_int = 0;
+    if (context_sb != null) {
+        const context_slice = context_sb.?.slice();
+        context_ptr = unsafe { @as([*c]const u8, @ptrCast(context_slice.ptr)) };
+        context_len = context_slice.len;
+        use_context = 1;
+    }
+
+    const buffer_size = @as(usize, @intCast(length));
+    let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
+    const buffer_ptr = unsafe { @as([*c]u8, @ptrCast(buffer.asArrayBuffer(globalObject).?.ptr)) };
+
     const ssl_ptr_opt = _.socket.ssl();
     if (ssl_ptr_opt == null) return JSValue.js_undefined;
     const ssl_ptr = ssl_ptr_opt.?;
 
-    if (args.len > 2) {
-        const context_arg = args.ptr[2];
-
-        let arena_alloc: bun.ArenaAllocator = bun.ArenaAllocator.init(bun.default_allocator);
-        let _arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
-
-        if (sb := jsc.Node.StringOrBuffer.fromJS(globalObject, arena_alloc.allocator(), context_arg)?) {
-            let mut_sb = sb;
-            let _sb_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &mut_sb } };
-            const context_slice = mut_sb.slice();
-
-            const buffer_size = @as(usize, @intCast(length));
-            let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
-            const buffer_ptr = unsafe { @as([*c]u8, @ptrCast(buffer.asArrayBuffer(globalObject).?.ptr)) };
-
-            const result = unsafe {
-                BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, @as([*c]const u8, @ptrCast(context_slice.ptr)), context_slice.len, 1)
-            };
-            if (result != 1) {
-                return globalObject.throwValue(getSSLException(globalObject, "Failed to export keying material"));
-            }
-            return buffer;
-        } else {
-            return globalObject.throw("Expected context to be a string, Buffer or TypedArray", .{});
-        }
-    } else {
-        const buffer_size = @as(usize, @intCast(length));
-        let buffer = JSValue.createBufferFromLength(globalObject, buffer_size)?;
-        const buffer_ptr = unsafe { @as([*c]u8, @ptrCast(buffer.asArrayBuffer(globalObject).?.ptr)) };
-
-        const result = unsafe {
-            BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, null, 0, 0)
-        };
-        if (result != 1) {
-            return globalObject.throwValue(getSSLException(globalObject, "Failed to export keying material"));
-        }
-        return buffer;
+    const result = unsafe {
+        BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, context_ptr, context_len, use_context)
+    };
+    if (result != 1) {
+        return globalObject.throwValue(getSSLException(globalObject, "Failed to export keying material"));
     }
+    return buffer;
 }
 
 pub fn getEphemeralKeyInfo(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {

@@ -540,9 +540,6 @@ pub fn ref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
 pub fn unref(self: *Listener, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = &callframe;
         _ = self.poll_ref.unref(globalObject.bunVM());
-        if ((self.handlers.active_connections == 0)) {
-            _ = self.strong_self.clearWithoutDeallocation();
-        }
         return JSValue.js_undefined;
 }
 

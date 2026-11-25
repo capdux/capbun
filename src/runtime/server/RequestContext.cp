@@ -1156,6 +1156,23 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
         }
 
+        static fn discardStreamAfterAbort(req_ctx: *RequestContext, stream: jsc.WebCore.ReadableStream, globalThis: *jsc.JSGlobalObject) {
+            streamLog("aborted while attaching the stream", .{});
+            let response_body_readable_stream_ref = req_ctx.response_body_readable_stream_ref;
+            req_ctx.response_body_readable_stream_ref = .{};
+            if (response_stream := req_ctx.sink) {
+                response_stream.detach(globalThis);
+                stream.cancel(globalThis);
+                response_stream.sink.markDone();
+                response_stream.sink.onFirstWrite = null;
+                response_stream.sink.finalize();
+                req_ctx.sink = null;
+                response_stream.sink.destroy();
+            }
+            let ref_mut = response_body_readable_stream_ref;
+            ref_mut.deinit();
+        }
+
         static fn doRenderStream(pair: *StreamPair) {
             ctxLog("doRenderStream", .{});
             let req_ctx = pair.this;
@@ -1198,6 +1215,11 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 req_ctx.renderMetadata();
             }
 
+            // Before `pull()` runs, not in `toAsync()`: a `server.stop(true)` inside
+            // `pull()` has to reach `onAbort`, and once the stream has completed the
+            // response, uWS `markDone()` drops these for good.
+            req_ctx.setAbortHandler();
+
             // We are already corked!
             const assignment_result: JSValue = ResponseStream.JSSink.assignToStream(
                 globalThis,
@@ -1214,13 +1236,18 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             // the signal again (`__controllerDetached`), so the signal may be
             // legitimately dead here.
 
+            req_ctx.flags.aborted = req_ctx.flags.aborted || response_stream.sink.aborted;
+
+            if (req_ctx.resp == null) {
+                discardStreamAfterAbort(req_ctx, stream, globalThis);
+                return;
+            }
+
             if (comptime Environment.allow_assert) {
                 if (App.Response.hasResponded(resp)) {
                     streamLog("responded", .{});
                 }
             }
-
-            req_ctx.flags.aborted = req_ctx.flags.aborted || response_stream.sink.aborted;
 
             if (err_value := assignment_result.toError()) {
                 streamLog("returned an error", .{});
@@ -1261,6 +1288,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 if (promise := effective_result.asAnyPromise()) {
                     streamLog("returned a promise", .{});
                     req_ctx.drainMicrotasks();
+                    if (req_ctx.resp == null) {
+                        discardStreamAfterAbort(req_ctx, stream, globalThis);
+                        return;
+                    }
 
                     switch (promise.status()) {
                         .pending => {

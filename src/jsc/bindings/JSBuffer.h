@@ -38,6 +38,7 @@ extern "C" bool JSBuffer__isBuffer(JSC::JSGlobalObject*, JSC::EncodedJSValue);
 namespace Bun {
 
 std::optional<double> byteLength(JSC::JSString* str, WebCore::BufferEncodingType encoding);
+bool rejectBytesNoCopyAboveArrayBufferLimit(JSC::JSGlobalObject*, JSC::ThrowScope&, const void* bytes, size_t length, JSTypedArrayBytesDeallocator, void* deallocatorContext);
 
 namespace Buffer {
 

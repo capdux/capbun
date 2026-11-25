@@ -391,9 +391,9 @@ struct NamedPipeCtxErrGuard {
     fn unref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
         * = callframe;
         _.poll_ref.unref(globalObject.bunVM());
-        if (_.handlers.active_connections == 0) {
-            _.strong_self.clearWithoutDeallocation();
-        }
+        // `strong_self` stays strong: the wrapper roots the handlers a future
+        // accept dispatches into. `doStop` / `markInactive` downgrade it
+        // once the listen socket is closed.
         return JSValue.js_undefined;
     }
 

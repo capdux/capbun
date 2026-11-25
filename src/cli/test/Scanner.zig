@@ -116,7 +116,7 @@ pub fn takeFoundTestFiles(scanner: *Scanner) Allocator.Error![]bun.PathString {
 
 pub fn scan(scanner: *Scanner, path_literal: []const u8) !void {
         const parts: [2][]const u8 = .{ scanner.fs.top_level_dir, path_literal };
-        const path = scanner.fs.absBuf((&parts), (&scanner.scan_dir_buf));
+        const path = ((scanner.fs.absBufChecked((&parts), (&scanner.scan_dir_buf))) orelse { return error.DoesNotExist; });
         var root = try scanner.readDirWithName(path, null);
         _ = &root;
         if ((root.* == .err)) {
@@ -141,7 +141,7 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8) !void {
             if ((!bun.Environment.isWindows)) {
                 const dir = entry.relative_dir.stdDir();
                 const parts2: [2][]const u8 = .{ entry.dir_path, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).slice() };
-                var path2 = scanner.fs.absBuf((&parts2), (&scanner.open_dir_buf));
+                var path2 = ((scanner.fs.absBufChecked((&parts2), scanner.open_dir_buf[0..(scanner.open_dir_buf.len - 1)])) orelse continue);
                 _ = &path2;
                 scanner.open_dir_buf[cp_cast_int(usize, path2.len)] = 0;
                 const pathZ = scanner.open_dir_buf[(path2.len - (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).slice().len)..path2.len :0];
@@ -153,7 +153,7 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8) !void {
                 _ = (blk_catch_2: { break :blk_catch_2 ((scanner.readDirWithName(path2, child_dir)) catch |__ce_2| { _ = &__ce_2; return error.OutOfMemory; }); });
             } else {
                 const parts2: [2][]const u8 = .{ entry.dir_path, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).slice() };
-                const path2 = scanner.fs.absBufZ((&parts2), (&scanner.open_dir_buf));
+                const path2 = ((scanner.fs.absBufChecked((&parts2), (&scanner.open_dir_buf))) orelse continue);
                 var child_dir = (blk_catch_3: { break :blk_catch_3 ((bun.openDirNoRenamingOrDeletingWindows(bun.invalid_fd, path2)) catch |__ce_3| { _ = &__ce_3; continue; }); });
                 _ = &child_dir;
                 const appended_path = (blk_catch_4: { break :blk_catch_4 ((scanner.fs.dirname_store.append(PathSlice, path2)) catch |e| { _ = &e; _ = child_dir.close();
@@ -262,7 +262,7 @@ if ((((name.len > 0) and (name[0] == 46)) or strings.eqlComptime(name, "node_mod
         }
         if ((scanner.path_ignore_patterns.len > 0)) {
             const parts: [2][]const u8 = .{ entry.dir, entry.base() };
-            const dir_path = scanner.fs.absBuf((&parts), (&scanner.open_dir_buf));
+            const dir_path = ((scanner.fs.absBufChecked((&parts), (&scanner.open_dir_buf))) orelse { return; });
             if (scanner.matchesPathIgnorePattern(dir_path)) {
                 return;
             }
@@ -279,7 +279,7 @@ if ((!entry.abs_path.isEmpty())) {
             return;
         }
         const parts: [2][]const u8 = .{ entry.dir, entry.base() };
-        const path = scanner.fs.absBuf((&parts), (&scanner.open_dir_buf));
+        const path = ((scanner.fs.absBufChecked((&parts), (&scanner.open_dir_buf))) orelse { return; });
         if ((!scanner.doesAbsolutePathMatchFilter(path))) {
             const rel_path = bun.path.relative(scanner.fs.top_level_dir, path);
             if ((!scanner.doesPathMatchFilter(rel_path))) {

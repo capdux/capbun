@@ -912,7 +912,6 @@ static JSC::JSValue rebindObject(JSC::JSGlobalObject* globalObject, SQLiteBindin
     };
 
     auto& vm = JSC::getVM(globalObject);
-    auto& structure = *target->structure();
     bindings.ensureNamesLoaded(vm, stmt);
     const auto& bindingNames = bindings.bindingNames;
     size_t size = bindings.count;
@@ -947,7 +946,8 @@ static JSC::JSValue rebindObject(JSC::JSGlobalObject* globalObject, SQLiteBindin
 
             const auto identifier = Identifier::fromString(vm, str);
             PropertySlot slot(target, PropertySlot::InternalMethodType::GetOwnProperty);
-            if (!target->getOwnNonIndexPropertySlot(vm, &structure, identifier, slot)) {
+            // Getters for earlier parameters can mutate the object, so the Structure must be re-read per lookup.
+            if (!target->getOwnNonIndexPropertySlot(vm, target->structure(), identifier, slot)) {
                 return {};
             }
 
@@ -966,7 +966,8 @@ static JSC::JSValue rebindObject(JSC::JSGlobalObject* globalObject, SQLiteBindin
                 return {};
             if (!value && !scope.exception()) {
                 if (throwOnMissing) {
-                    throwException(globalObject, scope, createError(globalObject, makeString("Missing parameter \""_s, WTF::String::fromUTF8ReplacingInvalidSequences({ reinterpret_cast<const unsigned char*>(name), strlen(name) }), "\""_s)));
+                    // A gap in explicit "?N" numbering makes sqlite allocate the skipped parameters with no name.
+                    throwException(globalObject, scope, createError(globalObject, makeString("Missing parameter \""_s, name ? WTF::String::fromUTF8ReplacingInvalidSequences({ reinterpret_cast<const unsigned char*>(name), strlen(name) }) : makeString('?', i + 1), "\""_s)));
                 } else {
                     continue;
                 }
@@ -1008,16 +1009,38 @@ static JSC::JSValue rebindObject(JSC::JSGlobalObject* globalObject, SQLiteBindin
             count++;
         }
     }
-    // Is it a simple object with no getters or setters?
+    // Named and/or positional keys, possibly with accessors, e.g.
     //
     // { foo: "bar", baz: "qux" }
     //
-    else if (target->canUseFastGetOwnProperty(structure)) {
+    else {
+        // Only the indexed and slow-path reads can run a getter that mutates `target` or finalizes `stmt`; refresh after those.
+        Structure* structure = target->structure();
+        bool canUseFastPath = target->canUseFastGetOwnProperty(*structure);
         for (size_t i = 0; i < size; i++) {
             const auto& property = bindingNames[i];
-            JSValue value = property.isEmpty() ? target->getDirectIndex(globalObject, i) : target->fastGetOwnProperty(vm, structure, bindingNames[i]);
-            if (!statementStillAlive())
-                return {};
+            JSValue value;
+
+            if (!property.isEmpty() && canUseFastPath) [[likely]] {
+                value = target->fastGetOwnProperty(vm, *structure, property);
+            } else {
+                if (property.isEmpty()) {
+                    value = target->getDirectIndex(globalObject, i);
+                } else {
+                    PropertySlot slot(target, PropertySlot::InternalMethodType::GetOwnProperty);
+                    if (target->methodTable()->getOwnPropertySlot(target, globalObject, property, slot) && !scope.exception()) {
+                        if (!slot.isTaintedByOpaqueObject()) [[likely]]
+                            value = slot.getValue(globalObject, property);
+                        else
+                            value = target->get(globalObject, property);
+                    }
+                }
+                if (!statementStillAlive())
+                    return {};
+                structure = target->structure();
+                canUseFastPath = target->canUseFastGetOwnProperty(*structure);
+            }
+
             if (!value && !scope.exception()) {
                 if (throwOnMissing) {
                     throwException(globalObject, scope, createError(globalObject, makeString("Missing parameter \""_s, property.isEmpty() ? String::number(i) : property.string(), "\""_s)));
@@ -1027,41 +1050,6 @@ static JSC::JSValue rebindObject(JSC::JSGlobalObject* globalObject, SQLiteBindin
             }
 
             RETURN_IF_EXCEPTION(scope, {});
-
-            if (!rebindValue(globalObject, db, stmt, i + 1, value, scope, safeIntegers)) {
-                return {};
-            }
-
-            RETURN_IF_EXCEPTION(scope, {});
-            count++;
-        }
-    } else {
-        for (size_t i = 0; i < size; i++) {
-            PropertySlot slot(target, PropertySlot::InternalMethodType::GetOwnProperty);
-            const auto& property = bindingNames[i];
-            bool hasProperty = property.isEmpty() ? target->methodTable()->getOwnPropertySlotByIndex(target, globalObject, i, slot) : target->methodTable()->getOwnPropertySlot(target, globalObject, property, slot);
-            if (!hasProperty && !scope.exception()) {
-                if (throwOnMissing) {
-                    throwException(globalObject, scope, createError(globalObject, makeString("Missing parameter \""_s, property.isEmpty() ? String::number(i) : property.string(), "\""_s)));
-                } else {
-                    continue;
-                }
-            }
-
-            RETURN_IF_EXCEPTION(scope, {});
-
-            JSValue value;
-            if (!slot.isTaintedByOpaqueObject()) [[likely]]
-                value = slot.getValue(globalObject, property);
-            else {
-                value = target->get(globalObject, property);
-                RETURN_IF_EXCEPTION(scope, {});
-            }
-
-            RETURN_IF_EXCEPTION(scope, {});
-
-            if (!statementStillAlive())
-                return {};
 
             if (!rebindValue(globalObject, db, stmt, i + 1, value, scope, safeIntegers)) {
                 return {};
@@ -1280,17 +1268,18 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementSerialize, (JSC::JSGlobalObject * lexical
         return {};
     }
 
-    sqlite3* db = databases()[dbIndex]->db;
-    if (!db) [[unlikely]] {
-        throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Can't do this on a closed database"_s));
-        return {};
-    }
-
     WTF::String attachedName = callFrame->argument(1).toWTFString(lexicalGlobalObject);
     RETURN_IF_EXCEPTION(scope, {});
 
     if (attachedName.isEmpty()) {
         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Expected attached database name"_s));
+        return {};
+    }
+
+    // Read after toWTFString: a user toString() may have closed the database.
+    sqlite3* db = databases()[dbIndex]->db;
+    if (!db) [[unlikely]] {
+        throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Can't do this on a closed database"_s));
         return {};
     }
     sqlite3_int64 length = -1;

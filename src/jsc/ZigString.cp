@@ -613,7 +613,7 @@ pub struct ZigStringGithubActionFormatter {
     static fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue {
         if (len > String.max_length()) {
             bun.default_allocator.free(unsafe { ptr[0..len] });
-            const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+            const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2147483647 characters", .{}).throw();
             * = &_err; // TODO: propagate?
             return .zero;
         }
@@ -776,7 +776,7 @@ pub struct ZigStringGithubActionFormatter {
         _.assertGlobal();
         if (_.len > String.max_length()) {
             bun.default_allocator.free(unsafe { @constCast(_.byteSlice()) });
-            const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+            const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2147483647 characters", .{}).throw();
             * = &_err; // TODO: propagate?
             return .zero;
         }
@@ -797,7 +797,7 @@ pub struct ZigStringGithubActionFormatter {
     ): JSValue {
         if (_.len > String.max_length()) {
             callback(ctx, unsafe { @ptrCast(@constCast(_.byteSlice().ptr)) }, _.len);
-            const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+            const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2147483647 characters", .{}).throw();
             * = &_err; // TODO: propagate?
             return .zero;
         }

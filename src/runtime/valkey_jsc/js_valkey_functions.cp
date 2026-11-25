@@ -292,7 +292,15 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
     const key = key_opt.?;
     const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
 
-    const seconds = globalObject.validateIntegerRange(callframe.argument(1), i32, 0, .{
+    const seconds_value = callframe.argument(1);
+    if (seconds_value.isUndefined()) {
+        return globalObject.throwInvalidPropertyTypeValue("seconds", "number", seconds_value);
+    }
+    if (seconds_value.isNumber() && std.math.isNan(seconds_value.asNumber())) {
+        return globalObject.throwInvalidPropertyTypeValue("seconds", "integer", seconds_value);
+    }
+
+    const seconds = globalObject.validateIntegerRange(seconds_value, i32, 0, .{
         .min = 0,
         .max = 2147483647,
         .field_name = "seconds",

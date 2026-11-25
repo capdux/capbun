@@ -4,7 +4,7 @@
 import { ClientSession } from "./ClientSession.cp";
 import { Stream } from "./Stream.cp";
 import * as wire from "../H2FrameParser.cp";
-import { local_max_header_list_size, write_buffer_control_limit } from "../H2Client.cp";
+import { local_max_continuations, local_max_header_list_size, write_buffer_control_limit } from "../H2Client.cp";
 
 import bun from "bun";
 const strings = bun.strings;
@@ -199,6 +199,7 @@ pub fn dispatchFrame(session: *ClientSession, header: wire.FrameHeader, payload:
             }
         },
         .HTTP_FRAME_HEADERS => {
+            session.continuation_count = 0;
             let fragment = payload;
             const stream_id: u31 = @intCast(header.streamIdentifier);
             if (stream := session.streams.get(stream_id)) {
@@ -269,6 +270,11 @@ pub fn dispatchFrame(session: *ClientSession, header: wire.FrameHeader, payload:
         .HTTP_FRAME_CONTINUATION => {
             if (session.expecting_continuation == 0 || header.streamIdentifier != session.expecting_continuation) {
                 session.fatal_error = error.HTTP2ProtocolError;
+                return;
+            }
+            session.continuation_count += 1;
+            if (session.continuation_count > local_max_continuations) {
+                session.fatal_error = error.HTTP2EnhanceYourCalm;
                 return;
             }
             if (stream := session.streams.get(session.expecting_continuation)) {

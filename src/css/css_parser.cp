@@ -1227,15 +1227,14 @@ fn parse_custom_at_rule_body(
     const result = switch (T.CustomAtRuleParser.parseBlock(at_rule_parser, prelude, start, input, options, is_nested)) {
         .result => |vv| vv,
         .err => |e| {
-            * = e; // autofix
-            // match &err.kind {
-            //   ParseErrorKind::Basic(kind) => ParseError {
-            //     kind: ParseErrorKind::Basic(kind.clone()),
-            //     location: err.location,
-            //   },
-            //   _ => input.new_error(BasicParseErrorKind::AtRuleBodyInvalid),
-            // }
-            todo("This part here", {});
+            const ErrT = ParseError(ParserError);
+            return switch (e.kind) {
+                .basic => |kind| .{ .err = ErrT{
+                    kind: .{ .basic = kind },
+                    location: e.location,
+                } },
+                else => .{ .err = input.newError(.at_rule_body_invalid) },
+            };
         },
     };
     return { result: result };
@@ -4774,7 +4773,7 @@ pub struct ParserState {
     fn sourceLocation(): SourceLocation {
         return {
             line: _.current_line_number,
-            column: @intCast(_.position - _.current_line_start_position + 1),
+            column: @intCast((_.position -% _.current_line_start_position) + 1),
         };
     }
 }
@@ -5049,7 +5048,7 @@ struct Tokenizer {
     fn currentSourceLocation(): SourceLocation {
         return SourceLocation{
             line: _.current_line_number,
-            column: @intCast((_.position - _.current_line_start_position) + 1),
+            column: @intCast((_.position -% _.current_line_start_position) + 1),
         };
     }
 
@@ -6031,11 +6030,15 @@ struct Tokenizer {
     /// 10xxxxxx  0x80..=0xBF   Continuation byte: one of 1-3 bytes following the first
     fn consume4byteIntro(*_) {
         if (bun.Environment.allow_assert) std.debug.assert((_.nextByteUnchecked() & 0xF0) == 0xF0);
-        // This takes two UTF-16 characters to represent, so we
-        // actually have an undercount.
-        // this.current_line_start_position = self.current_line_start_position.wrapping_sub(1);
-        _.current_line_start_position -%= 1;
         _.position += 1;
+        // 4 UTF-8 bytes encode 2 UTF-16 units (undercount). Input here is
+        // unvalidated bytes, so only apply the -1 when a continuation byte
+        // follows; a stray 0xF0..0xFF must not underflow the column math.
+        if (b := _.nextByte()) {
+            if ((b & 0xC0) == 0x80) {
+                _.current_line_start_position -%= 1;
+            }
+        }
     }
 
     fn isIdentStart(*_): bool {
@@ -6096,9 +6099,11 @@ struct Tokenizer {
         _.position += 1;
         // Continuation bytes contribute to column overcount.
         if ((byte & 0xF0) == 0xF0) {
-            // This takes two UTF-16 characters to represent, so we
-            // actually have an undercount.
-            _.current_line_start_position -%= 1;
+            if (b := _.nextByte()) {
+                if ((b & 0xC0) == 0x80) {
+                    _.current_line_start_position -%= 1;
+                }
+            }
         } else if ((byte & 0xC0) == 0x80) {
             // Note that due to the special case for the 4-byte
             // sequence intro, we must use wrapping add here.

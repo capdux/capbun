@@ -1330,7 +1330,7 @@ pub fn onData(self: *@This(), s: Socket, data: []const u8) void {
             }
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            const output_value = (blk_catch_12: { break :blk_catch_12 ((h.binary_type.toJS(data, globalObject)) catch |e| { _ = &e; _ = self.handleError(globalObject.takeException(e));
+            const output_value = (blk_catch_12: { break :blk_catch_12 ((h.binary_type.toJS(data, globalObject)) catch |e| { _ = &e; _ = self.handleError(globalObject.takeError(e));
             return; }); });
             var _scope_guard = HandlersScopeGuard(This, @TypeOf(h.enter())){ .socket = self, .scope = h.enter() };
             _ = &_scope_guard;

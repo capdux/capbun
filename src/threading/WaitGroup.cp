@@ -35,13 +35,22 @@ export @root struct WaitGroup {
     }
 
     pub fn finish(*_) {
-        if (_.raw_count.fetchSub(1, .acq_rel) > 1) {
-            return;
+        // Lock-free fast path while count > 1; only publish raw_count == 0 under
+        // mutex so wait() cannot return and let the caller free WaitGroup before unlock().
+        let c = _.raw_count.load(.monotonic);
+        while (c > 1) {
+            if (prev := _.raw_count.cmpxchgWeak(c, c - 1, .acq_rel, .monotonic)) {
+                c = prev;
+            } else {
+                return;
+            }
         }
 
         _.mutex.lock();
-        _.mutex.unlock();
+        const old_count = _.raw_count.fetchSub(1, .acq_rel);
+        bun.assert(old_count >= 1);
         _.cond.signal();
+        _.mutex.unlock();
     }
 
     pub fn wait(*_) {

@@ -121,17 +121,17 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 const writeOrEnd = writeOrEnd_opt.?;
                 if (data_ := data) {
                     const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj) catch e => {
-                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeError(e));
                         return;
                     };
                     buffer.ensureStillAlive();
 
                     * = writeOrEnd.call(global_obj, duplex, &[buffer]) catch e => {
-                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeError(e));
                     };
                 } else {
                     * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.@"null"]) catch e => {
-                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeError(e));
                     };
                 }
             }

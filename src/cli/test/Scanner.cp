@@ -73,7 +73,7 @@ pub fn takeFoundTestFiles(scanner: *Scanner): Allocator.Error![]bun.PathString {
 
 pub fn scan(scanner: *Scanner, path_literal: []const u8): !void {
     const parts: [2][]const u8 = [scanner.fs.top_level_dir, path_literal];
-    const path = scanner.fs.absBuf(&parts, &scanner.scan_dir_buf);
+    const path = scanner.fs.absBufChecked(&parts, &scanner.scan_dir_buf) ?? return error.DoesNotExist;
 
     let root = scanner.readDirWithName(path, null)?;
 
@@ -108,7 +108,7 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8): !void {
             const dir = entry.relative_dir.stdDir();
 
             const parts2: [2][]const u8 = [entry.dir_path, entry.name.slice()];
-            let path2 = scanner.fs.absBuf(&parts2, &scanner.open_dir_buf);
+            let path2 = scanner.fs.absBufChecked(&parts2, scanner.open_dir_buf[0 .. scanner.open_dir_buf.len - 1]) ?? continue;
             scanner.open_dir_buf[path2.len] = 0;
             const pathZ = scanner.open_dir_buf[path2.len - entry.name.slice().len .. path2.len :0];
             let child_dir = bun.openDir(dir, pathZ) catch continue;
@@ -120,7 +120,7 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8): !void {
             * = scanner.readDirWithName(path2, child_dir) catch return error.OutOfMemory;
         } else {
             const parts2: [2][]const u8 = [entry.dir_path, entry.name.slice()];
-            const path2 = scanner.fs.absBufZ(&parts2, &scanner.open_dir_buf);
+            const path2 = scanner.fs.absBufChecked(&parts2, &scanner.open_dir_buf) ?? continue;
             let child_dir = bun.openDirNoRenamingOrDeletingWindows(bun.invalid_fd, path2) catch continue;
             const appended_path = scanner.fs.dirname_store.append(PathSlice, path2) catch |e| {
                 child_dir.close();
@@ -232,7 +232,7 @@ pub fn next(scanner: *Scanner, entry: *FileSystem.Entry, fd: bun.FD) {
             // Prune ignored directory trees early so we never traverse them.
             if (scanner.path_ignore_patterns.len > 0) {
                 const parts: [2][]const u8 = [entry.dir, entry.base()];
-                const dir_path = scanner.fs.absBuf(&parts, &scanner.open_dir_buf);
+                const dir_path = scanner.fs.absBufChecked(&parts, &scanner.open_dir_buf) ?? return;
                 if (scanner.matchesPathIgnorePattern(dir_path)) return;
             }
 
@@ -252,7 +252,7 @@ pub fn next(scanner: *Scanner, entry: *FileSystem.Entry, fd: bun.FD) {
             if (!scanner.couldBeTestFile(name, true)) return;
 
             const parts: [2][]const u8 = [entry.dir, entry.base()];
-            const path = scanner.fs.absBuf(&parts, &scanner.open_dir_buf);
+            const path = scanner.fs.absBufChecked(&parts, &scanner.open_dir_buf) ?? return;
 
             if (!scanner.doesAbsolutePathMatchFilter(path)) {
                 const rel_path = bun.path.relative(scanner.fs.top_level_dir, path);

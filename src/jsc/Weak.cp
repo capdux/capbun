@@ -53,7 +53,16 @@ pub fn Weak(comptime T: type): type {
             return .zero;
         }
 
-        pub fn create(
+        /// A weak handle with no finalize callback. `get()` reads `null` from the
+        /// moment GC reaps the referent, before any sweep runs cell destructors.
+        pub static fn createPassive(value: jsc.JSValue, globalThis: *jsc.JSGlobalObject): WeakType {
+            if (value == .zero) {
+                return {};
+            }
+            return { ref: WeakImpl.init(globalThis, value, .None, null), globalThis: globalThis };
+        }
+
+        pub static fn create(
             value: jsc.JSValue,
             globalThis: *jsc.JSGlobalObject,
             refType: WeakRefType,

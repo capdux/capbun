@@ -1300,8 +1300,7 @@ else => {
             var overflow: []u8 = empty_u8[0..0];
             _ = &overflow;
             if ((overflow_len > 0)) {
-                overflow = (blk_catch_19: { break :blk_catch_19 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_19| { _ = &__ce_19; _ = self.terminate(ErrorCode.invalid_response);
-                return; }); });
+                overflow = (blk_catch_19: { break :blk_catch_19 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 bun.outOfMemory(); }); });
                 _ = @memcpy(overflow, remain_buf);
             }
             var _guard_overflow = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = (if ((overflow_len > 0)) overflow else null) };

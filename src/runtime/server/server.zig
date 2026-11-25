@@ -1629,7 +1629,6 @@ pub fn publish(self: *@This(), globalThis: *jsc.JSGlobalObject, topic: ZigString
             if ((self.config.websocket == null)) {
                 return JSValue.jsNumber(0);
             }
-            const app: *App = self.app.?;
             if ((topic.len == 0)) {
                 _ = httplog("publish() topic invalid", .{});
                 return globalThis.throw("publish requires a topic string", .{});
@@ -1650,6 +1649,7 @@ pub fn publish(self: *@This(), globalThis: *jsc.JSGlobalObject, topic: ZigString
             const compress = compress_js.toBoolean();
             if (message_value.asArrayBuffer(globalThis)) |buffer| {
                 _ = &buffer;
+                const app = ((self.app) orelse { return JSValue.jsNumber(0); });
                 return JSValue.jsNumber(((if (comptime @typeInfo(@TypeOf(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress)))) else cp_cast_int(i32, @intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer.slice(), .binary, compress)))) * @as(i32, @intCast(@as(u31, @truncate(buffer.len))))));
             }
             {
@@ -1668,6 +1668,7 @@ pub fn publish(self: *@This(), globalThis: *jsc.JSGlobalObject, topic: ZigString
                 defer {
                 _ = js_string.ensureStillAlive();
                 }
+                const app = ((self.app) orelse { return JSValue.jsNumber(0); });
                 const buffer = slice.slice();
                 return JSValue.jsNumber(((if (comptime @typeInfo(@TypeOf(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress)))) else cp_cast_int(i32, @intFromBool(uws.AnyWebSocket.publishWithOptions(ssl_enabled, app, topic_slice.slice(), buffer, .text, compress)))) * @as(i32, @intCast(@as(u31, @truncate(buffer.len))))));
             }
@@ -2300,12 +2301,18 @@ else => {
 }
             if (self.listener) |listener| {
                 _ = &listener;
-                return jsc.JSValue.jsNumber(listener.getLocalPort());
+                const local_port = listener.getLocalPort();
+                if ((local_port >= 0)) {
+                    return jsc.JSValue.jsNumber(local_port);
+                }
             }
             if (comptime has_h3) {
                 if (self.h3_listener) |h3l| {
                     _ = &h3l;
-                    return jsc.JSValue.jsNumber(h3l.getLocalPort());
+                    const local_port = h3l.getLocalPort();
+                    if ((local_port >= 0)) {
+                        return jsc.JSValue.jsNumber(local_port);
+                    }
                 }
             }
             return jsc.JSValue.jsNumber(self.config.address.tcp.port);
@@ -2342,7 +2349,10 @@ var port: u16 = self.config.address.tcp.port;
             _ = &port;
             if (self.listener) |listener| {
                 _ = &listener;
-                port = @intCast(listener.getLocalPort());
+                const local_port = listener.getLocalPort();
+                if ((local_port >= 0)) {
+                    port = @intCast(local_port);
+                }
                 var buf: [64]u8 = undefined;
                 _ = &buf;
                 _ = @memset((&buf), 0);
@@ -2356,7 +2366,10 @@ var port: u16 = self.config.address.tcp.port;
             if (comptime has_h3) {
                 if (self.h3_listener) |h3l| {
                     _ = &h3l;
-                    port = @intCast(h3l.getLocalPort());
+                    const local_port = h3l.getLocalPort();
+                    if ((local_port >= 0)) {
+                        port = @intCast(local_port);
+                    }
                     var buf: [64]u8 = undefined;
                     _ = &buf;
                     _ = @memset((&buf), 0);
@@ -2384,12 +2397,18 @@ pub fn getURLAsString(self: @This()) bun.OOM!bun.String {
             _ = &port;
             if (self.listener) |listener| {
                 _ = &listener;
-                port = @intCast(listener.getLocalPort());
+                const local_port = listener.getLocalPort();
+                if ((local_port >= 0)) {
+                    port = @intCast(local_port);
+                }
             } else {
                 if (comptime has_h3) {
                     if (self.h3_listener) |h3l| {
                         _ = &h3l;
-                        port = @intCast(h3l.getLocalPort());
+                        const local_port = h3l.getLocalPort();
+                        if ((local_port >= 0)) {
+                            port = @intCast(local_port);
+                        }
                     }
                 }
             }
@@ -3895,15 +3914,30 @@ var host: ?[*:0]const u8 = null;
             _ = &host;
             var host_buff: [1025]u8 = undefined;
             _ = &host_buff;
+            var host_alloc: ?[:0]u8 = null;
+            _ = &host_alloc;
+            defer {
+            if (host_alloc) |ha| {
+                _ = &ha;
+                _ = bun.default_allocator.free(ha);
+            }
+            }
             if (tcp.hostname) |existing| {
                 _ = &existing;
                 const hostname = bun.span(existing);
                 if (((hostname.len > 2) and (hostname[0] == 91))) {
-                    const written = ((std.fmt.bufPrint((&host_buff), "{s}\x00", .{ hostname[1..(hostname.len - 1)] })) catch unreachable);
-                    host = (blk: {
-                    break :blk @ptrCast(written.ptr);
+                    const inner = hostname[1..(hostname.len - 1)];
+                    if ((inner.len < host_buff.len)) {
+                        const written = ((std.fmt.bufPrint((&host_buff), "{s}\x00", .{ inner })) catch unreachable);
+                        host = (blk: {
+                        break :blk @ptrCast(written.ptr);
 
 });
+                    } else {
+                        const duped = bun.handleOom(bun.default_allocator.dupeZ(u8, inner));
+                        host_alloc = duped;
+                        host = duped.ptr;
+                    }
                 } else {
                     host = tcp.hostname;
                 }
@@ -3920,7 +3954,10 @@ var host: ?[*:0]const u8 = null;
                     var h3_port: u16 = tcp.port;
                     _ = &h3_port;
                     if ((self.listener != null)) {
-                        h3_port = @intCast(self.listener.?.getLocalPort());
+                        const local_port = self.listener.?.getLocalPort();
+                        if ((local_port >= 0)) {
+                            h3_port = @intCast(local_port);
+                        }
                     }
                     _ = h3_app.listenWithConfig(self, onH3Listen, .{ .port = h3_port, .host = (blk: {
                     break :blk @constCast(host);

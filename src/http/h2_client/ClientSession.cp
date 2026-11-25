@@ -64,6 +64,7 @@ export @root struct ClientSession {
     streams: std.AutoArrayHashMapUnmanaged(u31, *Stream) = {},
     next_stream_id: u31 = 1,
     expecting_continuation: u31 = 0,
+    continuation_count: u8 = 0,
     pending_attach: std.ArrayListUnmanaged(*HTTPClient) = {},
 
     preface_sent: bool = false,
@@ -668,6 +669,14 @@ export @root struct ClientSession {
                 return _.finishStream(stream, client);
             }
             client.cloneMetadata();
+            if (client.state.isDone()) {
+                stream.client = null;
+                client.h2 = null;
+                if (client.signals.get(.header_progress)) {
+                    client.progressUpdate(true, _.ctx, _.socket);
+                }
+                return true;
+            }
             if (client.signals.get(.header_progress)) {
                 client.progressUpdate(true, _.ctx, _.socket);
             }

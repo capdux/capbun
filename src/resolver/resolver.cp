@@ -2955,6 +2955,8 @@ pub struct Resolver {
             input_path = r.fs.top_level_dir;
         }
 
+        if (input_path.len == 0) return null;
+
         // A path longer than MAX_PATH_BYTES cannot name a real directory.
         // Bailing here also prevents overflowing `dir_info_uncached_path`
         // below when called with user-controlled absolute import paths.
@@ -2982,7 +2984,7 @@ pub struct Resolver {
             }
         }
 
-        bun.assertf(std.fs.path.isAbsolute(input_path), "cannot resolve DirInfo for non-absolute path: {s}", .{input_path});
+        if (!std.fs.path.isAbsolute(input_path)) return null;
 
         const path_without_trailing_slash = strings.withoutTrailingSlashWindowsPath(input_path);
         ThisResolver.assertValidCacheKey(path_without_trailing_slash);

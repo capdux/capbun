@@ -1212,7 +1212,23 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
     return writeFileWithSourceDestination(globalThis, &source_blob, &destination_blob, options);
 }
 
-fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *Blob): JSError!void {
+/// Parses the destination argument of `Bun.write` (shared by `Image.write`):
+/// a path, a file descriptor, or a `Bun.file()` / S3 blob. A `Blob` that is
+/// not backed by a file or S3 is rejected here; that is the precondition
+/// `writeFileInternal` relies on for a `.blob` destination.
+pub fn writeDestinationFromJS(globalThis: *JSGlobalObject, args: *jsc.CallFrame.ArgumentsSlice): JSError!PathOrBlob {
+    const path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, args)?;
+    if (path_or_blob == .blob) {
+        validateWritableBlob(globalThis, &path_or_blob.blob) catch |e| {
+            let mut_pob = path_or_blob;
+            mut_pob.deinit();
+            return e;
+        };
+    }
+    return path_or_blob;
+}
+
+fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *const Blob): JSError!void {
     const store_opt = blob.store;
     if (store_opt == null) {
         return globalThis.throw("Cannot write to a detached Blob", .{});
@@ -4274,11 +4290,8 @@ pub struct BlobExternalSharedDescriptor {
         let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments);
         const _guard_args = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ ptr: &args };
 
-        let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
+        let path_or_blob = writeDestinationFromJS(globalThis, &args)?;
         const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
-        if (path_or_blob == .blob) {
-            validateWritableBlob(globalThis, &path_or_blob.blob)?;
-        }
 
         const data_opt = args.nextEat();
         if (data_opt == null) {

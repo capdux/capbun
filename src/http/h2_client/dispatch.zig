@@ -68,6 +68,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 const ClientSession = @import("./ClientSession.zig").ClientSession;
 const Stream = @import("./Stream.zig").Stream;
 pub const wire = @import("../H2FrameParser.zig");
+const local_max_continuations = @import("../H2Client.zig").local_max_continuations;
 const local_max_header_list_size = @import("../H2Client.zig").local_max_header_list_size;
 const write_buffer_control_limit = @import("../H2Client.zig").write_buffer_control_limit;
 pub const bun = @import("bun");
@@ -281,7 +282,8 @@ if ((header.streamIdentifier == 0)) {
         }
 },
 .HTTP_FRAME_HEADERS => {
-var fragment = payload;
+session.continuation_count = 0;
+        var fragment = payload;
         _ = &fragment;
         const stream_id: u31 = @intCast(header.streamIdentifier);
         if (session.streams.get(stream_id)) |stream| {
@@ -355,6 +357,11 @@ var fragment = payload;
 .HTTP_FRAME_CONTINUATION => {
 if (((session.expecting_continuation == 0) or (header.streamIdentifier != session.expecting_continuation))) {
             session.fatal_error = error.HTTP2ProtocolError;
+            return;
+        }
+        session.continuation_count = (session.continuation_count + 1);
+        if ((session.continuation_count > local_max_continuations)) {
+            session.fatal_error = error.HTTP2EnhanceYourCalm;
             return;
         }
         if (session.streams.get(session.expecting_continuation)) |stream| {

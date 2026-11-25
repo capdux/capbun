@@ -46,7 +46,10 @@ export @root @value struct ThreadSafeStreamBuffer {
         _.callback = Callback.init(T, callback, context);
     }
 
+    /// Main thread; the request may still be in flight on the http thread.
     pub fn clearDrainCallback(*_) {
+        _.mutex.lock();
+        defer _.mutex.unlock();
         _.callback = null;
     }
 

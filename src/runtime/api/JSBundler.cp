@@ -995,6 +995,9 @@ struct IndentGuard {
                 if (naming.isString()) {
                     if (slice := config.getOptional(globalThis, "naming", ZigString.Slice)?) {
                         const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (u := options.findUnterminatedPlaceholder(slice_guard.slice.slice())) {
+                            return globalThis.throwInvalidArguments("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "naming", u.tail, u.pos });
+                        }
                         if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
                             cfg_guard.cfg.names.owned_entry_point.appendSliceExact("./")?;
                         }
@@ -1004,6 +1007,9 @@ struct IndentGuard {
                 } else if (naming.isObject()) {
                     if (slice := naming.getOptional(globalThis, "entry", ZigString.Slice)?) {
                         const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (u := options.findUnterminatedPlaceholder(slice_guard.slice.slice())) {
+                            return globalThis.throwInvalidArguments("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "naming.entry", u.tail, u.pos });
+                        }
                         if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
                             cfg_guard.cfg.names.owned_entry_point.appendSliceExact("./")?;
                         }
@@ -1013,6 +1019,9 @@ struct IndentGuard {
 
                     if (slice := naming.getOptional(globalThis, "chunk", ZigString.Slice)?) {
                         const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (u := options.findUnterminatedPlaceholder(slice_guard.slice.slice())) {
+                            return globalThis.throwInvalidArguments("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "naming.chunk", u.tail, u.pos });
+                        }
                         if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
                             cfg_guard.cfg.names.owned_chunk.appendSliceExact("./")?;
                         }
@@ -1022,6 +1031,9 @@ struct IndentGuard {
 
                     if (slice := naming.getOptional(globalThis, "asset", ZigString.Slice)?) {
                         const slice_guard = ZigSliceGuard{ slice: slice };
+                        if (u := options.findUnterminatedPlaceholder(slice_guard.slice.slice())) {
+                            return globalThis.throwInvalidArguments("{s}: unterminated \"{s}\" placeholder (missing \"]\") at position {d}", .{ "naming.asset", u.tail, u.pos });
+                        }
                         if (!strings.hasPrefixComptime(slice_guard.slice.slice(), "./")) {
                             cfg_guard.cfg.names.owned_asset.appendSliceExact("./")?;
                         }

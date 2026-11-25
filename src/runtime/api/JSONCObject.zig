@@ -130,6 +130,9 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         var __input_slice_guard_moved = false; _ = &__input_slice_guard_moved;
         defer if (!__input_slice_guard_moved) { __input_slice_guard_moved = true; const __T = @TypeOf(input_slice_guard); if (@typeInfo(__T) == .optional) { if (input_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_slice_guard; _drop_val.__cp_deinit(); } };
         const input_bytes = input_slice_guard.val.slice();
+        if ((input_bytes.len == 0)) {
+            return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: Unexpected end of input", .{}));
+        }
         if ((input_bytes.len > std.math.maxInt(i32))) {
             return globalThis.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
         }
@@ -138,6 +141,22 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         const parse_result = (blk_catch_0: { break :blk_catch_0 ((json.parseTSConfig(source, log_ptr, allocator, true)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return globalThis.throwStackOverflow();
         }
-        return globalThis.throwValue(try log_guard.val.toJS(globalThis, default_allocator, "Failed to parse JSONC")); }); });
-        return (blk_catch_1: { break :blk_catch_1 ((parse_result.toJS(allocator, globalThis)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  return error.OutOfMemory; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSError)) {  return error.JSError; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSTerminated)) {  return error.JSTerminated; } } {  break :__sw_blk_0 cp_val(unreachable); }  unreachable; }); }); });
+        if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        var first_msg: ?*const logger.Msg = (if ((log_guard.val.msgs.items.len > 0)) (&log_guard.val.msgs.items[0]) else null);
+        _ = &first_msg;
+        for (log_guard.val.msgs.items) |*m| {
+            _ = &m;
+            if (((m.*).kind == .@"err")) {
+                first_msg = (m.*);
+                break;
+            }
+        }
+        if (first_msg) |msg| {
+            _ = &msg;
+            return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: {s}", .{ msg.data.text }));
+        }
+        return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: Unable to parse JSONC string", .{})); }); });
+        return (blk_catch_1: { break :blk_catch_1 ((parse_result.toJS(allocator, globalThis)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  return error.OutOfMemory; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .JSError)) {  return error.JSError; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .JSTerminated)) {  return error.JSTerminated; } } {  break :__sw_blk_1 cp_val(unreachable); }  unreachable; }); }); });
 }

@@ -1686,7 +1686,11 @@ pub struct DataCellsGuard<P, C> {
                 }
                 const _putter_ptr = unsafe { &putter };
                 const _cells_guard = DataCellsGuard<@TypeOf(_putter_ptr), @TypeOf(cells)>{ putter: _putter_ptr, cells: cells, free_cells: free_cells };
-                @memset(cells, DataCell.SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
+                // Seed with the field's column kind so a short DataRow still
+                // matches the Structure built from these fields.
+                for (i of 0..cells.len) {
+                    cells[i] = DataCell.SQLDataCell.nullForColumn(@intCast(i), statement.fields[i].name_or_index);
+                }
                 putter.list = cells;
 
                 if (request.flags.result_mode == .raw) {

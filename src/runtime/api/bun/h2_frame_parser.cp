@@ -2854,6 +2854,8 @@ pub struct H2FrameParser {
         if (_callback_opt == null) return stream;
         const callback = _callback_opt.?;
 
+        _.ref();
+        defer _.deref();
         const _args = [ ctx_value, jsc.JSValue.jsNumber(streamIdentifier) ];
         * = callback.call(_.handlers.globalObject, ctx_value, &_args) catch e => {
             _.handlers.globalObject.reportActiveExceptionAsUnhandled(e);
@@ -3342,15 +3344,15 @@ pub struct H2FrameParser {
                 }
                 const origin_string = DeinitGuard<bun.String.Slice>{ val: item.toSlice(globalObject, bun.default_allocator)? };
                 const slice = origin_string.val.slice();
-                * = writer.writeInt(u16, @intCast(slice.len), .big) catch {
+                const fits = if (slice.len <= std.math.maxInt(u16)) blk: {
+                    * = writer.writeInt(u16, @intCast(slice.len), .big) catch break :blk false;
+                    * = writer.write(slice) catch break :blk false;
+                    break :blk true;
+                } else false;
+                if (!fits) {
                     const exception = globalObject.toTypeError(.HTTP2_ORIGIN_LENGTH, "HTTP/2 ORIGIN frames are limited to 16382 bytes", {});
                     return globalObject.throwValue(exception);
-                };
-
-                * = writer.write(slice) catch {
-                    const exception = globalObject.toTypeError(.HTTP2_ORIGIN_LENGTH, "HTTP/2 ORIGIN frames are limited to 16382 bytes", {});
-                    return globalObject.throwValue(exception);
-                };
+                }
             }
 
             const total_length: u32 = @intCast(stream.getPos() catch FrameHeader.byteSize);
@@ -4140,17 +4142,15 @@ pub struct H2FrameParser {
         let stream_id: u32 = _.lastStreamID;
         if (_.isServer) {
             if (stream_id % 2 == 0) {
-                stream_id += 2;
+                stream_id +|= 2;
             } else {
-                stream_id += 1;
+                stream_id +|= 1;
             }
         } else {
             if (stream_id % 2 == 0) {
-                stream_id += 1;
-            } else if (stream_id == 0) {
-                stream_id = 1;
+                stream_id +|= 1;
             } else {
-                stream_id += 2;
+                stream_id +|= 2;
             }
         }
         return stream_id;
@@ -4166,17 +4166,15 @@ pub struct H2FrameParser {
         // to set the next stream id we need to decrement because we only keep the last stream id
         if (_.isServer) {
             if (_.lastStreamID % 2 == 0) {
-                _.lastStreamID -= 2;
+                _.lastStreamID -|= 2;
             } else {
-                _.lastStreamID -= 1;
+                _.lastStreamID -|= 1;
             }
         } else {
             if (_.lastStreamID % 2 == 0) {
-                _.lastStreamID -= 1;
-            } else if (_.lastStreamID == 1) {
-                _.lastStreamID = 0;
+                _.lastStreamID -|= 1;
             } else {
-                _.lastStreamID -= 2;
+                _.lastStreamID -|= 2;
             }
         }
         return JSValue.js_undefined;

@@ -2655,11 +2655,6 @@ pub struct PathTemplate {
         while (j := strings.indexOfChar(remain, '[')) {
             writeReplacingSlashesOnWindows(writer, remain[0..j])?;
             remain = remain[j + 1 ..];
-            if (remain.len == 0) {
-                // TODO: throw error
-                writer.writeAll("[")?;
-                break;
-            }
 
             let count: isize = 1;
             let end_len: usize = remain.len;
@@ -2678,12 +2673,19 @@ pub struct PathTemplate {
                 }
             }
 
+            if (count != 0) {
+                writer.writeAll("[")?;
+                break;
+            }
+
             const placeholder = remain[0..end_len];
 
             const field_opt = PathTemplate.Placeholder.map.get(placeholder);
             if (field_opt == null) {
+                writer.writeAll("[")?;
                 writeReplacingSlashesOnWindows(writer, placeholder)?;
-                remain = remain[end_len..];
+                writer.writeAll("]")?;
+                remain = remain[end_len + 1 ..];
                 continue;
             }
             const field = field_opt.?;
@@ -2755,4 +2757,36 @@ pub struct PathTemplate {
         data: "[dir]/[target]/[name]-[hash].[ext]",
         placeholder: {},
     };
+}
+
+pub struct UnterminatedPlaceholder {
+    pos: usize,
+    tail: []const u8,
+}
+
+pub fn findUnterminatedPlaceholder(template: []const u8): UnterminatedPlaceholder? {
+    let offset: usize = 0;
+    while (j := strings.indexOfChar(template[offset..], '[')) {
+        const start = offset + j;
+        const remain = template[start + 1 ..];
+        let count: isize = 1;
+        let end_len: usize = remain.len;
+        for (idx of 0..remain.len) {
+            const c = remain[@as(usize, @intCast(idx))];
+            count += switch (c) {
+                '[' => @as(isize, 1),
+                ']' => @as(isize, -1),
+                else => @as(isize, 0),
+            };
+            if (count == 0) {
+                end_len = @intCast(idx);
+                break;
+            }
+        }
+        if (count != 0) {
+            return UnterminatedPlaceholder{ pos: start, tail: template[start..] };
+        }
+        offset = start + 1 + end_len + 1;
+    }
+    return null;
 }

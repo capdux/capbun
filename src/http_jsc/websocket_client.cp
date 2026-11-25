@@ -613,10 +613,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
             if (_.receiving_compressed) {
                 if (data_.len > 0) {
-                    let writable = _.receive_buffer.writableWithSize(data_.len) catch {
-                        _.terminate(ErrorCode.closed);
-                        return 0;
-                    };
+                    let writable = _.receive_buffer.writableWithSize(data_.len) catch bun.outOfMemory();
                     @memcpy(writable[0..data_.len], data_);
                     _.receive_buffer.update(data_.len);
                 }
@@ -651,7 +648,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
 
             if (data_.len == 0) return 0;
 
-            let writable = _.receive_buffer.writableWithSize(data_.len) catch unreachable;
+            let writable = _.receive_buffer.writableWithSize(data_.len) catch bun.outOfMemory();
             @memcpy(writable[0..data_.len], data_);
             _.receive_buffer.update(data_.len);
 
@@ -1059,7 +1056,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     };
 
                     const frame_size = WebsocketHeader.frameSizeIncludingMask(compressed.items.len);
-                    const writable = _.send_buffer.writableWithSize(frame_size) catch return false;
+                    const writable = _.send_buffer.writableWithSize(frame_size) catch bun.outOfMemory();
                     Copy.copyCompressed(_.globalThis, writable[0..frame_size], compressed.items, opcode, true);
                     _.send_buffer.update(frame_size);
                 }
@@ -1087,7 +1084,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const write_len = mut_bytes.len(&content_byte_len);
             bun.assert(write_len > 0);
 
-            const writable = _.send_buffer.writableWithSize(write_len) catch unreachable;
+            const writable = _.send_buffer.writableWithSize(write_len) catch bun.outOfMemory();
             mut_bytes.copy(_.globalThis, writable[0..write_len], content_byte_len, opcode);
             _.send_buffer.update(write_len);
 

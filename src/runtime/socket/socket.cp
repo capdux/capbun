@@ -844,7 +844,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             const globalObject = h.globalObject;
             const this_value = _.getThisValue(globalObject);
             const output_value = h.binary_type.toJS(data, globalObject) catch e => {
-                _.handleError(globalObject.takeException(e));
+                _.handleError(globalObject.takeError(e));
                 return;
             };
 

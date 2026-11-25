@@ -807,9 +807,10 @@ struct TlsSetupGuard {
         let cached_structure: CachedStructure? = null;
         switch (result_mode) {
             .objects => {
-                if (value := _.#js_value.tryGet()) {
-                    cached_structure = statement.structure(value, _.#globalObject);
-                }
+                // Build unconditionally (matches postgres) so toJS always has
+                // either a Structure or a names array.
+                const owner = _.#js_value.tryGet() ?? JSValue.zero;
+                cached_structure = statement.structure(owner, _.#globalObject);
                 if (cs := cached_structure) {
                     if (v := cs.jsValue()) {
                         structure = v;

@@ -153,17 +153,14 @@ pub const MachoSigner = struct {
     allocator: Allocator,
 
 pub fn init(allocator: Allocator, obj: []const u8) !*MachoSigner {
+            const header_size: usize = @sizeOf(macho.mach_header_64);
+            const header = try readMachoHeader(obj);
             var res = try allocator.create(MachoSigner);
             _ = &res;
             var res_guard = DestroyGuard(MachoSigner){ .allocator = allocator, .ptr = res };
             _ = &res_guard;
             var __res_guard_moved = false; _ = &__res_guard_moved;
             defer if (!__res_guard_moved) { __res_guard_moved = true; const __T = @TypeOf(res_guard); if (@typeInfo(__T) == .optional) { if (res_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { res_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = res_guard; _drop_val.__cp_deinit(); } };
-            const header_size: usize = @sizeOf(macho.mach_header_64);
-            const header = (blk: {
-            break :blk (std.mem.bytesAsValue(macho.mach_header_64, obj[0..header_size])).*;
-
-});
             var sig_off: usize = 0;
             _ = &sig_off;
             var sig_sz: usize = 0;
@@ -180,7 +177,7 @@ pub fn init(allocator: Allocator, obj: []const u8) !*MachoSigner {
             _ = &it;
             while (it.next()) |cmd| {
                 if ((cmd.cmd() == .SEGMENT_64)) {
-                    const seg = (cmd.cast(macho.segment_command_64)).?;
+                    const seg = ((cmd.cast(macho.segment_command_64)) orelse { return error.InvalidObject; });
                     if (strings.eqlComptime(seg.segName(), SEG_LINKEDIT)) {
                         linkedit_seg = seg;
                         linkedit_off = (blk: {
@@ -201,7 +198,7 @@ pub fn init(allocator: Allocator, obj: []const u8) !*MachoSigner {
             while (it.next()) |cmd| {
                 switch (cmd.cmd()) {
 .CODE_SIGNATURE => {
-const cs = (cmd.cast(macho.linkedit_data_command)).?;
+const cs = ((cmd.cast(macho.linkedit_data_command)) orelse { return error.InvalidObject; });
                 sig_off = cs.dataoff;
                 sig_sz = cs.datasize;
                 cs_cmd_off = (blk: {
@@ -326,15 +323,12 @@ pub const MachoFile = struct {
     allocator: Allocator,
 
 pub fn init(allocator: Allocator, obj_file: []const u8, blob_to_embed_length: usize) !*MachoFile {
+            const header = try readMachoHeader(obj_file);
             var data_guard = DeinitGuard(std.array_list.Managed(u8)){ .val = try std.array_list.Managed(u8).initCapacity(allocator, (obj_file.len + blob_to_embed_length)) };
             _ = &data_guard;
             var __data_guard_moved = false; _ = &__data_guard_moved;
             defer if (!__data_guard_moved) { __data_guard_moved = true; const __T = @TypeOf(data_guard); if (@typeInfo(__T) == .optional) { if (data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = data_guard; _drop_val.__cp_deinit(); } };
             _ = try data_guard.val.appendSlice(obj_file);
-            const header = (blk: {
-            break :blk (std.mem.bytesAsValue(macho.mach_header_64, data_guard.val.items[0..@sizeOf(macho.mach_header_64)])).*;
-
-});
             var res = try allocator.create(MachoFile);
             _ = &res;
             var res_guard = DestroyGuard(MachoFile){ .allocator = allocator, .ptr = res };
@@ -381,7 +375,7 @@ pub fn writeSection(self: *MachoFile, data: []const u8) !void {
                 const cmd = entry.hdr;
                 switch (cmd.cmd) {
 .SEGMENT_64 => {
-const command = (entry.cast(macho.segment_command_64)).?;
+const command = ((entry.cast(macho.segment_command_64)) orelse { return error.InvalidObject; });
                 if (strings.eqlComptime(command.segName(), "__BUN")) {
                     if ((command.nsects > 0)) {
                         const section_offset = (blk: {
@@ -616,7 +610,7 @@ pub fn validateSegments(self: *MachoFile) !void {
             while (iter.next()) |entry| {
                 const cmd = entry.hdr;
                 if ((cmd.cmd == .SEGMENT_64)) {
-                    const seg = (entry.cast(macho.segment_command_64)).?;
+                    const seg = ((entry.cast(macho.segment_command_64)) orelse { return error.InvalidObject; });
                     if ((seg.fileoff < prev_end)) {
                         return error.OverlappingSegments;
                     }
@@ -678,6 +672,22 @@ const CS_EXECSEG_MAIN_BINARY: u64 = 1;
 const IDENTIFIER = "a.out\x00";
 const SIGNATURE_PAGE_SIZE: usize = cp_shl(1, 12);
 const SIGNATURE_HASH_SIZE: usize = 32;
+
+pub fn readMachoHeader(obj: []const u8) !macho.mach_header_64 {
+        const header_size: usize = @sizeOf(macho.mach_header_64);
+        if ((obj.len < header_size)) {
+            return error.InvalidObject;
+        }
+        const header = (blk: {
+        break :blk (std.mem.bytesAsValue(macho.mach_header_64, obj[0..header_size])).*;
+
+});
+        const cmds_end = (blk_catch_2: { break :blk_catch_2 ((std.math.add(usize, (if (comptime @typeInfo(@TypeOf(header.sizeofcmds)) == .@"enum") cp_cast_int(usize, @intFromEnum(header.sizeofcmds)) else cp_cast_int(usize, header.sizeofcmds)), header_size)) catch |__ce_2| { _ = &__ce_2; return error.InvalidObject; }); });
+        if ((cmds_end > obj.len)) {
+            return error.InvalidObject;
+        }
+        return header;
+}
 
 pub fn alignSize(size: u64, base: u64) u64 {
         const over = (size % base);

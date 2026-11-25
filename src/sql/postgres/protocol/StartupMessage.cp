@@ -21,7 +21,7 @@ const int4 = int_types.int4;
         const user = _.user.slice();
         const database = _.database.slice();
         const options = _.options.slice();
-        const count: usize = @sizeOf(int4) + @sizeOf(int4) + zFieldCount("user", user) + zFieldCount("database", database) + zFieldCount("client_encoding", "UTF8") + options.len + 1;
+        const count: usize = @sizeOf(int4) + @sizeOf(int4) + zFieldCount("user", user) + zFieldCount("database", database) + zFieldCount("client_encoding", "UTF8") + zFieldCount("DateStyle", "ISO, MDY") + options.len + 1;
 
         const header = toBytes(Int32(@as(u32, @truncate(count))));
         writer.write(&header)?;
@@ -40,6 +40,10 @@ const int4 = int_types.int4;
         }
         writer.@"string"("client_encoding")?;
         writer.@"string"("UTF8")?;
+        // Pin the session DateStyle so date/timestamp text is always ISO
+        // regardless of postgresql.conf / ALTER DATABASE / ALTER ROLE defaults.
+        writer.@"string"("DateStyle")?;
+        writer.@"string"("ISO, MDY")?;
         if (options.len > 0) {
             writer.write(options)?;
         }

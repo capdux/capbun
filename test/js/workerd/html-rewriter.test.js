@@ -761,3 +761,133 @@ payloads.forEach(type => {
     expect(calls).toBeGreaterThan(0);
   });
 });
+
+// `on()` stores one (selector, handlers) record per call; `transform()` turns
+// the records collected so far into a fresh lol-html rewriter each time.
+describe("on() registrations", () => {
+  it("each selector runs the handlers it was registered with, also after a rejected on()", () => {
+    const rw = new HTMLRewriter();
+    const count = 24;
+    for (let i = 0; i < count; i++) {
+      if (i === count / 2) {
+        expect(() => rw.on("p[", { element() {} })).toThrow(expect.objectContaining({ name: "HTMLRewriterError" }));
+        expect(() => rw.on(`p[data-i="${i}"]`, { element: "not a function" })).toThrow("element must be a function");
+      }
+      if (i % 2 === 0) {
+        rw.on(`p[data-i="${i}"]`, { element: el => el.setInnerContent(`element ${i}`) });
+      } else {
+        rw.on(`p[data-i="${i}"]`, {
+          text(chunk) {
+            if (chunk.text) chunk.replace(`text ${i}`);
+          },
+        });
+      }
+    }
+
+    const indices = Array.from({ length: count }, (_, i) => count - 1 - i);
+    const input = indices.map(i => `<p data-i="${i}">x</p>`).join("");
+    const expected = indices.map(i => `<p data-i="${i}">${i % 2 === 0 ? "element" : "text"} ${i}</p>`).join("");
+    expect(rw.transform(input)).toBe(expected);
+    expect(rw.transform(input)).toBe(expected);
+  });
+
+  it("on() from inside a handler applies to the next transform, not the running one", () => {
+    const rw = new HTMLRewriter();
+    let grown = false;
+    rw.on("div", {
+      element(el) {
+        el.setInnerContent("div");
+        if (!grown) {
+          grown = true;
+          for (let i = 0; i < 64; i++) {
+            rw.on("span", { element: span => span.setAttribute("n", String(i)) });
+          }
+        }
+      },
+    });
+    rw.on("span", { element: el => el.setInnerContent("span") });
+
+    const input = "<div>1</div><span>2</span><div>3</div><span>4</span>";
+    expect(rw.transform(input)).toBe("<div>div</div><span>span</span><div>div</div><span>span</span>");
+    expect(rw.transform(input)).toBe('<div>div</div><span n="63">span</span><div>div</div><span n="63">span</span>');
+  });
+});
+
+it("content op string arguments survive a GC triggered while coercing a later argument", async () => {
+  const fixture = /* js */ `
+    const N = 20000;
+    const mk = (ch, n) => {
+      const s = ch.repeat(n);
+      return s.slice(0, 1) + s.slice(1);
+    };
+    const churn = () => {
+      Bun.gc(true);
+      for (let i = 0; i < 50; i++) mk("SECRET", 20000);
+      Bun.gc(true);
+    };
+    const content = ch => ({ toString: () => mk(ch, N) + "END" });
+    const opts = {
+      get html() {
+        churn();
+        return false;
+      },
+    };
+    const out = new HTMLRewriter()
+      .on("p", {
+        element(el) {
+          el.setInnerContent(content("I"), opts);
+          el.before(content("B"), opts);
+          el.setAttribute({ toString: () => mk("n", N) }, { toString: () => (churn(), "v") });
+          el.onEndTag(end => {
+            end.after(content("E"), opts);
+          });
+        },
+      })
+      .onDocument({
+        comments(c) {
+          c.replace(content("C"), opts);
+        },
+        text(t) {
+          if (t.text === "txt") t.after(content("T"), opts);
+        },
+        end(end) {
+          end.append(content("D"), opts);
+        },
+      })
+      .transform("<p>x</p><div>txt</div><!-- c -->");
+    const fragments = {
+      "element.before": mk("B", N) + "END<p ",
+      "element.setAttribute": "<p " + mk("n", N) + '="v">',
+      "element.setInnerContent": '="v">' + mk("I", N) + "END</p>",
+      "endTag.after": "</p>" + mk("E", N) + "END<div>",
+      "text.after": "<div>txt" + mk("T", N) + "END</div>",
+      "comment.replace": "</div>" + mk("C", N) + "END",
+      "documentEnd.append": "END" + mk("D", N) + "END",
+    };
+    const result = {};
+    for (const [op, fragment] of Object.entries(fragments)) result[op] = out.includes(fragment);
+    result.exact =
+      out ===
+      mk("B", N) + "END<p " + mk("n", N) + '="v">' + mk("I", N) + "END</p>" + mk("E", N) + "END" +
+      "<div>txt" + mk("T", N) + "END</div>" + mk("C", N) + "END" + mk("D", N) + "END";
+    console.log(JSON.stringify(result));
+  `;
+  await using proc = Bun.spawn({
+    cmd: [bunExe(), "-e", fixture],
+    env: process.platform === "win32" ? bunEnv : { ...bunEnv, Malloc: "1", ASAN_OPTIONS: "detect_leaks=0" },
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const [stdout, exitCode] = await Promise.all([proc.stdout.text(), proc.exited]);
+  expect(JSON.parse(stdout.trim() || "{}")).toEqual({
+    "element.before": true,
+    "element.setAttribute": true,
+    "element.setInnerContent": true,
+    "endTag.after": true,
+    "text.after": true,
+    "comment.replace": true,
+    "documentEnd.append": true,
+    exact: true,
+  });
+  expect(exitCode).toBe(0);
+});

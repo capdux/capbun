@@ -1778,7 +1778,7 @@ pub const ParserState = struct {
     at_start_of: ?BlockType,
 
 pub fn sourceLocation(self: ParserState) SourceLocation {
-            return .{ .line = self.current_line_number, .column = @intCast(((self.position - self.current_line_start_position) + 1)) };
+            return .{ .line = self.current_line_number, .column = @intCast(((self.position -% self.current_line_start_position) + 1)) };
     }
 };
 
@@ -2032,7 +2032,7 @@ return;
     }
 
 pub fn currentSourceLocation(self: Tokenizer) SourceLocation {
-            return SourceLocation{ .line = self.current_line_number, .column = @intCast(((self.position - self.current_line_start_position) + 1)) };
+            return SourceLocation{ .line = self.current_line_number, .column = @intCast(((self.position -% self.current_line_start_position) + 1)) };
     }
 
 pub fn prev(self: *Tokenizer) Token {
@@ -3010,8 +3010,13 @@ pub fn consume4byteIntro(self: *Tokenizer) void {
             if (bun.Environment.allow_assert) {
                 _ = std.debug.assert(((self.nextByteUnchecked() & 240) == 240));
             }
-            self.current_line_start_position = (self.current_line_start_position -% 1);
             self.position = (self.position + 1);
+            if (self.nextByte()) |b| {
+                _ = &b;
+                if (((b & 192) == 128)) {
+                    self.current_line_start_position = (self.current_line_start_position -% 1);
+                }
+            }
     }
 
 pub fn isIdentStart(self: *Tokenizer) bool {
@@ -3061,7 +3066,12 @@ pub fn consumeKnownByte(self: *Tokenizer, byte: u8) void {
             }
             self.position = (self.position + 1);
             if (((byte & 240) == 240)) {
-                self.current_line_start_position = (self.current_line_start_position -% 1);
+                if (self.nextByte()) |b| {
+                    _ = &b;
+                    if (((b & 192) == 128)) {
+                        self.current_line_start_position = (self.current_line_start_position -% 1);
+                    }
+                }
             } else {
                 if (((byte & 192) == 128)) {
                     self.current_line_start_position = (self.current_line_start_position +% 1);
@@ -4648,8 +4658,11 @@ pub fn parse_custom_at_rule_body(comptime T: type, prelude: T.CustomAtRuleParser
 .result => |vv| vv,
 .err => |e| {
 {
-            _ = &e;
-            _ = todo("This part here", .{});
+            const ErrT = ParseError(ParserError);
+            return (switch (e.kind) {
+.basic => |kind| .{ .err = ErrT{ .kind = .{ .basic = kind }, .location = e.location } },
+else => .{ .err = input.newError(.at_rule_body_invalid) },
+});
         }
 },
 });

@@ -191,7 +191,8 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
         chunk = c;
         if (state_ != .eof && _.max_size.? == 0) {
             if (comptime !bun.Environment.isPosix) _.reader.pause();
-            _.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onReaderDone).init(_);
+            _.ref();
+            _.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onEofTask).init(_);
             _.vm.eventLoop().enqueueTask(jsc.Task.init(&_.eof_task.?));
             state = .eof;
         }
@@ -217,6 +218,11 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
         },
         .want_more => return true,
     }
+}
+
+pub fn onEofTask(_: *FileResponseStream) {
+    defer _.deref();
+    _.onReaderDone();
 }
 
 pub fn onReaderDone(_: *FileResponseStream) {

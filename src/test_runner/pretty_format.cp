@@ -1462,18 +1462,28 @@ pub struct PrettyFormatter {
                     };
                     return;
                 } else if (value.@"as"(jsc.DOMFormData) != null) {
-                    const toJSONFunction = (value.get(_.globalThis, "toJSON")?).?;
+                    if (toJSONFunction := value.get(_.globalThis, "toJSON")?) {
+                        if (toJSONFunction.isCallable()) {
+                            _.addForNewLine("FormData (entries) ".len);
+                            writer.writeAll(comptime Output.prettyFmt("<r><blue>FormData<r> <d>(entries)<r> ", enable_ansi_colors));
 
-                    _.addForNewLine("FormData (entries) ".len);
-                    writer.writeAll(comptime Output.prettyFmt("<r><blue>FormData<r> <d>(entries)<r> ", enable_ansi_colors));
-
-                    const res_val = toJSONFunction.call(_.globalThis, value, [])?;
+                            const res_val = toJSONFunction.call(_.globalThis, value, [])?;
+                            return _.printAs(
+                                .Object,
+                                Writer,
+                                writer_,
+                                res_val,
+                                .Object,
+                                enable_ansi_colors,
+                            )?;
+                        }
+                    }
                     return _.printAs(
                         .Object,
                         Writer,
                         writer_,
-                        res_val,
-                        .Object,
+                        value,
+                        .Event,
                         enable_ansi_colors,
                     )?;
                 } else if (timer := value.@"as"(bun.api.Timer.TimeoutObject)) {

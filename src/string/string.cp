@@ -447,7 +447,7 @@ export @c struct String {
         }
         bun.assert(bytes.len > 0);
         jsc.markBinding(@src());
-        if (bytes.len >= String.max_length()) {
+        if (bytes.len > String.max_length()) {
             if (cb := callback) {
                 unsafe {
                     cb(ctx, @ptrCast(@constCast(bytes.ptr)), @truncate(bytes.len));
@@ -467,10 +467,14 @@ export @c struct String {
         return unsafe { BunString__createStaticExternal(bytes.ptr, bytes.len, isLatin1) };
     }
 
+    /// Mirror of `WTF::StringImpl::MaxLength` (`INT32_MAX`), which C++ enforces
+    /// with `RELEASE_ASSERT` in the `StringImplShape` constructors.
+    pub const wtf_string_max_length: usize = std.math.maxInt(i32);
+
     /// Max WTFStringImpl length.
     /// **Not** in bytes. In characters.
     pub static inline fn max_length(): usize {
-        return jsc.VirtualMachine.string_allocation_limit;
+        return @min(jsc.VirtualMachine.string_allocation_limit, wtf_string_max_length);
     }
 
     /// If the allocation fails, _ will free the bytes and return a dead string.
@@ -478,7 +482,7 @@ export @c struct String {
         jsc.markBinding(@src());
         bun.assert(bytes.len > 0);
 
-        if (bytes.len >= String.max_length()) {
+        if (bytes.len > String.max_length()) {
             bun.default_allocator.free(bytes);
             return String.dead;
         }

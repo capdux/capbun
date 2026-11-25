@@ -62,7 +62,7 @@ pub fn writeInternal(self: StartupMessage, comptime Context: type, writer: NewWr
         const user = self.user.slice();
         const database = self.database.slice();
         const options = self.options.slice();
-        const count: usize = ((((((@sizeOf(int4) + @sizeOf(int4)) + zFieldCount("user", user)) + zFieldCount("database", database)) + zFieldCount("client_encoding", "UTF8")) + options.len) + 1);
+        const count: usize = (((((((@sizeOf(int4) + @sizeOf(int4)) + zFieldCount("user", user)) + zFieldCount("database", database)) + zFieldCount("client_encoding", "UTF8")) + zFieldCount("DateStyle", "ISO, MDY")) + options.len) + 1);
         const header = toBytes(Int32(@as(u32, @truncate(count))));
         _ = try writer.write((&header));
         _ = try writer.int4(196608);
@@ -78,6 +78,8 @@ pub fn writeInternal(self: StartupMessage, comptime Context: type, writer: NewWr
         }
         _ = try writer.@"string"("client_encoding");
         _ = try writer.@"string"("UTF8");
+        _ = try writer.@"string"("DateStyle");
+        _ = try writer.@"string"("ISO, MDY");
         if ((options.len > 0)) {
             _ = try writer.write(options);
         }

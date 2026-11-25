@@ -1076,7 +1076,9 @@ _ = debugLog("  request url: {s}", .{ saved.request.url.byteSlice() });
             _ = saved.js_request.deinit();
 },
 .bundled_html_page => |r| {
-_ = r.response.endWithoutBody(true);
+_ = r.response.writeStatus("500 Internal Server Error");
+            _ = r.response.writeHeaderInt("Content-Length", 0);
+            _ = r.response.endWithoutBody(true);
 },
 .aborted => {
 
@@ -3805,14 +3807,16 @@ pub fn startNextBundleIfPresent(dev: *DevServer) void {
 
 pub fn handleParseTaskFailure(dev: *DevServer, e: anyerror, graph: bake.Graph, abs_path: []const u8, log: *const Log, bv2: *BundleV2) bun.OOM!void {
         _ = dev.graph_safety_lock.lock();
-        var lock_guard = GraphSafetyLockGuard{ .lock = (blk: {
-        break :blk (&dev.graph_safety_lock);
-
-}) };
-        _ = &lock_guard;
-        var __lock_guard_moved = false; _ = &__lock_guard_moved;
-        defer if (!__lock_guard_moved) { __lock_guard_moved = true; const __T = @TypeOf(lock_guard); if (@typeInfo(__T) == .optional) { if (lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = lock_guard; _drop_val.__cp_deinit(); } };
+        var unlocked = false;
+        _ = &unlocked;
+        defer {
+        if ((!unlocked)) {
+            _ = dev.graph_safety_lock.unlock();
+        }
+        }
         _ = debug.log("handleParseTaskFailure({}, .{s}, {f}, {d} messages)", .{ e, @tagName(graph), bun.fmt.quote(abs_path), log.msgs.items.len });
+        var watch_for_route_file = false;
+        _ = &watch_for_route_file;
         if (((e == error.FileNotFound) or (e == error.ModuleNotFound))) {
             switch (graph) {
 .server, .ssr => {
@@ -3820,6 +3824,13 @@ _ = dev.server_graph.onFileDeleted(abs_path, bv2);
 },
 .client => {
 _ = dev.client_graph.onFileDeleted(abs_path, bv2);
+            if (dev.client_graph.bundled_files.get(abs_path)) |file| {
+                _ = &file;
+                if ((file.html_route_bundle_index != null)) {
+                    watch_for_route_file = (!file.failed);
+                    _ = try dev.client_graph.insertFailure(.abs_path, abs_path, log, false);
+                }
+            }
 },
 }
         } else {
@@ -3834,6 +3845,11 @@ _ = try dev.server_graph.insertFailure(.abs_path, abs_path, log, true);
 _ = try dev.client_graph.insertFailure(.abs_path, abs_path, log, false);
 },
 }
+        }
+        unlocked = true;
+        _ = dev.graph_safety_lock.unlock();
+        if (watch_for_route_file) {
+            _ = try dev.directory_watchers.trackResolutionFailure(abs_path, std.fs.path.basename(abs_path), .client, .html);
         }
 }
 

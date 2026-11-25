@@ -194,6 +194,33 @@ describe("css tests", () => {
       indoc`.foo{border-spacing:6px 8px}`,
     );
 
+    describe("clamp() simplification", () => {
+      minify_test(`.foo { border-width: clamp(1px, 2px, 3px) }`, `.foo{border-width:2px}`);
+      minify_test(`.foo { border-width: clamp(1px, 10px, 3px) }`, `.foo{border-width:3px}`);
+      minify_test(`.foo { border-width: clamp(5px, 2px, 10px) }`, `.foo{border-width:5px}`);
+      minify_test(`.foo { border-width: clamp(100px, 2px, 10px) }`, `.foo{border-width:100px}`);
+      minify_test(`.foo { border-width: clamp(5px + 5px, 5px + 7px, 10px + 20px) }`, `.foo{border-width:12px}`);
+      minify_test(`.foo { border-width: clamp(1px, 2pt, 1in) }`, `.foo{border-width:2pt}`);
+      minify_test(`.foo { border-width: clamp(1em, 2px, 4vh) }`, `.foo{border-width:clamp(1em,2px,4vh)}`);
+      minify_test(`.foo { border-width: clamp(1em, 2em, 4vh) }`, `.foo{border-width:clamp(1em,2em,4vh)}`);
+      minify_test(`.foo { border-width: clamp(1em, 2vh, 4vh) }`, `.foo{border-width:max(1em,2vh)}`);
+      minify_test(`.foo { border-width: clamp(1px, 1px + 2em, 4px) }`, `.foo{border-width:clamp(1px,1px + 2em,4px)}`);
+      minify_test(`.foo { width: clamp(-100px, 0px, 50% - 50vw) }`, `.foo{width:clamp(-100px,0px,50% - 50vw)}`);
+      minify_test(`a { width: clamp(2px, 2px, 3px) }`, `a{width:2px}`);
+      minify_test(`a { width: clamp(1px, 2px, 2px) }`, `a{width:2px}`);
+      minify_test(`a { width: clamp(20px, 15px, 10px) }`, `a{width:20px}`);
+      minify_test(`a { width: clamp(30px, 100px, 20px) }`, `a{width:30px}`);
+      minify_test(`a { width: clamp(-10px, 100px, -30px) }`, `a{width:-10px}`);
+      minify_test(`a { width: clamp(10vw, 5px, 20px) }`, `a{width:max(10vw,5px)}`);
+      minify_test(`a { width: clamp(10vw, 30px, 20px) }`, `a{width:max(10vw,20px)}`);
+      minify_test(`a { width: clamp(10px, 5px, 20vw) }`, `a{width:clamp(10px,5px,20vw)}`);
+      minify_test(`a { width: clamp(10%, 5%, 20%) }`, `a{width:10%}`);
+      minify_test(`a { width: clamp(10%, 25%, 20%) }`, `a{width:20%}`);
+      minify_test(`a { rotate: clamp(0deg, 45deg, 30deg) }`, `a{rotate:30deg}`);
+      minify_test(`a { transition-duration: clamp(1s, 500ms, 2s) }`, `a{transition-duration:1s}`);
+      minify_test(`a { width: calc(clamp(1px, 2px, 3px) + 1px) }`, `a{width:3px}`);
+    });
+
     // TODO: The `<length>` in border-spacing cannot have a negative value,
     // we may need to implement NonNegativeLength like Servo does.
     // Servo Code: https://github.com/servo/servo/blob/08bc2d53579c9ab85415d4363888881b91df073b/components/style/values/specified/length.rs#L875

@@ -526,7 +526,18 @@ else => @compileError("unreachable"),
             if (parse_result.empty) {
                 return ResolvedSource{ .allocator = null, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .jsvalue_for_export = JSValue.createEmptyObject(jsc_vm.global, 0), .tag = .exports_object };
             }
-            return ResolvedSource{ .allocator = null, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .jsvalue_for_export = (blk_catch_4: { break :blk_catch_4 (((if (@typeInfo(@TypeOf(parse_result.ast.parts.at(0).stmts[0].data.s_expr)) == .@"enum") @intFromEnum(parse_result.ast.parts.at(0).stmts[0].data.s_expr) else parse_result.ast.parts.at(0).stmts[0].data.s_expr.value).toJS(allocator, ((globalObject) orelse (jsc_vm.global)))) catch |e| { _ = &e; break :blk_catch_4 std.debug.panic("Unexpected JS error: {s}", .{ @errorName(e) }); }); }), .tag = .exports_object };
+            const js_global = ((globalObject) orelse (jsc_vm.global));
+            const js_val = (blk_catch_4: { break :blk_catch_4 (((if (@typeInfo(@TypeOf(parse_result.ast.parts.at(0).stmts[0].data.s_expr)) == .@"enum") @intFromEnum(parse_result.ast.parts.at(0).stmts[0].data.s_expr) else parse_result.ast.parts.at(0).stmts[0].data.s_expr.value).toJS(allocator, js_global)) catch |e| { _ = &e; if ((e == error.JSError)) {
+                return error.JSError;
+            }
+            if ((e == error.JSTerminated)) {
+                return error.JSTerminated;
+            }
+            if ((e == error.OutOfMemory)) {
+                return js_global.throwOutOfMemory();
+            }
+            return js_global.throwError(e, "converting module to JavaScript"); }); });
+            return ResolvedSource{ .allocator = null, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .jsvalue_for_export = js_val, .tag = .exports_object };
         }
         if ((parse_result.already_bundled != .none)) {
             const bytecode_slice = parse_result.already_bundled.bytecodeSlice();

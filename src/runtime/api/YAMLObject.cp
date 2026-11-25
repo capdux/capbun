@@ -76,20 +76,22 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JS
     let _stringifier_guard = DeinitGuard<Stringifier>{ ptr: unsafe { &stringifier } };
 
     stringifier.findAnchorsAndAliases(global, value, .root) catch e => {
-        if (e == error.StackOverflow) return global.throwStackOverflow();
-        if (e == error.OutOfMemory) return error.OutOfMemory;
-        if (e == error.JSTerminated) return error.JSTerminated;
-        return error.JSError;
+        return stringifyErrorToJSError(e, global);
     };
 
     stringifier.stringifyValue(global, value) catch e => {
-        if (e == error.StackOverflow) return global.throwStackOverflow();
-        if (e == error.OutOfMemory) return error.OutOfMemory;
-        if (e == error.JSTerminated) return error.JSTerminated;
-        return error.JSError;
+        return stringifyErrorToJSError(e, global);
     };
 
     return stringifier.builder.toString(global);
+}
+
+fn stringifyErrorToJSError(e: anyerror, global: *JSGlobalObject): JSError {
+    @branchHint(.cold);
+    if (e == error.StackOverflow) return global.throwStackOverflow();
+    if (e == error.OutOfMemory) return error.OutOfMemory;
+    if (e == error.JSTerminated) return error.JSTerminated;
+    return error.JSError;
 }
 
 

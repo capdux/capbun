@@ -1812,7 +1812,14 @@ cached_structure = statement.structure(self.js_value, self.globalObject);
         _ = &_cells_guard;
         var ___cells_guard_moved = false; _ = &___cells_guard_moved;
         defer if (!___cells_guard_moved) { ___cells_guard_moved = true; const __T = @TypeOf(_cells_guard); if (@typeInfo(__T) == .optional) { if (_cells_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _cells_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _cells_guard; _drop_val.__cp_deinit(); } };
-        _ = @memset(cells, DataCell.SQLDataCell{ .tag = .@"null", .value = .{ .@"null" = 0 } });
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_1 = cells.len;
+            while (i < __end_1) : (i += 1) {
+                cells[cp_cast_int(usize, i)] = DataCell.SQLDataCell.nullForColumn(@intCast(i), statement.fields[@as(usize, @intCast(i))].name_or_index);
+            }
+        }
         putter.list = cells;
         if ((request.flags.result_mode == .raw)) {
             _ = try protocol.DataRow.decode((&putter), Context, reader, DataCell.Putter.putRaw);
@@ -1970,8 +1977,8 @@ var description: protocol.RowDescription = undefined;
             {
                 var field_idx: i32 = 0;
                 _ = &field_idx;
-                const __end_1 = statement.fields.len;
-                while (field_idx < __end_1) : (field_idx += 1) {
+                const __end_2 = statement.fields.len;
+                while (field_idx < __end_2) : (field_idx += 1) {
                     _ = statement.fields[@as(usize, @intCast(field_idx))].deinit();
                 }
             }
@@ -2044,8 +2051,8 @@ var sasl_cont = auth.SASLContinue;
         {
             var idx: i32 = 0;
             _ = &idx;
-            const __end_2 = 32;
-            while (idx < __end_2) : (idx += 1) {
+            const __end_3 = 32;
+            while (idx < __end_3) : (idx += 1) {
                 client_key_xor_buffer[cp_cast_int(usize, idx)] = (client_key[@as(usize, @intCast(idx))] ^ client_key_signature[@as(usize, @intCast(idx))]);
             }
         }

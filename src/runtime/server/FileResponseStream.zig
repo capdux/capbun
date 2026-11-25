@@ -280,7 +280,8 @@ pub fn onReadChunk(self: *FileResponseStream, chunk_: []const u8, state_: bun.io
                 if (comptime (!bun.Environment.isPosix)) {
                     _ = self.reader.pause();
                 }
-                self.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onReaderDone).init(self);
+                _ = self.ref();
+                self.eof_task = jsc.AnyTask.New(FileResponseStream, FileResponseStream.onEofTask).init(self);
                 _ = self.vm.eventLoop().enqueueTask(jsc.Task.init((&self.eof_task.?)));
                 state = .eof;
             }
@@ -309,6 +310,13 @@ var _bp_guard = self.takeReadRef();
 return true;
 },
 }
+}
+
+pub fn onEofTask(self: *FileResponseStream) void {
+        defer {
+        _ = self.deref();
+        }
+        _ = self.onReaderDone();
 }
 
 pub fn onReaderDone(self: *FileResponseStream) void {

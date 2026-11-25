@@ -1369,19 +1369,21 @@ else => {
             }
         }
         const pkgs_expr_opt = root.get("packages");
-        if ((pkgs_expr_opt == null)) {
-            if ((workspace_pkgs_len == 0)) {
-                _ = lockfile.initEmpty(allocator);
-            }
+        if (((pkgs_expr_opt == null) and (workspace_pkgs_len == 0))) {
+            _ = lockfile.initEmpty(allocator);
             return;
         }
-        const pkgs_expr = pkgs_expr_opt.?;
         {
-            if ((!pkgs_expr.isObject())) {
-                _ = try log.addError(source, pkgs_expr.loc, "Expected an object");
-                return error.InvalidPackagesObject;
+            if (pkgs_expr_opt) |pkgs_expr| {
+                _ = &pkgs_expr;
+                if ((!pkgs_expr.isObject())) {
+                    _ = try log.addError(source, pkgs_expr.loc, "Expected an object");
+                    return error.InvalidPackagesObject;
+                }
             }
-            for (cp_iter_slice(pkgs_expr.data.e_object.properties.slice())) |prop| {
+            const empty_props: [0]bun.ast.G.Property = undefined;
+            const pkg_props: []const bun.ast.G.Property = (if (pkgs_expr_opt) |pkgs_expr| pkgs_expr.data.e_object.properties.slice() else empty_props[0..0]);
+            for (cp_iter_slice(pkg_props)) |prop| {
                 _ = &prop;
                 const key = prop.key.?;
                 const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
@@ -1407,7 +1409,7 @@ else => {
                 }
                 _ = try bundled_pkgs.put(pkg_path, undefined);
             }
-            for (cp_iter_slice(pkgs_expr.data.e_object.properties.slice())) |prop| {
+            for (cp_iter_slice(pkg_props)) |prop| {
                 _ = &prop;
                 const key = prop.key.?;
                 const value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
@@ -1752,7 +1754,7 @@ else => {
                     }
                 }
             }
-            for (cp_iter_slice(pkgs_expr.data.e_object.properties.slice())) |prop| {
+            for (cp_iter_slice(pkg_props)) |prop| {
                 _ = &prop;
                 const key = prop.key.?;
                 const pkg_path = (key.asString(allocator)).?;

@@ -437,15 +437,6 @@ fn publish(
         return globalThis.throw("publish requires at least 1 argument", .{});
     }
 
-    if (_.#handler.app == null) {
-        log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-    }
-    const app = _.#handler.app.?;
-    const flags = _.#handler.flags;
-    const ssl = flags.ssl;
-    const publish_to_self = flags.publish_to_self;
-
     const topic_value = args.ptr[0];
     const message_value = args.ptr[1];
     const compress_value = args.ptr[2];
@@ -456,6 +447,8 @@ fn publish(
         return globalThis.throw("publish requires a topic string", .{});
     }
 
+    // ToString on either argument can run user JS that stops the server or
+    // triggers GC, so convert both before reading handler state.
     let topic_slice = topic_value.toSlice(globalThis, bun.default_allocator)?;
     const _topic_guard = DeinitGuard<@TypeOf(topic_slice)>{ ptr: unsafe { &topic_slice } };
     if (topic_slice.len == 0) {
@@ -473,6 +466,14 @@ fn publish(
     }
 
     if (array_buffer := message_value.asArrayBuffer(globalThis)) {
+        if (_.#handler.app == null) {
+            log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = _.#handler.app.?;
+        const flags = _.#handler.flags;
+        const ssl = flags.ssl;
+        const publish_to_self = flags.publish_to_self;
         const buffer = array_buffer.slice();
 
         const result = if (!publish_to_self && !_.isClosed())
@@ -494,6 +495,15 @@ fn publish(
         const _slice_guard = DeinitGuard<@TypeOf(slice)>{ ptr: unsafe { &slice } };
 
         const _js_str_guard = EnsureAliveGuard<@TypeOf(js_string)>{ ptr: js_string };
+
+        if (_.#handler.app == null) {
+            log("publish() closed", .{});
+            return JSValue.jsNumber(0);
+        }
+        const app = _.#handler.app.?;
+        const flags = _.#handler.flags;
+        const ssl = flags.ssl;
+        const publish_to_self = flags.publish_to_self;
 
         const buffer = slice.slice();
 
@@ -521,15 +531,6 @@ fn publishText(
         log("publish()", .{});
         return globalThis.throw("publish requires at least 1 argument", .{});
     }
-
-    if (_.#handler.app == null) {
-        log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-    }
-    const app = _.#handler.app.?;
-    const flags = _.#handler.flags;
-    const ssl = flags.ssl;
-    const publish_to_self = flags.publish_to_self;
 
     const topic_value = args.ptr[0];
     const message_value = args.ptr[1];
@@ -560,6 +561,15 @@ fn publishText(
 
     const _js_str_guard = EnsureAliveGuard<@TypeOf(js_string)>{ ptr: js_string };
 
+    if (_.#handler.app == null) {
+        log("publish() closed", .{});
+        return JSValue.jsNumber(0);
+    }
+    const app = _.#handler.app.?;
+    const flags = _.#handler.flags;
+    const ssl = flags.ssl;
+    const publish_to_self = flags.publish_to_self;
+
     const buffer = slice.slice();
 
     const result = if (!publish_to_self && !_.isClosed())
@@ -586,14 +596,6 @@ fn publishBinary(
         return globalThis.throw("publishBinary requires at least 1 argument", .{});
     }
 
-    if (_.#handler.app == null) {
-        log("publish() closed", .{});
-        return JSValue.jsNumber(0);
-    }
-    const app = _.#handler.app.?;
-    const flags = _.#handler.flags;
-    const ssl = flags.ssl;
-    const publish_to_self = flags.publish_to_self;
     const topic_value = args.ptr[0];
     const message_value = args.ptr[1];
     const compress_value = args.ptr[2];
@@ -625,6 +627,15 @@ fn publishBinary(
     }
     const array_buffer = array_buffer_opt.?;
     const buffer = array_buffer.slice();
+
+    if (_.#handler.app == null) {
+        log("publish() closed", .{});
+        return JSValue.jsNumber(0);
+    }
+    const app = _.#handler.app.?;
+    const flags = _.#handler.flags;
+    const ssl = flags.ssl;
+    const publish_to_self = flags.publish_to_self;
 
     const result = if (!publish_to_self && !_.isClosed())
         _.websocket().publish(topic_slice.slice(), buffer, .binary, compress)

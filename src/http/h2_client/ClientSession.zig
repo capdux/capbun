@@ -116,6 +116,7 @@ read_buffer: std.ArrayListUnmanaged(u8) = .{},
 streams: std.AutoArrayHashMapUnmanaged(u31, *Stream) = .{},
 next_stream_id: u31 = 1,
 expecting_continuation: u31 = 0,
+continuation_count: u8 = 0,
 pending_attach: std.ArrayListUnmanaged(*HTTPClient) = .{},
 preface_sent: bool = false,
 settings_received: bool = false,
@@ -720,6 +721,14 @@ pub fn deliverStream(self: *ClientSession, stream: *Stream) bool {
                 return self.finishStream(stream, client);
             }
             _ = client.cloneMetadata();
+            if (client.state.isDone()) {
+                stream.client = null;
+                client.h2 = null;
+                if (client.signals.get(.header_progress)) {
+                    _ = client.progressUpdate(true, self.ctx, self.socket);
+                }
+                return true;
+            }
             if (client.signals.get(.header_progress)) {
                 _ = client.progressUpdate(true, self.ctx, self.socket);
             }

@@ -3231,15 +3231,12 @@ pub fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSV
         _ = &_guard_args;
         var ___guard_args_moved = false; _ = &___guard_args_moved;
         defer if (!___guard_args_moved) { ___guard_args_moved = true; const __T = @TypeOf(_guard_args); if (@typeInfo(__T) == .optional) { if (_guard_args) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_args.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_args; _drop_val.__cp_deinit(); } };
-        var path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, (&args));
+        var path_or_blob = try writeDestinationFromJS(globalThis, (&args));
         _ = &path_or_blob;
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
         defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
-        if ((path_or_blob == .blob)) {
-            _ = try validateWritableBlob(globalThis, (&path_or_blob.blob));
-        }
         const data_opt = args.nextEat();
         if ((data_opt == null)) {
             return globalThis.throwInvalidArguments("Bun.write(pathOrFdOrBlob, blob) expects a Blob-y thing to write", .{});
@@ -4034,7 +4031,18 @@ if (destination_blob.isS3()) {
         return writeFileWithSourceDestination(globalThis, (&source_blob), (&destination_blob), options);
 }
 
-pub fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *Blob) JSError!void {
+pub fn writeDestinationFromJS(globalThis: *JSGlobalObject, args: *jsc.CallFrame.ArgumentsSlice) JSError!PathOrBlob {
+        const path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, args);
+        if ((path_or_blob == .blob)) {
+            _ = (blk_catch_24: { break :blk_catch_24 ((validateWritableBlob(globalThis, (&path_or_blob.blob))) catch |e| { _ = &e; var mut_pob = path_or_blob;
+            _ = &mut_pob;
+            _ = mut_pob.deinit();
+            return e; }); });
+        }
+        return path_or_blob;
+}
+
+pub fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *const Blob) JSError!void {
         const store_opt = blob.store;
         if ((store_opt == null)) {
             return globalThis.throw("Cannot write to a detached Blob", .{});
@@ -4635,7 +4643,7 @@ blob.name = name_value_str.dupeRef();
 }
 
 pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
-        return (blk_catch_24: { break :blk_catch_24 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        return (blk_catch_25: { break :blk_catch_25 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             if ((globalThis.throwOutOfMemory() == error.JSError)) {
             }
         }

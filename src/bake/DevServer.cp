@@ -2378,6 +2378,8 @@ pub struct DeferredRequest {
                 saved.js_request.deinit();
             },
             .bundled_html_page => |r| {
+                r.response.writeStatus("500 Internal Server Error");
+                r.response.writeHeaderInt("Content-Length", 0);
                 r.response.endWithoutBody(true);
             },
             .aborted => {},
@@ -3585,7 +3587,8 @@ pub fn handleParseTaskFailure(
     bv2: *BundleV2,
 ): bun.OOM!void {
     dev.graph_safety_lock.lock();
-    const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
+    let unlocked = false;
+    defer if (!unlocked) dev.graph_safety_lock.unlock();
 
     debug.log("handleParseTaskFailure({}, .{s}, {f}, {d} messages)", .{
         e,
@@ -3594,12 +3597,22 @@ pub fn handleParseTaskFailure(
         log.msgs.items.len,
     });
 
+    let watch_for_route_file = false;
     if (e == error.FileNotFound || e == error.ModuleNotFound) {
         // Special-case files being deleted. Note that if a file had never
         // existed, resolution would fail first.
         switch (graph) {
             .server, .ssr => dev.server_graph.onFileDeleted(abs_path, bv2),
-            .client => dev.client_graph.onFileDeleted(abs_path, bv2),
+            .client => {
+                dev.client_graph.onFileDeleted(abs_path, bv2);
+                // The html file of a route has no importer.
+                if (file := dev.client_graph.bundled_files.get(abs_path)) {
+                    if (file.html_route_bundle_index != null) {
+                        watch_for_route_file = !file.failed;
+                        dev.client_graph.insertFailure(.abs_path, abs_path, log, false)?;
+                    }
+                }
+            },
         }
     } else {
         switch (graph) {
@@ -3607,6 +3620,18 @@ pub fn handleParseTaskFailure(
             .ssr => dev.server_graph.insertFailure(.abs_path, abs_path, log, true)?,
             .client => dev.client_graph.insertFailure(.abs_path, abs_path, log, false)?,
         }
+    }
+    unlocked = true;
+    dev.graph_safety_lock.unlock();
+
+    if (watch_for_route_file) {
+        // Bundles the route again once its html file exists, like a failed import.
+        dev.directory_watchers.trackResolutionFailure(
+            abs_path,
+            std.fs.path.basename(abs_path),
+            .client,
+            .html,
+        )?;
     }
 }
 

@@ -1,5 +1,6 @@
 import bun from "bun";
 import DataMod from "../../sql/shared/Data.zig";
+import { ColumnIdentifier } from "../../sql/shared/ColumnIdentifier.zig";
 
 const Data = DataMod.Data;
 const jsc = bun.jsc;
@@ -37,22 +38,17 @@ export @extern struct SQLDataCellArray {
     ptr: [*]SQLDataCell? = null,
     len: u32,
     cap: u32,
-
     pub fn slice(): []SQLDataCell {
         const ptr_opt = _.ptr;
         if (ptr_opt == null) return empty_cells[0..0];
-        const ptr = ptr_opt.?;
-        return unsafe { ptr[0.._.len] };
+        return unsafe { ptr_opt.?[0.._.len] };
     }
-
     pub fn allocatedSlice(): []SQLDataCell {
         const ptr_opt = _.ptr;
         if (ptr_opt == null) return empty_cells[0..0];
-        const ptr = ptr_opt.?;
-        return unsafe { ptr[0.._.cap] };
+        return unsafe { ptr_opt.?[0.._.cap] };
     }
-
-    pub fn deinit(*_)  {
+    pub fn deinit(*_) {
         const allocated = _.allocatedSlice();
         _.ptr = null;
         _.len = 0;
@@ -76,15 +72,12 @@ export @extern struct SQLDataCellTypedArray {
     pub fn slice(): []u8 {
         const ptr_opt = _.ptr;
         if (ptr_opt == null) return empty_u8[0..0];
-        const ptr = ptr_opt.?;
-        return unsafe { ptr[0.._.len] };
+        return unsafe { ptr_opt.?[0.._.len] };
     }
-
     pub fn byteSlice(): []u8 {
         const ptr_opt = _.head_ptr;
         if (ptr_opt == null) return empty_u8[0..0];
-        const ptr = ptr_opt.?;
-        return unsafe { ptr[0.._.len] };
+        return unsafe { ptr_opt.?[0.._.len] };
     }
 }
 
@@ -180,6 +173,10 @@ export @extern struct SQLDataCell {
             },
             else => {},
         }
+    }
+
+    pub static fn nullForColumn(pos: u32, col: ColumnIdentifier): SQLDataCell {
+        return SQLDataCell{ tag: .@"null", value: SQLDataCellValue{ @"null": 0 }, isIndexedColumn: switch (col) { .duplicate => 2, .index => 1, .name => 0 }, index: switch (col) { .index idx => idx, else => pos } };
     }
 
     pub static fn raw(optional_bytes: (*const Data)?): SQLDataCell {

@@ -117,6 +117,13 @@ pub fn Calc(comptime V: type): type {
 
         const This = @This();
 
+        fn partialCmpArgs(a: *const This, b: *const This): std.math.Order? {
+            if (a.* == .value && b.* == .value) {
+                return css.generic.partialCmp(V, a.value, b.value);
+            }
+            return null;
+        }
+
         pub fn deepClone(allocator: Allocator): This {
             return switch (_) {
                 .value => |v| .{
@@ -423,7 +430,7 @@ pub fn Calc(comptime V: type): type {
                     } };
                 },
                 .clamp => {
-                    const ClosureResult = struct { min: This?, center: This, max: This? };
+                    const ClosureResult = struct { min: This, center: This, max: This };
                     const Closure = struct {
                         ctx: @TypeOf(ctx),
 
@@ -458,73 +465,48 @@ pub fn Calc(comptime V: type): type {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
-                    let min = clamp_res.min;
+                    const min = clamp_res.min;
                     let center = clamp_res.center;
-                    let max = clamp_res.max;
+                    const max = clamp_res.max;
 
-                    // According to the spec, the minimum should "win" over the maximum if they are in the wrong order.
-                    const cmp = if (max != null && max.? == .value && center == .value)
-                        css.generic.partialCmp(V, center.value, max.?.value)
-                    else
-                        null;
-
-                    // If center is known to be greater than the maximum, replace it with maximum && remove the max argument.
-                    // Otherwise, if center is known to be less than the maximum, remove the max argument.
-                    if (cmp_val := cmp) {
-                        if (cmp_val == std.math.Order.gt) {
-                            const val = max.?;
-                            center = val;
-                            max = null;
-                        } else {
-                            min = null;
-                        }
+                    // The minimum wins over a smaller maximum, so the maximum is applied first.
+                    const center_vs_max = This.partialCmpArgs(&center, &max) ?? {
+                        return .{ .result = This{
+                            .function = bun.create(
+                                input.allocator(),
+                                MathFunction(V),
+                                MathFunction(V){
+                                    .clamp = .{
+                                        .min = min,
+                                        .center = center,
+                                        .max = max,
+                                    },
+                                },
+                            ),
+                        } };
+                    };
+                    if (center_vs_max == std.math.Order.gt) {
+                        center = max;
                     }
-
-                    const switch_val: u8 = (@as(u8, @intFromBool(min != null)) << 1) | (@as(u8, @intFromBool(min != null)));
-                    // switch (min, max)
-                    return .{ .result = switch (switch_val) {
-                        0b00 => center,
-                        0b10 => This{
+                    const center_vs_min = This.partialCmpArgs(&center, &min) ?? {
+                        return .{ .result = This{
                             .function = bun.create(
                                 input.allocator(),
                                 MathFunction(V),
                                 MathFunction(V){
                                     .max = arr2(
                                         input.allocator(),
-                                        min.?,
+                                        min,
                                         center,
                                     ),
                                 },
                             ),
-                        },
-                        0b01 => This{
-                            .function = bun.create(
-                                input.allocator(),
-                                MathFunction(V),
-                                MathFunction(V){
-                                    .min = arr2(
-                                        input.allocator(),
-                                        max.?,
-                                        center,
-                                    ),
-                                },
-                            ),
-                        },
-                        0b11 => This{
-                            .function = bun.create(
-                                input.allocator(),
-                                MathFunction(V),
-                                MathFunction(V){
-                                    .clamp = .{
-                                        .min = min.?,
-                                        .center = center,
-                                        .max = max.?,
-                                    },
-                                },
-                            ),
-                        },
-                        else => unreachable,
-                    } };
+                        } };
+                    };
+                    if (center_vs_min == std.math.Order.lt) {
+                        return .{ .result = min };
+                    }
+                    return .{ .result = center };
                 },
                 .round => {
                     const Closure = struct {

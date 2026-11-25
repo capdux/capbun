@@ -1733,10 +1733,6 @@ pub fn format(self: PathTemplate, writer: *std.Io.Writer) !void {
             while (strings.indexOfChar(remain, 91)) |j| {
                 _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, remain[0..j]);
                 remain = remain[(j + 1)..];
-                if ((remain.len == 0)) {
-                    _ = try writer.writeAll("[");
-                    break;
-                }
                 var count: isize = 1;
                 _ = &count;
                 var end_len: usize = remain.len;
@@ -1759,11 +1755,17 @@ else => (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(isize, @int
                         }
                     }
                 }
+                if ((count != 0)) {
+                    _ = try writer.writeAll("[");
+                    break;
+                }
                 const placeholder = remain[0..end_len];
                 const field_opt = PathTemplate.Placeholder.map.get(placeholder);
                 if ((field_opt == null)) {
+                    _ = try writer.writeAll("[");
                     _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, placeholder);
-                    remain = remain[end_len..];
+                    _ = try writer.writeAll("]");
+                    remain = remain[(end_len + 1)..];
                     continue;
                 }
                 const field = field_opt.?;
@@ -1808,6 +1810,11 @@ _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, self.placeholder.tar
     pub const fileWithTarget = PathTemplate{ .data = "[dir]/[target]/[name].[ext]", .placeholder = .{} };
     pub const asset = PathTemplate{ .data = "./[name]-[hash].[ext]", .placeholder = .{} };
     pub const assetWithTarget = PathTemplate{ .data = "[dir]/[target]/[name]-[hash].[ext]", .placeholder = .{} };
+};
+
+pub const UnterminatedPlaceholder = struct {
+    pos: usize,
+    tail: []const u8,
 };
 
 const string = []const u8;
@@ -2117,4 +2124,39 @@ pub fn openOutputDir(output_dir: []const u8) !std.fs.Dir {
         break :blk_catch_22 Global.crash(); }); });
         break :brk handle;
 }; }); });
+}
+
+pub fn findUnterminatedPlaceholder(template: []const u8) ?UnterminatedPlaceholder {
+        var offset: usize = 0;
+        _ = &offset;
+        while (strings.indexOfChar(template[offset..], 91)) |j| {
+            const start = (offset + j);
+            const remain = template[(start + 1)..];
+            var count: isize = 1;
+            _ = &count;
+            var end_len: usize = remain.len;
+            _ = &end_len;
+            {
+                var idx: i32 = 0;
+                _ = &idx;
+                const __end_23 = remain.len;
+                while (idx < __end_23) : (idx += 1) {
+                    const c = remain[@as(usize, @intCast(@as(usize, @intCast(idx))))];
+                    count = (count + (switch (c) {
+'[' => (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(isize, @intFromEnum(1)) else cp_cast_int(isize, 1)),
+']' => (if (comptime @typeInfo(@TypeOf(-1)) == .@"enum") cp_cast_int(isize, @intFromEnum(-1)) else cp_cast_int(isize, -1)),
+else => (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(isize, @intFromEnum(0)) else cp_cast_int(isize, 0)),
+}));
+                    if ((count == 0)) {
+                        end_len = @intCast(idx);
+                        break;
+                    }
+                }
+            }
+            if ((count != 0)) {
+                return UnterminatedPlaceholder{ .pos = start, .tail = template[start..] };
+            }
+            offset = (((start + 1) + end_len) + 1);
+        }
+        return null;
 }

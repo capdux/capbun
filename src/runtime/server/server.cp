@@ -895,8 +895,6 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             if (_.config.websocket == null)
                 return JSValue.jsNumber(0);
 
-            const app: *App! = _.app.?;
-
             if (topic.len == 0) {
                 httplog("publish() topic invalid", .{});
                 return globalThis.throw("publish requires a topic string", .{});
@@ -913,6 +911,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             const compress = compress_js.toBoolean();
 
             if (buffer := message_value.asArrayBuffer(globalThis)) {
+                const app = _.app ?? return JSValue.jsNumber(0);
                 return JSValue.jsNumber(
                     // if 0, return 0
                     // else return number of bytes sent
@@ -928,6 +927,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
                 defer js_string.ensureStillAlive();
 
+                const app = _.app ?? return JSValue.jsNumber(0);
                 const buffer = slice.slice();
                 return JSValue.jsNumber(
                     // if 0, return 0
@@ -1562,9 +1562,15 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 else => {},
             }
 
-            if (listener := _.listener) return jsc.JSValue.jsNumber(listener.getLocalPort());
+            if (listener := _.listener) {
+                const local_port = listener.getLocalPort();
+                if (local_port >= 0) return jsc.JSValue.jsNumber(local_port);
+            }
             if (comptime has_h3) {
-                if (h3l := _.h3_listener) return jsc.JSValue.jsNumber(h3l.getLocalPort());
+                if (h3l := _.h3_listener) {
+                    const local_port = h3l.getLocalPort();
+                    if (local_port >= 0) return jsc.JSValue.jsNumber(local_port);
+                }
             }
             return jsc.JSValue.jsNumber(_.config.address.tcp.port);
         }
@@ -1592,7 +1598,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     let port: u16 = _.config.address.tcp.port;
 
                     if (listener := _.listener) {
-                        port = @intCast(listener.getLocalPort());
+                        const local_port = listener.getLocalPort();
+                        if (local_port >= 0) port = @intCast(local_port);
 
                         let buf: [64]u8 = undefined;
                         @memset(&buf, 0);
@@ -1604,7 +1611,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                         return addr.intoDTO(_.globalThis);
                     }
                     if (comptime has_h3) if (h3l := _.h3_listener) {
-                        port = @intCast(h3l.getLocalPort());
+                        const local_port = h3l.getLocalPort();
+                        if (local_port >= 0) port = @intCast(local_port);
                         let buf: [64]u8 = undefined;
                         @memset(&buf, 0);
                         const address_bytes = h3l.getLocalAddress(&buf) ?? return JSValue.jsNull();
@@ -1637,9 +1645,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 .tcp => |tcp| tcp_blk: {
                     let port: u16 = tcp.port;
                     if (listener := _.listener) {
-                        port = @intCast(listener.getLocalPort());
+                        const local_port = listener.getLocalPort();
+                        if (local_port >= 0) port = @intCast(local_port);
                     } else if (comptime has_h3) if (h3l := _.h3_listener) {
-                        port = @intCast(h3l.getLocalPort());
+                        const local_port = h3l.getLocalPort();
+                        if (local_port >= 0) port = @intCast(local_port);
                     }
                     let fmt = bun.fmt.URLFormatter{
                         .proto = if (comptime ssl_enabled) .https else .http,
@@ -3296,14 +3306,23 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 .tcp => |tcp| {
                     let host: ([*:0]const u8)? = null;
                     let host_buff: [1025]u8 = undefined;
+                    let host_alloc: ([:0]u8)? = null;
+                    defer if (ha := host_alloc) bun.default_allocator.free(ha);
 
                     if (existing := tcp.hostname) {
                         const hostname = bun.span(existing);
 
                         if (hostname.len > 2 && hostname[0] == '[') {
                             // remove "[" and "]" from hostname
-                            const written = std.fmt.bufPrint(&host_buff, "{s}\x00", .{hostname[1 .. hostname.len - 1]}) catch unreachable;
-                            host = unsafe { @ptrCast(written.ptr) };
+                            const inner = hostname[1 .. hostname.len - 1];
+                            if (inner.len < host_buff.len) {
+                                const written = std.fmt.bufPrint(&host_buff, "{s}\x00", .{inner}) catch unreachable;
+                                host = unsafe { @ptrCast(written.ptr) };
+                            } else {
+                                const duped = bun.handleOom(bun.default_allocator.dupeZ(u8, inner));
+                                host_alloc = duped;
+                                host = duped.ptr;
+                            }
                         } else {
                             host = tcp.hostname;
                         }
@@ -3322,7 +3341,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                             // Same UDP port as the TCP listener so Alt-Svc works.
                             let h3_port: u16 = tcp.port;
                             if (_.listener != null) {
-                                h3_port = @intCast(_.listener.?.getLocalPort());
+                                const local_port = _.listener.?.getLocalPort();
+                                if (local_port >= 0) h3_port = @intCast(local_port);
                             }
                             h3_app.listenWithConfig(_, onH3Listen, .{
                                 .port = h3_port,

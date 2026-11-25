@@ -687,7 +687,7 @@ pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject) JSV
                 break :blk ptr[0..len];
 
 }));
-                const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+                const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2147483647 characters", .{}).throw();
                 _ = (&_err);
                 return .zero;
             }
@@ -851,7 +851,7 @@ pub fn toExternalValue(self: ZigString, global: *JSGlobalObject) JSValue {
                 break :blk @constCast(self.byteSlice());
 
 }));
-                const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+                const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2147483647 characters", .{}).throw();
                 _ = (&_err);
                 return .zero;
             }
@@ -868,7 +868,7 @@ pub fn external(self: ZigString, global: *JSGlobalObject, ctx: ?*anyopaque, call
                 break :blk @ptrCast(@constCast(self.byteSlice().ptr));
 
 }), self.len);
-                const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
+                const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2147483647 characters", .{}).throw();
                 _ = (&_err);
                 return .zero;
             }

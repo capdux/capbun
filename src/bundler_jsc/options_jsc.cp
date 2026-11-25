@@ -47,8 +47,15 @@ pub fn loaderFromJS(global: *jsc.JSGlobalObject, loader: jsc.JSValue): options.L
         val: zig_str.toSlice(bun.default_allocator),
     };
 
-    if (ldr := options.Loader.fromString(slice_guard.val.slice())) return ldr;
-    return global.throwInvalidArguments("invalid loader - must be js, jsx, tsx, ts, css, file, toml, yaml, wasm, bunsh, json, or md", []);
+    const raw_loader = slice_guard.val.slice();
+    const ldr = options.Loader.fromString(raw_loader) ?? return global.throwInvalidArguments("invalid loader - must be js, jsx, tsx, ts, css, json, jsonc, json5, toml, yaml, text, wasm, or md", []);
+    switch (ldr) {
+        .file, .napi, .base64, .dataurl, .bunsh, .sqlite, .sqlite_embedded, .html => {
+            return global.throwInvalidArguments("loader \"{s}\" is not supported in Bun.Transpiler", [raw_loader]);
+        },
+        else => {},
+    }
+    return ldr;
 }
 
 // ── CompileTarget ──────────────────────────────────────────────────────────

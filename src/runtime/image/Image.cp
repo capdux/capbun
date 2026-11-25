@@ -1237,8 +1237,8 @@ pub struct PipelineTask {
                     const data = jsc.JSValue.createBufferWithCtx(global, enc.out.bytes, null, enc.out.free);
                     let arg_slice = jsc.CallFrame.ArgumentsSlice.init(global.bunVM(), &[dest_js]);
                     const _guard_arg_slice = DeinitGuard<@TypeOf(arg_slice)>{ ptr: &arg_slice };
-                    let path_or_blob = jsc.Node.PathOrBlob.fromJSNoCopy(global, &arg_slice) catch
-                        return promise.reject(global, error.JSError);
+                    let path_or_blob = jsc.WebCore.Blob.writeDestinationFromJS(global, &arg_slice) catch |e|
+                        return promise.reject(global, e);
                     const _guard_path_or_blob = PathOrBlobGuard{ ptr: &path_or_blob };
                     const write_promise = jsc.WebCore.Blob.writeFileInternal(global, &path_or_blob, data, {}) catch
                         return promise.reject(global, error.JSError);

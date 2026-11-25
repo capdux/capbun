@@ -2514,6 +2514,9 @@ pub fn dirInfoCachedMaybeLog(r: *ThisResolver, raw_input_path: []const u8, compt
             if ((isDotSlash(input_path) or strings.eqlComptime(input_path, "."))) {
                 input_path = r.fs.top_level_dir;
             }
+            if ((input_path.len == 0)) {
+                return null;
+            }
             if ((input_path.len > bun.MAX_PATH_BYTES)) {
                 return null;
             }
@@ -2531,7 +2534,9 @@ pub fn dirInfoCachedMaybeLog(r: *ThisResolver, raw_input_path: []const u8, compt
                     _ = ((bun.strings.indexOfChar(input_path[(2 + first_slash)..], 92)) orelse { return null; });
                 }
             }
-            _ = bun.assertf(std.fs.path.isAbsolute(input_path), "cannot resolve DirInfo for non-absolute path: {s}", .{ input_path });
+            if ((!std.fs.path.isAbsolute(input_path))) {
+                return null;
+            }
             const path_without_trailing_slash = strings.withoutTrailingSlashWindowsPath(input_path);
             _ = ThisResolver.assertValidCacheKey(path_without_trailing_slash);
             const top_result = try r.dir_cache.getOrPut(path_without_trailing_slash);

@@ -380,6 +380,8 @@ pub struct InitFromBytesOptions {
             .HEAD => _.onHEAD(resp),
             else => {
                 _.doWriteStatus(405, resp); // Method not allowed
+                resp.writeHeader("Allow", "GET, HEAD");
+                resp.writeHeaderInt("Content-Length", 0);
                 resp.endWithoutBody(resp.shouldCloseConnection());
             },
         }
