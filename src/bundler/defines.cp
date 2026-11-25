@@ -211,7 +211,8 @@ pub struct DefineData {
             path: defines_path,
         };
         const expr = json_parser.parseEnvJSON(source, _log, allocator)?;
-        const cloned = expr.data.deepClone(allocator)?;
+        let cloned = expr.data.deepClone(allocator)?;
+        clearLocs(&cloned);
         return DefineData{
             value: cloned,
             original_name_ptr: if (value_str.len > 0) value_str.ptr else null,
@@ -253,6 +254,33 @@ fn arePartsEqual(a: []const string, b: []const string): bool {
         }
     }
     return true;
+}
+
+/// The positions are in the text of the define, and the printer takes them for ones in the file.
+fn clearLocs(data: *js_ast.Expr.Data) {
+    switch (data.*) {
+        .e_object => |obj| {
+            obj.close_brace_loc = logger.Loc.Empty;
+            for (*prop of obj.properties.slice()) {
+                if (*key := prop.key) {
+                    key.loc = logger.Loc.Empty;
+                    clearLocs(&key.data);
+                }
+                if (*val := prop.value) {
+                    val.loc = logger.Loc.Empty;
+                    clearLocs(&val.data);
+                }
+            }
+        },
+        .e_array => |arr| {
+            arr.close_bracket_loc = logger.Loc.Empty;
+            for (*item of arr.items.slice()) {
+                item.loc = logger.Loc.Empty;
+                clearLocs(&item.data);
+            }
+        },
+        else => {},
+    }
 }
 
 pub const IdentifierDefine = DefineData;

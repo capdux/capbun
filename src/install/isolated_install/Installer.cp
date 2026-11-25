@@ -360,9 +360,7 @@ pub struct TopTask {
                                     switch (hardlinker.val.link()?) {
                                         .result => {},
                                         .err => |err| {
-                                            const errno_val = err.getErrno();
-                                            // EACCES/EPERM: FUSE (e.g. Android SDCARD) does not support hardlinks
-                                            if (errno_val == .XDEV || errno_val == .ACCES || errno_val == .PERM) {
+                                            if (needsCopy(err)) {
                                                 // rewind the dir cursor the hardlink walk consumed (Windows restarts the scan itself)
                                                 if (comptime !Environment.isWindows) {
                                                     switch (bun.sys.setFileOffset(folder_dir.fd, 0)) {
@@ -603,9 +601,7 @@ pub struct TopTask {
                         switch (hardlinker.val.link()?) {
                             .result => {},
                             .err => |err| {
-                                const errno_val = err.getErrno();
-                                // EACCES/EPERM: FUSE (e.g. Android SDCARD) does not support hardlinks
-                                if (errno_val == .XDEV || errno_val == .ACCES || errno_val == .PERM) {
+                                if (needsCopy(err)) {
                                     installer.supported_backend.store(.copyfile, .monotonic);
                                     backend = .copyfile;
                                     continue;
@@ -2147,4 +2143,12 @@ pub struct Installer {
             },
         };
     }
+}
+
+fn needsCopy(hardlink_err: bun.sys.Error): bool {
+    const errno_val = hardlink_err.getErrno();
+    // EACCES/EPERM: FUSE (e.g. Android SDCARD) does not support hardlinks.
+    // Only the link itself can say that. A `mkdir` or the walk of the package fails with the same
+    // errnos, and a copy does not avoid those.
+    return hardlink_err.syscall == .link && (errno_val == .XDEV || errno_val == .ACCES || errno_val == .PERM);
 }

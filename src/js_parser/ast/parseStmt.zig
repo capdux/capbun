@@ -210,7 +210,7 @@ if (((!opts.is_module_scope) and ((!opts.is_namespace_scope) or (!opts.is_typesc
                     _ = try p.lexer.next();
                     var stmtOpts = ParseStatementOptions{ .is_name_optional = true, .lexical_decl = .allow_all };
                     _ = &stmtOpts;
-                    const stmt = try p.parseFnStmt(loc, (&stmtOpts), async_range);
+                    const stmt = try p.parseFnStmt(async_range.loc, (&stmtOpts), async_range);
                     if ((std.meta.activeTag(stmt.data) == .s_type_script)) {
                         return stmt;
                     }
@@ -273,7 +273,7 @@ const r = js_lexer.rangeOfIdentifier(p.source, stmt.loc);
             if (((((is_typescript_enabled and is_identifier) and ((p.lexer.token == .t_class) or (opts.ts_decorators != null))) and strings.eqlComptime(name, "abstract")) and (expr.data == .e_identifier))) {
                 var stmtOpts = ParseStatementOptions{ .ts_decorators = opts.ts_decorators, .is_name_optional = true };
                 _ = &stmtOpts;
-                const stmt: Stmt = try p.parseClassStmt(loc, (&stmtOpts));
+                const stmt: Stmt = try p.parseClassStmt(p.lexer.loc(), (&stmtOpts));
                 const default_name: js_ast.LocRef = default_name_getter: {
                 switch (stmt.data) {
 .s_type_script => {
@@ -282,13 +282,13 @@ return stmt;
 .s_function => |func_container| {
 if ((if (@typeInfo(@TypeOf(func_container.func)) == .@"enum" or @typeInfo(@TypeOf(func_container.func)) == .@"union") @tagName(func_container.func) else func_container.func.name)) |_name| {
                     _ = &_name;
-                    break :default_name_getter LocRef{ .loc = defaultLoc, .@"ref" = _name.ref };
+                    break :default_name_getter LocRef{ .loc = _name.loc, .@"ref" = _name.ref };
                 }
 },
 .s_class => |cls| {
 if (cls.@"class".class_name) |_name| {
                     _ = &_name;
-                    break :default_name_getter LocRef{ .loc = defaultLoc, .@"ref" = _name.ref };
+                    break :default_name_getter LocRef{ .loc = _name.loc, .@"ref" = _name.ref };
                 }
 },
 else => {
@@ -491,6 +491,7 @@ pub fn t_if(p: *P, _opts: *ParseStatementOptions, loc: logger.Loc) anyerror!Stmt
                 if ((p.lexer.token != .t_else)) {
                     return root_if.?;
                 }
+                current_if.?.else_loc = p.lexer.loc();
                 _ = try p.lexer.next();
                 if ((p.lexer.token != .t_if)) {
                     stmtOpts = ParseStatementOptions{ .lexical_decl = .allow_fn_inside_if };
@@ -655,10 +656,11 @@ else => {
                 const finally_loc = p.lexer.loc();
                 _ = try p.pushScopeForParsePass(.block, finally_loc);
                 _ = try p.lexer.expect(.t_finally);
+                const finally_body_loc = p.lexer.loc();
                 _ = try p.lexer.expect(.t_open_brace);
                 const stmts = try p.parseStmtsUpTo(.t_close_brace, (&stmt_opts));
                 _ = try p.lexer.next();
-                finally = js_ast.Finally{ .loc = finally_loc, .stmts = stmts };
+                finally = js_ast.Finally{ .loc = finally_loc, .stmts = stmts, .body_loc = finally_body_loc };
                 _ = p.popScope();
             }
             return p.s(S.Try{ .body_loc = body_loc, .body = body, .catch_ = catch_, .finally = finally }, loc);
@@ -1105,12 +1107,13 @@ var stmtOpts = ParseStatementOptions{ .is_module_scope = opts.is_module_scope };
 },
 .ts_stmt_abstract => {
 if (((p.lexer.token == .t_class) or (opts.ts_decorators != null))) {
-                            return try p.parseClassStmt(loc, opts);
+                            return try p.parseClassStmt(p.lexer.loc(), opts);
                         }
 },
 .ts_stmt_global => {
 if (((opts.is_namespace_scope and opts.is_typescript_declare) and (p.lexer.token == .t_open_brace))) {
                             _ = try p.lexer.next();
+                            opts.ts_decorators = null;
                             _ = try p.parseStmtsUpTo(.t_close_brace, opts);
                             _ = try p.lexer.next();
                             return p.s(S.TypeScript, loc);
@@ -1126,6 +1129,7 @@ opts.lexical_decl = .allow_all;
                             _ = try p.lexer.next();
                             _ = try p.lexer.expect(.t_open_brace);
                             const scope_index = p.scopes_in_order.items.len;
+                            opts.ts_decorators = null;
                             _ = try p.parseStmtsUpTo(.t_close_brace, opts);
                             _ = try p.lexer.next();
                             _ = p.discardScopesUpTo(scope_index);

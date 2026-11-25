@@ -381,7 +381,7 @@ else => {
                 break :decls G.Decl.List.fromOwnedSlice(decls);
 } }, loc);
                 break :catch_body statements;
-}, .body_loc = loc, .loc = loc }, .finally = .{ .loc = loc, .stmts = finally_stmts } }, loc));
+}, .body_loc = loc, .loc = loc }, .finally = .{ .loc = loc, .stmts = finally_stmts, .body_loc = loc } }, loc));
                 if ((exports.items.len > 0)) {
                     _ = result.appendAssumeCapacity(p.s(S.ExportClause{ .items = exports.items, .is_single_line = false }, loc));
                 }
@@ -739,13 +739,13 @@ pub fn transposeImport(p: *P, arg: Expr, state: *const TransposeState) Expr {
                 const r = js_lexer.rangeOfIdentifier(p.source, state.loc);
                 _ = ((p.log.addRangeDebug(p.source, r, "This \"import\" expression cannot be bundled because the argument is not a string literal")) catch unreachable);
             }
-            _ = bun.handleOom(p.checkDynamicSpecifier(arg, state.loc, "import()"));
+            _ = bun.handleOom(p.checkDynamicSpecifier(arg, arg.loc, "import()"));
             return p.newExpr(E.Import{ .expr = arg, .options = state.import_options, .import_record_index = std.math.maxInt(u32) }, state.loc);
     }
 
 pub fn transposeRequireResolve(p: *P, arg: Expr, require_resolve_ref: Expr) Expr {
             if ((arg.data == .e_string)) {
-                return p.transposeRequireResolveKnownString(arg);
+                return p.transposeRequireResolveKnownString(arg, require_resolve_ref.loc);
             }
             if (p.options.warn_about_unbundled_modules) {
                 const r = js_lexer.rangeOfIdentifier(p.source, arg.loc);
@@ -757,7 +757,7 @@ pub fn transposeRequireResolve(p: *P, arg: Expr, require_resolve_ref: Expr) Expr
             return p.newExpr(E.Call{ .target = require_resolve_ref, .args = ExprNodeList.fromOwnedSlice(args) }, arg.loc);
     }
 
-pub inline fn transposeRequireResolveKnownString(p: *P, arg: Expr) Expr {
+pub inline fn transposeRequireResolveKnownString(p: *P, arg: Expr, loc: logger.Loc) Expr {
             _ = bun.assert((arg.data == .e_string));
             if (p.is_control_flow_dead) {
                 return p.newExpr(std.mem.zeroes(E.Null), arg.loc);
@@ -765,7 +765,7 @@ pub inline fn transposeRequireResolveKnownString(p: *P, arg: Expr) Expr {
             const import_record_index = p.addImportRecord(.require_resolve, arg.loc, ((arg.data.e_string.string(p.allocator)) catch unreachable));
             p.import_records.items[@as(usize, @intCast(import_record_index))].flags.handles_import_errors = (p.fn_or_arrow_data_visit.try_body_count != 0);
             _ = ((p.import_records_for_current_part.append(p.allocator, import_record_index)) catch unreachable);
-            return p.newExpr(E.RequireResolveString{ .import_record_index = import_record_index }, arg.loc);
+            return p.newExpr(E.RequireResolveString{ .import_record_index = import_record_index }, loc);
     }
 
 pub fn transposeRequire(p: *P, arg: Expr, state: *const TransposeState) Expr {
@@ -803,12 +803,12 @@ if (p.is_control_flow_dead) {
                 if ((!state.is_require_immediately_assigned_to_decl)) {
                     return p.newExpr(E.Identifier{ .ref = namespace_ref }, arg.loc);
                 }
-                return p.newExpr(E.RequireString{ .import_record_index = import_record_index, .unwrapped_id = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((p.imports_to_convert_from_require.items.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((p.imports_to_convert_from_require.items.len - 1))) else cp_cast_int(i32, (p.imports_to_convert_from_require.items.len - 1))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf((p.imports_to_convert_from_require.items.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((p.imports_to_convert_from_require.items.len - 1))) else cp_cast_int(i32, (p.imports_to_convert_from_require.items.len - 1))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf((p.imports_to_convert_from_require.items.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((p.imports_to_convert_from_require.items.len - 1))) else cp_cast_int(i32, (p.imports_to_convert_from_require.items.len - 1))))) }, arg.loc);
+                return p.newExpr(E.RequireString{ .import_record_index = import_record_index, .unwrapped_id = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((p.imports_to_convert_from_require.items.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((p.imports_to_convert_from_require.items.len - 1))) else cp_cast_int(i32, (p.imports_to_convert_from_require.items.len - 1))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf((p.imports_to_convert_from_require.items.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((p.imports_to_convert_from_require.items.len - 1))) else cp_cast_int(i32, (p.imports_to_convert_from_require.items.len - 1))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf((p.imports_to_convert_from_require.items.len - 1))) == .@"enum") cp_cast_int(i32, @intFromEnum((p.imports_to_convert_from_require.items.len - 1))) else cp_cast_int(i32, (p.imports_to_convert_from_require.items.len - 1))))) }, state.loc);
             }
             const import_record_index = p.addImportRecordByRangeAndPath(.require, p.source.rangeOfString(arg.loc), path);
             p.import_records.items[@as(usize, @intCast(import_record_index))].flags.handles_import_errors = handles_import_errors;
             _ = ((p.import_records_for_current_part.append(p.allocator, import_record_index)) catch unreachable);
-            return p.newExpr(E.RequireString{ .import_record_index = import_record_index }, arg.loc);
+            return p.newExpr(E.RequireString{ .import_record_index = import_record_index }, state.loc);
 },
 else => {
 _ = bun.handleOom(p.checkDynamicSpecifier(arg, arg.loc, "require()"));

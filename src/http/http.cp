@@ -1295,8 +1295,6 @@ export @root @value struct HTTPClient {
                         const connection_value = _.headerStr(header_values[i]);
                         if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
                             _.flags.disable_keepalive = true;
-                        } else if (std.ascii.eqlIgnoreCase(connection_value, "keep-alive")) {
-                            _.flags.disable_keepalive = false;
                         }
                     }
                 } else if (hash == if_modified_since_header_hash) {

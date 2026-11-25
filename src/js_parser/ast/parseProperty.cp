@@ -319,6 +319,14 @@ pub fn ParseProperty(
                                     }
                                 }
                             } else if (p.lexer.token == .t_open_brace && strings.eqlComptime(name, "static")) {
+                                if (opts.ts_decorators.len > 0) {
+                                    p.log.addError(
+                                        p.source,
+                                        opts.ts_decorators[0].loc,
+                                        "Decorators are not valid here",
+                                    ) catch unreachable;
+                                    return error.SyntaxError;
+                                }
                                 const loc = p.lexer.loc();
                                 p.lexer.next()?;
 

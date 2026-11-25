@@ -411,14 +411,14 @@ _ = try dest.writeStr(":host");
                 _ = &sel;
                 const sel_val = sel;
                 _ = try dest.writeChar(40);
-                _ = try serializeSelector((&sel_val), dest, dest.context(), false);
+                _ = try serializeSelector((&sel_val), dest, context, false);
                 _ = try dest.writeChar(41);
             }
             return;
 },
 .slotted => |*selector| {
 _ = try dest.writeStr("::slotted(");
-            _ = try serializeSelector(selector, dest, dest.context(), false);
+            _ = try serializeSelector(selector, dest, context, false);
             _ = try dest.writeChar(41);
 },
 else => {

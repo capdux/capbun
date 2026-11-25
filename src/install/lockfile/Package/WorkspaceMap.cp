@@ -23,7 +23,6 @@ const debug = Output.scoped(.Lockfile, .hidden);
 pub struct Entry {
     name: string,
     version: string?,
-    name_loc: logger.Loc,
 }
 
 const Map = bun.StringArrayHashMap(Entry);
@@ -118,7 +117,6 @@ pub struct ArenaResetGuard {
         entry.value_ptr.* = Entry{
             name: value.name,
             version: value.version,
-            name_loc: value.name_loc,
         };
     }
 
@@ -155,7 +153,6 @@ fn processWorkspaceName(
 
     const entry = Entry{
         name: name,
-        name_loc: name_expr.loc,
         version: brk: {
             if (version_expr := workspace_json.root.get("version")) {
                 if (version := version_expr.asStringCloned(allocator)?) {
@@ -284,7 +281,6 @@ pub fn processNamesArray(
         workspace_names.insert(workspace_path, Entry{
             name: workspace_entry.name,
             version: workspace_entry.version,
-            name_loc: workspace_entry.name_loc,
         })?;
     }
 
@@ -467,7 +463,6 @@ pub fn processNamesArray(
                 workspace_names.insert(workspace_path, Entry{
                     name: workspace_entry.name,
                     version: workspace_entry.version,
-                    name_loc: workspace_entry.name_loc,
                 })?;
             }
         }

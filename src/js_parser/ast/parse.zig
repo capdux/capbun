@@ -785,8 +785,9 @@ if ((!opts.is_using_statement)) {
                 if (p.lexer.has_newline_before) {
                     is_single_line = false;
                 }
+                const close_brace_loc = p.lexer.loc();
                 _ = try p.lexer.expect(.t_close_brace);
-                return p.b(B.Object{ .properties = properties.items, .is_single_line = is_single_line }, loc);
+                return p.b(B.Object{ .properties = properties.items, .is_single_line = is_single_line, .close_brace_loc = close_brace_loc }, loc);
             }
 },
 else => {

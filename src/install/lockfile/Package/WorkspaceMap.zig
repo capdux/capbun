@@ -67,7 +67,6 @@ pub const bun = @import("bun");
 pub const Entry = struct {
     name: []const u8,
     version: ?[]const u8,
-    name_loc: logger.Loc,
 };
 
 pub const WorkspaceSortContext = struct {
@@ -166,7 +165,7 @@ pub fn insert(self: *WorkspaceMap, key: []const u8, value: Entry) !void {
         } else {
             _ = self.map.allocator.free((if (@typeInfo(@TypeOf(entry.value_ptr)) == .@"enum" or @typeInfo(@TypeOf(entry.value_ptr)) == .@"union") @tagName(entry.value_ptr) else entry.value_ptr.name));
         }
-        entry.value_ptr.* = Entry{ .name = value.name, .version = value.version, .name_loc = value.name_loc };
+        entry.value_ptr.* = Entry{ .name = value.name, .version = value.version };
 }
 
 pub fn sort(self: *WorkspaceMap, sort_ctx: anytype) void {
@@ -216,7 +215,7 @@ pub fn processWorkspaceName(allocator: std.mem.Allocator, json_cache: *PackageMa
         const workspace_json = try json_cache.getWithPath(allocator, log, abs_package_json_path, .{ .init_reset_store = false, .guess_indentation = true }).unwrap();
         const name_expr = ((workspace_json.root.get("name")) orelse { return error.MissingPackageName; });
         const name = ((try name_expr.asStringCloned(allocator)) orelse { return error.MissingPackageName; });
-        const entry = Entry{ .name = name, .name_loc = name_expr.loc, .version = brk: {
+        const entry = Entry{ .name = name, .version = brk: {
         if (workspace_json.root.get("version")) |version_expr| {
             _ = &version_expr;
             if (try version_expr.asStringCloned(allocator)) |version| {
@@ -287,7 +286,7 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                     _ = builder.count(version);
                 }
             }
-            _ = try workspace_names.insert(workspace_path, Entry{ .name = workspace_entry.name, .version = workspace_entry.version, .name_loc = workspace_entry.name_loc });
+            _ = try workspace_names.insert(workspace_path, Entry{ .name = workspace_entry.name, .version = workspace_entry.version });
         }
         if ((workspace_globs.val.items.len > 0)) {
             var arena_alloc = DeinitGuard(std.heap.ArenaAllocator){ .val = std.heap.ArenaAllocator.init(allocator) };
@@ -412,7 +411,7 @@ continue :next_match;
                                 _ = builder.count(version);
                             }
                         }
-                        _ = try workspace_names.insert(workspace_path, Entry{ .name = workspace_entry.name, .version = workspace_entry.version, .name_loc = workspace_entry.name_loc });
+                        _ = try workspace_names.insert(workspace_path, Entry{ .name = workspace_entry.name, .version = workspace_entry.version });
                     }
                 }
             }

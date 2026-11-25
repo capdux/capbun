@@ -300,6 +300,7 @@ pub fn init(config: *const TlsConfig) !TlsContext {
             if (((ssl.SSL_CTX_set_min_proto_version(ctx, ssl.TLS1_3_VERSION) != 1) or (ssl.SSL_CTX_set_max_proto_version(ctx, ssl.TLS1_3_VERSION) != 1))) {
                 return error.TlsContextError;
             }
+            _ = us_ssl_ctx_reject_blocked_keys(ctx);
             if (config.groups) |groups| {
                 _ = &groups;
                 if ((ssl.SSL_CTX_set1_groups_list(ctx, (blk: {
@@ -445,6 +446,8 @@ extern "c" fn SSL_get_group_name(group_id: u16) callconv(.c) ?[*:0]const u8;
 extern "c" fn SSL_CTX_set_compliance_policy(ctx: *ssl.SSL_CTX, policy: c_int) callconv(.c) c_int;
 
 extern "c" fn Bun__X509__validationErrorCode(e: i32) callconv(.c) ?[*:0]const u8;
+
+extern "c" fn us_ssl_ctx_reject_blocked_keys(ctx: *ssl.SSL_CTX) callconv(.c) void;
 
 pub fn valueToBytes(global: *JSGlobalObject, value: JSValue) bun.JSError!?[]u8 {
         if (value.isEmptyOrUndefinedOrNull()) {

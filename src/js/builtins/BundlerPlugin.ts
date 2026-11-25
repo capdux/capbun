@@ -7,7 +7,7 @@ type AnyFunction = (...args: any[]) => any;
 interface BundlerPlugin {
   onLoad: Map<string, [RegExp, OnLoadCallback][]>;
   onResolve: Map<string, [RegExp, OnResolveCallback][]>;
-  onEndCallbacks: Array<(build: Bun.BuildOutput) => void | Promise<void>> | undefined;
+  $onEndCallbacks: Array<(build: Bun.BuildOutput) => void | Promise<void>> | undefined;
   /** Binding to `JSBundlerPlugin__onLoadAsync` */
   onLoadAsync(
     internalID,
@@ -112,7 +112,7 @@ export function runOnEndCallbacks(
   buildResult: Bun.BuildOutput,
   buildRejection: AggregateError | undefined,
 ): Promise<void> | void {
-  const callbacks = this.onEndCallbacks;
+  const callbacks = this.$onEndCallbacks;
   if (!callbacks) return;
   const promises: PromiseLike<unknown>[] = [];
 
@@ -266,9 +266,9 @@ export function runSetupFunction(
   function onEnd(this: PluginBuilder, callback: Function): PluginBuilder {
     if (!$isCallable(callback)) throw $ERR_INVALID_ARG_TYPE("callback", "function", callback);
 
-    if (!self.onEndCallbacks) self.onEndCallbacks = [];
+    if (!self.$onEndCallbacks) self.$onEndCallbacks = [];
 
-    $arrayPush(self.onEndCallbacks, callback);
+    $arrayPush(self.$onEndCallbacks, callback);
 
     return this;
   }

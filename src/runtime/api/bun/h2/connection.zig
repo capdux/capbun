@@ -88,6 +88,7 @@ pub const Connection = struct {
     local_settings_acked: bool = false,
     max_header_list_pairs: u32 = 128,
     max_invalid_frames: u32 = 1000,
+    strict_field_whitespace: bool = true,
     acked_local_initial_window: u32 = 65535,
     pending_local_window_acks: std.ArrayListUnmanaged(u32) = .{},
     invalid_frame_count: u32 = 0,
@@ -600,6 +601,24 @@ pub fn finishHeaderBlock(self: *Connection, sink: anytype) bool {
             _ = &seen_regular;
             var seen_pseudo: u8 = 0;
             _ = &seen_pseudo;
+            const is_request = (self.is_server or (push_parent != 0));
+            const is_trailer = ((push_parent == 0) and (if (self.streams.get(target)) |st| st.recv_final_headers else false));
+            var saw_connect = false;
+            _ = &saw_connect;
+            var saw_options = false;
+            _ = &saw_options;
+            var saw_host = (if (self.streams.get(target)) |st| st.recv_host else false);
+            _ = &saw_host;
+            var http_scheme = false;
+            _ = &http_scheme;
+            var origin_form = false;
+            _ = &origin_form;
+            var asterisk_form = false;
+            _ = &asterisk_form;
+            var informational = false;
+            _ = &informational;
+            var content_length: ?u64 = null;
+            _ = &content_length;
             while ((off < block.len)) {
                 const h = (blk_catch_8: { break :blk_catch_8 ((self.hpack_coder.decode(block[off..])) catch |e| { _ = &e; _ = &e;
                 _ = self.sendGoAway(sink, .CompressionError, "HPACK decode error");
@@ -648,21 +667,72 @@ pub fn finishHeaderBlock(self: *Connection, sink: anytype) bool {
                                     }
                                 }
                             }
-                            const wrong_direction = (self.is_server and std.mem.eql(u8, rest, "status"));
-                            if ((((seen_regular or (bit == 64)) or ((seen_pseudo & bit) != 0)) or wrong_direction)) {
+                            const wrong_direction = (std.mem.eql(u8, rest, "status") == is_request);
+                            const edge_whitespace = (hasEdgeWhitespace(value_b) and ((self.strict_field_whitespace or (bit != 32)) or isAllWhitespace(value_b)));
+                            if (((((((((seen_regular or (bit == 64)) or ((seen_pseudo & bit) != 0)) or wrong_direction) or is_trailer) or (value_b.len == 0)) or edge_whitespace) or hasControlByte(value_b)) or (!isValidPseudoValue(bit, value_b)))) {
                                 malformed = true;
                             }
                             seen_pseudo = (seen_pseudo | bit);
+                            if ((bit == 1)) {
+                                if (std.mem.eql(u8, value_b, "CONNECT")) {
+                                    saw_connect = true;
+                                }
+                                if (std.mem.eql(u8, value_b, "OPTIONS")) {
+                                    saw_options = true;
+                                }
+                            } else {
+                                if ((bit == 2)) {
+                                    http_scheme = (std.ascii.eqlIgnoreCase(value_b, "http") or std.ascii.eqlIgnoreCase(value_b, "https"));
+                                } else {
+                                    if ((bit == 8)) {
+                                        origin_form = ((value_b.len > 0) and (value_b[0] == 47));
+                                        asterisk_form = std.mem.eql(u8, value_b, "*");
+                                    } else {
+                                        if ((bit == 16)) {
+                                            informational = ((value_b.len > 0) and (value_b[0] == 49));
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             seen_regular = true;
                             if (((((std.mem.eql(u8, name_b, "connection") or std.mem.eql(u8, name_b, "keep-alive")) or std.mem.eql(u8, name_b, "proxy-connection")) or std.mem.eql(u8, name_b, "transfer-encoding")) or std.mem.eql(u8, name_b, "upgrade"))) {
                                 malformed = true;
                             } else {
-                                if (std.mem.eql(u8, name_b, "te")) {
-                                    if ((!std.ascii.eqlIgnoreCase(value_b, "trailers"))) {
+                                if ((is_request and std.mem.eql(u8, name_b, "host"))) {
+                                    if ((!isValidPseudoValue(4, value_b))) {
+                                        continue;
+                                    }
+                                    if (((value_b.len == 0) or saw_host)) {
                                         malformed = true;
                                     }
+                                    saw_host = true;
+                                } else {
+                                    if ((((!is_trailer) and is_request) and std.mem.eql(u8, name_b, "content-length"))) {
+                                        if (parseContentLengthStrict(value_b)) |parsed_cl| {
+                                            _ = &parsed_cl;
+                                            if (content_length) |prev_cl| {
+                                                _ = &prev_cl;
+                                                if ((prev_cl != parsed_cl)) {
+                                                    malformed = true;
+                                                }
+                                            } else {
+                                                content_length = parsed_cl;
+                                            }
+                                        } else {
+                                            malformed = true;
+                                        }
+                                    } else {
+                                        if (std.mem.eql(u8, name_b, "te")) {
+                                            if ((!std.ascii.eqlIgnoreCase(value_b, "trailers"))) {
+                                                malformed = true;
+                                            }
+                                        }
+                                    }
                                 }
+                            }
+                            if (hasControlByte(value_b)) {
+                                continue;
                             }
                         }
                     }
@@ -671,6 +741,23 @@ pub fn finishHeaderBlock(self: *Connection, sink: anytype) bool {
                     continue;
                 }
                 _ = sink.sinkOnHeader(target, (if (@typeInfo(@TypeOf(h)) == .@"enum" or @typeInfo(@TypeOf(h)) == .@"union") @tagName(h) else h.name), (if (@typeInfo(@TypeOf(h)) == .@"enum") @intFromEnum(h) else h.value), h.never_index);
+            }
+            if ((((is_request and (!rejected)) and (!malformed)) and (!is_trailer))) {
+                if (((http_scheme and (!origin_form)) and (!(asterisk_form and saw_options)))) {
+                    malformed = true;
+                }
+            }
+            if (((((push_parent == 0) and self.is_server) and (!malformed)) and (!rejected))) {
+                if (self.streams.getPtr(target)) |st| {
+                    _ = &st;
+                    st.recv_host = saw_host;
+                    if (((!saw_connect) and (st.content_length == null))) {
+                        st.content_length = content_length;
+                    }
+                    if ((!informational)) {
+                        st.recv_final_headers = true;
+                    }
+                }
             }
             _ = self.header_block.clearRetainingCapacity();
             if (fatal) {
@@ -761,6 +848,14 @@ pub fn beginStreamedData(self: *Connection, sink: anytype, hdr: FrameHeader, rem
                         st.state = .Closed;
                         _ = sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.FlowControlError.asU32());
                         discard = true;
+                    } else {
+                        st.recv_body_bytes = (st.recv_body_bytes +| (if (comptime @typeInfo(@TypeOf(data_total)) == .@"enum") cp_cast_int(u64, @intFromEnum(data_total)) else cp_cast_int(u64, data_total)));
+                        if (st.bodyExceedsContentLength()) {
+                            _ = self.sendRstStream(sink, hdr.stream_id, .ProtocolError);
+                            st.state = .Closed;
+                            _ = sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.ProtocolError.asU32());
+                            discard = true;
+                        }
                     }
                 }
             } else {
@@ -844,6 +939,11 @@ pub fn handleData(self: *Connection, sink: anytype, hdr: FrameHeader, payload: [
                     _ = s.recv_window.onData(consumed);
                     if (s.recv_window.isOverflowedWith(recv_limit)) {
                         decision = DataDecision{ .rst = .FlowControlError };
+                    } else {
+                        s.recv_body_bytes = (s.recv_body_bytes +| (if (comptime @typeInfo(@TypeOf((end - off))) == .@"enum") cp_cast_int(u64, @intFromEnum((end - off))) else cp_cast_int(u64, (end - off))));
+                        if (s.bodyExceedsContentLength()) {
+                            decision = DataDecision{ .rst = .ProtocolError };
+                        }
                     }
                 }
             } else {
@@ -1160,9 +1260,21 @@ pub const Stream = struct {
     state: State = .Idle,
     send_window: SendWindow,
     recv_window: RecvWindow,
+    recv_final_headers: bool = false,
+    recv_host: bool = false,
+    content_length: ?u64 = null,
+    recv_body_bytes: u64 = 0,
 
 pub fn init(initial_send: u32, initial_recv: u32) Stream {
             return Stream{ .state = .Idle, .send_window = SendWindow.init(initial_send), .recv_window = RecvWindow.init(initial_recv) };
+    }
+
+pub fn bodyExceedsContentLength(self: @This()) bool {
+            if (self.content_length) |declared| {
+                _ = &declared;
+                return (self.recv_body_bytes > declared);
+            }
+            return false;
     }
 };
 pub const Feed = struct {
@@ -1229,4 +1341,85 @@ pub fn isMalformedFieldValue(value: []const u8) bool {
             }
         }
         return false;
+}
+
+pub fn hasControlByte(value: []const u8) bool {
+        for (cp_iter_slice(value)) |c| {
+            _ = &c;
+            if ((((c < 32) and (c != 9)) or (c == 127))) {
+                return true;
+            }
+        }
+        return false;
+}
+
+pub fn hasEdgeWhitespace(value: []const u8) bool {
+        if ((value.len == 0)) {
+            return false;
+        }
+        return ((((value[0] == 32) or (value[0] == 9)) or (value[@as(usize, @intCast((value.len - 1)))] == 32)) or (value[@as(usize, @intCast((value.len - 1)))] == 9));
+}
+
+pub fn isAllWhitespace(value: []const u8) bool {
+        for (cp_iter_slice(value)) |c| {
+            _ = &c;
+            if (((c != 32) and (c != 9))) {
+                return false;
+            }
+        }
+        return true;
+}
+
+pub fn isAllowedChars(value: []const u8, extra: []const u8) bool {
+        for (cp_iter_slice(value)) |c| {
+            _ = &c;
+            if (std.ascii.isAlphanumeric(c)) {
+                continue;
+            }
+            var found = false;
+            _ = &found;
+            for (cp_iter_slice(extra)) |e| {
+                _ = &e;
+                if ((c == e)) {
+                    found = true;
+                    break;
+                }
+            }
+            if ((!found)) {
+                return false;
+            }
+        }
+        return true;
+}
+
+pub fn isValidPseudoValue(bit: u8, value: []const u8) bool {
+        return (switch (bit) {
+1 => isAllowedChars(value, "!#$%&'*+-.^_`|~"),
+8 => blk: {
+        for (cp_iter_slice(value)) |c| {
+            _ = &c;
+            if (((c <= 32) or (c == 127))) {
+                break :blk false;
+            }
+        }
+        break :blk true;
+},
+2 => (((value.len > 0) and std.ascii.isAlphabetic(value[0])) and isAllowedChars(value, "+-.")),
+4 => isAllowedChars(value, "!$%&'()*+,-.:;=[]_~"),
+16 => ((((((((value.len == 3) and (value[0] >= 49)) and (value[0] <= 57)) and (value[1] >= 48)) and (value[1] <= 57)) and (value[2] >= 48)) and (value[2] <= 57)) and (!std.mem.eql(u8, value, "101"))),
+else => true,
+});
+}
+
+pub fn parseContentLengthStrict(value: []const u8) ?u64 {
+        if ((value.len == 0)) {
+            return null;
+        }
+        for (cp_iter_slice(value)) |c| {
+            _ = &c;
+            if (((c < 48) or (c > 57))) {
+                return null;
+            }
+        }
+        return (blk_catch_24: { break :blk_catch_24 ((std.fmt.parseUnsigned(u64, value, 10)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 null; }); });
 }

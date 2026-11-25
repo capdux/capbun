@@ -519,11 +519,12 @@ const parse_opts: _ParseOptions = .{ .allocator = transpiler.allocator, .path = 
             (if (@typeInfo(@TypeOf(output_file)) == .@"enum") @intFromEnum(output_file) else output_file.value) = .{ .buffer = .{ .allocator = transpiler.allocator, .bytes = writer.ctx.written } };
 },
 .dataurl, .base64 => {
-_ = Output.panic("TODO: dataurl, base64", .{});
+_ = (blk_catch_9: { break :blk_catch_9 ((transpiler.log.addErrorFmt(null, bun.logger.Loc.Empty, transpiler.allocator, "loader \"{s}\" is not supported with --no-bundle", .{ @tagName(loader) })) catch |__ce_9| { _ = &__ce_9;  }); });
+            return null;
 },
 .css => {
 const alloc = transpiler.allocator;
-            const entry = (blk_catch_9: { break :blk_catch_9 ((transpiler.resolver.caches.fs.readFileWithAllocator(transpiler.allocator, transpiler.fs, file_path.text, resolve_result.dirname_fd, false, null)) catch |e| { _ = &e; _ = (blk_catch_10: { break :blk_catch_10 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} reading \"{s}\"", .{ @errorName(e), file_path.pretty })) catch |__ce_10| { _ = &__ce_10;  }); });
+            const entry = (blk_catch_10: { break :blk_catch_10 ((transpiler.resolver.caches.fs.readFileWithAllocator(transpiler.allocator, transpiler.fs, file_path.text, resolve_result.dirname_fd, false, null)) catch |e| { _ = &e; _ = (blk_catch_11: { break :blk_catch_11 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} reading \"{s}\"", .{ @errorName(e), file_path.pretty })) catch |__ce_11| { _ = &__ce_11;  }); });
             return null; }); });
             var opts = bun.css.ParserOptions.default(alloc, transpiler.log);
             _ = &opts;
@@ -649,20 +650,20 @@ pub fn parseMaybeReturnFileOnlyAllowSharedBuffer(transpiler: *Transpiler, this_p
                 break :brk logger.Source.initPathString(path.text, "");
             }
             if (strings.startsWith(path.text, "data:")) {
-                const data_url = (blk_catch_12: { break :blk_catch_12 ((DataURL.parseWithoutCheck(path.text)) catch |e| { _ = &e; _ = (blk_catch_13: { break :blk_catch_13 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} parsing data url \"{s}\"", .{ @errorName(e), path.text })) catch |__ce_13| { _ = &__ce_13;  }); });
+                const data_url = (blk_catch_13: { break :blk_catch_13 ((DataURL.parseWithoutCheck(path.text)) catch |e| { _ = &e; _ = (blk_catch_14: { break :blk_catch_14 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} parsing data url \"{s}\"", .{ @errorName(e), path.text })) catch |__ce_14| { _ = &__ce_14;  }); });
                 return null; }); });
-                const body = (blk_catch_14: { break :blk_catch_14 ((data_url.decodeData(this_parse.allocator)) catch |e| { _ = &e; _ = (blk_catch_15: { break :blk_catch_15 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} decoding data \"{s}\"", .{ @errorName(e), path.text })) catch |__ce_15| { _ = &__ce_15;  }); });
+                const body = (blk_catch_15: { break :blk_catch_15 ((data_url.decodeData(this_parse.allocator)) catch |e| { _ = &e; _ = (blk_catch_16: { break :blk_catch_16 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} decoding data \"{s}\"", .{ @errorName(e), path.text })) catch |__ce_16| { _ = &__ce_16;  }); });
                 return null; }); });
                 break :brk logger.Source.initPathString(path.text, body);
             }
-            const entry = (blk_catch_16: { break :blk_catch_16 ((transpiler.resolver.caches.fs.readFileWithAllocator((if (use_shared_buffer) bun.default_allocator else this_parse.allocator), transpiler.fs, path.text, dirname_fd, use_shared_buffer, file_descriptor)) catch |e| { _ = &e; _ = (blk_catch_17: { break :blk_catch_17 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} reading \"{s}\"", .{ @errorName(e), path.text })) catch |__ce_17| { _ = &__ce_17;  }); });
+            const entry = (blk_catch_17: { break :blk_catch_17 ((transpiler.resolver.caches.fs.readFileWithAllocator((if (use_shared_buffer) bun.default_allocator else this_parse.allocator), transpiler.fs, path.text, dirname_fd, use_shared_buffer, file_descriptor)) catch |e| { _ = &e; _ = (blk_catch_18: { break :blk_catch_18 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} reading \"{s}\"", .{ @errorName(e), path.text })) catch |__ce_18| { _ = &__ce_18;  }); });
             return null; }); });
             input_fd = entry.fd;
             if (this_parse.file_fd_ptr) |file_fd_ptr| {
                 _ = &file_fd_ptr;
                 file_fd_ptr.* = entry.fd;
             }
-            break :brk (blk_catch_18: { break :blk_catch_18 ((logger.Source.initRecycledFile(.{ .path = path, .contents = entry.contents }, transpiler.allocator)) catch |__ce_18| { _ = &__ce_18; return null; }); });
+            break :brk (blk_catch_19: { break :blk_catch_19 ((logger.Source.initRecycledFile(.{ .path = path, .contents = entry.contents }, transpiler.allocator)) catch |__ce_19| { _ = &__ce_19; return null; }); });
 });
             if (comptime return_file_only) {
                 return ParseResult{ .source = source.*, .input_fd = input_fd, .loader = loader, .empty = true, .ast = js_ast.Ast.empty };
@@ -725,7 +726,7 @@ if (source.isWebAssembly()) {
             }
             opts.features.is_macro_runtime = (target == .bun_macro);
             opts.features.replace_exports = this_parse.replace_exports;
-            const parsed_opt = (blk_catch_19: { break :blk_catch_19 ((transpiler.resolver.caches.js.parse(allocator, opts, transpiler.options.define, transpiler.log, source)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 null; }); });
+            const parsed_opt = (blk_catch_20: { break :blk_catch_20 ((transpiler.resolver.caches.js.parse(allocator, opts, transpiler.options.define, transpiler.log, source)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 null; }); });
             if ((parsed_opt == null)) {
                 return null;
             }
@@ -760,7 +761,7 @@ if (source.isWebAssembly()) {
 });
 },
 inline .toml, .yaml, .json, .jsonc, .json5, .xml => |kind| {
-var expr = (if ((kind == .jsonc)) (blk_catch_20: { break :blk_catch_20 ((JsonParser.parseTSConfig(source, transpiler.log, allocator, false)) catch |__ce_20| { _ = &__ce_20; return null; }); }) else (if ((kind == .json)) (blk_catch_21: { break :blk_catch_21 ((JsonParser.parse(source, transpiler.log, allocator, false)) catch |__ce_21| { _ = &__ce_21; return null; }); }) else (if ((kind == .toml)) (blk_catch_22: { break :blk_catch_22 ((TOML.parse(source, transpiler.log, allocator, false)) catch |__ce_22| { _ = &__ce_22; return null; }); }) else (if ((kind == .yaml)) (blk_catch_23: { break :blk_catch_23 ((YAML.parse(source, transpiler.log, allocator)) catch |__ce_23| { _ = &__ce_23; return null; }); }) else (if ((kind == .json5)) (blk_catch_24: { break :blk_catch_24 ((JSON5.parse(source, transpiler.log, allocator)) catch |__ce_24| { _ = &__ce_24; return null; }); }) else (if ((kind == .xml)) (blk_catch_25: { break :blk_catch_25 ((XML.parse(source, transpiler.log, allocator, XML.Options{ .compact = true, .encoding = .File })) catch |__ce_25| { _ = &__ce_25; return null; }); }) else @compileError("unreachable")))))));
+var expr = (if ((kind == .jsonc)) (blk_catch_21: { break :blk_catch_21 ((JsonParser.parseTSConfig(source, transpiler.log, allocator, false)) catch |__ce_21| { _ = &__ce_21; return null; }); }) else (if ((kind == .json)) (blk_catch_22: { break :blk_catch_22 ((JsonParser.parse(source, transpiler.log, allocator, false)) catch |__ce_22| { _ = &__ce_22; return null; }); }) else (if ((kind == .toml)) (blk_catch_23: { break :blk_catch_23 ((TOML.parse(source, transpiler.log, allocator, false)) catch |__ce_23| { _ = &__ce_23; return null; }); }) else (if ((kind == .yaml)) (blk_catch_24: { break :blk_catch_24 ((YAML.parse(source, transpiler.log, allocator)) catch |__ce_24| { _ = &__ce_24; return null; }); }) else (if ((kind == .json5)) (blk_catch_25: { break :blk_catch_25 ((JSON5.parse(source, transpiler.log, allocator)) catch |__ce_25| { _ = &__ce_25; return null; }); }) else (if ((kind == .xml)) (blk_catch_26: { break :blk_catch_26 ((XML.parse(source, transpiler.log, allocator, XML.Options{ .compact = true, .encoding = .File })) catch |__ce_26| { _ = &__ce_26; return null; }); }) else @compileError("unreachable")))))));
             _ = &expr;
             var symbols: []js_ast.Symbol = &.{};
             _ = &symbols;
@@ -777,13 +778,13 @@ var expr = (if ((kind == .jsonc)) (blk_catch_20: { break :blk_catch_20 ((JsonPar
             if ((expr.data == .e_object)) {
                 const properties: []js_ast.G.Property = expr.data.e_object.properties.slice();
                 if ((properties.len > 0)) {
-                    var stmts = (blk_catch_28: { break :blk_catch_28 ((allocator.alloc(js_ast.Stmt, 3)) catch |__ce_28| { _ = &__ce_28; return null; }); });
+                    var stmts = (blk_catch_29: { break :blk_catch_29 ((allocator.alloc(js_ast.Stmt, 3)) catch |__ce_29| { _ = &__ce_29; return null; }); });
                     _ = &stmts;
-                    var decls = (blk_catch_29: { break :blk_catch_29 ((std.ArrayListUnmanaged(js_ast.G.Decl).initCapacity(allocator, properties.len)) catch |e| { _ = &e; break :blk_catch_29 bun.handleOom(e); }); });
+                    var decls = (blk_catch_30: { break :blk_catch_30 ((std.ArrayListUnmanaged(js_ast.G.Decl).initCapacity(allocator, properties.len)) catch |e| { _ = &e; break :blk_catch_30 bun.handleOom(e); }); });
                     _ = &decls;
                     _ = decls.expandToCapacity();
-                    symbols = (blk_catch_30: { break :blk_catch_30 ((allocator.alloc(js_ast.Symbol, properties.len)) catch |__ce_30| { _ = &__ce_30; return null; }); });
-                    var export_clauses = (blk_catch_31: { break :blk_catch_31 ((allocator.alloc(js_ast.ClauseItem, properties.len)) catch |__ce_31| { _ = &__ce_31; return null; }); });
+                    symbols = (blk_catch_31: { break :blk_catch_31 ((allocator.alloc(js_ast.Symbol, properties.len)) catch |__ce_31| { _ = &__ce_31; return null; }); });
+                    var export_clauses = (blk_catch_32: { break :blk_catch_32 ((allocator.alloc(js_ast.ClauseItem, properties.len)) catch |__ce_32| { _ = &__ce_32; return null; }); });
                     _ = &export_clauses;
                     var duplicate_key_checker = bun.StringHashMap(u32).init(allocator);
                     _ = &duplicate_key_checker;
@@ -810,13 +811,13 @@ var expr = (if ((kind == .jsonc)) (blk_catch_20: { break :blk_catch_20 ((JsonPar
                         if (strings.eqlComptime(name, "default")) {
                             continue;
                         }
-                        const visited = (blk_catch_32: { break :blk_catch_32 ((duplicate_key_checker.getOrPut(name)) catch |__ce_32| { _ = &__ce_32; continue; }); });
+                        const visited = (blk_catch_33: { break :blk_catch_33 ((duplicate_key_checker.getOrPut(name)) catch |__ce_33| { _ = &__ce_33; continue; }); });
                         if (visited.found_existing) {
                             (if (@typeInfo(@TypeOf(decls.items[@as(usize, @intCast(visited.value_ptr.*))])) == .@"enum") @intFromEnum(decls.items[@as(usize, @intCast(visited.value_ptr.*))]) else decls.items[@as(usize, @intCast(visited.value_ptr.*))].value) = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
                             continue;
                         }
                         visited.value_ptr.* = @truncate(i);
-                        symbol.* = js_ast.Symbol{ .original_name = (blk_catch_33: { break :blk_catch_33 ((MutableString.ensureValidIdentifier(name, allocator)) catch |__ce_33| { _ = &__ce_33; return null; }); }) };
+                        symbol.* = js_ast.Symbol{ .original_name = (blk_catch_34: { break :blk_catch_34 ((MutableString.ensureValidIdentifier(name, allocator)) catch |__ce_34| { _ = &__ce_34; return null; }); }) };
                         const r = Ref.init(@truncate(i), 0, false);
                         decl.* = js_ast.G.Decl{ .binding = js_ast.Binding.alloc(allocator, js_ast.B.Identifier{ .@"ref" = r }, prop.key.?.loc), .value = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).? };
                         export_clauses[cp_cast_int(usize, i)] = js_ast.ClauseItem{ .name = .{ .@"ref" = r, .loc = prop.key.?.loc }, .alias = name, .alias_loc = prop.key.?.loc };
@@ -860,7 +861,7 @@ const expr = js_ast.Expr.init(js_ast.E.String, js_ast.E.String{ .data = source.c
             return ParseResult{ .ast = js_ast.Ast.fromParts(parts), .source = source.*, .loader = loader, .input_fd = input_fd };
 },
 .md => {
-const html = (blk_catch_39: { break :blk_catch_39 ((bun.md.renderToHtml(source.contents, allocator)) catch |__ce_39| { _ = &__ce_39; _ = (blk_catch_40: { break :blk_catch_40 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "Failed to render markdown to HTML", .{})) catch |__ce_40| { _ = &__ce_40;  }); });
+const html = (blk_catch_40: { break :blk_catch_40 ((bun.md.renderToHtml(source.contents, allocator)) catch |__ce_40| { _ = &__ce_40; _ = (blk_catch_41: { break :blk_catch_41 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "Failed to render markdown to HTML", .{})) catch |__ce_41| { _ = &__ce_41;  }); });
             return null; }); });
             const expr = js_ast.Expr.init(js_ast.E.String, js_ast.E.String{ .data = html }, logger.Loc.Empty);
             const stmt = js_ast.Stmt.alloc(js_ast.S.ExportDefault, js_ast.S.ExportDefault{ .value = js_ast.StmtOrExpr{ .expr = expr }, .default_name = js_ast.LocRef{ .loc = logger.Loc{  }, .@"ref" = Ref.None } }, logger.Loc{ .start = 0 });
@@ -875,7 +876,7 @@ const html = (blk_catch_39: { break :blk_catch_39 ((bun.md.renderToHtml(source.c
 .wasm => {
 if (transpiler.options.target.isBun()) {
                 if ((!source.isWebAssembly())) {
-                    _ = (blk_catch_43: { break :blk_catch_43 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "Invalid wasm file \"{s}\" (missing magic header)", .{ path.text })) catch |__ce_43| { _ = &__ce_43;  }); });
+                    _ = (blk_catch_44: { break :blk_catch_44 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "Invalid wasm file \"{s}\" (missing magic header)", .{ path.text })) catch |__ce_44| { _ = &__ce_44;  }); });
                     return null;
                 }
                 return ParseResult{ .ast = js_ast.Ast.empty, .source = source.*, .loader = loader, .input_fd = input_fd };
@@ -896,7 +897,7 @@ pub fn normalizeEntryPointPath(transpiler: *Transpiler, _entry: []const u8) []co
             _ = &paths;
             var entry = transpiler.fs.abs((&paths));
             _ = &entry;
-            _ = (blk_catch_44: { break :blk_catch_44 ((std.fs.accessAbsolute(entry, .{})) catch |__ce_44| { _ = &__ce_44; return _entry; }); });
+            _ = (blk_catch_45: { break :blk_catch_45 ((std.fs.accessAbsolute(entry, .{})) catch |__ce_45| { _ = &__ce_45; return _entry; }); });
             entry = transpiler.fs.relativeTo(entry);
             if ((!strings.startsWith(entry, "./"))) {
                 var __entry = ((transpiler.allocator.alloc(u8, ("./".len + entry.len))) catch unreachable);
@@ -920,7 +921,7 @@ pub fn enqueueEntryPoints(transpiler: *Transpiler, entry_points: []_resolver.Res
                 var ___store_guard_moved = false; _ = &___store_guard_moved;
                 defer if (!___store_guard_moved) { ___store_guard_moved = true; const __T = @TypeOf(_store_guard); if (@typeInfo(__T) == .optional) { if (_store_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _store_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _store_guard; _drop_val.__cp_deinit(); } };
                 _ = &_store_guard;
-                const result = (blk_catch_46: { break :blk_catch_46 ((transpiler.resolver.resolve(transpiler.fs.top_level_dir, entry, .entry_point_build)) catch |e| { _ = &e; _ = Output.prettyError("Error resolving \"{s}\": {s}\n", .{ entry, @errorName(e) });
+                const result = (blk_catch_47: { break :blk_catch_47 ((transpiler.resolver.resolve(transpiler.fs.top_level_dir, entry, .entry_point_build)) catch |e| { _ = &e; _ = Output.prettyError("Error resolving \"{s}\": {s}\n", .{ entry, @errorName(e) });
                 continue; }); });
                 if ((result.pathConst() == null)) {
                     _ = Output.prettyError("\"{s}\" is disabled due to \"browser\" field in package.json.\n", .{ entry });
@@ -990,23 +991,23 @@ pub fn processResolveQueue(transpiler: *Transpiler, comptime import_path_format:
                         _ = &client_entry_point;
                         client_entry_point.* = EntryPoints.ClientEntryPoint;
                         _ = try client_entry_point.generate(Transpiler, transpiler, (if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name), transpiler.options.framework.?.client.path);
-                        const entry_point_output_file = (((blk_catch_48: { break :blk_catch_48 ((transpiler.buildWithResolveResultEager(item, import_path_format, Outstream, outstream, client_entry_point)) catch |__ce_48| { _ = &__ce_48; continue; }); })) orelse continue);
+                        const entry_point_output_file = (((blk_catch_49: { break :blk_catch_49 ((transpiler.buildWithResolveResultEager(item, import_path_format, Outstream, outstream, client_entry_point)) catch |__ce_49| { _ = &__ce_49; continue; }); })) orelse continue);
                         _ = ((transpiler.output_files.append(entry_point_output_file)) catch unreachable);
                         _ = js_ast.Expr.Data.Store.reset();
                         _ = js_ast.Stmt.Data.Store.reset();
                         var item_not_entrypointed = item;
                         _ = &item_not_entrypointed;
                         item_not_entrypointed.import_kind = .stmt;
-                        const original_output_file = (((blk_catch_50: { break :blk_catch_50 ((transpiler.buildWithResolveResultEager(item_not_entrypointed, import_path_format, Outstream, outstream, null)) catch |__ce_50| { _ = &__ce_50; continue; }); })) orelse continue);
+                        const original_output_file = (((blk_catch_51: { break :blk_catch_51 ((transpiler.buildWithResolveResultEager(item_not_entrypointed, import_path_format, Outstream, outstream, null)) catch |__ce_51| { _ = &__ce_51; continue; }); })) orelse continue);
                         _ = ((transpiler.output_files.append(original_output_file)) catch unreachable);
                         continue;
                     }
                 }
                 const errors_before = transpiler.log.errors;
-                const output_file = (((blk_catch_52: { break :blk_catch_52 ((transpiler.buildWithResolveResultEager(item, import_path_format, Outstream, outstream, null)) catch |e| { _ = &e; if ((transpiler.log.errors == errors_before)) {
+                const output_file = (((blk_catch_53: { break :blk_catch_53 ((transpiler.buildWithResolveResultEager(item, import_path_format, Outstream, outstream, null)) catch |e| { _ = &e; if ((transpiler.log.errors == errors_before)) {
                     const path = (if (item.pathConst()) |p| p.text else "");
                     const message: []const u8 = (if ((e == error.StackOverflow)) "Maximum call stack size exceeded while generating code for" else "Failed to generate code for");
-                    _ = (blk_catch_53: { break :blk_catch_53 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} \"{s}\"", .{ message, path })) catch |__ce_53| { _ = &__ce_53;  }); });
+                    _ = (blk_catch_54: { break :blk_catch_54 ((transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} \"{s}\"", .{ message, path })) catch |__ce_54| { _ = &__ce_54;  }); });
                 }
                 continue; }); })) orelse continue);
                 _ = ((transpiler.output_files.append(output_file)) catch unreachable);

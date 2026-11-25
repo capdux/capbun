@@ -79,6 +79,7 @@ pub const BProperty = struct {
 pub const BObject = struct {
     properties: []BProperty,
     is_single_line: bool = false,
+    close_brace_loc: logger.Loc = logger.Loc.Empty,
     pub const Property = BProperty;
 };
 
@@ -143,6 +144,7 @@ _ = writeAnyToHasher(hasher, .{ std.meta.activeTag(self), object.properties.len 
 };
 
 pub const Class = G.Class;
+const logger = bun.logger;
 const writeAnyToHasher = bun.writeAnyToHasher;
 const js_ast = bun.ast;
 const ArrayBinding = js_ast.ArrayBinding;

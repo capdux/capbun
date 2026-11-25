@@ -20,12 +20,10 @@ pub struct RotateXYZ {
 }
 
 fn handleIndividualTransformProperty(handler: *TransformHandler, allocator: std.mem.Allocator, comptime field: []const u8, val: auto) {
-    if (*transform := handler.transform) {
-        bun.handleOom(transform[0].v.append(allocator, val.toTransform(allocator)));
-    } else {
-        @field(handler, field) = val.deepClone(allocator);
-        handler.has_any = true;
-    }
+    // Individual transforms cascade independently of `transform`. Keep them
+    // separate so declaration order cannot change their composition or resets.
+    @field(handler, field) = val.deepClone(allocator);
+    handler.has_any = true;
 }
 const PrintErr = css.PrintErr;
 const Result = css.Result;
@@ -990,22 +988,6 @@ fn toCssTranslate(this_u: *const Translate, dest: *css.Printer): PrintErr!void {
     return;
 }
 
-
-fn toTransformTranslate(this_u: *const Translate, allocator: std.mem.Allocator): Transform {
-    return switch (this_u.*) {
-        .none => Transform{ translate_3d: .{
-            .x = LengthPercentage.zero(),
-            .y = LengthPercentage.zero(),
-            .z = Length.zero(),
-        } },
-        .xyz => |xyz| Transform{ translate_3d: .{
-            .x = xyz.x.deepClone(allocator),
-            .y = xyz.y.deepClone(allocator),
-            .z = xyz.z.deepClone(allocator),
-        } },
-    };
-}
-
 pub struct TranslateXYZ {
     /// The x translation.
     x: LengthPercentage,
@@ -1030,7 +1012,6 @@ pub union(enum) Translate {
 
     pub const parse = parseTranslate;
     pub const toCss = toCssTranslate;
-    pub const toTransform = toTransformTranslate;
 
     static fn eql(lhs: *const @This(), other: *const @This()): bool {
         return css.implementEql(@This(), lhs, other);
@@ -1140,16 +1121,6 @@ pub struct Rotate {
         _.angle.toCss(dest)?;
     }
 
-    /// Converts the rotation to a transform function.
-    fn toTransform(allocator: std.mem.Allocator): Transform {
-        return { rotate_3d: {
-            x: _.x,
-            y: _.y,
-            z: _.z,
-            angle: _.angle.deepClone(allocator),
-        } };
-    }
-
     static fn eql(lhs: *const @This(), other: *const @This()): bool {
         return css.implementEql(@This(), lhs, other);
     }
@@ -1199,22 +1170,6 @@ fn toCssScale(this_u: *const Scale, dest: *css.Printer): PrintErr!void {
     }
 }
 
-
-fn toTransformScale(this_u: *const Scale, allocator: std.mem.Allocator): Transform {
-    return switch (this_u.*) {
-        .none => Transform{ scale_3d: .{
-            .x = .{ .number = 1.0 },
-            .y = .{ .number = 1.0 },
-            .z = .{ .number = 1.0 },
-        } },
-        .xyz => |xyz| Transform{ scale_3d: .{
-            .x = xyz.x.deepClone(allocator),
-            .y = xyz.y.deepClone(allocator),
-            .z = xyz.z.deepClone(allocator),
-        } },
-    };
-}
-
 pub struct ScaleXYZ {
     /// Scale on the x axis.
     x: NumberOrPercentage,
@@ -1239,7 +1194,6 @@ pub union(enum) Scale {
 
     pub const parse = parseScale;
     pub const toCss = toCssScale;
-    pub const toTransform = toTransformScale;
 
     static fn eql(lhs: *const @This(), other: *const @This()): bool {
         return css.implementEql(@This(), lhs, other);
@@ -1290,10 +1244,6 @@ pub struct TransformHandler {
                     _.transform = .{ transform_val.deepClone(allocator), vp };
                     _.has_any = true;
                 }
-
-                _.translate = null;
-                _.rotate = null;
-                _.scale = null;
             },
             .translate => |val| individualProperty(_, allocator, "translate", val),
             .rotate => |val| individualProperty(_, allocator, "rotate", val),

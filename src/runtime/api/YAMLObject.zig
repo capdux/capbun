@@ -792,19 +792,26 @@ i = (i + 1);
     }
 };
 
+pub const PendingProperty = struct {
+    mapping: JSValue,
+    key: JSValue,
+    value: JSValue,
+};
+
 pub const ParserCtx = struct {
     seen_objects: std.AutoHashMap(SeenObjectPtr, JSValue),
     stack_check: bun.StackCheck,
     global: *JSGlobalObject,
     root: Expr,
     result: JSValue,
+    pending: std.ArrayListUnmanaged(PendingProperty) = .{},
 
 pub fn deinit(ctx: *ParserCtx) void {
             _ = ctx.seen_objects.deinit();
     }
 
 pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
-            ctx.result = (blk_catch_0: { break :blk_catch_0 ((ctx.toJS(args, ctx.root)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            const parsed = (blk_catch_0: { break :blk_catch_0 ((ctx.toJS(args, ctx.root)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                 ctx.result = ctx.global.throwOutOfMemoryValue();
                 return;
             } else {
@@ -821,6 +828,24 @@ pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
                 }
             }
             unreachable; }); });
+            for (ctx.pending.items) |p| {
+                _ = &p;
+                var key_str = (blk_catch_1: { break :blk_catch_1 ((p.key.toBunString(ctx.global)) catch |e| { _ = &e; _ = &e;
+                ctx.result = .zero;
+                return; }); });
+                _ = &key_str;
+                var _key_str_guard = DerefGuard(String){ .ptr = (blk: {
+                break :blk (&key_str);
+
+}) };
+                _ = &_key_str_guard;
+                var ___key_str_guard_moved = false; _ = &___key_str_guard_moved;
+                defer if (!___key_str_guard_moved) { ___key_str_guard_moved = true; const __T = @TypeOf(_key_str_guard); if (@typeInfo(__T) == .optional) { if (_key_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _key_str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _key_str_guard; _drop_val.__cp_deinit(); } };
+                _ = (blk_catch_2: { break :blk_catch_2 ((p.mapping.putMayBeIndex(ctx.global, (&key_str), (if (@typeInfo(@TypeOf(p)) == .@"enum") @intFromEnum(p) else p.value))) catch |e| { _ = &e; _ = &e;
+                ctx.result = .zero;
+                return; }); });
+            }
+            ctx.result = parsed;
     }
 
 pub fn toJS(ctx: *ParserCtx, args: *MarkedArgumentBuffer, expr: Expr) ToJSError!JSValue {
@@ -869,12 +894,21 @@ if (ctx.seen_objects.get(expr.data.e_object)) |obj| {
             _ = &obj;
             _ = args.append(obj);
             _ = try ctx.seen_objects.put(expr.data.e_object, obj);
+            var is_pending = false;
+            _ = &is_pending;
             for (cp_iter_slice(expr.data.e_object.properties.slice())) |prop| {
                 _ = &prop;
                 const key_expr = prop.key.?;
                 const value_expr = (if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?;
                 const key = try ctx.toJS(args, key_expr);
                 const value = try ctx.toJS(args, value_expr);
+                is_pending = (is_pending or key.isObject());
+                if (is_pending) {
+                    _ = args.append(key);
+                    _ = args.append(value);
+                    _ = try ctx.pending.append(ctx.seen_objects.allocator, PendingProperty{ .mapping = obj, .key = key, .value = value });
+                    continue;
+                }
                 var key_str = try key.toBunString(ctx.global);
                 _ = &key_str;
                 var _key_str_guard = DerefGuard(String){ .ptr = (blk: {
@@ -950,8 +984,8 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSV
         _ = &_stringifier_guard;
         var ___stringifier_guard_moved = false; _ = &___stringifier_guard_moved;
         defer if (!___stringifier_guard_moved) { ___stringifier_guard_moved = true; const __T = @TypeOf(_stringifier_guard); if (@typeInfo(__T) == .optional) { if (_stringifier_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _stringifier_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _stringifier_guard; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_1: { break :blk_catch_1 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
-        _ = (blk_catch_2: { break :blk_catch_2 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
+        _ = (blk_catch_3: { break :blk_catch_3 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
+        _ = (blk_catch_4: { break :blk_catch_4 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
         return stringifier.builder.toString(global);
 }
 
@@ -1163,7 +1197,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         var ___log_guard_moved = false; _ = &___log_guard_moved;
         defer if (!___log_guard_moved) { ___log_guard_moved = true; const __T = @TypeOf(_log_guard); if (@typeInfo(__T) == .optional) { if (_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _log_guard; _drop_val.__cp_deinit(); } };
         const source = (&logger.Source.initPathString("input.yaml", input_bytes));
-        const root = (blk_catch_3: { break :blk_catch_3 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const root = (blk_catch_5: { break :blk_catch_5 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         if ((e == error.StackOverflow)) {

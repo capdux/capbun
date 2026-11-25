@@ -2797,6 +2797,15 @@ skip_process_ipc = inst.group;
         _ = client.main_resolved_path.deref();
         client.main_resolved_path = bun.String.empty;
         client.unhandled_error_counter = 0;
+        for (client.macros.values()) |callback| {
+            _ = &callback;
+            if (callback) |cb| {
+                _ = &cb;
+                _ = jsc.JSValue.fromRef(cb).unprotect();
+            }
+        }
+        _ = client.macros.clearRetainingCapacity();
+        client.transpiler.macro_context = null;
         client.transpiler.linker.plugin_runner = null;
         client.plugin_runner = null;
         const old_global = client.global;

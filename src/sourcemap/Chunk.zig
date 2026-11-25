@@ -256,6 +256,15 @@ pub inline fn takeBuffer(self: *@This()) MutableString {
 pub inline fn getCount(self: @This()) usize {
             return self.ctx.getCount();
     }
+
+pub inline fn markObjectBrace(self: *@This(), state: SourceMapState) void {
+            if (comptime (Type == VLQSourceMap)) {
+                if (self.ctx.internal) |*b| {
+                    _ = &b;
+                    _ = (b.*).markObjectBrace(state);
+                }
+            }
+    }
 };
 }
 
@@ -282,10 +291,16 @@ pub noinline fn generateChunk(self: *@This(), output: []const u8) Chunk {
                 {
                     (buffer.list.items[0..8]).* = @as([8]u8, @bitCast(buffer.list.items.len));
                     (buffer.list.items[8..16]).* = @as([8]u8, @bitCast(self.source_map.getCount()));
-                    (buffer.list.items[16..24]).* = @as([8]u8, @bitCast(self.approximate_input_line_count));
+                    (buffer.list.items[16..20]).* = @as([4]u8, @bitCast(@as(u32, @truncate(self.approximate_input_line_count))));
                 }
             }
             return Chunk{ .buffer = self.source_map.takeBuffer(), .mappings_count = self.source_map.getCount(), .end_state = self.prev_state, .final_generated_column = self.generated_column, .should_ignore = self.source_map.shouldIgnore() };
+    }
+
+pub fn markObjectBrace(self: *@This()) void {
+            if (self.has_prev_state) {
+                _ = self.source_map.markObjectBrace(self.prev_state);
+            }
     }
 
 pub fn updateGeneratedLineAndColumn(self: *@This(), output: []const u8) void {

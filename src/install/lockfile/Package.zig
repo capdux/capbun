@@ -1790,7 +1790,7 @@ else => {
                                 if (strings.eqlLong((if (@typeInfo(@TypeOf(value)) == .@"enum" or @typeInfo(@TypeOf(value)) == .@"union") @tagName(value) else value.name), (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), true)) {
                                     const note_abs_path = bun.handleOom(allocator.dupeZ(u8, Path.joinAbsStringZ(cwd, .{ note_path, "package.json" }, .auto)));
                                     const note_src = (blk_catch_13: { break :blk_catch_13 ((bun.sys.File.toSource(note_abs_path, allocator, .{}).unwrap()) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 logger.Source.initEmptyFile(note_abs_path); }); });
-                                    notes[cp_cast_int(usize, i)] = .{ .text = "Package name is also declared here", .location = logger.Location.initOrNull((&note_src), note_src.rangeOfString(value.name_loc)) };
+                                    notes[cp_cast_int(usize, i)] = .{ .text = "Package name is also declared here", .location = logger.Location.initOrNull((&note_src), nameRangeOnDisk(allocator, (&note_src))) };
                                     i = (i + 1);
                                 }
                             }
@@ -1798,7 +1798,7 @@ else => {
 };
                             const abs_path = Path.joinAbsStringZ(cwd, .{ path, "package.json" }, .auto);
                             const src = (blk_catch_14: { break :blk_catch_14 ((bun.sys.File.toSource(abs_path, allocator, .{}).unwrap()) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 logger.Source.initEmptyFile(abs_path); }); });
-                            _ = (blk_catch_15: { break :blk_catch_15 ((log.addRangeErrorFmtWithNotes((&src), src.rangeOfString(entry.name_loc), allocator, notes, "Workspace name \"{s}\" already exists", .{ (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name) })) catch |__ce_15| { _ = &__ce_15;  }); });
+                            _ = (blk_catch_15: { break :blk_catch_15 ((log.addRangeErrorFmtWithNotes((&src), nameRangeOnDisk(allocator, (&src)), allocator, notes, "Workspace name \"{s}\" already exists", .{ (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name) })) catch |__ce_15| { _ = &__ce_15;  }); });
                             return error.InstallFailed;
                         }
                         const external_name = string_builder.append(ExternalString, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
@@ -1948,4 +1948,19 @@ else => .init(.uninitialized),
     pub const List = bun.MultiArrayList(PackageType);
     pub const Serializer = PackageSerializer(PackageType, List);
 };
+}
+
+pub fn nameRangeOnDisk(allocator: Allocator, source: *const logger.Source) logger.Range {
+        var temp_log = logger.Log.init(allocator);
+        _ = &temp_log;
+        defer {
+        _ = temp_log.deinit();
+        }
+        _ = initializeStore();
+        const json = (blk_catch_2: { break :blk_catch_2 ((JSON.parsePackageJSONUTF8(source, (&temp_log), allocator)) catch |__ce_2| { _ = &__ce_2; return logger.Range.None; }); });
+        if (json.get("name")) |name_expr| {
+            _ = &name_expr;
+            return source.rangeOfString(name_expr.loc);
+        }
+        return logger.Range.None;
 }

@@ -90,6 +90,11 @@ pub fn __cp_errdeinit(self: *@This()) void {
     };
 }
 
+pub const ObjectBrace = struct {
+    generated: SourceMap.LineColumnOffset,
+    original: SourceMap.LineColumnOffset,
+};
+
 pub const SyncEntry = extern struct {
     generated_line: i32,
     generated_column: i32,
@@ -432,6 +437,7 @@ pub const Builder = struct {
     state: State = .{},
     count: u32 = 0,
     finalized: ?MutableString = null,
+    object_braces: std.ArrayListUnmanaged(ObjectBrace) = .{},
 
 pub fn init(allocator: std.mem.Allocator) Builder {
             return Builder{ .allocator = allocator };
@@ -440,10 +446,15 @@ pub fn init(allocator: std.mem.Allocator) Builder {
 pub fn deinit(self: *Builder) void {
             _ = self.sync_entries.deinit(self.allocator);
             _ = self.win_stream.deinit(self.allocator);
+            _ = self.object_braces.deinit(self.allocator);
             if (self.finalized) |*m| {
                 _ = &m;
                 _ = (m.*).deinit();
             }
+    }
+
+pub fn markObjectBrace(self: *Builder, last: SourceMapState) void {
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.object_braces.append(self.allocator, ObjectBrace{ .generated = .{ .lines = bun.Ordinal.fromZeroBased(self.state.generated_line), .columns = bun.Ordinal.fromZeroBased(last.generated_column) }, .original = .{ .lines = bun.Ordinal.fromZeroBased(last.original_line), .columns = bun.Ordinal.fromZeroBased(last.original_column) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
     }
 
 pub fn appendLineSeparator(self: *Builder) void {
@@ -468,7 +479,7 @@ pub fn flushWindow(self: *Builder) void {
             }
             const seed = self.pending[0];
             const start_off = (if (comptime @typeInfo(@TypeOf(self.win_stream.items.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(self.win_stream.items.len)) else cp_cast_int(u32, self.win_stream.items.len));
-            _ = (blk_catch_0: { break :blk_catch_0 ((self.sync_entries.append(self.allocator, SyncEntry{ .generated_line = seed.generated_line, .generated_column = seed.generated_column, .byte_offset = start_off, .original_line = seed.original_line, .original_column = seed.original_column, .source_index = seed.source_index })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+            _ = (blk_catch_1: { break :blk_catch_1 ((self.sync_entries.append(self.allocator, SyncEntry{ .generated_line = seed.generated_line, .generated_column = seed.generated_column, .byte_offset = start_off, .original_line = seed.original_line, .original_column = seed.original_column, .source_index = seed.source_index })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
             const n_deltas: usize = (n - 1);
             var deltas: [63]Delta = undefined;
             _ = &deltas;
@@ -505,7 +516,7 @@ pub fn flushWindow(self: *Builder) void {
             if (((flags & flag_has_src_idx) != 0)) {
                 cap = (cap + (8 + (n_deltas * max_varint_len)));
             }
-            _ = (blk_catch_1: { break :blk_catch_1 ((self.win_stream.ensureUnusedCapacity(self.allocator, cap)) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((self.win_stream.ensureUnusedCapacity(self.allocator, cap)) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
             const base = self.win_stream.items.len;
             self.win_stream.items.len = (self.win_stream.items.len + cap);
             var buf = self.win_stream.items[base..][0..cap];
@@ -624,14 +635,17 @@ pub fn finalize(self: *Builder) *MutableString {
             _ = self.flushWindow();
             const sync_bytes = (self.sync_entries.items.len * @sizeOf(SyncEntry));
             const stream_offset = (if (comptime @typeInfo(@TypeOf((header_size + sync_bytes))) == .@"enum") cp_cast_int(u32, @intFromEnum((header_size + sync_bytes))) else cp_cast_int(u32, (header_size + sync_bytes)));
-            const total: usize = ((stream_offset + self.win_stream.items.len) + stream_tail_pad);
+            const object_braces_offset: usize = (stream_offset + self.win_stream.items.len);
+            const object_braces_bytes: usize = (self.object_braces.items.len * @sizeOf(ObjectBrace));
+            const total: usize = ((object_braces_offset + object_braces_bytes) + stream_tail_pad);
             var out = MutableString.initEmpty(self.allocator);
             _ = &out;
-            _ = (blk_catch_2: { break :blk_catch_2 ((out.list.resize(self.allocator, total)) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+            _ = (blk_catch_3: { break :blk_catch_3 ((out.list.resize(self.allocator, total)) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
             var blob = out.list.items;
             _ = &blob;
-            _ = @memset(blob[0..24], 0);
+            _ = @memset(blob[0..20], 0);
             {
+                (blob[20..24]).* = @bitCast((if (comptime @typeInfo(@TypeOf(self.object_braces.items.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(self.object_braces.items.len)) else cp_cast_int(u32, self.object_braces.items.len)));
                 (blob[24..28]).* = @bitCast((if (comptime @typeInfo(@TypeOf(self.sync_entries.items.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(self.sync_entries.items.len)) else cp_cast_int(u32, self.sync_entries.items.len)));
                 (blob[28..32]).* = @bitCast(stream_offset);
             }
@@ -639,9 +653,13 @@ pub fn finalize(self: *Builder) *MutableString {
                 _ = @memcpy(blob[header_size..][0..sync_bytes], std.mem.sliceAsBytes(self.sync_entries.items));
             }
             _ = @memcpy(blob[stream_offset..][0..self.win_stream.items.len], self.win_stream.items);
+            if ((object_braces_bytes > 0)) {
+                _ = @memcpy(blob[object_braces_offset..][0..object_braces_bytes], std.mem.sliceAsBytes(self.object_braces.items));
+            }
             _ = @memset(blob[(total - stream_tail_pad)..][0..stream_tail_pad], 0);
             _ = self.win_stream.clearAndFree(self.allocator);
             _ = self.sync_entries.clearAndFree(self.allocator);
+            _ = self.object_braces.clearAndFree(self.allocator);
             self.finalized = out;
             return (blk: {
             break :blk @as(*MutableString, @ptrCast(@alignCast(&(self.finalized.?))));
@@ -670,7 +688,28 @@ pub inline fn mappingCount(self: InternalSourceMap) usize {
 
 pub inline fn inputLineCount(self: InternalSourceMap) usize {
         return (blk: {
-        break :blk @as(u64, @bitCast((self.data[16..24]).*));
+        break :blk @as(u32, @bitCast((self.data[16..20]).*));
+
+});
+}
+
+pub inline fn objectBraceCount(self: InternalSourceMap) u32 {
+        return (blk: {
+        break :blk @as(u32, @bitCast((self.data[20..24]).*));
+
+});
+}
+
+pub fn objectBraces(self: *const InternalSourceMap) []const ObjectBrace {
+        const count = (if (comptime @typeInfo(@TypeOf(self.objectBraceCount())) == .@"enum") cp_cast_int(usize, @intFromEnum(self.objectBraceCount())) else cp_cast_int(usize, self.objectBraceCount()));
+        if ((count == 0)) {
+            return &.{};
+        }
+        const bytes = (count * @sizeOf(ObjectBrace));
+        const end = (self.totalLen() - stream_tail_pad);
+        const start = (end - bytes);
+        return (blk: {
+        break :blk std.mem.bytesAsSlice(ObjectBrace, @as([]align(@alignOf(ObjectBrace)) const u8, @alignCast(self.data[start..end])));
 
 });
 }
@@ -883,7 +922,7 @@ pub fn appendVLQTo(self: InternalSourceMap, out: *MutableString) void {
 pub fn emitVLQ(state: *State, prev: *SourceMapState, generated_line: *i32, out: *MutableString) void {
         {
             while ((generated_line.* < state.generated_line)) : (generated_line.* = (generated_line.* + 1)) {
-                _ = (blk_catch_3: { break :blk_catch_3 ((out.appendChar(59)) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+                _ = (blk_catch_4: { break :blk_catch_4 ((out.appendChar(59)) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
                 prev.generated_column = 0;
             }
         }
@@ -899,7 +938,7 @@ pub fn emitVLQ(state: *State, prev: *SourceMapState, generated_line: *i32, out: 
 }
 
 pub fn accumulateVLQ(absolute: i32, delta: i32) InvalidSourceMapError!i32 {
-        const next = (blk_catch_4: { break :blk_catch_4 ((std.math.add(i32, absolute, delta)) catch |__ce_4| { _ = &__ce_4; return error.InvalidSourceMap; }); });
+        const next = (blk_catch_5: { break :blk_catch_5 ((std.math.add(i32, absolute, delta)) catch |__ce_5| { _ = &__ce_5; return error.InvalidSourceMap; }); });
         if ((next < 0)) {
             return error.InvalidSourceMap;
         }
@@ -987,13 +1026,14 @@ pub fn fromVLQ(allocator: std.mem.Allocator, vlq: []const u8, input_line_count_h
         _ = &blob;
         const total_len = (if (comptime @typeInfo(@TypeOf(blob.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(blob.len)) else cp_cast_int(u64, blob.len));
         const mapping_count: u64 = builder.count;
-        const input_lines: u64 = @max((if (comptime @typeInfo(@TypeOf(input_line_count_hint)) == .@"enum") cp_cast_int(u64, @intFromEnum(input_line_count_hint)) else cp_cast_int(u64, input_line_count_hint)), ((if (comptime @typeInfo(@TypeOf(max_original_line)) == .@"enum") cp_cast_int(u64, @intFromEnum(max_original_line)) else cp_cast_int(u64, max_original_line)) + 1));
+        const input_lines: u32 = @truncate(@max((if (comptime @typeInfo(@TypeOf(input_line_count_hint)) == .@"enum") cp_cast_int(u64, @intFromEnum(input_line_count_hint)) else cp_cast_int(u64, input_line_count_hint)), ((if (comptime @typeInfo(@TypeOf(max_original_line)) == .@"enum") cp_cast_int(u64, @intFromEnum(max_original_line)) else cp_cast_int(u64, max_original_line)) + 1)));
         {
             (blob[0..8]).* = @bitCast(total_len);
             (blob[8..16]).* = @bitCast(mapping_count);
-            (blob[16..24]).* = @bitCast(input_lines);
+            (blob[16..20]).* = @bitCast(input_lines);
+            (blob[20..24]).* = @bitCast((if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u32, @intFromEnum(0)) else cp_cast_int(u32, 0)));
         }
-        const owned = (blk_catch_5: { break :blk_catch_5 ((out.list.toOwnedSlice(allocator)) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+        const owned = (blk_catch_6: { break :blk_catch_6 ((out.list.toOwnedSlice(allocator)) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
         builder.finalized = null;
         return owned;
 }

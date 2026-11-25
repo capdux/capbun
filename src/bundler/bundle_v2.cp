@@ -231,8 +231,8 @@ struct ReachableFileVisitor {
     scb_bitset: bun.bit_set.DynamicBitSetUnmanaged?,
     scb_list: ServerComponentBoundary.List.Slice,
 
-    /// Files which are imported by JS and inlined in CSS
-    additional_files_imported_by_js_and_inlined_in_css: *bun.bit_set.DynamicBitSetUnmanaged,
+    /// Files inlined in CSS whose output path a JS or HTML importer or their own entry point chunk prints
+    additional_files_needed_outside_css: *bun.bit_set.DynamicBitSetUnmanaged,
     /// Files which are imported by CSS and inlined in CSS
     additional_files_imported_by_css_and_inlined: *bun.bit_set.DynamicBitSetUnmanaged,
 
@@ -293,12 +293,12 @@ struct ReachableFileVisitor {
                         }
                     }
 
-                    // Mark if the file is imported by JS and its URL is inlined for CSS
+                    // Mark who imports a file whose URL is inlined for CSS
                     const is_inlined = import_record.source_index.isValid() && v.all_urls_for_css[import_record.source_index.get()].len > 0;
-                    if (is_js && is_inlined) {
-                        v.additional_files_imported_by_js_and_inlined_in_css.set(import_record.source_index.get());
-                    } else if (is_css && is_inlined) {
+                    if (is_css && is_inlined) {
                         v.additional_files_imported_by_css_and_inlined.set(import_record.source_index.get());
+                    } else if (is_inlined) {
+                        v.additional_files_needed_outside_css.set(import_record.source_index.get());
                     }
 
                     v.visit(import_record.source_index, check_dynamic_imports && import_record.kind == .dynamic, check_dynamic_imports);
@@ -589,10 +589,13 @@ pub struct BundleV2 {
             alloc: stack_alloc,
         };
 
-        let additional_files_imported_by_js_and_inlined_in_css = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(stack_alloc, _.graph.input_files.len)?;
+        let additional_files_needed_outside_css = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(stack_alloc, _.graph.input_files.len)?;
+        for (entry_point of _.graph.entry_points.items) {
+            additional_files_needed_outside_css.set(entry_point.get());
+        }
         let additional_files_imported_by_css_and_inlined = bun.bit_set.DynamicBitSetUnmanaged.initEmpty(stack_alloc, _.graph.input_files.len)?;
         const _guard_add_js = DeinitWithAllocGuard<bun.bit_set.DynamicBitSetUnmanaged>{
-            ptr: unsafe { &additional_files_imported_by_js_and_inlined_in_css },
+            ptr: unsafe { &additional_files_needed_outside_css },
             alloc: stack_alloc,
         };
         const _guard_add_css = DeinitWithAllocGuard<bun.bit_set.DynamicBitSetUnmanaged>{
@@ -618,7 +621,7 @@ pub struct BundleV2 {
                 _.graph.server_component_boundaries.slice()
             else
                 undefined, // will never be read since the above bitset is `null`
-            additional_files_imported_by_js_and_inlined_in_css: &additional_files_imported_by_js_and_inlined_in_css,
+            additional_files_needed_outside_css: &additional_files_needed_outside_css,
             additional_files_imported_by_css_and_inlined: &additional_files_imported_by_css_and_inlined,
         };
         const _guard_visited = DeinitGuard<@TypeOf(visitor.visited)>{ ptr: unsafe { &visitor.visited } };
@@ -658,8 +661,8 @@ pub struct BundleV2 {
             const url_for_css = all_urls_for_css[index];
             if (url_for_css.len > 0) {
                 // We like to inline additional files in CSS if they fit a size threshold
-                // If we do inline a file in CSS, and it is not imported by JS, then we don't need to copy the additional file into the output directory
-                if (additional_files_imported_by_css_and_inlined.isSet(@intCast(index)) && !additional_files_imported_by_js_and_inlined_in_css.isSet(@intCast(index))) {
+                // If we do inline a file in CSS, and nothing else prints its path, then we don't need to copy the additional file into the output directory
+                if (additional_files_imported_by_css_and_inlined.isSet(@intCast(index)) && !additional_files_needed_outside_css.isSet(@intCast(index))) {
                     additional_files[index].clearRetainingCapacity();
                     unique_keys[index] = "";
                     content_hashes[index] = 0;
@@ -2170,6 +2173,12 @@ pub struct BundleV2 {
                 // If it's a file namespace, we should run it through the parser like normal.
                 // The file could be on disk.
                 if (source.path.isFile()) {
+                    // The enqueue site left the asset bookkeeping to the plugin's answer.
+                    const idx = load.source_index.get();
+                    if (bundle.graph.input_files.items(.loader)[idx].shouldCopyForBundling()) {
+                        bundle.graph.input_files.items(.side_effects)[idx] = .no_side_effects__pure_data;
+                        bundle.graph.estimated_file_loader_count += 1;
+                    }
                     bundle.graph.pool.schedule(load.parse_task);
                     return;
                 }
@@ -2806,6 +2815,9 @@ pub struct BundleV2 {
                             if (loaders[record.source_index.get()] != .css) continue;
                             if (asts.items(.parts)[record.source_index.get()].len == 0) {
                                 record.source_index = Index.invalid;
+                                // The importer isn't bundled again when the stylesheet is fixed, so its
+                                // output must treat this import the same as a stylesheet that didn't fail.
+                                record.path.is_disabled = true;
                                 continue;
                             }
 

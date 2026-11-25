@@ -368,6 +368,7 @@ pub struct TopLevelLowerUsingDeclarationsContext<P> {
             finally: {
                 loc: loc,
                 stmts: finally_stmts,
+                body_loc: loc,
             },
         }, loc));
 
@@ -1021,7 +1022,7 @@ pub fn NewParser_(
                 p.log.addRangeDebug(p.source, r, "This \"import\" expression cannot be bundled because the argument is not a string literal") catch unreachable;
             }
 
-            bun.handleOom(p.checkDynamicSpecifier(arg, state.loc, "import()"));
+            bun.handleOom(p.checkDynamicSpecifier(arg, arg.loc, "import()"));
 
             return p.newExpr(E.Import{
                 expr: arg,
@@ -1033,7 +1034,7 @@ pub fn NewParser_(
         static fn transposeRequireResolve(p: *P, arg: Expr, require_resolve_ref: Expr): Expr {
             // The argument must be a string
             if (arg.data == .e_string) {
-                return p.transposeRequireResolveKnownString(arg);
+                return p.transposeRequireResolveKnownString(arg, require_resolve_ref.loc);
             }
 
             if (p.options.warn_about_unbundled_modules) {
@@ -1053,7 +1054,7 @@ pub fn NewParser_(
             }, arg.loc);
         }
 
-        static inline fn transposeRequireResolveKnownString(p: *P, arg: Expr): Expr {
+        static inline fn transposeRequireResolveKnownString(p: *P, arg: Expr, loc: logger.Loc): Expr {
             bun.assert(arg.data == .e_string);
 
             // Ignore calls to import() if the control flow is provably dead here.
@@ -1072,7 +1073,7 @@ pub fn NewParser_(
                     import_record_index: import_record_index,
                     // .leading_interior_comments = arg.getString().
                 },
-                arg.loc,
+                loc,
             );
         }
 
@@ -1144,7 +1145,7 @@ pub fn NewParser_(
                                 import_record_index: import_record_index,
                                 unwrapped_id: @as(u32, i32(p.imports_to_convert_from_require.items.len - 1)),
                             },
-                            arg.loc,
+                            state.loc,
                         );
                     }
 
@@ -1152,7 +1153,7 @@ pub fn NewParser_(
                     p.import_records.items[import_record_index].flags.handles_import_errors = handles_import_errors;
                     p.import_records_for_current_part.append(p.allocator, import_record_index) catch unreachable;
 
-                    return p.newExpr(E.RequireString{ import_record_index: import_record_index }, arg.loc);
+                    return p.newExpr(E.RequireString{ import_record_index: import_record_index }, state.loc);
                 },
                 else => {
                     bun.handleOom(p.checkDynamicSpecifier(arg, arg.loc, "require()"));

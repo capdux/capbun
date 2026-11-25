@@ -1222,7 +1222,7 @@ fn VisitExprVisitors(
 
                     import_options: e_.options,
 
-                    loc: e_.expr.loc,
+                    loc: expr.loc,
                     import_loader: e_.importRecordLoader(),
                 };
 
@@ -1378,6 +1378,7 @@ fn VisitExprVisitors(
                     const state = TransposeState{
                         is_require_immediately_assigned_to_decl: expr_in.is_immediately_assigned_to_decl &&
                             first.data == .e_string,
+                        loc: expr.loc,
                     };
                     switch (first.data) {
                         .e_string => {
@@ -1428,7 +1429,7 @@ fn VisitExprVisitors(
                         .e_string => {
                             // require.resolve(FOO) => require.resolve(FOO)
                             // (this will register dependencies)
-                            return p.transposeRequireResolveKnownString(first);
+                            return p.transposeRequireResolveKnownString(first, expr.loc);
                         },
                         .e_if => {
                             // require.resolve(FOO  ? '123' : '456')

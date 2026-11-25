@@ -499,8 +499,9 @@ pub struct FreeSliceGuard<T> {
                         p.recordExport(alias.loc, alias.original_name, st.namespace_ref)?;
                         let record = &p.import_records.items[st.import_record_index];
                         record.flags.contains_import_star = true;
-                    } else {
+                    } else if (!hot_module_reloading_transformations) {
                         // "export * from 'path'"
+                        // (HMR lowering may merge the statement: `convert_stmt` lists the record it keeps)
                         p.export_star_import_records.append(allocator, st.import_record_index)?;
                     }
                 },

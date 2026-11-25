@@ -1007,6 +1007,12 @@ pub struct Stringifier {
 
 type SeenObjectPtr = *!;
 
+struct PendingProperty {
+    mapping: JSValue,
+    key: JSValue,
+    value: JSValue,
+}
+
 struct ParserCtx {
     seen_objects: std.AutoHashMap(SeenObjectPtr, JSValue),
     stack_check: bun.StackCheck,
@@ -1015,13 +1021,14 @@ struct ParserCtx {
     root: Expr,
 
     result: JSValue,
+    pending: std.ArrayListUnmanaged(PendingProperty) = .{},
 
     static fn deinit(ctx: *ParserCtx) {
         ctx.seen_objects.deinit();
     }
 
     @callconv("c") static fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) {
-        ctx.result = ctx.toJS(args, ctx.root) catch e => {
+        const parsed = ctx.toJS(args, ctx.root) catch e => {
             if (e == error.OutOfMemory) {
                 ctx.result = ctx.global.throwOutOfMemoryValue();
                 return;
@@ -1036,6 +1043,20 @@ struct ParserCtx {
             }
             unreachable;
         };
+        for (p of ctx.pending.items) {
+            let key_str = p.key.toBunString(ctx.global) catch |e| {
+                * = e;
+                ctx.result = .zero;
+                return;
+            };
+            let _key_str_guard = DerefGuard<String>{ ptr: unsafe { &key_str } };
+            p.mapping.putMayBeIndex(ctx.global, &key_str, p.value) catch |e| {
+                * = e;
+                ctx.result = .zero;
+                return;
+            };
+        }
+        ctx.result = parsed;
     }
 
     const ToJSError = error{ JSError, OutOfMemory, JSTerminated, StackOverflow };
@@ -1087,12 +1108,25 @@ struct ParserCtx {
                 args.append(obj);
                 ctx.seen_objects.put(expr.data.e_object, obj)?;
 
+                let is_pending = false;
                 for (prop of expr.data.e_object.properties.slice()) {
                     const key_expr = prop.key.?;
                     const value_expr = prop.value.?;
 
                     const key = ctx.toJS(args, key_expr)?;
                     const value = ctx.toJS(args, value_expr)?;
+
+                    is_pending = is_pending || key.isObject();
+                    if (is_pending) {
+                        args.append(key);
+                        args.append(value);
+                        ctx.pending.append(ctx.seen_objects.allocator, PendingProperty{
+                            mapping: obj,
+                            key: key,
+                            value: value,
+                        })?;
+                        continue;
+                    }
 
                     let key_str = key.toBunString(ctx.global)?;
                     let _key_str_guard = DerefGuard<String>{ ptr: unsafe { &key_str } };

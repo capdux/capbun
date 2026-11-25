@@ -393,6 +393,7 @@ pub const Options = struct {
     minify_identifiers: bool = false,
     minify_syntax: bool = false,
     print_dce_annotations: bool = true,
+    code_coverage: bool = false,
     transform_only: bool = false,
     inline_require_and_import_errors: bool = true,
     has_run_symbol_renamer: bool = false,
@@ -1654,6 +1655,16 @@ pub fn addSourceMapping(printer: *Printer, location: logger.Loc) void {
             _ = printer.source_map_builder.addSourceMapping(location, printer.writer.slice());
     }
 
+pub inline fn markObjectBrace(self: *@This()) void {
+            if (comptime (!generate_source_map)) {
+                return;
+            }
+            if ((!self.options.code_coverage)) {
+                return;
+            }
+            _ = self.source_map_builder.markObjectBrace();
+    }
+
 pub fn addSourceMappingForName(printer: *Printer, location: logger.Loc, name_unused: []const u8, ref_unused: Ref) void {
             _ = &name_unused;
             _ = &ref_unused;
@@ -2632,6 +2643,7 @@ _ = p.printSpaceBeforeIdentifier();
 },
 .e_require_string => |e| {
 if ((!rewrite_esm_to_cjs)) {
+                _ = p.addSourceMapping(expr.loc);
                 _ = p.printRequireOrImportExpr(e.import_record_index, (e.unwrapped_id != std.math.maxInt(u32)), (&empty_comments), Expr.empty, level, flags);
             }
 },
@@ -2641,6 +2653,7 @@ const wrap = (level.gte(.@"new") or flags.contains(.forbid_call));
                 _ = p.print("(");
             }
             _ = p.printSpaceBeforeIdentifier();
+            _ = p.addSourceMapping(expr.loc);
             if (p.options.require_ref) |require_ref| {
                 _ = &require_ref;
                 _ = p.printSymbol(require_ref);
@@ -2684,6 +2697,7 @@ if (e.isImportRecordNull()) {
                     _ = p.print(")");
                 }
             } else {
+                _ = p.addSourceMapping(expr.loc);
                 _ = p.printRequireOrImportExpr(e.import_record_index, false, &.{}, e.options, level, flags);
             }
 },
@@ -2931,6 +2945,7 @@ const n = p.writer.written;
                 _ = p.print("(");
             }
             _ = p.addSourceMapping(expr.loc);
+            _ = p.markObjectBrace();
             _ = p.print("{");
             const props = expr.data.e_object.properties.slice();
             if ((props.len > 0)) {
@@ -2967,6 +2982,7 @@ const n = p.writer.written;
             }
             if ((e.close_brace_loc.start > expr.loc.start)) {
                 _ = p.addSourceMapping(e.close_brace_loc);
+                _ = p.markObjectBrace();
             }
             _ = p.print("}");
             if (wrap) {
@@ -3420,6 +3436,15 @@ const c = cursor.c;
             p.prev_reg_exp_end = p.writer.written;
     }
 
+pub fn propertyKeyMustBeComputed(p: *Printer, key: Expr) bool {
+            return (switch (key.data) {
+.e_number => |e| (((std.math.isNan((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)) or std.math.isInf((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value))) or ((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value) < 0.0)) or std.math.signbit((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value))),
+.e_boolean, .e_branch_boolean => p.options.minify_syntax,
+.e_array, .e_object => true,
+else => false,
+});
+    }
+
 pub fn printProperty(p: *Printer, item_in: G.Property) void {
             var item = item_in;
             _ = &item;
@@ -3513,6 +3538,11 @@ else => {
                 }
             }
             const _key = item.key.?;
+            if (comptime (!is_json)) {
+                if (((!item.flags.contains(.is_computed)) and p.propertyKeyMustBeComputed(_key))) {
+                    _ = item.flags.insert(.is_computed);
+                }
+            }
             if (((!is_json) and item.flags.contains(.is_computed))) {
                 _ = p.print("[");
                 _ = p.printExpr(_key, .comma, ExprFlag.Set.initEmpty());
@@ -3549,10 +3579,10 @@ if (comptime is_json) {
             _ = p.printSymbol(priv_id.ref);
 },
 .e_string => |key| {
-_ = p.addSourceMapping(_key.loc);
-            if (key.isUTF8()) {
+if (key.isUTF8()) {
                 _ = key.resolveRopeIfNeeded(p.options.allocator);
                 _ = p.printSpaceBeforeIdentifier();
+                _ = p.addSourceMapping(_key.loc);
                 var allow_shorthand: bool = true;
                 _ = &allow_shorthand;
                 if (((!is_json) and js_lexer.isIdentifier(key.data))) {
@@ -3603,6 +3633,7 @@ else => {
             } else {
                 if (((!is_json) and p.canPrintIdentifierUTF16(key.slice16()))) {
                     _ = p.printSpaceBeforeIdentifier();
+                    _ = p.addSourceMapping(_key.loc);
                     _ = ((p.printIdentifierUTF16(key.slice16())) catch unreachable);
                     if ((if (@typeInfo(@TypeOf(item)) == .@"enum") @intFromEnum(item) else item.value)) |val| {
                         _ = &val;
@@ -3635,6 +3666,7 @@ else => {
 }
                     }
                 } else {
+                    _ = p.addSourceMapping(_key.loc);
                     const c = bestQuoteCharForString(u16, key.slice16(), false);
                     _ = p.print(c);
                     _ = p.printStringCharactersUTF16(key.slice16(), c);
@@ -3913,7 +3945,6 @@ _ = p.printIndent();
 .s_function => |s| {
 _ = p.printIndent();
             _ = p.printSpaceBeforeIdentifier();
-            _ = p.addSourceMapping(stmt.loc);
             const name = (((if (@typeInfo(@TypeOf(s.func)) == .@"enum" or @typeInfo(@TypeOf(s.func)) == .@"union") @tagName(s.func) else s.func.name)) orelse (Output.panic("Internal error: expected func to have a name ref", .{})));
             const nameRef = ((name.ref) orelse (Output.panic("Internal error: expected func to have a name", .{})));
             if (s.func.flags.contains(.is_export)) {
@@ -3921,6 +3952,7 @@ _ = p.printIndent();
                     _ = p.print("export ");
                 }
             }
+            _ = p.addSourceMapping(stmt.loc);
             if (s.func.flags.contains(.is_async)) {
                 _ = p.print("async ");
             }
@@ -3960,13 +3992,13 @@ if ((prev_stmt_tag != .s_empty)) {
             }
             _ = p.printIndent();
             _ = p.printSpaceBeforeIdentifier();
-            _ = p.addSourceMapping(stmt.loc);
             const nameRef = s.class.class_name.?.ref.?;
             if (s.is_export) {
                 if ((!rewrite_esm_to_cjs)) {
                     _ = p.print("export ");
                 }
             }
+            _ = p.addSourceMapping(stmt.loc);
             _ = p.print("class ");
             _ = p.addSourceMapping(s.class.class_name.?.loc);
             const nameStr = p.renamer.nameForSymbol(nameRef);
@@ -4009,7 +4041,9 @@ if (((p.prev_stmt_tag == .s_empty) and (p.options.indent.count == 0))) {
 .s_export_default => |s| {
 _ = p.printIndent();
             _ = p.printSpaceBeforeIdentifier();
-            _ = p.addSourceMapping(stmt.loc);
+            if (((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value) == .expr)) {
+                _ = p.addSourceMapping(stmt.loc);
+            }
             _ = p.print("export default ");
             switch ((if (@typeInfo(@TypeOf(s)) == .@"enum") @intFromEnum(s) else s.value)) {
 .expr => |expr| {
@@ -4026,7 +4060,8 @@ p.export_default_start = p.writer.written;
             return;
 },
 .stmt => |s2| {
-switch (s2.data) {
+_ = p.addSourceMapping(s2.loc);
+            switch (s2.data) {
 .s_function => |func| {
 _ = p.printSpaceBeforeIdentifier();
             if (func.func.flags.contains(.is_async)) {
@@ -4345,22 +4380,21 @@ _ = p.printIndent();
 .s_local => |s| {
 _ = p.printIndent();
             _ = p.printSpaceBeforeIdentifier();
-            _ = p.addSourceMapping(stmt.loc);
             switch (s.kind) {
 .k_const => {
-_ = p.printDeclStmt(s.is_export, "const", s.decls.slice(), tlmtlo);
+_ = p.printDeclStmt(stmt.loc, s.is_export, "const", s.decls.slice(), tlmtlo);
 },
 .k_let => {
-_ = p.printDeclStmt(s.is_export, "let", s.decls.slice(), tlmtlo);
+_ = p.printDeclStmt(stmt.loc, s.is_export, "let", s.decls.slice(), tlmtlo);
 },
 .k_var => {
-_ = p.printDeclStmt(s.is_export, "var", s.decls.slice(), tlmtlo);
+_ = p.printDeclStmt(stmt.loc, s.is_export, "var", s.decls.slice(), tlmtlo);
 },
 .k_using => {
-_ = p.printDeclStmt(s.is_export, "using", s.decls.slice(), tlmtlo);
+_ = p.printDeclStmt(stmt.loc, s.is_export, "using", s.decls.slice(), tlmtlo);
 },
 .k_await_using => {
-_ = p.printDeclStmt(s.is_export, "await using", s.decls.slice(), tlmtlo);
+_ = p.printDeclStmt(stmt.loc, s.is_export, "await using", s.decls.slice(), tlmtlo);
 },
 }
 },
@@ -4490,9 +4524,10 @@ _ = p.printIndent();
             if (s.finally) |finally| {
                 _ = &finally;
                 _ = p.printSpace();
+                _ = p.addSourceMapping(finally.loc);
                 _ = p.print("finally");
                 _ = p.printSpace();
-                _ = p.printBlock(finally.loc, finally.stmts, null, sub_var_try);
+                _ = p.printBlock(finally.body_loc, finally.stmts, null, sub_var_try);
             }
             _ = p.printNewline();
 },
@@ -4538,6 +4573,7 @@ _ = p.printIndent();
                 _ = &c;
                 _ = p.printSemicolonIfNeeded();
                 _ = p.printIndent();
+                _ = p.addSourceMapping(c.loc);
                 if ((if (@typeInfo(@TypeOf(c)) == .@"enum") @intFromEnum(c) else c.value)) |val| {
                     _ = &val;
                     _ = p.print("case");
@@ -5188,7 +5224,7 @@ if (wrapToAvoidAmbiguousElse((&s.yes.data))) {
                 _ = &no_block;
                 _ = p.printSemicolonIfNeeded();
                 _ = p.printSpaceBeforeIdentifier();
-                _ = p.addSourceMapping(no_block.loc);
+                _ = p.addSourceMapping((if ((s.else_loc.start != logger.Loc.Empty.start)) s.else_loc else no_block.loc));
                 _ = p.print("else");
                 switch (no_block.data) {
 .s_block => {
@@ -5285,10 +5321,11 @@ _ = p.printExpr(.{ .data = .{ .e_string = str }, .loc = logger.Loc.Empty }, leve
             }
     }
 
-pub fn printDeclStmt(p: *Printer, is_export: bool, comptime keyword: []const u8, decls: []G.Decl, tlmtlo: TopLevel) void {
+pub fn printDeclStmt(p: *Printer, loc: logger.Loc, is_export: bool, comptime keyword: []const u8, decls: []G.Decl, tlmtlo: TopLevel) void {
             if (((!rewrite_esm_to_cjs) and is_export)) {
                 _ = p.print("export ");
             }
+            _ = p.addSourceMapping(loc);
             const tlm: TopLevelAndIsExport = (if (may_have_module_info) TopLevelAndIsExport{ .is_export = is_export, .is_top_level = (if (comptime strings.eqlComptime(keyword, "var")) (if (tlmtlo.isTopLevel()) .declared else null) else (if ((tlmtlo.is_top_level == .yes)) .lexical else null)) } else TopLevelAndIsExportEmpty{  });
             _ = p.printDecls(keyword, decls, ExprFlag.Set.initEmpty(), tlm);
             _ = p.printSemicolonAfterStatement();

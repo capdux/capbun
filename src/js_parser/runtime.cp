@@ -291,14 +291,14 @@ pub struct Fallback {
 
     const Base64FallbackMessage = _Base64FallbackMessage;
 
-    pub inline fn errorJS(): string {
+    pub inline static fn errorJS(): string {
         return if (Environment.codegen_embed)
             @embedFile("bun-error/index.js")
         else
             bun.runtimeEmbedFile(.codegen, "bun-error/index.js");
     }
 
-    pub inline fn errorCSS(): string {
+    pub inline static fn errorCSS(): string {
         return if (Environment.codegen_embed)
             @embedFile("bun-error/bun-error.css")
         else
@@ -369,6 +369,13 @@ pub union(enum) _RuntimeReplaceableExport {
     inject: _RuntimeReplaceableExportInject,
 
     pub const Map = bun.StringArrayHashMapUnmanaged(_RuntimeReplaceableExport);
+
+    pub inline fn injectsDefault(): bool {
+        return switch (_) {
+            .inject i => strings.eqlComptime(i.name, "default"),
+            else => false,
+        };
+    }
 }
 
 struct _RuntimeFeaturesSortCtx {

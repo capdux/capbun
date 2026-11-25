@@ -108,6 +108,7 @@ pub fn toExpr(binding: *const Binding, wrapper: auto): Expr {
                 E.Object{
                     properties: G.Property.List.fromOwnedSlice(properties),
                     is_single_line: b.is_single_line,
+                    close_brace_loc: b.close_brace_loc,
                 },
                 loc,
             );

@@ -143,6 +143,7 @@ using namespace JSC;
     macro(napiDlopenHandle) \
     macro(napiWrappedContents) \
     macro(normalize) \
+    macro(onEndCallbacks) \
     macro(originalColumn) \
     macro(originalLine) \
     macro(overridableRequire) \

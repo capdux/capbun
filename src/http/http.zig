@@ -810,10 +810,6 @@ pub fn buildRequest(self: *HTTPClient, body_len: usize) picohttp.Request {
                             const connection_value = self.headerStr(header_values[@as(usize, @intCast(i))]);
                             if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
                                 self.flags.disable_keepalive = true;
-                            } else {
-                                if (std.ascii.eqlIgnoreCase(connection_value, "keep-alive")) {
-                                    self.flags.disable_keepalive = false;
-                                }
                             }
                         }
                     } else {

@@ -88,6 +88,8 @@ pub struct If {
     test_: ExprNodeIndex,
     yes: StmtNodeIndex,
     no: StmtNodeIndex?,
+    /// Where the `else` of `no` is. `logger.Loc.Empty` in an `if` that the parser did not make.
+    else_loc: logger.Loc = logger.Loc.Empty,
 }
 
 pub struct For {

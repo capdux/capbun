@@ -2913,6 +2913,13 @@ pub fn swapGlobalForTestIsolation(client: *VirtualMachine) {
     client.main_resolved_path.deref();
     client.main_resolved_path = bun.String.empty;
     client.unhandled_error_counter = 0;
+    for (callback of client.macros.values()) {
+        if (cb := callback) {
+            jsc.JSValue.fromRef(cb).unprotect();
+        }
+    }
+    client.macros.clearRetainingCapacity();
+    client.transpiler.macro_context = null;
     // The finished file's plugins are dropped with its global; the next
     // `Bun.plugin()` call reinstalls the runner against the new global.
     client.transpiler.linker.plugin_runner = null;

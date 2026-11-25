@@ -460,6 +460,7 @@ pub struct Options {
     minify_identifiers: bool = false,
     minify_syntax: bool = false,
     print_dce_annotations: bool = true,
+    code_coverage: bool = false,
 
     transform_only: bool = false,
     inline_require_and_import_errors: bool = true,
@@ -1451,6 +1452,16 @@ fn NewPrinter(
                 return;
             }
             printer.source_map_builder.addSourceMapping(location, printer.writer.slice());
+        }
+
+        inline fn markObjectBrace(*_) {
+            if (comptime !generate_source_map) {
+                return;
+            }
+            if (!_.options.code_coverage) {
+                return;
+            }
+            _.source_map_builder.markObjectBrace();
         }
 
         static fn addSourceMappingForName(printer: *Printer, location: logger.Loc, name_unused: string, ref_unused: Ref) {
@@ -2502,6 +2513,7 @@ fn NewPrinter(
                 },
                 .e_require_string e => {
                     if (!rewrite_esm_to_cjs) {
+                        p.addSourceMapping(expr.loc);
                         p.printRequireOrImportExpr(
                             e.import_record_index,
                             e.unwrapped_id != std.math.maxInt(u32),
@@ -2519,6 +2531,7 @@ fn NewPrinter(
                     }
 
                     p.printSpaceBeforeIdentifier();
+                    p.addSourceMapping(expr.loc);
 
                     if (require_ref := p.options.require_ref) {
                         p.printSymbol(require_ref);
@@ -2581,6 +2594,7 @@ fn NewPrinter(
                             p.print(")");
                         }
                     } else {
+                        p.addSourceMapping(expr.loc);
                         p.printRequireOrImportExpr(
                             e.import_record_index,
                             false,
@@ -2861,6 +2875,7 @@ fn NewPrinter(
                         p.print("(");
                     }
                     p.addSourceMapping(expr.loc);
+                    p.markObjectBrace();
                     p.print("{");
                     const props = expr.data.e_object.properties.slice();
                     if (props.len > 0) {
@@ -2900,6 +2915,7 @@ fn NewPrinter(
                     }
                     if (e.close_brace_loc.start > expr.loc.start) {
                         p.addSourceMapping(e.close_brace_loc);
+                        p.markObjectBrace();
                     }
                     p.print("}");
                     if (wrap) {
@@ -3458,6 +3474,15 @@ fn NewPrinter(
             p.prev_reg_exp_end = p.writer.written;
         }
 
+        static fn propertyKeyMustBeComputed(p: *Printer, key: Expr): bool {
+            return switch (key.data) {
+                .e_number e => std.math.isNan(e.value) || std.math.isInf(e.value) || e.value < 0.0 || std.math.signbit(e.value),
+                .e_boolean, .e_branch_boolean => p.options.minify_syntax,
+                .e_array, .e_object => true,
+                else => false,
+            };
+        }
+
         static fn printProperty(p: *Printer, item_in: G.Property) {
             let item = item_in;
             if (comptime !is_json) {
@@ -3557,6 +3582,12 @@ fn NewPrinter(
 
             const _key = item.key.?;
 
+            if (comptime !is_json) {
+                if (!item.flags.contains(.is_computed) && p.propertyKeyMustBeComputed(_key)) {
+                    item.flags.insert(.is_computed);
+                }
+            }
+
             if (!is_json && item.flags.contains(.is_computed)) {
                 p.print("[");
                 p.printExpr(_key, .comma, ExprFlag.Set.initEmpty());
@@ -3594,10 +3625,10 @@ fn NewPrinter(
                     p.printSymbol(priv_id.ref);
                 },
                 .e_string key => {
-                    p.addSourceMapping(_key.loc);
                     if (key.isUTF8()) {
                         key.resolveRopeIfNeeded(p.options.allocator);
                         p.printSpaceBeforeIdentifier();
+                        p.addSourceMapping(_key.loc);
                         let allow_shorthand: bool = true;
                         // In react/cjs/react.development.js, there's part of a function like this:
                         // var escaperLookup = {
@@ -3650,6 +3681,7 @@ fn NewPrinter(
                         }
                     } else if (!is_json && p.canPrintIdentifierUTF16(key.slice16())) {
                         p.printSpaceBeforeIdentifier();
+                        p.addSourceMapping(_key.loc);
                         p.printIdentifierUTF16(key.slice16()) catch unreachable;
 
                         // Use a shorthand property if the names are the same
@@ -3689,6 +3721,7 @@ fn NewPrinter(
                             }
                         }
                     } else {
+                        p.addSourceMapping(_key.loc);
                         const c = bestQuoteCharForString(u16, key.slice16(), false);
                         p.print(c);
                         p.printStringCharactersUTF16(key.slice16(), c);
@@ -3961,7 +3994,6 @@ fn NewPrinter(
                 .s_function s => {
                     p.printIndent();
                     p.printSpaceBeforeIdentifier();
-                    p.addSourceMapping(stmt.loc);
                     const name = s.func.name ?? Output.panic("Internal error: expected func to have a name ref", {});
                     const nameRef = name.ref ?? Output.panic("Internal error: expected func to have a name", {});
 
@@ -3970,6 +4002,7 @@ fn NewPrinter(
                             p.print("export ");
                         }
                     }
+                    p.addSourceMapping(stmt.loc);
                     if (s.func.flags.contains(.is_async)) {
                         p.print("async ");
                     }
@@ -4012,7 +4045,6 @@ fn NewPrinter(
 
                     p.printIndent();
                     p.printSpaceBeforeIdentifier();
-                    p.addSourceMapping(stmt.loc);
                     const nameRef = s.class.class_name.?.ref.?;
                     if (s.is_export) {
                         if (!rewrite_esm_to_cjs) {
@@ -4020,6 +4052,7 @@ fn NewPrinter(
                         }
                     }
 
+                    p.addSourceMapping(stmt.loc);
                     p.print("class ");
                     p.addSourceMapping(s.class.class_name.?.loc);
                     const nameStr = p.renamer.nameForSymbol(nameRef);
@@ -4061,7 +4094,9 @@ fn NewPrinter(
                 .s_export_default s => {
                     p.printIndent();
                     p.printSpaceBeforeIdentifier();
-                    p.addSourceMapping(stmt.loc);
+                    if (s.value == .expr) {
+                        p.addSourceMapping(stmt.loc);
+                    }
                     p.print("export default ");
 
                     switch (s.value) {
@@ -4082,6 +4117,7 @@ fn NewPrinter(
                         },
 
                         .stmt s2 => {
+                            p.addSourceMapping(s2.loc);
                             switch (s2.data) {
                                 .s_function func => {
                                     p.printSpaceBeforeIdentifier();
@@ -4418,22 +4454,21 @@ fn NewPrinter(
                 .s_local s => {
                     p.printIndent();
                     p.printSpaceBeforeIdentifier();
-                    p.addSourceMapping(stmt.loc);
                     switch (s.kind) {
                         .k_const => {
-                            p.printDeclStmt(s.is_export, "const", s.decls.slice(), tlmtlo);
+                            p.printDeclStmt(stmt.loc, s.is_export, "const", s.decls.slice(), tlmtlo);
                         },
                         .k_let => {
-                            p.printDeclStmt(s.is_export, "let", s.decls.slice(), tlmtlo);
+                            p.printDeclStmt(stmt.loc, s.is_export, "let", s.decls.slice(), tlmtlo);
                         },
                         .k_var => {
-                            p.printDeclStmt(s.is_export, "var", s.decls.slice(), tlmtlo);
+                            p.printDeclStmt(stmt.loc, s.is_export, "var", s.decls.slice(), tlmtlo);
                         },
                         .k_using => {
-                            p.printDeclStmt(s.is_export, "using", s.decls.slice(), tlmtlo);
+                            p.printDeclStmt(stmt.loc, s.is_export, "using", s.decls.slice(), tlmtlo);
                         },
                         .k_await_using => {
-                            p.printDeclStmt(s.is_export, "await using", s.decls.slice(), tlmtlo);
+                            p.printDeclStmt(stmt.loc, s.is_export, "await using", s.decls.slice(), tlmtlo);
                         },
                     }
                 },
@@ -4563,9 +4598,10 @@ fn NewPrinter(
 
                     if (finally := s.finally) {
                         p.printSpace();
+                        p.addSourceMapping(finally.loc);
                         p.print("finally");
                         p.printSpace();
-                        p.printBlock(finally.loc, finally.stmts, null, sub_var_try);
+                        p.printBlock(finally.body_loc, finally.stmts, null, sub_var_try);
                     }
 
                     p.printNewline();
@@ -4617,6 +4653,7 @@ fn NewPrinter(
                     for (c of s.cases) {
                         p.printSemicolonIfNeeded();
                         p.printIndent();
+                        p.addSourceMapping(c.loc);
 
                         if (val := c.value) {
                             p.print("case");
@@ -5255,7 +5292,7 @@ fn NewPrinter(
             if (no_block := s.no) {
                 p.printSemicolonIfNeeded();
                 p.printSpaceBeforeIdentifier();
-                p.addSourceMapping(no_block.loc);
+                p.addSourceMapping(if (s.else_loc.start != logger.Loc.Empty.start) s.else_loc else no_block.loc);
                 p.print("else");
 
                 switch (no_block.data) {
@@ -5354,10 +5391,11 @@ fn NewPrinter(
             }
         }
 
-        static fn printDeclStmt(p: *Printer, is_export: bool, comptime keyword: string, decls: []G.Decl, tlmtlo: TopLevel) {
+        static fn printDeclStmt(p: *Printer, loc: logger.Loc, is_export: bool, comptime keyword: string, decls: []G.Decl, tlmtlo: TopLevel) {
             if (!rewrite_esm_to_cjs && is_export) {
                 p.print("export ");
             }
+            p.addSourceMapping(loc);
             const tlm: TopLevelAndIsExport = if (may_have_module_info) TopLevelAndIsExport{
                 is_export: is_export,
                 is_top_level: if (comptime strings.eqlComptime(keyword, "var"))

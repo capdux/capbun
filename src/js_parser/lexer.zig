@@ -265,6 +265,27 @@ pub fn ensureUnusedCapacity(self: *FakeArrayList16, int: anytype) !void {
     }
 };
 
+pub const RadixInteger = struct {
+    leading: u64 = 0,
+    dropped_bits: u32 = 0,
+    is_inexact: bool = false,
+
+pub inline fn pushDigit(self: *RadixInteger, bits_per_digit: u6, digit: u32) void {
+            if ((cp_shr(self.leading, @as(u6, @intCast(((if (comptime @typeInfo(@TypeOf(64)) == .@"enum") cp_cast_int(u7, @intFromEnum(64)) else cp_cast_int(u7, 64)) - (if (comptime @typeInfo(@TypeOf(bits_per_digit)) == .@"enum") cp_cast_int(u7, @intFromEnum(bits_per_digit)) else cp_cast_int(u7, bits_per_digit)))))) == 0)) {
+                self.leading = (cp_shl(self.leading, bits_per_digit) | (if (comptime @typeInfo(@TypeOf(digit)) == .@"enum") cp_cast_int(u64, @intFromEnum(digit)) else cp_cast_int(u64, digit)));
+            } else {
+                self.dropped_bits = (self.dropped_bits +| (if (comptime @typeInfo(@TypeOf(bits_per_digit)) == .@"enum") cp_cast_int(u32, @intFromEnum(bits_per_digit)) else cp_cast_int(u32, bits_per_digit)));
+                self.is_inexact = (self.is_inexact or (digit != 0));
+            }
+    }
+
+pub fn toF64(self: RadixInteger) f64 {
+            const exp: i32 = (if ((self.dropped_bits <= std.math.maxInt(i32))) @as(i32, @intCast(self.dropped_bits)) else std.math.maxInt(i32));
+            const scale = std.math.pow(f64, 2.0, @as(f64, @floatFromInt(exp)));
+            return (@as(f64, @floatFromInt((self.leading | @intFromBool(self.is_inexact)))) * scale);
+    }
+};
+
 pub const InvalidEscapeSequenceFormatter = struct {
     code_point: i32,
 
@@ -2577,23 +2598,29 @@ pub fn parseNumericLiteralOrDot(lexer: *LexerType) !void {
             _ = &lastUnderscoreEnd;
             var hasDotOrExponent = (first == 46);
             _ = &hasDotOrExponent;
-            var base: f32 = 0.0;
+            var base: u8 = 0;
             _ = &base;
+            var bits_per_digit: u6 = 0;
+            _ = &bits_per_digit;
             lexer.is_legacy_octal_literal = false;
             lexer.token = T.t_numeric_literal;
             if ((first == 48)) {
                 switch (lexer.code_point) {
 'b', 'B' => {
 base = 2;
+                bits_per_digit = 1;
 },
 'o', 'O' => {
 base = 8;
+                bits_per_digit = 3;
 },
 'x', 'X' => {
 base = 16;
+                bits_per_digit = 4;
 },
 48...55, '_' => {
 base = 8;
+                bits_per_digit = 3;
                 lexer.is_legacy_octal_literal = true;
 },
 else => {
@@ -2606,7 +2633,8 @@ else => {
                 _ = &isFirst;
                 var isInvalidLegacyOctalLiteral = false;
                 _ = &isInvalidLegacyOctalLiteral;
-                lexer.number = 0;
+                var integer = RadixInteger{  };
+                _ = &integer;
                 if ((!lexer.is_legacy_octal_literal)) {
                     _ = lexer.step();
                 }
@@ -2623,13 +2651,13 @@ if (((lastUnderscoreEnd > 0) and (lexer.end == (lastUnderscoreEnd + 1)))) {
                     underscoreCount = (underscoreCount + 1);
 },
 '0', '1' => {
-lexer.number = ((lexer.number * base) + float64((lexer.code_point - 48)));
+_ = integer.pushDigit(bits_per_digit, (if (comptime @typeInfo(@TypeOf((lexer.code_point - 48))) == .@"enum") cp_cast_int(u32, @intFromEnum((lexer.code_point - 48))) else cp_cast_int(u32, (lexer.code_point - 48))));
 },
 '2', '3', '4', '5', '6', '7' => {
 if ((base == 2)) {
                         _ = try lexer.syntaxError();
                     }
-                    lexer.number = ((lexer.number * base) + float64((lexer.code_point - 48)));
+                    _ = integer.pushDigit(bits_per_digit, (if (comptime @typeInfo(@TypeOf((lexer.code_point - 48))) == .@"enum") cp_cast_int(u32, @intFromEnum((lexer.code_point - 48))) else cp_cast_int(u32, (lexer.code_point - 48))));
 },
 '8', '9' => {
 if (lexer.is_legacy_octal_literal) {
@@ -2639,19 +2667,19 @@ if (lexer.is_legacy_octal_literal) {
                             _ = try lexer.syntaxError();
                         }
                     }
-                    lexer.number = ((lexer.number * base) + float64((lexer.code_point - 48)));
+                    _ = integer.pushDigit(bits_per_digit, (if (comptime @typeInfo(@TypeOf((lexer.code_point - 48))) == .@"enum") cp_cast_int(u32, @intFromEnum((lexer.code_point - 48))) else cp_cast_int(u32, (lexer.code_point - 48))));
 },
 'A', 'B', 'C', 'D', 'E', 'F' => {
 if ((base != 16)) {
                         _ = try lexer.syntaxError();
                     }
-                    lexer.number = ((lexer.number * base) + float64(((lexer.code_point + 10) - 65)));
+                    _ = integer.pushDigit(bits_per_digit, (if (comptime @typeInfo(@TypeOf(((lexer.code_point + 10) - 65))) == .@"enum") cp_cast_int(u32, @intFromEnum(((lexer.code_point + 10) - 65))) else cp_cast_int(u32, ((lexer.code_point + 10) - 65))));
 },
 'a', 'b', 'c', 'd', 'e', 'f' => {
 if ((base != 16)) {
                         _ = try lexer.syntaxError();
                     }
-                    lexer.number = ((lexer.number * base) + float64(((lexer.code_point + 10) - 97)));
+                    _ = integer.pushDigit(bits_per_digit, (if (comptime @typeInfo(@TypeOf(((lexer.code_point + 10) - 97))) == .@"enum") cp_cast_int(u32, @intFromEnum(((lexer.code_point + 10) - 97))) else cp_cast_int(u32, ((lexer.code_point + 10) - 97))));
 },
 else => {
 if (isFirst) {
@@ -2663,6 +2691,7 @@ if (isFirst) {
                     _ = lexer.step();
                     isFirst = false;
                 }
+                lexer.number = integer.toF64();
                 const isBigIntegerLiteral = ((lexer.code_point == 110) and (!hasDotOrExponent));
                 if ((isBigIntegerLiteral or isInvalidLegacyOctalLiteral)) {
                     const text = lexer.raw();
@@ -2956,10 +2985,6 @@ pub fn rangeOfIdentifier(source: *const Source, loc: logger.Loc) logger.Range {
             r.len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(cursor.i)) == .@"enum") cp_cast_int(i32, @intFromEnum(cursor.i)) else cp_cast_int(i32, cursor.i)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(cursor.i)) == .@"enum") cp_cast_int(i32, @intFromEnum(cursor.i)) else cp_cast_int(i32, cursor.i)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(cursor.i)) == .@"enum") cp_cast_int(i32, @intFromEnum(cursor.i)) else cp_cast_int(i32, cursor.i))));
         }
         return r;
-}
-
-pub inline fn float64(num: anytype) f64 {
-        return @as(f64, @floatFromInt(num));
 }
 
 pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer) bool {

@@ -85,14 +85,19 @@ pub struct Pattern {
         const has_leading_or_middle_slash = slashes_res[0];
         const has_trailing_slash = slashes_res[1];
         const add_negate = slashes_res[2];
+        const escape_open_paren = add_negate && remain[0] == '(';
 
-        const length = remain.len + @intFromBool(add_negate);
+        const length = remain.len + @intFromBool(add_negate) + @intFromBool(escape_open_paren);
         let buf = allocator.alloc(u8, length)?;
-        const start_index = @intFromBool(add_negate);
+        const start_index = @intFromBool(add_negate) + @intFromBool(escape_open_paren);
         const end = start_index + remain.len;
         @memcpy(buf[start_index..end], remain);
         if (add_negate) {
             buf[0] = '!';
+            if (escape_open_paren) {
+                // In npm and git this `!` negates and the `(` is a plain character. Side by side they would start a group.
+                buf[1] = '\\';
+            }
         }
 
         return Pattern{

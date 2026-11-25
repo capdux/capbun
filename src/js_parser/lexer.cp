@@ -2762,7 +2762,8 @@ fn NewLexer_(
             let underscoreCount: usize = 0;
             let lastUnderscoreEnd: usize = 0;
             let hasDotOrExponent = first == '.';
-            let base: f32 = 0.0;
+            let base: u8 = 0;
+            let bits_per_digit: u6 = 0;
             lexer.is_legacy_octal_literal = false;
 
             // Assume this is a number, but potentially change to a bigint later;
@@ -2773,18 +2774,22 @@ fn NewLexer_(
                 switch (lexer.code_point) {
                     'b', 'B' => {
                         base = 2;
+                        bits_per_digit = 1;
                     },
 
                     'o', 'O' => {
                         base = 8;
+                        bits_per_digit = 3;
                     },
 
                     'x', 'X' => {
                         base = 16;
+                        bits_per_digit = 4;
                     },
 
                     '0'..='7', '_' => {
                         base = 8;
+                        bits_per_digit = 3;
                         lexer.is_legacy_octal_literal = true;
                     },
                     else => {},
@@ -2795,7 +2800,7 @@ fn NewLexer_(
                 // Integer literal;
                 let isFirst = true;
                 let isInvalidLegacyOctalLiteral = false;
-                lexer.number = 0;
+                let integer = RadixInteger{};
                 if (!lexer.is_legacy_octal_literal) {
                     lexer.step();
                 }
@@ -2818,14 +2823,14 @@ fn NewLexer_(
                         },
 
                         '0', '1' => {
-                            lexer.number = lexer.number * base + float64(lexer.code_point - '0');
+                            integer.pushDigit(bits_per_digit, u32(lexer.code_point - '0'));
                         },
 
                         '2', '3', '4', '5', '6', '7' => {
                             if (base == 2) {
                                 lexer.syntaxError()?;
                             }
-                            lexer.number = lexer.number * base + float64(lexer.code_point - '0');
+                            integer.pushDigit(bits_per_digit, u32(lexer.code_point - '0'));
                         },
                         '8', '9' => {
                             if (lexer.is_legacy_octal_literal) {
@@ -2833,20 +2838,20 @@ fn NewLexer_(
                             } else if (base < 10) {
                                 lexer.syntaxError()?;
                             }
-                            lexer.number = lexer.number * base + float64(lexer.code_point - '0');
+                            integer.pushDigit(bits_per_digit, u32(lexer.code_point - '0'));
                         },
                         'A', 'B', 'C', 'D', 'E', 'F' => {
                             if (base != 16) {
                                 lexer.syntaxError()?;
                             }
-                            lexer.number = lexer.number * base + float64(lexer.code_point + 10 - 'A');
+                            integer.pushDigit(bits_per_digit, u32(lexer.code_point + 10 - 'A'));
                         },
 
                         'a', 'b', 'c', 'd', 'e', 'f' => {
                             if (base != 16) {
                                 lexer.syntaxError()?;
                             }
-                            lexer.number = lexer.number * base + float64(lexer.code_point + 10 - 'a');
+                            integer.pushDigit(bits_per_digit, u32(lexer.code_point + 10 - 'a'));
                         },
                         else => {
                             // The first digit must exist;
@@ -2861,6 +2866,7 @@ fn NewLexer_(
                     lexer.step();
                     isFirst = false;
                 }
+                lexer.number = integer.toF64();
 
                 const isBigIntegerLiteral = lexer.code_point == 'n' && !hasDotOrExponent;
 
@@ -3215,9 +3221,28 @@ pub fn rangeOfIdentifier(source: *const Source, loc: logger.Loc): logger.Range {
     return r;
 }
 
-inline fn float64(num: auto): f64 {
-    return @as(f64, @floatFromInt(num));
-}
+/// The digits of a binary, octal or hexadecimal integer, rounded to the nearest `f64` once.
+struct RadixInteger {
+    leading: u64 = 0,
+    dropped_bits: u32 = 0,
+    is_inexact: bool = false,
+
+    /// `bits_per_digit` is 1, 3 or 4.
+    inline fn pushDigit(*_, bits_per_digit: u6, digit: u32) {
+        if (_.leading >> @as(u6, @intCast(@as(u7, 64) - @as(u7, bits_per_digit))) == 0) {
+            _.leading = (_.leading << bits_per_digit) | u64(digit);
+        } else {
+            _.dropped_bits +|= u32(bits_per_digit);
+            _.is_inexact = _.is_inexact || digit != 0;
+        }
+    }
+
+    fn toF64(): f64 {
+        const exp: i32 = if (_.dropped_bits <= std.math.maxInt(i32)) @as(i32, @intCast(_.dropped_bits)) else std.math.maxInt(i32);
+        const scale = std.math.pow(f64, 2.0, @as(f64, @floatFromInt(exp)));
+        return @as(f64, @floatFromInt(_.leading | @intFromBool(_.is_inexact))) * scale;
+    }
+};
 
 pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer): bool {
     if (name.len == 0) return false;

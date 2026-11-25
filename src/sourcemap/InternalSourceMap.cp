@@ -24,6 +24,11 @@ struct ErrDeinitPtrGuard<T> {
     }
 }
 
+pub struct ObjectBrace {
+    generated: SourceMap.LineColumnOffset,
+    original: SourceMap.LineColumnOffset,
+}
+
 pub @c struct SyncEntry {
     generated_line: i32,
     generated_column: i32,
@@ -376,6 +381,7 @@ pub struct Builder {
     state: State = {},
     count: u32 = 0,
     finalized: MutableString? = null,
+    object_braces: std.ArrayListUnmanaged(ObjectBrace) = {},
 
     pub static fn init(allocator: std.mem.Allocator): Builder {
         return Builder{ allocator: allocator };
@@ -384,7 +390,21 @@ pub struct Builder {
     pub fn deinit(*_) {
         _.sync_entries.deinit(_.allocator);
         _.win_stream.deinit(_.allocator);
+        _.object_braces.deinit(_.allocator);
         if (*m := _.finalized) m.deinit();
+    }
+
+    pub fn markObjectBrace(*_, last: SourceMapState) {
+        _.object_braces.append(_.allocator, ObjectBrace{
+            generated: {
+                lines: bun.Ordinal.fromZeroBased(_.state.generated_line),
+                columns: bun.Ordinal.fromZeroBased(last.generated_column),
+            },
+            original: {
+                lines: bun.Ordinal.fromZeroBased(last.original_line),
+                columns: bun.Ordinal.fromZeroBased(last.original_column),
+            },
+        }) catch e => bun.handleOom(e);
     }
 
     pub fn appendLineSeparator(*_) {
@@ -518,14 +538,17 @@ pub struct Builder {
 
         const sync_bytes = _.sync_entries.items.len * @sizeOf(SyncEntry);
         const stream_offset = (header_size + sync_bytes) as u32;
-        const total: usize = stream_offset + _.win_stream.items.len + stream_tail_pad;
+        const object_braces_offset: usize = stream_offset + _.win_stream.items.len;
+        const object_braces_bytes: usize = _.object_braces.items.len * @sizeOf(ObjectBrace);
+        const total: usize = object_braces_offset + object_braces_bytes + stream_tail_pad;
 
         let out = MutableString.initEmpty(_.allocator);
         out.list.resize(_.allocator, total) catch e => bun.handleOom(e);
         let blob = out.list.items;
 
-        @memset(blob[0..24], 0);
+        @memset(blob[0..20], 0);
         unsafe {
+            blob[20..24].* = @bitCast(_.object_braces.items.len as u32);
             blob[24..28].* = @bitCast(_.sync_entries.items.len as u32);
             blob[28..32].* = @bitCast(stream_offset);
         }
@@ -533,10 +556,14 @@ pub struct Builder {
             @memcpy(blob[header_size..][0..sync_bytes], std.mem.sliceAsBytes(_.sync_entries.items));
         }
         @memcpy(blob[stream_offset..][0.._.win_stream.items.len], _.win_stream.items);
+        if (object_braces_bytes > 0) {
+            @memcpy(blob[object_braces_offset..][0..object_braces_bytes], std.mem.sliceAsBytes(_.object_braces.items));
+        }
         @memset(blob[total - stream_tail_pad ..][0..stream_tail_pad], 0);
 
         _.win_stream.clearAndFree(_.allocator);
         _.sync_entries.clearAndFree(_.allocator);
+        _.object_braces.clearAndFree(_.allocator);
 
         _.finalized = out;
         return unsafe { &_.finalized.? as *MutableString! };
@@ -557,7 +584,20 @@ export @root struct InternalSourceMap {
     }
 
     @inline pub fn inputLineCount(): usize {
-        return unsafe { @as(u64, @bitCast(_.data[16..24].*)) };
+        return unsafe { @as(u32, @bitCast(_.data[16..20].*)) };
+    }
+
+    @inline pub fn objectBraceCount(): u32 {
+        return unsafe { @as(u32, @bitCast(_.data[20..24].*)) };
+    }
+
+    pub fn objectBraces(): []const ObjectBrace {
+        const count = _.objectBraceCount() as usize;
+        if (count == 0) return [];
+        const bytes = count * @sizeOf(ObjectBrace);
+        const end = _.totalLen() - stream_tail_pad;
+        const start = end - bytes;
+        return unsafe { std.mem.bytesAsSlice(ObjectBrace, @as([]align(@alignOf(ObjectBrace)) const u8, @alignCast(_.data[start..end]))) };
     }
 
     @inline pub fn syncCount(): u32 {
@@ -813,14 +853,15 @@ export @root struct InternalSourceMap {
         let blob = out.list.items;
         const total_len = blob.len as u64;
         const mapping_count: u64 = builder.count;
-        const input_lines: u64 = @max(
+        const input_lines: u32 = @truncate(@max(
             input_line_count_hint as u64,
             (max_original_line as u64) + 1,
-        );
+        ));
         unsafe {
             blob[0..8].* = @bitCast(total_len);
             blob[8..16].* = @bitCast(mapping_count);
-            blob[16..24].* = @bitCast(input_lines);
+            blob[16..20].* = @bitCast(input_lines);
+            blob[20..24].* = @bitCast(@as(u32, 0));
         }
 
         const owned = out.list.toOwnedSlice(allocator) catch e => bun.handleOom(e);

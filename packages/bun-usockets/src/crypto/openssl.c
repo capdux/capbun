@@ -491,6 +491,27 @@ static int us_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
   return 1;
 }
 
+/* A blocked public key (blocked_spkis.cpp) is reported the way X509_verify_cert reports its own errors: to the SSL's
+ * verify callback, which says whether to go on. Without one, as in quic.c and node:quic, this returns 0 as it would. */
+static int us_x509_verify_chain(X509_STORE_CTX *ctx) {
+  int ok = X509_verify_cert(ctx);
+  int error = us_x509_store_ctx_blocked_key_error(ctx);
+  if (error == X509_V_OK) return ok;
+  X509_STORE_CTX_set_error(ctx, error);
+  SSL *ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+  int (*verify_callback)(int, X509_STORE_CTX *) = ssl ? SSL_get_verify_callback(ssl) : NULL;
+  return verify_callback ? verify_callback(0, ctx) : 0;
+}
+
+static int us_x509_verify_chain_cb(X509_STORE_CTX *ctx, void *arg) {
+  (void)arg;
+  return us_x509_verify_chain(ctx);
+}
+
+void us_ssl_ctx_reject_blocked_keys(SSL_CTX *ctx) {
+  SSL_CTX_set_cert_verify_callback(ctx, us_x509_verify_chain_cb, NULL);
+}
+
 /* Drop the strdup'd passphrase. Called as soon as private-key load completes
  * (the only consumer of the passwd_cb), so the secret never outlives ctx
  * construction and SSL_CTX_free() is sufficient on every later path. Also
@@ -662,6 +683,7 @@ SSL_CTX *us_ssl_ctx_build_raw(struct us_bun_socket_context_options_t options,
 
   SSL_CTX_set_session_cache_mode(ssl_context, SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL);
   SSL_CTX_sess_set_new_cb(ssl_context, us_ssl_new_session_cb);
+  us_ssl_ctx_reject_blocked_keys(ssl_context);
 
   return ssl_context;
 }

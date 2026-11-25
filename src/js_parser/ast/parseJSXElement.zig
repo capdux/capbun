@@ -265,7 +265,7 @@ const less_than_loc = p.lexer.loc();
                 if ((p.lexer.token != .t_greater_than)) {
                     _ = try p.lexer.expected(.t_greater_than);
                 }
-                return p.newExpr(E.JSXElement{ .tag = end_tag.data.asExpr(), .children = ExprNodeList.moveFromList((&children)), .properties = properties, .key_prop_index = key_prop_i, .flags = flags, .close_tag_loc = end_tag.range.loc }, loc);
+                return p.newExpr(E.JSXElement{ .tag = tag.data.asExpr(), .children = ExprNodeList.moveFromList((&children)), .properties = properties, .key_prop_index = key_prop_i, .flags = flags, .close_tag_loc = end_tag.range.loc }, loc);
 },
 else => {
 _ = try p.lexer.unexpected();

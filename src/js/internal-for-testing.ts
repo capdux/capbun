@@ -14,6 +14,15 @@ export const escapePowershell = (code: string) => fmtBinding(code, "escape-power
 
 export const canonicalizeIP = $newCppFunction("NodeTLS.cpp", "Bun__canonicalizeIP", 1);
 
+// Process-wide additions to the public keys no certificate chain may hold (blocked_spkis.cpp). `hash` is the SHA-256 of
+// a DER SubjectPublicKeyInfo.
+export const addBlockedSPKIForTesting: (hash: ArrayBufferView) => void = $newCppFunction(
+  "NodeTLS.cpp",
+  "addBlockedSPKIForTesting",
+  1,
+);
+export const clearBlockedSPKIsForTesting: () => void = $newCppFunction("NodeTLS.cpp", "clearBlockedSPKIsForTesting", 0);
+
 export const SQL = $cpp("JSSQLStatement.cpp", "createJSSQLStatementConstructor");
 
 export const patchInternals = {

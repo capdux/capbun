@@ -161,7 +161,8 @@ pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) {
         for (k_idx of 0..prop_keys.len) {
             const sym_ref = prop_keys[k_idx];
             const properties = prop_vals[k_idx];
-            let use = part.symbol_uses.getPtr(sym_ref).?;
+            // The parser drops the entry if a replaced macro call was the last plain use.
+            let use = (part.symbol_uses.getOrPutValue(allocator, sym_ref, .{}) catch e => bun.handleOom(e)).value_ptr;
 
             // Rare path: this import is a TypeScript enum
             if (import_data := our_imports_to_bind.get(sym_ref)) {

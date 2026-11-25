@@ -573,8 +573,7 @@ var src = DeinitGuard(AbsPathOsAuto){ .val = .initTopLevelDirLongPath() };
 
 },
 .err => |err| {
-const errno_val = err.getErrno();
-                        if ((((errno_val == .XDEV) or (errno_val == .ACCES)) or (errno_val == .PERM))) {
+if (needsCopy(err)) {
                             if (comptime (!Environment.isWindows)) {
                                 switch (bun.sys.setFileOffset(folder_dir.fd, 0)) {
 .result => {
@@ -765,8 +764,7 @@ cached_package_dir.fd = (switch (bun.openDirForIteration(cache_dir, pkg_cache_di
 
 },
 .err => |err| {
-const errno_val = err.getErrno();
-                    if ((((errno_val == .XDEV) or (errno_val == .ACCES)) or (errno_val == .PERM))) {
+if (needsCopy(err)) {
                         _ = installer.supported_backend.store(.copyfile, .monotonic);
                         backend = .copyfile;
                         continue;
@@ -1966,4 +1964,9 @@ pub fn doSymlinkGlobalStore(d: [:0]const u8, t: [:0]const u8) sys.Maybe(void) {
             return sys.symlinkOrJunction(d, t, t);
         }
         return sys.symlink(t, d);
+}
+
+pub fn needsCopy(hardlink_err: bun.sys.Error) bool {
+        const errno_val = hardlink_err.getErrno();
+        return ((hardlink_err.syscall == .link) and (((errno_val == .XDEV) or (errno_val == .ACCES)) or (errno_val == .PERM)));
 }

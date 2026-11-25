@@ -37,6 +37,7 @@ const SSL_GROUP_X448: u16 = 30;
     fn SSL_get_group_name(group_id: u16): [*:0]const u8?;
     fn SSL_CTX_set_compliance_policy(ctx: *ssl.SSL_CTX, policy: c_int): c_int;
     fn Bun__X509__validationErrorCode(e: i32): [*:0]const u8?;
+    fn us_ssl_ctx_reject_blocked_keys(ctx: *ssl.SSL_CTX);
 }
 
 pub struct TlsConfig {
@@ -263,6 +264,7 @@ pub struct TlsContext {
         {
             return error.TlsContextError;
         }
+        us_ssl_ctx_reject_blocked_keys(ctx);
         if (groups := config.groups) {
             if (ssl.SSL_CTX_set1_groups_list(ctx, unsafe { groups.ptr as [*:0]const u8 }) != 1) {
                 return error.TlsContextError;

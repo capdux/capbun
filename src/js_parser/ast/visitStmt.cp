@@ -231,7 +231,25 @@ fn VisitStmtVisitors(
                     if (was_anonymous_named_expr && expr.data == .e_class && expr.data.e_class.should_lower_standard_decorators) {
                         p.decorator_class_name = js_ast.ClauseItem.default_alias;
                     }
+                    // `--minify-syntax` drops an unused name. The value would then be named after the generated binding.
+                    const expr_name: js_ast.LocRef? = if (!p.options.features.minify_identifiers)
+                        switch (expr.data) {
+                            .e_function func => func.func.name,
+                            .e_class cls => cls.class_name,
+                            else => null,
+                        }
+                    else
+                        null;
                     data.value.expr = p.visitExpr(expr);
+                    switch (data.value.expr.data) {
+                        .e_function func => {
+                            if (func.func.name == null) func.func.name = expr_name;
+                        },
+                        .e_class cls => {
+                            if (cls.class_name == null) cls.class_name = expr_name;
+                        },
+                        else => {},
+                    }
                     p.decorator_class_name = prev_decorator_class_name;
 
                     if (p.is_control_flow_dead) {
@@ -519,7 +537,7 @@ fn VisitStmtVisitors(
             // We mark it as dead, but the value may not actually be dead
             // We just want to be sure to not increment the usage counts for anything in the function
             const mark_as_dead = p.options.features.dead_code_elimination && data.func.flags.contains(.is_export) &&
-                p.options.features.replace_exports.count() > 0 && p.isExportToEliminate(data.func.name.?.ref.?);
+                p.options.features.replace_exports.count() > 0 && p.enclosing_namespace_arg_ref == null && p.isExportToEliminate(data.func.name.?.ref.?);
             const original_is_dead = p.is_control_flow_dead;
 
             if (mark_as_dead) {
@@ -607,7 +625,7 @@ fn VisitStmtVisitors(
 
         static fn s_class(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.Class)! {
             const mark_as_dead = p.options.features.dead_code_elimination && data.is_export &&
-                p.options.features.replace_exports.count() > 0 && p.isExportToEliminate(data.class.class_name.?.ref.?);
+                p.options.features.replace_exports.count() > 0 && p.enclosing_namespace_arg_ref == null && p.isExportToEliminate(data.class.class_name.?.ref.?);
             const original_is_dead = p.is_control_flow_dead;
 
             if (mark_as_dead) {
@@ -736,8 +754,20 @@ fn VisitStmtVisitors(
 
             const decls_len = if (!(data.is_export && p.options.features.replace_exports.entries.len > 0))
                 p.visitDecls(data.decls.slice(), data.kind == .k_const, false)
-            else
-                p.visitDecls(data.decls.slice(), data.kind == .k_const, true);
+            else brk: {
+                if (p.enclosing_namespace_arg_ref == null) {
+                    for (decl of data.decls.slice()) {
+                        if (decl.binding.data == .b_identifier) {
+                            if (entry := p.options.features.replace_exports.getPtr(p.loadNameFromRef(decl.binding.data.b_identifier.ref))) {
+                                if (entry.injectsDefault()) {
+                                    * = p.injectReplacementExport(stmts, Ref.None, decl.binding.loc, entry);
+                                }
+                            }
+                        }
+                    }
+                }
+                break :brk p.visitDecls(data.decls.slice(), data.kind == .k_const, true);
+            };
 
             const is_now_dead = data.decls.len > 0 && decls_len == 0;
             if (is_now_dead) {

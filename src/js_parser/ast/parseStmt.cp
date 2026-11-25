@@ -161,7 +161,7 @@ pub fn ParseStmt(
                                 is_name_optional: true,
                                 lexical_decl: .allow_all,
                             };
-                            const stmt = p.parseFnStmt(loc, &stmtOpts, async_range)?;
+                            const stmt = p.parseFnStmt(async_range.loc, &stmtOpts, async_range)?;
                             if (std.meta.activeTag(stmt.data) == .s_type_script) {
                                 // This was just a type annotation
                                 return stmt;
@@ -246,7 +246,7 @@ pub fn ParseStmt(
                             ts_decorators: opts.ts_decorators,
                             is_name_optional: true,
                         };
-                        const stmt: Stmt = p.parseClassStmt(loc, &stmtOpts)?;
+                        const stmt: Stmt = p.parseClassStmt(p.lexer.loc(), &stmtOpts)?;
 
                         // Use the statement name if present, since it's a better name
                         const default_name: js_ast.LocRef = default_name_getter: {
@@ -258,12 +258,12 @@ pub fn ParseStmt(
 
                                 .s_function => |func_container| {
                                     if (_name := func_container.func.name) {
-                                        break :default_name_getter LocRef{ loc: defaultLoc, @"ref": _name.ref };
+                                        break :default_name_getter LocRef{ loc: _name.loc, @"ref": _name.ref };
                                     }
                                 },
                                 .s_class => |cls| {
                                     if (_name := cls.@"class".class_name) {
-                                        break :default_name_getter LocRef{ loc: defaultLoc, @"ref": _name.ref };
+                                        break :default_name_getter LocRef{ loc: _name.loc, @"ref": _name.ref };
                                     }
                                 },
                                 else => {},
@@ -574,6 +574,7 @@ pub fn ParseStmt(
                     return root_if.?;
                 }
 
+                current_if.?.else_loc = p.lexer.loc();
                 p.lexer.next()?;
 
                 // Handle final else
@@ -753,10 +754,11 @@ pub fn ParseStmt(
                 const finally_loc = p.lexer.loc();
                 * = p.pushScopeForParsePass(.block, finally_loc)?;
                 p.lexer.expect(.t_finally)?;
+                const finally_body_loc = p.lexer.loc();
                 p.lexer.expect(.t_open_brace)?;
                 const stmts = p.parseStmtsUpTo(.t_close_brace, &stmt_opts)?;
                 p.lexer.next()?;
-                finally = js_ast.Finally{ loc: finally_loc, stmts: stmts };
+                finally = js_ast.Finally{ loc: finally_loc, stmts: stmts, body_loc: finally_body_loc };
                 p.popScope();
             }
 
@@ -1265,12 +1267,13 @@ pub fn ParseStmt(
                                     },
                                     .ts_stmt_abstract => {
                                         if (p.lexer.token == .t_class || opts.ts_decorators != null) {
-                                            return p.parseClassStmt(loc, opts)?;
+                                            return p.parseClassStmt(p.lexer.loc(), opts)?;
                                         }
                                     },
                                     .ts_stmt_global => {
                                         if (opts.is_namespace_scope && opts.is_typescript_declare && p.lexer.token == .t_open_brace) {
                                             p.lexer.next()?;
+                                            opts.ts_decorators = null;
                                             * = p.parseStmtsUpTo(.t_close_brace, opts)?;
                                             p.lexer.next()?;
                                             return p.s(S.TypeScript{}, loc);
@@ -1288,6 +1291,8 @@ pub fn ParseStmt(
                                             p.lexer.next()?;
                                             p.lexer.expect(.t_open_brace)?;
                                             const scope_index = p.scopes_in_order.items.len;
+                                            // The decorators belong to this statement, not to the statements in its body.
+                                            opts.ts_decorators = null;
                                             * = p.parseStmtsUpTo(.t_close_brace, opts)?;
                                             p.lexer.next()?;
                                             // The statements inside are dropped, so discard any scopes they

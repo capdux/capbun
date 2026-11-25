@@ -898,14 +898,14 @@ pub struct serialize {
                 if (sel := selector) {
                     const sel_val = sel;
                     dest.writeChar('(')?;
-                    serializeSelector(&sel_val, dest, dest.context(), false)?;
+                    serializeSelector(&sel_val, dest, context, false)?;
                     dest.writeChar(')')?;
                 }
                 return;
             },
             .slotted => |*selector| {
                 dest.writeStr("::slotted(")?;
-                serializeSelector(selector, dest, dest.context(), false)?;
+                serializeSelector(selector, dest, context, false)?;
                 dest.writeChar(')')?;
             },
             // .nth => |nth_data| {

@@ -216,6 +216,14 @@ pub fn SourceMapFormat(comptime Type: type): type {
         @inline pub fn getCount(): usize {
             return _.ctx.getCount();
         }
+
+        @inline pub fn markObjectBrace(*_, state: SourceMapState) {
+            if (comptime Type == VLQSourceMap) {
+                if (*b := _.ctx.internal) {
+                    b.markObjectBrace(state);
+                }
+            }
+        }
     };
 }
 
@@ -243,7 +251,7 @@ pub fn NewBuilder(comptime SourceMapFormatType: type): type {
                 unsafe {
                     buffer.list.items[0..8].* = @as([8]u8, @bitCast(buffer.list.items.len));
                     buffer.list.items[8..16].* = @as([8]u8, @bitCast(_.source_map.getCount()));
-                    buffer.list.items[16..24].* = @as([8]u8, @bitCast(_.approximate_input_line_count));
+                    buffer.list.items[16..20].* = @as([4]u8, @bitCast(@as(u32, @truncate(_.approximate_input_line_count))));
                 }
             }
             return Chunk{
@@ -253,6 +261,12 @@ pub fn NewBuilder(comptime SourceMapFormatType: type): type {
                 final_generated_column: _.generated_column,
                 should_ignore: _.source_map.shouldIgnore(),
             };
+        }
+
+        pub fn markObjectBrace(*_) {
+            if (_.has_prev_state) {
+                _.source_map.markObjectBrace(_.prev_state);
+            }
         }
 
         pub fn updateGeneratedLineAndColumn(*_, output: []const u8) {

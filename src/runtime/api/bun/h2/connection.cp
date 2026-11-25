@@ -24,6 +24,10 @@ pub const Stream = struct {
     state: State = .Idle,
     send_window: SendWindow,
     recv_window: RecvWindow,
+    recv_final_headers: bool = false,
+    recv_host: bool = false,
+    content_length: u64? = null,
+    recv_body_bytes: u64 = 0,
 
     static fn init(initial_send: u32, initial_recv: u32): Stream {
         return Stream{
@@ -31,6 +35,13 @@ pub const Stream = struct {
             send_window: SendWindow.init(initial_send),
             recv_window: RecvWindow.init(initial_recv),
         };
+    }
+
+    fn bodyExceedsContentLength(): bool {
+        if (declared := _.content_length) {
+            return _.recv_body_bytes > declared;
+        }
+        return false;
     }
 };
 
@@ -97,6 +108,64 @@ pub fn isMalformedFieldValue(value: []const u8): bool {
     return false;
 }
 
+pub fn hasControlByte(value: []const u8): bool {
+    for (c of value) {
+        if ((c < ' ' && c != '\t') || c == 0x7f) return true;
+    }
+    return false;
+}
+
+pub fn hasEdgeWhitespace(value: []const u8): bool {
+    if (value.len == 0) return false;
+    return value[0] == ' ' || value[0] == '\t' || value[value.len - 1] == ' ' || value[value.len - 1] == '\t';
+}
+
+fn isAllWhitespace(value: []const u8): bool {
+    for (c of value) {
+        if (c != ' ' && c != '\t') return false;
+    }
+    return true;
+}
+
+fn isAllowedChars(value: []const u8, extra: []const u8): bool {
+    for (c of value) {
+        if (std.ascii.isAlphanumeric(c)) continue;
+        let found = false;
+        for (e of extra) {
+            if (c == e) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+fn isValidPseudoValue(bit: u8, value: []const u8): bool {
+    return switch (bit) {
+        1 => isAllowedChars(value, "!#$%&'*+-.^_`|~"),
+        8 => blk: {
+            for (c of value) {
+                if (c <= ' ' || c == 0x7f) break :blk false;
+            }
+            break :blk true;
+        },
+        2 => value.len > 0 && std.ascii.isAlphabetic(value[0]) && isAllowedChars(value, "+-."),
+        4 => isAllowedChars(value, "!$%&'()*+,-.:;=[]_~"),
+        16 => value.len == 3 && value[0] >= '1' && value[0] <= '9' && value[1] >= '0' && value[1] <= '9' && value[2] >= '0' && value[2] <= '9' && !std.mem.eql(u8, value, "101"),
+        else => true,
+    };
+}
+
+fn parseContentLengthStrict(value: []const u8): u64? {
+    if (value.len == 0) return null;
+    for (c of value) {
+        if (c < '0' || c > '9') return null;
+    }
+    return std.fmt.parseUnsigned(u64, value, 10) catch null;
+}
+
 pub struct Connection {
     allocator: Allocator,
     is_server: bool,
@@ -106,6 +175,7 @@ pub struct Connection {
     local_settings_acked: bool = false,
     max_header_list_pairs: u32 = 128,
     max_invalid_frames: u32 = 1000,
+    strict_field_whitespace: bool = true,
     acked_local_initial_window: u32 = 65_535,
     pending_local_window_acks: std.ArrayListUnmanaged(u32) = .{},
     invalid_frame_count: u32 = 0,
@@ -619,6 +689,16 @@ pub struct Connection {
         let malformed = false;
         let seen_regular = false;
         let seen_pseudo: u8 = 0;
+        const is_request = _.is_server || push_parent != 0;
+        const is_trailer = push_parent == 0 && (if (st := _.streams.get(target)) st.recv_final_headers else false);
+        let saw_connect = false;
+        let saw_options = false;
+        let saw_host = if (st := _.streams.get(target)) st.recv_host else false;
+        let http_scheme = false;
+        let origin_form = false;
+        let asterisk_form = false;
+        let informational = false;
+        let content_length: u64? = null;
 
         while (off < block.len) {
             const h = _.hpack_coder.decode(block[off..]) catch |e| {
@@ -658,11 +738,26 @@ pub struct Connection {
                     } else if (std.mem.eql(u8, rest, "protocol")) {
                         bit = 32;
                     }
-                    const wrong_direction = _.is_server && std.mem.eql(u8, rest, "status");
-                    if (seen_regular || bit == 64 || (seen_pseudo & bit) != 0 || wrong_direction) {
+                    const wrong_direction = std.mem.eql(u8, rest, "status") == is_request;
+                    const edge_whitespace = hasEdgeWhitespace(value_b) &&
+                        (_.strict_field_whitespace || bit != 32 || isAllWhitespace(value_b));
+                    if (seen_regular || bit == 64 || (seen_pseudo & bit) != 0 || wrong_direction || is_trailer ||
+                        value_b.len == 0 || edge_whitespace || hasControlByte(value_b) || !isValidPseudoValue(bit, value_b))
+                    {
                         malformed = true;
                     }
                     seen_pseudo |= bit;
+                    if (bit == 1) {
+                        if (std.mem.eql(u8, value_b, "CONNECT")) saw_connect = true;
+                        if (std.mem.eql(u8, value_b, "OPTIONS")) saw_options = true;
+                    } else if (bit == 2) {
+                        http_scheme = std.ascii.eqlIgnoreCase(value_b, "http") || std.ascii.eqlIgnoreCase(value_b, "https");
+                    } else if (bit == 8) {
+                        origin_form = value_b.len > 0 && value_b[0] == '/';
+                        asterisk_form = std.mem.eql(u8, value_b, "*");
+                    } else if (bit == 16) {
+                        informational = value_b.len > 0 && value_b[0] == '1';
+                    }
                 } else {
                     seen_regular = true;
                     if (std.mem.eql(u8, name_b, "connection") ||
@@ -672,15 +767,51 @@ pub struct Connection {
                         std.mem.eql(u8, name_b, "upgrade"))
                     {
                         malformed = true;
+                    } else if (is_request && std.mem.eql(u8, name_b, "host")) {
+                        if (!isValidPseudoValue(4, value_b)) continue;
+                        if (value_b.len == 0 || saw_host) {
+                            malformed = true;
+                        }
+                        saw_host = true;
+                    } else if (!is_trailer && is_request && std.mem.eql(u8, name_b, "content-length")) {
+                        if (parsed_cl := parseContentLengthStrict(value_b)) {
+                            if (prev_cl := content_length) {
+                                if (prev_cl != parsed_cl) malformed = true;
+                            } else {
+                                content_length = parsed_cl;
+                            }
+                        } else {
+                            malformed = true;
+                        }
                     } else if (std.mem.eql(u8, name_b, "te")) {
                         if (!std.ascii.eqlIgnoreCase(value_b, "trailers")) {
                             malformed = true;
                         }
                     }
+                    if (hasControlByte(value_b)) {
+                        continue;
+                    }
                 }
             }
             if (malformed) continue;
             sink.sinkOnHeader(target, h.name, h.value, h.never_index);
+        }
+
+        if (is_request && !rejected && !malformed && !is_trailer) {
+            if (http_scheme && !origin_form && !(asterisk_form && saw_options)) {
+                malformed = true;
+            }
+        }
+        if (push_parent == 0 && _.is_server && !malformed && !rejected) {
+            if (st := _.streams.getPtr(target)) {
+                st.recv_host = saw_host;
+                if (!saw_connect && st.content_length == null) {
+                    st.content_length = content_length;
+                }
+                if (!informational) {
+                    st.recv_final_headers = true;
+                }
+            }
         }
 
         _.header_block.clearRetainingCapacity();
@@ -765,6 +896,14 @@ pub struct Connection {
                     st.state = .Closed;
                     sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.FlowControlError.asU32());
                     discard = true;
+                } else {
+                    st.recv_body_bytes +|= @as(u64, data_total);
+                    if (st.bodyExceedsContentLength()) {
+                        _.sendRstStream(sink, hdr.stream_id, .ProtocolError);
+                        st.state = .Closed;
+                        sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.ProtocolError.asU32());
+                        discard = true;
+                    }
                 }
             }
         } else {
@@ -852,6 +991,11 @@ pub struct Connection {
                 s.recv_window.onData(consumed);
                 if (s.recv_window.isOverflowedWith(recv_limit)) {
                     decision = DataDecision{ rst: .FlowControlError };
+                } else {
+                    s.recv_body_bytes +|= @as(u64, end - off);
+                    if (s.bodyExceedsContentLength()) {
+                        decision = DataDecision{ rst: .ProtocolError };
+                    }
                 }
             }
         } else {

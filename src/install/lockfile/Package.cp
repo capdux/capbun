@@ -2125,7 +2125,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
                                         notes[i] = {
                                             text: "Package name is also declared here",
-                                            location: logger.Location.initOrNull(&note_src, note_src.rangeOfString(value.name_loc)),
+                                            location: logger.Location.initOrNull(&note_src, nameRangeOnDisk(allocator, &note_src)),
                                         };
                                         i += 1;
                                     }
@@ -2139,7 +2139,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
                             log.addRangeErrorFmtWithNotes(
                                 &src,
-                                src.rangeOfString(entry.name_loc),
+                                nameRangeOnDisk(allocator, &src),
                                 allocator,
                                 notes,
                                 "Workspace name \"{s}\" already exists",
@@ -2382,6 +2382,18 @@ pub fn Package(comptime SemverIntType: type): type {
 }
 
 type string = []const u8;
+
+/// Finds `"name"` in the file on disk. The cached tree can be of an edit that is not written.
+fn nameRangeOnDisk(allocator: Allocator, source: *const logger.Source): logger.Range {
+    let temp_log = logger.Log.init(allocator);
+    defer temp_log.deinit();
+    initializeStore();
+    const json = JSON.parsePackageJSONUTF8(source, &temp_log, allocator) catch return logger.Range.None;
+    if (name_expr := json.get("name")) {
+        return source.rangeOfString(name_expr.loc);
+    }
+    return logger.Range.None;
+}
 
 import _ScriptsMod from "./Package/Scripts.zig";
 import _MetaMod from "./Package/Meta.zig";

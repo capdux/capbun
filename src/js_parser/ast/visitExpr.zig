@@ -933,7 +933,7 @@ pub fn e_import(p: *P, expr: Expr, unused_in: ExprIn) Expr {
                     _ = &await_target;
                     is_await_target = ((await_target == .e_import) and (await_target.e_import == e_));
                 }
-                const state = TransposeState{ .is_await_target = is_await_target, .is_then_catch_target = ((p.then_catch_chain.has_catch and (p.then_catch_chain.next_target == .e_import)) and (expr.data.e_import == p.then_catch_chain.next_target.e_import)), .import_options = e_.options, .loc = e_.expr.loc, .import_loader = e_.importRecordLoader() };
+                const state = TransposeState{ .is_await_target = is_await_target, .is_then_catch_target = ((p.then_catch_chain.has_catch and (p.then_catch_chain.next_target == .e_import)) and (expr.data.e_import == p.then_catch_chain.next_target.e_import)), .import_options = e_.options, .loc = expr.loc, .import_loader = e_.importRecordLoader() };
                 return p.import_transposer.maybeTransposeIf(e_.expr, (&state));
             }
             return expr;
@@ -1033,7 +1033,7 @@ method_call_should_be_replaced_with_undefined = false;
                 e_.can_be_unwrapped_if_unused = .never;
                 if ((e_.args.len == 1)) {
                     const first = e_.args.slice()[0];
-                    const state = TransposeState{ .is_require_immediately_assigned_to_decl = (expr_in.is_immediately_assigned_to_decl and (first.data == .e_string)) };
+                    const state = TransposeState{ .is_require_immediately_assigned_to_decl = (expr_in.is_immediately_assigned_to_decl and (first.data == .e_string)), .loc = expr.loc };
                     switch (first.data) {
 .e_string => {
 return p.transposeRequire(first, (&state));
@@ -1069,7 +1069,7 @@ else => {
                         const first = e_.args.slice()[0];
                         switch (first.data) {
 .e_string => {
-return p.transposeRequireResolveKnownString(first);
+return p.transposeRequireResolveKnownString(first, expr.loc);
 },
 .e_if => {
 return p.require_resolve_transposer.transposeKnownToBeIf(first, e_.target);

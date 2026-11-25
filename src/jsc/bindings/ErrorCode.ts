@@ -330,5 +330,6 @@ const errors: ErrorCodeMapping = [
   ["ERR_QUIC_VERSION_NEGOTIATION_ERROR", Error],
   ["ERR_SQLITE_ERROR", Error],
   ["ERR_CRYPTO_ARGON2_NOT_SUPPORTED", Error],
+  ["HPE_INVALID_URL", Error],
 ];
 export default errors;

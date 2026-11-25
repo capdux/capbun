@@ -285,6 +285,7 @@ pub struct DeduplicatedImportResult {
                         kind: .spread,
                         value: Expr.initIdentifier(deduped.namespace_ref, stmt.loc),
                     })?;
+                    p.export_star_import_records.append(p.allocator, deduped.import_record_index)?;
                 }
                 return;
             },

@@ -182,14 +182,18 @@ pub fn fromUTF8(allocator: std.mem.Allocator, pattern: []const u8) OOM!?Pattern 
             const has_leading_or_middle_slash = slashes_res[0];
             const has_trailing_slash = slashes_res[1];
             const add_negate = slashes_res[2];
-            const length = (remain.len + @intFromBool(add_negate));
+            const escape_open_paren = (add_negate and (remain[0] == 40));
+            const length = ((remain.len + @intFromBool(add_negate)) + @intFromBool(escape_open_paren));
             var buf = try allocator.alloc(u8, length);
             _ = &buf;
-            const start_index = @intFromBool(add_negate);
+            const start_index = (@intFromBool(add_negate) + @intFromBool(escape_open_paren));
             const end = (start_index + remain.len);
             _ = @memcpy(buf[start_index..end], remain);
             if (add_negate) {
                 buf[cp_cast_int(usize, 0)] = 33;
+                if (escape_open_paren) {
+                    buf[cp_cast_int(usize, 1)] = 92;
+                }
             }
             return Pattern{ .glob = CowString.initOwned(buf[0..end], allocator), .flags = PatternFlags{ .rel_path = has_leading_or_middle_slash, .@"leading **/" = has_leading_glob_star, .dirs_only = has_trailing_slash, .negated = add_negate } };
     }

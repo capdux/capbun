@@ -457,7 +457,7 @@ pub fn convertStmtsForChunk(
                                             S.Function{
                                                 func: s2.func,
                                             },
-                                            stmt.loc,
+                                            stmt2.loc,
                                         );
                                         stmt.data.s_function.func.name = s.default_name;
                                     },
@@ -473,7 +473,7 @@ pub fn convertStmtsForChunk(
                                                 class: s2.class,
                                                 is_export: false,
                                             },
-                                            stmt.loc,
+                                            stmt2.loc,
                                         );
                                         stmt.data.s_class.class.class_name = s.default_name;
                                     },

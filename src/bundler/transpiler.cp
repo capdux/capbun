@@ -575,7 +575,14 @@ pub struct Transpiler {
                 };
             },
             .dataurl, .base64 => {
-                Output.panic("TODO: dataurl, base64", .{}); // TODO
+                transpiler.log.addErrorFmt(
+                    null,
+                    bun.logger.Loc.Empty,
+                    transpiler.allocator,
+                    "loader \"{s}\" is not supported with --no-bundle",
+                    .{@tagName(loader)},
+                ) catch {};
+                return null;
             },
             .css => {
                 const alloc = transpiler.allocator;

@@ -30,6 +30,7 @@ pub struct BProperty {
 pub struct BObject {
     properties: []BProperty,
     is_single_line: bool = false,
+    close_brace_loc: logger.Loc = logger.Loc.Empty,
 
     pub const Property = BProperty;
 }
@@ -98,6 +99,7 @@ pub union(Binding.Tag) B {
 pub const Class = G.Class;
 
 import bun from "bun";
+const logger = bun.logger;
 const writeAnyToHasher = bun.writeAnyToHasher;
 
 const js_ast = bun.ast;

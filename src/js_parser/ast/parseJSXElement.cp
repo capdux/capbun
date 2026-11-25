@@ -267,7 +267,7 @@ pub fn ParseJSXElement(
                         }
 
                         return p.newExpr(E.JSXElement{
-                            tag: end_tag.data.asExpr(),
+                            tag: tag.data.asExpr(),
                             children: ExprNodeList.moveFromList(&children),
                             properties: properties,
                             key_prop_index: key_prop_i,

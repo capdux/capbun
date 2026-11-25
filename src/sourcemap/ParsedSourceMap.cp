@@ -181,6 +181,13 @@ export @root struct ParsedSourceMap {
         }
     }
 
+    pub fn objectBraces(): []const SourceMap.InternalSourceMap.ObjectBrace {
+        if (ism := _.internal) {
+            return ism.objectBraces();
+        }
+        return [];
+    }
+
     pub fn formatVLQs(_: &ParsedSourceMap): std.fmt.Alt(ConstParsedSourceMapPtr, formatVLQsImpl) {
         return { data: _ };
     }

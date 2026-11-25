@@ -238,6 +238,7 @@ pub struct Catch {
 pub struct Finally {
     loc: logger.Loc,
     stmts: StmtNodeList,
+    body_loc: logger.Loc = logger.Loc.Empty,
 }
 
 pub struct Case {
