@@ -294,6 +294,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
                                         if (mergeStyleRules(AtRule, &b[0].style, &a[len - 2].style, context)) {
                                             // If we were able to merge the last rule into the previous one, remove the last.
                                             * = rules.pop();
+                                            truncateStyleRules(AtRule, &style_rules, rules.items.len);
                                             // TODO: deinit?
                                             // popped.deinit(contet.allocator);
                                             continue;
@@ -610,6 +611,17 @@ pub fn StyleRuleKey(comptime R: type): type {
             return rule.isDuplicate(other_rule);
         }
     };
+}
+
+/// Forget style rule keys at `len..`: the caller popped them, and other rules can take their slots.
+fn truncateStyleRules(comptime R: type, style_rules: *StyleRuleKey(R).HashMap(usize), len: usize) {
+    let i: usize = style_rules.count();
+    while (i > 0) {
+        i -= 1;
+        if (style_rules.values()[i] >= len) {
+            style_rules.swapRemoveAt(i);
+        }
+    }
 }
 
 fn mergeStyleRules(

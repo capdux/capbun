@@ -279,16 +279,7 @@ pub fn runTasks(
                             ) catch oom_err => bun.handleOom(oom_err);
                         }
 
-                        if (manager.subcommand != .remove) {
-                            for (*request of manager.update_requests) {
-                                if (strings.eql(request.name, name.slice())) {
-                                    request.failed = true;
-                                    manager.options.do.save_lockfile = false;
-                                    manager.options.do.save_yarn_lock = false;
-                                    manager.options.do.install_packages = false;
-                                }
-                            }
-                        }
+                        failUpdateRequests(manager, task.task_id, name.slice(), null);
                     }
 
                     continue;
@@ -336,16 +327,7 @@ pub fn runTasks(
                             .{ metadata.url, response.status_code },
                         ) catch oom_err => bun.handleOom(oom_err);
                     }
-                    if (manager.subcommand != .remove) {
-                        for (*request of manager.update_requests) {
-                            if (strings.eql(request.name, name.slice())) {
-                                request.failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
+                    failUpdateRequests(manager, task.task_id, name.slice(), null);
 
                     continue;
                 }
@@ -385,22 +367,19 @@ pub fn runTasks(
                             );
                         }
 
-                        if (@hasField(@TypeOf(callbacks), "manifests_only") && callbacks.manifests_only) {
-                            continue;
+                        // A task that `populateManifestCache` started has no entry.
+                        if (dependency_list_entry := manager.task_queue.getEntry(task.task_id)) {
+                            const dependency_list = dependency_list_entry.value_ptr.*;
+                            dependency_list_entry.value_ptr.* = {};
+
+                            manager.processDependencyList(
+                                dependency_list,
+                                Ctx,
+                                extract_ctx,
+                                callbacks,
+                                install_peer,
+                            )?;
                         }
-
-                        const dependency_list_entry = manager.task_queue.getEntry(task.task_id).?;
-
-                        const dependency_list = dependency_list_entry.value_ptr.*;
-                        dependency_list_entry.value_ptr.* = {};
-
-                        manager.processDependencyList(
-                            dependency_list,
-                            Ctx,
-                            extract_ctx,
-                            callbacks,
-                            install_peer,
-                        )?;
 
                         continue;
                     }
@@ -531,16 +510,7 @@ pub fn runTasks(
                             },
                         ) catch oom_err => bun.handleOom(oom_err);
                     }
-                    if (manager.subcommand != .remove) {
-                        for (*request of manager.update_requests) {
-                            if (strings.eql(request.name, extract.name.slice())) {
-                                request.failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
+                    failUpdateRequests(manager, task.task_id, extract.name.slice(), extract.dependency_id);
 
                     if (removed := manager.task_queue.fetchRemove(task.task_id)) {
                         let list = removed.value;
@@ -621,16 +591,7 @@ pub fn runTasks(
                             },
                         ) catch oom_err => bun.handleOom(oom_err);
                     }
-                    if (manager.subcommand != .remove) {
-                        for (*request of manager.update_requests) {
-                            if (strings.eql(request.name, extract.name.slice())) {
-                                request.failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
+                    failUpdateRequests(manager, task.task_id, extract.name.slice(), extract.dependency_id);
 
                     if (removed := manager.task_queue.fetchRemove(task.task_id)) {
                         let list = removed.value;
@@ -711,17 +672,15 @@ pub fn runTasks(
 
                 manager.manifests.insert(manifest.pkg.name.hash, manifest)?;
 
-                if (@hasField(@TypeOf(callbacks), "manifests_only") && callbacks.manifests_only) {
-                    continue;
+                // A task that `populateManifestCache` started has no entry.
+                if (dependency_list_entry := manager.task_queue.getEntry(task.id)) {
+                    const dependency_list = dependency_list_entry.value_ptr.*;
+                    dependency_list_entry.value_ptr.* = {};
+
+                    manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer)?;
                 }
 
-                const dependency_list_entry = manager.task_queue.getEntry(task.id).?;
-                const dependency_list = dependency_list_entry.value_ptr.*;
-                dependency_list_entry.value_ptr.* = {};
-
-                manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer)?;
-
-                if (log_level.showProgress()) {
+                if (log_level.showProgress() && !(@hasField(@TypeOf(callbacks), "manifests_only") && callbacks.manifests_only)) {
                     if (!has_updated_this_run) {
                         manager.setNodeName(manager.downloads_node.?, manifest.name(), ProgressStrings.download_emoji, true);
                         has_updated_this_run = true;
@@ -1370,5 +1329,79 @@ pub fn generateNetworkTaskForTarball(
     }
 
     return network_task;
+}
+
+/// `bun add` / `bun update <name>` exits 1 and saves nothing when a download for the request fails.
+fn failUpdateRequests(
+    manager: *PackageManager,
+    task_id: Task.Id,
+    package_name: string,
+    tarball_dependency_id: DependencyID?,
+) {
+    if (manager.subcommand == .remove) return;
+    const lockfile = manager.lockfile;
+    const string_buf = lockfile.buffers.string_bytes.items;
+    const dependencies = lockfile.buffers.dependencies.items;
+    const resolutions = lockfile.buffers.resolutions.items;
+    const waiters: []const bun.install.TaskCallbackContext = if (entry := manager.task_queue.getEntry(task_id))
+        entry.value_ptr.items
+    else
+        [];
+    const package_id: PackageID = if (dep_id := tarball_dependency_id)
+        if (dep_id < resolutions.len) resolutions[dep_id] else invalid_package_id
+    else
+        invalid_package_id;
+
+    let cwd_buf: [1]PackageID = [lockfile.getWorkspacePackageID(manager.workspace_name_hash)];
+    const lists = lockfile.packages.items(.dependencies);
+
+    let any_failed = false;
+    for (*request of manager.update_requests) {
+        const workspace_ids: []const PackageID = if (pending := manager.pending_filtered_write)
+            pending.workspaceIdsReceiving(lockfile, request.name_hash).items
+        else
+            cwd_buf[0..];
+        let names_its_dependency = false;
+        for (workspace_id of workspace_ids) {
+            if (workspace_id >= lists.len) continue;
+            const list = lists[workspace_id];
+            let id = list.off;
+            const end = list.off + list.len;
+            while (id < end) : (id += 1) {
+                if (id >= dependencies.len) break;
+                if (!request.matches(dependencies[id], string_buf)) continue;
+                let was_for = package_id != invalid_package_id && id < resolutions.len && resolutions[id] == package_id;
+                if (!was_for) {
+                    for (waiter of waiters) {
+                        switch (waiter) {
+                            .dependency => |waiting| if (waiting == id) {
+                                was_for = true;
+                                break;
+                            },
+                            .root_dependency => |waiting| if (waiting == id) {
+                                was_for = true;
+                                break;
+                            },
+                            else => {},
+                        }
+                    }
+                }
+                if (was_for) {
+                    names_its_dependency = true;
+                    break;
+                }
+            }
+            if (names_its_dependency) break;
+        }
+        if (names_its_dependency || strings.eql(request.name, package_name)) {
+            request.failed = true;
+            any_failed = true;
+        }
+    }
+    if (any_failed) {
+        manager.options.do.save_lockfile = false;
+        manager.options.do.save_yarn_lock = false;
+        manager.options.do.install_packages = false;
+    }
 }
 

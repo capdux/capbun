@@ -1068,6 +1068,11 @@ pub fn getOrPutResolvedPackageWithFindResult(mgr: *PackageManager, name_hash: Pa
         defer {
         _ = successFn(mgr, dependency_id, package.@"meta".id);
         }
+        const placed = behavior.isPlaced(mgr.options.local_package_features);
+        const unplaced = ((!mgr.options.runtime_auto_install) and (((!placed) or package.@"meta".isDisabled(mgr.options.cpu, mgr.options.os)) or mgr.lockfile.isInUnplacedSubtree(dependency_id)));
+        if (unplaced) {
+            _ = mgr.lockfile.markUnplacedSubtree(package.dependencies);
+        }
         var name_and_version_hash: ?u64 = null;
         _ = &name_and_version_hash;
         var patchfile_hash: ?u64 = null;
@@ -1075,6 +1080,9 @@ pub fn getOrPutResolvedPackageWithFindResult(mgr: *PackageManager, name_hash: Pa
         return (switch (mgr.determinePreinstallState(package, mgr.lockfile, (&name_and_version_hash), (&patchfile_hash))) {
 .done => ResolvedPackageResult{ .package = package, .is_first_time = true },
 .extract => extract: {
+        if (unplaced) {
+            break :extract ResolvedPackageResult{ .package = package, .is_first_time = true };
+        }
         if ((!mgr.options.do.prefetch_resolved_tarballs)) {
             break :extract ResolvedPackageResult{ .package = package, .is_first_time = true };
         }

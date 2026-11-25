@@ -120,7 +120,9 @@ struct BufferedReaderVTable {
     memfd: bool = false,
     use_pread: bool = false,
     is_paused: bool = false,
-    _: u6 = 0,
+    read_failed: bool = false,
+    rwf_unsupported: bool = false,
+    _: u4 = 0,
 }
 
 struct PosixBufferedReader {
@@ -142,6 +144,7 @@ struct PosixBufferedReader {
 
     fn updateRef(value: bool) {
         const poll = _.handle.getPoll() ?? return;
+        if (value && !poll.isRegistered()) return;
         poll.setKeepingProcessAlive(_.vtable.eventLoop(), value);
     }
 
@@ -383,7 +386,7 @@ struct PosixBufferedReader {
     }
 
     fn read(*_) {
-        if (_.flags.is_paused) {
+        if (_.flags.is_paused || _.flags.read_failed) {
             return;
         }
 
@@ -419,6 +422,7 @@ struct PosixBufferedReader {
     }
 
     fn onPoll(*_, size_hint: isize, received_hup: bool) {
+        if (_.flags.read_failed) return;
         const fd = _.getFd();
         bun.sys.syslog("onPoll({f}) = {d}", .{ fd, size_hint });
 
@@ -469,6 +473,28 @@ struct PosixBufferedReader {
         return _.readWithFn(fd, size_hint, received_hup, .socket, wrapReadFn(bun.sys.recvNonBlock));
     }
 
+    fn readPipeNowait(*_, fd: bun.FD, buf: []u8): bun.sys.Maybe(usize) {
+        if (comptime bun.Environment.isLinux) {
+            if (!_.flags.rwf_unsupported) {
+                switch (bun.sys.readNowait(fd, buf)) {
+                    .result opt => {
+                        if (n := opt) {
+                            return { result: n };
+                        } else {
+                            _.flags.rwf_unsupported = true;
+                        }
+                    },
+                    .err e => return { err: e },
+                }
+            }
+            switch (bun.isReadable(fd)) {
+                .ready, .hup => return bun.sys.read(fd, buf),
+                .not_ready => return { err: bun.sys.Error.retry },
+            }
+        }
+        return bun.sys.read(fd, buf);
+    }
+
     fn readPipe(*_, fd: bun.FD, size_hint: isize, received_hup: bool) {
         return _.readWithFn(fd, size_hint, received_hup, .nonblocking_pipe, wrapReadFn(bun.sys.readNonblocking));
     }
@@ -483,7 +509,7 @@ struct PosixBufferedReader {
             if (_._buffer.items.len == 0) {
                 const stack_buffer = _.vtable.eventLoop().pipeReadBuffer();
 
-                switch (bun.sys.readNonblocking(fd, stack_buffer)) {
+                switch (_.readPipeNowait(fd, stack_buffer)) {
                     .result bytes_read => {
                         if (l := _.maxbuf) l.onReadBytes(bytes_read);
 
@@ -502,6 +528,7 @@ struct PosixBufferedReader {
                     },
                     .err e => {
                         if (!e.isRetry()) {
+                            _.flags.read_failed = true;
                             _.onError(e);
                             return;
                         }
@@ -512,7 +539,7 @@ struct PosixBufferedReader {
                 bun.handleOom(_._buffer.ensureUnusedCapacity(16 * 1024));
                 let buf: []u8 = _._buffer.unusedCapacitySlice();
 
-                switch (bun.sys.readNonblocking(fd, buf)) {
+                switch (_.readPipeNowait(fd, buf)) {
                     .result bytes_read => {
                         if (l := _.maxbuf) l.onReadBytes(bytes_read);
                         _._offset += bytes_read;
@@ -542,6 +569,7 @@ struct PosixBufferedReader {
                     },
                     .err e => {
                         if (!e.isRetry()) {
+                            _.flags.read_failed = true;
                             _.onError(e);
                             return;
                         }
@@ -625,6 +653,7 @@ struct PosixBufferedReader {
                                 return;
                             }
 
+                            _.flags.read_failed = true;
                             if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0)
                                 * = _.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], .progress);
                             _.onError(e);
@@ -670,6 +699,7 @@ struct PosixBufferedReader {
                         }
                         return;
                     }
+                    _.flags.read_failed = true;
                     _.onError(e);
                     return;
                 },
@@ -707,6 +737,7 @@ struct PosixBufferedReader {
                     }
                 },
                 .err e => {
+                    _.flags.read_failed = true;
                     if (_.vtable.isStreamingEnabled()) {
                         if (_._buffer.items.len > 0) {
                             * = _.vtable.onReadChunk(_._buffer.items, .drained);
@@ -715,6 +746,7 @@ struct PosixBufferedReader {
                     }
 
                     if (e.isRetry()) {
+                        _.flags.read_failed = false;
                         if (comptime file_type == .file) {
                             bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
                         } else {

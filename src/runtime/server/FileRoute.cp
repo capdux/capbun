@@ -320,8 +320,11 @@ pub struct FileRouteInitOptions {
         // RFC 9110 §14.2: Range is only defined for GET (HEAD mirrors GET's
         // headers). Skip if the route has a non-200 status or the user already
         // set Content-Range — they're managing partial responses themselves.
+        const range_etag_raw = _.headers.get("etag");
+        const range_etag: string? = if (range_etag_raw != null && range_etag_raw.?.len > 0) range_etag_raw else null;
+        const range_lmd: u64? = if (req.header("if-range") != null) (_.lastModifiedDate() catch return) else null;
         const range: RangeRequest.Result = if ((method == .GET || method == .HEAD) && file_type == .file && _.status_code == 200 && !_.has_content_range_header)
-            RangeRequest.fromRequest(req, size)
+            RangeRequest.fromRequest(req, size, range_etag, range_lmd)
         else
             .none;
 

@@ -92,14 +92,17 @@ type SentinelU8 = [:0]u8;
 
                     is_socket.* = std.posix.S.ISSOCK(stat.mode);
 
-                    if (force_sync || isatty) {
-                        * = bun.sys.updateNonblocking(fd, false);
-                        is_nonblocking = false;
+                    if (isatty) {
                         if (Ctx == void) {
                             onForceSyncOrIsaTTY(undefined);
                         } else {
                             onForceSyncOrIsaTTY(ctx);
                         }
+                    }
+
+                    if (force_sync || isatty) {
+                        * = bun.sys.updateNonblocking(fd, false);
+                        is_nonblocking = false;
                     } else if (!is_nonblocking) {
                         const flags = match (bun.sys.getFcntlFlags(fd)) {
                             .result(fl) => fl,

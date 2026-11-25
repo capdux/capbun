@@ -1602,8 +1602,8 @@ pub struct DataCellsGuard<P, C> {
                                     return;
                                 },
                                 .parsing => {
-                                    offset += 1;
-                                    continue;
+                                    // Replies go to the requests in queue order: write nothing past this one.
+                                    break;
                                 },
                             }
                         } else {

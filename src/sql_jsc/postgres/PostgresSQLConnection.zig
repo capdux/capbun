@@ -1708,8 +1708,7 @@ if ((!self.canPrepareQuery())) {
                     return;
 },
 .parsing => {
-offset = (offset + 1);
-                    continue;
+break;
 },
 }
                 } else {

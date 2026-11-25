@@ -1990,10 +1990,12 @@ pub fn printRequireOrImportExpr(p: *Printer, import_record_index: u32, was_unwra
                 switch (record.tag) {
 .bun => {
 if ((record.kind == .dynamic)) {
+                    _ = p.printSpaceBeforeIdentifier();
                     _ = p.print("Promise.resolve(globalThis.Bun)");
                     return;
                 } else {
                     if (((record.kind == .require) or (record.kind == .stmt))) {
+                        _ = p.printSpaceBeforeIdentifier();
                         _ = p.print("globalThis.Bun");
                         return;
                     }
@@ -2072,6 +2074,7 @@ else => {
                         }
                         if (req_meta.exports_ref.isValid()) {
                             const wrap_with_to_cjs = record.flags.wrap_with_to_commonjs;
+                            _ = p.printSpaceBeforeIdentifier();
                             if (wrap_with_to_cjs) {
                                 _ = p.printSymbol(p.options.to_commonjs_ref);
                                 _ = p.print("(");
@@ -5771,6 +5774,30 @@ pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols_: js_
         _ = &module_scope;
         if (opts.minify_identifiers) {
             const allocator = opts.allocator;
+            const dont_break_the_code: [3]Ref = .{ tree.module_ref, tree.exports_ref, tree.require_ref };
+            inline for (dont_break_the_code) |r_init| {
+                var r = r_init;
+                _ = &r;
+                while (symbols.get(r)) |symbol| {
+                    symbol.must_not_be_renamed = true;
+                    if (symbol.link.isNull()) {
+                        break;
+                    }
+                    r = symbol.link;
+                }
+            }
+            for (tree.named_exports.values()) |named_export| {
+                _ = &named_export;
+                var r = named_export.ref;
+                _ = &r;
+                while (symbols.get(r)) |symbol| {
+                    symbol.must_not_be_renamed = true;
+                    if (symbol.link.isNull()) {
+                        break;
+                    }
+                    r = symbol.link;
+                }
+            }
             var reserved_names = try rename.computeInitialReservedNames(allocator, opts.module_type);
             _ = &reserved_names;
             var _reserved_guard = OptDeinitWithAllocGuard(bun.StringHashMapUnmanaged(u32)){ .ptr = (blk: {
@@ -5807,20 +5834,6 @@ pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols_: js_
             const exports_ref = tree.exports_ref;
             const module_ref = tree.module_ref;
             const parts = tree.parts;
-            const dont_break_the_code: [3]Ref = .{ tree.module_ref, tree.exports_ref, tree.require_ref };
-            inline for (dont_break_the_code) |r| {
-                if (symbols.get(r)) |symbol| {
-                    _ = &symbol;
-                    symbol.must_not_be_renamed = true;
-                }
-            }
-            for (tree.named_exports.values()) |named_export| {
-                _ = &named_export;
-                if (symbols.get(named_export.ref)) |symbol| {
-                    _ = &symbol;
-                    symbol.must_not_be_renamed = true;
-                }
-            }
             if (uses_exports_ref) {
                 _ = try minify_renamer.accumulateSymbolUseCount((&top_level_symbols), exports_ref, 1, (&.{ (if (@typeInfo(@TypeOf(source.index)) == .@"enum") @intFromEnum(source.index) else source.index.value) }));
             }
@@ -5837,7 +5850,10 @@ pub fn printAst(comptime Writer: type, _writer: Writer, tree: Ast, symbols_: js_
             }
             _ = std.sort.pdq(rename.StableSymbolCount, top_level_symbols.items, @as(void, undefined), rename.StableSymbolCount.lessThan);
             _ = try minify_renamer.allocateTopLevelSymbolSlots(top_level_symbols);
-            var minifier = tree.char_freq.?.compile(allocator);
+            const default_char_freq: js_ast.CharFreq = .{};
+            var char_freq = ((tree.char_freq) orelse (default_char_freq));
+            _ = &char_freq;
+            var minifier = char_freq.compile(allocator);
             _ = &minifier;
             _ = try minify_renamer.assignNamesByFrequency((&minifier));
         } else {

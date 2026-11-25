@@ -143,6 +143,7 @@ pub fn isNotEmpty(self: StreamBuffer) bool {
     }
 
 pub fn write(self: *StreamBuffer, buffer: []const u8) !void {
+            _ = self.compact();
             _ = try self.list.appendSlice(buffer);
     }
 
@@ -150,11 +151,22 @@ pub fn wrote(self: *StreamBuffer, amount: usize) void {
             self.cursor = (self.cursor + amount);
     }
 
+pub fn compact(self: *StreamBuffer) void {
+            if (((self.cursor == 0) or (self.cursor < self.size()))) {
+                return;
+            }
+            const tail = self.list.items[self.cursor..];
+            _ = std.mem.copyForwards(u8, self.list.items[0..tail.len], tail);
+            self.list.items.len = tail.len;
+            self.cursor = 0;
+    }
+
 pub fn writeAssumeCapacity(self: *StreamBuffer, buffer: []const u8) void {
             _ = self.list.appendSliceAssumeCapacity(buffer);
     }
 
 pub fn ensureUnusedCapacity(self: *StreamBuffer, capacity: usize) !void {
+            _ = self.compact();
             return self.list.ensureUnusedCapacity(capacity);
     }
 
@@ -176,6 +188,7 @@ pub fn writeOrFallback(self: *StreamBuffer, buffer: anytype, comptime writeFn: a
                 if (bun.strings.isAllASCII(buffer)) {
                     return buffer;
                 }
+                _ = self.compact();
                 {
                     var byte_list = bun.ByteList.moveFromList((&self.list));
                     _ = &byte_list;
@@ -187,6 +200,7 @@ pub fn writeOrFallback(self: *StreamBuffer, buffer: anytype, comptime writeFn: a
                 return self.list.items[self.cursor..];
             } else {
                 if (comptime ((@TypeOf(writeFn) == @TypeOf((&writeUTF16))) and (writeFn == (&writeUTF16)))) {
+                    _ = self.compact();
                     {
                         var byte_list = bun.ByteList.moveFromList((&self.list));
                         _ = &byte_list;
@@ -212,6 +226,7 @@ pub fn writeLatin1(self: *StreamBuffer, buffer: []const u8, comptime check_ascii
                     return self.write(buffer);
                 }
             }
+            _ = self.compact();
             var byte_list = bun.ByteList.moveFromList((&self.list));
             _ = &byte_list;
             defer {
@@ -221,6 +236,7 @@ pub fn writeLatin1(self: *StreamBuffer, buffer: []const u8, comptime check_ascii
     }
 
 pub fn writeUTF16(self: *StreamBuffer, buffer: []const u16) !void {
+            _ = self.compact();
             var byte_list = bun.ByteList.moveFromList((&self.list));
             _ = &byte_list;
             defer {
@@ -289,8 +305,25 @@ pub fn writeToFileType(comptime file_type: FileType) *const fn (bun.FD, []const 
             _ = (comptime return (switch (file_type) {
 .nonblocking_pipe, .file => (&bun.sys.write),
 .pipe => (&writeToBlockingPipe),
-.socket => (&bun.sys.sendNonBlock),
+.socket => (&writeToSocket),
 }));
+    }
+
+pub fn writeToSocket(fd: bun.FD, buf: []const u8) bun.sys.Maybe(usize) {
+            switch (bun.sys.sendNonBlock(fd, buf)) {
+.err => |err| {
+var out = err;
+            _ = &out;
+            out.syscall = .write;
+            if ((out.getErrno() == .NOTCONN)) {
+                out.errno = @intFromEnum(bun.sys.E.PIPE);
+            }
+            return .{ .err = out };
+},
+.result => |n| {
+return .{ .result = n };
+},
+}
     }
 
 pub fn writeToBlockingPipe(fd: bun.FD, buf: []const u8) bun.sys.Maybe(usize) {

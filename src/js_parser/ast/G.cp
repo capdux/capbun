@@ -53,8 +53,7 @@ pub struct Class {
                 return false;
             }
 
-            if (property.kind == .normal) {
-                if (flags.contains(.is_static)) {
+            if ((property.kind == .normal || property.kind == .auto_accessor) && flags.contains(.is_static)) {
                     let i: usize = 0;
                     while (i < 2) : (i += 1) {
                         const val_ = if (i == 0) property.value else property.initializer;
@@ -69,7 +68,6 @@ pub struct Class {
                             }
                         }
                     }
-                }
             }
         }
 

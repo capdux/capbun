@@ -220,10 +220,12 @@ pub fn visitFunc(p: *P, _func: G.Fn, open_parens_loc: logger.Loc) G.Fn {
             _ = &temp_opts;
             _ = ((p.visitStmtsAndPrependTempRefs((&stmts), (&temp_opts))) catch unreachable);
             if (p.options.features.react_fast_refresh) {
-                const hook_storage = ((p.react_refresh.hook_ctx_storage) orelse (unreachable));
-                if ((hook_storage.* != null)) {
-                    const hook = (&hook_storage.*.?);
-                    _ = p.handleReactRefreshPostVisitFunctionBody((&stmts), hook);
+                if (p.react_refresh.hook_ctx_storage) |hook_storage| {
+                    _ = &hook_storage;
+                    if ((hook_storage.* != null)) {
+                        const hook = (&hook_storage.*.?);
+                        _ = p.handleReactRefreshPostVisitFunctionBody((&stmts), hook);
+                    }
                 }
             }
             func.body = G.FnBody{ .stmts = stmts.items, .loc = body.loc };
@@ -309,7 +311,7 @@ pub fn visitDecls(p: *P, decls: []G.Decl, was_const: bool, comptime is_possibly_
                     if ((((was_anonymous_named_expr and (val.data == .e_class)) and val.data.e_class.should_lower_standard_decorators) and ((decl.*).binding.data == .b_identifier))) {
                         p.decorator_class_name = p.loadNameFromRef((decl.*).binding.data.b_identifier.ref);
                     }
-                    (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) = p.visitExprInOut(val, .{ .is_immediately_assigned_to_decl = true });
+                    (if (@typeInfo(@TypeOf((decl.*))) == .@"enum") @intFromEnum((decl.*)) else (decl.*).value) = p.visitExprInOut(val, .{ .is_immediately_assigned_to_decl = true, .is_property_access_target = ((decl.*).binding.data == .b_object) });
                     p.decorator_class_name = prev_decorator_class_name;
                     if (p.options.features.react_fast_refresh) {
                         if (p.react_refresh.last_hook_seen) |last_hook| {

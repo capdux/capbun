@@ -184,6 +184,35 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
                 }
             }
 
+            // `Object.freeze`, `defineProperty` and `delete` on a held default import need the real `module.exports`.
+            if (id < named_imports.len) {
+                let ni_it = named_imports[id].iterator();
+                while (ni_entry := ni_it.next()) {
+                    const import_ref = ni_entry.key_ptr.*;
+                    const ni = ni_entry.value_ptr.*;
+                    if (ni.import_record_index >= import_records.len) continue;
+                    const record = import_records[ni.import_record_index];
+                    if (!record.source_index.isValid()) continue;
+                    const other = record.source_index.get();
+                    if (other >= exports_kind.len) continue;
+                    if (ast_flags_list[other].commonjs_lifted_to_esm &&
+                        !ni.alias_is_star &&
+                        ni.alias != null &&
+                        strings.eqlComptime(ni.alias.?, "default"))
+                    {
+                        if (symbol := client.graph.symbols.get(import_ref)) {
+                            // `ns.default` can be the module's own `default` export, which only step 3 resolves.
+                            if (symbol.import_item_status != .generated &&
+                                (ni.is_exported || symbol.import_used_as_value))
+                            {
+                                exports_kind[other] = .cjs;
+                                flags[other].wrap = .cjs;
+                            }
+                        }
+                    }
+                }
+            }
+
             const kind = exports_kind[id];
 
             // If the output format doesn't have an implicit CommonJS wrapper, any file

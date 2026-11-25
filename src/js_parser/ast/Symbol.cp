@@ -101,6 +101,7 @@ struct EndGuard<T> {
     must_start_with_capital_letter_for_jsx: bool = false,
     kind: Kind = Kind.other,
     must_not_be_renamed: bool = false,
+    import_used_as_value: bool = false,
     import_item_status: ImportItemStatus = ImportItemStatus.none,
     private_symbol_must_be_lowered: bool = false,
     remove_overwritten_function_declaration: bool = false,

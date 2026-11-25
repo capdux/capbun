@@ -1699,6 +1699,13 @@ fn getOrPutResolvedPackageWithFindResult(
     if (comptime Environment.allow_assert) bun.assert(package.@"meta".id != invalid_package_id);
     defer successFn(mgr, dependency_id, package.@"meta".id);
 
+    const placed = behavior.isPlaced(mgr.options.local_package_features);
+    const unplaced = !mgr.options.runtime_auto_install &&
+        (!placed || package.@"meta".isDisabled(mgr.options.cpu, mgr.options.os) || mgr.lockfile.isInUnplacedSubtree(dependency_id));
+    if (unplaced) {
+        mgr.lockfile.markUnplacedSubtree(package.dependencies);
+    }
+
     // non-null if the package is in "patchedDependencies"
     let name_and_version_hash: u64? = null;
     let patchfile_hash: u64? = null;
@@ -1714,6 +1721,9 @@ fn getOrPutResolvedPackageWithFindResult(
         .done => ResolvedPackageResult{ package: package, is_first_time: true },
         // Do we need to download the tarball?
         .extract => extract: {
+            if (unplaced) {
+                break :extract ResolvedPackageResult{ package: package, is_first_time: true };
+            }
             // Skip tarball download when prefetch_resolved_tarballs is disabled (e.g., --lockfile-only)
             if (!mgr.options.do.prefetch_resolved_tarballs) {
                 break :extract ResolvedPackageResult{ package: package, is_first_time: true };

@@ -288,6 +288,10 @@ pub fn onReady(self: *FileSink) void {
 
 pub fn onClose(self: *FileSink) void {
         _ = log("onClose()", .{});
+        _ = self.ref();
+        defer {
+        _ = self.deref();
+        }
         if (self.readable_stream.has()) {
             if (self.event_loop_handle.globalObject()) |global| {
                 _ = &global;

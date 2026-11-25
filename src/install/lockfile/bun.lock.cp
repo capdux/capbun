@@ -1735,8 +1735,15 @@ pub fn parseIntoBinaryLockfile(
             }
 
             const pkg_info = value.data.e_array.items;
-            if (pkg_info.len < 3) continue;
-            const maybe_info_obj = pkg_info.at(2);
+            // Index 2 for an npm resolution (after the registry string), index 1 otherwise.
+            let maybe_info_obj_opt: Expr? = null;
+            for (item of pkg_info.slice()) {
+                if (item.data == .e_object) {
+                    maybe_info_obj_opt = item;
+                    break;
+                }
+            }
+            const maybe_info_obj = maybe_info_obj_opt ?? continue;
             const bundled_expr = maybe_info_obj.get("bundled") ?? continue;
             const bundled = bundled_expr.asBool() ?? continue;
             if (!bundled) continue;

@@ -82,17 +82,17 @@ pub fn parse(header: []const u8, total: u64): Result {
     return parseRaw(header).resolve(total);
 }
 
-pub fn fromRequest(req: uws.AnyRequest, total: u64): Result {
-    if (h := req.header("range")) {
-        return parse(h, total);
+pub fn fromRequest(req: uws.AnyRequest, total: u64, etag: string?, last_modified_ms: u64?): Result {
+    const h = req.header("range") ?? return .none;
+    const range = parse(h, total);
+    if (range != .none) {
+        if (ir := req.header("if-range")) { if (!@import("./DirectoryRoute.zig").ifRangeMatches(ir, etag, last_modified_ms)) return .none; }
     }
-    return .none;
+    return range;
 }
 
 pub fn rawFromRequest(req: uws.AnyRequest): Raw {
-    if (h := req.header("range")) {
-        return parseRaw(h);
-    }
+    if (h := req.header("range")) return parseRaw(h);
     return .none;
 }
 

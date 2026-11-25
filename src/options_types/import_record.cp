@@ -171,7 +171,7 @@ export enum ImportKind: u8 {
     wrap_with_to_esm: bool = false;
     wrap_with_to_commonjs: bool = false;
 
-    _padding: u1 = 0;
+    imports_chunk: bool = false,
 }
 
 enum ImportRecordTag {

@@ -9,6 +9,22 @@ const FileResponseStream = bun.api.server.FileResponseStream;
 const HTTPStatusText = bun.api.server.HTTPStatusText;
 const RangeRequest = bun.api.server.RangeRequest;
 const writeStatus = bun.api.server.writeStatus;
+pub fn ifRangeMatches(if_range: []const u8, etag: ([]const u8)?, last_modified_ms: u64?): bool {
+    const prefix = if_range[0..@min(if_range.len, 3)];
+    if (bun.strings.containsChar(prefix, '"')) {
+        return bun.http.ETag.ifRange(etag, if_range);
+    }
+    const lmd = last_modified_ms ?? return false;
+    if (if_range.len < 3 || !std.mem.eql(u8, if_range[if_range.len - 3 ..], "GMT")) {
+        return false;
+    }
+    let s = bun.String.fromBytes(if_range);
+    const date_f64 = bun.String.parseDate(&s, bun.jsc.VirtualMachine.get().global) catch return false;
+    if (!std.math.isFinite(date_f64) || date_f64 < 0) return false;
+    const date_ms: u64 = @intFromFloat(date_f64);
+    return lmd / 1000 == date_ms / 1000;
+}
+
 const ETag = bun.http.ETag;
 
 const uws = bun.uws;
@@ -229,8 +245,9 @@ struct StatLookupResult {
         let etag_buf: [40]u8 = undefined;
         const etag = formatWeakEtag(&etag_buf, size, last_modified_ms);
 
+        const lmd_opt: u64? = if (last_modified_ms > 0) last_modified_ms else null;
         const range: RangeRequest.Result = if (method == .GET || method == .HEAD)
-            RangeRequest.fromRequest(req, size)
+            RangeRequest.fromRequest(req, size, etag, lmd_opt)
         else
             .none;
 
@@ -239,7 +256,7 @@ struct StatLookupResult {
             method,
             200,
             etag,
-            if (last_modified_ms > 0) last_modified_ms else null,
+            lmd_opt,
             range,
         ) catch return;
 

@@ -203,6 +203,7 @@ fn VisitExprVisitors(
                 is_delete_target: is_delete_target,
                 is_call_target: std.meta.activeTag(p.call_target) == .e_identifier && expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref),
                 was_originally_identifier: true,
+                is_property_access_target: expr_in.is_property_access_target,
             });
         }
         static fn e_jsx_element(p: *P, expr: Expr, unused_in: ExprIn): Expr {
@@ -542,6 +543,7 @@ fn VisitExprVisitors(
         static fn e_index(p: *P, expr: Expr, expr_in: ExprIn): Expr {
             const e_ = expr.data.e_index;
             const is_call_target = p.call_target == .e_index && expr.data.e_index == p.call_target.e_index;
+            const is_template_tag = p.template_tag == .e_index && expr.data.e_index == p.template_tag.e_index;
             const is_delete_target = p.delete_target == .e_index && expr.data.e_index == p.delete_target.e_index;
 
             // "a['b']" => "a.b"
@@ -564,6 +566,10 @@ fn VisitExprVisitors(
                     p.call_target = dot.data;
                 }
 
+                if (is_template_tag) {
+                    p.template_tag = dot.data;
+                }
+
                 if (is_delete_target) {
                     p.delete_target = dot.data;
                 }
@@ -573,6 +579,7 @@ fn VisitExprVisitors(
 
             const target_visited = p.visitExprInOut(e_.target, ExprIn{
                 has_chain_parent: e_.optional_chain == .continuation,
+                is_property_access_target: !is_delete_target,
             });
             e_.target = target_visited;
 
@@ -632,6 +639,10 @@ fn VisitExprVisitors(
                                 p.call_target = dot.data;
                             }
 
+                            if (is_template_tag) {
+                                p.template_tag = dot.data;
+                            }
+
                             if (is_delete_target) {
                                 p.delete_target = dot.data;
                             }
@@ -654,6 +665,7 @@ fn VisitExprVisitors(
                                 // .is_template_tag = is_template_tag,
                                 is_delete_target: is_delete_target,
                                 assign_target: expr_in.assign_target,
+                                is_property_access_target: expr_in.is_property_access_target,
                             },
                         )) {
                             return rewrite;
@@ -912,6 +924,7 @@ fn VisitExprVisitors(
 
             e_.target = p.visitExprInOut(e_.target, {
                 property_access_for_method_call_maybe_should_replace_with_undefined: expr_in.property_access_for_method_call_maybe_should_replace_with_undefined,
+                is_property_access_target: !is_delete_target,
             });
 
             // 'require.resolve' -> .e_require_resolve_call_target
@@ -938,6 +951,7 @@ fn VisitExprVisitors(
                         is_call_target: is_call_target,
                         assign_target: expr_in.assign_target,
                         is_delete_target: is_delete_target,
+                        is_property_access_target: expr_in.is_property_access_target,
                         // .is_template_tag = p.template_tag != null,
                     },
                 )) {
@@ -1665,7 +1679,9 @@ fn VisitExprVisitors(
             let react_hook_data: ReactRefresh.HookContext? = null;
             const prev = p.react_refresh.hook_ctx_storage;
             defer p.react_refresh.hook_ctx_storage = prev;
-            p.react_refresh.hook_ctx_storage = &react_hook_data;
+            // A method cannot be wrapped in a call. Like react-refresh/babel, ignore its hook calls.
+            const is_method = e_.func.flags.contains(.is_unique_formal_parameters);
+            p.react_refresh.hook_ctx_storage = if (is_method) null else &react_hook_data;
 
             e_.func = p.visitFunc(e_.func, expr.loc);
 

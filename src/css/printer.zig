@@ -365,6 +365,17 @@ pub fn writeIdentOrRef(self: *Printer, ident: css.css_values.ident.IdentOrRef, h
                     return (blk_catch_7: { break :blk_catch_7 ((css.serializer.serializeIdentifier(symbol.original_name, self)) catch |__ce_7| { _ = &__ce_7; return self.addFmtError(); }); });
                 }
             }
+            if ((self.local_names == null)) {
+                if (ident.asRef()) |ref_| {
+                    _ = &ref_;
+                    const final_ref = self.symbols.follow(ref_);
+                    const symbol_opt = self.symbols.get(final_ref);
+                    if ((symbol_opt == null)) {
+                        return self.addFmtError();
+                    }
+                    return self.writeIdent(symbol_opt.?.original_name, true);
+                }
+            }
             const str = self.lookupIdentOrRef(ident);
             return (blk_catch_8: { break :blk_catch_8 ((css.serializer.serializeIdentifier(str, self)) catch |__ce_8| { _ = &__ce_8; return self.addFmtError(); }); });
     }

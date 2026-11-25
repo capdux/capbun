@@ -281,6 +281,41 @@ pub struct YarnLockEntry {
         return strings.hasPrefixComptime(version, "https://") && strings.endsWithComptime(version, ".tgz");
     }
 
+    /// `https://registry.npmjs.org/@scope/name/-/name-1.0.0.tgz` -> `@scope/name`
+    static fn getPackageNameFromDefaultRegistryUrl(url: string): string? {
+        let host_and_path: string = undefined;
+        if (strings.hasPrefixComptime(url, "https://")) {
+            host_and_path = url["https://".len..];
+        } else if (strings.hasPrefixComptime(url, "http://")) {
+            host_and_path = url["http://".len..];
+        } else {
+            return null;
+        }
+        let path: string = undefined;
+        if (strings.hasPrefixComptime(host_and_path, "registry.npmjs.org/")) {
+            path = host_and_path["registry.npmjs.org/".len..];
+        } else if (strings.hasPrefixComptime(host_and_path, "registry.yarnpkg.com/")) {
+            path = host_and_path["registry.yarnpkg.com/".len..];
+        } else {
+            return null;
+        }
+        // `-` is a valid package name, so the first "/-/" can be inside `@scope/-`.
+        let scope_len: usize = 0;
+        if (strings.hasPrefixComptime(path, "@")) {
+            const scope_end = std.mem.indexOfScalar(u8, path, '/') ?? return null;
+            if (scope_end == "@".len) return null;
+            scope_len = scope_end + 1;
+        }
+        const rel_slash = std.mem.indexOfScalar(u8, path[scope_len..], '/') ?? return null;
+        const name_len = scope_len + rel_slash;
+        const name = path[0..name_len];
+        const rest = path[name_len..];
+        if (strings.hasPrefixComptime(rest, "/-/") && Dependency.isSafeInstallFolderName(name)) {
+            return name;
+        }
+        return null;
+    }
+
     static fn isWorkspaceDependency(version: string): bool {
         return strings.hasPrefixComptime(version, "workspace:") ||
             strings.eqlComptime(version, "*");
@@ -1016,16 +1051,8 @@ pub fn migrateYarnLockfile(
             name_to_use = entry.git_repo_name.?;
         } else if (resolved := entry.resolved) {
             if (is_direct_url_dep || YarnLockEntry.isRemoteTarball(resolved) || strings.endsWithComptime(resolved, ".tgz")) {
-                if (strings.contains(resolved, "registry.npmjs.org/") || strings.contains(resolved, "registry.yarnpkg.com/")) {
-                    if (separator_idx := strings.indexOf(resolved, "/-/")) {
-                        if (registry_idx := strings.indexOf(resolved, "registry.")) {
-                            const after_registry = resolved[registry_idx..];
-                            if (domain_slash := strings.indexOf(after_registry, "/")) {
-                                const package_start = registry_idx + domain_slash + 1;
-                                name_to_use = resolved[package_start..separator_idx];
-                            }
-                        }
-                    }
+                if (name := YarnLockEntry.getPackageNameFromDefaultRegistryUrl(resolved)) {
+                    name_to_use = name;
                 }
             }
         }

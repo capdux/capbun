@@ -325,11 +325,12 @@ pub struct Lookup {
 
             const src_name = source_map.external_source_names[index as usize];
 
-            let buf: bun.PathBuffer = undefined;
+            const buf = bun.path_buffer_pool.get();
+            defer bun.path_buffer_pool.put(buf);
             const paths: [1]string = [src_name];
             const normalized = bun.path.joinAbsStringBufZ(
                 bun.path.dirname(base_filename, .auto),
-                unsafe { &buf },
+                buf,
                 unsafe { &paths },
                 .loose,
             );

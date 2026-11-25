@@ -1718,7 +1718,8 @@ pub fn openatWindowsA(dir: bun.FD, path: []const u8, flags: i32, perm: bun.Mode)
         return openatWindowsT(u8, dir, path, flags, perm);
 }
 
-pub fn openatOSPath(dirfd: bun.FD, file_path: bun.OSPathSliceZ, flags: i32, perm: bun.Mode) Maybe(bun.FD) {
+pub fn openatOSPath(dirfd: bun.FD, file_path: bun.OSPathSliceZ, flags_: i32, perm: bun.Mode) Maybe(bun.FD) {
+        const flags = (flags_ | bun.O.CLOEXEC);
         if (comptime Environment.isMac) {
             while (true) {
                 const rc = darwin_nocancel.@"openat$NOCANCEL"(dirfd.cast(), file_path.ptr, @bitCast(bun.O.toPacked(flags)), perm);
@@ -1799,7 +1800,8 @@ pub fn access(path: bun.OSPathSliceZ, mode: i32) Maybe(void) {
         return ((Maybe(void).errnoSysP(syscall.access(path, @bitCast(mode)), .access, path)) orelse (.success));
 }
 
-pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags: i32, perm: bun.Mode) Maybe(bun.FD) {
+pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags_: i32, perm: bun.Mode) Maybe(bun.FD) {
+        const flags = (flags_ | bun.O.CLOEXEC);
         if (comptime (!Environment.isLinux)) {
             return openat(dirfd, file_path, flags, perm);
         }
@@ -2319,7 +2321,7 @@ pub fn pidfd_open(pid: std.os.linux.pid_t, flags: u32) Maybe(i32) {
                 }
                 return e;
             }
-            return .{ .result = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) };
+            return .{ .result = moveAboveStdio(.fromNative((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))).native() };
         }
         _ = unreachable;
 }
@@ -3162,7 +3164,7 @@ break :e e;
             }
         }
         _ = log("socketpair() = [{d} {d}]", .{ fds_i[0], fds_i[1] });
-        return .{ .result = .{ .fromNative(fds_i[0]), .fromNative(fds_i[1]) } };
+        return .{ .result = .{ moveAboveStdio(.fromNative(fds_i[0])), moveAboveStdio(.fromNative(fds_i[1])) } };
 }
 
 pub fn munmap(memory: []align(page_size_min) const u8) Maybe(void) {
@@ -3215,7 +3217,7 @@ else => {
 }
                 return e;
             }
-            return .{ .result = .fromNative((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc))) };
+            return .{ .result = moveAboveStdio(.fromNative((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) };
         }
         _ = unreachable;
 }
@@ -3672,6 +3674,33 @@ pub fn dupWithFlags(fd: bun.FD, _: i32) Maybe(bun.FD) {
         return .initResult(.fromNative((if (comptime @typeInfo(@TypeOf(out)) == .@"enum") cp_cast_int(i32, @intFromEnum(out)) else cp_cast_int(i32, out))));
 }
 
+pub fn moveAboveStdio(fd: bun.FD) bun.FD {
+        if (comptime Environment.isWindows) {
+            return fd;
+        }
+        if ((fd.stdioTag() == null)) {
+            return fd;
+        }
+        const ArgType = (if (comptime Environment.isLinux) usize else c_int);
+        const getfd = fcntl(fd, (if (comptime @typeInfo(@TypeOf(bun.c.F_GETFD)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.c.F_GETFD)) else cp_cast_int(i32, bun.c.F_GETFD)), (if (comptime @typeInfo(ArgType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(ArgType, @enumFromInt(0)) else @as(ArgType, 0)));
+        const flags = (switch (getfd) {
+.result => |fl| fl,
+.err => {
+return fd;
+},
+});
+        const dup_cmd: i32 = (if (((flags & (if (comptime @typeInfo(@TypeOf(bun.c.FD_CLOEXEC)) == .@"enum") cp_cast_int(usize, @intFromEnum(bun.c.FD_CLOEXEC)) else cp_cast_int(usize, bun.c.FD_CLOEXEC))) != 0)) (if (comptime @typeInfo(@TypeOf(bun.c.F_DUPFD_CLOEXEC)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.c.F_DUPFD_CLOEXEC)) else cp_cast_int(i32, bun.c.F_DUPFD_CLOEXEC)) else (if (comptime @typeInfo(@TypeOf(bun.c.F_DUPFD)) == .@"enum") cp_cast_int(i32, @intFromEnum(bun.c.F_DUPFD)) else cp_cast_int(i32, bun.c.F_DUPFD)));
+        switch (fcntl(fd, dup_cmd, (if (comptime @typeInfo(ArgType) == .@"enum" and (@typeInfo(@TypeOf(3)) == .int or @typeInfo(@TypeOf(3)) == .comptime_int)) @as(ArgType, @enumFromInt(3)) else @as(ArgType, 3)))) {
+.result => |rc| {
+_ = fd.closeAllowingStandardIo(null);
+        return .fromNative((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)));
+},
+.err => {
+return fd;
+},
+}
+}
+
 pub fn dup(fd: bun.FD) Maybe(bun.FD) {
         return dupWithFlags(fd, 0);
 }
@@ -3798,6 +3827,40 @@ return e;
         return read(fd, buf);
 }
 
+pub fn readNowait(fd: bun.FD, buf: []u8) Maybe(?usize) {
+        if (comptime Environment.isLinux) {
+            if ((!bun.linux.RWFFlagSupport.isMaybeSupported())) {
+                return .{ .result = null };
+            }
+            while (true) {
+                var iovec: [1]std.posix.iovec = undefined;
+                _ = &iovec;
+                iovec[cp_cast_int(usize, 0)] = .{ .base = buf.ptr, .len = buf.len };
+                const rc = sys_preadv2(fd.native(), (&iovec), 1, -1, std.os.linux.RWF.NOWAIT);
+                if (Maybe(?usize).errnoSysFd(rc, .read, fd)) |e| {
+                    _ = &e;
+                    switch (e.getErrno()) {
+.INTR => {
+_ = continue;
+},
+.NOSYS => {
+_ = bun.linux.RWFFlagSupport.disable();
+                    return .{ .result = null };
+},
+.OPNOTSUPP, .PERM, .ACCES => {
+return .{ .result = null };
+},
+else => {
+return e;
+},
+}
+                }
+                return .{ .result = @as(usize, @intCast(rc)) };
+            }
+        }
+        return .{ .result = null };
+}
+
 pub extern "c" fn sys_pwritev2(fd: c_int, iov: [*]const std.posix.iovec_const, iovcnt: c_int, offset: std.posix.off_t, flags: c_uint) callconv(.c) isize;
 
 pub fn writeNonblocking(fd: bun.FD, buf: []const u8) Maybe(usize) {
@@ -3841,6 +3904,40 @@ return e;
             }
         }
         return write(fd, buf);
+}
+
+pub fn writeNowait(fd: bun.FD, buf: []const u8) Maybe(?usize) {
+        if (comptime Environment.isLinux) {
+            if ((!bun.linux.RWFFlagSupport.isMaybeSupported())) {
+                return .{ .result = null };
+            }
+            while (true) {
+                var iovec: [1]std.posix.iovec_const = undefined;
+                _ = &iovec;
+                iovec[cp_cast_int(usize, 0)] = .{ .base = buf.ptr, .len = buf.len };
+                const rc = sys_pwritev2(fd.native(), (&iovec), 1, -1, std.os.linux.RWF.NOWAIT);
+                if (Maybe(?usize).errnoSysFd(rc, .write, fd)) |e| {
+                    _ = &e;
+                    switch (e.getErrno()) {
+.INTR => {
+_ = continue;
+},
+.NOSYS => {
+_ = bun.linux.RWFFlagSupport.disable();
+                    return .{ .result = null };
+},
+.OPNOTSUPP, .PERM, .ACCES => {
+return .{ .result = null };
+},
+else => {
+return e;
+},
+}
+                }
+                return .{ .result = @as(usize, @intCast(rc)) };
+            }
+        }
+        return .{ .result = null };
 }
 
 pub fn getFileSize(fd: bun.FD) Maybe(usize) {

@@ -1695,8 +1695,10 @@ extern_string_count_bin = (extern_string_count_bin + (obj.properties.len * 2));
 .e_string => {
 if (bin.expr.asString(allocator)) |str_| {
                             _ = &str_;
-                            _ = string_builder.count(str_);
-                            break :bin;
+                            if ((str_.len > 0)) {
+                                _ = string_builder.count(str_);
+                                break :bin;
+                            }
                         }
 },
 else => {
@@ -2763,7 +2765,7 @@ pub fn sortExternVersions(comptime int_bytes: usize, max_versions_count: usize, 
                     const first = semver_versions_[0];
                     const second = semver_versions_[1];
                     const order = second.order(first, string_buf, string_buf);
-                    _ = bun.assertWithLocation((order == .gt), @src());
+                    _ = bun.assertWithLocation((order != .lt), @src());
                 }
             }
         }

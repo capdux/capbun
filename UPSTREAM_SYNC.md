@@ -39,3 +39,10 @@
 
 ### 2026-11-26 `bun-v1.4.1 -> bun-v1.4.2` 全量同步与测试同步（Tag: `cp-v1.4.2-sync`）
 - **核心修复**：`#41387` (`BunString.cpp` / `bindings.cpp` `JSONParseWithException`)、`#41366` (`lockfile.cp` `appendWithHash` 强制按 `slice` 计算真实哈希)、`#38354` (`PipeWriter.cp` `start()` 失败时若新建 poll 则只销毁 poll 不关闭 caller fd)、`#31898` (`image_resize.cpp` + `image/{codecs,codec_jpeg,codec_png}.cp` CMYK/YCCK JPEG SIMD 转换与 PNG 解码提速)；同步全量 `test/` 至 `bun-v1.4.2`，`bun run zig:check` 5/5 步全绿。
+
+### 2026-11-26 `bun-v1.4.3` 全量同步闭合 (`bun-v1.4.2..bun-v1.4.3`)
+- **测试与类型同步**：全量同步 `test/` 与 `packages/bun-types/` 至 `bun-v1.4.3`。
+- **`install`/`cli`/`glob`/`resolver`/`sys`/`io`/`spawn`（21 `.cp`）**：吸收 `#41985`/`#43179`/`#30623`/`#43845`/`#41460`/`#43868`/`#43900`/`#42038`/`#42731`/`#43189`/`#43035`/`#43145`/`#42884`/`#44414`/`#43122`/`#33106`/`#43168`（含 `bun.lock.cp`、`runTasks.cp`、`sys.cp`、`PopulateManifestCache.cp` 等）。
+- **`bundler`/`js_parser`/`js_printer`/`css`/`sourcemap`（33 `.cp` + `ident.cp`）**：吸收 `#42948`/`#34368`/`#42779`/`#42729`/`#42764`/`#43750`/`#44345`/`#43634`/`#42396`/`#42186`/`#41973`/`#41828`/`#40887`/`#41174`/`#42751`/`#42681`/`#41909`/`#44502`/`#30623`/`#42981`/`#41442`/`#42549`/`#42569`/`#42665`/`#42760`/`#42423`/`#42596`/`#42489`（含 `P.cp` `template_tag`/`setMustNotBeRenamedThroughLinks`、`Scope.cp`、`BundledAst.cp`、`import_record.cp`、`MetafileBuilder.cp`、`css/selectors/parser.cp`、`css/values/ident.cp`）。
+- **`http`/`sql`/`webcore`/`server`**：吸收 `http/Decompressor.cp` & `InternalState.cp`（`#33711`）、`http/http.cp`（`#44507` `configureTLS`）、`PostgresSQLConnection.cp` & `sql.ts` & `shared.ts`（`#44235`/`#35119`/`#41761`）、`FileSink.cp`（`#43761`）、`ETag.cp` & `RangeRequest.cp` & `DirectoryRoute.cp` & `FileRoute.cp`（`#43571` `If-Range`）。
+- **验证**：全部修改 `.cp` 通过 `cpc_brief.py` 4 项硬门禁，`bun run zig:check` 5/5 步通过（21s, MaxRSS 3G），打标 `cp-v1.4.3-sync`。

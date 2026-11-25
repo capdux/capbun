@@ -21,7 +21,8 @@
     has_explicit_use_strict_directive: bool = false,
     has_import_meta: bool = false,
     has_esm_namespace: bool = false,
-    _padding: u6 = 0,
+    commonjs_lifted_to_esm: bool = false,
+    _padding: u5 = 0,
 }
 
 let empty_u32s: [0]u32 = undefined;

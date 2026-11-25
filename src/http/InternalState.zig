@@ -197,7 +197,8 @@ pub fn decompressBytes(self: *InternalState, buffer: []const u8, body_out: *bun.
         var still_needs_to_decompress = true;
         _ = &still_needs_to_decompress;
         if (bun.FeatureFlags.isLibdeflateEnabled()) {
-            if ((((is_final_chunk and (!self.flags.is_libdeflate_fast_path_disabled)) and self.encoding.canUseLibDeflate()) and self.isDone())) {
+            const use_libdeflate = ((((is_final_chunk and (!self.flags.is_libdeflate_fast_path_disabled)) and self.encoding.canUseLibDeflate()) and self.isDone()) and (!((self.encoding == .deflate) and @import("./Decompressor.zig").hasZlibHeader(buffer))));
+            if (use_libdeflate) {
                 self.flags.is_libdeflate_fast_path_disabled = true;
                 var deflater = bun.http.http_thread.deflater();
                 _ = &deflater;

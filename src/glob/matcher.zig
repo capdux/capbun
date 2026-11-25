@@ -134,6 +134,10 @@ pub const BraceIndex = struct {
 
 const BraceStack = bun.BoundedArray(Brace, 10);
 const BRACE_BRANCH_BUDGET: u32 = 10000;
+const RuneResult = struct {
+    cp: u32,
+    len: u8,
+};
 
 pub fn match(glob: []const u8, path: []const u8) MatchResult {
         var state = State{  };
@@ -170,7 +174,7 @@ pub inline fn globMatchImpl(state: *State, glob: []const u8, glob_start: u32, pa
                         _ = skipGlobstars(glob, (&state.glob_index));
                     }
                     state.wildcard.glob_index = state.glob_index;
-                    state.wildcard.path_index = (state.path_index + (if ((state.path_index < path.len)) bun.strings.wtf8ByteSequenceLength(path[@as(usize, @intCast(state.path_index))]) else 1));
+                    state.wildcard.path_index = (state.path_index + (if ((state.path_index < path.len)) runeLenAt(path, state.path_index) else 1));
                     state.wildcard.brace_depth = state.brace_depth;
                     var in_globstar = false;
                     _ = &in_globstar;
@@ -200,7 +204,7 @@ pub inline fn globMatchImpl(state: *State, glob: []const u8, glob_start: u32, pa
 if ((state.path_index < path.len)) {
                     if ((!isSeparator(path[@as(usize, @intCast(state.path_index))]))) {
                         state.glob_index = (state.glob_index + 1);
-                        state.path_index = (state.path_index + bun.strings.wtf8ByteSequenceLength(path[@as(usize, @intCast(state.path_index))]));
+                        state.path_index = (state.path_index + runeLenAt(path, state.path_index));
                         continue;
                     }
                     break :fallthrough;
@@ -221,8 +225,9 @@ if ((state.path_index < path.len)) {
                     _ = &first;
                     var is_match = false;
                     _ = &is_match;
-                    const len = bun.strings.wtf8ByteSequenceLength(path[@as(usize, @intCast(state.path_index))]);
-                    const rune = bun.strings.decodeWTF8RuneT(path[state.path_index..].ptr[0..4], len, u32, 65533);
+                    const decoded = decodeRuneAt(path, state.path_index);
+                    const len = decoded.len;
+                    const rune = decoded.cp;
                     while (((state.glob_index < glob.len) and (first or (glob[@as(usize, @intCast(state.glob_index))] != 93)))) {
                         var low: u32 = glob[@as(usize, @intCast(state.glob_index))];
                         _ = &low;
@@ -477,23 +482,36 @@ glob_index.* = (glob_index.* + 1);
 'r' => 13,
 't' => 9,
 else => brk: {
-        const cc = glob[@as(usize, @intCast(glob_index.*))];
-        const len = bun.strings.wtf8ByteSequenceLength(cc);
-        clen.* = len;
-        if ((len == 1)) {
-            break :brk cc;
-        }
-        break :brk bun.strings.decodeWTF8RuneT(glob[glob_index.*..].ptr[0..4], len, u32, 65533);
+        const decoded = decodeRuneAt(glob, glob_index.*);
+        clen.* = decoded.len;
+        break :brk decoded.cp;
 },
 }));
 },
 else => {
-const len = bun.strings.wtf8ByteSequenceLength(@truncate(c.*));
-        clen.* = len;
-        c.* = bun.strings.decodeWTF8RuneT(glob[glob_index.*..].ptr[0..4], len, u32, 65533);
+const decoded = decodeRuneAt(glob, glob_index.*);
+        clen.* = decoded.len;
+        c.* = decoded.cp;
 },
 }
         return true;
+}
+
+pub inline fn runeLenAt(bytes: []const u8, idx: usize) u8 {
+        return decodeRuneAt(bytes, idx).len;
+}
+
+pub inline fn decodeRuneAt(bytes: []const u8, idx: usize) RuneResult {
+        const lead = bytes[@as(usize, @intCast(idx))];
+        if ((lead < 128)) {
+            return RuneResult{ .cp = lead, .len = 1 };
+        }
+        const seq_len = (blk_catch_2: { break :blk_catch_2 ((std.unicode.utf8ByteSequenceLength(lead)) catch |__ce_2| { _ = &__ce_2; return RuneResult{ .cp = 65533, .len = 1 }; }); });
+        if (((idx + seq_len) > bytes.len)) {
+            return RuneResult{ .cp = 65533, .len = 1 };
+        }
+        const cp = (blk_catch_3: { break :blk_catch_3 ((std.unicode.utf8Decode(bytes[idx..][0..seq_len])) catch |__ce_3| { _ = &__ce_3; return RuneResult{ .cp = 65533, .len = 1 }; }); });
+        return RuneResult{ .cp = cp, .len = @intCast(seq_len) };
 }
 
 pub inline fn skipGlobstars(glob: []const u8, glob_index: *u32) void {

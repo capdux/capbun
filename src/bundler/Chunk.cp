@@ -784,9 +784,9 @@ pub struct Chunk {
 
     compile_results_for_chunk: []CompileResult = [],
 
-    /// Pre-built JSON fragment for this chunk's metafile output entry.
-    /// Generated during parallel chunk generation, joined at the end.
-    metafile_chunk_json: []const u8 = "",
+    /// Byte length of the output emitted for this chunk: what `code()` returned plus
+    /// the source map comment. The metafile reports it as `outputs[..].bytes`.
+    final_output_size: usize = 0,
 
     /// Pack boolean flags to reduce padding overhead.
     /// Previously 3 separate bool fields caused ~21 bytes of padding waste.

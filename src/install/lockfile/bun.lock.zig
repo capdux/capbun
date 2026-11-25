@@ -1423,10 +1423,16 @@ else => {
                     return error.InvalidPackageInfo;
                 }
                 const pkg_info = value.data.e_array.items;
-                if ((pkg_info.len < 3)) {
-                    continue;
+                var maybe_info_obj_opt: ?Expr = null;
+                _ = &maybe_info_obj_opt;
+                for (cp_iter_slice(pkg_info.slice())) |item| {
+                    _ = &item;
+                    if ((item.data == .e_object)) {
+                        maybe_info_obj_opt = item;
+                        break;
+                    }
                 }
-                const maybe_info_obj = pkg_info.at(2);
+                const maybe_info_obj = ((maybe_info_obj_opt) orelse continue);
                 const bundled_expr = ((maybe_info_obj.get("bundled")) orelse continue);
                 const bundled = ((bundled_expr.asBool()) orelse continue);
                 if ((!bundled)) {
@@ -1523,8 +1529,8 @@ else => {
                         {
                             var _workspace_pkg_id: i32 = workspace_pkgs_off;
                             _ = &_workspace_pkg_id;
-                            const __end_26 = (workspace_pkgs_off + workspace_pkgs_len);
-                            while (_workspace_pkg_id < __end_26) : (_workspace_pkg_id += 1) {
+                            const __end_27 = (workspace_pkgs_off + workspace_pkgs_len);
+                            while (_workspace_pkg_id < __end_27) : (_workspace_pkg_id += 1) {
                                 const workspace_pkg_id: PackageID = @intCast(_workspace_pkg_id);
                                 if (res.eql((&pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))]), string_buf.bytes.items, string_buf.bytes.items)) {
                                     if (comptime Environment.isDebug) {
@@ -1745,8 +1751,8 @@ else => {
                 {
                     var _pkg_id: i32 = workspace_pkgs_off;
                     _ = &_pkg_id;
-                    const __end_27 = (workspace_pkgs_off + workspace_pkgs_len);
-                    while (_pkg_id < __end_27) : (_pkg_id += 1) {
+                    const __end_28 = (workspace_pkgs_off + workspace_pkgs_len);
+                    while (_pkg_id < __end_28) : (_pkg_id += 1) {
                         const pkg_id: PackageID = @intCast(_pkg_id);
                         const workspace_name = pkg_names[@as(usize, @intCast(pkg_id))].slice(lockfile.buffers.string_bytes.items);
                         _ = seen_deps.clearRetainingCapacity();

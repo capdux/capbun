@@ -1664,8 +1664,10 @@ pub fn Package(comptime SemverIntType: type): type {
                         },
                         .e_string => {
                             if (str_ := bin.expr.asString(allocator)) {
-                                string_builder.count(str_);
-                                break :bin;
+                                if (str_.len > 0) {
+                                    string_builder.count(str_);
+                                    break :bin;
+                                }
                             }
                         },
                         else => {},

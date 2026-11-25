@@ -503,7 +503,45 @@ pub fn onConnect(
     if (!client.flags.disable_keepalive && client.unix_socket_path.length() == 0) {
         * = socket.setKeepAlive(true, 60);
     }
-    return onOpen(client, is_ssl, socket);
+    onOpen(client, is_ssl, socket)?;
+    if (comptime is_ssl) {
+        configureTLS(client, socket);
+    }
+}
+
+fn configureTLS(
+    client: *HTTPClient,
+    socket: NewHTTPContext(true).HTTPSocket,
+) {
+    let ssl_ptr: *bun.BoringSSL.c.SSL = unsafe { @ptrCast(socket.getNativeHandle()) };
+    const _hostname = getTlsHostname(client, client.http_proxy != null);
+
+    let hostname: [:0]const u8 = "";
+    let _hostname_guard = OptFreeZGuard{ alloc: bun.default_allocator };
+    if (!bun.strings.isIPAddress(_hostname)) {
+        if (_hostname.len < temp_hostname.len) {
+            @memcpy(temp_hostname[0.._hostname.len], _hostname);
+            temp_hostname[_hostname.len] = 0;
+            hostname = temp_hostname[0.._hostname.len :0];
+        } else {
+            const duped = bun.default_allocator.dupeZ(u8, _hostname) catch unreachable;
+            hostname = duped;
+            _hostname_guard.slice = duped;
+        }
+    }
+
+    ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
+
+    if (session_cache.eligible(client)) {
+        const want_tunnel = client.http_proxy != null && client.url.isHTTPS();
+        session_cache.install(
+            ssl_ptr,
+            client.getSslCtx(true),
+            client.connected_url.hostname,
+            client.connected_url.getPortAuto(),
+            if (want_tunnel || client.http_proxy == null) client.proxyAuthHash() else 0,
+        );
+    }
 }
 
 pub fn onOpen(
@@ -531,39 +569,7 @@ pub fn onOpen(
     if (client.state.request_stage == .pending)
         client.state.request_stage = .opened;
 
-    if (comptime is_ssl) {
-        let ssl_ptr: *bun.BoringSSL.c.SSL = unsafe { @ptrCast(socket.getNativeHandle()) };
-        if (!ssl_ptr.isInitFinished()) {
-            const _hostname = getTlsHostname(client, client.http_proxy != null);
-
-            let hostname: [:0]const u8 = "";
-            let _hostname_guard = OptFreeZGuard{ alloc: bun.default_allocator };
-            if (!bun.strings.isIPAddress(_hostname)) {
-                if (_hostname.len < temp_hostname.len) {
-                    @memcpy(temp_hostname[0.._hostname.len], _hostname);
-                    temp_hostname[_hostname.len] = 0;
-                    hostname = temp_hostname[0.._hostname.len :0];
-                } else {
-                    const duped = bun.default_allocator.dupeZ(u8, _hostname) catch unreachable;
-                    hostname = duped;
-                    _hostname_guard.slice = duped;
-                }
-            }
-
-            ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
-
-            if (session_cache.eligible(client)) {
-                const want_tunnel = client.http_proxy != null && client.url.isHTTPS();
-                session_cache.install(
-                    ssl_ptr,
-                    client.getSslCtx(true),
-                    client.connected_url.hostname,
-                    client.connected_url.getPortAuto(),
-                    if (want_tunnel || client.http_proxy == null) client.proxyAuthHash() else 0,
-                );
-            }
-        }
-    } else {
+    if (comptime !is_ssl) {
         client.firstCall(is_ssl, socket);
     }
 }

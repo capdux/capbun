@@ -296,7 +296,7 @@ pub fn hash(self: IdentOrRef, hasher: *std.hash.Wyhash) void {
             if (self.isIdent()) {
                 _ = hasher.update((self.asIdent()).?.v);
             } else {
-                _ = hasher.update(std.mem.asBytes(self));
+                _ = hasher.update(std.mem.asBytes((&self)));
             }
     }
 

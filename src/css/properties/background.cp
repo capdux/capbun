@@ -226,7 +226,7 @@ pub struct Background {
             has_output = true;
         }
 
-        if ((output_padding_box && !_.clip.eqlOrigin(&BackgroundOrigin.@"border-box")) ||
+        if ((output_padding_box && !_.clip.eqlOrigin(&_.origin)) ||
             !_.clip.eqlOrigin(&BackgroundOrigin.@"border-box"))
         {
             if (has_output) dest.writeStr(" ")?;

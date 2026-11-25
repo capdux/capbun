@@ -2767,7 +2767,41 @@ pub fn onConnect(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCont
         if (((!client.flags.disable_keepalive) and (client.unix_socket_path.length() == 0))) {
             _ = socket.setKeepAlive(true, 60);
         }
-        return onOpen(client, is_ssl, socket);
+        _ = try onOpen(client, is_ssl, socket);
+        if (comptime is_ssl) {
+            _ = configureTLS(client, socket);
+        }
+}
+
+pub fn configureTLS(client: *HTTPClient, socket: NewHTTPContext(true).HTTPSocket) void {
+        var ssl_ptr: *bun.BoringSSL.c.SSL = (blk: {
+        break :blk @ptrCast(socket.getNativeHandle());
+
+});
+        _ = &ssl_ptr;
+        const _hostname = getTlsHostname(client, (client.http_proxy != null));
+        var hostname: [:0]const u8 = "";
+        _ = &hostname;
+        var _hostname_guard = OptFreeZGuard{ .alloc = bun.default_allocator };
+        _ = &_hostname_guard;
+        var ___hostname_guard_moved = false; _ = &___hostname_guard_moved;
+        defer if (!___hostname_guard_moved) { ___hostname_guard_moved = true; const __T = @TypeOf(_hostname_guard); if (@typeInfo(__T) == .optional) { if (_hostname_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _hostname_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _hostname_guard; _drop_val.__cp_deinit(); } };
+        if ((!bun.strings.isIPAddress(_hostname))) {
+            if ((_hostname.len < temp_hostname.len)) {
+                _ = @memcpy(temp_hostname[0.._hostname.len], _hostname);
+                temp_hostname[cp_cast_int(usize, _hostname.len)] = 0;
+                hostname = temp_hostname[0.._hostname.len :0];
+            } else {
+                const duped = ((bun.default_allocator.dupeZ(u8, _hostname)) catch unreachable);
+                hostname = duped;
+                _hostname_guard.slice = duped;
+            }
+        }
+        _ = ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
+        if (session_cache.eligible(client)) {
+            const want_tunnel = ((client.http_proxy != null) and client.url.isHTTPS());
+            _ = session_cache.install(ssl_ptr, client.getSslCtx(true), client.connected_url.hostname, client.connected_url.getPortAuto(), (if ((want_tunnel or (client.http_proxy == null))) client.proxyAuthHash() else 0));
+        }
 }
 
 pub fn onOpen(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket) !void {
@@ -2789,38 +2823,7 @@ pub fn onOpen(client: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext
         if ((client.state.request_stage == .pending)) {
             client.state.request_stage = .opened;
         }
-        if (comptime is_ssl) {
-            var ssl_ptr: *bun.BoringSSL.c.SSL = (blk: {
-            break :blk @ptrCast(socket.getNativeHandle());
-
-});
-            _ = &ssl_ptr;
-            if ((!ssl_ptr.isInitFinished())) {
-                const _hostname = getTlsHostname(client, (client.http_proxy != null));
-                var hostname: [:0]const u8 = "";
-                _ = &hostname;
-                var _hostname_guard = OptFreeZGuard{ .alloc = bun.default_allocator };
-                _ = &_hostname_guard;
-                var ___hostname_guard_moved = false; _ = &___hostname_guard_moved;
-                defer if (!___hostname_guard_moved) { ___hostname_guard_moved = true; const __T = @TypeOf(_hostname_guard); if (@typeInfo(__T) == .optional) { if (_hostname_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _hostname_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _hostname_guard; _drop_val.__cp_deinit(); } };
-                if ((!bun.strings.isIPAddress(_hostname))) {
-                    if ((_hostname.len < temp_hostname.len)) {
-                        _ = @memcpy(temp_hostname[0.._hostname.len], _hostname);
-                        temp_hostname[cp_cast_int(usize, _hostname.len)] = 0;
-                        hostname = temp_hostname[0.._hostname.len :0];
-                    } else {
-                        const duped = ((bun.default_allocator.dupeZ(u8, _hostname)) catch unreachable);
-                        hostname = duped;
-                        _hostname_guard.slice = duped;
-                    }
-                }
-                _ = ssl_ptr.configureHTTPClientWithALPN(hostname, client.alpnOffer());
-                if (session_cache.eligible(client)) {
-                    const want_tunnel = ((client.http_proxy != null) and client.url.isHTTPS());
-                    _ = session_cache.install(ssl_ptr, client.getSslCtx(true), client.connected_url.hostname, client.connected_url.getPortAuto(), (if ((want_tunnel or (client.http_proxy == null))) client.proxyAuthHash() else 0));
-                }
-            }
-        } else {
+        if (comptime (!is_ssl)) {
             _ = client.firstCall(is_ssl, socket);
         }
 }

@@ -190,6 +190,9 @@ pub union(enum) PatchFeatures {
 
     lockfile_only: bool = false,
 
+    /// Set by `initWithRuntime`: no install phase, so only a resolve downloads a package.
+    runtime_auto_install: bool = false,
+
     // `bun pm version` command options
     git_tag_version: bool = true,
     allow_same_version: bool = false,

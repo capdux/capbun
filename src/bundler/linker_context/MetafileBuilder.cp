@@ -110,8 +110,7 @@ struct ImportedByGuard {
 }
 
 /// Generates the JSON fragment for a single output chunk.
-/// Called during parallel chunk generation in postProcessJSChunk/postProcessCSSChunk.
-/// The result is stored in chunk.metafile_chunk_json && assembled later.
+/// Runs after the chunk's output is emitted: "bytes" is only known then.
 pub fn generateChunkJson(
     allocator: std.mem.Allocator,
     c: *const LinkerContext,
@@ -128,9 +127,7 @@ pub fn generateChunkJson(
     writeJSONString(writer, chunk.final_rel_path)?;
     writer.writeAll(": {")?;
 
-    // Write bytes
-    const chunk_bytes = chunk.intermediate_output.getSize();
-    writer.print("\n      \"bytes\": {d}", .{chunk_bytes})?;
+    writer.print("\n      \"bytes\": {d}", .{chunk.final_output_size})?;
 
     // Write inputs for this output (bytesInOutput is pre-computed during chunk generation)
     writer.writeAll(",\n      \"inputs\": {")?;
@@ -282,6 +279,16 @@ pub fn generate(
         }
     }
 
+    // A split `import()` / `require()` record names its target's chunk
+    // (`computeCrossChunkDependencies`); "entryPoint" adds the input.
+    let entry_of_chunk = std.StringHashMap(u32).init(allocator);
+    defer entry_of_chunk.deinit();
+    for (chunk of chunks) {
+        if (chunk.entry_point.is_entry_point && chunk.unique_key.len > 0) {
+            entry_of_chunk.put(chunk.unique_key, chunk.entry_point.source_index)?;
+        }
+    }
+
     // Write inputs
     let source_index: u32 = 0;
     while (source_index < sources.len) : (source_index += 1) {
@@ -330,6 +337,15 @@ pub fn generate(
                 if (record.original_path.len > 0 && !std.mem.eql(u8, record.original_path, record.path.text)) {
                     j.pushStatic(",\n          \"original\": ");
                     j.push(std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(record.original_path, .{})})?, allocator);
+                }
+
+                if (record.flags.imports_chunk) {
+                    if (entry_point := entry_of_chunk.get(record.path.text)) {
+                        if (entry_point < sources.len && sources[entry_point].path.pretty.len > 0) {
+                            j.pushStatic(",\n          \"entryPoint\": ");
+                            j.push(std.fmt.allocPrint(allocator, "{f}", .{bun.fmt.formatJSONStringUTF8(sources[entry_point].path.pretty, .{})})?, allocator);
+                        }
+                    }
                 }
 
                 // Add "external": true for external imports
@@ -387,9 +403,11 @@ pub fn generate(
 
     j.pushStatic("\n  },\n  \"outputs\": {");
 
-    // Write outputs by joining pre-built chunk JSON fragments
+    // Write outputs
     let first_output = true;
-    for (*chunk of chunks) {
+    let chunk_i: usize = 0;
+    while (chunk_i < chunks.len) : (chunk_i += 1) {
+        const chunk = &chunks[chunk_i];
         if (chunk.final_rel_path.len == 0) continue;
 
         if (!first_output) {
@@ -398,7 +416,7 @@ pub fn generate(
         first_output = false;
 
         j.pushStatic("\n    ");
-        j.pushStatic(chunk.metafile_chunk_json);
+        j.push(generateChunkJson(allocator, c, chunk, chunks)?, allocator);
     }
 
     j.pushStatic("\n  }\n}\n");
@@ -431,6 +449,25 @@ pub fn generate(
 
 fn writeJSONString(writer: anytype, str: []const u8)! {
     writer.print("{f}", .{bun.fmt.formatJSONStringUTF8(str, .{})})?;
+}
+
+/// The target of an `inputs[..].imports[..]` edge and whether the edge is external.
+/// A split `import()` / `require()` has the output chunk in "path" and `"external": true`;
+/// its "entryPoint" is the bundled input it loads, so it is reported as that input.
+const ImportTargetResult = struct {
+    path: std.json.Value?,
+    is_external: bool,
+};
+
+fn importTarget(imp: std.json.ObjectMap): ImportTargetResult {
+    if (entry_point := imp.get("entryPoint")) {
+        return { path: entry_point, is_external: false };
+    }
+    let is_ext = false;
+    if (ext := imp.get("external")) {
+        is_ext = ext == .@"bool" && ext.bool;
+    }
+    return { path: imp.get("path"), is_external: is_ext };
 }
 
 /// Generates a markdown visualization of the module graph from metafile JSON.
@@ -564,13 +601,12 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
                 info.import_count = @as(u32, @intCast(imps.array.items.len));
                 for (imp of imps.array.items) {
                     if (imp == .object) {
-                        if (ext := imp.object.get("external")) {
-                            if (ext == .@"bool" && ext.bool) {
-                                external_count += 1;
-                                continue;
-                            }
+                        const target_res = importTarget(imp.object);
+                        if (target_res.is_external) {
+                            external_count += 1;
+                            continue;
                         }
-                        if (imp_path := imp.object.get("path")) {
+                        if (imp_path := target_res.path) {
                             if (imp_path == .@"string") {
                                 // Try to find the matching input key for this import
                                 // The import path may be absolute while input keys are relative
@@ -944,16 +980,12 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
                 writer.writeAll("- **Imports**:\n")?;
                 for (imp of imps.array.items) {
                     if (imp == .object) {
-                        const path = imp.object.get("path") ?? continue;
+                        const target_res = importTarget(imp.object);
+                        const path = target_res.path ?? continue;
                         const kind = imp.object.get("kind") ?? continue;
                         if (path != .@"string" || kind != .@"string") continue;
 
-                        const is_external = blk: {
-                            if (ext := imp.object.get("external")) {
-                                if (ext == .@"bool") break :blk ext.bool;
-                            }
-                            break :blk false;
-                        };
+                        const is_external = target_res.is_external;
 
                         const original = blk: {
                             if (orig := imp.object.get("original")) {
@@ -1052,14 +1084,10 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
             if (imps == .array) {
                 for (imp of imps.array.items) {
                     if (imp == .object) {
-                        const is_ext = blk: {
-                            if (ext := imp.object.get("external")) {
-                                if (ext == .@"bool") break :blk ext.bool;
-                            }
-                            break :blk false;
-                        };
+                        const target_res = importTarget(imp.object);
+                        const is_ext = target_res.is_external;
 
-                        if (imp_path := imp.object.get("path")) {
+                        if (imp_path := target_res.path) {
                             if (imp_path == .@"string") {
                                 if (is_ext) {
                                     writer.print("[EXTERNAL: {s} imports {s}]\n", .{ source_path, imp_path.string })?;

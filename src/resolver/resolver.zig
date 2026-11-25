@@ -1057,21 +1057,29 @@ else => r.opts.extension_order.default.default,
                 }
                 return .{ .success = Result{ .import_kind = kind, .path_pair = PathPair{ .primary = Path.init(import_path) }, .module_type = (if ((!kind.isFromCSS())) .esm else .unknown), .flags = .{ .is_external = true } } };
             }
-            if ((blk_catch_10: { break :blk_catch_10 ((DataURL.parse(import_path)) catch |__ce_10| { _ = &__ce_10; return .{ .failure = error.InvalidDataURL }; }); })) |data_url| {
+            if ((blk_catch_10: { break :blk_catch_10 ((DataURL.parse(import_path)) catch |__ce_10| { _ = &__ce_10; if (kind.isFromCSS()) {
+                if (r.debug_logs) |*debug| {
+                    _ = &debug;
+                    _ = (debug.*).addNote("Marking malformed \"dataurl\" as external");
+                    _ = (blk_catch_11: { break :blk_catch_11 ((r.flushDebugLogs(.success)) catch |__ce_11| { _ = &__ce_11;  }); });
+                }
+                return .{ .success = Result{ .import_kind = kind, .path_pair = PathPair{ .primary = Path.init(import_path) }, .module_type = .unknown, .flags = .{ .is_external = true } } };
+            }
+            return .{ .failure = error.InvalidDataURL }; }); })) |data_url| {
                 _ = &data_url;
                 const mime = data_url.decodeMimeType();
                 if (((((mime.category == .javascript) or (mime.category == .css)) or (mime.category == .json)) or (mime.category == .text))) {
                     if (r.debug_logs) |*debug| {
                         _ = &debug;
                         _ = (debug.*).addNote("Putting this path in the \"dataurl\" namespace");
-                        _ = (blk_catch_11: { break :blk_catch_11 ((r.flushDebugLogs(.success)) catch |__ce_11| { _ = &__ce_11;  }); });
+                        _ = (blk_catch_12: { break :blk_catch_12 ((r.flushDebugLogs(.success)) catch |__ce_12| { _ = &__ce_12;  }); });
                     }
                     return .{ .success = Result{ .path_pair = PathPair{ .primary = Path.initWithNamespace(import_path, "dataurl") } } };
                 }
                 if (r.debug_logs) |*debug| {
                     _ = &debug;
                     _ = (debug.*).addNote("Marking this \"dataurl\" as external");
-                    _ = (blk_catch_12: { break :blk_catch_12 ((r.flushDebugLogs(.success)) catch |__ce_12| { _ = &__ce_12;  }); });
+                    _ = (blk_catch_13: { break :blk_catch_13 ((r.flushDebugLogs(.success)) catch |__ce_13| { _ = &__ce_13;  }); });
                 }
                 return .{ .success = Result{ .path_pair = PathPair{ .primary = Path.initWithNamespace(import_path, "dataurl") }, .flags = .{ .is_external = true } } };
             }
@@ -1106,12 +1114,12 @@ else => r.opts.extension_order.default.default,
             if ((!std.fs.path.isAbsolute(source_dir))) {
                 break :brk Fs.FileSystem.instance.top_level_dir;
             }
-            break :brk (blk_catch_13: { break :blk_catch_13 ((source_dir_resolver.resolveCWD(source_dir)) catch |__ce_13| { _ = &__ce_13; @panic("Failed to query CWD"); }); });
+            break :brk (blk_catch_14: { break :blk_catch_14 ((source_dir_resolver.resolveCWD(source_dir)) catch |__ce_14| { _ = &__ce_14; @panic("Failed to query CWD"); }); });
 };
             const _guard_flush_debug = FlushDebugLogsErrGuard(ThisResolver){ .r = r };
             _ = &_guard_flush_debug;
             if (bun.strings.containsChar(import_path, 0)) {
-                _ = (blk_catch_14: { break :blk_catch_14 ((r.flushDebugLogs(.fail)) catch |__ce_14| { _ = &__ce_14;  }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((r.flushDebugLogs(.fail)) catch |__ce_15| { _ = &__ce_15;  }); });
                 return .not_found;
             }
             var tmp = r.resolveWithoutSymlinks(source_dir_normalized, import_path, kind, global_cache);
@@ -1133,9 +1141,9 @@ else => r.opts.extension_order.default.default,
             switch (tmp) {
 .success => |*result| {
 if (((!strings.eqlComptime(result.path_pair.primary.namespace, "node")) and (!result.flags.is_standalone_module))) {
-                _ = (blk_catch_15: { break :blk_catch_15 ((r.finalizeResult(result, kind)) catch |e| { _ = &e; return .{ .failure = e }; }); });
+                _ = (blk_catch_16: { break :blk_catch_16 ((r.finalizeResult(result, kind)) catch |e| { _ = &e; return .{ .failure = e }; }); });
             }
-            _ = (blk_catch_16: { break :blk_catch_16 ((r.flushDebugLogs(.success)) catch |__ce_16| { _ = &__ce_16;  }); });
+            _ = (blk_catch_17: { break :blk_catch_17 ((r.flushDebugLogs(.success)) catch |__ce_17| { _ = &__ce_17;  }); });
             result.import_kind = kind;
             if (comptime Environment.enable_logs) {
                 var result_path_text: []const u8 = "<NULL>";
@@ -1154,15 +1162,15 @@ if (((!strings.eqlComptime(result.path_pair.primary.namespace, "node")) and (!re
             return .{ .success = result.* };
 },
 .failure => |e| {
-_ = (blk_catch_17: { break :blk_catch_17 ((r.flushDebugLogs(.fail)) catch |__ce_17| { _ = &__ce_17;  }); });
+_ = (blk_catch_18: { break :blk_catch_18 ((r.flushDebugLogs(.fail)) catch |__ce_18| { _ = &__ce_18;  }); });
             return .{ .failure = e };
 },
 .pending => |pending| {
-_ = (blk_catch_18: { break :blk_catch_18 ((r.flushDebugLogs(.fail)) catch |__ce_18| { _ = &__ce_18;  }); });
+_ = (blk_catch_19: { break :blk_catch_19 ((r.flushDebugLogs(.fail)) catch |__ce_19| { _ = &__ce_19;  }); });
             return .{ .pending = pending };
 },
 .not_found => {
-_ = (blk_catch_19: { break :blk_catch_19 ((r.flushDebugLogs(.fail)) catch |__ce_19| { _ = &__ce_19;  }); });
+_ = (blk_catch_20: { break :blk_catch_20 ((r.flushDebugLogs(.fail)) catch |__ce_20| { _ = &__ce_20;  }); });
             return .not_found;
 },
 }
@@ -1214,7 +1222,7 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
             while (iter.next()) |path| {
                 const primary = is_primary;
                 is_primary = false;
-                var dir: *DirInfo = (((blk_catch_20: { break :blk_catch_20 ((r.readDirInfo((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).dir)) catch |__ce_20| { _ = &__ce_20; continue; }); })) orelse continue);
+                var dir: *DirInfo = (((blk_catch_21: { break :blk_catch_21 ((r.readDirInfo((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).dir)) catch |__ce_21| { _ = &__ce_21; continue; }); })) orelse continue);
                 _ = &dir;
                 if (((primary and (!kind.isFromCSS())) and (module_type == .unknown))) {
                     if (dir.package_json_for_module_type) |pkg| {
@@ -1353,7 +1361,7 @@ pub fn resolveWithoutSymlinks(r: *ThisResolver, source_dir: []const u8, input_im
                     _ = &debug;
                     _ = (debug.*).addNoteFmt("The import \"{s}\" is being treated as an absolute path", .{ import_path });
                 }
-                if ((blk_catch_21: { break :blk_catch_21 ((r.dirInfoCached(source_dir)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); })) |_dir_info| {
+                if ((blk_catch_22: { break :blk_catch_22 ((r.dirInfoCached(source_dir)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 null; }); })) |_dir_info| {
                     _ = &_dir_info;
                     const dir_info: *DirInfo = _dir_info;
                     if (dir_info.enclosing_tsconfig_json) |tsconfig| {
@@ -1542,7 +1550,7 @@ pub fn checkRelativePath(r: *ThisResolver, source_dir: []const u8, import_path: 
                 return .{ .success = .{ .path_pair = .{ .primary = Path.init(bun.handleOom(r.fs.dirname_store.append(@TypeOf(abs_path), abs_path))) }, .flags = .{ .is_external = true } } };
             }
             if (r.care_about_browser_field) {
-                if ((blk_catch_22: { break :blk_catch_22 ((r.dirInfoCached(((std.fs.path.dirname(abs_path)) orelse (unreachable)))) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 null; }); })) |_import_dir_info| {
+                if ((blk_catch_23: { break :blk_catch_23 ((r.dirInfoCached(((std.fs.path.dirname(abs_path)) orelse (abs_path)))) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 null; }); })) |_import_dir_info| {
                     _ = &_import_dir_info;
                     if (_import_dir_info.getEnclosingBrowserScope()) |import_dir_info| {
                         _ = &import_dir_info;
@@ -1586,7 +1594,7 @@ pub fn checkPackagePath(r: *ThisResolver, source_dir: []const u8, unremapped_imp
             var import_path = unremapped_import_path;
             _ = &import_path;
             var source_dir_info: *DirInfo = brk: {
-            if ((blk_catch_24: { break :blk_catch_24 ((r.dirInfoCached(source_dir)) catch |__ce_24| { _ = &__ce_24; return .not_found; }); })) |cached| {
+            if ((blk_catch_25: { break :blk_catch_25 ((r.dirInfoCached(source_dir)) catch |__ce_25| { _ = &__ce_25; return .not_found; }); })) |cached| {
                 _ = &cached;
                 break :brk cached;
             }
@@ -1596,7 +1604,7 @@ pub fn checkPackagePath(r: *ThisResolver, source_dir: []const u8, unremapped_imp
             var closest_dir = source_dir;
             _ = &closest_dir;
             while (std.fs.path.dirname(closest_dir)) |current| : (closest_dir = current) {
-                if ((blk_catch_25: { break :blk_catch_25 ((r.dirInfoCached(current)) catch |__ce_25| { _ = &__ce_25; return .not_found; }); })) |dir| {
+                if ((blk_catch_26: { break :blk_catch_26 ((r.dirInfoCached(current)) catch |__ce_26| { _ = &__ce_26; return .not_found; }); })) |dir| {
                     _ = &dir;
                     break :brk dir;
                 }
@@ -1657,7 +1665,7 @@ var result: Result = Result{ .path_pair = PathPair{ .primary = Path.empty }, .js
                 var base_dir_info = res.dir_info;
                 _ = &base_dir_info;
                 if ((base_dir_info == null)) {
-                    base_dir_info = (blk_catch_26: { break :blk_catch_26 ((r.readDirInfo((if (@typeInfo(@TypeOf(res.path_pair.primary)) == .@"enum" or @typeInfo(@TypeOf(res.path_pair.primary)) == .@"union") @tagName(res.path_pair.primary) else res.path_pair.primary.name).dir)) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 null; }); });
+                    base_dir_info = (blk_catch_27: { break :blk_catch_27 ((r.readDirInfo((if (@typeInfo(@TypeOf(res.path_pair.primary)) == .@"enum" or @typeInfo(@TypeOf(res.path_pair.primary)) == .@"union") @tagName(res.path_pair.primary) else res.path_pair.primary.name).dir)) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 null; }); });
                 }
                 if ((base_dir_info == null)) {
                     return .{ .success = result };
@@ -1706,7 +1714,7 @@ return .not_found;
     }
 
 pub fn packageJSONForResolvedNodeModule(r: *ThisResolver, result: *const Result) ?*const PackageJSON {
-            var dir_info = (((blk_catch_27: { break :blk_catch_27 ((r.dirInfoCached((if (@typeInfo(@TypeOf(result.path_pair.primary)) == .@"enum" or @typeInfo(@TypeOf(result.path_pair.primary)) == .@"union") @tagName(result.path_pair.primary) else result.path_pair.primary.name).dir)) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 null; }); })) orelse { return null; });
+            var dir_info = (((blk_catch_28: { break :blk_catch_28 ((r.dirInfoCached((if (@typeInfo(@TypeOf(result.path_pair.primary)) == .@"enum" or @typeInfo(@TypeOf(result.path_pair.primary)) == .@"union") @tagName(result.path_pair.primary) else result.path_pair.primary.name).dir)) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 null; }); })) orelse { return null; });
             _ = &dir_info;
             while (true) {
                 if (dir_info.package_json) |pkg| {
@@ -1746,7 +1754,7 @@ pub fn rootNodeModulePackageJSON(r: *ThisResolver, result: *const Result) ?RootP
                 }
             }
             {
-                const dir_info = (((blk_catch_28: { break :blk_catch_28 ((r.dirInfoCached(slice)) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 null; }); })) orelse { return null; });
+                const dir_info = (((blk_catch_29: { break :blk_catch_29 ((r.dirInfoCached(slice)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); })) orelse { return null; });
                 return RootPathPair{ .base_path = slice, .package_json = ((dir_info.package_json) orelse { return null; }) };
             }
     }
@@ -1883,7 +1891,7 @@ pub fn loadNodeModules(r: *ThisResolver, import_path: []const u8, kind: ast.Impo
                         _ = &parts;
                         break :brk r.fs.absBuf((&parts), bufs(.esm_absolute_package_path));
 };
-                        if ((blk_catch_29: { break :blk_catch_29 ((r.dirInfoCached(abs_package_path)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); })) |pkg_dir_info| {
+                        if ((blk_catch_30: { break :blk_catch_30 ((r.dirInfoCached(abs_package_path)) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 null; }); })) |pkg_dir_info| {
                             _ = &pkg_dir_info;
                             r.extension_order = (switch (kind) {
 .url, .at_conditional, .at => css_extension_order[0..],
@@ -2057,7 +2065,7 @@ return .not_found;
 });
 
 };
-                const dir_path_for_resolution = (blk_catch_30: { break :blk_catch_30 ((manager.pathForResolution(resolved_package_id, resolution, bufs(.path_in_global_disk_cache))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                const dir_path_for_resolution = (blk_catch_31: { break :blk_catch_31 ((manager.pathForResolution(resolved_package_id, resolution, bufs(.path_in_global_disk_cache))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                     switch (manager.getPreinstallState(resolved_package_id)) {
 .done => {
 var path = Fs.Path.init(import_path);
@@ -2075,7 +2083,7 @@ if ((!global_cache.canInstall())) {
                     _ = ((builder.allocate(manager.allocator)) catch unreachable);
                     const cloned = esm.clone((&builder));
                     if ((st == .extract)) {
-                        _ = (blk_catch_33: { break :blk_catch_33 ((manager.enqueuePackageForDownload((if (@typeInfo(@TypeOf(esm)) == .@"enum" or @typeInfo(@TypeOf(esm)) == .@"union") @tagName(esm) else esm.name), ((manager.lockfile.buffers.legacyPackageToDependencyID(null, resolved_package_id)) catch unreachable), resolved_package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, manager.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url)), .{ .root_request_id = 0 }, null)) catch |enqueue_download_err| { _ = &enqueue_download_err; return .{ .failure = enqueue_download_err }; }); });
+                        _ = (blk_catch_34: { break :blk_catch_34 ((manager.enqueuePackageForDownload((if (@typeInfo(@TypeOf(esm)) == .@"enum" or @typeInfo(@TypeOf(esm)) == .@"union") @tagName(esm) else esm.name), ((manager.lockfile.buffers.legacyPackageToDependencyID(null, resolved_package_id)) catch unreachable), resolved_package_id, (if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.version, manager.lockfile.str((&(if (@typeInfo(@TypeOf(resolution)) == .@"enum") @intFromEnum(resolution) else resolution.value).npm.url)), .{ .root_request_id = 0 }, null)) catch |enqueue_download_err| { _ = &enqueue_download_err; return .{ .failure = enqueue_download_err }; }); });
                     }
                     return .{ .pending = .{ .esm = cloned, .dependency = dependency_version, .resolution_id = resolved_package_id, .string_buf = builder.allocatedSlice(), .tag = .download } };
 },
@@ -2085,7 +2093,7 @@ else => {
 }
                 }
                 return .{ .failure = e }; }); });
-                const dir_info_to_use_ = (blk_catch_34: { break :blk_catch_34 ((r.dirInfoForResolution(dir_path_for_resolution, resolved_package_id)) catch |e| { _ = &e; return .{ .failure = e }; }); });
+                const dir_info_to_use_ = (blk_catch_35: { break :blk_catch_35 ((r.dirInfoForResolution(dir_path_for_resolution, resolved_package_id)) catch |e| { _ = &e; return .{ .failure = e }; }); });
                 if (dir_info_to_use_) |pkg_dir_info| {
                     _ = &pkg_dir_info;
                     const abs_package_path = pkg_dir_info.abs_path;
@@ -2187,7 +2195,7 @@ pub fn dirInfoForResolution(r: *ThisResolver, dir_path_maybe_trail_slash: []cons
                 }
             }
             if (needs_iter) {
-                open_dir = (blk_catch_35: { break :blk_catch_35 ((bun.openDirForIteration(FD.cwd(), dir_path).unwrap()) catch |e| { _ = &e; _ = ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Unable to open directory: {s}", .{ bun.asByteSlice(@errorName(e)) })) catch unreachable);
+                open_dir = (blk_catch_36: { break :blk_catch_36 ((bun.openDirForIteration(FD.cwd(), dir_path).unwrap()) catch |e| { _ = &e; _ = ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Unable to open directory: {s}", .{ bun.asByteSlice(@errorName(e)) })) catch unreachable);
                 return e; }); });
                 open_dir_opened = true;
                 const allocator = bun.default_allocator;
@@ -2206,7 +2214,7 @@ pub fn dirInfoForResolution(r: *ThisResolver, dir_path_maybe_trail_slash: []cons
                 _ = &new_entry;
                 var dir_iterator = bun.iterateDir(open_dir);
                 _ = &dir_iterator;
-                while ((blk_catch_38: { break :blk_catch_38 ((dir_iterator.next().unwrap()) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 null; }); })) |_value| {
+                while ((blk_catch_39: { break :blk_catch_39 ((dir_iterator.next().unwrap()) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 null; }); })) |_value| {
                     _ = ((new_entry.addEntry(existing_data_ptr, (&_value), allocator, void, undefined)) catch unreachable);
                 }
                 if (in_place) |existing| {
@@ -2244,14 +2252,14 @@ pub fn enqueueDependencyToResolve(r: *ThisResolver, package_json_: ?*PackageJSON
             if (is_main) {
                 if (package_json_) |package_json| {
                     _ = &package_json;
-                    package = (blk_catch_43: { break :blk_catch_43 ((Package.fromPackageJSON(pm.lockfile, pm, package_json, Install.Features{ .dev_dependencies = true, .is_main = true, .dependencies = true, .optional_dependencies = true })) catch |e| { _ = &e; return .{ .failure = e }; }); });
+                    package = (blk_catch_44: { break :blk_catch_44 ((Package.fromPackageJSON(pm.lockfile, pm, package_json, Install.Features{ .dev_dependencies = true, .is_main = true, .dependencies = true, .optional_dependencies = true })) catch |e| { _ = &e; return .{ .failure = e }; }); });
                     _ = package.@"meta".setHasInstallScript(package.scripts.hasAny());
-                    package = (blk_catch_44: { break :blk_catch_44 ((pm.lockfile.appendPackage(package)) catch |e| { _ = &e; return .{ .failure = e }; }); });
+                    package = (blk_catch_45: { break :blk_catch_45 ((pm.lockfile.appendPackage(package)) catch |e| { _ = &e; return .{ .failure = e }; }); });
                     package_json.package_manager_package_id = package.@"meta".id;
                 } else {
                     package = Package{ .name = Semver.String.@"from"(""), .resolution = .{ .tag = .root, .value = .{ .root = undefined } } };
                     _ = package.@"meta".setHasInstallScript(package.scripts.hasAny());
-                    package = (blk_catch_45: { break :blk_catch_45 ((pm.lockfile.appendPackage(package)) catch |e| { _ = &e; return .{ .failure = e }; }); });
+                    package = (blk_catch_46: { break :blk_catch_46 ((pm.lockfile.appendPackage(package)) catch |e| { _ = &e; return .{ .failure = e }; }); });
                 }
             }
             if (r.opts.prefer_offline_install) {
@@ -2302,7 +2310,7 @@ pub fn handleESMResolution(r: *ThisResolver, esm_resolution_: ESModule.Resolutio
             _ = &missing_suffix;
             switch (esm_resolution.status) {
 .Exact, .ExactEndsWithStar => {
-const resolved_dir_info_opt = (blk_catch_47: { break :blk_catch_47 ((r.dirInfoCached((std.fs.path.dirname(abs_esm_path)).?)) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 null; }); });
+const resolved_dir_info_opt = (blk_catch_48: { break :blk_catch_48 ((r.dirInfoCached((std.fs.path.dirname(abs_esm_path)).?)) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 null; }); });
             if ((resolved_dir_info_opt == null)) {
                 esm_resolution.status = .ModuleNotFound;
                 return null;
@@ -2377,7 +2385,7 @@ const resolved_dir_info_opt = (blk_catch_47: { break :blk_catch_47 ((r.dirInfoCa
                 const ends_with_star = (esm_resolution.status == .ExactEndsWithStar);
                 esm_resolution.status = .UnsupportedDirectoryImport;
                 if (ends_with_star) {
-                    if ((blk_catch_48: { break :blk_catch_48 ((r.dirInfoCached(abs_esm_path)) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 null; }); })) |dir_info| {
+                    if ((blk_catch_49: { break :blk_catch_49 ((r.dirInfoCached(abs_esm_path)) catch |__ce_49| { _ = &__ce_49; break :blk_catch_49 null; }); })) |dir_info| {
                         _ = &dir_info;
                         if (dir_info.getEntries(r.generation)) |dir_entries| {
                             _ = &dir_entries;
@@ -2528,7 +2536,7 @@ pub fn readDirInfo(r: *ThisResolver, path: []const u8) !?*DirInfo {
     }
 
 pub fn readDirInfoIgnoreError(r: *ThisResolver, path: []const u8) ?*const DirInfo {
-            return (blk_catch_54: { break :blk_catch_54 ((r.dirInfoCachedMaybeLog(path, false, true)) catch |__ce_54| { _ = &__ce_54; break :blk_catch_54 null; }); });
+            return (blk_catch_55: { break :blk_catch_55 ((r.dirInfoCachedMaybeLog(path, false, true)) catch |__ce_55| { _ = &__ce_55; break :blk_catch_55 null; }); });
     }
 
 pub inline fn isDotSlash(path: []const u8) bool {
@@ -2674,15 +2682,15 @@ _ = debuglog("Failed to load DirEntry {s}  {s} - {s}", .{ top, @errorName(e.orig
                 }
                 const sentinel = path.ptr[0..queue_top.unsafe_path.len :0];
                 const open_req = (if (comptime Environment.isPosix) open_req: {
-                const dir_result = (blk_catch_55: { break :blk_catch_55 ((std.fs.openDirAbsoluteZ(sentinel, .{ .no_follow = (!follow_symlinks), .iterate = true })) catch |e| { _ = &e; break :open_req e; }); });
+                const dir_result = (blk_catch_56: { break :blk_catch_56 ((std.fs.openDirAbsoluteZ(sentinel, .{ .no_follow = (!follow_symlinks), .iterate = true })) catch |e| { _ = &e; break :open_req e; }); });
                 break :open_req FD.fromStdDir(dir_result);
 } else (if (comptime Environment.isWindows) open_req: {
                 const dirfd_result = bun.sys.openDirAtWindowsA(bun.invalid_fd, sentinel, .{ .iterable = true, .no_follow = (!follow_symlinks), .read_only = true });
-                const res = (blk_catch_56: { break :blk_catch_56 ((dirfd_result.unwrap()) catch |e| { _ = &e; break :open_req e; }); });
+                const res = (blk_catch_57: { break :blk_catch_57 ((dirfd_result.unwrap()) catch |e| { _ = &e; break :open_req e; }); });
                 break :open_req res;
 } else null));
                 _ = bun.fs.debug("open({s})", .{ sentinel });
-                break :open_dir (blk_catch_57: { break :blk_catch_57 ((open_req) catch |e| { _ = &e; break :blk_catch_57 (switch ((if (comptime @typeInfo(anyerror) == .@"enum" and (@typeInfo(@TypeOf(e)) == .int or @typeInfo(@TypeOf(e)) == .comptime_int)) @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
+                break :open_dir (blk_catch_58: { break :blk_catch_58 ((open_req) catch |e| { _ = &e; break :blk_catch_58 (switch ((if (comptime @typeInfo(anyerror) == .@"enum" and (@typeInfo(@TypeOf(e)) == .int or @typeInfo(@TypeOf(e)) == .comptime_int)) @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.ENOTDIR, error.IsDir, error.NotDir => {
 return null;
 },
@@ -2698,7 +2706,7 @@ error.ENOENT, error.FileNotFound => {
 else => {
 if (comptime enable_logging) {
                         const pretty = queue_top.unsafe_path;
-                        _ = (blk_catch_59: { break :blk_catch_59 ((r.log.addErrorFmt(null, logger.Loc{  }, r.allocator, "Cannot read directory \"{s}\": {s}", .{ pretty, @errorName(e) })) catch |__ce_59| { _ = &__ce_59;  }); });
+                        _ = (blk_catch_60: { break :blk_catch_60 ((r.log.addErrorFmt(null, logger.Loc{  }, r.allocator, "Cannot read directory \"{s}\": {s}", .{ pretty, @errorName(e) })) catch |__ce_60| { _ = &__ce_60;  }); });
                     }
 },
 }
@@ -2763,7 +2771,7 @@ if (comptime enable_logging) {
                     _ = &new_entry;
                     var dir_iterator = bun.iterateDir(open_dir);
                     _ = &dir_iterator;
-                    while ((blk_catch_62: { break :blk_catch_62 ((dir_iterator.next().unwrap()) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 null; }); })) |_value| {
+                    while ((blk_catch_63: { break :blk_catch_63 ((dir_iterator.next().unwrap()) catch |__ce_63| { _ = &__ce_63; break :blk_catch_63 null; }); })) |_value| {
                         _ = ((new_entry.addEntry(existing_data_ptr, (&_value), allocator, void, undefined)) catch unreachable);
                     }
                     if (in_place) |existing| {
@@ -3043,7 +3051,7 @@ pub fn loadFromMainField(r: *ThisResolver, path: []const u8, dir_info: *DirInfo,
                 }
                 return MatchResult{ .path_pair = PathPair{ .primary = Fs.Path.init(result.path) }, .dirname_fd = result.dirname_fd, .diff_case = result.diff_case };
             }
-            const field_dir_info_opt = (blk_catch_66: { break :blk_catch_66 ((r.dirInfoCached(field_abs_path)) catch |__ce_66| { _ = &__ce_66; break :blk_catch_66 null; }); });
+            const field_dir_info_opt = (blk_catch_67: { break :blk_catch_67 ((r.dirInfoCached(field_abs_path)) catch |__ce_67| { _ = &__ce_67; break :blk_catch_67 null; }); });
             if ((field_dir_info_opt == null)) {
                 return null;
             }
@@ -3142,7 +3150,7 @@ pub fn loadAsIndexWithBrowserRemapping(r: *ThisResolver, dir_info: *DirInfo, pat
                                 _ = &file_result;
                                 return MatchResult{ .dirname_fd = file_result.dirname_fd, .path_pair = .{ .primary = Path.init(file_result.path) }, .diff_case = file_result.diff_case };
                             }
-                            if ((blk_catch_68: { break :blk_catch_68 ((r.dirInfoCached(remapped_abs)) catch |__ce_68| { _ = &__ce_68; break :blk_catch_68 null; }); })) |new_dir| {
+                            if ((blk_catch_69: { break :blk_catch_69 ((r.dirInfoCached(remapped_abs)) catch |__ce_69| { _ = &__ce_69; break :blk_catch_69 null; }); })) |new_dir| {
                                 _ = &new_dir;
                                 if (r.loadAsIndex(new_dir, extension_order)) |absolute| {
                                     _ = &absolute;
@@ -3166,7 +3174,7 @@ pub fn loadAsFileOrDirectory(r: *ThisResolver, path: []const u8, kind: ast.Impor
                     const node_modules_folder_offset = (last_node_modules_folder + ("node_modules" ++ std.fs.path.sep_str).len);
                     if (strings.indexOfChar(file.path[node_modules_folder_offset..], std.fs.path.sep)) |package_name_length| {
                         _ = &package_name_length;
-                        if ((blk_catch_69: { break :blk_catch_69 ((r.dirInfoCached(file.path[0..(node_modules_folder_offset + package_name_length)])) catch |__ce_69| { _ = &__ce_69; break :blk_catch_69 null; }); })) |package_dir_info| {
+                        if ((blk_catch_70: { break :blk_catch_70 ((r.dirInfoCached(file.path[0..(node_modules_folder_offset + package_name_length)])) catch |__ce_70| { _ = &__ce_70; break :blk_catch_70 null; }); })) |package_dir_info| {
                             _ = &package_dir_info;
                             if (package_dir_info.package_json) |package_json| {
                                 _ = &package_json;
@@ -3189,7 +3197,7 @@ pub fn loadAsFileOrDirectory(r: *ThisResolver, path: []const u8, kind: ast.Impor
             _ = &_guard_debug_indent;
             var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
             defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
-            const dir_info = (((blk_catch_70: { break :blk_catch_70 ((r.dirInfoCached(path)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
+            const dir_info = (((blk_catch_71: { break :blk_catch_71 ((r.dirInfoCached(path)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
                 _ = Output.prettyErrorln("err: {s} reading {s}", .{ @errorName(e), path });
             }
             return null; }); })) orelse { return null; });
@@ -3282,14 +3290,14 @@ pub fn loadAsFile(r: *ThisResolver, path: []const u8, extension_order: []const [
             var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
             defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
             const dir_path = bun.strings.withoutTrailingSlashWindowsPath(Dirname.dirname(path));
-            const dir_entry: *Fs.FileSystem.RealFS.EntriesOption = (blk_catch_71: { break :blk_catch_71 ((rfs.readDirectory(dir_path, null, r.generation, r.store_fd)) catch |__ce_71| { _ = &__ce_71; return null; }); });
+            const dir_entry: *Fs.FileSystem.RealFS.EntriesOption = (blk_catch_72: { break :blk_catch_72 ((rfs.readDirectory(dir_path, null, r.generation, r.store_fd)) catch |__ce_72| { _ = &__ce_72; return null; }); });
             if ((std.meta.activeTag(dir_entry.*) == .err)) {
                 switch (dir_entry.err.original_err) {
 error.ENOENT, error.FileNotFound, error.ENOTDIR, error.NotDir => {
 
 },
 else => {
-_ = (blk_catch_72: { break :blk_catch_72 ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot read directory \"{s}\": {s}", .{ dir_path, @errorName(dir_entry.err.original_err) })) catch |__ce_72| { _ = &__ce_72;  }); });
+_ = (blk_catch_73: { break :blk_catch_73 ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot read directory \"{s}\": {s}", .{ dir_path, @errorName(dir_entry.err.original_err) })) catch |__ce_73| { _ = &__ce_73;  }); });
 },
 }
                 return null;
@@ -3442,13 +3450,13 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                             bin_folders = ((BinFolderArray.init(0)) catch unreachable);
                         }
                         const this_dir = fd.stdDir();
-                        var file = bun.FD.fromStdDir((blk_catch_78: { break :blk_catch_78 ((this_dir.openDirZ(bun.pathLiteral("node_modules/.bin"), .{})) catch |__ce_78| { _ = &__ce_78; break :append_bin_dir; }); }));
+                        var file = bun.FD.fromStdDir((blk_catch_79: { break :blk_catch_79 ((this_dir.openDirZ(bun.pathLiteral("node_modules/.bin"), .{})) catch |__ce_79| { _ = &__ce_79; break :append_bin_dir; }); }));
                         _ = &file;
                         var _guard_file = CloseGuard(@TypeOf(file)){ .ptr = (&file) };
                         _ = &_guard_file;
                         var ___guard_file_moved = false; _ = &___guard_file_moved;
                         defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
-                        const bin_path = (blk_catch_79: { break :blk_catch_79 ((file.getFdPath(bufs(.node_bin_path))) catch |__ce_79| { _ = &__ce_79; break :append_bin_dir; }); });
+                        const bin_path = (blk_catch_80: { break :blk_catch_80 ((file.getFdPath(bufs(.node_bin_path))) catch |__ce_80| { _ = &__ce_80; break :append_bin_dir; }); });
                         _ = (if (comptime @typeInfo(@TypeOf(bin_folders_lock)) == .pointer) (bin_folders_lock) else &(bin_folders_lock)).lock();
                         var _guard_bin_lock = UnlockGuard(@TypeOf(bin_folders_lock)){ .ptr = (&bin_folders_lock) };
                         _ = &_guard_bin_lock;
@@ -3460,7 +3468,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                                 break :append_bin_dir;
                             }
                         }
-                        _ = (blk_catch_81: { break :blk_catch_81 ((bin_folders.append((blk_catch_80: { break :blk_catch_80 ((r.fs.dirname_store.append(string, bin_path)) catch |__ce_80| { _ = &__ce_80; break :append_bin_dir; }); }))) catch |__ce_81| { _ = &__ce_81;  }); });
+                        _ = (blk_catch_82: { break :blk_catch_82 ((bin_folders.append((blk_catch_81: { break :blk_catch_81 ((r.fs.dirname_store.append(string, bin_path)) catch |__ce_81| { _ = &__ce_81; break :append_bin_dir; }); }))) catch |__ce_82| { _ = &__ce_82;  }); });
                     }
                 }
                 if (info.isNodeModules()) {
@@ -3472,13 +3480,13 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                                 bin_folders = ((BinFolderArray.init(0)) catch unreachable);
                             }
                             const this_dir = fd.stdDir();
-                            var file = (blk_catch_83: { break :blk_catch_83 ((this_dir.openDirZ(".bin", .{})) catch |__ce_83| { _ = &__ce_83; break :append_bin_dir; }); });
+                            var file = (blk_catch_84: { break :blk_catch_84 ((this_dir.openDirZ(".bin", .{})) catch |__ce_84| { _ = &__ce_84; break :append_bin_dir; }); });
                             _ = &file;
                             var _guard_file = CloseGuard(@TypeOf(file)){ .ptr = (&file) };
                             _ = &_guard_file;
                             var ___guard_file_moved = false; _ = &___guard_file_moved;
                             defer if (!___guard_file_moved) { ___guard_file_moved = true; const __T = @TypeOf(_guard_file); if (@typeInfo(__T) == .optional) { if (_guard_file) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_file.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_file; _drop_val.__cp_deinit(); } };
-                            const bin_path = (blk_catch_84: { break :blk_catch_84 ((bun.getFdPath(.fromStdDir(file), bufs(.node_bin_path))) catch |__ce_84| { _ = &__ce_84; break :append_bin_dir; }); });
+                            const bin_path = (blk_catch_85: { break :blk_catch_85 ((bun.getFdPath(.fromStdDir(file), bufs(.node_bin_path))) catch |__ce_85| { _ = &__ce_85; break :append_bin_dir; }); });
                             _ = (if (comptime @typeInfo(@TypeOf(bin_folders_lock)) == .pointer) (bin_folders_lock) else &(bin_folders_lock)).lock();
                             var _guard_bin_lock = UnlockGuard(@TypeOf(bin_folders_lock)){ .ptr = (&bin_folders_lock) };
                             _ = &_guard_bin_lock;
@@ -3490,7 +3498,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                                     break :append_bin_dir;
                                 }
                             }
-                            _ = (blk_catch_86: { break :blk_catch_86 ((bin_folders.append((blk_catch_85: { break :blk_catch_85 ((r.fs.dirname_store.append(string, bin_path)) catch |__ce_85| { _ = &__ce_85; break :append_bin_dir; }); }))) catch |__ce_86| { _ = &__ce_86;  }); });
+                            _ = (blk_catch_87: { break :blk_catch_87 ((bin_folders.append((blk_catch_86: { break :blk_catch_86 ((r.fs.dirname_store.append(string, bin_path)) catch |__ce_86| { _ = &__ce_86; break :append_bin_dir; }); }))) catch |__ce_87| { _ = &__ce_87;  }); });
                         }
                     }
                 }
@@ -3566,7 +3574,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                     _ = &lookup;
                     const entry = lookup.entry;
                     if ((entry.kind(rfs, r.store_fd) == .file)) {
-                        info.package_json = (if (((r.usePackageManager() and (!info.hasNodeModules())) and (!info.isNodeModules()))) (blk_catch_90: { break :blk_catch_90 ((r.parsePackageJSON(path, (if (FeatureFlags.store_file_descriptors) fd else .invalid), package_id, true)) catch |__ce_90| { _ = &__ce_90; break :blk_catch_90 null; }); }) else (blk_catch_91: { break :blk_catch_91 ((r.parsePackageJSON(path, (if (FeatureFlags.store_file_descriptors) fd else .invalid), null, false)) catch |__ce_91| { _ = &__ce_91; break :blk_catch_91 null; }); }));
+                        info.package_json = (if (((r.usePackageManager() and (!info.hasNodeModules())) and (!info.isNodeModules()))) (blk_catch_91: { break :blk_catch_91 ((r.parsePackageJSON(path, (if (FeatureFlags.store_file_descriptors) fd else .invalid), package_id, true)) catch |__ce_91| { _ = &__ce_91; break :blk_catch_91 null; }); }) else (blk_catch_92: { break :blk_catch_92 ((r.parsePackageJSON(path, (if (FeatureFlags.store_file_descriptors) fd else .invalid), null, false)) catch |__ce_92| { _ = &__ce_92; break :blk_catch_92 null; }); }));
                         if (info.package_json) |pkg| {
                             _ = &pkg;
                             info.package_json_for_module_type = pkg;
@@ -3617,13 +3625,13 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                 }
                 if (tsconfig_path) |tsconfigpath| {
                     _ = &tsconfigpath;
-                    info.tsconfig_json = (blk_catch_92: { break :blk_catch_92 ((r.parseTSConfig(tsconfigpath, (if (FeatureFlags.store_file_descriptors) fd else .zero))) catch |e| { _ = &e; break :blk_catch_92 brk: {
+                    info.tsconfig_json = (blk_catch_93: { break :blk_catch_93 ((r.parseTSConfig(tsconfigpath, (if (FeatureFlags.store_file_descriptors) fd else .zero))) catch |e| { _ = &e; break :blk_catch_93 brk: {
                     const pretty = tsconfigpath;
                     if (((e == error.ENOENT) or (e == error.FileNotFound))) {
-                        _ = (blk_catch_93: { break :blk_catch_93 ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot find tsconfig file {f}", .{ bun.fmt.QuotedFormatter{ .text = pretty } })) catch |__ce_93| { _ = &__ce_93;  }); });
+                        _ = (blk_catch_94: { break :blk_catch_94 ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot find tsconfig file {f}", .{ bun.fmt.QuotedFormatter{ .text = pretty } })) catch |__ce_94| { _ = &__ce_94;  }); });
                     } else {
                         if ((((e != error.ParseErrorAlreadyLogged) and (e != error.IsDir)) and (e != error.EISDIR))) {
-                            _ = (blk_catch_94: { break :blk_catch_94 ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot read file {f}: {s}", .{ bun.fmt.QuotedFormatter{ .text = pretty }, @errorName(e) })) catch |__ce_94| { _ = &__ce_94;  }); });
+                            _ = (blk_catch_95: { break :blk_catch_95 ((r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot read file {f}: {s}", .{ bun.fmt.QuotedFormatter{ .text = pretty }, @errorName(e) })) catch |__ce_95| { _ = &__ce_95;  }); });
                         }
                     }
                     break :brk null;
@@ -3638,7 +3646,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                         while ((current.extends.len > 0)) {
                             const ts_dir_name = Dirname.dirname(current.abs_path);
                             const abs_path = ResolvePath.joinAbsStringBuf(ts_dir_name, bufs(.tsconfig_path_abs), (&.{ ts_dir_name, current.extends }), .auto);
-                            const parent_config_maybe = (blk_catch_95: { break :blk_catch_95 ((r.parseTSConfig(abs_path, bun.invalid_fd)) catch |e| { _ = &e; _ = (blk_catch_96: { break :blk_catch_96 ((r.log.addDebugFmt(null, logger.Loc.Empty, r.allocator, "{s} loading tsconfig.json extends {f}", .{ @errorName(e), bun.fmt.QuotedFormatter{ .text = abs_path } })) catch |__ce_96| { _ = &__ce_96;  }); });
+                            const parent_config_maybe = (blk_catch_96: { break :blk_catch_96 ((r.parseTSConfig(abs_path, bun.invalid_fd)) catch |e| { _ = &e; _ = (blk_catch_97: { break :blk_catch_97 ((r.log.addDebugFmt(null, logger.Loc.Empty, r.allocator, "{s} loading tsconfig.json extends {f}", .{ @errorName(e), bun.fmt.QuotedFormatter{ .text = abs_path } })) catch |__ce_97| { _ = &__ce_97;  }); });
                             break; }); });
                             if (parent_config_maybe) |parent_config| {
                                 _ = &parent_config;

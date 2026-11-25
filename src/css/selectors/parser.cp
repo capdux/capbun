@@ -37,6 +37,7 @@ enum _PseudoElementEnum {
     @"view-transition-image-pair",
     @"view-transition-old",
     @"view-transition-new",
+    @"view-transition-group-children",
 }
 
 enum _FunctionalPseudoClass {
@@ -1163,19 +1164,23 @@ pub struct SelectorParser {
                     .result => |a| a,
                     .err => |e| return .{ .err = e },
                 } } } },
-                .@"view-transition-group" => .{ .result = .{ .view_transition_group = .{ .part_name = switch (ViewTransitionPartName.parse(input)) {
+                .@"view-transition-group" => .{ .result = .{ .view_transition_group = .{ .part = switch (ViewTransitionPartSelector.parse(_, input)) {
                     .result => |a| a,
                     .err => |e| return .{ .err = e },
                 } } } },
-                .@"view-transition-image-pair" => .{ .result = .{ .view_transition_image_pair = .{ .part_name = switch (ViewTransitionPartName.parse(input)) {
+                .@"view-transition-image-pair" => .{ .result = .{ .view_transition_image_pair = .{ .part = switch (ViewTransitionPartSelector.parse(_, input)) {
                     .result => |a| a,
                     .err => |e| return .{ .err = e },
                 } } } },
-                .@"view-transition-old" => .{ .result = .{ .view_transition_old = .{ .part_name = switch (ViewTransitionPartName.parse(input)) {
+                .@"view-transition-old" => .{ .result = .{ .view_transition_old = .{ .part = switch (ViewTransitionPartSelector.parse(_, input)) {
                     .result => |a| a,
                     .err => |e| return .{ .err = e },
                 } } } },
-                .@"view-transition-new" => .{ .result = .{ .view_transition_new = .{ .part_name = switch (ViewTransitionPartName.parse(input)) {
+                .@"view-transition-new" => .{ .result = .{ .view_transition_new = .{ .part = switch (ViewTransitionPartSelector.parse(_, input)) {
+                    .result => |a| a,
+                    .err => |e| return .{ .err = e },
+                } } } },
+                .@"view-transition-group-children" => .{ .result = .{ .view_transition_group_children = .{ .part = switch (ViewTransitionPartSelector.parse(_, input)) {
                     .result => |a| a,
                     .err => |e| return .{ .err = e },
                 } } } },
@@ -2544,8 +2549,8 @@ struct PseudoElementSelector {
 }
 
 struct PseudoElementViewTransition {
-    /// A part name selector.
-    part_name: ViewTransitionPartName,
+    /// A part selector.
+    part: ViewTransitionPartSelector,
 
     pub fn __generateEql() {}
     pub fn __generateDeepClone() {}
@@ -2621,6 +2626,8 @@ pub union(enum) PseudoElement {
     view_transition_old: PseudoElementViewTransition,
     /// The [::view-transition-new()](https://w3c.github.io/csswg-drafts/css-view-transitions-1/#view-transition-new-pt-name-selector) functional pseudo element.
     view_transition_new: PseudoElementViewTransition,
+    /// The [::view-transition-group-children()](https://drafts.csswg.org/css-view-transitions-2/#::view-transition-group-children) functional pseudo element.
+    view_transition_group_children: PseudoElementViewTransition,
     /// The [::details-content](https://drafts.csswg.org/css-pseudo-4/#details-content-pseudo) pseudo element.
     details_content: void,
     /// The [::picker-icon](https://drafts.csswg.org/css-forms-1/#picker-icon-pseudo) pseudo element.
@@ -2703,7 +2710,7 @@ pub union(enum) PseudoElement {
 
     pub fn isViewTransition(): bool {
         return switch (_) {
-            .view_transition_group, .view_transition_image_pair, .view_transition_new, .view_transition_old => true,
+            .view_transition_group, .view_transition_image_pair, .view_transition_new, .view_transition_old, .view_transition_group_children => true,
             else => false,
         };
     }
@@ -3738,31 +3745,17 @@ pub union(enum) ViewTransitionPartName {
     all: void,
     /// <custom-ident>
     name: css.css_values.ident.CustomIdent,
-    /// .<custom-ident>
-    @"class": css.css_values.ident.CustomIdent,
 
     pub fn toCss(dest: *css.Printer): css.PrintErr!void {
         return switch (_) {
             .all => dest.writeStr("*")?,
             .name => |name| css.CustomIdentFns.toCss(name, dest)?,
-            .class => |name| {
-                dest.writeChar('.')?;
-                css.CustomIdentFns.toCss(name, dest)?;
-            },
         };
     }
 
     static fn parse(input: *css.Parser): Result(ViewTransitionPartName) {
         if (input.tryParse(css.Parser.expectDelim, .{'*'}).isOk()) {
             return .{ .result = .all };
-        }
-
-        // Try to parse a class selector (.<custom-ident>)
-        if (input.tryParse(css.Parser.expectDelim, .{'.'}).isOk()) {
-            return .{ .result = .{ .class = switch (css.css_values.ident.CustomIdent.parse(input)) {
-                .result => |v| v,
-                .err => |e| return .{ .err = e },
-            } } };
         }
 
         return .{ .result = .{ .name = switch (css.css_values.ident.CustomIdent.parse(input)) {
@@ -3781,6 +3774,117 @@ pub union(enum) ViewTransitionPartName {
 
     pub fn deepClone(allocator: Allocator): @This() {
         return css.implementDeepClone(@This(), &_, allocator);
+    }
+}
+
+fn isReservedCustomIdent(ident: []const u8): bool {
+    return bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "initial") ||
+        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "inherit") ||
+        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "unset") ||
+        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "default") ||
+        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "revert") ||
+        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "revert-layer");
+}
+
+/// A [view transition part selector](https://w3c.github.io/csswg-drafts/css-view-transitions-2/#typedef-pt-name-and-class-selector).
+pub struct ViewTransitionPartSelector {
+    /// The view transition part name.
+    name: ViewTransitionPartName?,
+    /// The view transition classes, each written as `.<custom-ident>`.
+    classes: []const css.css_values.ident.IdentOrRef,
+
+    pub fn toCss(dest: *css.Printer): css.PrintErr!void {
+        if (name := _.name) {
+            name.toCss(dest)?;
+        }
+        for (cls of _.classes) {
+            dest.writeChar('.')?;
+            dest.writeIdentOrRef(cls, dest.css_module != null)?;
+        }
+    }
+
+    static fn parse(parser: *SelectorParser, input: *css.Parser): Result(ViewTransitionPartSelector) {
+        input.skipWhitespace();
+        const name_res = input.tryParse(ViewTransitionPartName.parse, {});
+
+        // White space is not allowed between the name and a class, or inside the classes.
+        let classes: std.ArrayListUnmanaged(css.css_values.ident.IdentOrRef) = .{};
+        while (true) {
+            const start = input.state();
+            const loc = input.position();
+            const next_tok = input.nextIncludingWhitespace();
+            const is_dot = switch (next_tok) {
+                .result => |tok| tok.* == .delim && tok.delim == '.',
+                .err => false,
+            };
+            if (!is_dot) {
+                input.reset(&start);
+                break;
+            }
+            const location = input.currentSourceLocation();
+            const class_tok = switch (input.nextIncludingWhitespace()) {
+                .result => |t| t.*,
+                .err => |e| return .{ .err = e },
+            };
+            const class_name = switch (class_tok) {
+                .ident => |c| c,
+                else => {
+                    const e = SelectorParseErrorKind{ .class_needs_ident = class_tok };
+                    return .{ .err = location.newCustomError(e.intoDefaultParserError()) };
+                },
+            };
+            if (isReservedCustomIdent(class_name)) {
+                return .{ .err = location.newUnexpectedTokenError(.{ .ident = class_name }) };
+            }
+            bun.handleOom(classes.append(input.allocator(), parser.newLocalIdentifier(input, .CLASS, class_name, loc)));
+        }
+
+        const name: ViewTransitionPartName? = switch (name_res) {
+            .result => |n| n,
+            .err => |e| if (classes.items.len == 0) return .{ .err = e } else @as(ViewTransitionPartName?, null),
+        };
+        return .{ .result = ViewTransitionPartSelector{
+            name: name,
+            classes: classes.items,
+        } };
+    }
+
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        const names_eql = if (lhs.name != null && rhs.name != null)
+            ViewTransitionPartName.eql(&lhs.name.?, &rhs.name.?)
+        else
+            lhs.name == null && rhs.name == null;
+        if (!names_eql || lhs.classes.len != rhs.classes.len) return false;
+        let i: usize = 0;
+        while (i < lhs.classes.len) : (i += 1) {
+            if (!lhs.classes[i].eql(&rhs.classes[i])) return false;
+        }
+        return true;
+    }
+
+    pub fn hash(hasher: *std.hash.Wyhash) {
+        if (name := _.name) {
+            name.hash(hasher);
+        }
+        for (cls of _.classes) {
+            hasher.update(&@as([4]u8, @bitCast(@as(u32, 2))));
+            cls.hash(hasher);
+        }
+    }
+
+    pub fn deepClone(allocator: Allocator): @This() {
+        const cloned_classes: []const css.css_values.ident.IdentOrRef = if (_.classes.len > 0)
+            bun.handleOom(allocator.dupe(css.css_values.ident.IdentOrRef, _.classes))
+        else
+            [];
+        let cloned_name: ViewTransitionPartName? = null;
+        if (name := _.name) {
+            cloned_name = name.deepClone(allocator);
+        }
+        return ViewTransitionPartSelector{
+            name: cloned_name,
+            classes: cloned_classes,
+        };
     }
 }
 

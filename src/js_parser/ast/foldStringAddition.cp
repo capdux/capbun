@@ -1,39 +1,7 @@
-/// Concatenate two `E.String`s, mutating BOTH inputs
-/// unless `has_inlined_enum_poison` is set.
-///
-/// Currently inlined enum poison refers to where mutation would cause output
-/// bugs due to inlined enum values sharing `E.String`s. If a new use case
-/// besides inlined enums comes up to set this to true, please rename the
-/// variable and document it.
-fn joinStrings(left: *const E.String, right: *const E.String, has_inlined_enum_poison: bool): E.String {
-    let result = if (has_inlined_enum_poison)
-        // Inlined enums can be shared by multiple call sites. In
-        // this case, we need to ensure that the ENTIRE rope is
-        // cloned. In other situations, the lhs doesn't have any
-        // other owner, so it is fine to mutate `lhs.data.end.next`.
-        //
-        // Consider the following case:
-        //   const enum A {
-        //     B = "a" + "b",
-        //     D = B + "d",
-        //   };
-        //   console.log(A.B, A.D);
-        left.cloneRopeNodes()
-    else
-        left.*;
-
-    // Similarly, the right side has to be cloned for an enum rope too.
-    //
-    // Consider the following case:
-    //   const enum A {
-    //     B = "1" + "2",
-    //     C = ("3" + B) + "4",
-    //   };
-    //   console.log(A.B, A.C);
-    const rhs_clone = Expr.Data.Store.append(E.String, if (has_inlined_enum_poison)
-        right.cloneRopeNodes()
-    else
-        right.*);
+/// Links both ropes into the result (see `E.String.push`); sound because shared strings are never ropes.
+fn joinStrings(left: *const E.String, right: *const E.String): E.String {
+    let result = left.*;
+    const rhs_clone = Expr.Data.Store.append(E.String, right.*);
 
     result.push(rhs_clone);
     result.prefer_template = result.prefer_template || rhs_clone.prefer_template;
@@ -83,14 +51,9 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                     // "bar" + "baz" => "barbaz"
                     .e_string => |right| {
                         if (right.isUTF8()) {
-                            const has_inlined_enum_poison =
-                                l.data == .e_inlined_enum ||
-                                r.data == .e_inlined_enum;
-
                             return Expr.init(E.String, joinStrings(
                                 left,
                                 right,
-                                has_inlined_enum_poison,
                             ), lhs.loc);
                         }
                     },
@@ -102,7 +65,6 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                                 head: { cooked: joinStrings(
                                     left,
                                     &right.head.cooked,
-                                    l.data == .e_inlined_enum,
                                 ) },
                             }, l.loc);
                         }
@@ -146,7 +108,6 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                                     left.parts[i].tail = { cooked: joinStrings(
                                         &last.tail.cooked,
                                         right,
-                                        r.data == .e_inlined_enum,
                                     ) };
                                     return lhs;
                                 }
@@ -155,7 +116,6 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                                     left.head = { cooked: joinStrings(
                                         &left.head.cooked,
                                         right,
-                                        r.data == .e_inlined_enum,
                                     ) };
                                     return lhs;
                                 }
@@ -172,7 +132,6 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                                     left.parts[i].tail = { cooked: joinStrings(
                                         &last.tail.cooked,
                                         &right.head.cooked,
-                                        r.data == .e_inlined_enum,
                                     ) };
 
                                     if (right.parts.len > 0) {
@@ -190,7 +149,6 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                                     left.head = { cooked: joinStrings(
                                         &left.head.cooked,
                                         &right.head.cooked,
-                                        r.data == .e_inlined_enum,
                                     ) };
                                     left.parts = right.parts;
                                     return lhs;

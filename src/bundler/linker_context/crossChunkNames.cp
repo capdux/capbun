@@ -84,6 +84,11 @@ pub fn assignUnminified(c: *LinkerContext, chunks: []const Chunk)! {
         const interned = internName(c, name);
         used.put(allocator, interned, 1)?;
         c.cross_chunk_names.put(allocator, sym_ref, interned)?;
+        // An importing chunk's renamer looks the binding up by the symbol its links lead to.
+        const followed = c.graph.symbols.follow(sym_ref);
+        if (!followed.eql(sym_ref)) {
+            c.cross_chunk_names.put(allocator, followed, interned)?;
+        }
     }
 }
 

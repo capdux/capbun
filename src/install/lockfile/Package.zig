@@ -1379,8 +1379,10 @@ for (cp_iter_slice(obj.properties.slice())) |bin_prop| {
 .e_string => {
 if (bin.expr.asString(allocator)) |str_| {
                     _ = &str_;
-                    _ = string_builder.count(str_);
-                    break :bin;
+                    if ((str_.len > 0)) {
+                        _ = string_builder.count(str_);
+                        break :bin;
+                    }
                 }
 },
 else => {

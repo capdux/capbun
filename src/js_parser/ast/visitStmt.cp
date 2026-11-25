@@ -1438,6 +1438,9 @@ fn VisitStmtVisitors(
                         .e_string => |str| {
                             has_string_value = true;
 
+                            // Inlined uses share this node's rope and folds append to ropes in place: store it flat.
+                            str.resolveRopeIfNeeded(p.allocator);
+
                             exported_members.getPtr(name).?.data = { enum_string: str };
 
                             p.ref_to_ts_namespace_member.put(

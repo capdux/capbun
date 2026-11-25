@@ -401,7 +401,8 @@ pub enum AsyncPrefixExpression: u2 {
     is_delete_target: bool = false,
     was_originally_identifier: bool = false,
     is_call_target: bool = false,
-    _padding: u3 = 0,
+    is_property_access_target: bool = false,
+    _padding: u2 = 0,
 }
 
 pub fn statementCaresAboutScope(stmt: Stmt): bool {
@@ -496,6 +497,9 @@ pub struct ExprIn {
     is_immediately_assigned_to_decl: bool = false,
 
     property_access_for_method_call_maybe_should_replace_with_undefined: bool = false,
+
+    /// The parent only reads, calls or assigns a property of this: `x.a`, `x[a]`, `const { a } = x`, not `delete x.a`.
+    is_property_access_target: bool = false,
 }
 
 // This function exists to tie all of these checks together in one place

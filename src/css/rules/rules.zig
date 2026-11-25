@@ -375,6 +375,7 @@ const Selector = css.selector.Selector;
                             if (((b[0] == .style) and (a[@as(usize, @intCast((len - 2)))] == .style))) {
                                 if (mergeStyleRules(AtRule, (&b[0].style), (&a[@as(usize, @intCast((len - 2)))].style), context)) {
                                     _ = rules.pop();
+                                    _ = truncateStyleRules(AtRule, (&style_rules), rules.items.len);
                                     continue;
                                 }
                             }
@@ -593,6 +594,17 @@ pub fn eql(key_self: *const @This(), other: *const This) bool {
     }
     const This = @This();
 };
+}
+
+pub fn truncateStyleRules(comptime R: type, style_rules: *StyleRuleKey(R).HashMap(usize), len: usize) void {
+        var i: usize = style_rules.count();
+        _ = &i;
+        while ((i > 0)) {
+            i = (i - 1);
+            if ((style_rules.values()[@as(usize, @intCast(i))] >= len)) {
+                _ = style_rules.swapRemoveAt(i);
+            }
+        }
 }
 
 pub fn mergeStyleRules(comptime T: type, sty: *style.StyleRule(T), last_style_rule: *style.StyleRule(T), context: *MinifyContext) bool {

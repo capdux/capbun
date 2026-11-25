@@ -89,12 +89,12 @@ pub fn Visit(
             p.visitStmtsAndPrependTempRefs(&stmts, &temp_opts) catch unreachable;
 
             if (p.options.features.react_fast_refresh) {
-                const hook_storage = p.react_refresh.hook_ctx_storage ??
-                    unreachable; // caller did not init hook storage. any function can have react hooks!
-
-                if (hook_storage.* != null) {
-                    const hook = &hook_storage.*.?;
-                    p.handleReactRefreshPostVisitFunctionBody(&stmts, hook);
+                // There is no storage for a method, which takes no signature.
+                if (hook_storage := p.react_refresh.hook_ctx_storage) {
+                    if (hook_storage.* != null) {
+                        const hook = &hook_storage.*.?;
+                        p.handleReactRefreshPostVisitFunctionBody(&stmts, hook);
+                    }
                 }
             }
 
@@ -195,6 +195,8 @@ pub fn Visit(
                     }
                     decl.value = p.visitExprInOut(val, {
                         is_immediately_assigned_to_decl: true,
+                        // `const { a } = x` reads `x.a` and drops `x`.
+                        is_property_access_target: decl.binding.data == .b_object,
                     });
                     p.decorator_class_name = prev_decorator_class_name;
 

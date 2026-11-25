@@ -759,7 +759,8 @@ function parseOptions(
     }
   }
 
-  tls ||= options.tls || options.ssl;
+  const rawTls = options.tls || options.ssl;
+  tls ||= $inheritsBlob(rawTls) ? { ca: rawTls } : rawTls;
   max = options.max;
 
   idleTimeout ??= options.idleTimeout;

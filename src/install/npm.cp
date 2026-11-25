@@ -971,7 +971,8 @@ fn sortExternVersions(
                 const first = semver_versions_[0];
                 const second = semver_versions_[1];
                 const order = second.order(first, string_buf, string_buf);
-                bun.assertWithLocation(order == .gt, @src());
+                // Two keys can name one version ("1.0.0" and "01.0.0"), so neighbours can be equal.
+                bun.assertWithLocation(order != .lt, @src());
             }
         }
     }
@@ -2095,8 +2096,10 @@ pub struct PackageManifest {
                                 },
                                 .e_string => {
                                     if (str_ := bin.expr.asString(allocator)) {
-                                        string_builder.count(str_);
-                                        break :bin;
+                                        if (str_.len > 0) {
+                                            string_builder.count(str_);
+                                            break :bin;
+                                        }
                                     }
                                 },
                                 else => {},

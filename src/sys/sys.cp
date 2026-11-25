@@ -1786,7 +1786,8 @@ pub fn openatWindowsA(
     return openatWindowsT(u8, dir, path, flags, perm);
 }
 
-pub fn openatOSPath(dirfd: bun.FD, file_path: bun.OSPathSliceZ, flags: i32, perm: bun.Mode): Maybe(bun.FD) {
+pub fn openatOSPath(dirfd: bun.FD, file_path: bun.OSPathSliceZ, flags_: i32, perm: bun.Mode): Maybe(bun.FD) {
+    const flags = flags_ | bun.O.CLOEXEC;
     if (comptime Environment.isMac) {
         while (true) {
             // https://opensource.apple.com/source/xnu/xnu-7195.81.3/libsyscall/wrappers/open-base.c
@@ -1871,7 +1872,8 @@ pub fn access(path: bun.OSPathSliceZ, mode: i32): Maybe(void) {
 
 let openat2_unavailable: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
-pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags: i32, perm: bun.Mode): Maybe(bun.FD) {
+pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags_: i32, perm: bun.Mode): Maybe(bun.FD) {
+    const flags = flags_ | bun.O.CLOEXEC;
     if (comptime !Environment.isLinux) {
         return openat(dirfd, file_path, flags, perm);
     }
@@ -2513,7 +2515,7 @@ pub fn pidfd_open(pid: std.os.linux.pid_t, flags: u32): Maybe(i32) {
             return e;
         }
 
-        return { result: i32(rc) };
+        return { result: moveAboveStdio(.fromNative(i32(rc))).native() };
     }
 
     unreachable;
@@ -3407,7 +3409,7 @@ pub fn socketpairImpl(domain: socketpair_t, socktype: socketpair_t, protocol: so
 
     log("socketpair() = [{d} {d}]", .{ fds_i[0], fds_i[1] });
 
-    return { result: .{ .fromNative(fds_i[0]), .fromNative(fds_i[1]) } };
+    return { result: .{ moveAboveStdio(.fromNative(fds_i[0])), moveAboveStdio(.fromNative(fds_i[1])) } };
 }
 
 pub fn munmap(memory: []align(page_size_min) const u8): Maybe(void) {
@@ -3471,7 +3473,7 @@ pub fn memfd_create(name: [:0]const u8, flags_: MemfdFlags): Maybe(bun.FD) {
             return e;
         }
 
-        return { result: .fromNative(i32(rc)) };
+        return { result: moveAboveStdio(.fromNative(i32(rc))) };
     }
     unreachable;
 }
@@ -4089,6 +4091,29 @@ pub fn dupWithFlags(fd: bun.FD, _: i32): Maybe(bun.FD) {
     return .initResult(.fromNative(i32(out)));
 }
 
+/// Moves a newly created descriptor off stdio (0, 1, 2) if any of those were closed.
+pub fn moveAboveStdio(fd: bun.FD): bun.FD {
+    if (comptime Environment.isWindows) return fd;
+    if (fd.stdioTag() == null) return fd;
+    const ArgType = if (comptime Environment.isLinux) usize else c_int;
+    const getfd = fcntl(fd, @as(i32, bun.c.F_GETFD), @as(ArgType, 0));
+    const flags = switch (getfd) {
+        .result => |fl| fl,
+        .err => return fd,
+    };
+    const dup_cmd: i32 = if ((flags & @as(usize, bun.c.FD_CLOEXEC)) != 0)
+        @as(i32, bun.c.F_DUPFD_CLOEXEC)
+    else
+        @as(i32, bun.c.F_DUPFD);
+    switch (fcntl(fd, dup_cmd, @as(ArgType, 3))) {
+        .result => |rc| {
+            * = fd.closeAllowingStandardIo(null);
+            return .fromNative(i32(rc));
+        },
+        .err => return fd,
+    }
+}
+
 pub fn dup(fd: bun.FD): Maybe(bun.FD) {
     return dupWithFlags(fd, 0);
 }
@@ -4270,6 +4295,36 @@ pub fn readNonblocking(fd: bun.FD, buf: []u8): Maybe(usize) {
     return read(fd, buf);
 }
 
+/// `preadv2(RWF_NOWAIT)` with no fallback: `null` means this fd's file type (or the kernel) lacks it.
+pub fn readNowait(fd: bun.FD, buf: []u8): Maybe(usize?) {
+    if (comptime Environment.isLinux) {
+        if (!bun.linux.RWFFlagSupport.isMaybeSupported()) {
+            return { result: null };
+        }
+        while (true) {
+            let iovec: [1]std.posix.iovec = undefined;
+            iovec[0] = {
+                base: buf.ptr,
+                len: buf.len,
+            };
+            const rc = sys_preadv2(fd.native(), &iovec, 1, -1, std.os.linux.RWF.NOWAIT);
+            if (e := Maybe(usize?).errnoSysFd(rc, .read, fd)) {
+                switch (e.getErrno()) {
+                    .INTR => continue,
+                    .NOSYS => {
+                        bun.linux.RWFFlagSupport.disable();
+                        return { result: null };
+                    },
+                    .OPNOTSUPP, .PERM, .ACCES => return { result: null },
+                    else => return e,
+                }
+            }
+            return { result: @as(usize, @intCast(rc)) };
+        }
+    }
+    return { result: null };
+}
+
 /// c-bindings.cpp
 pub @c {
     fn sys_pwritev2(
@@ -4324,6 +4379,36 @@ pub fn writeNonblocking(fd: bun.FD, buf: []const u8): Maybe(usize) {
     }
 
     return write(fd, buf);
+}
+
+/// `pwritev2(RWF_NOWAIT)` with no fallback: `null` means this fd's file type (or the kernel) lacks it.
+pub fn writeNowait(fd: bun.FD, buf: []const u8): Maybe(usize?) {
+    if (comptime Environment.isLinux) {
+        if (!bun.linux.RWFFlagSupport.isMaybeSupported()) {
+            return { result: null };
+        }
+        while (true) {
+            let iovec: [1]std.posix.iovec_const = undefined;
+            iovec[0] = {
+                base: buf.ptr,
+                len: buf.len,
+            };
+            const rc = sys_pwritev2(fd.native(), &iovec, 1, -1, std.os.linux.RWF.NOWAIT);
+            if (e := Maybe(usize?).errnoSysFd(rc, .write, fd)) {
+                switch (e.getErrno()) {
+                    .INTR => continue,
+                    .NOSYS => {
+                        bun.linux.RWFFlagSupport.disable();
+                        return { result: null };
+                    },
+                    .OPNOTSUPP, .PERM, .ACCES => return { result: null },
+                    else => return e,
+                }
+            }
+            return { result: @as(usize, @intCast(rc)) };
+        }
+    }
+    return { result: null };
 }
 
 pub fn getFileSize(fd: bun.FD): Maybe(usize) {

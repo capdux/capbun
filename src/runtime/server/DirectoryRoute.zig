@@ -321,8 +321,9 @@ var loc_guard = PathBufGuard{ .buf = bun.path_buffer_pool.get() };
         var etag_buf: [40]u8 = undefined;
         _ = &etag_buf;
         const etag = formatWeakEtag((&etag_buf), size, last_modified_ms);
-        const range: RangeRequest.Result = (if (((method == .GET) or (method == .HEAD))) RangeRequest.fromRequest(req, size) else .none);
-        const status_code = (blk_catch_0: { break :blk_catch_0 ((statusForPreconditions(req, method, 200, etag, (if ((last_modified_ms > 0)) last_modified_ms else null), range)) catch |__ce_0| { _ = &__ce_0; return; }); });
+        const lmd_opt: ?u64 = (if ((last_modified_ms > 0)) last_modified_ms else null);
+        const range: RangeRequest.Result = (if (((method == .GET) or (method == .HEAD))) RangeRequest.fromRequest(req, size, etag, lmd_opt) else .none);
+        const status_code = (blk_catch_0: { break :blk_catch_0 ((statusForPreconditions(req, method, 200, etag, lmd_opt, range)) catch |__ce_0| { _ = &__ce_0; return; }); });
         _ = req.setYield(false);
         _ = writeAnyStatus(resp, status_code);
         _ = resp.writeMark();
@@ -564,6 +565,25 @@ const AnyResponse = uws.AnyResponse;
 const AnyRequest = uws.AnyRequest;
 const log = bun.Output.scoped(.DirectoryRoute, .hidden);
 const STAT_CACHE_SLOTS: usize = 256;
+
+pub fn ifRangeMatches(if_range: []const u8, etag: ?[]const u8, last_modified_ms: ?u64) bool {
+        const prefix = if_range[0..@min(if_range.len, 3)];
+        if (bun.strings.containsChar(prefix, 34)) {
+            return bun.http.ETag.ifRange(etag, if_range);
+        }
+        const lmd = ((last_modified_ms) orelse { return false; });
+        if (((if_range.len < 3) or (!std.mem.eql(u8, if_range[(if_range.len - 3)..], "GMT")))) {
+            return false;
+        }
+        var s = bun.String.fromBytes(if_range);
+        _ = &s;
+        const date_f64 = (blk_catch_1: { break :blk_catch_1 ((bun.String.parseDate((&s), bun.jsc.VirtualMachine.get().global)) catch |__ce_1| { _ = &__ce_1; return false; }); });
+        if (((!std.math.isFinite(date_f64)) or (date_f64 < 0))) {
+            return false;
+        }
+        const date_ms: u64 = @intFromFloat(date_f64);
+        return ((lmd / 1000) == (date_ms / 1000));
+}
 
 pub fn writeAnyStatus(resp: AnyResponse, status_code: u16) void {
         switch (resp) {
@@ -807,7 +827,7 @@ i = (i + 1);
         var stream = std.io.fixedBufferStream(out[0..after_prefix.len]);
         _ = &stream;
         const writer = stream.writer();
-        const decoded_len = (blk_catch_4: { break :blk_catch_4 ((bun.url_mod.PercentEncoding.decode(@TypeOf(writer), writer, after_prefix)) catch |__ce_4| { _ = &__ce_4; return null; }); });
+        const decoded_len = (blk_catch_5: { break :blk_catch_5 ((bun.url_mod.PercentEncoding.decode(@TypeOf(writer), writer, after_prefix)) catch |__ce_5| { _ = &__ce_5; return null; }); });
         const decoded = out[0..decoded_len];
         if ((strings.countChar(decoded, 47) != raw_slashes)) {
             return null;

@@ -161,6 +161,10 @@ pub fn assignUnminified(c: *LinkerContext, chunks: []const Chunk) !void {
             const interned = internName(c, name);
             _ = try used.put(allocator, interned, 1);
             _ = try c.cross_chunk_names.put(allocator, sym_ref, interned);
+            const followed = c.graph.symbols.follow(sym_ref);
+            if ((!followed.eql(sym_ref))) {
+                _ = try c.cross_chunk_names.put(allocator, followed, interned);
+            }
         }
 }
 

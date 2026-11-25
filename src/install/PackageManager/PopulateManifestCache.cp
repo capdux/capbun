@@ -21,8 +21,9 @@ struct RunClosure {
     @"err": anyerror? = null,
 
     fn isDone(*_): bool {
+        const CtxType = @TypeOf(_.manager);
         _.manager.runTasks(
-            *PackageManager,
+            CtxType,
             _.manager,
             .{
                 .onExtract = .{},
@@ -157,6 +158,10 @@ pub fn populateManifestCache(manager: *PackageManager, packages: Packages)! {
 
     manager.flushNetworkQueue();
     * = manager.scheduleTasks();
+
+    if (log_level.showProgress()) {
+        manager.startProgressBarIfNone();
+    }
 
     if (manager.pendingTaskCount() > 0) {
         let run_closure = RunClosure{ manager: manager };

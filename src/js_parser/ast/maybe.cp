@@ -108,6 +108,7 @@ pub fn AstMaybe(
                                     assign_target: identifier_opts.assign_target,
                                     is_call_target: identifier_opts.is_call_target,
                                     is_delete_target: identifier_opts.is_delete_target,
+                                    is_property_access_target: identifier_opts.is_property_access_target,
 
                                     // If this expression is used as the target of a call expression, make
                                     // sure the value of "this" is preserved.

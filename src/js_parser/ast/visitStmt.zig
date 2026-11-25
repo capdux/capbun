@@ -1253,6 +1253,7 @@ pub fn s_enum(p: *P, stmts: *ListManaged(Stmt), stmt: *Stmt, data: *S.Enum, was_
 },
 .e_string => |str| {
 has_string_value = true;
+                    _ = str.resolveRopeIfNeeded(p.allocator);
                     (exported_members.getPtr(name)).?.data = .{ .enum_string = str };
                     _ = (blk_catch_46: { break :blk_catch_46 ((p.ref_to_ts_namespace_member.put(p.allocator, (value.*).ref, .{ .enum_string = str })) catch |e| { _ = &e; break :blk_catch_46 bun.handleOom(e); }); });
 },

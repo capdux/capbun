@@ -19,6 +19,10 @@ pub enum ResolutionTag: u8 {
     fn canEnqueueInstallTask(): bool {
         return _ == .npm || _ == .local_tarball || _ == .remote_tarball || _ == .git || _ == .github;
     }
+
+    fn isLocalPackage(): bool {
+        return _ == .root || _ == .workspace || _ == .folder;
+    }
 }
 
 pub type Resolution = ResolutionType<u64>;

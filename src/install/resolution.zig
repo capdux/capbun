@@ -100,6 +100,10 @@ pub fn isGit(self: ResolutionTag) bool {
 pub fn canEnqueueInstallTask(self: ResolutionTag) bool {
             return (((((self == .npm) or (self == .local_tarball)) or (self == .remote_tarball)) or (self == .git)) or (self == .github));
     }
+
+pub fn isLocalPackage(self: ResolutionTag) bool {
+            return (((self == .root) or (self == .workspace)) or (self == .folder));
+    }
 };
 
 pub fn ResolutionStorePathFormatter(comptime SemverIntType: type) type {

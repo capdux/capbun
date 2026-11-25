@@ -414,6 +414,7 @@ pub fn writeOutputFilesToDisk(
         else
             .chunk;
 
+        chunk.final_output_size = code_result.buffer.len;
         const chunk_index = output_files.insertForChunk(options.OutputFile.init({
             output_path: bun.default_allocator.dupe(u8, chunk.final_rel_path) catch unreachable,
             input_path: input_path,

@@ -351,12 +351,15 @@ const stat_size: u64 = @intCast(@max(stat.size, 0));
             _ = req.setYield(true);
             return;
         }
-        const range: RangeRequest.Result = (if ((((((method == .GET) or (method == .HEAD)) and (file_type == .file)) and (self.status_code == 200)) and (!self.has_content_range_header))) RangeRequest.fromRequest(req, size) else .none);
+        const range_etag_raw = self.headers.get("etag");
+        const range_etag: ?[]const u8 = (if (((range_etag_raw != null) and (range_etag_raw.?.len > 0))) (range_etag_raw.?) else null);
+        const range_lmd: ?u64 = (if ((req.header("if-range") != null)) (blk_catch_2: { break :blk_catch_2 ((self.lastModifiedDate()) catch |__ce_2| { _ = &__ce_2; return; }); }) else null);
+        const range: RangeRequest.Result = (if ((((((method == .GET) or (method == .HEAD)) and (file_type == .file)) and (self.status_code == 200)) and (!self.has_content_range_header))) RangeRequest.fromRequest(req, size, range_etag, range_lmd) else .none);
         const status_code: u16 = brk: {
         if (input_if_modified_since_date) |requested_if_modified_since| {
             _ = &requested_if_modified_since;
             if (((method == .HEAD) or (method == .GET))) {
-                if ((blk_catch_2: { break :blk_catch_2 ((self.lastModifiedDate()) catch |__ce_2| { _ = &__ce_2; return; }); })) |actual_last_modified_at| {
+                if ((blk_catch_3: { break :blk_catch_3 ((self.lastModifiedDate()) catch |__ce_3| { _ = &__ce_3; return; }); })) |actual_last_modified_at| {
                     _ = &actual_last_modified_at;
                     if (((actual_last_modified_at / 1000) <= (requested_if_modified_since / 1000))) {
                         break :brk 304;

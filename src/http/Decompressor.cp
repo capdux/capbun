@@ -3,6 +3,13 @@ import bun from "bun";
 
 import { Encoding } from "../http_types/Encoding.cp";
 
+pub fn hasZlibHeader(buffer: string): bool {
+    if (buffer.len < 2) return false;
+    const cmf = buffer[0];
+    const flg = buffer[1];
+    return (cmf & 0x0f) == 8 && (cmf >> 4) <= 7 && (((@as(u16, cmf) << 8) | flg) % 31) == 0;
+}
+
 export enum Decompressor {
     zlib: *bun.zlib.ZlibReaderArrayList,
     brotli: *bun.brotli.BrotliReaderArrayList,
@@ -42,7 +49,7 @@ export enum Decompressor {
                     let windowBits: i32 = 0 - bun.zlib.MAX_WBITS;
                     if (encoding == Encoding.gzip) {
                         windowBits = bun.zlib.MAX_WBITS | 16;
-                    } else if (buffer.len > 1 && buffer[0] == 120) {
+                    } else if (hasZlibHeader(buffer)) {
                         windowBits = 0;
                     }
                     let reader = bun.zlib.ZlibReaderArrayList.initWithOptionsAndListAllocator(

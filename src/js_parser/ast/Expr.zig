@@ -64,6 +64,11 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 const Message = struct { __cp_no_message_sentinel: void = {} };
@@ -1131,6 +1136,13 @@ else => self,
     }
 
 pub fn writeToHasher(self: Data, hasher: anytype, symbol_table: anytype) void {
+            _ = self.writeToHasherWithCheck(hasher, symbol_table, bun.StackCheck.init());
+    }
+
+pub fn writeToHasherWithCheck(self: Data, hasher: anytype, symbol_table: anytype, stack_check: bun.StackCheck) void {
+            if ((!stack_check.isSafeToRecurse())) {
+                return;
+            }
             _ = writeAnyToHasher(hasher, std.@"meta".activeTag(self));
             switch (self) {
 .e_name_of_symbol => |e| {
@@ -1141,18 +1153,36 @@ const symbol = e.ref.getSymbol(symbol_table);
 _ = writeAnyToHasher(hasher, .{ e.is_single_line, e.is_parenthesized, e.was_originally_macro, e.items.len });
             for (cp_iter_slice(e.items.slice())) |item| {
                 _ = &item;
-                _ = item.data.writeToHasher(hasher, symbol_table);
+                _ = item.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             }
 },
 .e_unary => |e| {
 _ = writeAnyToHasher(hasher, @as(u8, @bitCast(e.flags)));
             _ = writeAnyToHasher(hasher, .{ e.op });
-            _ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.writeToHasher(hasher, symbol_table);
+            _ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
 },
 .e_binary => |e| {
-_ = writeAnyToHasher(hasher, .{ e.op });
-            _ = e.left.data.writeToHasher(hasher, symbol_table);
-            _ = e.right.data.writeToHasher(hasher, symbol_table);
+var node = e;
+            _ = &node;
+            var parents: std.ArrayListUnmanaged(*E.Binary) = .{};
+            _ = &parents;
+            defer {
+            _ = parents.deinit(bun.default_allocator);
+            }
+            while (true) {
+                _ = writeAnyToHasher(hasher, .{ node.op });
+                if ((node.left.data != .e_binary)) {
+                    break;
+                }
+                _ = writeAnyToHasher(hasher, std.@"meta".activeTag(node.left.data));
+                _ = bun.handleOom(parents.append(bun.default_allocator, node));
+                node = node.left.data.e_binary;
+            }
+            _ = node.left.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+            _ = node.right.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+            while (parents.pop()) |parent| {
+                _ = parent.right.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+            }
 },
 .e_class => {
 
@@ -1165,13 +1195,13 @@ inline .e_new, .e_call => {
 },
 .e_dot => |e| {
 _ = writeAnyToHasher(hasher, .{ e.optional_chain, (if (@typeInfo(@TypeOf(e)) == .@"enum" or @typeInfo(@TypeOf(e)) == .@"union") @tagName(e) else e.name).len });
-            _ = e.target.data.writeToHasher(hasher, symbol_table);
+            _ = e.target.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             _ = hasher.update((if (@typeInfo(@TypeOf(e)) == .@"enum" or @typeInfo(@TypeOf(e)) == .@"union") @tagName(e) else e.name));
 },
 .e_index => |e| {
 _ = writeAnyToHasher(hasher, .{ e.optional_chain });
-            _ = e.target.data.writeToHasher(hasher, symbol_table);
-            _ = e.index.data.writeToHasher(hasher, symbol_table);
+            _ = e.target.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+            _ = e.index.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
 },
 .e_arrow => {
 
@@ -1183,13 +1213,13 @@ _ = &e;
 _ = &e;
 },
 inline .e_spread, .e_await => |e| {
-_ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.writeToHasher(hasher, symbol_table);
+_ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
 },
 .e_yield => |e| {
 _ = writeAnyToHasher(hasher, .{ e.is_star, (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value) });
             if ((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)) |value| {
                 _ = &value;
-                _ = value.data.writeToHasher(hasher, symbol_table);
+                _ = value.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             }
 },
 .e_template => |e| {
@@ -1232,7 +1262,7 @@ _ = writeAnyToHasher(hasher, e.import_record_index);
 _ = writeAnyToHasher(hasher, e.inverted);
 },
 .e_inlined_enum => |e| {
-_ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.writeToHasher(hasher, symbol_table);
+_ = (if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value).data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
 },
 .e_require_call_target, .e_require_resolve_call_target, .e_missing, .e_this, .e_super, .e_null, .e_undefined, .e_new_target, .e_require_main, .e_import_meta, .e_special => {
 

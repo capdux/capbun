@@ -234,10 +234,10 @@ pub fn verifyResolutions(client: *PackageManager, log_level: PackageManager.Opti
 
             if (failed_dep.behavior.isPeer()) continue;
 
-            const features = switch (pkg_resolutions[parent_id].tag) {
-                .root, .workspace, .folder => client.options.local_package_features,
-                else => client.options.remote_package_features,
-            };
+            const features = if (pkg_resolutions[parent_id].tag.isLocalPackage())
+                client.options.local_package_features
+            else
+                client.options.remote_package_features;
             if (failed_dep.behavior.optional || !failed_dep.behavior.isEnabled(features)) continue;
 
             if (log_level != .silent) {

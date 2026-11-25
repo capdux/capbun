@@ -1448,7 +1448,7 @@ _ = @memcpy(to_copy_into2[0..entry.path.len], entry.path);
                     return e;
                 }
                 _ = (blk_catch_52: { break :blk_catch_52 ((std.posix.unlinkat(destination_dir.fd, entry.path, 0)) catch |__ce_52| { _ = &__ce_52;  }); });
-                break :blk_catch_51 try std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path); }); });
+                break :blk_catch_51 try std.posix.symlinkat(target, destination_dir.fd, entry.path); }); });
                 real_file_count = (real_file_count + 1);
 },
 else => {
@@ -1482,7 +1482,13 @@ if ((bun.windows.CreateDirectoryExW(src.ptr, dest.ptr, null) == 0)) {
 .file => {
 switch (bun.sys.symlinkW(dest, src, .{})) {
 .err => |e| {
-if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
+if ((e.getErrno() == .EXIST)) {
+                    _ = bun.sys.unlinkW(dest);
+                    if ((bun.sys.symlinkW(dest, src, .{}) == .result)) {
+                        continue;
+                    }
+                }
+                if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
                     _ = &entry_dirname;
                     _ = (blk_catch_54: { break :blk_catch_54 ((bun.MakePath.makePath(u16, destination_dir, entry_dirname)) catch |__ce_54| { _ = &__ce_54;  }); });
                     if ((bun.sys.symlinkW(dest, src, .{}) == .result)) {

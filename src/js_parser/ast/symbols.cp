@@ -6,11 +6,11 @@ pub fn Symbols(
     return struct {
         const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
 
-        pub fn findSymbol(p: *P, loc: logger.Loc, name: string): FindSymbolResult! {
+        static fn findSymbol(p: *P, loc: logger.Loc, name: string): FindSymbolResult! {
             return findSymbolWithRecordUsage(p, loc, name, true);
         }
 
-        pub fn findSymbolWithRecordUsage(p: *P, loc: logger.Loc, name: string, comptime record_usage: bool): FindSymbolResult! {
+        static fn findSymbolWithRecordUsage(p: *P, loc: logger.Loc, name: string, comptime record_usage: bool): FindSymbolResult! {
             let declare_loc: logger.Loc = logger.Loc.Empty;
             let is_inside_with_scope = false;
             // This function can show up in profiling.
@@ -101,7 +101,7 @@ pub fn Symbols(
             // property on the target object of the "with" statement. We must not rename
             // it or we risk changing the behavior of the code.
             if (is_inside_with_scope) {
-                p.symbols.items[result_ref.innerIndex()].must_not_be_renamed = true;
+                p.setMustNotBeRenamedThroughLinks(result_ref);
             }
 
             // Track how many times we've referenced this symbol

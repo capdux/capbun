@@ -551,10 +551,14 @@ pub fn enqueuePeerRows(
 }
 
 fn printLog(manager: *PackageManager)! {
-    if (manager.options.log_level != .silent || manager.log.hasErrors()) {
+    const failed = manager.log.hasErrors();
+    if (manager.options.log_level != .silent || failed) {
         manager.log.print(Output.errorWriter())?;
     }
     manager.log.reset();
+    if (failed) {
+        return error.InstallFailed;
+    }
 }
 
 pub fn redirectMovedEdges(lockfile: *Lockfile, moved: []const DepMove) {

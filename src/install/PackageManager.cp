@@ -894,6 +894,7 @@ pub fn init(
     const options = Options{
         global: cli.global,
         max_concurrent_lifecycle_scripts: cli.concurrent_scripts ?? cpu_count * 2,
+        runtime_auto_install: true,
     };
 
     if (env.get("BUN_INSTALL_VERBOSE") != null) {

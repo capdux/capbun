@@ -59,6 +59,9 @@ pub enum Kind: u8 {
     // evaluated code might reference anything that it has access to.
     contains_direct_eval: bool = false,
 
+    // Set on a "with" scope and every scope that encloses it, for computeReservedNamesForScope.
+    contains_with: bool = false,
+
     // This is to help forbid "arguments" inside class body scopes
     forbid_arguments: bool = false,
 
@@ -69,12 +72,12 @@ pub enum Kind: u8 {
     // This will be non-null if this is a TypeScript "namespace" or "enum"
     ts_namespace: (*TSNamespaceScope)? = null,
 
-    pub fn getMemberWithHash(client: *const Scope, name: []const u8, hash_value: u64): Member? {
+    pub fn getMemberWithHash(name: []const u8, hash_value: u64): Member? {
         const hashed = bun.StringHashMapContext.Prehashed{
             value: hash_value,
             input: name,
         };
-        return client.members.getAdapted(name, hashed);
+        return _.members.getAdapted(name, hashed);
     }
 
     pub fn getOrPutMemberWithHash(
@@ -99,12 +102,12 @@ pub enum Kind: u8 {
         _.label_ref = null;
         _.label_stmt_is_loop = false;
         _.contains_direct_eval = false;
+        _.contains_with = false;
         _.strict_mode = .sloppy_mode;
         _.kind = .block;
     }
 
     pub fn canMergeSymbols(
-        scope: *Scope,
         existing: Symbol.Kind,
         new_kind: Symbol.Kind,
         comptime is_typescript_enabled: bool,
@@ -151,7 +154,7 @@ pub enum Kind: u8 {
         // "function *foo() {} function *foo() {}" but not "{ function *foo() {} function *foo() {} }"
         if (Symbol.isKindHoistedOrFunction(new_kind) &&
             Symbol.isKindHoistedOrFunction(existing) &&
-            (scope.kind == .entry || scope.kind == .function_body || scope.kind == .function_args ||
+            (scope_kind: { break :scope_kind _.kind == .entry || _.kind == .function_body || _.kind == .function_args; } ||
                 (new_kind == existing && Symbol.isKindHoisted(existing))))
         {
             return .replace_with_new;
@@ -197,8 +200,8 @@ pub enum Kind: u8 {
         }
     }
 
-    pub inline fn kindStopsHoisting(s: *const Scope): bool {
-        return @intFromEnum(s.kind) >= @intFromEnum(Kind.entry);
+    pub inline fn kindStopsHoisting(): bool {
+        return @intFromEnum(_.kind) >= @intFromEnum(Kind.entry);
     }
 }
 

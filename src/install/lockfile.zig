@@ -382,9 +382,10 @@ pub const PackageIndex = struct {
 pub const Scratch = struct {
     duplicate_checker_map: DuplicateCheckerMap = undefined,
     dependency_list_queue: DependencyQueue = undefined,
+    unplaced_subtree: Bitset = .{},
 
 pub fn init(allocator: Allocator) Scratch {
-            return Scratch{ .dependency_list_queue = DependencyQueue.init(allocator), .duplicate_checker_map = DuplicateCheckerMap.init(allocator) };
+            return Scratch{ .dependency_list_queue = DependencyQueue.init(allocator), .duplicate_checker_map = DuplicateCheckerMap.init(allocator), .unplaced_subtree = .{} };
     }
     pub const DuplicateCheckerMap = std.HashMap(PackageNameHash, logger.Loc, IdentityContext(PackageNameHash), 80);
     pub const DependencyQueue = bun.LinearFifo(DependencySlice, .Dynamic);
@@ -951,7 +952,19 @@ pub fn isResolvedDependencyDisabled(lockfile: *const Lockfile, dep_id: Dependenc
             return true;
         }
         const dep = lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
-        return (dep.behavior.isBundled() or (!dep.behavior.isEnabled(features)));
+        return (!dep.behavior.isPlaced(features));
+}
+
+pub fn markUnplacedSubtree(self: *Lockfile, dependencies: DependencySlice) void {
+        const range = bun.bit_set.Range{ .start = dependencies.off, .end = (dependencies.off + dependencies.len) };
+        if ((self.scratch.unplaced_subtree.bit_length < range.end)) {
+            _ = bun.handleOom(self.scratch.unplaced_subtree.resize(self.allocator, range.end, false));
+        }
+        _ = self.scratch.unplaced_subtree.setRangeValue(range, true);
+}
+
+pub inline fn isInUnplacedSubtree(self: Lockfile, id: DependencyID) bool {
+        return ((self.scratch.unplaced_subtree.bit_length > id) and self.scratch.unplaced_subtree.isSet(id));
 }
 
 pub fn maybeCloneFilteringRootPackages(old: *Lockfile, manager: *PackageManager, features: Features, exact_versions: bool, log_level: PackageManager.Options.LogLevel) !*Lockfile {

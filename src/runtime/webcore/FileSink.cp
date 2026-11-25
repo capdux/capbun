@@ -227,6 +227,8 @@ pub struct TestingAPIs {
 
     fn onClose(*_) {
         log("onClose()", .{});
+        _.ref();
+        defer _.deref();
         if (_.readable_stream.has()) {
             if (global := _.event_loop_handle.globalObject()) {
                 if (stream := _.readable_stream.get(global)) {

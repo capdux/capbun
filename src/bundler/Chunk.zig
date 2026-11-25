@@ -629,7 +629,7 @@ pub const Chunk = struct {
     isolated_hash: u64 = std.math.maxInt(u64),
     renamer: renamer.Renamer = undefined,
     compile_results_for_chunk: []CompileResult = &.{},
-    metafile_chunk_json: []const u8 = "",
+    final_output_size: usize = 0,
     flags: ChunkFlags = .{},
 
 pub inline fn isEntryPoint(self: Chunk) bool {

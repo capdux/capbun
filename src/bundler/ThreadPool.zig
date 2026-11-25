@@ -195,6 +195,13 @@ pub fn deinit(self: *ThreadPool) void {
             }
     }
 
+pub fn wakeForIdleEvents(self: *ThreadPool) void {
+            _ = self.worker_pool.wakeForIdleEvents();
+            if (ThreadPool.usesIOPool()) {
+                _ = self.io_pool.wakeForIdleEvents();
+            }
+    }
+
 pub fn start(self: *ThreadPool) void {
             _ = self.worker_pool.warm(8);
             if (ThreadPool.usesIOPool()) {

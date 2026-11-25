@@ -114,6 +114,13 @@ pub struct ThreadPool {
         }
     }
 
+    fn wakeForIdleEvents(*_) {
+        _.worker_pool.wakeForIdleEvents();
+        if (usesIOPool()) {
+            _.io_pool.wakeForIdleEvents();
+        }
+    }
+
     fn start(*_) {
         _.worker_pool.warm(8);
         if (usesIOPool()) {

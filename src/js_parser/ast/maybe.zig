@@ -167,7 +167,7 @@ if (p.options.bundle) {
 })).ref.?;
                         _ = p.ignoreUsage(id.ref);
                         _ = p.recordUsage(ref_);
-                        return p.handleIdentifier(name_loc, E.Identifier{ .@"ref" = ref_ }, name, .{ .assign_target = identifier_opts.assign_target, .is_call_target = identifier_opts.is_call_target, .is_delete_target = identifier_opts.is_delete_target, .was_originally_identifier = false });
+                        return p.handleIdentifier(name_loc, E.Identifier{ .@"ref" = ref_ }, name, .{ .assign_target = identifier_opts.assign_target, .is_call_target = identifier_opts.is_call_target, .is_delete_target = identifier_opts.is_delete_target, .is_property_access_target = identifier_opts.is_property_access_target, .was_originally_identifier = false });
                     }
                 }
                 if (((!p.is_control_flow_dead) and id.ref.eql(p.module_ref))) {

@@ -317,17 +317,7 @@ const name = (if (@typeInfo(@TypeOf(manifest_req)) == .@"enum" or @typeInfo(@Typ
                     } else {
                         _ = (blk_catch_3: { break :blk_catch_3 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, fmt, .{ @errorName(e), name.slice() })) catch |oom_err| { _ = &oom_err; break :blk_catch_3 bun.handleOom(oom_err); }); });
                     }
-                    if ((manager.subcommand != .remove)) {
-                        for (cp_mut_slice(&manager.update_requests)) |*request| {
-                            _ = &request;
-                            if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), name.slice())) {
-                                (request.*).failed = true;
-                                manager.options.do.save_lockfile = false;
-                                manager.options.do.save_yarn_lock = false;
-                                manager.options.do.install_packages = false;
-                            }
-                        }
-                    }
+                    _ = failUpdateRequests(manager, task.task_id, name.slice(), null);
                 }
                 continue;
             }
@@ -352,17 +342,7 @@ else => error.PackageManifestHTTP5xx,
                 } else {
                     _ = (blk_catch_5: { break :blk_catch_5 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>", .{ metadata.url, response.status_code })) catch |oom_err| { _ = &oom_err; break :blk_catch_5 bun.handleOom(oom_err); }); });
                 }
-                if ((manager.subcommand != .remove)) {
-                    for (cp_mut_slice(&manager.update_requests)) |*request| {
-                        _ = &request;
-                        if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), name.slice())) {
-                            (request.*).failed = true;
-                            manager.options.do.save_lockfile = false;
-                            manager.options.do.save_yarn_lock = false;
-                            manager.options.do.install_packages = false;
-                        }
-                    }
-                }
+                _ = failUpdateRequests(manager, task.task_id, name.slice(), null);
                 continue;
             }
             if (log_level.isVerbose()) {
@@ -389,13 +369,12 @@ else => error.PackageManifestHTTP5xx,
                     if (manager.options.enable.manifest_cache) {
                         _ = Npm.PackageManifest.Serializer.saveAsync((&entry.value_ptr.manifest), manager.scopeForPackageName(name.slice()), manager.getTemporaryDirectory().handle, manager.getCacheDirectory());
                     }
-                    if ((@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only)) {
-                        continue;
+                    if (manager.task_queue.getEntry(task.task_id)) |dependency_list_entry| {
+                        _ = &dependency_list_entry;
+                        const dependency_list = dependency_list_entry.value_ptr.*;
+                        dependency_list_entry.value_ptr.* = .{};
+                        _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
                     }
-                    const dependency_list_entry = (manager.task_queue.getEntry(task.task_id)).?;
-                    const dependency_list = dependency_list_entry.value_ptr.*;
-                    dependency_list_entry.value_ptr.* = .{};
-                    _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
                     continue;
                 }
             }
@@ -443,17 +422,7 @@ _ = bun.debugAssert((!task.streaming_committed));
                 } else {
                     _ = (blk_catch_8: { break :blk_catch_8 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, fmt, .{ @errorName(e), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto) })) catch |oom_err| { _ = &oom_err; break :blk_catch_8 bun.handleOom(oom_err); }); });
                 }
-                if ((manager.subcommand != .remove)) {
-                    for (cp_mut_slice(&manager.update_requests)) |*request| {
-                        _ = &request;
-                        if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice())) {
-                            (request.*).failed = true;
-                            manager.options.do.save_lockfile = false;
-                            manager.options.do.save_yarn_lock = false;
-                            manager.options.do.install_packages = false;
-                        }
-                    }
-                }
+                _ = failUpdateRequests(manager, task.task_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), extract.dependency_id);
                 if (manager.task_queue.fetchRemove(task.task_id)) |removed| {
                     _ = &removed;
                     var list = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
@@ -490,17 +459,7 @@ else => error.TarballHTTP5xx,
                 } else {
                     _ = (blk_catch_10: { break :blk_catch_10 ((manager.log.addWarningFmt(null, logger.Loc.Empty, manager.allocator, "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>", .{ metadata.url, response.status_code })) catch |oom_err| { _ = &oom_err; break :blk_catch_10 bun.handleOom(oom_err); }); });
                 }
-                if ((manager.subcommand != .remove)) {
-                    for (cp_mut_slice(&manager.update_requests)) |*request| {
-                        _ = &request;
-                        if (strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice())) {
-                            (request.*).failed = true;
-                            manager.options.do.save_lockfile = false;
-                            manager.options.do.save_yarn_lock = false;
-                            manager.options.do.install_packages = false;
-                        }
-                    }
-                }
+                _ = failUpdateRequests(manager, task.task_id, (if (@typeInfo(@TypeOf(extract)) == .@"enum" or @typeInfo(@TypeOf(extract)) == .@"union") @tagName(extract) else extract.name).slice(), extract.dependency_id);
                 if (manager.task_queue.fetchRemove(task.task_id)) |removed| {
                     _ = &removed;
                     var list = (if (@typeInfo(@TypeOf(removed)) == .@"enum") @intFromEnum(removed) else removed.value);
@@ -566,14 +525,13 @@ var _net_guard = PutBackGuard(@TypeOf(manager.preallocated_network_tasks), @Type
             }
             const manifest = (&task.data.package_manifest);
             _ = try manager.manifests.insert((if (@typeInfo(@TypeOf(manifest.pkg)) == .@"enum" or @typeInfo(@TypeOf(manifest.pkg)) == .@"union") @tagName(manifest.pkg) else manifest.pkg.name).hash, manifest);
-            if ((@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only)) {
-                continue;
+            if (manager.task_queue.getEntry(task.id)) |dependency_list_entry| {
+                _ = &dependency_list_entry;
+                const dependency_list = dependency_list_entry.value_ptr.*;
+                dependency_list_entry.value_ptr.* = .{};
+                _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
             }
-            const dependency_list_entry = (manager.task_queue.getEntry(task.id)).?;
-            const dependency_list = dependency_list_entry.value_ptr.*;
-            dependency_list_entry.value_ptr.* = .{};
-            _ = try manager.processDependencyList(dependency_list, Ctx, extract_ctx, callbacks, install_peer);
-            if (log_level.showProgress()) {
+            if ((log_level.showProgress() and (!(@hasField(@TypeOf(callbacks), "manifests_only") and callbacks.manifests_only)))) {
                 if ((!has_updated_this_run)) {
                     _ = manager.setNodeName(manager.downloads_node.?, manifest.name(), ProgressStrings.download_emoji, true);
                     has_updated_this_run = true;
@@ -1037,4 +995,85 @@ pub fn generateNetworkTaskForTarball(client: *PackageManager, task_id: Task.Id, 
             network_task.tarball_stream = TarballStream.init(client.allocator, extract_task, network_task, client);
         }
         return network_task;
+}
+
+pub fn failUpdateRequests(manager: *PackageManager, task_id: Task.Id, package_name: []const u8, tarball_dependency_id: ?DependencyID) void {
+        if ((manager.subcommand == .remove)) {
+            return;
+        }
+        const lockfile = manager.lockfile;
+        const string_buf = lockfile.buffers.string_bytes.items;
+        const dependencies = lockfile.buffers.dependencies.items;
+        const resolutions = lockfile.buffers.resolutions.items;
+        const waiters: []const bun.install.TaskCallbackContext = (if (manager.task_queue.getEntry(task_id)) |entry| entry.value_ptr.items else &.{});
+        const package_id: PackageID = (if (tarball_dependency_id) |dep_id| (if ((dep_id < resolutions.len)) resolutions[@as(usize, @intCast(dep_id))] else invalid_package_id) else invalid_package_id);
+        var cwd_buf: [1]PackageID = .{ lockfile.getWorkspacePackageID(manager.workspace_name_hash) };
+        _ = &cwd_buf;
+        const lists = lockfile.packages.items(.dependencies);
+        var any_failed = false;
+        _ = &any_failed;
+        for (cp_mut_slice(&manager.update_requests)) |*request| {
+            _ = &request;
+            const workspace_ids: []const PackageID = (if (manager.pending_filtered_write) |pending| pending.workspaceIdsReceiving(lockfile, (request.*).name_hash).items else cwd_buf[0..]);
+            var names_its_dependency = false;
+            _ = &names_its_dependency;
+            for (cp_iter_slice(workspace_ids)) |workspace_id| {
+                _ = &workspace_id;
+                if ((workspace_id >= lists.len)) {
+                    continue;
+                }
+                const list = lists[@as(usize, @intCast(workspace_id))];
+                var id = list.off;
+                _ = &id;
+                const end = (list.off + list.len);
+                while ((id < end)) : (id = (id + 1)) {
+                    if ((id >= dependencies.len)) {
+                        break;
+                    }
+                    if ((!(request.*).matches(dependencies[@as(usize, @intCast(id))], string_buf))) {
+                        continue;
+                    }
+                    var was_for = (((package_id != invalid_package_id) and (id < resolutions.len)) and (resolutions[@as(usize, @intCast(id))] == package_id));
+                    _ = &was_for;
+                    if ((!was_for)) {
+                        for (cp_iter_slice(waiters)) |waiter| {
+                            _ = &waiter;
+                            switch (waiter) {
+.dependency => |waiting| {
+_ = (if ((waiting == id)) ({
+                            was_for = true;
+                            break;
+}) else null);
+},
+.root_dependency => |waiting| {
+_ = (if ((waiting == id)) ({
+                            was_for = true;
+                            break;
+}) else null);
+},
+else => {
+
+},
+}
+                        }
+                    }
+                    if (was_for) {
+                        names_its_dependency = true;
+                        break;
+                    }
+                }
+                if (names_its_dependency) {
+                    break;
+                }
+            }
+            if ((names_its_dependency or strings.eql((if (@typeInfo(@TypeOf((request.*))) == .@"enum" or @typeInfo(@TypeOf((request.*))) == .@"union") @tagName((request.*)) else (request.*).name), package_name))) {
+                (request.*).failed = true;
+                any_failed = true;
+            }
+        }
+        if (any_failed) {
+            manager.options.do.save_lockfile = false;
+            manager.options.do.save_yarn_lock = false;
+            manager.options.do.install_packages = false;
+        }
 }

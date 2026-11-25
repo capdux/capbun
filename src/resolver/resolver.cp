@@ -1004,6 +1004,20 @@ pub struct Resolver {
         }
 
         if (data_url := DataURL.parse(import_path) catch {
+            if (kind.isFromCSS()) {
+                if (*debug := r.debug_logs) {
+                    debug.addNote("Marking malformed \"dataurl\" as external");
+                    r.flushDebugLogs(.success) catch {};
+                }
+                return {
+                    success: Result{
+                        import_kind: kind,
+                        path_pair: PathPair{ .primary = Path.init(import_path) },
+                        module_type: .unknown,
+                        flags: { is_external: true },
+                    },
+                };
+            }
             return { failure: error.InvalidDataURL };
         }) {
             // "import 'data:text/javascript,console.log(123)';"
@@ -1609,7 +1623,7 @@ pub struct Resolver {
 
         // Check the "browser" map
         if (r.care_about_browser_field) {
-            if (_import_dir_info := r.dirInfoCached(std.fs.path.dirname(abs_path) ?? unreachable) catch null) {
+            if (_import_dir_info := r.dirInfoCached(std.fs.path.dirname(abs_path) ?? abs_path) catch null) {
                 if (import_dir_info := _import_dir_info.getEnclosingBrowserScope()) {
                     const pkg = import_dir_info.package_json.?;
                     if (remap := r.checkBrowserMap(

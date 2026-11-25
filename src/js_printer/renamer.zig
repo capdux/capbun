@@ -1015,7 +1015,7 @@ pub fn computeInitialReservedNames(allocator: std.mem.Allocator, output_format: 
         }
         var names: bun.StringHashMapUnmanaged(u32) = .{};
         _ = &names;
-        const extras: struct { []const u8, []const u8 } = .{ "Promise", "Require" };
+        const extras: struct { []const u8, []const u8, []const u8, []const u8, []const u8 } = .{ "Promise", "Require", "NaN", "Infinity", "undefined" };
         const cjs_names: struct { []const u8, []const u8 } = .{ "exports", "module" };
         const cjs_names_len: u32 = (if ((output_format == .cjs)) cjs_names.len else 0);
         _ = try names.ensureTotalCapacityContext(allocator, (cjs_names_len + @as(u32, @truncate((((JSLexer.Keywords.keys().len + JSLexer.StrictModeReservedWords.keys().len) + 1) + extras.len)))), bun.StringHashMapContext{  });
@@ -1059,10 +1059,10 @@ pub fn computeReservedNamesForScope(scope: *js_ast.Scope, symbols: *const js_ast
                 _ = ((names.put(allocator, symbol.original_name, 1)) catch unreachable);
             }
         }
-        if (scope.contains_direct_eval) {
+        if ((scope.contains_direct_eval or scope.contains_with)) {
             for (cp_iter_slice(scope.children.slice())) |child| {
                 _ = &child;
-                if (child.contains_direct_eval) {
+                if ((child.contains_direct_eval or child.contains_with)) {
                     names_.* = names;
                     _ = computeReservedNamesForScope(child, symbols, (&names), allocator);
                 }

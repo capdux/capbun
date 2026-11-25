@@ -146,7 +146,8 @@ export @root @value struct InternalState {
         let still_needs_to_decompress = true;
 
         if (bun.FeatureFlags.isLibdeflateEnabled()) {
-            if (is_final_chunk && !_.flags.is_libdeflate_fast_path_disabled && _.encoding.canUseLibDeflate() && _.isDone()) {
+            const use_libdeflate = is_final_chunk && !_.flags.is_libdeflate_fast_path_disabled && _.encoding.canUseLibDeflate() && _.isDone() && !(_.encoding == .deflate && @import("./Decompressor.zig").hasZlibHeader(buffer));
+            if (use_libdeflate) {
                 _.flags.is_libdeflate_fast_path_disabled = true;
 
                 let deflater = bun.http.http_thread.deflater();

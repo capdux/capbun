@@ -752,22 +752,27 @@ _ = try dest.writeStr("::view-transition");
 },
 .view_transition_group => |v| {
 _ = try dest.writeStr("::view-transition-group(");
-            _ = try v.part_name.toCss(dest);
+            _ = try v.part.toCss(dest);
             _ = try dest.writeChar(41);
 },
 .view_transition_image_pair => |v| {
 _ = try dest.writeStr("::view-transition-image-pair(");
-            _ = try v.part_name.toCss(dest);
+            _ = try v.part.toCss(dest);
             _ = try dest.writeChar(41);
 },
 .view_transition_old => |v| {
 _ = try dest.writeStr("::view-transition-old(");
-            _ = try v.part_name.toCss(dest);
+            _ = try v.part.toCss(dest);
             _ = try dest.writeChar(41);
 },
 .view_transition_new => |v| {
 _ = try dest.writeStr("::view-transition-new(");
-            _ = try v.part_name.toCss(dest);
+            _ = try v.part.toCss(dest);
+            _ = try dest.writeChar(41);
+},
+.view_transition_group_children => |v| {
+_ = try dest.writeStr("::view-transition-group-children(");
+            _ = try v.part.toCss(dest);
             _ = try dest.writeChar(41);
 },
 .details_content => {

@@ -723,6 +723,10 @@ pub inline fn isRequired(self: DependencyBehavior) bool {
 pub fn isEnabled(self: DependencyBehavior, features: Features) bool {
             return ((((self.isProd() or (features.optional_dependencies and self.isOptional())) or (features.dev_dependencies and self.isDev())) or (features.peer_dependencies and self.isPeer())) or (features.workspaces and self.isWorkspace()));
     }
+
+pub fn isPlaced(self: DependencyBehavior, features: Features) bool {
+            return ((!self.isBundled()) and self.isEnabled(features));
+    }
 };
 
 pub const Dependency = @This();

@@ -1518,13 +1518,14 @@ pub struct LinkerContext {
         was_unwrapped_require: bool,
     ): js_printer.RequireOrImportMeta {
         const flags = _.graph.meta.items(.flags)[source_index];
+        const wrapper_ref = _.graph.ast.items(.wrapper_ref)[source_index];
         return .{
             .exports_ref = if (flags.wrap == .esm || (was_unwrapped_require && _.graph.ast.items(.flags)[source_index].force_cjs_to_esm))
                 _.graph.ast.items(.exports_ref)[source_index]
             else
                 Ref.None,
-            .is_wrapper_async = flags.is_async_or_has_async_dependency,
-            .wrapper_ref = _.graph.ast.items(.wrapper_ref)[source_index],
+            .is_wrapper_async = flags.is_async_or_has_async_dependency && wrapper_ref.isValid(),
+            .wrapper_ref = wrapper_ref,
 
             .was_unwrapped_require = was_unwrapped_require && _.graph.ast.items(.flags)[source_index].force_cjs_to_esm,
         };

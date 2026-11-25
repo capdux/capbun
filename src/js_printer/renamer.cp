@@ -943,6 +943,9 @@ pub fn computeInitialReservedNames(
     const extras = .{
         "Promise",
         "Require",
+        "NaN",
+        "Infinity",
+        "undefined",
     };
 
     const cjs_names = .{
@@ -1011,11 +1014,10 @@ pub fn computeReservedNamesForScope(
         }
     }
 
-    // If there's a direct "eval" somewhere inside the current scope, continue
-    // traversing down the scope tree until we find it to get all reserved names
-    if (scope.contains_direct_eval) {
+    // Keep traversing down the scope tree toward a direct "eval" or a "with" to get all reserved names
+    if (scope.contains_direct_eval || scope.contains_with) {
         for (child of scope.children.slice()) {
-            if (child.contains_direct_eval) {
+            if (child.contains_direct_eval || child.contains_with) {
                 names_.* = names;
                 computeReservedNamesForScope(child, symbols, &names, allocator);
             }

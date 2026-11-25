@@ -481,6 +481,34 @@ else => {
 },
 }
                 }
+                if ((id < named_imports.len)) {
+                    var ni_it = named_imports[@as(usize, @intCast(id))].iterator();
+                    _ = &ni_it;
+                    while (ni_it.next()) |ni_entry| {
+                        const import_ref = ni_entry.key_ptr.*;
+                        const ni = ni_entry.value_ptr.*;
+                        if ((ni.import_record_index >= import_records.len)) {
+                            continue;
+                        }
+                        const record = import_records[@as(usize, @intCast(ni.import_record_index))];
+                        if ((!record.source_index.isValid())) {
+                            continue;
+                        }
+                        const other = record.source_index.get();
+                        if ((other >= exports_kind.len)) {
+                            continue;
+                        }
+                        if ((((ast_flags_list[@as(usize, @intCast(other))].commonjs_lifted_to_esm and (!ni.alias_is_star)) and (ni.alias != null)) and strings.eqlComptime(ni.alias.?, "default"))) {
+                            if (client.graph.symbols.get(import_ref)) |symbol| {
+                                _ = &symbol;
+                                if (((symbol.import_item_status != .generated) and (ni.is_exported or symbol.import_used_as_value))) {
+                                    exports_kind[cp_cast_int(usize, other)] = .cjs;
+                                    flags[@as(usize, @intCast(other))].wrap = .cjs;
+                                }
+                            }
+                        }
+                    }
+                }
                 const kind = exports_kind[@as(usize, @intCast(id))];
                 if (((kind == .cjs) and (((!entry_point_kinds[@as(usize, @intCast(id))].isEntryPoint()) or (output_format == .iife)) or (output_format == .esm)))) {
                     flags[@as(usize, @intCast(id))].wrap = .cjs;

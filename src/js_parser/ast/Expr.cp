@@ -2712,6 +2712,13 @@ pub union(Tag) Data {
     /// `hasher` should be something with 'pub fn update([]const u8) void';
     /// symbol table is passed to serialize `Ref` as an identifier names instead of a nondeterministic numbers
     fn writeToHasher(hasher: auto, symbol_table: auto) {
+        _.writeToHasherWithCheck(hasher, symbol_table, bun.StackCheck.init());
+    }
+
+    fn writeToHasherWithCheck(hasher: auto, symbol_table: auto, stack_check: bun.StackCheck) {
+        if (!stack_check.isSafeToRecurse()) {
+            return;
+        }
         writeAnyToHasher(hasher, std.@"meta".activeTag(_));
         switch (_) {
             .e_name_of_symbol => |e| {
@@ -2726,31 +2733,44 @@ pub union(Tag) Data {
                     e.items.len,
                 });
                 for (item of e.items.slice()) {
-                    item.data.writeToHasher(hasher, symbol_table);
+                    item.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
                 }
             },
             .e_unary => |e| {
                 writeAnyToHasher(hasher, @as(u8, @bitCast(e.flags)));
                 writeAnyToHasher(hasher, .{e.op});
-                e.value.data.writeToHasher(hasher, symbol_table);
+                e.value.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             },
             .e_binary => |e| {
-                writeAnyToHasher(hasher, .{e.op});
-                e.left.data.writeToHasher(hasher, symbol_table);
-                e.right.data.writeToHasher(hasher, symbol_table);
+                // Not recursive on the left: the parser builds `a + b + …` in a loop, to any depth.
+                let node = e;
+                let parents: std.ArrayListUnmanaged(*E.Binary) = .{};
+                defer parents.deinit(bun.default_allocator);
+                while (true) {
+                    writeAnyToHasher(hasher, .{node.op});
+                    if (node.left.data != .e_binary) break;
+                    writeAnyToHasher(hasher, std.@"meta".activeTag(node.left.data));
+                    bun.handleOom(parents.append(bun.default_allocator, node));
+                    node = node.left.data.e_binary;
+                }
+                node.left.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+                node.right.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+                while (parent := parents.pop()) {
+                    parent.right.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+                }
             },
             .e_class => {},
             inline .e_new, .e_call => {},
             .e_function => {},
             .e_dot => |e| {
                 writeAnyToHasher(hasher, .{ e.optional_chain, e.name.len });
-                e.target.data.writeToHasher(hasher, symbol_table);
+                e.target.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
                 hasher.update(e.name);
             },
             .e_index => |e| {
                 writeAnyToHasher(hasher, .{e.optional_chain});
-                e.target.data.writeToHasher(hasher, symbol_table);
-                e.index.data.writeToHasher(hasher, symbol_table);
+                e.target.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
+                e.index.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             },
             .e_arrow => {},
             .e_jsx_element => |e| {
@@ -2760,12 +2780,12 @@ pub union(Tag) Data {
                 * = e; // autofix
             },
             inline .e_spread, .e_await => |e| {
-                e.value.data.writeToHasher(hasher, symbol_table);
+                e.value.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             },
             .e_yield => |e| {
                 writeAnyToHasher(hasher, .{ e.is_star, e.value });
                 if (value := e.value)
-                    value.data.writeToHasher(hasher, symbol_table);
+                    value.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             },
             .e_template => |e| {
                 * = e; // autofix
@@ -2813,7 +2833,7 @@ pub union(Tag) Data {
             },
             .e_inlined_enum => |e| {
                 // pretend there is no comment
-                e.value.data.writeToHasher(hasher, symbol_table);
+                e.value.data.writeToHasherWithCheck(hasher, symbol_table, stack_check);
             },
 
             // no data

@@ -433,6 +433,15 @@ pub struct Printer {
             }
         }
 
+        if (_.local_names == null) {
+            if (ref_ := ident.asRef()) {
+                const final_ref = _.symbols.follow(ref_);
+                const symbol_opt = _.symbols.get(final_ref);
+                if (symbol_opt == null) return _.addFmtError();
+                return _.writeIdent(symbol_opt.?.original_name, true);
+            }
+        }
+
         const str = _.lookupIdentOrRef(ident);
         return css.serializer.serializeIdentifier(str, _) catch return _.addFmtError();
     }

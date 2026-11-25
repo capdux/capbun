@@ -317,7 +317,7 @@ fn copyFilesSymlink(
                         }
 
                         std.posix.unlinkat(destination_dir.fd, entry.path, 0) catch {};
-                        std.posix.symlinkat(entry.basename, destination_dir.fd, entry.path)?;
+                        std.posix.symlinkat(target, destination_dir.fd, entry.path)?;
                     };
 
                     real_file_count += 1;
@@ -351,6 +351,12 @@ fn copyFilesSymlink(
                 .file => {
                     switch (bun.sys.symlinkW(dest, src, .{})) {
                         .err e => {
+                            if (e.getErrno() == .EXIST) {
+                                * = bun.sys.unlinkW(dest);
+                                if (bun.sys.symlinkW(dest, src, .{}) == .result) {
+                                    continue;
+                                }
+                            }
                             if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
                                 bun.MakePath.makePath(u16, destination_dir, entry_dirname) catch {};
                                 if (bun.sys.symlinkW(dest, src, .{}) == .result) {

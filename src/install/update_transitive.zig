@@ -735,10 +735,14 @@ pub fn lessThan(unused_ctx: void, a: PackageID, b: PackageID) bool {
 }
 
 pub fn printLog(manager: *PackageManager) !void {
-        if (((manager.options.log_level != .silent) or manager.log.hasErrors())) {
+        const failed = manager.log.hasErrors();
+        if (((manager.options.log_level != .silent) or failed)) {
             _ = try manager.log.print(Output.errorWriter());
         }
         _ = manager.log.reset();
+        if (failed) {
+            return error.InstallFailed;
+        }
 }
 
 pub fn redirectMovedEdges(lockfile: *Lockfile, moved: []const DepMove) void {

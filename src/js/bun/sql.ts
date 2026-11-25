@@ -764,7 +764,12 @@ const SQL: typeof Bun.SQL = function SQL(
       if (BEFORE_COMMIT_OR_ROLLBACK_COMMAND) {
         await run_internal_transaction_sql(BEFORE_COMMIT_OR_ROLLBACK_COMMAND);
       }
-      await run_internal_transaction_sql(COMMIT_COMMAND);
+      const commit_result = await run_internal_transaction_sql(COMMIT_COMMAND);
+      if (commit_result?.command === "ROLLBACK") {
+        throw new PostgresError("COMMIT was rolled back by the server because the transaction was already aborted", {
+          code: "ERR_POSTGRES_COMMIT_ROLLED_BACK",
+        });
+      }
       return resolve(transaction_result);
     } catch (err) {
       try {

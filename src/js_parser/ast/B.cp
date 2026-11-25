@@ -67,6 +67,7 @@ pub union(Binding.Tag) B {
             .b_identifier => |id| {
                 const original_name = id.ref.getSymbol(symbol_table).original_name;
                 writeAnyToHasher(hasher, .{ std.meta.activeTag(_), original_name.len });
+                hasher.update(original_name);
             },
             .b_array => |array| {
                 writeAnyToHasher(hasher, .{ std.meta.activeTag(_), array.has_spread, array.items.len });

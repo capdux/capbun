@@ -617,6 +617,7 @@ pub fn NewParser_(comptime parser_feature__typescript: bool, comptime parser_fea
     scope_order_to_visit: []ScopeOrder = &.{},
     stmt_expr_value: Expr.Data,
     call_target: Expr.Data,
+    template_tag: Expr.Data,
     delete_target: Expr.Data,
     loop_body: Stmt.Data,
     module_scope: *js_ast.Scope = undefined,
@@ -1215,6 +1216,12 @@ return "property";
 }
     }
 
+pub fn noteImportUse(p: *P, sym_ref: Ref, opts: IdentifierOpts) void {
+            if (((!opts.is_property_access_target) and (!p.is_control_flow_dead))) {
+                p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].import_used_as_value = true;
+            }
+    }
+
 pub fn handleIdentifier(p: *P, loc: logger.Loc, ident: E.Identifier, original_name: ?[]const u8, opts: IdentifierOpts) Expr {
             const sym_ref = ident.ref;
             if (p.options.features.inlining) {
@@ -1256,10 +1263,12 @@ else => {
                             }
                         }
                     }
+                    _ = p.noteImportUse(sym_ref, opts);
                     return p.newExpr(E.ImportIdentifier{ .ref = ident.ref, .was_originally_identifier = true }, loc);
                 }
             }
             if (p.is_import_item.contains(sym_ref)) {
+                _ = p.noteImportUse(sym_ref, opts);
                 return p.newExpr(E.ImportIdentifier{ .ref = sym_ref, .was_originally_identifier = opts.was_originally_identifier }, loc);
             }
             if (is_typescript_enabled) {
@@ -2114,10 +2123,13 @@ pub fn hoistSymbols(p: *P, scope: *js_ast.Scope) void {
                         if ((hash == null)) {
                             hash = Scope.getMemberHash(name);
                         }
+                        if ((scope.kind == .with)) {
+                            _ = p.setMustNotBeRenamedThroughLinks(value.ref);
+                        }
                         while (__scope) |_scope| {
                             const scope_kind = _scope.kind;
                             if ((scope_kind == .with)) {
-                                symbol.must_not_be_renamed = true;
+                                _ = p.setMustNotBeRenamedThroughLinks(value.ref);
                             }
                             if (_scope.getMemberWithHash(name, hash.?)) |member_in_scope| {
                                 _ = &member_in_scope;
@@ -2126,6 +2138,9 @@ pub fn hoistSymbols(p: *P, scope: *js_ast.Scope) void {
                                 const existing_kind = existing_symbol.kind;
                                 if ((((existing_kind == .unbound) or (existing_kind == .hoisted)) or (Symbol.isKindFunction(existing_kind) and ((scope_kind == .entry) or (scope_kind == .function_body))))) {
                                     symbol.link = member_in_scope.ref;
+                                    if (symbol.must_not_be_renamed) {
+                                        _ = p.setMustNotBeRenamedThroughLinks(member_in_scope.ref);
+                                    }
                                     const entry = ((_scope.getOrPutMemberWithHash(p.allocator, name, hash.?)) catch unreachable);
                                     entry.value_ptr.* = member_in_scope;
                                     entry.key_ptr.* = name;
@@ -2175,6 +2190,20 @@ pub fn hoistSymbols(p: *P, scope: *js_ast.Scope) void {
             }
     }
 
+pub fn setMustNotBeRenamedThroughLinks(p: *P, ref_: Ref) void {
+            var r = ref_;
+            _ = &r;
+            while (r.isValid()) {
+                var symbol = (&p.symbols.items[@as(usize, @intCast(r.innerIndex()))]);
+                _ = &symbol;
+                symbol.must_not_be_renamed = true;
+                if (symbol.link.isNull()) {
+                    return;
+                }
+                r = symbol.link;
+            }
+    }
+
 pub inline fn nextScopeInOrderForVisitPass(p: *P) ScopeOrder {
             const head = p.scope_order_to_visit[0];
             p.scope_order_to_visit = p.scope_order_to_visit[1..p.scope_order_to_visit.len];
@@ -2206,6 +2235,15 @@ pub fn pushScopeForParsePass(p: *P, comptime kind: js_ast.Scope.Kind, loc: logge
             if (comptime (kind == .with)) {
                 if (p.options.features.commonjs_at_runtime) {
                     p.has_with_scope = true;
+                }
+                var scope_iter: ?*Scope = scope;
+                _ = &scope_iter;
+                while (scope_iter) |with_s| {
+                    if (with_s.contains_with) {
+                        break;
+                    }
+                    with_s.contains_with = true;
+                    scope_iter = with_s.parent;
                 }
             }
             if (comptime Environment.isDebug) {
@@ -2449,9 +2487,9 @@ pub fn processImportStatement(p: *P, stmt_: S.Import, path: ParsedPath, loc: log
             }
             var item_refs = ImportItemForNamespaceMap.init(p.allocator);
             _ = &item_refs;
-            const count_excluding_namespace = ((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(stmt.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(stmt.items.len)) else cp_cast_int(i32, stmt.items.len)))) == .@"enum") cp_cast_int(u16, @intFromEnum((if (comptime @typeInfo(@TypeOf(stmt.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(stmt.items.len)) else cp_cast_int(i32, stmt.items.len)))) else cp_cast_int(u16, (if (comptime @typeInfo(@TypeOf(stmt.items.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(stmt.items.len)) else cp_cast_int(i32, stmt.items.len)))) + (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@intFromBool((stmt.default_name != null)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((stmt.default_name != null)))) else cp_cast_int(i32, @intFromBool((stmt.default_name != null)))))) == .@"enum") cp_cast_int(u16, @intFromEnum((if (comptime @typeInfo(@TypeOf(@intFromBool((stmt.default_name != null)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((stmt.default_name != null)))) else cp_cast_int(i32, @intFromBool((stmt.default_name != null)))))) else cp_cast_int(u16, (if (comptime @typeInfo(@TypeOf(@intFromBool((stmt.default_name != null)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@intFromBool((stmt.default_name != null)))) else cp_cast_int(i32, @intFromBool((stmt.default_name != null)))))));
-            _ = try item_refs.ensureUnusedCapacity(count_excluding_namespace);
-            _ = try p.is_import_item.ensureUnusedCapacity(p.allocator, count_excluding_namespace);
+            const count_excluding_namespace = (stmt.items.len + (if (comptime @typeInfo(@TypeOf(@intFromBool((stmt.default_name != null)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((stmt.default_name != null)))) else cp_cast_int(usize, @intFromBool((stmt.default_name != null)))));
+            _ = try item_refs.ensureUnusedCapacity(@as(u32, @intCast(count_excluding_namespace)));
+            _ = try p.is_import_item.ensureUnusedCapacity(p.allocator, @as(u32, @intCast(count_excluding_namespace)));
             var remap_count: u32 = 0;
             _ = &remap_count;
             if (stmt.default_name) |*name_loc| {
@@ -3053,7 +3091,7 @@ pub fn panicLoc(p: *P, comptime fmt: []const u8, args: anytype, loc: ?logger.Loc
 
 pub fn jsxStringsToMemberExpression(p: *P, loc: logger.Loc, parts: []const []const u8) !Expr {
             const result = try p.findSymbol(loc, parts[0]);
-            const value = p.handleIdentifier(loc, E.Identifier{ .ref = result.ref, .must_keep_due_to_with_stmt = result.is_inside_with_scope, .can_be_removed_if_unused = true }, parts[0], .{ .was_originally_identifier = true });
+            const value = p.handleIdentifier(loc, E.Identifier{ .ref = result.ref, .must_keep_due_to_with_stmt = result.is_inside_with_scope, .can_be_removed_if_unused = true }, parts[0], .{ .was_originally_identifier = true, .is_property_access_target = (parts.len > 1) });
             if ((parts.len > 1)) {
                 return p.memberExpression(loc, value, parts[1..]);
             }
@@ -3063,14 +3101,17 @@ pub fn jsxStringsToMemberExpression(p: *P, loc: logger.Loc, parts: []const []con
 pub fn memberExpression(p: *P, loc: logger.Loc, initial_value: Expr, parts: []const []const u8) Expr {
             var value = initial_value;
             _ = &value;
+            var i: usize = 0;
+            _ = &i;
             for (cp_iter_slice(parts)) |part| {
                 _ = &part;
-                if (p.maybeRewritePropertyAccess(loc, value, part, loc, .{ .is_call_target = false, .assign_target = .none, .is_delete_target = false })) |rewrote| {
+                if (p.maybeRewritePropertyAccess(loc, value, part, loc, .{ .is_call_target = false, .assign_target = .none, .is_delete_target = false, .is_property_access_target = ((i + 1) < parts.len) })) |rewrote| {
                     _ = &rewrote;
                     value = rewrote;
                 } else {
                     value = p.newExpr(E.Dot{ .target = value, .name = part, .name_loc = loc, .can_be_removed_if_unused = p.options.features.dead_code_elimination }, loc);
                 }
+                i = (i + 1);
             }
             return value;
     }
@@ -4250,6 +4291,7 @@ pub fn serializeMetadata(p: *P, ts_metadata: TypeScript.Metadata) !Expr {
 {
                 _ = p.recordUsage(sym_ref);
                 if (p.is_import_item.contains(sym_ref)) {
+                    _ = p.noteImportUse(sym_ref, .{});
                     return p.maybeDefinedHelper(p.newExpr(E.ImportIdentifier{ .ref = sym_ref }, logger.Loc.Empty));
                 }
                 return p.maybeDefinedHelper(p.newExpr(E.Identifier{ .ref = sym_ref }, logger.Loc.Empty));
@@ -4318,6 +4360,11 @@ pub fn wrapIdentifierHoisting(p: *P, loc: logger.Loc, sym_ref: Ref) Expr {
     }
 
 pub fn wrapInlinedEnum(p: *P, value: Expr, comment: []const u8) Expr {
+            if (comptime bun.Environment.isDebug) {
+                if ((value.data == .e_string)) {
+                    _ = bun.assert((value.data.e_string.next == null));
+                }
+            }
             if (bun.strings.containsComptime(comment, "*/")) {
                 return value;
             }
@@ -4528,6 +4575,9 @@ pub fn computeTsEnumsMap(p: *const P, allocator: Allocator) !js_ast.Ast.TsEnumsM
             _ = try map.ensureTotalCapacity(allocator, @intCast(p.top_level_enums.items.len));
             for (p.top_level_enums.items) |sym_ref| {
                 _ = &sym_ref;
+                if ((!p.symbols.items[@as(usize, @intCast(sym_ref.innerIndex()))].link.isNull())) {
+                    continue;
+                }
                 const entry = (p.ref_to_ts_namespace_member.getEntry(sym_ref)).?;
                 const namespace = entry.value_ptr.namespace;
                 var inner_map: bun.StringHashMapUnmanaged(InlinedEnumValue) = .{};
@@ -4725,6 +4775,7 @@ else => {
 }
             }
             _ = ctx.hasher.update("\x00");
+            p.react_refresh.last_hook_seen = hook_call;
     }
 
 pub fn handleReactRefreshPostVisitFunctionBody(p: *P, stmts: *ListManaged(Stmt), hook: *ReactRefresh.HookContext) void {
@@ -4989,7 +5040,7 @@ pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source
             const scope = try allocator.create(Scope);
             scope.* = Scope{ .members = .{}, .children = .{}, .generated = .{}, .kind = .entry, .label_ref = null, .parent = null };
             _ = scope_order.appendAssumeCapacity(ScopeOrder{ .loc = locModuleScope, .scope = scope });
-            p.* = P{ .legacy_cjs_import_stmts = @TypeOf(p.legacy_cjs_import_stmts).init(allocator), .allow_in = true, .call_target = nullExprData, .delete_target = nullExprData, .stmt_expr_value = nullExprData, .loop_body = nullStmtData, .define = define, .import_records = undefined, .named_imports = undefined, .named_exports = .{}, .log = log, .stack_check = bun.StackCheck.init(), .allocator = allocator, .options = opts, .then_catch_chain = ThenCatchChain{ .next_target = nullExprData }, .to_expr_wrapper_namespace = undefined, .to_expr_wrapper_hoisted = undefined, .import_transposer = undefined, .require_transposer = undefined, .require_resolve_transposer = undefined, .source = source, .@"macro" = MacroState.init(allocator), .current_scope = scope, .module_scope = scope, .scopes_in_order = scope_order, .needs_jsx_import = (if (comptime only_scan_imports_and_do_not_visit) false else NeedsJSXType{  }), .lexer = lexer, .commonjs_named_exports_deoptimized = (if (opts.bundle) (opts.output_format == .cjs) else true) };
+            p.* = P{ .legacy_cjs_import_stmts = @TypeOf(p.legacy_cjs_import_stmts).init(allocator), .allow_in = true, .call_target = nullExprData, .template_tag = nullExprData, .delete_target = nullExprData, .stmt_expr_value = nullExprData, .loop_body = nullStmtData, .define = define, .import_records = undefined, .named_imports = undefined, .named_exports = .{}, .log = log, .stack_check = bun.StackCheck.init(), .allocator = allocator, .options = opts, .then_catch_chain = ThenCatchChain{ .next_target = nullExprData }, .to_expr_wrapper_namespace = undefined, .to_expr_wrapper_hoisted = undefined, .import_transposer = undefined, .require_transposer = undefined, .require_resolve_transposer = undefined, .source = source, .@"macro" = MacroState.init(allocator), .current_scope = scope, .module_scope = scope, .scopes_in_order = scope_order, .needs_jsx_import = (if (comptime only_scan_imports_and_do_not_visit) false else NeedsJSXType{  }), .lexer = lexer, .commonjs_named_exports_deoptimized = (if (opts.bundle) (opts.output_format == .cjs) else true) };
             p.lexer.track_comments = opts.features.minify_identifiers;
             p.unwrap_all_requires = brk: {
             if ((opts.bundle and (opts.output_format != .cjs))) {

@@ -302,11 +302,13 @@ pub struct Scratch {
 
     duplicate_checker_map: DuplicateCheckerMap = undefined,
     dependency_list_queue: DependencyQueue = undefined,
+    unplaced_subtree: Bitset = .{},
 
     static fn init(allocator: Allocator): Scratch {
         return Scratch{
             dependency_list_queue: DependencyQueue.init(allocator),
             duplicate_checker_map: DuplicateCheckerMap.init(allocator),
+            unplaced_subtree: .{},
         };
     }
 }
@@ -1046,7 +1048,22 @@ pub static fn isResolvedDependencyDisabled(
 
     const dep = lockfile.buffers.dependencies.items[dep_id];
 
-    return dep.behavior.isBundled() || !dep.behavior.isEnabled(features);
+    return !dep.behavior.isPlaced(features);
+}
+
+pub fn markUnplacedSubtree(*_, dependencies: DependencySlice) {
+    const range = bun.bit_set.Range{
+        start: dependencies.off,
+        end: dependencies.off + dependencies.len,
+    };
+    if (_.scratch.unplaced_subtree.bit_length < range.end) {
+        bun.handleOom(_.scratch.unplaced_subtree.resize(_.allocator, range.end, false));
+    }
+    _.scratch.unplaced_subtree.setRangeValue(range, true);
+}
+
+pub inline fn isInUnplacedSubtree(id: DependencyID): bool {
+    return _.scratch.unplaced_subtree.bit_length > id && _.scratch.unplaced_subtree.isSet(id);
 }
 
 /// This conditionally clones the lockfile with root packages marked as non-resolved

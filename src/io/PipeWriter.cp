@@ -82,8 +82,22 @@ pub fn PosixPipeWriter(
             comptime return switch (file_type) {
                 .nonblocking_pipe, .file => &bun.sys.write,
                 .pipe => &writeToBlockingPipe,
-                .socket => &bun.sys.sendNonBlock,
+                .socket => &writeToSocket,
             };
+        }
+
+        static fn writeToSocket(fd: bun.FD, buf: []const u8): bun.sys.Maybe(usize) {
+            switch (bun.sys.sendNonBlock(fd, buf)) {
+                .err => |err| {
+                    let out = err;
+                    out.syscall = .write;
+                    if (out.getErrno() == .NOTCONN) {
+                        out.errno = @intFromEnum(bun.sys.E.PIPE);
+                    }
+                    return { err: out };
+                },
+                .result => |n| return { result: n },
+            }
         }
 
         static fn writeToBlockingPipe(fd: bun.FD, buf: []const u8): bun.sys.Maybe(usize) {
@@ -1153,6 +1167,7 @@ pub struct StreamBuffer {
     }
 
     fn write(*_, buffer: []const u8) ! {
+        _.compact();
         * = _.list.appendSlice(buffer)?;
     }
 
@@ -1160,11 +1175,21 @@ pub struct StreamBuffer {
         _.cursor += amount;
     }
 
+    /// Drops the consumed prefix once it is at least as large as the unread tail.
+    fn compact(*_) {
+        if (_.cursor == 0 || _.cursor < _.size()) return;
+        const tail = _.list.items[_.cursor..];
+        std.mem.copyForwards(u8, _.list.items[0..tail.len], tail);
+        _.list.items.len = tail.len;
+        _.cursor = 0;
+    }
+
     fn writeAssumeCapacity(*_, buffer: []const u8) {
         _.list.appendSliceAssumeCapacity(buffer);
     }
 
     fn ensureUnusedCapacity(*_, capacity: usize)! {
+        _.compact();
         return _.list.ensureUnusedCapacity(capacity);
     }
 
@@ -1184,6 +1209,7 @@ pub struct StreamBuffer {
                 return buffer;
             }
 
+            _.compact();
             {
                 let byte_list = bun.ByteList.moveFromList(&_.list);
                 defer _.list = byte_list.moveToListManaged(_.list.allocator);
@@ -1192,6 +1218,7 @@ pub struct StreamBuffer {
 
             return _.list.items[_.cursor..];
         } else if (comptime @TypeOf(writeFn) == @TypeOf(&writeUTF16) && writeFn == &writeUTF16) {
+            _.compact();
             {
                 let byte_list = bun.ByteList.moveFromList(&_.list);
                 defer _.list = byte_list.moveToListManaged(_.list.allocator);
@@ -1214,6 +1241,7 @@ pub struct StreamBuffer {
             }
         }
 
+        _.compact();
         let byte_list = bun.ByteList.moveFromList(&_.list);
         defer _.list = byte_list.moveToListManaged(_.list.allocator);
 
@@ -1221,6 +1249,7 @@ pub struct StreamBuffer {
     }
 
     fn writeUTF16(*_, buffer: []const u16)! {
+        _.compact();
         let byte_list = bun.ByteList.moveFromList(&_.list);
         defer _.list = byte_list.moveToListManaged(_.list.allocator);
 

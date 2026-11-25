@@ -207,7 +207,9 @@ pub const PosixBufferedReaderFlags = packed struct(u16) {
     memfd: bool = false,
     use_pread: bool = false,
     is_paused: bool = false,
-    _: u6 = 0,
+    read_failed: bool = false,
+    rwf_unsupported: bool = false,
+    _: u4 = 0,
 };
 
 pub const PosixBufferedReader = struct {
@@ -225,6 +227,9 @@ pub fn init(comptime Type: type) PosixBufferedReader {
 
 pub fn updateRef(self: PosixBufferedReader, value: bool) void {
             const poll = ((self.handle.getPoll()) orelse { return; });
+            if ((value and (!poll.isRegistered()))) {
+                return;
+            }
             _ = poll.setKeepingProcessAlive(self.vtable.eventLoop(), value);
     }
 
@@ -465,7 +470,7 @@ pub fn eventLoop(self: PosixBufferedReader) jsc.EventLoopHandle {
     }
 
 pub fn read(self: *PosixBufferedReader) void {
-            if (self.flags.is_paused) {
+            if ((self.flags.is_paused or self.flags.read_failed)) {
                 return;
             }
             const fd = self.getFd();
@@ -499,6 +504,9 @@ _ = self.registerPoll();
     }
 
 pub fn onPoll(self: *PosixBufferedReader, size_hint: isize, received_hup: bool) void {
+            if (self.flags.read_failed) {
+                return;
+            }
             const fd = self.getFd();
             _ = bun.sys.syslog("onPoll({f}) = {d}", .{ fd, size_hint });
             switch (self.getFileType()) {
@@ -548,6 +556,35 @@ pub fn readSocket(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, rece
             return self.readWithFn(fd, size_hint, received_hup, .socket, PosixBufferedReader.wrapReadFn(bun.sys.recvNonBlock));
     }
 
+pub fn readPipeNowait(self: *PosixBufferedReader, fd: bun.FD, buf: []u8) bun.sys.Maybe(usize) {
+            if (comptime bun.Environment.isLinux) {
+                if ((!self.flags.rwf_unsupported)) {
+                    switch (bun.sys.readNowait(fd, buf)) {
+.result => |opt| {
+if (opt) |n| {
+                        _ = &n;
+                        return .{ .result = n };
+                    } else {
+                        self.flags.rwf_unsupported = true;
+                    }
+},
+.err => |e| {
+return .{ .err = e };
+},
+}
+                }
+                switch (bun.isReadable(fd)) {
+.ready, .hup => {
+return bun.sys.read(fd, buf);
+},
+.not_ready => {
+return .{ .err = bun.sys.Error.retry };
+},
+}
+            }
+            return bun.sys.read(fd, buf);
+    }
+
 pub fn readPipe(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, received_hup: bool) void {
             return self.readWithFn(fd, size_hint, received_hup, .nonblocking_pipe, PosixBufferedReader.wrapReadFn(bun.sys.readNonblocking));
     }
@@ -562,7 +599,7 @@ pub fn readBlockingPipe(self: *PosixBufferedReader, fd: bun.FD, unused_hint: isi
                 _ = &got_retry;
                 if ((self._buffer.items.len == 0)) {
                     const stack_buffer = self.vtable.eventLoop().pipeReadBuffer();
-                    switch (bun.sys.readNonblocking(fd, stack_buffer)) {
+                    switch (self.readPipeNowait(fd, stack_buffer)) {
 .result => |bytes_read| {
 if (self.maxbuf) |l| {
                         _ = &l;
@@ -583,6 +620,7 @@ if (self.maxbuf) |l| {
 },
 .err => |e| {
 if ((!e.isRetry())) {
+                        self.flags.read_failed = true;
                         _ = self.onError(e);
                         return;
                     }
@@ -593,7 +631,7 @@ if ((!e.isRetry())) {
                     _ = bun.handleOom(self._buffer.ensureUnusedCapacity((16 * 1024)));
                     var buf: []u8 = self._buffer.unusedCapacitySlice();
                     _ = &buf;
-                    switch (bun.sys.readNonblocking(fd, buf)) {
+                    switch (self.readPipeNowait(fd, buf)) {
 .result => |bytes_read| {
 if (self.maxbuf) |l| {
                         _ = &l;
@@ -627,6 +665,7 @@ if (self.maxbuf) |l| {
 },
 .err => |e| {
 if ((!e.isRetry())) {
+                        self.flags.read_failed = true;
                         _ = self.onError(e);
                         return;
                     }
@@ -709,6 +748,7 @@ if (e.isRetry()) {
                             }
                             return;
                         }
+                        self.flags.read_failed = true;
                         if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
                             _ = self.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], .progress);
                         }
@@ -758,6 +798,7 @@ if (e.isRetry()) {
                         }
                         return;
                     }
+                    self.flags.read_failed = true;
                     _ = self.onError(e);
                     return;
 },
@@ -802,13 +843,15 @@ if (self.maxbuf) |l| {
                 }
 },
 .err => |e| {
-if (self.vtable.isStreamingEnabled()) {
+self.flags.read_failed = true;
+                if (self.vtable.isStreamingEnabled()) {
                     if ((self._buffer.items.len > 0)) {
                         _ = self.vtable.onReadChunk(self._buffer.items, .drained);
                         _ = self._buffer.clearRetainingCapacity();
                     }
                 }
                 if (e.isRetry()) {
+                    self.flags.read_failed = false;
                     if (comptime (file_type == .file)) {
                         _ = bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
                     } else {

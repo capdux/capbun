@@ -254,8 +254,8 @@ pub fn SkipTypescript(
                     p.lexer.expect(.t_close_brace)?;
                 },
                 else => {
-                    // try p.lexer.unexpected();
-                    return error.Backtrack;
+                    p.lexer.unexpected()?;
+                    return error.SyntaxError;
                 },
             }
         }

@@ -251,7 +251,7 @@ pub fn e_identifier(p: *P, expr: Expr, expr_in: ExprIn) Expr {
                     return p.valueForRequire(expr.loc);
                 }
             }
-            return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{ .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target, .is_call_target = ((std.meta.activeTag(p.call_target) == .e_identifier) and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref)), .was_originally_identifier = true });
+            return p.handleIdentifier(expr.loc, e_, original_name, IdentifierOpts{ .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target, .is_call_target = ((std.meta.activeTag(p.call_target) == .e_identifier) and expr.data.e_identifier.ref.eql(p.call_target.e_identifier.ref)), .was_originally_identifier = true, .is_property_access_target = expr_in.is_property_access_target });
     }
 
 pub fn e_jsx_element(p: *P, expr: Expr, unused_in: ExprIn) Expr {
@@ -453,18 +453,22 @@ pub fn e_binary(p: *P, expr: Expr, expr_in: ExprIn) Expr {
 pub fn e_index(p: *P, expr: Expr, expr_in: ExprIn) Expr {
             const e_ = expr.data.e_index;
             const is_call_target = ((p.call_target == .e_index) and (expr.data.e_index == p.call_target.e_index));
+            const is_template_tag = ((p.template_tag == .e_index) and (expr.data.e_index == p.template_tag.e_index));
             const is_delete_target = ((p.delete_target == .e_index) and (expr.data.e_index == p.delete_target.e_index));
             if ((((p.options.features.minify_syntax and (e_.index.data == .e_string)) and e_.index.data.e_string.isUTF8()) and e_.index.data.e_string.isIdentifier(p.allocator))) {
                 const dot = p.newExpr(E.Dot{ .name = e_.index.data.e_string.slice(p.allocator), .name_loc = e_.index.loc, .target = e_.target, .optional_chain = e_.optional_chain }, expr.loc);
                 if (is_call_target) {
                     p.call_target = dot.data;
                 }
+                if (is_template_tag) {
+                    p.template_tag = dot.data;
+                }
                 if (is_delete_target) {
                     p.delete_target = dot.data;
                 }
                 return p.visitExprInOut(dot, expr_in);
             }
-            const target_visited = p.visitExprInOut(e_.target, ExprIn{ .has_chain_parent = (e_.optional_chain == .continuation) });
+            const target_visited = p.visitExprInOut(e_.target, ExprIn{ .has_chain_parent = (e_.optional_chain == .continuation), .is_property_access_target = (!is_delete_target) });
             e_.target = target_visited;
             switch (e_.index.data) {
 .e_private_identifier => |_private| {
@@ -508,12 +512,15 @@ const index = p.visitExpr(e_.index);
                     if (is_call_target) {
                         p.call_target = dot.data;
                     }
+                    if (is_template_tag) {
+                        p.template_tag = dot.data;
+                    }
                     if (is_delete_target) {
                         p.delete_target = dot.data;
                     }
                     return dot;
                 }
-                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, unwrapped.data.e_string.data, unwrapped.loc, .{ .is_call_target = is_call_target, .is_delete_target = is_delete_target, .assign_target = expr_in.assign_target })) |rewrite| {
+                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, unwrapped.data.e_string.data, unwrapped.loc, .{ .is_call_target = is_call_target, .is_delete_target = is_delete_target, .assign_target = expr_in.assign_target, .is_property_access_target = expr_in.is_property_access_target })) |rewrite| {
                     _ = &rewrite;
                     return rewrite;
                 }
@@ -711,12 +718,12 @@ pub fn e_dot(p: *P, expr: Expr, expr_in: ExprIn) Expr {
                     }
                 }
             }
-            e_.target = p.visitExprInOut(e_.target, .{ .property_access_for_method_call_maybe_should_replace_with_undefined = expr_in.property_access_for_method_call_maybe_should_replace_with_undefined });
+            e_.target = p.visitExprInOut(e_.target, .{ .property_access_for_method_call_maybe_should_replace_with_undefined = expr_in.property_access_for_method_call_maybe_should_replace_with_undefined, .is_property_access_target = (!is_delete_target) });
             if (((e_.target.data == .e_require_call_target) and strings.eqlComptime((if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), "resolve"))) {
                 return .{ .data = .{ .e_require_resolve_call_target = undefined }, .loc = expr.loc };
             }
             if ((e_.optional_chain == null)) {
-                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, (if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), e_.name_loc, .{ .is_call_target = is_call_target, .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target })) |_expr| {
+                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, (if (@typeInfo(@TypeOf(e_)) == .@"enum" or @typeInfo(@TypeOf(e_)) == .@"union") @tagName(e_) else e_.name), e_.name_loc, .{ .is_call_target = is_call_target, .assign_target = expr_in.assign_target, .is_delete_target = is_delete_target, .is_property_access_target = expr_in.is_property_access_target })) |_expr| {
                     _ = &_expr;
                     return _expr;
                 }
@@ -1266,7 +1273,8 @@ pub fn e_function(p: *P, expr: Expr, unused_in: ExprIn) Expr {
             defer {
             p.react_refresh.hook_ctx_storage = prev;
             }
-            p.react_refresh.hook_ctx_storage = (&react_hook_data);
+            const is_method = e_.func.flags.contains(.is_unique_formal_parameters);
+            p.react_refresh.hook_ctx_storage = (if (is_method) null else (&react_hook_data));
             e_.func = p.visitFunc(e_.func, expr.loc);
             if (((((((p.options.features.minify_syntax and p.options.bundle) and (!p.options.features.minify_keep_names)) and (!p.current_scope.contains_direct_eval)) and ((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name) != null)) and ((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name).?.ref != null)) and (p.symbols.items[@as(usize, @intCast((if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name).?.ref.?.innerIndex()))].use_count_estimate == 0))) {
                 (if (@typeInfo(@TypeOf(e_.func)) == .@"enum" or @typeInfo(@TypeOf(e_.func)) == .@"union") @tagName(e_.func) else e_.func.name) = null;

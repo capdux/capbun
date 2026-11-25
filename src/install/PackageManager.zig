@@ -1083,7 +1083,7 @@ else => null,
 })), env, true, (&default_npmrc));
         }
         const cpu_count = bun.getThreadCount();
-        const options = Options{ .global = cli.global, .max_concurrent_lifecycle_scripts = ((cli.concurrent_scripts) orelse ((cpu_count * 2))) };
+        const options = Options{ .global = cli.global, .max_concurrent_lifecycle_scripts = ((cli.concurrent_scripts) orelse ((cpu_count * 2))), .runtime_auto_install = true };
         if ((env.get("BUN_INSTALL_VERBOSE") != null)) {
             PackageManager.verbose_install = true;
         }

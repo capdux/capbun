@@ -248,7 +248,7 @@ enum IdentOrRefTag {
         if (_.isIdent()) {
             hasher.update(_.asIdent().?.v);
         } else {
-            hasher.update(std.mem.asBytes(_));
+            hasher.update(std.mem.asBytes(&_));
         }
     }
 

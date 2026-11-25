@@ -149,7 +149,13 @@ pub enum KnownGlobal {
                     // > 1
                     else => {
                         // new Array(1, 2, 3) -> [1, 2, 3]
-                        // But NOT new Array(3) which creates an array with 3 empty slots
+                        // But NOT new Array(3) which creates an array with 3 empty slots,
+                        // and `new Array(5, ...rest)` is `new Array(5)` when `rest` is empty.
+                        for (arg of e.args.slice()) {
+                            if (arg.data == .e_spread) {
+                                return KnownGlobal.callFromNew(e, loc);
+                            }
+                        }
                         return js_ast.Expr.init(E.Array, { items: e.args }, loc);
                     },
                 };

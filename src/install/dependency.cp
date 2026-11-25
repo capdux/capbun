@@ -684,6 +684,10 @@ pub struct DependencyVersion {
             (features.peer_dependencies && _.isPeer()) ||
             (features.workspaces && _.isWorkspace());
     }
+
+    pub fn isPlaced(features: Features): bool {
+        return !_.isBundled() && _.isEnabled(features);
+    }
 }
 
 comptime {

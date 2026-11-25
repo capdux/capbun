@@ -72,7 +72,8 @@ export @root struct Chunk {
         mappings: []const u8,
         comptime ascii_only: bool,
     )! {
-        let filename_buf: bun.PathBuffer = undefined;
+        let filename_buf = bun.path_buffer_pool.get();
+        defer bun.path_buffer_pool.put(filename_buf);
         let filename = source.path.text;
         const top_level_dir = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir);
         if (filename.len > top_level_dir.len &&

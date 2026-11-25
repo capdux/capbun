@@ -1170,22 +1170,27 @@ pub struct serialize {
             .view_transition => dest.writeStr("::view-transition")?,
             .view_transition_group v => {
                 dest.writeStr("::view-transition-group(")?;
-                v.part_name.toCss(dest)?;
+                v.part.toCss(dest)?;
                 dest.writeChar(')')?;
             },
             .view_transition_image_pair v => {
                 dest.writeStr("::view-transition-image-pair(")?;
-                v.part_name.toCss(dest)?;
+                v.part.toCss(dest)?;
                 dest.writeChar(')')?;
             },
             .view_transition_old v => {
                 dest.writeStr("::view-transition-old(")?;
-                v.part_name.toCss(dest)?;
+                v.part.toCss(dest)?;
                 dest.writeChar(')')?;
             },
             .view_transition_new v => {
                 dest.writeStr("::view-transition-new(")?;
-                v.part_name.toCss(dest)?;
+                v.part.toCss(dest)?;
+                dest.writeChar(')')?;
+            },
+            .view_transition_group_children v => {
+                dest.writeStr("::view-transition-group-children(")?;
+                v.part.toCss(dest)?;
                 dest.writeChar(')')?;
             },
             .details_content => dest.writeStr("::details-content")?,

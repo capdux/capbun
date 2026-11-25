@@ -1784,9 +1784,11 @@ fn NewPrinter(
                 switch (record.tag) {
                     .bun => {
                         if (record.kind == .dynamic) {
+                            p.printSpaceBeforeIdentifier();
                             p.print("Promise.resolve(globalThis.Bun)");
                             return;
                         } else if (record.kind == .require || record.kind == .stmt) {
+                            p.printSpaceBeforeIdentifier();
                             p.print("globalThis.Bun");
                             return;
                         }
@@ -1872,6 +1874,8 @@ fn NewPrinter(
                     if (req_meta.exports_ref.isValid()) {
                         // Wrap this with a call to "__toCommonJS()" if this is an ESM file
                         const wrap_with_to_cjs = record.flags.wrap_with_to_commonjs;
+                        // With no `init_x(), ` before it, this is the first token.
+                        p.printSpaceBeforeIdentifier();
                         if (wrap_with_to_cjs) {
                             p.printSymbol(p.options.to_commonjs_ref);
                             p.print("(");
@@ -6107,6 +6111,29 @@ pub fn printAst(
     let module_scope = tree.module_scope;
     if (opts.minify_identifiers) {
         const allocator = opts.allocator;
+        // Pinned before the reserved names are computed so no slot takes one of these names.
+        const dont_break_the_code: [3]Ref = [
+            tree.module_ref,
+            tree.exports_ref,
+            tree.require_ref,
+        ];
+        inline for (r_init of dont_break_the_code) {
+            let r = r_init;
+            while (symbol := symbols.get(r)) {
+                symbol.must_not_be_renamed = true;
+                if (symbol.link.isNull()) break;
+                r = symbol.link;
+            }
+        }
+        for (named_export of tree.named_exports.values()) {
+            let r = named_export.ref;
+            while (symbol := symbols.get(r)) {
+                symbol.must_not_be_renamed = true;
+                if (symbol.link.isNull()) break;
+                r = symbol.link;
+            }
+        }
+
         let reserved_names = rename.computeInitialReservedNames(allocator, opts.module_type)?;
         let _reserved_guard = OptDeinitWithAllocGuard<bun.StringHashMapUnmanaged(u32)>{ ptr: unsafe { &reserved_names }, alloc: allocator };
         for (child of module_scope.children.slice()) {
@@ -6128,24 +6155,6 @@ pub fn printAst(
         const module_ref = tree.module_ref;
         const parts = tree.parts;
 
-        const dont_break_the_code: [3]Ref = [
-            tree.module_ref,
-            tree.exports_ref,
-            tree.require_ref,
-        ];
-
-        inline for (r of dont_break_the_code) {
-            if (symbol := symbols.get(r)) {
-                symbol.must_not_be_renamed = true;
-            }
-        }
-
-        for (named_export of tree.named_exports.values()) {
-            if (symbol := symbols.get(named_export.ref)) {
-                symbol.must_not_be_renamed = true;
-            }
-        }
-
         if (uses_exports_ref) {
             minify_renamer.accumulateSymbolUseCount(&top_level_symbols, exports_ref, 1, &.{source.index.value})?;
         }
@@ -6165,7 +6174,10 @@ pub fn printAst(
         std.sort.pdq(rename.StableSymbolCount, top_level_symbols.items, @as(void, undefined), rename.StableSymbolCount.lessThan);
 
         minify_renamer.allocateTopLevelSymbolSlots(top_level_symbols)?;
-        let minifier = tree.char_freq.?.compile(allocator);
+        // `null` if the JS parser did not build `tree`: an empty file, a data loader.
+        const default_char_freq: js_ast.CharFreq = .{};
+        let char_freq = tree.char_freq orelse default_char_freq;
+        let minifier = char_freq.compile(allocator);
         minify_renamer.assignNamesByFrequency(&minifier)?;
 
     } else {

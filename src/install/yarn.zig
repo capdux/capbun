@@ -418,6 +418,48 @@ pub fn isRemoteTarball(version: []const u8) bool {
             return (strings.hasPrefixComptime(version, "https://") and strings.endsWithComptime(version, ".tgz"));
     }
 
+pub fn getPackageNameFromDefaultRegistryUrl(url: []const u8) ?[]const u8 {
+            var host_and_path: []const u8 = undefined;
+            _ = &host_and_path;
+            if (strings.hasPrefixComptime(url, "https://")) {
+                host_and_path = url["https://".len..];
+            } else {
+                if (strings.hasPrefixComptime(url, "http://")) {
+                    host_and_path = url["http://".len..];
+                } else {
+                    return null;
+                }
+            }
+            var path: []const u8 = undefined;
+            _ = &path;
+            if (strings.hasPrefixComptime(host_and_path, "registry.npmjs.org/")) {
+                path = host_and_path["registry.npmjs.org/".len..];
+            } else {
+                if (strings.hasPrefixComptime(host_and_path, "registry.yarnpkg.com/")) {
+                    path = host_and_path["registry.yarnpkg.com/".len..];
+                } else {
+                    return null;
+                }
+            }
+            var scope_len: usize = 0;
+            _ = &scope_len;
+            if (strings.hasPrefixComptime(path, "@")) {
+                const scope_end = ((std.mem.indexOfScalar(u8, path, 47)) orelse { return null; });
+                if ((scope_end == "@".len)) {
+                    return null;
+                }
+                scope_len = (scope_end + 1);
+            }
+            const rel_slash = ((std.mem.indexOfScalar(u8, path[scope_len..], 47)) orelse { return null; });
+            const name_len = (scope_len + rel_slash);
+            const name = path[0..name_len];
+            const rest = path[name_len..];
+            if ((strings.hasPrefixComptime(rest, "/-/") and Dependency.isSafeInstallFolderName(name))) {
+                return name;
+            }
+            return null;
+    }
+
 pub fn isWorkspaceDependency(version: []const u8) bool {
             return (strings.hasPrefixComptime(version, "workspace:") or strings.eqlComptime(version, "*"));
     }
@@ -1196,19 +1238,9 @@ pub fn migrateYarnLockfile(lockfile: *Lockfile, manager: *Install.PackageManager
                 if (entry.resolved) |resolved| {
                     _ = &resolved;
                     if (((is_direct_url_dep or YarnLockEntry.isRemoteTarball(resolved)) or strings.endsWithComptime(resolved, ".tgz"))) {
-                        if ((strings.contains(resolved, "registry.npmjs.org/") or strings.contains(resolved, "registry.yarnpkg.com/"))) {
-                            if (strings.indexOf(resolved, "/-/")) |separator_idx| {
-                                _ = &separator_idx;
-                                if (strings.indexOf(resolved, "registry.")) |registry_idx| {
-                                    _ = &registry_idx;
-                                    const after_registry = resolved[registry_idx..];
-                                    if (strings.indexOf(after_registry, "/")) |domain_slash| {
-                                        _ = &domain_slash;
-                                        const package_start = ((registry_idx + domain_slash) + 1);
-                                        name_to_use = resolved[package_start..separator_idx];
-                                    }
-                                }
-                            }
+                        if (YarnLockEntry.getPackageNameFromDefaultRegistryUrl(resolved)) |name| {
+                            _ = &name;
+                            name_to_use = name;
                         }
                     }
                 }

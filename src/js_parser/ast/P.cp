@@ -757,6 +757,7 @@ pub fn NewParser_(
         // syntactic constructs as appropriate.
         stmt_expr_value: Expr.Data,
         call_target: Expr.Data,
+        template_tag: Expr.Data,
         delete_target: Expr.Data,
         loop_body: Stmt.Data,
         module_scope: *js_ast.Scope = undefined,
@@ -1601,6 +1602,13 @@ pub fn NewParser_(
             }
         }
 
+        /// See `Symbol.import_used_as_value`.
+        static fn noteImportUse(p: *P, sym_ref: Ref, opts: IdentifierOpts) {
+            if (!opts.is_property_access_target && !p.is_control_flow_dead) {
+                p.symbols.items[sym_ref.innerIndex()].import_used_as_value = true;
+            }
+        }
+
         /// This function is very very hot.
         static fn handleIdentifier(p: *P, loc: logger.Loc, ident: E.Identifier, original_name: string?, opts: IdentifierOpts): Expr {
             const sym_ref = ident.ref;
@@ -1657,6 +1665,7 @@ pub fn NewParser_(
                         }
                     }
 
+                    p.noteImportUse(sym_ref, opts);
                     return p.newExpr(E.ImportIdentifier{
                         ref: ident.ref,
                         was_originally_identifier: true,
@@ -1666,6 +1675,7 @@ pub fn NewParser_(
 
             // Substitute an EImportIdentifier now if this is an import item
             if (p.is_import_item.contains(sym_ref)) {
+                p.noteImportUse(sym_ref, opts);
                 return p.newExpr(
                     E.ImportIdentifier{ ref: sym_ref, was_originally_identifier: opts.was_originally_identifier },
                     loc,
@@ -2735,6 +2745,11 @@ pub fn NewParser_(
 
                         if (hash == null) hash = Scope.getMemberHash(name);
 
+                        // `with (obj) var t = 2` declares `t` in the "with" scope, which the walk below starts above.
+                        if (scope.kind == .with) {
+                            p.setMustNotBeRenamedThroughLinks(value.ref);
+                        }
+
                         while (_scope := __scope) {
                             const scope_kind = _scope.kind;
 
@@ -2749,7 +2764,7 @@ pub fn NewParser_(
                             //   assert(obj.foo === 2)
                             //
                             if (scope_kind == .with) {
-                                symbol.must_not_be_renamed = true;
+                                p.setMustNotBeRenamedThroughLinks(value.ref);
                             }
 
                             if (member_in_scope := _scope.getMemberWithHash(name, hash.?)) {
@@ -2769,6 +2784,9 @@ pub fn NewParser_(
                                 {
                                     // Silently merge this symbol into the existing symbol
                                     symbol.link = member_in_scope.ref;
+                                    if (symbol.must_not_be_renamed) {
+                                        p.setMustNotBeRenamedThroughLinks(member_in_scope.ref);
+                                    }
                                     const entry = _scope.getOrPutMemberWithHash(p.allocator, name, hash.?) catch unreachable;
                                     entry.value_ptr.* = member_in_scope;
                                     entry.key_ptr.* = name;
@@ -2836,6 +2854,17 @@ pub fn NewParser_(
             }
         }
 
+        /// The renamer follows links before it reads the flag, so pin the whole chain.
+        pub static fn setMustNotBeRenamedThroughLinks(p: *P, ref_: Ref) {
+            let r = ref_;
+            while (r.isValid()) {
+                let symbol = &p.symbols.items[r.innerIndex()];
+                symbol.must_not_be_renamed = true;
+                if (symbol.link.isNull()) return;
+                r = symbol.link;
+            }
+        }
+
         static inline fn nextScopeInOrderForVisitPass(p: *P): ScopeOrder {
             const head = p.scope_order_to_visit[0];
             p.scope_order_to_visit = p.scope_order_to_visit[1..p.scope_order_to_visit.len];
@@ -2884,6 +2913,14 @@ pub fn NewParser_(
                 // "with" statements are not allowed in strict mode.
                 if (p.options.features.commonjs_at_runtime) {
                     p.has_with_scope = true;
+                }
+
+                // Marked up the chain like contains_direct_eval, for computeReservedNamesForScope.
+                let scope_iter: (*Scope)? = scope;
+                while (with_s := scope_iter) {
+                    if (with_s.contains_with) break;
+                    with_s.contains_with = true;
+                    scope_iter = with_s.parent;
                 }
             }
 
@@ -3220,14 +3257,14 @@ pub fn NewParser_(
             }
 
             let item_refs = ImportItemForNamespaceMap.init(p.allocator);
-            const count_excluding_namespace = @as(u16, i32(stmt.items.len)) +
-                @as(u16, i32(@intFromBool(stmt.default_name != null)));
+            const count_excluding_namespace = stmt.items.len +
+                @as(usize, @intFromBool(stmt.default_name != null));
 
-            item_refs.ensureUnusedCapacity(count_excluding_namespace)?;
+            item_refs.ensureUnusedCapacity(@as(u32, @intCast(count_excluding_namespace)))?;
             // Even though we allocate ahead of time here
             // we cannot use putAssumeCapacity because a symbol can have existing links
             // those may write to this hash table, so this estimate may be innaccurate
-            p.is_import_item.ensureUnusedCapacity(p.allocator, count_excluding_namespace)?;
+            p.is_import_item.ensureUnusedCapacity(p.allocator, @as(u32, @intCast(count_excluding_namespace)))?;
             let remap_count: u32 = 0;
             // Link the default item to the namespace
             if (*name_loc := stmt.default_name) outer: {
@@ -4008,6 +4045,7 @@ pub fn NewParser_(
                 parts[0],
                 {
                     was_originally_identifier: true,
+                    is_property_access_target: parts.len > 1,
                 },
             );
             if (parts.len > 1) {
@@ -4019,6 +4057,7 @@ pub fn NewParser_(
 
         static fn memberExpression(p: *P, loc: logger.Loc, initial_value: Expr, parts: []const []const u8): Expr {
             let value = initial_value;
+            let i: usize = 0;
 
             for (part of parts) {
                 if (rewrote := p.maybeRewritePropertyAccess(
@@ -4031,6 +4070,7 @@ pub fn NewParser_(
                         assign_target: .none,
                         // .is_template_tag = false,
                         is_delete_target: false,
+                        is_property_access_target: i + 1 < parts.len,
                     },
                 )) {
                     value = rewrote;
@@ -4046,6 +4086,7 @@ pub fn NewParser_(
                         loc,
                     );
                 }
+                i += 1;
             }
 
             return value;
@@ -5832,6 +5873,7 @@ pub fn NewParser_(
                 .m_identifier => |sym_ref| {
                     p.recordUsage(sym_ref);
                     if (p.is_import_item.contains(sym_ref)) {
+                        p.noteImportUse(sym_ref, .{});
                         return p.maybeDefinedHelper(p.newExpr(
                             E.ImportIdentifier{
                                 ref: sym_ref,
@@ -5977,6 +6019,11 @@ pub fn NewParser_(
         }
 
         static fn wrapInlinedEnum(p: *P, value: Expr, comment: string): Expr {
+            if (comptime bun.Environment.isDebug) {
+                if (value.data == .e_string) {
+                    bun.assert(value.data.e_string.next == null);
+                }
+            }
             if (bun.strings.containsComptime(comment, "*/")) {
                 // Don't wrap with a comment
                 return value;
@@ -6265,6 +6312,8 @@ pub fn NewParser_(
             let map: js_ast.Ast.TsEnumsMap = {};
             map.ensureTotalCapacity(allocator, @intCast(p.top_level_enums.items.len))?;
             for (sym_ref of p.top_level_enums.items) {
+                // Only the newest symbol of a merged `enum E {} enum E {}` is looked up. It has no link.
+                if (!p.symbols.items[sym_ref.innerIndex()].link.isNull()) continue;
                 const entry = p.ref_to_ts_namespace_member.getEntry(sym_ref).?;
                 const namespace = entry.value_ptr.namespace;
                 let inner_map: bun.StringHashMapUnmanaged(InlinedEnumValue) = {};
@@ -6516,6 +6565,7 @@ pub fn NewParser_(
             }
 
             ctx.hasher.update("\x00");
+            p.react_refresh.last_hook_seen = hook_call;
         }
 
         static fn handleReactRefreshPostVisitFunctionBody(p: *P, stmts: *ListManaged(Stmt), hook: *ReactRefresh.HookContext) {
@@ -6995,6 +7045,7 @@ pub fn NewParser_(
                 allow_in: true,
 
                 call_target: nullExprData,
+                template_tag: nullExprData,
                 delete_target: nullExprData,
                 stmt_expr_value: nullExprData,
                 loop_body: nullStmtData,

@@ -86,6 +86,13 @@ pub fn appendToHeaders(bytes: []const u8, headers: *bun.http.Headers) !void {
         _ = try headers.append("etag", etag_str);
 }
 
+pub fn ifRange(etag_opt: ?[]const u8, if_range_hdr: []const u8) bool {
+        const etag = ((etag_opt) orelse { return false; });
+        const ours = parse(etag);
+        const theirs = parse(if_range_hdr);
+        return (((!ours.is_weak) and (!theirs.is_weak)) and std.mem.eql(u8, ours.tag, theirs.tag));
+}
+
 pub fn ifNoneMatch(etag: []const u8, if_none_match: []const u8) bool {
         const our_parsed = parse(etag);
         if (std.mem.eql(u8, std.mem.trim(u8, if_none_match, " \t"), "*")) {

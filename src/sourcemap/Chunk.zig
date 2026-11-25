@@ -107,8 +107,11 @@ pub fn printSourceMapContentsFromInternal(self: Chunk, source: *const Logger.Sou
 }
 
 pub fn printSourceMapContentsJSON(source: *const Logger.Source, mutable: *MutableString, include_sources_contents: bool, mappings: []const u8, comptime ascii_only: bool) !void {
-        var filename_buf: bun.PathBuffer = undefined;
+        var filename_buf = bun.path_buffer_pool.get();
         _ = &filename_buf;
+        defer {
+        _ = bun.path_buffer_pool.put(filename_buf);
+        }
         var filename = source.path.text;
         _ = &filename;
         const top_level_dir = strings.withoutTrailingSlash(FileSystem.instance.top_level_dir);

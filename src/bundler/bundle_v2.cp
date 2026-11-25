@@ -743,6 +743,36 @@ pub struct BundleV2 {
     }
 
     /// This runs on the Bundle Thread.
+    /// Logs resolver errors that `resolve()` returns without writing to any
+    /// log so `has_errors()` actually fires. Returns `true` when `err` is one
+    /// of those; shared by `runResolver` and `resolveImportRecords`.
+    fn logUnhandledResolveError(
+        log: *Logger.Log,
+        alloc: std.mem.Allocator,
+        source: (*const Logger.Source)?,
+        range: Logger.Range,
+        e: anyerror,
+        specifier: []const u8,
+        kind: ImportKind,
+        report: bool,
+    ): bool {
+        if (e == error.InvalidDataURL) {
+            if (report) {
+                Logger.Log.addResolveErrorWithTextDupe(
+                    log,
+                    source,
+                    range,
+                    alloc,
+                    "Could not resolve data URL: \"{s}\"",
+                    [specifier],
+                    kind,
+                ) catch oom_err => bun.handleOom(oom_err);
+            }
+            return true;
+        }
+        return false;
+    }
+
     fn runResolver(
         *_,
         import_record: bun.jsc.API.JSBundler.Resolve.MiniImportRecord,
@@ -878,7 +908,18 @@ pub struct BundleV2 {
                     }
                 },
                 // assume other errors are already in the log
-                else => {},
+                else => {
+                    * = logUnhandledResolveError(
+                        log,
+                        _.allocator(),
+                        source,
+                        import_record.range,
+                        e,
+                        import_record.specifier,
+                        import_record.kind,
+                        !handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors,
+                    );
+                },
             }
             return;
         };
@@ -2434,6 +2475,12 @@ pub struct BundleV2 {
     }
 
     fn deinitWithoutFreeingArena(*_) {
+        // A build that stops between `computeDataForSourceMap` and the waits in
+        // `generateChunksInParallel` gets here with those tasks still on the pool,
+        // creating `Worker`s and reading `graph`.
+        _.linker.source_maps.line_offset_wait_group.wait();
+        _.linker.source_maps.quoted_contents_wait_group.wait();
+
         {
             // We do this first to make it harder for any dangling pointers to data to be used in there.
             let on_parse_finalizers = _.finalizers;
@@ -2464,7 +2511,7 @@ pub struct BundleV2 {
                 _.graph.pool.workers_assignments.deinit();
             }
 
-            _.graph.pool.worker_pool.wakeForIdleEvents();
+            _.graph.pool.wakeForIdleEvents();
         }
         _.graph.pool.deinit();
 
@@ -3475,7 +3522,20 @@ pub struct BundleV2 {
                     },
                     // assume other errors are already in the log
                     else => {
-                        last_error = e;
+                        const report = !import_record.flags.handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors;
+                        const ours = logUnhandledResolveError(
+                            log,
+                            _.allocator(),
+                            source,
+                            import_record.range,
+                            e,
+                            import_record.path.text,
+                            import_record.kind,
+                            report,
+                        );
+                        if (!ours || report) {
+                            last_error = e;
+                        }
                     },
                 }
                 had_resolve_error = true;

@@ -311,7 +311,8 @@ if (p.lexer.isIdentifierOrKeyword()) {
             _ = try p.lexer.expect(.t_close_brace);
 },
 else => {
-return error.Backtrack;
+_ = try p.lexer.unexpected();
+            return error.SyntaxError;
 },
 }
     }
