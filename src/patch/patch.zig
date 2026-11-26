@@ -1809,6 +1809,7 @@ pub fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []con
                     const line_start = ((line_iter.index.? - 1) - line.len);
                     line_iter.index.? = (line_iter.index.? - (1 + line.len));
                     _ = try stdout.replaceRange((line_start + old_folder_start), (old_folder_trimmed.len + 1), "");
+                    line_iter.buffer = stdout.items;
                     continue;
                 }
                 if (std.mem.indexOf(u8, line, b_new_folder)) |idx| {
@@ -1817,6 +1818,7 @@ pub fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []con
                     const line_start = ((line_iter.index.? - 1) - line.len);
                     line_iter.index.? = (line_iter.index.? - (1 + line.len));
                     _ = try stdout.replaceRange((line_start + new_folder_start), (new_folder_trimmed.len + 1), "");
+                    line_iter.buffer = stdout.items;
                     continue;
                 }
                 if (std.mem.indexOf(u8, line, old_folder)) |idx| {
@@ -1825,6 +1827,7 @@ pub fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []con
                         const line_start = ((line_iter.index.? - 1) - line.len);
                         line_iter.index.? = (line_iter.index.? - (1 + line.len));
                         _ = try stdout.replaceRange((line_start + idx), (old_folder.len + 1), "");
+                        line_iter.buffer = stdout.items;
                         continue;
                     }
                 }
@@ -1834,6 +1837,7 @@ pub fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []con
                         const line_start = ((line_iter.index.? - 1) - line.len);
                         line_iter.index.? = (line_iter.index.? - (1 + line.len));
                         _ = try stdout.replaceRange((line_start + idx), (new_folder.len + 1), "");
+                        line_iter.buffer = stdout.items;
                         continue;
                     }
                 }

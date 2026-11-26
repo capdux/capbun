@@ -265,7 +265,7 @@ export function getStdinStream(
   function triggerRead(_size) {
     $debug("_read();", reader);
 
-    if (!reader && !forceUnref && !shouldDisown && !stream_endEmitted && !stream_destroyed) {
+    if (!reader && !forceUnref && !shouldDisown && !stream_endEmitted && !stream_destroyed && !(stream.isPaused() && !stream._readableState.readableListening)) {
       own();
     }
 

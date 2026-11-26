@@ -489,18 +489,8 @@ pub fn flushFromJS(self: *FileSink, globalThis: *JSGlobalObject, wait: bool) sys
         if ((had_buffered_data and (!self.writer.hasPendingData()))) {
             _ = self.updateRef(false);
         }
-        if ((rc == .done)) {
-            self.written = (self.written + @as(usize, @truncate(rc.done)));
-        } else {
-            if ((rc == .pending)) {
-                self.written = (self.written + @as(usize, @truncate(rc.pending)));
-            } else {
-                if ((rc == .wrote)) {
-                    self.written = (self.written + @as(usize, @truncate(rc.wrote)));
-                } else {
-                    return .{ .err = rc.err };
-                }
-            }
+        if ((((rc != .done) and (rc != .pending)) and (rc != .wrote))) {
+            return .{ .err = rc.err };
         }
         const to_res = self.toResult(rc);
         if ((to_res == .err)) {
@@ -559,7 +549,6 @@ pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
         }
         const flush_res = self.writer.flush();
         if ((flush_res == .done)) {
-            self.written = (self.written + @as(usize, @truncate(flush_res.done)));
             _ = self.writer.end();
             return .success;
         } else {
@@ -568,7 +557,6 @@ pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
                 return .{ .err = flush_res.err };
             } else {
                 if ((flush_res == .pending)) {
-                    self.written = (self.written + @as(usize, @truncate(flush_res.pending)));
                     if ((!self.must_be_kept_alive_until_eof)) {
                         self.must_be_kept_alive_until_eof = true;
                         _ = self.ref();
@@ -576,7 +564,6 @@ pub fn end(self: *FileSink, _: ?sys.Error) sys.Maybe(void) {
                     self.done = true;
                     return .success;
                 } else {
-                    self.written = (self.written + @as(usize, @truncate(flush_res.wrote)));
                     _ = self.writer.end();
                     return .success;
                 }
@@ -642,7 +629,6 @@ pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue
             } else {
                 if ((flush_result == .pending)) {
                     const pending_written = flush_result.pending;
-                    self.written = (self.written + @as(usize, @truncate(pending_written)));
                     if ((!self.must_be_kept_alive_until_eof)) {
                         self.must_be_kept_alive_until_eof = true;
                         _ = self.ref();

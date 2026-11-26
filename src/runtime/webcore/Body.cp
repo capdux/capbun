@@ -1307,6 +1307,9 @@ pub struct ValueBufferer {
         if (stream.isDone()) {
             const bytes = sink.stream_buffer.list.items;
             log("onStreamPipe done {}", .{bytes.len});
+            if (rs := sink.readable_stream_ref.get(sink.global)) {
+                rs.done(sink.global);
+            }
             sink.onFinishedBuffering(sink.ctx, bytes, null, true);
             return;
         }

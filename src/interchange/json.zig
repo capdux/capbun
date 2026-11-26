@@ -575,7 +575,7 @@ pub fn parseExpr(self: *@This(), comptime maybe_auto_quote: bool, comptime force
     }
 
 pub fn parseExprJSONC(self: *@This()) !Expr {
-            return parseJSONExprImpl(self, opts, false, true, true);
+            return parseJSONExprImpl(self, opts, false, false, true);
     }
 
 pub fn parseMaybeTrailingComma(self: *@This(), closer: js_lexer.T) !bool {

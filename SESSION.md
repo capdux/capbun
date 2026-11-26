@@ -1115,3 +1115,12 @@
 - **验证摘要**：
   - **新全绿（0 fail）**：`bun/archive.test.ts`、`bun/terminal/`（`terminal-platform-gaps` + `terminal-spawn`）、`bun/test/{jest-extended,test-timers,test-test,mock-fn}`、`node/dgram`、`node/http/{node-http-backpressure,node-http-req-complete,node-http-incoming-socket}`、`web/html/`（全 5 文件）、`web/fetch/{wasm-streaming,stream-fast-path}`、`web/url/`（全 3 文件）、`web/broadcastchannel/`（全 2 文件）。
   - **显著收敛**：`bun/image/`（23+ fail -> 仅余 1 fail）；定位并冻结 `node:repl` + `--interactive`（`1960936e231`）及 `alpnCallback`/`serverName` TLS selection `stop(true)` 缺失特性。
+
+### [2026-11-27 Batch 50–51] `web-stream-state` / `perf_hooks` / `stdin` / `toml` / `jsonc` 收敛与验收提交
+- **用户指令**：重开 2 路子智能体并行推进、保持 `COMM.md` 跨 AGY 通信自检、注册 3 小时定时 Token/效率审计并固化至 `GEMINI.md`、每波验收后及时提交推送并自主推进下一阶段。
+- **核心动作**：
+  - 完成 **Batch 50–51** 修复并编译 `1.4.5-debug` 验收；同步检查 `agy-comm.service`（`active`、`unacked=[]`）并注册 `0 */3 * * *` 审计定时任务。
+- **验证摘要**：
+  - **新全绿（0 fail）**：`bun/toml/toml.test.ts`、`bun/jsonc/{json-differential-fuzz,jsonc}.test.ts`、`node/perf_hooks/perf_hooks.test.ts`（17/17）。
+  - **显著收敛**：`web-stream-state.test.ts`（44/46 通过，仅余 3 项，零超时/UAF）、`process-stdin.test.ts`（21/22 通过，`paused` 退出已修）、`bun/jsonc/json-test-suite.test.ts`（仅余 1 项）、`bun/image/`（JPEG 警告与 colorspace 检查全部通过）。
+  - **待下轮编译复测**：`src/patch/patch.cp`（`gitDiffPostprocess` 同步 `line_iter.buffer = stdout.items`）。

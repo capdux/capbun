@@ -268,7 +268,16 @@ function eosWeb(stream, options, callback) {
       process.nextTick(() => callback.$apply(stream, args));
     }
   };
-  const closedPromise = stream[kIsClosedPromise]?.promise;
+  let closedPromise = stream[kIsClosedPromise]?.promise;
+  if (!closedPromise && isReadableStream(stream)) {
+    if (!isReadable(stream) && !isReadableErrored(stream)) {
+      resolverFn();
+      return nop;
+    }
+    const capability = Promise.withResolvers();
+    stream[kIsClosedPromise] = capability;
+    closedPromise = capability.promise;
+  }
   if (closedPromise) {
     PromisePrototypeThen.$call(closedPromise, resolverFn, resolverFn);
   }

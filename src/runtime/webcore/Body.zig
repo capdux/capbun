@@ -1226,6 +1226,10 @@ pub fn onStreamPipe(sink: *@This(), stream: jsc.WebCore.streams.Result, allocato
             if (stream.isDone()) {
                 const bytes = sink.stream_buffer.list.items;
                 _ = log("onStreamPipe done {}", .{ bytes.len });
+                if (sink.readable_stream_ref.get(sink.global)) |rs| {
+                    _ = &rs;
+                    _ = rs.done(sink.global);
+                }
                 _ = sink.onFinishedBuffering(sink.ctx, bytes, null, true);
                 return;
             }

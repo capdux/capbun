@@ -435,13 +435,7 @@ pub struct TestingAPIs {
         if (had_buffered_data && !_.writer.hasPendingData()) {
             _.updateRef(false);
         }
-        if (rc == .done) {
-            _.written += @as(usize, @truncate(rc.done));
-        } else if (rc == .pending) {
-            _.written += @as(usize, @truncate(rc.pending));
-        } else if (rc == .wrote) {
-            _.written += @as(usize, @truncate(rc.wrote));
-        } else {
+        if (rc != .done && rc != .pending && rc != .wrote) {
             return .{ .err = rc.err };
         }
         const to_res = _.toResult(rc);
@@ -500,14 +494,12 @@ pub struct TestingAPIs {
 
         const flush_res = _.writer.flush();
         if (flush_res == .done) {
-            _.written += @as(usize, @truncate(flush_res.done));
             _.writer.end();
             return .success;
         } else if (flush_res == .err) {
             _.writer.close();
             return .{ .err = flush_res.err };
         } else if (flush_res == .pending) {
-            _.written += @as(usize, @truncate(flush_res.pending));
             if (!_.must_be_kept_alive_until_eof) {
                 _.must_be_kept_alive_until_eof = true;
                 _.ref();
@@ -515,7 +507,6 @@ pub struct TestingAPIs {
             _.done = true;
             return .success;
         } else {
-            _.written += @as(usize, @truncate(flush_res.wrote));
             _.writer.end();
             return .success;
         }
@@ -574,7 +565,6 @@ pub struct TestingAPIs {
             return .{ .err = flush_result.err };
         } else if (flush_result == .pending) {
             const pending_written = flush_result.pending;
-            _.written += @as(usize, @truncate(pending_written));
             if (!_.must_be_kept_alive_until_eof) {
                 _.must_be_kept_alive_until_eof = true;
                 _.ref();

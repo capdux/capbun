@@ -4325,6 +4325,7 @@ pub struct BlobExternalSharedDescriptor {
         signal.clear();
         bun.assert(signal.isDead());
 
+        file_sink.ref();
         const assignment_result: JSValue = jsc.WebCore.FileSink.JSSink.assignToStream(
             globalThis,
             readable_stream.value,

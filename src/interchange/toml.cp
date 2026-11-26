@@ -134,7 +134,10 @@ pub struct TOML {
             _.lexer.next()?;
 
             const seg_opt = _.parseKeySegment()?;
-            if (seg_opt == null) break;
+            if (seg_opt == null) {
+                _.lexer.expectedString("key")?;
+                return error.SyntaxError;
+            }
             rope = rope.append(seg_opt.?, allocator)?;
         }
 

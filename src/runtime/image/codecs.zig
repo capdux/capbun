@@ -362,6 +362,9 @@ const handle_opt = jpeg.tj3Init(1);
         if (((jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0) and (jpeg.tj3GetErrorCode(handle_guard.handle) != jpeg.TJERR_WARNING))) {
             return error.DecodeFailed;
         }
+        if ((jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_COLORSPACE) < 0)) {
+            return error.DecodeFailed;
+        }
         const rw = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGWIDTH);
         const rh = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGHEIGHT);
         if (((rw <= 0) or (rh <= 0))) {

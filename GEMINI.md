@@ -251,7 +251,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - 借用单例防 RAII 自动释放：严禁将带 `.release()`/`.deinit()` 的借用单例（如 `uws.Loop.get()`）绑定到局部 `const`/`let`，避免 `cpc` 自动注入 `defer release()`；
    - 表达式 `if (opt) |x|`：严禁在赋值/字段初始化中使用旧 Zig `= if (opt) |x|`（会被 `cpc` 静默丢弃），统一改写为语句级 `if (x := opt)`。
 
-
 ---
 
 ## 十二、 Phase 2 运行时测试与省 Token 提速固化铁律（2026-11-24 自优化合并）
@@ -288,7 +287,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 4. **仅对非 Rust-only 的 Linux/Windows/跨平台运行时修复吸收**：
    - 跳过 Cargo/clippy/Windows Rust stub crate 搬家 commit；对真正影响 Windows/Linux/跨平台运行时行为与内存安全的修复全部等价吸收。
 
-
 ---
 
 ## 十四、 上游 Rust Bun 版本持续跟进、吸收与发布标准流程（SOP）
@@ -311,7 +309,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - 完成 `cp-vX.Y.Z-sync` 打标后，运行 `bun bd -p 'Bun.version'` 验证链接与启动；
    - 分域回归核心测试集（`xml`、`yaml`、`sqlite`、`http2`、`tls`、`webcrypto`、`diagnostics_channel`、`bundler`、`install`），修复残余回归后执行最终 `git commit` 与版本标签发布。
 
-
 ---
 
 ## 十五、 全仓测试大扫测、集中修正与单次构建提速规范（2026-11-26 固化）
@@ -329,3 +326,13 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 3. **阶段 3：单次集中构建 + 批量回归 + 状态账本与提交推送**
    - 待本大轮 2 路子智能体 + 主智能体修改全部就位后，由主智能体**仅执行唯一 1 次 `bun bd -p 'Bun.version'`** 生成最新 Debug 二进制。
    - 用单条批处理循环（`BUN_DEBUG_QUIET_LOGS=1 timeout 45 ./build/debug/bun-debug test --timeout=10000`）一次性验收本轮全部修改过的目录，实时更新 **`test/stats.md`**（记录已全绿、已修待编、在修与待修队列，重启后优先读取以避免重复测试），随后执行原子 `git commit && git push origin main`，无缝进入下一大轮或最终 `build:release` 发布。
+4. 临时文件, 放入当前项目的tmp目录!
+5. 测试时, 先扫描收集错误, 集中修改后编译为debug版本, 再扫描收集错误,如此往复循环, 提高效率, 不要一错一改.
+6. 测试结果及时写入 `test/stats.md`， 测试通过的， 不要重复测试（除非我下指令）， 浪费token。
+7. 每波测试完成， 更新文档， 及时git 提交并push， 固化成果, 然后继续下一波, 不要停。
+8. 确保开启并三个子智能体,与主智能体一起工作, 主智能体不可空闲等待,也不可陷入长时间任务. 子智能体收回后立刻新发, 确保三个子智能体在线.
+9. **【2026-11-27 3小时审计固化】防 OOM/Token 浪费 4 项铁律**：
+   - 所有测试命令必须带 `timeout -k 3 <sec>` 防止 `Bun.spawn` 孤儿进程残留消耗内存/拖慢调度；
+   - 已全绿套件写入 `test/stats.md` 后**严禁重复运行**，仅重跑新增/修复套件；
+   - 明确缺失上游大型特性（如 `Bun.ModuleGraph`、`node:repl`、`bun lint`、`maxHeadersCount`、`alpnCallback`）直接写入冻结清单，禁止反复排查浪费 Token；
+   - 严禁在多路子智能体同时运行 `bun-debug` 扫测期间中途触发 `zig:check` 覆盖 `build/debug/js/`，必须集中在 `bun bd` 前统一校验。

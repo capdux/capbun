@@ -646,15 +646,50 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         if (input_value.isEmptyOrUndefinedOrNull()) {
             return globalThis.throwInvalidArguments("Expected a string to parse", .{});
         }
-        var input_slice = try input_value.toSlice(globalThis, bun.default_allocator);
-        _ = &input_slice;
-        var input_slice_guard = DeinitGuard(@TypeOf(input_slice)){ .ptr = (&input_slice) };
-        _ = &input_slice_guard;
-        var __input_slice_guard_moved = false; _ = &__input_slice_guard_moved;
-        defer if (!__input_slice_guard_moved) { __input_slice_guard_moved = true; const __T = @TypeOf(input_slice_guard); if (@typeInfo(__T) == .optional) { if (input_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_slice_guard; _drop_val.__cp_deinit(); } };
-        const input_bytes = input_slice.slice();
+        if (input_value.@"as"(jsc.WebCore.Blob)) |blob| {
+            _ = &blob;
+            if ((blob.needsToReadFile() or blob.isS3())) {
+                return globalThis.throwInvalidArguments("File blob cannot be used here", .{});
+            }
+        }
+        const maybe_input = try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, allocator, input_value);
+        var input: jsc.Node.BlobOrStringOrBuffer = undefined;
+        _ = &input;
+        if (maybe_input) |v| {
+            _ = &v;
+            input = v;
+        } else {
+            var str = try input_value.toBunString(globalThis);
+            _ = &str;
+            var _str_guard = DerefGuard(bun.String){ .ptr = (blk: {
+            break :blk (&str);
+
+}) };
+            _ = &_str_guard;
+            var ___str_guard_moved = false; _ = &___str_guard_moved;
+            defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
+            input = jsc.Node.BlobOrStringOrBuffer{ .string_or_buffer = .{ .string = str.toSlice(allocator) } };
+        }
+        var input_guard = DeinitGuard(jsc.Node.BlobOrStringOrBuffer){ .ptr = (blk: {
+        break :blk (&input);
+
+}) };
+        _ = &input_guard;
+        var __input_guard_moved = false; _ = &__input_guard_moved;
+        defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
+        var input_bytes = input.slice();
+        _ = &input_bytes;
+        if (input_value.asArrayBuffer(globalThis)) |ab| {
+            _ = &ab;
+            if (ab.shared) {
+                input_bytes = bun.handleOom(allocator.dupe(u8, input_bytes));
+            }
+        }
         if ((input_bytes.len > std.math.maxInt(i32))) {
             return globalThis.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i64))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i64))) else cp_cast_int(usize, std.math.maxInt(i64)))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+        }
+        if ((!std.unicode.utf8ValidateSlice(input_bytes))) {
+            return globalThis.throwValue(globalThis.createSyntaxErrorInstance("TOML Parse error: Invalid UTF-8", .{}));
         }
         const source = (&logger.Source.initPathString("input.toml", input_bytes));
         const log_ptr: *logger.Log = (&log);

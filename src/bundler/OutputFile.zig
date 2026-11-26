@@ -298,13 +298,13 @@ pub fn writeToDisk(self: *OutputFile, root_dir: std.fs.Dir, root_dir_path: []con
 .buffer => |value| {
 var rel_path = self.dest_path;
         _ = &rel_path;
-        if ((self.dest_path.len > root_dir_path.len)) {
+        if (((root_dir_path.len > 0) and (self.dest_path.len > root_dir_path.len))) {
             rel_path = resolve_path.relative(root_dir_path, self.dest_path);
-            if (std.fs.path.dirname(rel_path)) |parent| {
-                _ = &parent;
-                if ((parent.len > root_dir_path.len)) {
-                    _ = try root_dir.makePath(parent);
-                }
+        }
+        if (std.fs.path.dirname(rel_path)) |parent| {
+            _ = &parent;
+            if ((parent.len > 0)) {
+                _ = try root_dir.makePath(parent);
             }
         }
         var path_buf: bun.PathBuffer = undefined;

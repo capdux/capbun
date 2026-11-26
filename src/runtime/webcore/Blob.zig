@@ -3184,6 +3184,7 @@ else => {
         signal.* = jsc.WebCore.FileSink.JSSink.SinkSignal.init(.zero);
         _ = signal.clear();
         _ = bun.assert(signal.isDead());
+        _ = file_sink.ref();
         const assignment_result: JSValue = jsc.WebCore.FileSink.JSSink.assignToStream(globalThis, (if (@typeInfo(@TypeOf(readable_stream)) == .@"enum") @intFromEnum(readable_stream) else readable_stream.value), file_sink, (blk: {
         break :blk @as(*OpaquePtr, @ptrCast(@alignCast(&(signal.ptr))));
 

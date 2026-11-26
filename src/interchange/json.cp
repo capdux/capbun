@@ -363,7 +363,7 @@ fn JSONLikeParser_(
         }
 
         fn parseExprJSONC(*_): !Expr {
-            return parseJSONExprImpl(_, opts, false, true, true);
+            return parseJSONExprImpl(_, opts, false, false, true);
         }
 
         fn parseMaybeTrailingComma(*_, closer: js_lexer.T): !bool {

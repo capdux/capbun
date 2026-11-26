@@ -1941,3 +1941,7 @@
 ## 2026-11-27: Batch 48–49 尾项收敛要点
 - **Archive & Terminal & Image**：`Archive.cp` 通过 `hdrcharset=BINARY` + `entry.setPathname` 绕过 `"C"` locale 转码失败使 `archive.test.ts` 全绿；`Terminal.cp` 在 POSIX `onWrite` `.drained` 时回调 `onWriterReady` 使 `terminal-spawn.test.ts` 全绿；`codec_jpeg.cp` + `codecs.cp` 恢复 `TJERR_WARNING` 豁免使 `image/` 降至仅余 1 项。
 - **Web HTML/Fetch/URL/TestRunner**：`URLSearchParams.cpp` 在 `formURLDecode` 前将 `+` 转为空格使 `web/html/` 全绿；`ReadableStream.ts` 单 chunk 统一拷贝并处理 detached buffer；`inspect.js` 补全 `formatURL` `ignored` 参数使 `web/url/` 全绿；`JSMockFunction.cpp` 修复 `resolvedPromise` 异常检查、`withImplementation` 异常重抛与 `tail = lastTail` 拼写及 `copyNameAndLength` 异常透传使 `mock-fn.test.js` 全绿。
+
+## 2026-11-27: Batch 50–51 收敛要点
+- **Web Streams (`web-stream-state`)**：`FileSink.cp` 移除 `flush` 重复累加 `written`（解决写入字节翻倍）；`Blob.cp` 在 `assignToStream` 前增加 `file_sink.ref()` 消除 ASan UAF；`ReadableStreamInternals.ts` + `end-of-stream.ts` 保留控制器与 `kIsClosedPromise`、`Body.cp` 补 `.Bytes` `done()`，使 44/46 用例通过。
+- **PerfHooks / Stdin / TOML / JSONC / Patch**：`JSPerformanceEntry.cpp` 改用 `JSC::JSFunction::create` 命名 `"[nodejs.util.inspect.custom]"` 使 `perf_hooks` 17/17 全绿；`ProcessObjectInternals.ts` `triggerRead()` 增加暂停态守卫修复 `stdin` 退出；`TOMLObject.cp` 接入 `BlobOrStringOrBuffer` 与 UTF-8 校验、`toml.cp` 拒绝 `[a.]` 尾点；`json.cp` `parseExprJSONC` 设 `force_utf8=false` 保留 `\uXXXX` 孤立代理码元；`patch.cp` `gitDiffPostprocess` 在 `replaceRange` 后同步 `line_iter.buffer = stdout.items`。

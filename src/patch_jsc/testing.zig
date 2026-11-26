@@ -225,8 +225,8 @@ pub fn makeDiff(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
 
 pub fn apply(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             var args = (switch (parseApplyArgs(globalThis, callframe)) {
-.err => |e| {
-return e;
+.err => {
+return error.JSError;
 },
 .result => |a| a,
 });
@@ -283,14 +283,14 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             if ((patchfile_js_opt == null)) {
                 if ((globalThis.throw("apply: expected at least 1 argument, got 0", .{}) == error.JSError)) {
                 }
-                return .initErr(.js_undefined);
+                return .initErr(.zero);
             }
             const patchfile_js = patchfile_js_opt.?;
             var dir_fd = bun.FD.cwd();
             _ = &dir_fd;
             if (arguments.nextEat()) |dir_js| {
                 _ = &dir_js;
-                var bunstr = (blk_catch_2: { break :blk_catch_2 ((dir_js.toBunString(globalThis)) catch |__ce_2| { _ = &__ce_2; return .initErr(.js_undefined); }); });
+                var bunstr = (blk_catch_2: { break :blk_catch_2 ((dir_js.toBunString(globalThis)) catch |__ce_2| { _ = &__ce_2; return .initErr(.zero); }); });
                 _ = &bunstr;
                 var _g_bunstr = DerefGuard(@TypeOf(bunstr)){ .ptr = (&bunstr) };
                 _ = &_g_bunstr;
@@ -304,9 +304,9 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
                 dir_fd = (switch (bun.sys.open(path, (bun.O.DIRECTORY | bun.O.RDONLY), 0)) {
 .err => |e| {
 {
-                    if ((globalThis.throwValue((blk_catch_4: { break :blk_catch_4 ((e.withPath(path).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return .initErr(.js_undefined); }); })) == error.JSError)) {
+                    if ((globalThis.throwValue((blk_catch_4: { break :blk_catch_4 ((e.withPath(path).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return .initErr(.zero); }); })) == error.JSError)) {
                     }
-                    return .initErr(.js_undefined);
+                    return .initErr(.zero);
                 }
 },
 .result => |fd| fd,
@@ -315,7 +315,7 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             var patchfile_bunstr = (blk_catch_5: { break :blk_catch_5 ((patchfile_js.toBunString(globalThis)) catch |__ce_5| { _ = &__ce_5; if ((bun.FD.cwd() != dir_fd)) {
                 _ = dir_fd.close();
             }
-            return .initErr(.js_undefined); }); });
+            return .initErr(.zero); }); });
             _ = &patchfile_bunstr;
             var _g_patchfile_bunstr = DerefGuard(@TypeOf(patchfile_bunstr)){ .ptr = (&patchfile_bunstr) };
             _ = &_g_patchfile_bunstr;
@@ -328,7 +328,7 @@ pub fn parseApplyArgs(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
             _ = patchfile_src.deinit();
             if ((globalThis.throwError(e, "failed to parse patchfile") == error.JSError)) {
             }
-            return .initErr(.js_undefined); }); });
+            return .initErr(.zero); }); });
             return .{ .result = ApplyArgs{ .dirfd = dir_fd, .patchfile = patch_file, .patchfile_txt = patchfile_src } };
     }
 };

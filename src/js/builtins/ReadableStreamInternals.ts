@@ -696,15 +696,26 @@ export function readDirectStream(stream, sink, underlyingSource) {
     }
 
     if (stream) {
-      $putByIdDirectPrivate(stream, "readableStreamController", undefined);
-      $putByIdDirectPrivate(stream, "reader", undefined);
+      $putByIdDirectPrivate(stream, "readableStreamController", null);
       stream.$bunNativePtr = -1;
       $putByIdDirectPrivate(stream, "disturbed", true);
+      const isClosedPromise = stream[Symbol.for("nodejs.webstream.isClosedPromise")];
       if (reason) {
         $putByIdDirectPrivate(stream, "state", $streamErrored);
         $putByIdDirectPrivate(stream, "storedError", reason);
+        if (isClosedPromise) {
+          isClosedPromise.reject.$call(undefined, reason);
+          $markPromiseAsHandled(isClosedPromise.promise);
+        } else {
+          const p = Promise.$reject(reason);
+          $markPromiseAsHandled(p);
+          stream[Symbol.for("nodejs.webstream.isClosedPromise")] = { promise: p };
+        }
       } else {
         $putByIdDirectPrivate(stream, "state", $streamClosed);
+        if (isClosedPromise) {
+          isClosedPromise.resolve.$call();
+        }
       }
       stream = undefined;
     }
@@ -733,11 +744,7 @@ export function readDirectStream(stream, sink, underlyingSource) {
   var maybePromise = underlyingSource.pull(sink);
   sink = undefined;
   if (maybePromise && $isPromise(maybePromise)) {
-    if (maybePromise.$then) {
-      return maybePromise.$then(() => {});
-    }
-
-    return maybePromise.then(() => {});
+    return maybePromise;
   }
 }
 
@@ -962,7 +969,7 @@ export async function readStreamIntoSink(stream: ReadableStream, sink, isNative)
 
     throw e;
   } finally {
-    if (reader) {
+    if (reader && !isNative) {
       try {
         reader.releaseLock();
       } catch {}
@@ -1507,6 +1514,15 @@ export function readableStreamError(stream, error) {
   $assert($isReadableStream(stream));
   $putByIdDirectPrivate(stream, "state", $streamErrored);
   $putByIdDirectPrivate(stream, "storedError", error);
+  const isClosedPromise = stream[Symbol.for("nodejs.webstream.isClosedPromise")];
+  if (isClosedPromise) {
+    isClosedPromise.reject.$call(undefined, error);
+    $markPromiseAsHandled(isClosedPromise.promise);
+  } else {
+    const p = Promise.$reject(error);
+    $markPromiseAsHandled(p);
+    stream[Symbol.for("nodejs.webstream.isClosedPromise")] = { promise: p };
+  }
   const reader = $getByIdDirectPrivate(stream, "reader");
 
   if (!reader) return;
@@ -1673,6 +1689,10 @@ export function readableStreamClose(stream) {
       $getByIdDirectPrivate(stream, "state") === $streamClosing,
   );
   $putByIdDirectPrivate(stream, "state", $streamClosed);
+  const isClosedPromise = stream[Symbol.for("nodejs.webstream.isClosedPromise")];
+  if (isClosedPromise) {
+    isClosedPromise.resolve.$call();
+  }
   const reader = $getByIdDirectPrivate(stream, "reader");
   if (!reader) return;
 
@@ -1870,10 +1890,11 @@ export function readableStreamFromAsyncIterator(target, fn) {
           throw closingError;
         }
       } else {
-        await controller.end();
+        const endResult = await controller.end();
         if (iter) {
           await iter.return?.();
         }
+        return endResult;
       }
       iter = undefined;
     }

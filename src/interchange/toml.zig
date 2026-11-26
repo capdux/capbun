@@ -182,7 +182,8 @@ pub fn parseKey(self: *TOML, allocator: std.mem.Allocator) !*Rope {
                 _ = try self.lexer.next();
                 const seg_opt = try self.parseKeySegment();
                 if ((seg_opt == null)) {
-                    break;
+                    _ = try self.lexer.expectedString("key");
+                    return error.SyntaxError;
                 }
                 rope = try rope.append(seg_opt.?, allocator);
             }

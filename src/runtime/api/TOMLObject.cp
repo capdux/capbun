@@ -481,11 +481,34 @@ pub fn parse(
         return globalThis.throwInvalidArguments("Expected a string to parse", {});
     }
 
-    let input_slice = input_value.toSlice(globalThis, bun.default_allocator)?;
-    const input_slice_guard = DeinitGuard<@TypeOf(input_slice)>{ ptr: &input_slice };
-    const input_bytes = input_slice.slice();
+    if (blob := input_value.@"as"(jsc.WebCore.Blob)) {
+        if (blob.needsToReadFile() || blob.isS3()) {
+            return globalThis.throwInvalidArguments("File blob cannot be used here", {});
+        }
+    }
+
+    const maybe_input = jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, allocator, input_value)?;
+    let input: jsc.Node.BlobOrStringOrBuffer = undefined;
+    if (v := maybe_input) {
+        input = v;
+    } else {
+        let str = input_value.toBunString(globalThis)?;
+        let _str_guard = DerefGuard<bun.String>{ ptr: unsafe { &str } };
+        input = jsc.Node.BlobOrStringOrBuffer{ string_or_buffer: .{ .string = str.toSlice(allocator) } };
+    }
+    const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input } };
+
+    let input_bytes = input.slice();
+    if (ab := input_value.asArrayBuffer(globalThis)) {
+        if (ab.shared) {
+            input_bytes = bun.handleOom(allocator.dupe(u8, input_bytes));
+        }
+    }
     if (input_bytes.len > std.math.maxInt(i32)) {
         return globalThis.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
+    }
+    if (!std.unicode.utf8ValidateSlice(input_bytes)) {
+        return globalThis.throwValue(globalThis.createSyntaxErrorInstance("TOML Parse error: Invalid UTF-8", .{}));
     }
     const source = &logger.Source.initPathString("input.toml", input_bytes);
     const log_ptr: *logger.Log = &log;

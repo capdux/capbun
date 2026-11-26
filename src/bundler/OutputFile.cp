@@ -274,12 +274,12 @@ pub struct Options {
             .saved => {},
             .buffer => |value| {
                 let rel_path = _.dest_path;
-                if (_.dest_path.len > root_dir_path.len) {
+                if (root_dir_path.len > 0 && _.dest_path.len > root_dir_path.len) {
                     rel_path = resolve_path.relative(root_dir_path, _.dest_path);
-                    if (parent := std.fs.path.dirname(rel_path)) {
-                        if (parent.len > root_dir_path.len) {
-                            root_dir.makePath(parent)?;
-                        }
+                }
+                if (parent := std.fs.path.dirname(rel_path)) {
+                    if (parent.len > 0) {
+                        root_dir.makePath(parent)?;
                     }
                 }
 

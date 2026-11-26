@@ -131,7 +131,8 @@ void JSPerformanceEntryPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSPerformanceEntry::info(), JSPerformanceEntryPrototypeTableValues, *this);
-    putDirectNativeFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsPerformanceEntryPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, static_cast<unsigned>(JSC::PropertyAttribute::DontEnum));
+    auto* inspectCustomFn = JSC::JSFunction::create(vm, globalObject(), 2, "[nodejs.util.inspect.custom]"_s, jsPerformanceEntryPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic);
+    putDirect(vm, WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), inspectCustomFn, static_cast<unsigned>(JSC::PropertyAttribute::DontEnum));
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

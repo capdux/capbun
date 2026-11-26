@@ -84,7 +84,7 @@ pub struct TestingAPIs {
 
     pub static fn apply(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
         let args = switch (parseApplyArgs(globalThis, callframe)) {
-            .err e => return e,
+            .err => return error.JSError,
             .result a => a,
         };
         const _g_args = DeinitGuard<ApplyArgs>{ ptr: &args };
@@ -129,27 +129,27 @@ pub struct TestingAPIs {
         const patchfile_js_opt = arguments.nextEat();
         if (patchfile_js_opt == null) {
             if (globalThis.throw("apply: expected at least 1 argument, got 0", {}) == error.JSError) {}
-            return .initErr(.js_undefined);
+            return .initErr(.zero);
         }
         const patchfile_js = patchfile_js_opt.?;
 
         let dir_fd = bun.FD.cwd();
         if (dir_js := arguments.nextEat()) {
-            let bunstr = dir_js.toBunString(globalThis) catch return .initErr(.js_undefined);
+            let bunstr = dir_js.toBunString(globalThis) catch return .initErr(.zero);
             const _g_bunstr = DerefGuard<@TypeOf(bunstr)>{ ptr: &bunstr };
             const path = bunstr.toOwnedSliceZ(bun.default_allocator) catch unreachable;
             const _g_path = FreeGuard<@TypeOf(path)>{ slice: path, allocator: bun.default_allocator };
 
             dir_fd = switch (bun.sys.open(path, bun.O.DIRECTORY | bun.O.RDONLY, 0)) {
                 .err e => {
-                    if (globalThis.throwValue((e.withPath(path).toJS(globalThis) catch return .initErr(.js_undefined))) == error.JSError) {}
-                    return .initErr(.js_undefined);
+                    if (globalThis.throwValue((e.withPath(path).toJS(globalThis) catch return .initErr(.zero))) == error.JSError) {}
+                    return .initErr(.zero);
                 },
                 .result fd => fd,
             };
         }
 
-        let patchfile_bunstr = patchfile_js.toBunString(globalThis) catch { if (bun.FD.cwd() != dir_fd) dir_fd.close(); return .initErr(.js_undefined); };
+        let patchfile_bunstr = patchfile_js.toBunString(globalThis) catch { if (bun.FD.cwd() != dir_fd) dir_fd.close(); return .initErr(.zero); };
         const _g_patchfile_bunstr = DerefGuard<@TypeOf(patchfile_bunstr)>{ ptr: &patchfile_bunstr };
         const patchfile_src = patchfile_bunstr.toUTF8(bun.default_allocator);
 
@@ -161,7 +161,7 @@ pub struct TestingAPIs {
 
             patchfile_src.deinit();
             if (globalThis.throwError(e, "failed to parse patchfile") == error.JSError) {}
-            return .initErr(.js_undefined);
+            return .initErr(.zero);
         };
 
         return {
