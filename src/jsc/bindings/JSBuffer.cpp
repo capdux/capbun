@@ -1578,11 +1578,112 @@ static int64_t indexOf16(const uint8_t* thisPtr, int64_t thisLength, const uint8
 
 static int64_t lastIndexOf(const uint8_t* thisPtr, int64_t thisLength, const uint8_t* valuePtr, int64_t valueLength, int64_t byteOffset)
 {
-    auto start = thisPtr;
-    auto end = thisPtr + std::min(thisLength, byteOffset + valueLength);
-    auto it = std::find_end(start, end, valuePtr, valuePtr + valueLength);
-    if (it != end) {
-        return it - thisPtr;
+    int64_t endLen = std::min(thisLength, byteOffset + valueLength);
+    if (valueLength <= 0) {
+        return endLen;
+    }
+    if (endLen < valueLength) {
+        return -1;
+    }
+    if (valueLength == 1) {
+        auto result = WTF::reverseFind(std::span<const uint8_t>(thisPtr, static_cast<size_t>(endLen)), valuePtr[0]);
+        return result == WTF::notFound ? -1 : static_cast<int64_t>(result);
+    }
+
+    // Crochemore-Perrin Two-Way algorithm on reversed haystack and needle
+    // so worst-case time is O(N + M) with O(1) extra space.
+    const size_t n = static_cast<size_t>(endLen);
+    const size_t m = static_cast<size_t>(valueLength);
+    auto H = [thisPtr, n](size_t idx) -> uint8_t { return thisPtr[n - 1 - idx]; };
+    auto N = [valuePtr, m](size_t idx) -> uint8_t { return valuePtr[m - 1 - idx]; };
+
+    auto maxSuffix = [m, &N](bool lessThan) -> std::pair<size_t, size_t> {
+        size_t ms = static_cast<size_t>(-1);
+        size_t j = 0;
+        size_t k = 1;
+        size_t p = 1;
+        while (j + k < m) {
+            uint8_t a = N(j + k);
+            uint8_t b = N(ms + k);
+            if (lessThan ? (a < b) : (a > b)) {
+                j += k;
+                k = 1;
+                p = j - ms;
+            } else if (a == b) {
+                if (k != p) {
+                    k++;
+                } else {
+                    j += p;
+                    k = 1;
+                }
+            } else {
+                ms = j;
+                j = ms + 1;
+                k = p = 1;
+            }
+        }
+        return { ms + 1, p };
+    };
+
+    auto [l1, p1] = maxSuffix(true);
+    auto [l2, p2] = maxSuffix(false);
+    size_t l = l1 >= l2 ? l1 : l2;
+    size_t p = l1 >= l2 ? p1 : p2;
+
+    bool periodic = (l < m / 2);
+    if (periodic) {
+        for (size_t t = 0; t < l; t++) {
+            if (N(t) != N(t + p)) {
+                periodic = false;
+                break;
+            }
+        }
+    }
+
+    if (periodic) {
+        size_t j = 0;
+        size_t memory = 0;
+        while (j <= n - m) {
+            size_t i = std::max(l, memory);
+            while (i < m && N(i) == H(j + i)) {
+                i++;
+            }
+            if (i >= m) {
+                i = l;
+                while (i > memory && N(i - 1) == H(j + i - 1)) {
+                    i--;
+                }
+                if (i <= memory) {
+                    return static_cast<int64_t>(n - m - j);
+                }
+                j += p;
+                memory = m - p;
+            } else {
+                j += (i - l) + 1;
+                memory = 0;
+            }
+        }
+    } else {
+        p = std::max(l, m - l) + 1;
+        size_t j = 0;
+        while (j <= n - m) {
+            size_t i = l;
+            while (i < m && N(i) == H(j + i)) {
+                i++;
+            }
+            if (i >= m) {
+                i = l;
+                while (i > 0 && N(i - 1) == H(j + i - 1)) {
+                    i--;
+                }
+                if (i == 0) {
+                    return static_cast<int64_t>(n - m - j);
+                }
+                j += p;
+            } else {
+                j += (i - l) + 1;
+            }
+        }
     }
     return -1;
 }

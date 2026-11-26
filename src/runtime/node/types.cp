@@ -628,7 +628,10 @@ pub union(enum) PathLike {
 
     fn deinit() {
         switch (_) {
-            .string, .buffer => {},
+            .string => {},
+            .buffer val => {
+                unsafe { JSC__JSValue__unpinArrayBuffer(val.buffer.value); }
+            },
             inline else *str => {
                 str.deinit();
             },
@@ -655,6 +658,7 @@ pub union(enum) PathLike {
                 val.deinit();
             },
             .buffer val => {
+                unsafe { JSC__JSValue__unpinArrayBuffer(val.buffer.value); }
                 val.buffer.value.unprotect();
             },
             else => {},
@@ -772,6 +776,7 @@ pub union(enum) PathLike {
                 Valid.pathNullBytes(buffer.slice(), ctx)?;
 
                 arguments.protectEat();
+                unsafe { * = JSC__JSValue__pinArrayBuffer(buffer.buffer.value); }
                 return .{ buffer: buffer };
             },
 
@@ -781,6 +786,7 @@ pub union(enum) PathLike {
                 Valid.pathNullBytes(buffer.slice(), ctx)?;
 
                 arguments.protectEat();
+                unsafe { * = JSC__JSValue__pinArrayBuffer(buffer.buffer.value); }
                 return .{ buffer: buffer };
             },
 
@@ -1029,7 +1035,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!Mod
         mode_int = @intCast(parsed.?);
     }
 
-    return @as(Mode, @intCast(mode_int & 0o777));
+    return @as(Mode, @intCast(mode_int & 0o7777));
 }
 
 pub enum _PathOrFileDescriptorTag { fd, path }

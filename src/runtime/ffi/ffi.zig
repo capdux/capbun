@@ -299,7 +299,7 @@ pub fn first(self: *const CompileCSource) [:0]const u8 {
 pub fn deinit(self: *CompileCSource, allocator: Allocator) void {
             switch (self.*) {
 .file => {
-_ = (if ((self.file.len > 0)) allocator.free(self.file) else null);
+_ = (if ((self.file.len > 0)) allocator.free(self.file) else @as(void, undefined));
 },
 .files => {
 for (self.files.items) |file| {
@@ -1500,6 +1500,10 @@ pub const CompilerRTSources = struct {
     const @"tgmath.h" = @embedFile("./ffi-tgmath.h");
     const @"stddef.h" = @embedFile("./ffi-stddef.h");
     const @"varargs.h" = "// empty";
+    const @"node_api.h" = @embedFile("../../napi/node_api.h");
+    const @"node_api_types.h" = @embedFile("../../napi/node_api_types.h");
+    const @"js_native_api.h" = @embedFile("../../napi/js_native_api.h");
+    const @"js_native_api_types.h" = @embedFile("../../napi/js_native_api_types.h");
 };
 
 pub const MyFunctionSStructWorkAround = struct {

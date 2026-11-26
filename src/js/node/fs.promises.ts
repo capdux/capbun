@@ -23,6 +23,21 @@ const kTransferList = Symbol("kTransferList");
 const kDeserialize = Symbol("kDeserialize");
 const kEmptyObject = ObjectFreeze(Object.create(null));
 const kFlag = Symbol("kFlag");
+const kFinalizer = Symbol("kFinalizer");
+
+const fileHandleRegistry = new FinalizationRegistry<{ fd: number }>(held => {
+  if (held.fd !== -1) {
+    const fd = held.fd;
+    held.fd = -1;
+    try {
+      fs.closeSync(fd);
+    } catch {}
+    const err = $ERR_INVALID_STATE(`A FileHandle was garbage collected without being closed. File descriptor: ${fd}`);
+    setTimeout(() => {
+      throw err;
+    }, 0);
+  }
+});
 
 let Interface; // lazy value for require("node:readline").Interface.
 
@@ -257,10 +272,16 @@ function asyncWrap(fn: any, name: string) {
   class FileHandle extends EventEmitter {
     constructor(fd, flag) {
       super();
-      this[kFd] = fd ? fd : -1;
+      const realFd = fd ? fd : -1;
+      this[kFd] = realFd;
       this[kRefs] = 1;
       this[kClosePromise] = null;
       this[kFlag] = flag;
+      if (realFd !== -1) {
+        const held = { fd: realFd };
+        this[kFinalizer] = held;
+        fileHandleRegistry.register(this, held, this);
+      }
     }
 
     getAsyncId() {
@@ -531,6 +552,11 @@ function asyncWrap(fn: any, name: string) {
 
       if (--this[kRefs] === 0) {
         this[kFd] = -1;
+        if (this[kFinalizer]) {
+          this[kFinalizer].fd = -1;
+          fileHandleRegistry.unregister(this);
+          this[kFinalizer] = undefined;
+        }
         this[kClosePromise] = PromisePrototypeFinally.$call(close(fd), () => {
           this[kClosePromise] = undefined;
         });
@@ -601,8 +627,142 @@ function asyncWrap(fn: any, name: string) {
 
     [kUnref]() {
       if (--this[kRefs] === 0) {
+        const fd = this[kFd];
         this[kFd] = -1;
-        this.close().$then(this[kCloseResolve], this[kCloseReject]);
+        if (this[kFinalizer]) {
+          this[kFinalizer].fd = -1;
+          fileHandleRegistry.unregister(this);
+          this[kFinalizer] = undefined;
+        }
+        if (fd !== -1) {
+          close(fd).$then(this[kCloseResolve], this[kCloseReject]);
+        } else {
+          this[kCloseResolve]?.();
+        }
+      }
+    }
+
+    writer(options = kEmptyObject) {
+      const fh = this;
+      throwEBADFIfNecessary("writer", fh[kFd]);
+      const autoClose = Boolean(options?.autoClose);
+      let position: number | null = options?.start !== undefined ? options.start : null;
+      let inFlight = 0;
+      let totalWritten = 0;
+      let ended = false;
+      let failed = false;
+      let endResolve: ((total: number) => void) | undefined;
+      let endReject: ((err: any) => void) | undefined;
+      let endPromise: Promise<number> | undefined;
+
+      const finishIfIdle = () => {
+        if (inFlight !== 0) return;
+        if (autoClose && (ended || failed) && fh[kFd] !== -1) {
+          const p = fh.close();
+          if (endResolve) {
+            const resolve = endResolve;
+            const reject = endReject!;
+            endResolve = undefined;
+            endReject = undefined;
+            p.then(() => resolve(totalWritten), reject);
+          }
+          return;
+        }
+        if (ended && endResolve) {
+          const resolve = endResolve;
+          endResolve = undefined;
+          endReject = undefined;
+          resolve(totalWritten);
+        }
+      };
+
+      return {
+        async write(chunk: any) {
+          if (ended || failed || fh[kFd] === -1) {
+            throw $ERR_INVALID_STATE("FileHandle is closed or writer has ended");
+          }
+          const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+          const writePos = position;
+          if (position !== null) {
+            position += buf.byteLength;
+          }
+          inFlight++;
+          fh[kRef]();
+          try {
+            const written = await write(fh[kFd], buf, 0, buf.byteLength, writePos);
+            totalWritten += written;
+            return written;
+          } finally {
+            inFlight--;
+            fh[kUnref]();
+            finishIfIdle();
+          }
+        },
+        writeSync(chunk: any) {
+          if (ended || failed || fh[kFd] === -1) {
+            throw $ERR_INVALID_STATE("FileHandle is closed or writer has ended");
+          }
+          const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+          const writePos = position;
+          if (position !== null) {
+            position += buf.byteLength;
+          }
+          const written = fs.writeSync(fh[kFd], buf, 0, buf.byteLength, writePos);
+          totalWritten += written;
+          return written;
+        },
+        end() {
+          if (endPromise) return endPromise;
+          ended = true;
+          endPromise = new Promise<number>((resolve, reject) => {
+            endResolve = resolve;
+            endReject = reject;
+            finishIfIdle();
+          });
+          return endPromise;
+        },
+        fail(_err?: any) {
+          if (failed) return;
+          failed = true;
+          finishIfIdle();
+        },
+      };
+    }
+
+    async *pull(options = kEmptyObject) {
+      if (this[kFd] === -1) {
+        throw $ERR_INVALID_STATE("FileHandle is closed");
+      }
+      const chunkSize = options?.highWaterMark ?? 64 * 1024;
+      this[kRef]();
+      try {
+        while (true) {
+          if (this[kFd] === -1) {
+            throw $ERR_INVALID_STATE("FileHandle is closed");
+          }
+          const buf = Buffer.allocUnsafe(chunkSize);
+          const bytesRead = await read(this[kFd], buf, 0, chunkSize, null);
+          if (bytesRead === 0) break;
+          yield bytesRead === chunkSize ? buf : buf.subarray(0, bytesRead);
+        }
+      } finally {
+        this[kUnref]();
+      }
+    }
+
+    *pullSync(options = kEmptyObject) {
+      if (this[kFd] === -1) {
+        throw $ERR_INVALID_STATE("FileHandle is closed");
+      }
+      const chunkSize = options?.highWaterMark ?? 64 * 1024;
+      while (true) {
+        if (this[kFd] === -1) {
+          throw $ERR_INVALID_STATE("FileHandle is closed");
+        }
+        const buf = Buffer.allocUnsafe(chunkSize);
+        const bytesRead = fs.readSync(this[kFd], buf, 0, chunkSize, null);
+        if (bytesRead === 0) break;
+        yield bytesRead === chunkSize ? buf : buf.subarray(0, bytesRead);
       }
     }
   }
@@ -628,7 +788,7 @@ async function writeFileAsyncIteratorInner(fd, iterable, encoding, signal: Abort
   try {
     for await (let chunk of iterable) {
       if (signal?.aborted) {
-        throw signal.reason;
+        throw $makeAbortError(undefined, { cause: signal.reason });
       }
 
       if (mustRencode && typeof chunk === "string") {
@@ -661,7 +821,7 @@ async function writeFileAsyncIterator(fdOrPath, iterable, optionsOrEncoding, fla
     mode = optionsOrEncoding?.mode ?? (mode || 0o666);
     signal = optionsOrEncoding?.signal ?? null;
     if (signal?.aborted) {
-      throw signal.reason;
+      throw $makeAbortError(undefined, { cause: signal.reason });
     }
   } else if (typeof optionsOrEncoding === "string" || optionsOrEncoding == null) {
     encoding = optionsOrEncoding || "utf8";
@@ -682,7 +842,7 @@ async function writeFileAsyncIterator(fdOrPath, iterable, optionsOrEncoding, fla
 
   if (signal?.aborted) {
     if (mustClose) await fs.close(fdOrPath);
-    throw signal.reason;
+    throw $makeAbortError(undefined, { cause: signal.reason });
   }
 
   let totalBytesWritten = 0;
@@ -708,7 +868,7 @@ async function writeFileAsyncIterator(fdOrPath, iterable, optionsOrEncoding, fla
 
   // Abort signal shadows other errors
   if (signal?.aborted) {
-    error = signal.reason;
+    error = $makeAbortError(undefined, { cause: signal.reason });
   }
 
   if (error) {

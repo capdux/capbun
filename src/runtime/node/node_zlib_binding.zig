@@ -227,6 +227,13 @@ pub fn throwUnlessIdle(stream: *T, globalThis: *jsc.JSGlobalObject) bun.JSError!
             }
     }
 
+pub fn checkNotResizable(buf: jsc.ArrayBuffer, globalThis: *jsc.JSGlobalObject, comptime is_out: bool) bun.JSError!void {
+            if (buf.resizable) {
+                const msg = (if (is_out) "The \"out\" argument must not be backed by a resizable ArrayBuffer or a WebAssembly.Memory" else "The \"in\" argument must not be backed by a resizable ArrayBuffer");
+                return globalThis.ERR(.INVALID_ARG_VALUE, msg, .{}).throw();
+            }
+    }
+
 pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
             if ((arguments.len != 7)) {
@@ -259,6 +266,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
                 const in_buf = ((arguments[1].asArrayBuffer(globalThis)) orelse {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "The \"in\" argument must be a TypedArray or DataView", .{}).throw();
 });
+                _ = try checkNotResizable(in_buf, globalThis, false);
                 in_off = arguments[2].toU32();
                 in_len = arguments[3].toU32();
                 if ((in_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(in_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_off)) else cp_cast_int(usize, in_off)) + (if (comptime @typeInfo(@TypeOf(in_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_len)) else cp_cast_int(usize, in_len))))) {
@@ -268,6 +276,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             const out_buf = ((arguments[4].asArrayBuffer(globalThis)) orelse {
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
 });
+            _ = try checkNotResizable(out_buf, globalThis, true);
             out_off = arguments[5].toU32();
             out_len = arguments[6].toU32();
             if ((out_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(out_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_off)) else cp_cast_int(usize, out_off)) + (if (comptime @typeInfo(@TypeOf(out_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_len)) else cp_cast_int(usize, out_len))))) {
@@ -404,6 +413,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
                 const in_buf = ((arguments[1].asArrayBuffer(globalThis)) orelse {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "The \"in\" argument must be a TypedArray or DataView", .{}).throw();
 });
+                _ = try checkNotResizable(in_buf, globalThis, false);
                 in_off = arguments[2].toU32();
                 in_len = arguments[3].toU32();
                 if ((in_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(in_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_off)) else cp_cast_int(usize, in_off)) + (if (comptime @typeInfo(@TypeOf(in_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(in_len)) else cp_cast_int(usize, in_len))))) {
@@ -414,6 +424,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             const out_buf = ((arguments[4].asArrayBuffer(globalThis)) orelse {
             return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
 });
+            _ = try checkNotResizable(out_buf, globalThis, true);
             out_off = arguments[5].toU32();
             out_len = arguments[6].toU32();
             if ((out_buf.byte_len < ((if (comptime @typeInfo(@TypeOf(out_off)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_off)) else cp_cast_int(usize, out_off)) + (if (comptime @typeInfo(@TypeOf(out_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(out_len)) else cp_cast_int(usize, out_len))))) {
@@ -435,7 +446,10 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             return jsc.JSValue.js_undefined;
     }
 
-pub fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) jsc.JSValue {
+pub fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            if (stream.write_in_progress) {
+                return globalThis.ERR(.INVALID_STATE, "Cannot reset zlib stream while a write is in progress", .{}).throw();
+            }
             _ = resetInternal(stream, globalThis, callframe.this());
             return jsc.JSValue.js_undefined;
     }

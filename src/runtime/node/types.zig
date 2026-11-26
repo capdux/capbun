@@ -852,8 +852,13 @@ pub fn estimatedSize(self: PathLike) usize {
 
 pub fn deinit(self: PathLike) void {
             switch (self) {
-.string, .buffer => {
+.string => {
 
+},
+.buffer => |val| {
+{
+                _ = JSC__JSValue__unpinArrayBuffer((if (@typeInfo(@TypeOf(val.buffer)) == .@"enum") @intFromEnum(val.buffer) else val.buffer.value));
+            }
 },
 inline else => |*str| {
 _ = str.deinit();
@@ -883,7 +888,10 @@ inline .encoded_slice, .threadsafe_string, .slice_with_underlying_string => |*va
 _ = val.deinit();
 },
 .buffer => |val| {
-_ = (if (@typeInfo(@TypeOf(val.buffer)) == .@"enum") @intFromEnum(val.buffer) else val.buffer.value).unprotect();
+{
+                _ = JSC__JSValue__unpinArrayBuffer((if (@typeInfo(@TypeOf(val.buffer)) == .@"enum") @intFromEnum(val.buffer) else val.buffer.value));
+            }
+            _ = (if (@typeInfo(@TypeOf(val.buffer)) == .@"enum") @intFromEnum(val.buffer) else val.buffer.value).unprotect();
 },
 else => {
 
@@ -1003,6 +1011,9 @@ const buffer = Buffer.fromTypedArray(ctx, arg);
             _ = try Valid.pathBuffer(buffer, ctx);
             _ = try Valid.pathNullBytes(buffer.slice(), ctx);
             _ = arguments.protectEat();
+            {
+                _ = JSC__JSValue__pinArrayBuffer((if (@typeInfo(@TypeOf(buffer.buffer)) == .@"enum") @intFromEnum(buffer.buffer) else buffer.buffer.value));
+            }
             return .{ .buffer = buffer };
 },
 .ArrayBuffer => {
@@ -1010,6 +1021,9 @@ const buffer = Buffer.fromArrayBuffer(ctx, arg);
             _ = try Valid.pathBuffer(buffer, ctx);
             _ = try Valid.pathNullBytes(buffer.slice(), ctx);
             _ = arguments.protectEat();
+            {
+                _ = JSC__JSValue__pinArrayBuffer((if (@typeInfo(@TypeOf(buffer.buffer)) == .@"enum") @intFromEnum(buffer.buffer) else buffer.buffer.value));
+            }
             return .{ .buffer = buffer };
 },
 .String, .StringObject, .DerivedStringObject => {
@@ -1424,7 +1438,7 @@ pub fn modeFromJS(ctx: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!?Mod
             }
             mode_int = @intCast(parsed.?);
         }
-        return @as(Mode, @intCast((mode_int & 511)));
+        return @as(Mode, @intCast((mode_int & 4095)));
 }
 
 extern "c" fn Bun__JSDirentObjectConstructor(global: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue;

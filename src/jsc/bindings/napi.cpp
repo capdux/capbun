@@ -1239,7 +1239,6 @@ extern "C" napi_status napi_reference_ref(napi_env env, napi_ref ref,
 extern "C" napi_status napi_delete_reference(napi_env env, napi_ref ref)
 {
     NAPI_PREAMBLE(env);
-    NAPI_CHECK_ENV_NOT_IN_GC(env);
     NAPI_CHECK_ARG(env, ref);
     NapiRef* napiRef = toJS(ref);
     delete napiRef;

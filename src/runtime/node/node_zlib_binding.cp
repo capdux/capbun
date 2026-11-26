@@ -103,6 +103,13 @@ pub fn CompressionStream(comptime T: type): type {
             }
         }
 
+        static fn checkNotResizable(buf: jsc.ArrayBuffer, globalThis: *jsc.JSGlobalObject, comptime is_out: bool): bun.JSError!void {
+            if (buf.resizable) {
+                const msg = if (is_out) "The \"out\" argument must not be backed by a resizable ArrayBuffer or a WebAssembly.Memory" else "The \"in\" argument must not be backed by a resizable ArrayBuffer";
+                return globalThis.ERR(.INVALID_ARG_VALUE, msg, .{}).throw();
+            }
+        }
+
         pub static fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
 
@@ -136,6 +143,7 @@ pub fn CompressionStream(comptime T: type): type {
                 const in_buf = arguments[1].asArrayBuffer(globalThis) ?? {
                     return globalThis.ERR(.INVALID_ARG_TYPE, "The \"in\" argument must be a TypedArray or DataView", .{}).throw();
                 };
+                checkNotResizable(in_buf, globalThis, false)?;
                 in_off = arguments[2].toU32();
                 in_len = arguments[3].toU32();
                 if (in_buf.byte_len < @as(usize, in_off) + @as(usize, in_len)) {
@@ -146,6 +154,7 @@ pub fn CompressionStream(comptime T: type): type {
             const out_buf = arguments[4].asArrayBuffer(globalThis) ?? {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
             };
+            checkNotResizable(out_buf, globalThis, true)?;
             out_off = arguments[5].toU32();
             out_len = arguments[6].toU32();
             if (out_buf.byte_len < @as(usize, out_off) + @as(usize, out_len)) {
@@ -187,12 +196,10 @@ pub fn CompressionStream(comptime T: type): type {
             // Only create the strong handle when we have a pending write
             // And make sure to clear it when we are done.
             stream.this_value.set(globalThis, this_value);
-
             const vm = globalThis.bunVM();
             stream.task = { callback: &AsyncJob.runTask };
             stream.poll_ref.ref(vm);
             jsc.WorkPool.schedule(&stream.task);
-
             return jsc.JSValue.js_undefined;
         }
 
@@ -278,6 +285,7 @@ pub fn CompressionStream(comptime T: type): type {
                 const in_buf = arguments[1].asArrayBuffer(globalThis) ?? {
                     return globalThis.ERR(.INVALID_ARG_TYPE, "The \"in\" argument must be a TypedArray or DataView", .{}).throw();
                 };
+                checkNotResizable(in_buf, globalThis, false)?;
                 in_off = arguments[2].toU32();
                 in_len = arguments[3].toU32();
                 if (in_buf.byte_len < @as(usize, in_off) + @as(usize, in_len)) {
@@ -289,6 +297,7 @@ pub fn CompressionStream(comptime T: type): type {
             const out_buf = arguments[4].asArrayBuffer(globalThis) ?? {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
             };
+            checkNotResizable(out_buf, globalThis, true)?;
             out_off = arguments[5].toU32();
             out_len = arguments[6].toU32();
             if (out_buf.byte_len < @as(usize, out_off) + @as(usize, out_len)) {
@@ -314,7 +323,10 @@ pub fn CompressionStream(comptime T: type): type {
             return jsc.JSValue.js_undefined;
         }
 
-        pub static fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue {
+        pub static fn reset(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+            if (stream.write_in_progress) {
+                return globalThis.ERR(.INVALID_STATE, "Cannot reset zlib stream while a write is in progress", .{}).throw();
+            }
             resetInternal(stream, globalThis, callframe.this());
             return jsc.JSValue.js_undefined;
         }
@@ -381,13 +393,11 @@ pub fn CompressionStream(comptime T: type): type {
             // still queued, leading to a use-after-free when the worker thread
             // runs doWork().
             stream.write_in_progress = false;
-
             let msg_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.msg, 0) ?? "" }));
             const msg_value = msg_str.transferToJS(globalThis) catch return;
             const err_value: jsc.JSValue = .jsNumber(err_.e);
             let code_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.code, 0) ?? "" }));
             const code_value = code_str.transferToJS(globalThis) catch return;
-
             // The `zlib.ts` wrapper installs `onerror` right after construction,
             // but a handle driven directly has none; there is nobody to notify.
             // The pending reset/close handling below still runs either way.
@@ -395,7 +405,6 @@ pub fn CompressionStream(comptime T: type): type {
                 const vm = globalThis.bunVM();
                 vm.eventLoop().runCallback(callback, globalThis, this_value, &[msg_value, err_value, code_value]);
             }
-
             if (stream.pending_reset) resetInternal(stream, globalThis, this_value);
             if (stream.pending_close) closeInternal(stream);
         }
@@ -456,9 +465,6 @@ pub struct Error {
         return _.msg != null;
     }
 }
-
-
-
 
 import bun from "bun";
 const Output = bun.Output;

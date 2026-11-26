@@ -928,7 +928,7 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             var promise = self.promise.get();
             _ = &promise;
             const result = (switch (self.result) {
-.err => |e| (blk_catch_0: { break :blk_catch_0 ((e.toJSWithAsyncStack(globalObject, promise)) catch |e2| { _ = &e2; return promise.reject(globalObject, globalObject.takeException(e2)); }); }),
+.err => |e| (if (((e.syscall == .rm) and (e.getErrno() == .ISDIR))) globalObject.ERR(.FS_EISDIR, "Path is a directory: rm returned EISDIR (is a directory) {s}", .{ e.path }).toJS() else (blk_catch_0: { break :blk_catch_0 ((e.toJSWithAsyncStack(globalObject, promise)) catch |e2| { _ = &e2; return promise.reject(globalObject, globalObject.takeException(e2)); }); })),
 .result => |*res| brk: {
             break :brk (blk_catch_1: { break :blk_catch_1 ((globalObject.toJS(res)) catch |e| { _ = &e; return promise.reject(globalObject, globalObject.takeException(e)); }); });
 },
@@ -937,9 +937,9 @@ pub fn runFromJSThread(self: *@This()) bun.JSTerminated!void {
             if (have_abort_signal) {
                 if (self.args.signal) |signal| {
                     _ = &signal;
-                    if (signal.reasonIfAborted(globalObject)) |reason| {
-                        _ = &reason;
-                        _ = try promise.reject(globalObject, reason.toJS(globalObject));
+                    if (signal.nodeAbortErrorIfAborted(globalObject)) |abort_err| {
+                        _ = &abort_err;
+                        _ = try promise.reject(globalObject, abort_err);
                         return;
                     }
                 }
@@ -2579,7 +2579,45 @@ else => {
                     if ((current.isUndefinedOrNull() or current.isFunction())) {
                         break :parse;
                     }
+                    const buf_len = args.buffer.buffer.slice().len;
+                    const max_offset = @min(buf_len, std.math.maxInt(i64));
+                    if ((current.isObject() and (!current.isArray()))) {
+                        if (try current.getOptional(ctx, "offset", jsc.JSValue)) |offset_val| {
+                            _ = &offset_val;
+                            if ((!offset_val.isUndefinedOrNull())) {
+                                args.offset = @as(u64, @intCast(try jsc.Node.validators.validateInteger(ctx, offset_val, "offset", 0, 9007199254740991)));
+                            }
+                        }
+                        if ((args.offset > max_offset)) {
+                            return ctx.throwRangeError(@as(f64, @floatFromInt(args.offset)), .{ .field_name = "offset", .max = (if (comptime @typeInfo(@TypeOf(max_offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_offset)) else cp_cast_int(i32, max_offset)) });
+                        }
+                        if (try current.getOptional(ctx, "length", jsc.JSValue)) |len_val| {
+                            _ = &len_val;
+                            if ((len_val.isNumber() or len_val.isBigInt())) {
+                                const length = len_val.to(i64);
+                                const max_len = @min((buf_len - args.offset), std.math.maxInt(i32));
+                                if (((length > max_len) or (length < 0))) {
+                                    return ctx.throwRangeError(@as(f64, @floatFromInt(length)), .{ .field_name = "length", .min = 0, .max = (if (comptime @typeInfo(@TypeOf(max_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_len)) else cp_cast_int(i32, max_len)) });
+                                }
+                                args.length = @intCast(length);
+                            }
+                        }
+                        if (try current.getOptional(ctx, "position", jsc.JSValue)) |pos_val| {
+                            _ = &pos_val;
+                            if ((pos_val.isNumber() or pos_val.isBigInt())) {
+                                const position = pos_val.to(i52);
+                                if ((position >= 0)) {
+                                    args.position = position;
+                                }
+                            }
+                        }
+                        _ = arguments.eat();
+                        break :parse;
+                    }
                     args.offset = @as(u64, @intCast(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)));
+                    if ((args.offset > max_offset)) {
+                        return ctx.throwRangeError(@as(f64, @floatFromInt(args.offset)), .{ .field_name = "offset", .max = (if (comptime @typeInfo(@TypeOf(max_offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_offset)) else cp_cast_int(i32, max_offset)) });
+                    }
                     _ = arguments.eat();
                     if (arguments.next()) |next_cur| {
                         _ = &next_cur;
@@ -2591,11 +2629,6 @@ else => {
                         break :parse;
                     }
                     const length = current.to(i64);
-                    const buf_len = args.buffer.buffer.slice().len;
-                    const max_offset = @min(buf_len, std.math.maxInt(i64));
-                    if ((args.offset > max_offset)) {
-                        return ctx.throwRangeError(@as(f64, @floatFromInt(args.offset)), .{ .field_name = "offset", .max = (if (comptime @typeInfo(@TypeOf(max_offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_offset)) else cp_cast_int(i32, max_offset)) });
-                    }
                     const max_len = @min((buf_len - args.offset), std.math.maxInt(i32));
                     if (((length > max_len) or (length < 0))) {
                         return ctx.throwRangeError(@as(f64, @floatFromInt(length)), .{ .field_name = "length", .min = 0, .max = (if (comptime @typeInfo(@TypeOf(max_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_len)) else cp_cast_int(i32, max_len)) });
@@ -2869,6 +2902,14 @@ pub fn deinitAndUnprotect(self: *_ArgumentsWriteFile) void {
     }
 
 pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsWriteFile {
+            return fromJSWithDefaultFlag(ctx, arguments, FileSystemFlags.w);
+    }
+
+pub fn fromJSAppend(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsWriteFile {
+            return fromJSWithDefaultFlag(ctx, arguments, FileSystemFlags.a);
+    }
+
+pub fn fromJSWithDefaultFlag(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice, default_flag: FileSystemFlags) bun.JSError!_ArgumentsWriteFile {
             const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
             return ctx.throwInvalidArguments("path must be a string or a file descriptor", .{});
 });
@@ -2881,7 +2922,7 @@ pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!
 });
             var encoding = Encoding.buffer;
             _ = &encoding;
-            var flag = FileSystemFlags.w;
+            var flag = default_flag;
             _ = &flag;
             var mode: Mode = default_permission;
             _ = &mode;
@@ -3504,7 +3545,7 @@ return .{ .err = e };
 },
 .path => |path_| {
 const path = path_.sliceZ((&self.sync_error_buf));
-            const fd = (switch (Syscall.open(path, @intFromEnum(FileSystemFlags.a), args.mode)) {
+            const fd = (switch (Syscall.open(path, args.flag.asInt(), args.mode)) {
 .result => |result| result,
 .err => |e| {
 return .{ .err = e };
@@ -3776,10 +3817,10 @@ return .{ .err = e };
                     const rc = std.c.copy_file_range(src_fd.native(), null, dest_fd.native(), null, (std.math.maxInt(i32) - 1), 0);
                     switch (bun.sys.getErrno(rc)) {
 .SUCCESS => {
-_ = (if ((rc == 0)) ({
-                    _ = Syscall.fchmod(dest_fd, stat_.mode);
-                    return ret.success;
-}) else null);
+if ((rc == 0)) {
+                        _ = Syscall.fchmod(dest_fd, stat_.mode);
+                        return ret.success;
+                    }
 },
 .INTR => {
 _ = continue;
@@ -5295,7 +5336,7 @@ buf = buf[amt..];
 },
 }
             }
-            if ((((@intFromEnum(args.flag) & bun.O.APPEND) == 0) and (args.file != .fd))) {
+            if ((((args.flag.asInt() & bun.O.TRUNC) != 0) and (args.file != .fd))) {
                 if (Environment.isWindows) {
                     _ = bun.windows.SetEndOfFile(fd.cast());
                 } else {
@@ -5526,7 +5567,7 @@ else => .FAULT,
                 return .success;
             }
             {
-                const code: E = (__sw_blk_8: { const __disc_8 = err1; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .AccessDenied)) {  break :__sw_blk_8 cp_val(.ACCES); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .SymLinkLoop)) {  break :__sw_blk_8 cp_val(.LOOP); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .NameTooLong)) {  break :__sw_blk_8 cp_val(.NAMETOOLONG); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .SystemResources)) {  break :__sw_blk_8 cp_val(.NOMEM); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .ReadOnlyFileSystem)) {  break :__sw_blk_8 cp_val(.ROFS); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileBusy)) {  break :__sw_blk_8 cp_val(.BUSY); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .InvalidUtf8)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .InvalidWtf8)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .BadPathName)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileNotFound)) {  break :__sw_blk_8 cp_val(brk: {
+                const code: E = (__sw_blk_8: { const __disc_8 = err1; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .IsDir)) {  break :__sw_blk_8 cp_val(.ISDIR); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .AccessDenied)) {  break :__sw_blk_8 cp_val(.ACCES); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .SymLinkLoop)) {  break :__sw_blk_8 cp_val(.LOOP); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .NameTooLong)) {  break :__sw_blk_8 cp_val(.NAMETOOLONG); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .SystemResources)) {  break :__sw_blk_8 cp_val(.NOMEM); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .ReadOnlyFileSystem)) {  break :__sw_blk_8 cp_val(.ROFS); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileBusy)) {  break :__sw_blk_8 cp_val(.BUSY); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .InvalidUtf8)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .InvalidWtf8)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .BadPathName)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileNotFound)) {  break :__sw_blk_8 cp_val(brk: {
                 if (args.force) {
                     return .success;
                 }

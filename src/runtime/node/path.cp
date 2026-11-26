@@ -965,7 +965,7 @@ pub fn formatJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocator
     // Add one for the possible separator.
     const bufLen: usize = @max(1 +
         (if (dirLen > 0) dirLen else pathObject.root.len) +
-        (if (baseLen > 0) baseLen else pathObject.name.len + pathObject.ext.len), PATH_SIZE(T));
+        (if (baseLen > 0) baseLen else pathObject.name.len + pathObject.ext.len + (if (pathObject.ext.len > 0) @as(usize, 1) else 0)), PATH_SIZE(T));
     const buf = bun.handleOom(allocator.alloc(T, bufLen));
     const _guard_buf = FreeGuard<@TypeOf(buf)>{ alloc: allocator, slice: buf };
     return if (isWindows) formatWindowsJS_T(T, globalObject, pathObject, buf) else formatPosixJS_T(T, globalObject, pathObject, buf);
@@ -1417,7 +1417,7 @@ fn normalizeStringT(comptime T: type, path: []const T, allowAboveRoot: bool, sep
 
                 // Translated from the following JS code:
                 //   lastSegmentLength = i - lastSlash - 1;
-                const subtract = if (lastSlash != null) lastSlash.? + 1 else 2;
+                const subtract = if (lastSlash != null) lastSlash.? + 1 else 0;
                 lastSegmentLength = if (i >= subtract) i - subtract else 0;
             }
             lastSlash = i;

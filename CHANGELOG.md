@@ -2376,3 +2376,10 @@
 - `src/runtime/valkey_jsc/protocol_jsc.cp` (.zig), `src/runtime/valkey_jsc/js_valkey.cp` (.zig), `src/codegen/generate-classes.ts`
 - `src/js/internal/sql/postgres.ts`, `src/js/internal/sql/mysql.ts`, `src/sql_jsc/postgres/PostgresSQLConnection.cp` (.zig), `src/sql_jsc/mysql/MySQLConnection.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 3 测试收敛提交
+- `src/runtime/node/path.cp` (.zig), `src/runtime/node/node_zlib_binding.cp` (.zig), `src/js/node/zlib.ts`
+- `src/jsc/bindings/JSBuffer.cpp`, `src/jsc/bindings/napi.cpp`, `src/runtime/ffi/ffi.cp` (.zig), `test/napi/napi-value-ffi.test.ts`
+- `src/runtime/node/node_fs.cp` (.zig), `src/runtime/node/node_fs_binding.cp` (.zig), `src/runtime/node/types.cp` (.zig), `src/js/node/fs.promises.ts`
+- `src/jsc/bindings/ZigGlobalObject.lut.txt`
+- `SESSION.md`, `CHANGELOG.md`

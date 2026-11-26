@@ -913,7 +913,7 @@ pub fn formatWindowsJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, pa
 pub fn formatJS_T(comptime T: type, globalObject: *jsc.JSGlobalObject, allocator: std.mem.Allocator, isWindows: bool, pathObject: PathParsed(T)) bun.JSError!jsc.JSValue {
         const baseLen = pathObject.base.len;
         const dirLen = pathObject.dir.len;
-        const bufLen: usize = @max(((1 + (if ((dirLen > 0)) dirLen else pathObject.root.len)) + (if ((baseLen > 0)) baseLen else ((if (@typeInfo(@TypeOf(pathObject)) == .@"enum" or @typeInfo(@TypeOf(pathObject)) == .@"union") @tagName(pathObject) else pathObject.name).len + pathObject.ext.len))), PATH_SIZE(T));
+        const bufLen: usize = @max(((1 + (if ((dirLen > 0)) dirLen else pathObject.root.len)) + (if ((baseLen > 0)) baseLen else (((if (@typeInfo(@TypeOf(pathObject)) == .@"enum" or @typeInfo(@TypeOf(pathObject)) == .@"union") @tagName(pathObject) else pathObject.name).len + pathObject.ext.len) + (if ((pathObject.ext.len > 0)) (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1)) else 0)))), PATH_SIZE(T));
         const buf = bun.handleOom(allocator.alloc(T, bufLen));
         var _guard_buf = FreeGuard(@TypeOf(buf)){ .alloc = allocator, .slice = buf };
         _ = &_guard_buf;
@@ -1331,7 +1331,7 @@ pub fn normalizeStringT(comptime T: type, path: []const T, allowAboveRoot: bool,
                         bufOffset = bufSize;
                         bufSize = (bufSize + slice.len);
                         _ = bun.memmove(buf[bufOffset..bufSize], slice);
-                        const subtract = (if ((lastSlash != null)) (lastSlash.? + 1) else 2);
+                        const subtract = (if ((lastSlash != null)) (lastSlash.? + 1) else 0);
                         lastSegmentLength = (if ((i >= subtract)) (i - subtract) else 0);
                     }
                 }

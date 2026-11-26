@@ -111,7 +111,7 @@ describe.skipIf(isFFIUnavailable)("cc() bundled N-API headers", () => {
 const systemCC = process.env.CC || Bun.which("cc") || Bun.which("gcc") || Bun.which("clang");
 describe.skipIf(isWindows || !systemCC)("in-tree N-API headers", () => {
   it("provide the Node 26 type surface and modern NAPI_MODULE_INIT()", async () => {
-    const bunHeaders = resolve(__dirname, "../../src/runtime/napi");
+    const bunHeaders = resolve(__dirname, "../../src/napi");
     expect(existsSync(join(bunHeaders, "node_api.h"))).toBe(true);
 
     using dir = tempDir("napi-headers-node26", {});

@@ -1011,3 +1011,11 @@
 - **`yaml`**：`yaml.cp` & `YAMLObject.cp` 修复 Core schema 数字状态机、NUL 字节、代理对、tab 缩进、`\L`/`\P` (`0x2028`/`0x2029`) 及非空集合换行。
 - **`valkey`**：`valkey_protocol.cp`, `protocol_jsc.cp`, `js_valkey.cp`, `JSBigInt.cp`, `JSBigIntBinding.cpp`, `ErrorCode.ts`, `generate-classes.ts` 消除 ASan `use-after-poison`、修复分包解码、`ERR_REDIS_SERVER_ERROR`、`getBuffer` GC、SNI 与 `onconnect`/`onclose` 校验。
 - **`sql`**：`postgres.ts`, `mysql.ts`, `PostgresSQLConnection.cp`, `MySQLConnection.cp` 修复 `mysql` 与 `postgres` 连接超时及 TLS 关闭，收敛至仅余 3 fail。
+
+### 2026-11-26 Batch 3 测试修复与验证（`node/zlib` / `node/path` / `node/buffer` / `napi` / `node/fs` / `web/timers`）
+- **`node/zlib`**：`node_zlib_binding.cp` 与 `zlib.ts` 修复 `reset()` 并发 write 抛错、`resizable ArrayBuffer` 校验及 `opts?.pledgedSrcSize` -> **6 项历史 fail 全部清零**。
+- **`node/path`**：`path.cp` 修复 `normalizeStringT` 首段 `..` 长度计算与 `formatJS_T` 无点 `ext` 长度 -> **123 pass, 2 fail**（129 tests across 19 files）。
+- **`node/buffer`**：`JSBuffer.cpp` `lastIndexOf` 替换为逆向 Crochemore-Perrin Two-Way 算法 -> `buffer-indexof-worstcase.test.ts` **13 pass, 1 fail**（线性复杂度测试全绿）。
+- **`napi`**：`napi.cpp` 移除 `napi_delete_reference` GC 拦截、`ffi.cp` 嵌入 N-API 头文件、`napi-value-ffi.test.ts` 更新路径。
+- **`node/fs`**：`node_fs.cp`, `node_fs_binding.cp`, `types.cp`, `fs.promises.ts` 修复 `write`/`writeSync` offset 校验、`appendFile` `'ax'` `EEXIST`、`rm` `ERR_FS_EISDIR`、`chmodSync` 特殊权限位、`FileHandle.writer()`/`close()`/`autoClose` 与 `Uint8Array` `pinArrayBuffer`。
+- **`web/timers`**：`ZigGlobalObject.lut.txt` 修正 `queueMicrotask` `Function 1`。

@@ -625,7 +625,10 @@ pub struct Async {
                 let promise_value = _.promise.value();
                 let promise = _.promise.get();
                 const result = switch (_.result) {
-                    .err e => e.toJSWithAsyncStack(globalObject, promise) catch e2 => return promise.reject(globalObject, globalObject.takeException(e2)),
+                    .err e => (if (e.syscall == .rm && e.getErrno() == .ISDIR)
+                        globalObject.ERR(.FS_EISDIR, "Path is a directory: rm returned EISDIR (is a directory) {s}", .{ e.path }).toJS()
+                    else
+                        e.toJSWithAsyncStack(globalObject, promise) catch e2 => return promise.reject(globalObject, globalObject.takeException(e2))),
                     .result => |*res| brk: {
                         break :brk globalObject.toJS(res) catch e => return promise.reject(globalObject, globalObject.takeException(e));
                     },
@@ -634,8 +637,8 @@ pub struct Async {
 
                 if (have_abort_signal) {
                     if (signal := _.args.signal) {
-                        if (reason := signal.reasonIfAborted(globalObject)) {
-                            promise.reject(globalObject, reason.toJS(globalObject))?;
+                        if (abort_err := signal.nodeAbortErrorIfAborted(globalObject)) {
+                            promise.reject(globalObject, abort_err)?;
                             return;
                         }
                     }
@@ -2750,9 +2753,53 @@ pub struct _ArgumentsWrite {
                         }
                     },
                     // fs.write(fd, buffer[, offset[, length[, position]]], callback)
+                    // fs.write(fd, buffer[, options], callback)
                     .buffer => {
                         if (current.isUndefinedOrNull() || current.isFunction()) break :parse;
+                        const buf_len = args.buffer.buffer.slice().len;
+                        const max_offset = @min(buf_len, std.math.maxInt(i64));
+                        if (current.isObject() && !current.isArray()) {
+                            if (offset_val := current.getOptional(ctx, "offset", jsc.JSValue)?) {
+                                if (!offset_val.isUndefinedOrNull()) {
+                                    args.offset = @as(u64, @intCast(jsc.Node.validators.validateInteger(ctx, offset_val, "offset", 0, 9007199254740991)?));
+                                }
+                            }
+                            if (args.offset > max_offset) {
+                                return ctx.throwRangeError(
+                                    @as(f64, @floatFromInt(args.offset)),
+                                    { field_name: "offset", max: i32(max_offset) },
+                                );
+                            }
+                            if (len_val := current.getOptional(ctx, "length", jsc.JSValue)?) {
+                                if (len_val.isNumber() || len_val.isBigInt()) {
+                                    const length = len_val.to(i64);
+                                    const max_len = @min(buf_len - args.offset, std.math.maxInt(i32));
+                                    if (length > max_len || length < 0) {
+                                        return ctx.throwRangeError(
+                                            @as(f64, @floatFromInt(length)),
+                                            { field_name: "length", min: 0, max: i32(max_len) },
+                                        );
+                                    }
+                                    args.length = @intCast(length);
+                                }
+                            }
+                            if (pos_val := current.getOptional(ctx, "position", jsc.JSValue)?) {
+                                if (pos_val.isNumber() || pos_val.isBigInt()) {
+                                    const position = pos_val.to(i52);
+                                    if (position >= 0) args.position = position;
+                                }
+                            }
+                            arguments.eat();
+                            break :parse;
+                        }
+
                         args.offset = @as(u64, @intCast(jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)?));
+                        if (args.offset > max_offset) {
+                            return ctx.throwRangeError(
+                                @as(f64, @floatFromInt(args.offset)),
+                                { field_name: "offset", max: i32(max_offset) },
+                            );
+                        }
                         arguments.eat();
                         if (next_cur := arguments.next()) {
                             current = next_cur;
@@ -2762,14 +2809,6 @@ pub struct _ArgumentsWrite {
 
                         if (!(current.isNumber() || current.isBigInt())) break :parse;
                         const length = current.to(i64);
-                        const buf_len = args.buffer.buffer.slice().len;
-                        const max_offset = @min(buf_len, std.math.maxInt(i64));
-                        if (args.offset > max_offset) {
-                            return ctx.throwRangeError(
-                                @as(f64, @floatFromInt(args.offset)),
-                                { field_name: "offset", max: i32(max_offset) },
-                            );
-                        }
                         const max_len = @min(buf_len - args.offset, std.math.maxInt(i32));
                         if (length > max_len || length < 0) {
                             return ctx.throwRangeError(
@@ -3068,6 +3107,14 @@ pub struct _ArgumentsWriteFile {
         }
     }
     static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWriteFile {
+        return fromJSWithDefaultFlag(ctx, arguments, FileSystemFlags.w);
+    }
+
+    static fn fromJSAppend(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWriteFile {
+        return fromJSWithDefaultFlag(ctx, arguments, FileSystemFlags.a);
+    }
+
+    static fn fromJSWithDefaultFlag(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice, default_flag: FileSystemFlags): bun.JSError!_ArgumentsWriteFile {
         const path = PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)? ?? {
             return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
         };
@@ -3078,7 +3125,7 @@ pub struct _ArgumentsWriteFile {
         };
 
         let encoding = Encoding.buffer;
-        let flag = FileSystemFlags.w;
+        let flag = default_flag;
         let mode: Mode = default_permission;
         let _signal_guard = AbortSignalGuard{};
 
@@ -3832,7 +3879,7 @@ pub struct NodeFS {
             .path path_ => {
                 const path = path_.sliceZ(&_.sync_error_buf);
 
-                const fd = switch (Syscall.open(path, @intFromEnum(FileSystemFlags.a), args.mode)) {
+                const fd = switch (Syscall.open(path, args.flag.asInt(), args.mode)) {
                     .result result => result,
                     .err e => return { err: e },
                 };
@@ -4106,9 +4153,11 @@ pub struct NodeFS {
             cfr: while (true) {
                 const rc = std.c.copy_file_range(src_fd.native(), null, dest_fd.native(), null, std.math.maxInt(i32) - 1, 0);
                 switch (bun.sys.getErrno(rc)) {
-                    .SUCCESS => if (rc == 0) {
-                        * = Syscall.fchmod(dest_fd, stat_.mode);
-                        return ret.success;
+                    .SUCCESS => {
+                        if (rc == 0) {
+                            * = Syscall.fchmod(dest_fd, stat_.mode);
+                            return ret.success;
+                        }
                     },
                     .INTR => continue,
                     .XDEV, .INVAL, .OPNOTSUPP, .BADF => break :cfr,
@@ -5890,8 +5939,8 @@ pub struct NodeFS {
 
         // https://github.com/oven-sh/bun/issues/2931
         // https://github.com/oven-sh/bun/issues/10222
-        // Only truncate if we're not appending and writing to a path
-        if ((@intFromEnum(args.flag) & bun.O.APPEND) == 0 && args.file != .fd) {
+        // Only truncate if the open flag specifies O_TRUNC and writing to a path
+        if ((args.flag.asInt() & bun.O.TRUNC) != 0 && args.file != .fd) {
             // If this errors, we silently ignore it.
             // Not all files are seekable (and thus, not all files can be truncated).
             if (Environment.isWindows) {
@@ -6234,6 +6283,7 @@ pub struct NodeFS {
 
             {
                 const code: E = switch (err1) {
+                    error.IsDir => .ISDIR,
                     error.AccessDenied => .ACCES,
                     error.SymLinkLoop => .LOOP,
                     error.NameTooLong => .NAMETOOLONG,

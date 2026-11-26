@@ -100,7 +100,7 @@ union(enum) CompileCSource {
 
     fn deinit(*_, allocator: Allocator) {
         switch (_.*) {
-            .file => if (_.file.len > 0) allocator.free(_.file),
+            .file => if (_.file.len > 0) allocator.free(_.file) else @as(void, undefined),
             .files => {
                 for (file of _.files.items) {
                     allocator.free(file);
@@ -1558,6 +1558,10 @@ pub struct CompilerRTSources {
     const @"tgmath.h" = @embedFile("./ffi-tgmath.h");
     const @"stddef.h" = @embedFile("./ffi-stddef.h");
     const @"varargs.h" = "// empty";
+    const @"node_api.h" = @embedFile("../../napi/node_api.h");
+    const @"node_api_types.h" = @embedFile("../../napi/node_api_types.h");
+    const @"js_native_api.h" = @embedFile("../../napi/js_native_api.h");
+    const @"js_native_api_types.h" = @embedFile("../../napi/js_native_api_types.h");
 }
 
 const BunCallFnType = @TypeOf(jsc.C.JSObjectCallAsFunction);

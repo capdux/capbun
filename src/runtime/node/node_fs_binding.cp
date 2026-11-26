@@ -47,7 +47,10 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
 
             let args_guard = OptionalDeinitGuard<Arguments>{
                 val: if (Arguments != void)
-                    (Arguments.fromJS(globalObject, &slice_guard.val)?)
+                    (if (comptime function_name == .appendFile)
+                        Arguments.fromJSAppend(globalObject, &slice_guard.val)?
+                    else
+                        Arguments.fromJS(globalObject, &slice_guard.val)?)
                 else
                     @as(void, undefined),
             };
@@ -58,7 +61,10 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
 
             let result = function(&binding.node_fs, args_guard.val, .sync);
             return switch (result) {
-                .err => |e| globalObject.throwValue((e.toJS(globalObject))?),
+                .err => |e| if (e.syscall == .rm && e.getErrno() == .ISDIR)
+                    globalObject.throwValue(globalObject.ERR(.FS_EISDIR, "Path is a directory: rm returned EISDIR (is a directory) {s}", .{ e.path }).toJS())
+                else
+                    globalObject.throwValue((e.toJS(globalObject))?),
                 .result => |*res| globalObject.toJS(res),
             };
         }
@@ -72,10 +78,16 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
 
             let args_guard = OptionalDeinitGuard<Arguments>{
                 val: if (Arguments != void)
-                    Arguments.fromJS(globalObject, &slice_guard.val) catch e => {
-                        slice_guard.armed = true;
-                        return e;
-                    }
+                    (if (comptime function_name == .appendFile)
+                        Arguments.fromJSAppend(globalObject, &slice_guard.val) catch e => {
+                            slice_guard.armed = true;
+                            return e;
+                        }
+                    else
+                        Arguments.fromJS(globalObject, &slice_guard.val) catch e => {
+                            slice_guard.armed = true;
+                            return e;
+                        })
                 else
                     @as(void, undefined),
                 armed: false,
@@ -91,10 +103,10 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
             if (have_abort_signal) check_early_abort: {
                 if (args_guard.val.signal == null) break :check_early_abort;
                 const signal = args_guard.val.signal.?;
-                if (reason := signal.reasonIfAborted(globalObject)) {
+                if (abort_err := signal.nodeAbortErrorIfAborted(globalObject)) {
                     slice_guard.armed = true;
                     args_guard.armed = true;
-                    return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, reason.toJS(globalObject));
+                    return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, abort_err);
                 }
             }
 
