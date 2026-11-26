@@ -709,18 +709,15 @@ pub fn finishHeaderBlock(self: *Connection, sink: anytype) bool {
                                     saw_host = true;
                                 } else {
                                     if ((((!is_trailer) and is_request) and std.mem.eql(u8, name_b, "content-length"))) {
-                                        if (parseContentLengthStrict(value_b)) |parsed_cl| {
-                                            _ = &parsed_cl;
-                                            if (content_length) |prev_cl| {
-                                                _ = &prev_cl;
-                                                if ((prev_cl != parsed_cl)) {
-                                                    malformed = true;
-                                                }
-                                            } else {
-                                                content_length = parsed_cl;
-                                            }
-                                        } else {
+                                        if ((content_length != null)) {
                                             malformed = true;
+                                        } else {
+                                            if (parseContentLengthStrict(value_b)) |parsed_cl| {
+                                                _ = &parsed_cl;
+                                                content_length = parsed_cl;
+                                            } else {
+                                                malformed = true;
+                                            }
                                         }
                                     } else {
                                         if (std.mem.eql(u8, name_b, "te")) {
@@ -742,9 +739,53 @@ pub fn finishHeaderBlock(self: *Connection, sink: anytype) bool {
                 }
                 _ = sink.sinkOnHeader(target, (if (@typeInfo(@TypeOf(h)) == .@"enum" or @typeInfo(@TypeOf(h)) == .@"union") @tagName(h) else h.name), (if (@typeInfo(@TypeOf(h)) == .@"enum") @intFromEnum(h) else h.value), h.never_index);
             }
-            if ((((is_request and (!rejected)) and (!malformed)) and (!is_trailer))) {
-                if (((http_scheme and (!origin_form)) and (!(asterisk_form and saw_options)))) {
-                    malformed = true;
+            if (((is_request and (!rejected)) and (!malformed))) {
+                if (is_trailer) {
+                    if ((!self.header_end_stream)) {
+                        malformed = true;
+                    } else {
+                        if (self.streams.get(target)) |st| {
+                            _ = &st;
+                            if (st.content_length) |exp| {
+                                _ = &exp;
+                                if ((st.recv_body_bytes != exp)) {
+                                    malformed = true;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (((seen_pseudo & 1) == 0)) {
+                        malformed = true;
+                    } else {
+                        if (saw_connect) {
+                            if (((seen_pseudo & 32) != 0)) {
+                                if (((((self.is_server and (self.local_settings.enable_connect_protocol == 0)) or ((seen_pseudo & 2) == 0)) or ((seen_pseudo & 8) == 0)) or ((seen_pseudo & 4) == 0))) {
+                                    malformed = true;
+                                }
+                            } else {
+                                if (((((seen_pseudo & 2) != 0) or ((seen_pseudo & 8) != 0)) or ((seen_pseudo & 4) == 0))) {
+                                    malformed = true;
+                                }
+                            }
+                        } else {
+                            if ((((((seen_pseudo & 32) != 0) or ((seen_pseudo & 2) == 0)) or ((seen_pseudo & 8) == 0)) or (((seen_pseudo & 4) == 0) and (!saw_host)))) {
+                                malformed = true;
+                            } else {
+                                if (((http_scheme and (!origin_form)) and (!(asterisk_form and saw_options)))) {
+                                    malformed = true;
+                                }
+                            }
+                        }
+                    }
+                    if ((!malformed)) {
+                        if (content_length) |exp| {
+                            _ = &exp;
+                            if ((self.header_end_stream and (exp != 0))) {
+                                malformed = true;
+                            }
+                        }
+                    }
                 }
             }
             if (((((push_parent == 0) and self.is_server) and (!malformed)) and (!rejected))) {
@@ -879,6 +920,15 @@ pub fn finishStreamedData(self: *Connection, sink: anytype, inflight: DataInFlig
             if ((inflight.end_stream and (!inflight.discard))) {
                 if (self.streams.getPtr(inflight.stream_id)) |s| {
                     _ = &s;
+                    if (s.content_length) |exp| {
+                        _ = &exp;
+                        if ((s.recv_body_bytes != exp)) {
+                            _ = self.sendRstStream(sink, inflight.stream_id, .ProtocolError);
+                            s.state = .Closed;
+                            _ = sink.sinkOnStreamReset(inflight.stream_id, ErrorCode.ProtocolError.asU32());
+                            return;
+                        }
+                    }
                     if ((blk_catch_10: { break :blk_catch_10 ((stream.transition(s.state, .RecvEndStream)) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 null; }); })) |next| {
                         _ = &next;
                         s.state = next;
@@ -943,6 +993,15 @@ pub fn handleData(self: *Connection, sink: anytype, hdr: FrameHeader, payload: [
                         s.recv_body_bytes = (s.recv_body_bytes +| (if (comptime @typeInfo(@TypeOf((end - off))) == .@"enum") cp_cast_int(u64, @intFromEnum((end - off))) else cp_cast_int(u64, (end - off))));
                         if (s.bodyExceedsContentLength()) {
                             decision = DataDecision{ .rst = .ProtocolError };
+                        } else {
+                            if (wire.flags.has(hdr.flags, wire.flags.END_STREAM)) {
+                                if (s.content_length) |exp| {
+                                    _ = &exp;
+                                    if ((s.recv_body_bytes != exp)) {
+                                        decision = DataDecision{ .rst = .ProtocolError };
+                                    }
+                                }
+                            }
                         }
                     }
                 }

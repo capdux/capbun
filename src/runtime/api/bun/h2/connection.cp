@@ -774,12 +774,10 @@ pub struct Connection {
                         }
                         saw_host = true;
                     } else if (!is_trailer && is_request && std.mem.eql(u8, name_b, "content-length")) {
-                        if (parsed_cl := parseContentLengthStrict(value_b)) {
-                            if (prev_cl := content_length) {
-                                if (prev_cl != parsed_cl) malformed = true;
-                            } else {
-                                content_length = parsed_cl;
-                            }
+                        if (content_length != null) {
+                            malformed = true;
+                        } else if (parsed_cl := parseContentLengthStrict(value_b)) {
+                            content_length = parsed_cl;
                         } else {
                             malformed = true;
                         }
@@ -797,9 +795,48 @@ pub struct Connection {
             sink.sinkOnHeader(target, h.name, h.value, h.never_index);
         }
 
-        if (is_request && !rejected && !malformed && !is_trailer) {
-            if (http_scheme && !origin_form && !(asterisk_form && saw_options)) {
-                malformed = true;
+        if (is_request && !rejected && !malformed) {
+            if (is_trailer) {
+                if (!_.header_end_stream) {
+                    malformed = true;
+                } else if (st := _.streams.get(target)) {
+                    if (exp := st.content_length) {
+                        if (st.recv_body_bytes != exp) {
+                            malformed = true;
+                        }
+                    }
+                }
+            } else {
+                if ((seen_pseudo & 1) == 0) {
+                    malformed = true;
+                } else if (saw_connect) {
+                    if ((seen_pseudo & 32) != 0) {
+                        if ((_.is_server && _.local_settings.enable_connect_protocol == 0) ||
+                            (seen_pseudo & 2) == 0 || (seen_pseudo & 8) == 0 || (seen_pseudo & 4) == 0)
+                        {
+                            malformed = true;
+                        }
+                    } else {
+                        if ((seen_pseudo & 2) != 0 || (seen_pseudo & 8) != 0 || (seen_pseudo & 4) == 0) {
+                            malformed = true;
+                        }
+                    }
+                } else {
+                    if ((seen_pseudo & 32) != 0 || (seen_pseudo & 2) == 0 || (seen_pseudo & 8) == 0 ||
+                        ((seen_pseudo & 4) == 0 && !saw_host))
+                    {
+                        malformed = true;
+                    } else if (http_scheme && !origin_form && !(asterisk_form && saw_options)) {
+                        malformed = true;
+                    }
+                }
+                if (!malformed) {
+                    if (exp := content_length) {
+                        if (_.header_end_stream && exp != 0) {
+                            malformed = true;
+                        }
+                    }
+                }
             }
         }
         if (push_parent == 0 && _.is_server && !malformed && !rejected) {
@@ -933,6 +970,14 @@ pub struct Connection {
     fn finishStreamedData(*_, sink: auto, inflight: DataInFlight) {
         if (inflight.end_stream && !inflight.discard) {
             if (s := _.streams.getPtr(inflight.stream_id)) {
+                if (exp := s.content_length) {
+                    if (s.recv_body_bytes != exp) {
+                        _.sendRstStream(sink, inflight.stream_id, .ProtocolError);
+                        s.state = .Closed;
+                        sink.sinkOnStreamReset(inflight.stream_id, ErrorCode.ProtocolError.asU32());
+                        return;
+                    }
+                }
                 if (next := stream.transition(s.state, .RecvEndStream) catch null) {
                     s.state = next;
                 }
@@ -995,6 +1040,12 @@ pub struct Connection {
                     s.recv_body_bytes +|= @as(u64, end - off);
                     if (s.bodyExceedsContentLength()) {
                         decision = DataDecision{ rst: .ProtocolError };
+                    } else if (wire.flags.has(hdr.flags, wire.flags.END_STREAM)) {
+                        if (exp := s.content_length) {
+                            if (s.recv_body_bytes != exp) {
+                                decision = DataDecision{ rst: .ProtocolError };
+                            }
+                        }
                     }
                 }
             }

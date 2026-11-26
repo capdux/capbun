@@ -1657,12 +1657,29 @@ pub fn NewSocket(comptime ssl: bool): type {
             const raw_socket = _.socket.socket.get() ?? {
                 return globalObject.throwInvalidArguments("upgradeTLS requires an established socket", .{});
             };
-            if (_.isServer()) {
-                return globalObject.throw("Server-side upgradeTLS is not supported. Use upgradeDuplexToTLS with isServer: true instead.", .{});
-            }
 
             if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
                 return globalObject.throw("Expected options object", .{});
+            }
+
+            let is_server = false;
+            if (is_server_val := opts.getTruthy(globalObject, "isServer")?) {
+                is_server = is_server_val.toBoolean();
+            }
+            if (_.isServer() && !is_server) {
+                return globalObject.throw("Server-side upgradeTLS is not supported. Use upgradeDuplexToTLS with isServer: true instead.", .{});
+            }
+
+            let initial_data: ([]u8)? = null;
+            defer if (d := initial_data) bun.default_allocator.free(d);
+            if (init_val := opts.getTruthy(globalObject, "initialData")?) {
+                let init_buf = (jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, init_val)?) ?? {
+                    return globalObject.throwInvalidArgumentTypeValue("initialData", "string or Buffer", init_val);
+                };
+                defer init_buf.deinit();
+                if (init_buf.slice().len > 0) {
+                    initial_data = bun.handleOom(bun.default_allocator.dupe(u8, init_buf.slice()));
+                }
             }
 
             const socket_obj_opt = opts.get(globalObject, "socket")?;
@@ -1746,7 +1763,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             if (_ssl_opts_guard.val != null) {
                 cfg_opt = bun.cast(OptSSLConfig, unsafe { &_ssl_opts_guard.val.? });
             }
-            const reject_unauthorized = upgradeRejectPolicy(vm, cfg_opt, false, _ctx_guard.ctx);
+            const reject_unauthorized = upgradeRejectPolicy(vm, cfg_opt, is_server, _ctx_guard.ctx);
 
             let tls = bun.new(TLSSocket, .{
                 .ref_count = .init(),
@@ -1758,7 +1775,8 @@ pub fn NewSocket(comptime ssl: bool): type {
                 .owned_ssl_ctx = _ctx_guard.ctx,
                 .flags = .{
                     .reject_unauthorized = reject_unauthorized,
-                    .defers_server_identity = defers_server_identity,
+                    .defers_server_identity = defers_server_identity && !is_server,
+                    .tls_server_role = is_server,
                 },
             });
             if (conn_ref := _.connection) {
@@ -1767,7 +1785,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             _ctx_guard.ctx = null;
 
             const group = vm.rareData().bunConnectGroup(vm, true);
-            const new_raw = raw_socket.adoptTLS(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, @sizeOf(OpaquePtr), @sizeOf(OpaquePtr)) ?? {
+            const new_raw = raw_socket.adoptTLSRole(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, !is_server, @sizeOf(OpaquePtr), @sizeOf(OpaquePtr)) ?? {
                 const get_err_fn = BoringSSL.ERR_get_error;
                 const err_code = get_err_fn();
                 const _err_clear_guard = SSLErrClearGuard{ has_err: err_code != 0 };
@@ -1812,7 +1830,6 @@ pub fn NewSocket(comptime ssl: bool): type {
             });
             raw.ref();
             tls.twin = raw;
-            new_raw.setSslRawTap(true);
 
             const tls_js_value = tls.getThisValue(globalObject);
             const raw_js_value = raw.getThisValue(globalObject);
@@ -1823,7 +1840,14 @@ pub fn NewSocket(comptime ssl: bool): type {
             if (was_reffed) tls.poll_ref.ref(vm);
 
             tls.onOpen(tls.socket);
-            new_raw.startTLSHandshake();
+            if (d := initial_data) {
+                new_raw.feedTLSInitialData(d);
+            } else {
+                new_raw.startTLSHandshake();
+            }
+            if (!new_raw.isClosed()) {
+                new_raw.setSslRawTap(true);
+            }
 
             const array = jsc.JSValue.createEmptyArray(globalObject, 2)?;
             array.putIndex(globalObject, 0, raw_js_value)?;

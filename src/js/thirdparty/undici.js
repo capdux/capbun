@@ -449,6 +449,26 @@ function buildConnector(_options = {}) {
   };
 }
 
+function ping(ws, body) {
+  if (body !== undefined && !Buffer.isBuffer(body)) {
+    throw new TypeError("Expected buffer payload");
+  }
+  if (!(ws instanceof WebSocket)) {
+    throw new TypeError("Expected WebSocket");
+  }
+  if (body !== undefined && body.byteLength > 125) {
+    throw new TypeError("A PING frame cannot have a body larger than 125 bytes.");
+  }
+  if (ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  if (body === undefined) {
+    ws.ping();
+  } else {
+    ws.ping(body);
+  }
+}
+
 // Update the exports to match the exact structure
 const moduleExports = {
   Agent,
@@ -482,6 +502,7 @@ const moduleExports = {
   mockErrors,
   MockPool,
   parseMIMEType,
+  ping,
   pipeline,
   Pool,
   ProxyAgent,

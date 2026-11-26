@@ -1046,3 +1046,9 @@
 - **`sql/sql-close-pending-connection.test.ts`**：`JSMySQLConnection.cp` `doClose` 非 `.connected` 路径改用 `fail` 立即触发 `on_close` -> `mysql` 全部通过。
 - **`node/events/event-emitter.test.ts`**：`JSEventEmitterCustom.cpp/.h`, `JSEventEmitter.cpp`, `events.ts` 修复异常透传、`async once`、AbortError、GC 释放 -> **88 pass, 3 fail**（原 21 fail 收敛至 3 fail）。
 - **`TOML.stringify` & `cli/install`**：`TOMLObject.cp` 补齐 `Bun.TOML.stringify` 解锁 `test-registry.ts`，`dedupe.cp` 与 `install_with_manager.cp` 补齐 `collapseAppended` 收敛逻辑。
+
+### 2026-11-26 Batch 8 测试修复与验证（`first_party` / `sql/postgres` / `node/http2` / `node/tls`）
+- **`first_party`**：`undici.js` 实现 `ping(ws, body)`，`WebSocket.cpp` 发布 `undici:websocket:ping`/`pong` `diagnostics_channel` 事件 -> `undici` Ping/Pong 全部通过。
+- **`sql/postgres`**：`postgres.ts` `#onClose` 清除 `canBeConnected`，`PostgresSQLConnection.cp`/`MySQLConnection.cp` 改用 `socket.terminate()`，`libusockets.h`/`openssl.c`/`us_socket_t.cp`/`socket.cp` 支持 `upgradeTLS({ isServer, initialData })` -> `mid-reconnect` 通过。
+- **`node/http2`**：`h2_frame_parser.cp` 修复 `handleReceivedStreamID` `stream.setContext`、`SETTINGS` ACK 队列与 `PUSH_PROMISE`；`h2/connection.cp` 补全 RFC 9113 §8.3.1 伪头与 §8.1 `content-length` 校验 -> 39 pass, 83 fail (Ran 122 tests)。
+- **`node/tls`**：`uws.cp` 修正 `NODE_EXTRA_CA_CERTS` 告警格式，`net.ts`/`openssl.c` 透传 `requestCert` 与 `ERR_SSL_PEER_DID_NOT_RETURN_A_CERTIFICATE` -> 42 pass, 30 fail (Ran 74 tests)。

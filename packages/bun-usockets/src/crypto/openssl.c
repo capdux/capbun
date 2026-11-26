@@ -1052,9 +1052,20 @@ static void ssl_update_handshake(struct us_socket_t *s) {
   if (result <= 0) {
     int err = SSL_get_error(s_ssl(s), result);
     if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+      unsigned long ssl_err = ERR_peek_error();
       if (err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL) {
         ERR_clear_error();
         s->ssl_fatal_error = 1;
+      }
+      if (ERR_GET_LIB(ssl_err) == ERR_LIB_SSL &&
+          ERR_GET_REASON(ssl_err) == SSL_R_PEER_DID_NOT_RETURN_A_CERTIFICATE) {
+        s->ssl_handshake_state = HANDSHAKE_COMPLETED;
+        struct us_bun_verify_error_t verify_error = {
+            .error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+            .code = "ERR_SSL_PEER_DID_NOT_RETURN_A_CERTIFICATE",
+            .reason = "Peer did not return a certificate"};
+        us_dispatch_handshake(s, 0, verify_error);
+        return;
       }
       ssl_trigger_handshake(s, 0);
       return;
@@ -1323,17 +1334,17 @@ void us_internal_ssl_handshake_abort(struct us_socket_t *s) {
 
 /* ── Adopt-TLS (STARTTLS / Bun.connect upgrade) ──────────────────────────── */
 
-struct us_socket_t *us_socket_adopt_tls(struct us_socket_t *s,
-                                        struct us_socket_group_t *group,
-                                        unsigned char kind, struct ssl_ctx_st *ssl_ctx,
-                                        const char *sni, int old_ext_size,
-                                        int ext_size) {
+struct us_socket_t *us_socket_adopt_tls_role(struct us_socket_t *s,
+                                             struct us_socket_group_t *group,
+                                             unsigned char kind, struct ssl_ctx_st *ssl_ctx,
+                                             const char *sni, int is_client,
+                                             int old_ext_size, int ext_size) {
   if (us_socket_is_closed(s)) return NULL;
 
   struct us_socket_t *new_s = us_socket_adopt(s, group, kind, old_ext_size, ext_size);
   if (!new_s) return NULL;
 
-  us_internal_ssl_attach(new_s, ssl_ctx, /*is_client*/1, sni, NULL);
+  us_internal_ssl_attach(new_s, ssl_ctx, is_client, sni, NULL);
   us_socket_resume(new_s);
   /* Do NOT kick the handshake or dispatch on_open here — the caller hasn't
    * repointed the ext slot yet, so any dispatch (open/handshake/close) would
@@ -1342,10 +1353,23 @@ struct us_socket_t *us_socket_adopt_tls(struct us_socket_t *s,
   return new_s;
 }
 
+struct us_socket_t *us_socket_adopt_tls(struct us_socket_t *s,
+                                        struct us_socket_group_t *group,
+                                        unsigned char kind, struct ssl_ctx_st *ssl_ctx,
+                                        const char *sni, int old_ext_size,
+                                        int ext_size) {
+  return us_socket_adopt_tls_role(s, group, kind, ssl_ctx, sni, /*is_client*/1, old_ext_size, ext_size);
+}
+
 void us_socket_start_tls_handshake(struct us_socket_t *s) {
   if (!s->ssl || us_socket_is_closed(s)) return;
   ssl_set_loop_data(s);
   ssl_update_handshake(s);
+}
+
+void us_socket_feed_tls_initial_data(struct us_socket_t *s, const char *data, int length) {
+  if (!s->ssl || us_socket_is_closed(s) || length <= 0) return;
+  us_internal_ssl_on_data(s, (char *)data, length);
 }
 
 /* ── SNI on listen sockets ───────────────────────────────────────────────── */

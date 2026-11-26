@@ -1278,7 +1278,7 @@ pub struct DataCellsGuard<P, C> {
                 _.poll_ref.unref(_.vm);
             } else {
                 _.poll_ref.ref(_.vm);
-                _.socket.close();
+                _.socket.terminate();
             }
         }
 

@@ -1229,6 +1229,11 @@ pub fn setSettings(self: *H2FrameParser, settings: FullSettingsPayload) bool {
             _ = settingsHeader.write(@TypeOf(writer), writer);
             self.outstandingSettings = (self.outstandingSettings + 1);
             self.localSettings = settings;
+            _ = self.ensureEngine();
+            if (self.engine) |*eng| {
+                _ = &eng;
+                _ = (blk_catch_8: { break :blk_catch_8 (((eng.*).pending_local_window_acks.append(self.allocator, self.localSettings.initialWindowSize)) catch |__ce_8| { _ = &__ce_8;  }); });
+            }
             _ = self.localSettings.write(@TypeOf(writer), writer);
             _ = self.write((&buffer));
             return true;
@@ -1250,7 +1255,7 @@ pub fn abortStream(self: *H2FrameParser, stream: *Stream, abortReason: jsc.JSVal
             _ = &value;
             stream.rstCode = value;
             value = @byteSwap(value);
-            _ = (blk_catch_8: { break :blk_catch_8 ((writer.write(std.mem.asBytes((&value)))) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 0; }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((writer.write(std.mem.asBytes((&value)))) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); });
             const old_state = stream.state;
             stream.state = .CLOSED;
             const identifier = stream.getIdentifier();
@@ -1278,7 +1283,7 @@ pub fn endStream(self: *H2FrameParser, stream: *Stream, rstCode: ErrorCode) void
             _ = &value;
             stream.rstCode = value;
             value = @byteSwap(value);
-            _ = (blk_catch_9: { break :blk_catch_9 ((writer.write(std.mem.asBytes((&value)))) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 0; }); });
+            _ = (blk_catch_10: { break :blk_catch_10 ((writer.write(std.mem.asBytes((&value)))) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); });
             stream.state = .CLOSED;
             const identifier = stream.getIdentifier();
             _ = identifier.ensureStillAlive();
@@ -1308,12 +1313,12 @@ pub fn sendGoAway(self: *H2FrameParser, streamIdentifier: u32, rstCode: ErrorCod
             var value: u32 = @intFromEnum(rstCode);
             _ = &value;
             value = @byteSwap(value);
-            _ = (blk_catch_10: { break :blk_catch_10 ((writer.write(std.mem.asBytes((&value)))) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((writer.write(std.mem.asBytes((&value)))) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); });
             _ = self.write((&buffer));
             if ((debug_data.len > 0)) {
                 _ = self.write(debug_data);
             }
-            const chunk = (blk_catch_11: { break :blk_catch_11 ((self.handlers.binary_type.toJS(debug_data, self.handlers.globalObject)) catch |e| { _ = &e; _ = self.dispatch(.onError, self.globalThis.takeException(e));
+            const chunk = (blk_catch_12: { break :blk_catch_12 ((self.handlers.binary_type.toJS(debug_data, self.handlers.globalObject)) catch |e| { _ = &e; _ = self.dispatch(.onError, self.globalThis.takeException(e));
             return; }); });
             if (emitError) {
                 if ((rstCode != .NO_ERROR)) {
@@ -1334,7 +1339,7 @@ pub fn sendAltSvc(self: *H2FrameParser, streamIdentifier: u32, origin_str: []con
             var frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_ALTSVC), .flags = 0, .streamIdentifier = streamIdentifier, .length = @intCast(((origin_str.len + alt.len) + 2)) };
             _ = &frame;
             _ = frame.write(@TypeOf(writer), writer);
-            _ = (blk_catch_12: { break :blk_catch_12 ((writer.writeInt(u16, @intCast(origin_str.len), .big)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 0; }); });
+            _ = (blk_catch_13: { break :blk_catch_13 ((writer.writeInt(u16, @intCast(origin_str.len), .big)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 0; }); });
             _ = self.write((&buffer));
             if ((origin_str.len > 0)) {
                 _ = self.write(origin_str);
@@ -1358,7 +1363,7 @@ pub fn sendPing(self: *H2FrameParser, ack: bool, payload: []const u8) void {
             var frame = FrameHeader{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_PING), .flags = (if (ack) @intFromEnum(PingFrameFlags.ACK) else 0), .streamIdentifier = 0, .length = 8 };
             _ = &frame;
             _ = frame.write(@TypeOf(writer), writer);
-            _ = (blk_catch_13: { break :blk_catch_13 ((writer.write(payload)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 0; }); });
+            _ = (blk_catch_14: { break :blk_catch_14 ((writer.write(payload)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 0; }); });
             _ = self.write((&buffer));
     }
 
@@ -1370,10 +1375,15 @@ pub fn sendPrefaceAndSettings(self: *H2FrameParser) void {
             var preface_stream = std.io.fixedBufferStream((&preface_buffer));
             _ = &preface_stream;
             const writer = preface_stream.writer();
-            _ = (blk_catch_14: { break :blk_catch_14 ((writer.write("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 0; }); });
+            _ = (blk_catch_15: { break :blk_catch_15 ((writer.write("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 0; }); });
             var settingsHeader: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_SETTINGS), .flags = 0, .streamIdentifier = 0, .length = FullSettingsPayload.byteSize };
             _ = &settingsHeader;
             self.outstandingSettings = (self.outstandingSettings + 1);
+            _ = self.ensureEngine();
+            if (self.engine) |*eng| {
+                _ = &eng;
+                _ = (blk_catch_16: { break :blk_catch_16 (((eng.*).pending_local_window_acks.append(self.allocator, self.localSettings.initialWindowSize)) catch |__ce_16| { _ = &__ce_16;  }); });
+            }
             _ = settingsHeader.write(@TypeOf(writer), writer);
             _ = self.localSettings.write(@TypeOf(writer), writer);
             _ = self.write((&preface_buffer));
@@ -1650,7 +1660,7 @@ else => {
                     _ = &_wb_guard;
                     var ___wb_guard_moved = false; _ = &___wb_guard_moved;
                     defer if (!___wb_guard_moved) { ___wb_guard_moved = true; const __T = @TypeOf(_wb_guard); if (@typeInfo(__T) == .optional) { if (_wb_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _wb_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _wb_guard; _drop_val.__cp_deinit(); } };
-                    const output_value = (blk_catch_15: { break :blk_catch_15 ((self.handlers.binary_type.toJS(bytes, self.handlers.globalObject)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 .zero; }); });
+                    const output_value = (blk_catch_17: { break :blk_catch_17 ((self.handlers.binary_type.toJS(bytes, self.handlers.globalObject)) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 .zero; }); });
                     const result = self.call(.onWrite, output_value);
                     if ((result.isBoolean() and (!result.toBoolean()))) {
                         self.has_nonnative_backpressure = true;
@@ -1692,7 +1702,7 @@ else => {
                     _ = self.globalThis.vm().reportExtraMemory(bytes.len);
                     return false;
                 }
-                const output_value = (blk_catch_16: { break :blk_catch_16 ((self.handlers.binary_type.toJS(bytes, self.handlers.globalObject)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 .zero; }); });
+                const output_value = (blk_catch_18: { break :blk_catch_18 ((self.handlers.binary_type.toJS(bytes, self.handlers.globalObject)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 .zero; }); });
                 const result = self.call(.onWrite, output_value);
                 const code = (if (result.isNumber()) result.to(i32) else -1);
                 switch (code) {
@@ -1875,7 +1885,7 @@ pub fn decodeHeaderBlock(self: *H2FrameParser, payload: []const u8, stream: *Str
             var cl_count: u8 = 0;
             _ = &cl_count;
             while (true) {
-                const header = (blk_catch_17: { break :blk_catch_17 ((self.decode(payload[offset..])) catch |__ce_17| { _ = &__ce_17; break; }); });
+                const header = (blk_catch_19: { break :blk_catch_19 ((self.decode(payload[offset..])) catch |__ce_19| { _ = &__ce_19; break; }); });
                 offset = (offset + header.next);
                 _ = log("header {s} {s}", .{ (if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name), (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value) });
                 if ((self.isServer and strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name), ":status"))) {
@@ -1966,7 +1976,7 @@ pub fn decodeHeaderBlock(self: *H2FrameParser, payload: []const u8, stream: *Str
                                         if (((cl_count > 0) or ((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value).len == 0))) {
                                             malformed = true;
                                         } else {
-                                            const parsed = (blk_catch_18: { break :blk_catch_18 ((std.fmt.parseInt(u64, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 10)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 null; }); });
+                                            const parsed = (blk_catch_20: { break :blk_catch_20 ((std.fmt.parseInt(u64, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 10)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 null; }); });
                                             if (parsed) |p| {
                                                 _ = &p;
                                                 expected_cl = p;
@@ -2129,7 +2139,7 @@ pub fn handleDataFrame(self: *H2FrameParser, frame: FrameHeader, data: []const u
                             return end;
                         }
                     }
-                    const chunk = (blk_catch_19: { break :blk_catch_19 ((self.handlers.binary_type.toJS(payload, self.handlers.globalObject)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 .zero; }); });
+                    const chunk = (blk_catch_21: { break :blk_catch_21 ((self.handlers.binary_type.toJS(payload, self.handlers.globalObject)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 .zero; }); });
                     _ = self.dispatchWithExtra(.onStreamData, stream.getIdentifier(), chunk);
                     emitted = true;
                 }
@@ -2182,7 +2192,7 @@ pub fn handleGoAwayFrame(self: *H2FrameParser, frame: FrameHeader, data: []const
                 _ = &content;
                 const payload = content.data;
                 const error_code = u32FromBytes(payload[4..8]);
-                const chunk = (blk_catch_20: { break :blk_catch_20 ((self.handlers.binary_type.toJS(payload[8..], self.handlers.globalObject)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 .zero; }); });
+                const chunk = (blk_catch_22: { break :blk_catch_22 ((self.handlers.binary_type.toJS(payload[8..], self.handlers.globalObject)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 .zero; }); });
                 _ = self.readBuffer.reset();
                 _ = self.dispatchWith2Extra(.onGoAway, jsc.JSValue.jsNumber(error_code), jsc.JSValue.jsNumber(self.lastStreamID), chunk);
                 return content.end;
@@ -2219,7 +2229,7 @@ pub fn handleOriginFrame(self: *H2FrameParser, frame: FrameHeader, data: []const
                 while ((payload.len > 0)) {
                     var stream = std.io.fixedBufferStream(payload);
                     _ = &stream;
-                    const origin_length = (blk_catch_21: { break :blk_catch_21 ((stream.reader().readInt(u16, .big)) catch |e| { _ = &e; _ = log("error reading ORIGIN frame size: {s}", .{ @errorName(e) });
+                    const origin_length = (blk_catch_23: { break :blk_catch_23 ((stream.reader().readInt(u16, .big)) catch |e| { _ = &e; _ = log("error reading ORIGIN frame size: {s}", .{ @errorName(e) });
                     _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid ORIGIN frame size", self.lastStreamID, true);
                     return content.end; }); });
                     var origin_str = payload[2..];
@@ -2264,7 +2274,7 @@ pub fn handleAltsvcFrame(self: *H2FrameParser, frame: FrameHeader, data: []const
                 var stream = std.io.fixedBufferStream(payload);
                 _ = &stream;
                 _ = self.readBuffer.reset();
-                const origin_length = (blk_catch_22: { break :blk_catch_22 ((stream.reader().readInt(u16, .big)) catch |__ce_22| { _ = &__ce_22; _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid ALTSVC frame size", self.lastStreamID, true);
+                const origin_length = (blk_catch_24: { break :blk_catch_24 ((stream.reader().readInt(u16, .big)) catch |__ce_24| { _ = &__ce_24; _ = self.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid ALTSVC frame size", self.lastStreamID, true);
                 return content.end; }); });
                 const origin_and_value = payload[2..];
                 if ((origin_and_value.len < origin_length)) {
@@ -2342,7 +2352,7 @@ pub fn handlePingFrame(self: *H2FrameParser, frame: FrameHeader, data: []const u
                 } else {
                     self.outStandingPings = (self.outStandingPings -| 1);
                 }
-                var buffer = (blk_catch_23: { break :blk_catch_23 ((self.handlers.binary_type.toJS(payload, self.handlers.globalObject)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 .zero; }); });
+                var buffer = (blk_catch_25: { break :blk_catch_25 ((self.handlers.binary_type.toJS(payload, self.handlers.globalObject)) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 .zero; }); });
                 _ = &buffer;
                 _ = self.dispatchWithExtra(.onPing, buffer, jsc.JSValue.jsBoolean((!isNotACK)));
                 return content.end;
@@ -2681,7 +2691,13 @@ pub fn handleReceivedStreamID(self: *H2FrameParser, streamIdentifier: u32) ?*Str
             _ = self.deref();
             }
             const _args = .{ ctx_value, jsc.JSValue.jsNumber(streamIdentifier) };
-            _ = (blk_catch_24: { break :blk_catch_24 ((callback.call(self.handlers.globalObject, ctx_value, (&_args))) catch |e| { _ = &e; break :blk_catch_24 self.handlers.globalObject.reportActiveExceptionAsUnhandled(e); }); });
+            const result = (blk_catch_26: { break :blk_catch_26 ((callback.call(self.handlers.globalObject, ctx_value, (&_args))) catch |e| { _ = &e; break :blk_catch_26 blk: {
+            _ = self.handlers.globalObject.reportActiveExceptionAsUnhandled(e);
+            break :blk JSValue.js_undefined;
+}; }); });
+            if (result.isObject()) {
+                _ = stream.setContext(result, self.handlers.globalObject);
+            }
             return stream;
     }
 
@@ -2958,7 +2974,7 @@ pub fn loadSettingsFromJSValue(self: *H2FrameParser, globalObject: *jsc.JSGlobal
                         _ = &setting_id_str;
                         var __setting_id_str_moved = false; _ = &__setting_id_str_moved;
                         defer if (!__setting_id_str_moved) { __setting_id_str_moved = true; const __T = @TypeOf(setting_id_str); if (@typeInfo(__T) == .optional) { if (setting_id_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { setting_id_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = setting_id_str; _drop_val.__cp_deinit(); } };
-                        const setting_id = (blk_catch_25: { break :blk_catch_25 ((std.fmt.parseInt(u32, setting_id_str.val.slice(), 10)) catch |__ce_25| { _ = &__ce_25; return globalObject.ERR(.HTTP2_INVALID_SETTING_VALUE_RangeError, "Invalid custom setting identifier", .{}).throw(); }); });
+                        const setting_id = (blk_catch_27: { break :blk_catch_27 ((std.fmt.parseInt(u32, setting_id_str.val.slice(), 10)) catch |__ce_27| { _ = &__ce_27; return globalObject.ERR(.HTTP2_INVALID_SETTING_VALUE_RangeError, "Invalid custom setting identifier", .{}).throw(); }); });
                         if ((setting_id > 65535)) {
                             return globalObject.ERR(.HTTP2_INVALID_SETTING_VALUE_RangeError, "Invalid custom setting identifier", .{}).throw();
                         }
@@ -3139,7 +3155,7 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                 var frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_ORIGIN), .flags = 0, .streamIdentifier = 0, .length = @intCast((slice.len + 2)) };
                 _ = &frame;
                 _ = frame.write(@TypeOf(writer), writer);
-                _ = (blk_catch_26: { break :blk_catch_26 ((writer.writeInt(u16, @intCast(slice.len), .big)) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 0; }); });
+                _ = (blk_catch_28: { break :blk_catch_28 ((writer.writeInt(u16, @intCast(slice.len), .big)) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 0; }); });
                 _ = self.write((&buffer));
                 if ((slice.len > 0)) {
                     _ = self.write(slice);
@@ -3152,7 +3168,7 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                     var stream = std.io.fixedBufferStream((&buffer));
                     _ = &stream;
                     const writer = stream.writer();
-                    _ = (blk_catch_27: { break :blk_catch_27 ((stream.seekTo(FrameHeader.byteSize)) catch |__ce_27| { _ = &__ce_27;  }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((stream.seekTo(FrameHeader.byteSize)) catch |__ce_29| { _ = &__ce_29;  }); });
                     var value_iter = try origin_arg.arrayIterator(globalObject);
                     _ = &value_iter;
                     while (try value_iter.next()) |item| {
@@ -3165,8 +3181,8 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                         defer if (!__origin_string_moved) { __origin_string_moved = true; const __T = @TypeOf(origin_string); if (@typeInfo(__T) == .optional) { if (origin_string) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { origin_string.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = origin_string; _drop_val.__cp_deinit(); } };
                         const slice = origin_string.val.slice();
                         const fits = (if ((slice.len <= std.math.maxInt(u16))) blk: {
-                        _ = (blk_catch_28: { break :blk_catch_28 ((writer.writeInt(u16, @intCast(slice.len), .big)) catch |__ce_28| { _ = &__ce_28; break :blk false; }); });
-                        _ = (blk_catch_29: { break :blk_catch_29 ((writer.write(slice)) catch |__ce_29| { _ = &__ce_29; break :blk false; }); });
+                        _ = (blk_catch_30: { break :blk_catch_30 ((writer.writeInt(u16, @intCast(slice.len), .big)) catch |__ce_30| { _ = &__ce_30; break :blk false; }); });
+                        _ = (blk_catch_31: { break :blk_catch_31 ((writer.write(slice)) catch |__ce_31| { _ = &__ce_31; break :blk false; }); });
                         break :blk true;
 } else false);
                         if ((!fits)) {
@@ -3174,7 +3190,7 @@ pub fn origin(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callframe
                             return globalObject.throwValue(exception);
                         }
                     }
-                    const total_length: u32 = @intCast((blk_catch_30: { break :blk_catch_30 ((stream.getPos()) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 FrameHeader.byteSize; }); }));
+                    const total_length: u32 = @intCast((blk_catch_32: { break :blk_catch_32 ((stream.getPos()) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 FrameHeader.byteSize; }); }));
                     var frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_ORIGIN), .flags = 0, .streamIdentifier = 0, .length = @intCast((total_length - FrameHeader.byteSize)) };
                     _ = &frame;
                     _ = stream.reset();
@@ -3511,9 +3527,9 @@ pub fn sendData(self: *H2FrameParser, stream: *Stream, payload: []const u8, clos
                             _ = &buffer;
                             _ = bun.memmove(buffer[1..][0..slice.len], slice);
                             buffer[cp_cast_int(usize, 0)] = padding;
-                            _ = (blk_catch_31: { break :blk_catch_31 ((writer.write(buffer[0..payload_size])) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 @as(usize, 0); }); });
+                            _ = (blk_catch_33: { break :blk_catch_33 ((writer.write(buffer[0..payload_size])) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 @as(usize, 0); }); });
                         } else {
-                            _ = (blk_catch_32: { break :blk_catch_32 ((writer.write(slice)) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 @as(usize, 0); }); });
+                            _ = (blk_catch_34: { break :blk_catch_34 ((writer.write(slice)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 @as(usize, 0); }); });
                         }
                     }
                 }
@@ -3634,7 +3650,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
             _ = &encoded_headers_guard;
             var __encoded_headers_guard_moved = false; _ = &__encoded_headers_guard_moved;
             defer if (!__encoded_headers_guard_moved) { __encoded_headers_guard_moved = true; const __T = @TypeOf(encoded_headers_guard); if (@typeInfo(__T) == .optional) { if (encoded_headers_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { encoded_headers_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = encoded_headers_guard; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_33: { break :blk_catch_33 ((encoded_headers_guard.val.ensureTotalCapacity(alloc, shared_request_buffer.len)) catch |__ce_33| { _ = &__ce_33; return globalObject.throw("Failed to allocate header buffer", .{}); }); });
+            _ = (blk_catch_35: { break :blk_catch_35 ((encoded_headers_guard.val.ensureTotalCapacity(alloc, shared_request_buffer.len)) catch |__ce_35| { _ = &__ce_35; return globalObject.throw("Failed to allocate header buffer", .{}); }); });
             var name_buffer: [4096]u8 = undefined;
             _ = &name_buffer;
             _ = @memset((&name_buffer), 0);
@@ -3664,7 +3680,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                     const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ name });
                     return globalObject.throwValue(exception);
                 }
-                const validated_name = (blk_catch_34: { break :blk_catch_34 ((H2FrameParser.toValidHeaderName(name, (&name_buffer))) catch |__ce_34| { _ = &__ce_34; const exception = globalObject.toTypeError(.INVALID_HTTP_TOKEN, "The arguments Header name is invalid. Received {s}", .{ name });
+                const validated_name = (blk_catch_36: { break :blk_catch_36 ((H2FrameParser.toValidHeaderName(name, (&name_buffer))) catch |__ce_36| { _ = &__ce_36; const exception = globalObject.toTypeError(.INVALID_HTTP_TOKEN, "The arguments Header name is invalid. Received {s}", .{ name });
                 return globalObject.throwValue(exception); }); });
                 if (js_value.jsType().isArray()) {
                     var value_iter = try js_value.arrayIterator(globalObject);
@@ -3683,7 +3699,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                             const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                             return globalObject.throwValue(exception);
                         }
-                        const value_str = (blk_catch_35: { break :blk_catch_35 ((item.toJSString(globalObject)) catch |__ce_35| { _ = &__ce_35; _ = globalObject.clearException();
+                        const value_str = (blk_catch_37: { break :blk_catch_37 ((item.toJSString(globalObject)) catch |__ce_37| { _ = &__ce_37; _ = globalObject.clearException();
                         const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                         return globalObject.throwValue(exception); }); });
                         const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
@@ -3694,7 +3710,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                             return globalObject.throwValue(exception);
                         }
                         _ = log("encode header {s} {s}", .{ validated_name, value });
-                        _ = (blk_catch_36: { break :blk_catch_36 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                        _ = (blk_catch_38: { break :blk_catch_38 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                             return globalObject.throw("Failed to allocate header buffer", .{});
                         }
                         stream.state = .CLOSED;
@@ -3716,7 +3732,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                         }
                         single_value_headers[cp_cast_int(usize, idx)] = true;
                     }
-                    const value_str = (blk_catch_37: { break :blk_catch_37 ((js_value.toJSString(globalObject)) catch |__ce_37| { _ = &__ce_37; _ = globalObject.clearException();
+                    const value_str = (blk_catch_39: { break :blk_catch_39 ((js_value.toJSString(globalObject)) catch |__ce_39| { _ = &__ce_39; _ = globalObject.clearException();
                     const exception = globalObject.toTypeError(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name });
                     return globalObject.throwValue(exception); }); });
                     const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
@@ -3727,7 +3743,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                         return globalObject.throwValue(exception);
                     }
                     _ = log("encode header {s} {s}", .{ name, value });
-                    _ = (blk_catch_38: { break :blk_catch_38 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = (blk_catch_40: { break :blk_catch_40 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                         return globalObject.throw("Failed to allocate header buffer", .{});
                     }
                     stream.state = .CLOSED;
@@ -3750,14 +3766,14 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                 var frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_HEADERS), .flags = (base_flags | @intFromEnum(HeadersFrameFlags.END_HEADERS)), .streamIdentifier = stream.id, .length = @intCast(encoded_size) };
                 _ = &frame;
                 _ = frame.write(@TypeOf(writer), writer);
-                _ = (blk_catch_39: { break :blk_catch_39 ((writer.write(encoded_data)) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 @as(usize, 0); }); });
+                _ = (blk_catch_41: { break :blk_catch_41 ((writer.write(encoded_data)) catch |__ce_41| { _ = &__ce_41; break :blk_catch_41 @as(usize, 0); }); });
             } else {
                 _ = log("Using CONTINUATION frames for trailers: encoded_size={d} max_frame_size={d}", .{ encoded_size, actual_max_frame_size });
                 const first_chunk_size = actual_max_frame_size;
                 var headers_frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_HEADERS), .flags = base_flags, .streamIdentifier = stream.id, .length = @intCast(first_chunk_size) };
                 _ = &headers_frame;
                 _ = headers_frame.write(@TypeOf(writer), writer);
-                _ = (blk_catch_40: { break :blk_catch_40 ((writer.write(encoded_data[0..first_chunk_size])) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 @as(usize, 0); }); });
+                _ = (blk_catch_42: { break :blk_catch_42 ((writer.write(encoded_data[0..first_chunk_size])) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 @as(usize, 0); }); });
                 var offset: usize = first_chunk_size;
                 _ = &offset;
                 while ((offset < encoded_size)) {
@@ -3767,7 +3783,7 @@ pub fn sendTrailers(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, cal
                     var cont_frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_CONTINUATION), .flags = (if (is_last) @intFromEnum(HeadersFrameFlags.END_HEADERS) else 0), .streamIdentifier = stream.id, .length = @intCast(chunk_size) };
                     _ = &cont_frame;
                     _ = cont_frame.write(@TypeOf(writer), writer);
-                    _ = (blk_catch_41: { break :blk_catch_41 ((writer.write(encoded_data[offset..][0..chunk_size])) catch |__ce_41| { _ = &__ce_41; break :blk_catch_41 @as(usize, 0); }); });
+                    _ = (blk_catch_43: { break :blk_catch_43 ((writer.write(encoded_data[offset..][0..chunk_size])) catch |__ce_43| { _ = &__ce_43; break :blk_catch_43 @as(usize, 0); }); });
                     offset = (offset + chunk_size);
                 }
             }
@@ -4043,7 +4059,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
             _ = &encoded_headers_guard;
             var __encoded_headers_guard_moved = false; _ = &__encoded_headers_guard_moved;
             defer if (!__encoded_headers_guard_moved) { __encoded_headers_guard_moved = true; const __T = @TypeOf(encoded_headers_guard); if (@typeInfo(__T) == .optional) { if (encoded_headers_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { encoded_headers_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = encoded_headers_guard; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_42: { break :blk_catch_42 ((encoded_headers_guard.val.ensureTotalCapacity(alloc, shared_request_buffer.len)) catch |__ce_42| { _ = &__ce_42; return globalObject.throw("Failed to allocate header buffer", .{}); }); });
+            _ = (blk_catch_44: { break :blk_catch_44 ((encoded_headers_guard.val.ensureTotalCapacity(alloc, shared_request_buffer.len)) catch |__ce_44| { _ = &__ce_44; return globalObject.throw("Failed to allocate header buffer", .{}); }); });
             var name_buffer: [4096]u8 = undefined;
             _ = &name_buffer;
             _ = @memset((&name_buffer), 0);
@@ -4073,7 +4089,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                         var __name_slice_moved = false; _ = &__name_slice_moved;
                         defer if (!__name_slice_moved) { __name_slice_moved = true; const __T = @TypeOf(name_slice); if (@typeInfo(__T) == .optional) { if (name_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { name_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = name_slice; _drop_val.__cp_deinit(); } };
                         const name = name_slice.val.slice();
-                        const validated_name = (blk_catch_43: { break :blk_catch_43 ((H2FrameParser.toValidHeaderName(name, (&name_buffer))) catch |__ce_43| { _ = &__ce_43; const exception = globalObject.toTypeError(.INVALID_HTTP_TOKEN, "The arguments Header name is invalid. Received \"{s}\"", .{ name });
+                        const validated_name = (blk_catch_45: { break :blk_catch_45 ((H2FrameParser.toValidHeaderName(name, (&name_buffer))) catch |__ce_45| { _ = &__ce_45; const exception = globalObject.toTypeError(.INVALID_HTTP_TOKEN, "The arguments Header name is invalid. Received \"{s}\"", .{ name });
                         return globalObject.throwValue(exception); }); });
                         if ((header_name.charAt(0) == 58)) {
                             if ((ignore_pseudo_headers == 1)) {
@@ -4127,7 +4143,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                     }
                                     return jsc.JSValue.zero;
                                 }
-                                const value_str = (blk_catch_44: { break :blk_catch_44 ((item.toJSString(globalObject)) catch |__ce_44| { _ = &__ce_44; _ = globalObject.clearException();
+                                const value_str = (blk_catch_46: { break :blk_catch_46 ((item.toJSString(globalObject)) catch |__ce_46| { _ = &__ce_46; _ = globalObject.clearException();
                                 return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name }).throw(); }); });
                                 const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
                                 const value_slice = HeaderValueBytes.from(value_str, globalObject);
@@ -4136,7 +4152,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                     return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ validated_name }).throw();
                                 }
                                 _ = log("encode header {s} {s}", .{ validated_name, value });
-                                _ = (blk_catch_45: { break :blk_catch_45 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                                _ = (blk_catch_47: { break :blk_catch_47 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                                     return globalObject.throw("Failed to allocate header buffer", .{});
                                 }
                                 var stream: *Stream = undefined;
@@ -4167,7 +4183,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                     }
                                     single_value_headers[cp_cast_int(usize, idx)] = true;
                                 }
-                                const value_str = (blk_catch_46: { break :blk_catch_46 ((js_value.toJSString(globalObject)) catch |__ce_46| { _ = &__ce_46; _ = globalObject.clearException();
+                                const value_str = (blk_catch_48: { break :blk_catch_48 ((js_value.toJSString(globalObject)) catch |__ce_48| { _ = &__ce_48; _ = globalObject.clearException();
                                 return globalObject.ERR(.HTTP2_INVALID_HEADER_VALUE, "Invalid value for header \"{s}\"", .{ name }).throw(); }); });
                                 const never_index = (((try sensitive_arg.getTruthyPropertyValue(globalObject, validated_name)) orelse (try sensitive_arg.getTruthyPropertyValue(globalObject, name))) != null);
                                 const value_slice = HeaderValueBytes.from(value_str, globalObject);
@@ -4177,7 +4193,7 @@ pub fn request(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, callfram
                                     return globalObject.throwValue(exception);
                                 }
                                 _ = log("encode header {s} {s}", .{ validated_name, value });
-                                _ = (blk_catch_47: { break :blk_catch_47 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                                _ = (blk_catch_49: { break :blk_catch_49 ((self.encodeHeaderIntoList((&encoded_headers_guard.val), alloc, validated_name, value, never_index)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                                     return globalObject.throw("Failed to allocate header buffer", .{});
                                 }
                                 var stream: *Stream = undefined;
@@ -4390,14 +4406,14 @@ else => .none,
                     _ = priority_data.write(@TypeOf(writer), writer);
                 }
                 if ((padding != 0)) {
-                    _ = (blk_catch_48: { break :blk_catch_48 ((encoded_headers_guard.val.ensureTotalCapacity(alloc, (encoded_size + padding_overhead))) catch |__ce_48| { _ = &__ce_48; return globalObject.throw("Failed to allocate padding buffer", .{}); }); });
+                    _ = (blk_catch_50: { break :blk_catch_50 ((encoded_headers_guard.val.ensureTotalCapacity(alloc, (encoded_size + padding_overhead))) catch |__ce_50| { _ = &__ce_50; return globalObject.throw("Failed to allocate padding buffer", .{}); }); });
                     var buffer = encoded_headers_guard.val.allocatedSlice();
                     _ = &buffer;
                     _ = bun.memmove(buffer[1..][0..encoded_size], buffer[0..encoded_size]);
                     buffer[cp_cast_int(usize, 0)] = padding;
-                    _ = (blk_catch_49: { break :blk_catch_49 ((writer.write(buffer[0..(encoded_size + padding_overhead)])) catch |__ce_49| { _ = &__ce_49; break :blk_catch_49 @as(usize, 0); }); });
+                    _ = (blk_catch_51: { break :blk_catch_51 ((writer.write(buffer[0..(encoded_size + padding_overhead)])) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 @as(usize, 0); }); });
                 } else {
-                    _ = (blk_catch_50: { break :blk_catch_50 ((writer.write(encoded_data)) catch |__ce_50| { _ = &__ce_50; break :blk_catch_50 @as(usize, 0); }); });
+                    _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(encoded_data)) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 @as(usize, 0); }); });
                 }
             } else {
                 _ = log("Using CONTINUATION frames: encoded_size={d} max_frame_payload={d}", .{ encoded_size, actual_max_frame_size });
@@ -4413,7 +4429,7 @@ else => .none,
                     _ = &priority_data;
                     _ = priority_data.write(@TypeOf(writer), writer);
                 }
-                _ = (blk_catch_51: { break :blk_catch_51 ((writer.write(encoded_data[0..first_chunk_size])) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 @as(usize, 0); }); });
+                _ = (blk_catch_53: { break :blk_catch_53 ((writer.write(encoded_data[0..first_chunk_size])) catch |__ce_53| { _ = &__ce_53; break :blk_catch_53 @as(usize, 0); }); });
                 var offset: usize = first_chunk_size;
                 _ = &offset;
                 while ((offset < encoded_size)) {
@@ -4423,7 +4439,7 @@ else => .none,
                     var cont_frame: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_CONTINUATION), .flags = (if (is_last) @intFromEnum(HeadersFrameFlags.END_HEADERS) else 0), .streamIdentifier = stream.id, .length = @intCast(chunk_size) };
                     _ = &cont_frame;
                     _ = cont_frame.write(@TypeOf(writer), writer);
-                    _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(encoded_data[offset..][0..chunk_size])) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 @as(usize, 0); }); });
+                    _ = (blk_catch_54: { break :blk_catch_54 ((writer.write(encoded_data[offset..][0..chunk_size])) catch |__ce_54| { _ = &__ce_54; break :blk_catch_54 @as(usize, 0); }); });
                     offset = (offset + chunk_size);
                 }
             }
@@ -4760,13 +4776,13 @@ pub fn noteEngineSendConsumed(self: *H2FrameParser, stream_id: u32, n: u64) void
             if (((len > 0) and (self.pending_stream_send_consumed.items[@as(usize, @intCast((len - 1)))].id == stream_id))) {
                 self.pending_stream_send_consumed.items[@as(usize, @intCast((len - 1)))].n = (self.pending_stream_send_consumed.items[@as(usize, @intCast((len - 1)))].n + n);
             } else {
-                _ = (blk_catch_53: { break :blk_catch_53 ((self.pending_stream_send_consumed.append(self.allocator, StreamConsumeItem{ .id = stream_id, .n = n })) catch |__ce_53| { _ = &__ce_53;  }); });
+                _ = (blk_catch_55: { break :blk_catch_55 ((self.pending_stream_send_consumed.append(self.allocator, StreamConsumeItem{ .id = stream_id, .n = n })) catch |__ce_55| { _ = &__ce_55;  }); });
             }
     }
 
 pub fn rewriteRead(self: *H2FrameParser, bytes: []const u8) void {
             if (self.engine_busy) {
-                _ = (blk_catch_54: { break :blk_catch_54 ((self.rewrite_tail.appendSlice(self.allocator, bytes)) catch |__ce_54| { _ = &__ce_54;  }); });
+                _ = (blk_catch_56: { break :blk_catch_56 ((self.rewrite_tail.appendSlice(self.allocator, bytes)) catch |__ce_56| { _ = &__ce_56;  }); });
                 return;
             }
             self.engine_busy = true;
@@ -4822,11 +4838,11 @@ pub fn rewriteRead(self: *H2FrameParser, bytes: []const u8) void {
                     return;
                 }
                 if ((feed.consumed < bytes.len)) {
-                    _ = (blk_catch_55: { break :blk_catch_55 ((self.rewrite_tail.insertSlice(self.allocator, 0, bytes[feed.consumed..])) catch |__ce_55| { _ = &__ce_55;  }); });
+                    _ = (blk_catch_57: { break :blk_catch_57 ((self.rewrite_tail.insertSlice(self.allocator, 0, bytes[feed.consumed..])) catch |__ce_57| { _ = &__ce_57;  }); });
                 }
             } else {
-                _ = (blk_catch_56: { break :blk_catch_56 ((self.rewrite_tail.appendSlice(self.allocator, bytes)) catch |__ce_56| { _ = &__ce_56;  }); });
-                var combined = (blk_catch_57: { break :blk_catch_57 ((self.rewrite_tail.toOwnedSlice(self.allocator)) catch |__ce_57| { _ = &__ce_57; return; }); });
+                _ = (blk_catch_58: { break :blk_catch_58 ((self.rewrite_tail.appendSlice(self.allocator, bytes)) catch |__ce_58| { _ = &__ce_58;  }); });
+                var combined = (blk_catch_59: { break :blk_catch_59 ((self.rewrite_tail.toOwnedSlice(self.allocator)) catch |__ce_59| { _ = &__ce_59; return; }); });
                 _ = &combined;
                 defer {
                 _ = self.allocator.free(combined);
@@ -4843,11 +4859,11 @@ pub fn rewriteRead(self: *H2FrameParser, bytes: []const u8) void {
                     return;
                 }
                 if ((feed.consumed < combined.len)) {
-                    _ = (blk_catch_58: { break :blk_catch_58 ((self.rewrite_tail.insertSlice(self.allocator, 0, combined[feed.consumed..])) catch |__ce_58| { _ = &__ce_58;  }); });
+                    _ = (blk_catch_60: { break :blk_catch_60 ((self.rewrite_tail.insertSlice(self.allocator, 0, combined[feed.consumed..])) catch |__ce_60| { _ = &__ce_60;  }); });
                 }
             }
             while ((self.rewrite_tail.items.len > 0)) {
-                var pending = (blk_catch_59: { break :blk_catch_59 ((self.rewrite_tail.toOwnedSlice(self.allocator)) catch |__ce_59| { _ = &__ce_59; break; }); });
+                var pending = (blk_catch_61: { break :blk_catch_61 ((self.rewrite_tail.toOwnedSlice(self.allocator)) catch |__ce_61| { _ = &__ce_61; break; }); });
                 _ = &pending;
                 defer {
                 _ = self.allocator.free(pending);
@@ -4864,7 +4880,7 @@ pub fn rewriteRead(self: *H2FrameParser, bytes: []const u8) void {
                     return;
                 }
                 if ((feed.consumed < pending.len)) {
-                    _ = (blk_catch_60: { break :blk_catch_60 ((self.rewrite_tail.insertSlice(self.allocator, 0, pending[feed.consumed..])) catch |__ce_60| { _ = &__ce_60;  }); });
+                    _ = (blk_catch_62: { break :blk_catch_62 ((self.rewrite_tail.insertSlice(self.allocator, 0, pending[feed.consumed..])) catch |__ce_62| { _ = &__ce_62;  }); });
                 }
                 if ((feed.consumed == 0)) {
                     break;
@@ -4882,7 +4898,7 @@ pub fn sinkWrite(self: *H2FrameParser, bytes: []const u8) h2.WriteResult {
 
 pub fn sinkOnError(self: *H2FrameParser, code: u32, _last: u32, debug: []const u8) void {
             _ = &_last;
-            const chunk = (blk_catch_61: { break :blk_catch_61 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_61| { _ = &__ce_61; break :blk_catch_61 JSValue.js_undefined; }); });
+            const chunk = (blk_catch_63: { break :blk_catch_63 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_63| { _ = &__ce_63; break :blk_catch_63 JSValue.js_undefined; }); });
             if ((code != 0)) {
                 _ = self.dispatchWith2Extra(.onError, JSValue.jsNumber(code), JSValue.jsNumber(self.lastStreamID), chunk);
             }
@@ -4901,7 +4917,7 @@ pub fn settingsToJS(self: H2FrameParser, s: *const h2.Settings, globalObject: *j
             _ = std.mem.byteSwapAllFields(FullSettingsPayload, (&payload));
             const bytes = std.mem.asBytes((&payload))[0..FullSettingsPayload.byteSize];
             const bt: BinaryType = .Buffer;
-            return (blk_catch_62: { break :blk_catch_62 ((bt.toJS(bytes, globalObject)) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 JSValue.js_undefined; }); });
+            return (blk_catch_64: { break :blk_catch_64 ((bt.toJS(bytes, globalObject)) catch |__ce_64| { _ = &__ce_64; break :blk_catch_64 JSValue.js_undefined; }); });
     }
 
 pub fn sinkOnLocalSettings(self: *H2FrameParser, s: *const h2.Settings) void {
@@ -4934,12 +4950,12 @@ pub fn sinkOnPing(self: *H2FrameParser, payload: []const u8, is_ack: bool) void 
             if (is_ack) {
                 self.outStandingPings = (self.outStandingPings -| 1);
             }
-            const buffer = (blk_catch_63: { break :blk_catch_63 ((self.handlers.binary_type.toJS(payload, self.globalThis)) catch |__ce_63| { _ = &__ce_63; return; }); });
+            const buffer = (blk_catch_65: { break :blk_catch_65 ((self.handlers.binary_type.toJS(payload, self.globalThis)) catch |__ce_65| { _ = &__ce_65; return; }); });
             _ = self.dispatchWithExtra(.onPing, buffer, JSValue.jsBoolean(is_ack));
     }
 
 pub fn sinkOnGoAway(self: *H2FrameParser, code: u32, last: u32, debug: []const u8) void {
-            const chunk = (blk_catch_64: { break :blk_catch_64 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_64| { _ = &__ce_64; break :blk_catch_64 JSValue.js_undefined; }); });
+            const chunk = (blk_catch_66: { break :blk_catch_66 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_66| { _ = &__ce_66; break :blk_catch_66 JSValue.js_undefined; }); });
             _ = self.dispatchWith2Extra(.onGoAway, JSValue.jsNumber(code), JSValue.jsNumber(last), chunk);
     }
 
@@ -4968,6 +4984,7 @@ pub fn sinkIsLocalStream(self: H2FrameParser, stream_id: u32) bool {
 pub fn sinkOnPushPromise(self: *H2FrameParser, _parent_id: u32, promised_id: u32) void {
             _ = &_parent_id;
             self.rewrite_pending_push = promised_id;
+            _ = self.handleReceivedStreamID(promised_id);
     }
 
 pub fn sinkOnOrigin(self: *H2FrameParser, payload: []const u8) void {
@@ -4989,13 +5006,13 @@ pub fn sinkOnOrigin(self: *H2FrameParser, payload: []const u8) void {
                     _ = origin_value.ensureStillAlive();
                 } else {
                     if ((count == 1)) {
-                        const array = (blk_catch_65: { break :blk_catch_65 ((JSValue.createEmptyArray(self.globalThis, 0)) catch |__ce_65| { _ = &__ce_65; return; }); });
+                        const array = (blk_catch_67: { break :blk_catch_67 ((JSValue.createEmptyArray(self.globalThis, 0)) catch |__ce_67| { _ = &__ce_67; return; }); });
                         _ = array.ensureStillAlive();
-                        _ = (blk_catch_66: { break :blk_catch_66 ((array.push(self.globalThis, origin_value)) catch |__ce_66| { _ = &__ce_66;  }); });
-                        _ = (blk_catch_67: { break :blk_catch_67 ((array.push(self.globalThis, origin_js)) catch |__ce_67| { _ = &__ce_67;  }); });
+                        _ = (blk_catch_68: { break :blk_catch_68 ((array.push(self.globalThis, origin_value)) catch |__ce_68| { _ = &__ce_68;  }); });
+                        _ = (blk_catch_69: { break :blk_catch_69 ((array.push(self.globalThis, origin_js)) catch |__ce_69| { _ = &__ce_69;  }); });
                         origin_value = array;
                     } else {
-                        _ = (blk_catch_68: { break :blk_catch_68 ((origin_value.push(self.globalThis, origin_js)) catch |__ce_68| { _ = &__ce_68;  }); });
+                        _ = (blk_catch_70: { break :blk_catch_70 ((origin_value.push(self.globalThis, origin_js)) catch |__ce_70| { _ = &__ce_70;  }); });
                     }
                 }
                 count = (count + 1);
@@ -5013,11 +5030,11 @@ pub fn sinkOnStreamOpen(self: *H2FrameParser, stream_id: u32) void {
 
 pub fn sinkOnHeader(self: *H2FrameParser, _stream_id: u32, name: []const u8, value: []const u8, never_index: bool) void {
             _ = &_stream_id;
-            const name_copy = (blk_catch_69: { break :blk_catch_69 ((self.allocator.dupe(u8, name)) catch |__ce_69| { _ = &__ce_69; return; }); });
-            const value_copy = (blk_catch_70: { break :blk_catch_70 ((self.allocator.dupe(u8, value)) catch |__ce_70| { _ = &__ce_70; _ = self.allocator.free(name_copy);
+            const name_copy = (blk_catch_71: { break :blk_catch_71 ((self.allocator.dupe(u8, name)) catch |__ce_71| { _ = &__ce_71; return; }); });
+            const value_copy = (blk_catch_72: { break :blk_catch_72 ((self.allocator.dupe(u8, value)) catch |__ce_72| { _ = &__ce_72; _ = self.allocator.free(name_copy);
             return; }); });
-            _ = (blk_catch_71: { break :blk_catch_71 ((self.hdr_entries.append(self.allocator, HdrEntry{ .name = name_copy, .value = value_copy, .never_index = never_index })) catch |__ce_71| { _ = &__ce_71; _ = self.allocator.free(name_copy);
-            break :blk_catch_71 self.allocator.free(value_copy); }); });
+            _ = (blk_catch_73: { break :blk_catch_73 ((self.hdr_entries.append(self.allocator, HdrEntry{ .name = name_copy, .value = value_copy, .never_index = never_index })) catch |__ce_73| { _ = &__ce_73; _ = self.allocator.free(name_copy);
+            break :blk_catch_73 self.allocator.free(value_copy); }); });
     }
 
 pub fn clearHdrEntries(self: *H2FrameParser) void {
@@ -5070,7 +5087,7 @@ pub fn materializeHeadersTuple(self: *H2FrameParser) !JSValue {
                             defer {
                             _ = prev.deinit();
                             }
-                            const joined = (blk_catch_72: { break :blk_catch_72 ((std.fmt.allocPrint(self.allocator, "{s}; {s}", .{ prev.slice(), (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) })) catch |__ce_72| { _ = &__ce_72; break :blk_catch_72 null; }); });
+                            const joined = (blk_catch_74: { break :blk_catch_74 ((std.fmt.allocPrint(self.allocator, "{s}; {s}", .{ prev.slice(), (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) })) catch |__ce_74| { _ = &__ce_74; break :blk_catch_74 null; }); });
                             if (joined) |j| {
                                 _ = &j;
                                 defer {
@@ -5102,7 +5119,7 @@ pub fn sinkOnHeadersComplete(self: *H2FrameParser, stream_id: u32, end_stream: b
                 _ = &stream;
                 stream.endAfterHeaders = end_stream;
             }
-            const tuple = (blk_catch_73: { break :blk_catch_73 ((self.materializeHeadersTuple()) catch |__ce_73| { _ = &__ce_73; return; }); });
+            const tuple = (blk_catch_75: { break :blk_catch_75 ((self.materializeHeadersTuple()) catch |__ce_75| { _ = &__ce_75; return; }); });
             if (((self.rewrite_pending_push == stream_id) and (stream_id != 0))) {
                 self.rewrite_pending_push = 0;
                 _ = self.dispatchWith2Extra(.onStreamPush, JSValue.jsNumber(stream_id), tuple, JSValue.jsNumber(f));
@@ -5114,7 +5131,7 @@ pub fn sinkOnHeadersComplete(self: *H2FrameParser, stream_id: u32, end_stream: b
 
 pub fn sinkOnData(self: *H2FrameParser, stream_id: u32, data: []const u8) void {
             const stream_ctx = self.rewriteStreamCtx(stream_id);
-            const chunk = (blk_catch_74: { break :blk_catch_74 ((self.handlers.binary_type.toJS(data, self.globalThis)) catch |__ce_74| { _ = &__ce_74; return; }); });
+            const chunk = (blk_catch_76: { break :blk_catch_76 ((self.handlers.binary_type.toJS(data, self.globalThis)) catch |__ce_76| { _ = &__ce_76; return; }); });
             _ = self.dispatchWithExtra(.onStreamData, stream_ctx, chunk);
     }
 
@@ -5212,7 +5229,7 @@ pub fn pushPromise(self: *H2FrameParser, globalObject: *jsc.JSGlobalObject, call
                     defer {
                     _ = name_slice.deinit();
                     }
-                    const validated_name = (blk_catch_75: { break :blk_catch_75 ((H2FrameParser.toValidHeaderName(name_slice.slice(), (&name_buf))) catch |__ce_75| { _ = &__ce_75; return globalObject.throwInvalidArguments("The arguments Header name is invalid", .{}); }); });
+                    const validated_name = (blk_catch_77: { break :blk_catch_77 ((H2FrameParser.toValidHeaderName(name_slice.slice(), (&name_buf))) catch |__ce_77| { _ = &__ce_77; return globalObject.throwInvalidArguments("The arguments Header name is invalid", .{}); }); });
                     const js_val = (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value);
                     if (js_val.isEmptyOrUndefinedOrNull()) {
                         continue;

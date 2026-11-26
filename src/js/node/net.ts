@@ -2357,6 +2357,8 @@ Server.prototype.listen = function listen(port, hostname, onListen) {
       if (!tls.requestCert) {
         tls.rejectUnauthorized = false;
       }
+      options.requestCert = tls.requestCert;
+      options.rejectUnauthorized = tls.rejectUnauthorized;
     } else {
       options[kSocketClass] = Socket;
     }

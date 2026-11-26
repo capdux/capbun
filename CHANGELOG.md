@@ -2412,3 +2412,10 @@
 - `src/sql_jsc/mysql/JSMySQLConnection.cp` (.zig)
 - `src/runtime/api/TOMLObject.cp` (.zig), `src/install/dedupe.cp` (.zig), `src/install/PackageManager/install_with_manager.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 8 测试收敛提交
+- `src/js/thirdparty/undici.js`, `src/jsc/bindings/webcore/WebSocket.cpp`
+- `src/runtime/api/bun/h2_frame_parser.cp` (.zig), `src/runtime/api/bun/h2/connection.cp` (.zig)
+- `src/js/internal/sql/postgres.ts`, `src/sql_jsc/postgres/PostgresSQLConnection.cp` (.zig), `src/sql_jsc/mysql/MySQLConnection.cp` (.zig)
+- `packages/bun-usockets/src/libusockets.h`, `packages/bun-usockets/src/crypto/openssl.c`, `src/uws_sys/us_socket_t.cp` (.zig), `src/runtime/socket/socket.cp` (.zig), `src/uws/uws.cp` (.zig), `src/js/node/net.ts`
+- `SESSION.md`, `CHANGELOG.md`

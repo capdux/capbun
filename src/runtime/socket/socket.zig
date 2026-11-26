@@ -2096,11 +2096,38 @@ pub fn upgradeTLSImpl(self: *@This(), globalObject: *jsc.JSGlobalObject, opts: J
             const raw_socket = ((self.socket.socket.get()) orelse {
             return globalObject.throwInvalidArguments("upgradeTLS requires an established socket", .{});
 });
-            if (self.isServer()) {
-                return globalObject.throw("Server-side upgradeTLS is not supported. Use upgradeDuplexToTLS with isServer: true instead.", .{});
-            }
             if (((opts.isEmptyOrUndefinedOrNull() or opts.isBoolean()) or (!opts.isObject()))) {
                 return globalObject.throw("Expected options object", .{});
+            }
+            var is_server = false;
+            _ = &is_server;
+            if (try opts.getTruthy(globalObject, "isServer")) |is_server_val| {
+                _ = &is_server_val;
+                is_server = is_server_val.toBoolean();
+            }
+            if ((self.isServer() and (!is_server))) {
+                return globalObject.throw("Server-side upgradeTLS is not supported. Use upgradeDuplexToTLS with isServer: true instead.", .{});
+            }
+            var initial_data: ?[]u8 = null;
+            _ = &initial_data;
+            defer {
+            if (initial_data) |d| {
+                _ = &d;
+                _ = bun.default_allocator.free(d);
+            }
+            }
+            if (try opts.getTruthy(globalObject, "initialData")) |init_val| {
+                _ = &init_val;
+                var init_buf = ((try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, init_val)) orelse {
+                return globalObject.throwInvalidArgumentTypeValue("initialData", "string or Buffer", init_val);
+});
+                _ = &init_buf;
+                defer {
+                _ = init_buf.deinit();
+                }
+                if ((init_buf.slice().len > 0)) {
+                    initial_data = bun.handleOom(bun.default_allocator.dupe(u8, init_buf.slice()));
+                }
             }
             const socket_obj_opt = try opts.get(globalObject, "socket");
             if ((socket_obj_opt == null)) {
@@ -2227,8 +2254,8 @@ pub fn upgradeTLSImpl(self: *@This(), globalObject: *jsc.JSGlobalObject, opts: J
 
 }));
             }
-            const reject_unauthorized = upgradeRejectPolicy(vm, cfg_opt, false, _ctx_guard.ctx);
-            var tls = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = null, .protos = duped_protos, .server_name = duped_server_name, .owned_ssl_ctx = _ctx_guard.ctx, .flags = .{ .reject_unauthorized = reject_unauthorized, .defers_server_identity = defers_server_identity } });
+            const reject_unauthorized = upgradeRejectPolicy(vm, cfg_opt, is_server, _ctx_guard.ctx);
+            var tls = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = null, .protos = duped_protos, .server_name = duped_server_name, .owned_ssl_ctx = _ctx_guard.ctx, .flags = .{ .reject_unauthorized = reject_unauthorized, .defers_server_identity = (defers_server_identity and (!is_server)), .tls_server_role = is_server } });
             _ = &tls;
             if (self.connection) |conn_ref| {
                 _ = &conn_ref;
@@ -2236,7 +2263,7 @@ pub fn upgradeTLSImpl(self: *@This(), globalObject: *jsc.JSGlobalObject, opts: J
             }
             _ctx_guard.ctx = null;
             const group = vm.rareData().bunConnectGroup(vm, true);
-            const new_raw = ((raw_socket.adoptTLS(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, @sizeOf(OpaquePtr), @sizeOf(OpaquePtr))) orelse {
+            const new_raw = ((raw_socket.adoptTLSRole(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, (!is_server), @sizeOf(OpaquePtr), @sizeOf(OpaquePtr))) orelse {
             const get_err_fn = BoringSSL.ERR_get_error;
             const err_code = get_err_fn();
             var _err_clear_guard = SSLErrClearGuard{ .has_err = (err_code != 0) };
@@ -2280,7 +2307,6 @@ pub fn upgradeTLSImpl(self: *@This(), globalObject: *jsc.JSGlobalObject, opts: J
             _ = &raw;
             _ = raw.ref();
             tls.twin = raw;
-            _ = new_raw.setSslRawTap(true);
             const tls_js_value = tls.getThisValue(globalObject);
             const raw_js_value = raw.getThisValue(globalObject);
             _ = TLSSocket.js.dataSetCached(tls_js_value, globalObject, default_data);
@@ -2290,7 +2316,15 @@ pub fn upgradeTLSImpl(self: *@This(), globalObject: *jsc.JSGlobalObject, opts: J
                 _ = tls.poll_ref.ref(vm);
             }
             _ = tls.onOpen(tls.socket);
-            _ = new_raw.startTLSHandshake();
+            if (initial_data) |d| {
+                _ = &d;
+                _ = new_raw.feedTLSInitialData(d);
+            } else {
+                _ = new_raw.startTLSHandshake();
+            }
+            if ((!new_raw.isClosed())) {
+                _ = new_raw.setSslRawTap(true);
+            }
             const array = try jsc.JSValue.createEmptyArray(globalObject, 2);
             _ = try array.putIndex(globalObject, 0, raw_js_value);
             _ = try array.putIndex(globalObject, 1, tls_js_value);

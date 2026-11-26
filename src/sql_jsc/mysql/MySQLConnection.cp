@@ -333,7 +333,7 @@ export struct Reader {
         if (_.status != .connected) {
             _.@"#socket".terminate();
         } else {
-            _.@"#socket".close();
+            _.@"#socket".terminate();
         }
         _.@"#write_buffer".clearAndFree(bun.default_allocator);
     }

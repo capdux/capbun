@@ -594,6 +594,7 @@ class PooledPostgresConnection {
       this.queries?.clear?.();
       this.queryCount = 0;
       this.flags &= ~PooledConnectionFlags.reserved;
+      this.flags &= ~PooledConnectionFlags.canBeConnected;
 
       // notify all queries that the connection is closed
       for (const onClose of queries) {

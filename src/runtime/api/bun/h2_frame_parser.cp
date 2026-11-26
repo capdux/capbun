@@ -1578,6 +1578,8 @@ pub struct H2FrameParser {
         _.outstandingSettings += 1;
 
         _.localSettings = settings;
+        _.ensureEngine();
+        if (*eng := _.engine) eng.pending_local_window_acks.append(_.allocator, _.localSettings.initialWindowSize) catch {};
         * = _.localSettings.write(@TypeOf(writer), writer);
         * = _.write(&buffer);
         return true;
@@ -1745,6 +1747,8 @@ pub struct H2FrameParser {
             length: FullSettingsPayload.byteSize,
         };
         _.outstandingSettings += 1;
+        _.ensureEngine();
+        if (*eng := _.engine) eng.pending_local_window_acks.append(_.allocator, _.localSettings.initialWindowSize) catch {};
         * = settingsHeader.write(@TypeOf(writer), writer);
         * = _.localSettings.write(@TypeOf(writer), writer);
         * = _.write(&preface_buffer);
@@ -3068,9 +3072,11 @@ pub struct H2FrameParser {
         _.ref();
         defer _.deref();
         const _args = [ ctx_value, jsc.JSValue.jsNumber(streamIdentifier) ];
-        * = callback.call(_.handlers.globalObject, ctx_value, &_args) catch e => {
+        const result = callback.call(_.handlers.globalObject, ctx_value, &_args) catch e => blk: {
             _.handlers.globalObject.reportActiveExceptionAsUnhandled(e);
+            break :blk JSValue.js_undefined;
         };
+        if (result.isObject()) stream.setContext(result, _.handlers.globalObject);
         return stream;
     }
 
@@ -5500,15 +5506,7 @@ pub struct H2FrameParser {
     }
 
     fn sinkOnRemoteSettings(*_, s: *const h2.Settings) {
-        _.remoteSettings = FullSettingsPayload{
-            headerTableSize: s.header_table_size,
-            enablePush: s.enable_push,
-            maxConcurrentStreams: s.max_concurrent_streams,
-            initialWindowSize: s.initial_window_size,
-            maxFrameSize: s.max_frame_size,
-            maxHeaderListSize: s.max_header_list_size,
-            enableConnectProtocol: s.enable_connect_protocol,
-        };
+        _.remoteSettings = FullSettingsPayload{ headerTableSize: s.header_table_size, enablePush: s.enable_push, maxConcurrentStreams: s.max_concurrent_streams, initialWindowSize: s.initial_window_size, maxFrameSize: s.max_frame_size, maxHeaderListSize: s.max_header_list_size, enableConnectProtocol: s.enable_connect_protocol };
         let window_grew = false;
         let it = _.streams.valueIterator();
         while (item := it.next()) {
@@ -5518,9 +5516,7 @@ pub struct H2FrameParser {
                 window_grew = true;
             }
         }
-        if (window_grew) {
-            * = _.flush();
-        }
+        if (window_grew) * = _.flush();
         const js_val = settingsToJS(s, _.globalThis);
         _.dispatch(.onRemoteSettings, js_val);
     }
@@ -5560,6 +5556,7 @@ pub struct H2FrameParser {
     fn sinkOnPushPromise(*_, _parent_id: u32, promised_id: u32) {
         * = _parent_id;
         _.rewrite_pending_push = promised_id;
+        * = _.handleReceivedStreamID(promised_id);
     }
 
     fn sinkOnOrigin(*_, payload: []const u8) {
@@ -5701,9 +5698,7 @@ pub struct H2FrameParser {
     fn sinkOnStreamEnd(*_, stream_id: u32, state: u8) {
         let effective = state;
         if (stream := _.streams.get(stream_id)) {
-            if (state == 6 && (stream.state == .HALF_CLOSED_LOCAL || stream.state == .CLOSED)) {
-                effective = 7;
-            }
+            if (state == 6 && (stream.state == .HALF_CLOSED_LOCAL || stream.state == .CLOSED)) effective = 7;
             if (effective == 5) {
                 stream.state = .HALF_CLOSED_LOCAL;
             } else if (effective == 6) {

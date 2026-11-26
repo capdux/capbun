@@ -353,7 +353,7 @@ pub fn close(self: *MySQLConnection) void {
         if ((self.status != .connected)) {
             _ = self.@"#socket".terminate();
         } else {
-            _ = self.@"#socket".close();
+            _ = self.@"#socket".terminate();
         }
         _ = self.@"#write_buffer".clearAndFree(bun.default_allocator);
 }

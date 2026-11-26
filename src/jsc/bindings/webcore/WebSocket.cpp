@@ -74,8 +74,12 @@
 #include <wtf/text/StringBuilder.h>
 
 #include "JSBuffer.h"
+#include "JSWebSocket.h"
+#include "InternalModuleRegistry.h"
+#include "ZigGlobalObject.h"
 #include "ErrorEvent.h"
 #include "WebSocketDeflate.h"
+#include <JavaScriptCore/ObjectConstructor.h>
 
 // #if USE(WEB_THREAD)
 // #include "WebCoreThreadRun.h"
@@ -1951,6 +1955,77 @@ extern "C" void WebSocket__didReceiveText(WebCore::WebSocket* webSocket, bool cl
     WTF::String wtf_str = clone ? Zig::toStringCopy(*str) : Zig::toString(*str);
     webSocket->didReceiveMessage(WTF::move(wtf_str));
 }
+static void publishUndiciWebSocketControlFrame(WebCore::WebSocket* webSocket, ASCIILiteral channelName, const std::span<const uint8_t> binaryData)
+{
+    auto* context = webSocket->scriptExecutionContext();
+    if (!context)
+        return;
+    auto* globalObject = defaultGlobalObject(context->jsGlobalObject());
+    if (!globalObject)
+        return;
+    auto& vm = globalObject->vm();
+    auto scope = DECLARE_TOP_EXCEPTION_SCOPE(vm);
+
+    JSC::JSValue dcModule = globalObject->internalModuleRegistry()->requireId(globalObject, vm, Bun::InternalModuleRegistry::NodeDiagnosticsChannel);
+    if (scope.exception() || !dcModule.isObject()) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    auto* dcObj = dcModule.getObject();
+    auto channelFnVal = dcObj->get(globalObject, JSC::Identifier::fromString(vm, "channel"_s));
+    if (scope.exception() || !channelFnVal.isCallable()) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    JSC::MarkedArgumentBuffer channelArgs;
+    channelArgs.append(JSC::jsString(vm, WTF::String(channelName)));
+    JSC::CallData channelCallData = JSC::getCallData(channelFnVal);
+    JSC::JSValue channelVal = JSC::call(globalObject, channelFnVal, channelCallData, dcObj, channelArgs);
+    if (scope.exception() || !channelVal.isObject()) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    auto* channelObj = channelVal.getObject();
+    auto hasSubscribersVal = channelObj->get(globalObject, JSC::Identifier::fromString(vm, "hasSubscribers"_s));
+    if (scope.exception() || !hasSubscribersVal.toBoolean(globalObject)) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    auto publishFnVal = channelObj->get(globalObject, JSC::Identifier::fromString(vm, "publish"_s));
+    if (scope.exception() || !publishFnVal.isCallable()) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    JSC::JSUint8Array* buffer = Bun::createBuffer(globalObject, binaryData);
+    if (!buffer || scope.exception()) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    JSC::JSValue wsVal = WebCore::toJS(globalObject, globalObject, *webSocket);
+    if (scope.exception()) {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+
+    auto* payloadObj = JSC::constructEmptyObject(globalObject);
+    payloadObj->putDirect(vm, JSC::Identifier::fromString(vm, "payload"_s), buffer);
+    payloadObj->putDirect(vm, JSC::Identifier::fromString(vm, "websocket"_s), wsVal);
+
+    JSC::MarkedArgumentBuffer publishArgs;
+    publishArgs.append(payloadObj);
+    JSC::CallData publishCallData = JSC::getCallData(publishFnVal);
+    JSC::call(globalObject, publishFnVal, publishCallData, channelObj, publishArgs);
+    if (scope.exception()) {
+        scope.clearExceptionExceptTermination();
+    }
+}
+
 extern "C" void WebSocket__didReceiveBytes(WebCore::WebSocket* webSocket, const uint8_t* bytes, size_t len, const uint8_t op)
 {
     auto opcode = static_cast<WebCore::WebSocket::Opcode>(op);
@@ -1959,9 +2034,11 @@ extern "C" void WebSocket__didReceiveBytes(WebCore::WebSocket* webSocket, const 
         webSocket->didReceiveBinaryData("message"_s, { bytes, len });
         break;
     case WebCore::WebSocket::Opcode::Ping:
+        publishUndiciWebSocketControlFrame(webSocket, "undici:websocket:ping"_s, { bytes, len });
         webSocket->didReceiveBinaryData("ping"_s, { bytes, len });
         break;
     case WebCore::WebSocket::Opcode::Pong:
+        publishUndiciWebSocketControlFrame(webSocket, "undici:websocket:pong"_s, { bytes, len });
         webSocket->didReceiveBinaryData("pong"_s, { bytes, len });
         break;
     default:

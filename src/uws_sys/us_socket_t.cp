@@ -38,7 +38,9 @@ import { SocketKind } from "./SocketKind.zig";
     fn us_socket_is_established(s: *us_socket_t): i32;
     fn us_socket_adopt(s: *us_socket_t, group: *SocketGroup, kind: u8, old_ext_size: i32, ext_size: i32): (*us_socket_t)?;
     fn us_socket_adopt_tls(s: *us_socket_t, group: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx, sni: cstr?, old_ext_size: i32, ext_size: i32): (*us_socket_t)?;
+    fn us_socket_adopt_tls_role(s: *us_socket_t, group: *SocketGroup, kind: u8, ssl_ctx: *bun.uws.SslCtx, sni: cstr?, is_client: i32, old_ext_size: i32, ext_size: i32): (*us_socket_t)?;
     fn us_socket_start_tls_handshake(s: *us_socket_t);
+    fn us_socket_feed_tls_initial_data(s: *us_socket_t, data: [*]const u8!, length: i32);
 }
 
 pub enum SocketCloseCode: i32 {
@@ -131,6 +133,25 @@ export @opaque class us_socket_t {
         new_ext: i32,
     ): (*us_socket_t)? {
         return us_socket_adopt_tls(_, g, @intFromEnum(k), ssl_ctx, sni, old_ext, new_ext);
+    }
+
+    pub fn adoptTLSRole(
+        *_,
+        g: *SocketGroup,
+        k: SocketKind,
+        ssl_ctx: *bun.uws.SslCtx,
+        sni: cstr?,
+        is_client: bool,
+        old_ext: i32,
+        new_ext: i32,
+    ): (*us_socket_t)? {
+        return us_socket_adopt_tls_role(_, g, @intFromEnum(k), ssl_ctx, sni, if (is_client) 1 else 0, old_ext, new_ext);
+    }
+
+    pub fn feedTLSInitialData(*_, data: []const u8) {
+        if (data.len > 0) {
+            us_socket_feed_tls_initial_data(_, data.ptr, @as(i32, @intCast(data.len)));
+        }
     }
 
     pub fn write(*_, data: string): i32 {
