@@ -464,7 +464,7 @@ fn NewLexer_(
                                 iter.c = @as(i32, i32(value));
                                 if (is_bad) {
                                     lexer.addRangeError(
-                                        logger.Range{ loc: { start: @as(i32, i32(octal_start)) }, len: @as(i32, i32(iter.i - octal_start)) },
+                                        logger.Range{ loc: { start: @as(i32, i32(start + octal_start)) }, len: @as(i32, i32(iter.i - octal_start)) },
                                         "Invalid legacy octal literal",
                                         {},
                                         false,
@@ -537,7 +537,7 @@ fn NewLexer_(
                                         lexer.syntaxError()?;
                                     }
 
-                                    const hex_start = (iter.i + start) - width - width2 - width3;
+                                    const hex_start = iter.i - width - width2;
                                     let is_first = true;
                                     let is_out_of_range = false;
                                     variableLength: while (true) {
@@ -577,7 +577,7 @@ fn NewLexer_(
 
                                     if (is_out_of_range) {
                                         lexer.addRangeError(
-                                            { loc: { start: @as(i32, i32(start + hex_start)) }, len: @as(i32, i32(((iter.i + start) - hex_start))) },
+                                            { loc: { start: @as(i32, i32(start + hex_start)) }, len: @as(i32, i32(iter.i - hex_start)) },
                                             "Unicode escape sequence is out of range",
                                             {},
                                             true,
@@ -2129,7 +2129,7 @@ fn NewLexer_(
                     const buf_ptr = unsafe { &lexer.temp_buffer_u16 };
                     const _clear_guard = TempBufferU16ClearGuard{ ptr: buf_ptr };
                     lexer.temp_buffer_u16.ensureUnusedCapacity(lexer.string_literal_raw_content.len)?;
-                    lexer.decodeEscapeSequences(lexer.string_literal_start, lexer.string_literal_raw_content, std.array_list.Managed(u16), &lexer.temp_buffer_u16)?;
+                    lexer.decodeEscapeSequences(lexer.string_literal_start + 1, lexer.string_literal_raw_content, std.array_list.Managed(u16), &lexer.temp_buffer_u16)?;
                     const first_non_ascii = strings.firstNonASCII16(lexer.temp_buffer_u16.items);
                     // prefer to store an ascii e.string rather than a utf-16 one. ascii takes less memory, and `+` folding is not yet supported on utf-16.
                     if (first_non_ascii != null) {

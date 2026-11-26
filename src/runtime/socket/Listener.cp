@@ -828,6 +828,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                     }
                     bun.assert(prev_tls.this_value.isNotEmpty());
                     prev_tls.handlers = handlers_ptr;
+                    prev_tls.teardownForReconnect(handlers.vm);
                     bun.assert(prev_tls.socket.socket == .detached);
                     if (old_connection := prev_tls.connection) {
                         old_connection.deinit();
@@ -903,6 +904,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         handlers.vm.allocator.destroy(prev_handlers);
                     }
                     prev_tcp.handlers = handlers_ptr;
+                    prev_tcp.teardownForReconnect(handlers.vm);
                     bun.assert(prev_tcp.socket.socket == .detached);
                     if (old_connection := prev_tcp.connection) {
                         old_connection.deinit();
@@ -1000,6 +1002,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                     handlers.vm.allocator.destroy(prev_handlers);
                 }
                 prev_sock.handlers = handlers_ptr;
+                prev_sock.teardownForReconnect(handlers.vm);
                 bun.assert(prev_sock.socket.socket == .detached);
                 if (old_connection := prev_sock.connection) {
                     old_connection.deinit();

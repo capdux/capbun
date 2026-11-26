@@ -744,7 +744,10 @@ export function readDirectStream(stream, sink, underlyingSource) {
   var maybePromise = underlyingSource.pull(sink);
   sink = undefined;
   if (maybePromise && $isPromise(maybePromise)) {
-    return maybePromise;
+    return maybePromise.$then(undefined, e => {
+      close(stream, e);
+      return Promise.$reject(e);
+    });
   }
 }
 
@@ -1049,6 +1052,14 @@ export function onPullDirectStream(controller: ReadableStreamDirectController) {
     return;
   }
 
+  if (controller._pulling) {
+    if (controller._pendingRead === undefined) {
+      controller._pendingRead = $newPromise();
+      return controller._pendingRead;
+    }
+    return $readableStreamAddReadRequest(stream);
+  }
+
   controller._deferClose = -1;
   controller._deferFlush = -1;
   var deferClose;
@@ -1074,7 +1085,16 @@ export function onPullDirectStream(controller: ReadableStreamDirectController) {
         controller._handleError = $handleDirectStreamErrorReject.bind(controller);
       }
 
-      result.catch(controller._handleError);
+      controller._pulling = true;
+      result.$then(
+        () => {
+          controller._pulling = false;
+        },
+        e => {
+          controller._pulling = false;
+          return controller._handleError(e);
+        },
+      );
     }
   } catch (e) {
     return $handleDirectStreamErrorReject.$call(controller, e);
@@ -1706,7 +1726,10 @@ export function readableStreamClose(stream) {
     }
   }
 
-  $getByIdDirectPrivate($getByIdDirectPrivate(stream, "reader"), "closedPromiseCapability").resolve.$call();
+  const closedPromiseCapability = $getByIdDirectPrivate(reader, "closedPromiseCapability");
+  if (closedPromiseCapability) {
+    closedPromiseCapability.resolve.$call();
+  }
 }
 
 export function readableStreamFulfillReadRequest(stream, chunk, done) {

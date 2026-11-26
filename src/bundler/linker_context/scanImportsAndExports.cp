@@ -418,6 +418,9 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
             }
         }
 
+        // Step 4.5: Inline cross-module namespace property accesses (e.g. `HooksHost.load()`, `z.object()`).
+        inlineNsProp.inlineNamespacePropertyAccesses(client)?;
+
         // Step 5: Create namespace exports for every file. This is always necessary
         // for CommonJS files, and is also necessary for other files if they are
         // imported using an import star statement.
@@ -1303,7 +1306,7 @@ fn validateComposesFromProperties(
     }
 }
 
-
+import inlineNsProp from "./inlineNamespacePropertyAccesses.zig";
 import bun from "bun";
 const Environment = bun.Environment;
 const FeatureFlags = bun.FeatureFlags;

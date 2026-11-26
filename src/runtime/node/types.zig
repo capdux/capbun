@@ -779,7 +779,7 @@ pub fn fromJSWithEncodingMaybeAsync(global: *jsc.JSGlobalObject, allocator: std.
             if ((encoding == .utf8)) {
                 return StringOrBuffer.fromJSMaybeAsync(global, allocator, value, is_async, allow_string_object);
             }
-            if (value.isString()) {
+            if ((value.isString() or (allow_string_object and value.isStringObjectLike()))) {
                 var bun_str = try bun.String.fromJS(value, global);
                 _ = &bun_str;
                 const str_ptr: *const bun.String = (&bun_str);

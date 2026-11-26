@@ -1221,6 +1221,8 @@ walkDone:;
     }
     if (needEndEllipsis) result.append(ellipsis);
     activeStyles.emitCloseCodes(result);
+    if (result.hasOverflowed() || result.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]]
+        return std::nullopt;
     return result.toString();
 }
 

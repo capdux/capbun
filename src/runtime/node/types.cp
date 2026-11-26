@@ -371,7 +371,7 @@ pub union(enum) StringOrBuffer {
             return StringOrBuffer.fromJSMaybeAsync(global, allocator, value, is_async, allow_string_object);
         }
 
-        if (value.isString()) {
+        if (value.isString() || (allow_string_object && value.isStringObjectLike())) {
             let bun_str = bun.String.fromJS(value, global)?;
             const str_ptr: *const bun.String = &bun_str;
             const _guard_str = DerefGuard<bun.String>{ ptr: str_ptr };

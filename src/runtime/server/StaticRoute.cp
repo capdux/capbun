@@ -220,7 +220,7 @@ pub struct InitFromBytesOptions {
         // 304: no synthesized Content-Length (RFC 9110 §8.6 only allows the
         // 200's length; `from_js` already stripped the handler's).
         if (_.status_code != 304) {
-            const size = if (HTTPStatusText.isNullBody(_.status_code)) 0 else _.cached_blob_size;
+            const size = if (HTTPStatusText.isNullBody(_.status_code)) 0 else _.blob.slice().len;
             resp.writeHeaderInt("Content-Length", size);
         }
         resp.endWithoutBody(resp.shouldCloseConnection());

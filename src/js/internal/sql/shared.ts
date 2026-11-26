@@ -893,7 +893,7 @@ function parseOptions(
   }
 
   if (path) {
-    if (require("node:fs").existsSync(path)) {
+    if (path.includes("\0") || require("node:fs").existsSync(path)) {
       ret.path = path;
     }
   }

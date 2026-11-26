@@ -338,7 +338,7 @@ void JSDOMURLPrototype::finishCreation(VM& vm)
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSDOMURL::info(), JSDOMURLPrototypeTableValues, *this);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
-    putDirectNativeFunction(vm, this->globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsDOMURLPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontDelete | 0);
+    putDirectNativeFunction(vm, this->globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsDOMURLPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, JSC::PropertyAttribute::DontEnum | 0);
 }
 
 const ClassInfo JSDOMURL::s_info = { "URL"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSDOMURL) };

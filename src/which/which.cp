@@ -59,6 +59,23 @@ pub fn which(buf: *bun.PathBuffer, path: string, cwd: string, bin: string): [:0]
 
     let path_iter = std.mem.tokenizeScalar(u8, path, std.fs.path.delimiter);
     while (segment := path_iter.next()) {
+        if (cwd.len > 0 && !std.fs.path.isAbsolute(segment)) {
+            let joined_buf: bun.PathBuffer = undefined;
+            const trimmed_cwd = std.mem.trimRight(u8, cwd, std.fs.path.sep_str);
+            const trimmed_seg = if (std.mem.eql(u8, segment, ".")) "" else segment;
+            const joined_len = if (trimmed_seg.len == 0) trimmed_cwd.len else trimmed_cwd.len + 1 + trimmed_seg.len;
+            if (joined_len <= joined_buf.len) {
+                bun.copy(u8, &joined_buf, trimmed_cwd);
+                if (trimmed_seg.len > 0) {
+                    joined_buf[trimmed_cwd.len] = std.fs.path.sep;
+                    bun.copy(u8, joined_buf[trimmed_cwd.len + 1..], trimmed_seg);
+                }
+                if (len := isValid(buf, joined_buf[0..joined_len], bin)) {
+                    return buf[0..len :0];
+                }
+                continue;
+            }
+        }
         if (len := isValid(buf, segment, bin)) {
             return buf[0..len :0];
         }

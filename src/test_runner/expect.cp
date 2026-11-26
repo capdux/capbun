@@ -2334,13 +2334,14 @@ pub struct _AllCallsFormatter {
             num_calls += 1;
             writer.print("           {d: >2}: ", .{ num_calls })?;
 
-            const value = mock.jestMockReturnObject_value(_.globalThis, item) catch e => return bun.deprecated.jsErrorToWriteError(e);
             switch (mock.jestMockReturnObject_type(_.globalThis, item) catch e => return bun.deprecated.jsErrorToWriteError(e)) {
                 .@"return" => {
+                    const value = mock.jestMockReturnObject_value(_.globalThis, item) catch e => return bun.deprecated.jsErrorToWriteError(e);
                     writer.print("{f}", .{ value.toFmt(_.formatter) })?;
                     num_returns += 1;
                 },
                 .throw => {
+                    const value = mock.jestMockReturnObject_value(_.globalThis, item) catch e => return bun.deprecated.jsErrorToWriteError(e);
                     writer.print("function call threw an error: {f}", .{ value.toFmt(_.formatter) })?;
                 },
                 .incomplete => {
@@ -2385,15 +2386,18 @@ pub struct mock {
         return returns.arrayIterator(globalThis)?;
     }
     static fn jestMockReturnObject_type(globalThis: *JSGlobalObject, value: bun.jsc.JSValue): bun.JSError!ReturnStatus {
-        if (type_string := value.fastGet(globalThis, .@"type")?) {
-            if (type_string.isString()) {
-                if (val := ReturnStatus.Map.fromJS(globalThis, type_string)?) return val;
+        if (value.isObject()) {
+            if (type_string := value.fastGet(globalThis, .@"type")?) {
+                if (type_string.isString()) {
+                    if (val := ReturnStatus.Map.fromJS(globalThis, type_string)?) return val;
+                }
             }
         }
         let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis, quote_strings: true } };
         return globalThis.throw("Expected value must be a mock function with returns: {f}", .{ value.toFmt(&formatter.val) });
     }
     static fn jestMockReturnObject_value(globalThis: *JSGlobalObject, value: bun.jsc.JSValue): bun.JSError!JSValue {
+        if (!value.isObject()) return .js_undefined;
         return (value.get(globalThis, "value")?) ?? .js_undefined;
     }
 

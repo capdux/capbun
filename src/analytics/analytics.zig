@@ -299,6 +299,12 @@ pub export fn Bun__isEpollPwait2SupportedOnLinuxKernel() callconv(.c) i32 {
             if (comptime (!Environment.isLinux)) {
                 return 0;
             }
+            if (bun.getenvZ("BUN_FEATURE_FLAG_DISABLE_EPOLL_PWAIT2")) |v| {
+                _ = &v;
+                if ((bun.strings.eqlComptime(v, "1") or bun.strings.eqlComptime(v, "true"))) {
+                    return 0;
+                }
+            }
             const min_epoll_pwait2 = Semver.Version{ .major = 5, .minor = 11, .patch = 0 };
             return (switch (kernelVersion().order(min_epoll_pwait2, "", "")) {
 .gt => 1,

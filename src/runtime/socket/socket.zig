@@ -1058,6 +1058,42 @@ pub fn closeAndDetach(self: *@This(), code: uws.Socket.CloseCode) void {
             _ = socket.close(code);
     }
 
+pub fn teardownForReconnect(self: *@This(), vm: *jsc.VirtualMachine) void {
+            if ((!self.socket.isDetached())) {
+                const OptThisPtr = @FieldType(struct {
+    p: ?*This,
+}, "p");
+                switch (self.socket.socket) {
+.connected => |s| {
+(s.ext(OptThisPtr)).* = null;
+},
+.connecting => |c| {
+(c.ext(OptThisPtr)).* = null;
+},
+else => {
+
+},
+}
+                _ = self.closeAndDetach(.fast_shutdown);
+                _ = self.poll_ref.unref(vm);
+                _ = self.deref();
+            }
+            if (self.twin) |raw| {
+                _ = &raw;
+                self.twin = null;
+                _ = raw.deref();
+            }
+            self.flags.is_active = false;
+            self.flags.finalizing = false;
+            self.flags.authorized = false;
+            self.flags.handshake_complete = false;
+            self.flags.empty_packet_pending = false;
+            self.flags.end_after_flush = false;
+            self.flags.is_paused = false;
+            self.flags.rejected = false;
+            self.flags.hostname_mismatch = false;
+    }
+
 pub fn markInactive(self: *@This()) void {
             if (self.flags.is_active) {
                 if ((!self.socket.isClosed())) {

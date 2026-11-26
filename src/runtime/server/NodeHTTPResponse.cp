@@ -608,6 +608,10 @@ static fn writeHead(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject
         break :do_it;
     }
 
+    if (globalObject.hasException()) {
+        return error.JSError;
+    }
+
     return .js_undefined;
 }
 

@@ -1243,7 +1243,10 @@ pub fn sendWithoutAutoFlusher(self: *@This(), buf: []const u8) bool {
             _ = res.clearOnWritable();
             _ = self.handleFirstWriteIfNecessary();
             if (self.requested_end) {
-                _ = res.end(buf, false);
+                if ((buf.len > 0)) {
+                    _ = res.write(buf);
+                }
+                _ = res.endStream(false);
                 self.has_backpressure = false;
             } else {
                 self.has_backpressure = (res.write(buf) == .backpressure);
@@ -1548,7 +1551,11 @@ pub fn endFromJS(self: *@This(), globalThis: *JSGlobalObject) bun.sys.Maybe(JSVa
             } else {
                 if (self.res) |res| {
                     _ = &res;
-                    _ = res.end("", false);
+                    if (res.state().isHttpWriteCalled()) {
+                        _ = res.endStream(false);
+                    } else {
+                        _ = res.end("", false);
+                    }
                 }
             }
             _ = self.markDone();

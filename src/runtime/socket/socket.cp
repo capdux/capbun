@@ -537,6 +537,33 @@ pub fn NewSocket(comptime ssl: bool): type {
             socket.close(code);
         }
 
+        pub fn teardownForReconnect(*_, vm: *jsc.VirtualMachine) {
+            if (!_.socket.isDetached()) {
+                const OptThisPtr = @FieldType(struct { p: (*This)? }, "p");
+                switch (_.socket.socket) {
+                    .connected(s) => s.ext(OptThisPtr).* = null,
+                    .connecting(c) => c.ext(OptThisPtr).* = null,
+                    else => {},
+                }
+                _.closeAndDetach(.fast_shutdown);
+                _.poll_ref.unref(vm);
+                _.deref();
+            }
+            if (raw := _.twin) {
+                _.twin = null;
+                raw.deref();
+            }
+            _.flags.is_active = false;
+            _.flags.finalizing = false;
+            _.flags.authorized = false;
+            _.flags.handshake_complete = false;
+            _.flags.empty_packet_pending = false;
+            _.flags.end_after_flush = false;
+            _.flags.is_paused = false;
+            _.flags.rejected = false;
+            _.flags.hostname_mismatch = false;
+        }
+
         pub fn markInactive(*_) {
             if (_.flags.is_active) {
                 if (!_.socket.isClosed()) {

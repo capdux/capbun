@@ -1520,6 +1520,9 @@ pub fn getText(this_obj: *Type, globalObject: *jsc.JSGlobalObject, callframe: *j
             if ((value.* == .Used)) {
                 return handleBodyAlreadyUsed(globalObject);
             }
+            if ((value.* == .Error)) {
+                return handleBodyError(value, globalObject);
+            }
             if ((value.* == .Locked)) {
                 if (@hasDecl(Type, "getBodyReadableStream")) {
                     if (this_obj.getBodyReadableStream(globalObject)) |readable| {
@@ -1597,6 +1600,9 @@ pub fn getJSON(this_obj: *Type, globalObject: *jsc.JSGlobalObject, callframe: *j
             if ((value.* == .Used)) {
                 return handleBodyAlreadyUsed(globalObject);
             }
+            if ((value.* == .Error)) {
+                return handleBodyError(value, globalObject);
+            }
             if ((value.* == .Locked)) {
                 if (@hasDecl(Type, "getBodyReadableStream")) {
                     if (this_obj.getBodyReadableStream(globalObject)) |readable| {
@@ -1629,12 +1635,22 @@ pub fn handleBodyAlreadyUsed(globalObject: *jsc.JSGlobalObject) JSValue {
             return globalObject.ERR(.BODY_ALREADY_USED, "Body already used", .{}).reject();
     }
 
+pub fn handleBodyError(value: *Body.Value, globalObject: *jsc.JSGlobalObject) JSValue {
+            const err_val = value.Error.toJS(globalObject);
+            _ = value.Error.deinit();
+            value.* = .Used;
+            return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, err_val);
+    }
+
 pub fn getArrayBuffer(this_obj: *Type, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = log("getArrayBuffer", .{});
             var value: *Body.Value = this_obj.getBodyValue();
             _ = &value;
             if ((value.* == .Used)) {
                 return handleBodyAlreadyUsed(globalObject);
+            }
+            if ((value.* == .Error)) {
+                return handleBodyError(value, globalObject);
             }
             if ((value.* == .Locked)) {
                 if (@hasDecl(Type, "getBodyReadableStream")) {
@@ -1670,6 +1686,9 @@ pub fn getBytes(this_obj: *Type, globalObject: *jsc.JSGlobalObject, callframe: *
             if ((value.* == .Used)) {
                 return handleBodyAlreadyUsed(globalObject);
             }
+            if ((value.* == .Error)) {
+                return handleBodyError(value, globalObject);
+            }
             if ((value.* == .Locked)) {
                 if (@hasDecl(Type, "getBodyReadableStream")) {
                     if (this_obj.getBodyReadableStream(globalObject)) |readable| {
@@ -1703,6 +1722,9 @@ pub fn getFormData(this_obj: *Type, globalObject: *jsc.JSGlobalObject, callframe
             _ = &value;
             if ((value.* == .Used)) {
                 return handleBodyAlreadyUsed(globalObject);
+            }
+            if ((value.* == .Error)) {
+                return handleBodyError(value, globalObject);
             }
             if ((value.* == .Locked)) {
                 if (@hasDecl(Type, "getBodyReadableStream")) {
@@ -1761,6 +1783,9 @@ pub fn getBlobWithThisValue(this_obj: *Type, globalObject: *jsc.JSGlobalObject, 
             _ = &value;
             if ((value.* == .Used)) {
                 return handleBodyAlreadyUsed(globalObject);
+            }
+            if ((value.* == .Error)) {
+                return handleBodyError(value, globalObject);
             }
             if ((value.* == .Locked)) {
                 if (@hasDecl(Type, "getBodyReadableStream")) {

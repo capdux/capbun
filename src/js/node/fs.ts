@@ -627,8 +627,21 @@ var access = function access(path, mode, callback) {
       options = undefined;
     }
     validateFunction(callback, "callback");
-    const result = new Dir(1, path, options);
-    callback(null, result);
+    const opts = validateOpendirOptions(options);
+    fs.readdir(path, {
+      withFileTypes: true,
+      encoding: opts?.encoding,
+      recursive: opts?.recursive,
+    }).then(
+      entries => callback(null, new Dir(1, path, opts, entries)),
+      e => {
+        if (e && typeof e === "object" && e.syscall === "scandir") {
+          e.syscall = "opendir";
+          if (typeof e.message === "string") e.message = e.message.replace(", scandir ", ", opendir ");
+        }
+        callback(e);
+      },
+    );
   };
 
 const { defineCustomPromisifyArgs } = require("internal/promisify");
@@ -1046,10 +1059,47 @@ function _toUnixTimestamp(time: any, name = "time") {
   throw $ERR_INVALID_ARG_TYPE(name, "number or Date", time);
 }
 
+function validateOpendirOptions(options) {
+  if (options === undefined || options === null) return undefined;
+  if (typeof options === "string") {
+    if (options !== "buffer" && !Buffer.isEncoding(options)) {
+      throw $ERR_INVALID_ARG_VALUE("encoding", options, "is invalid encoding");
+    }
+    return { encoding: options };
+  }
+  if (typeof options === "object") {
+    if (
+      options.encoding !== undefined &&
+      options.encoding !== null &&
+      options.encoding !== "buffer" &&
+      !Buffer.isEncoding(options.encoding)
+    ) {
+      throw $ERR_INVALID_ARG_VALUE("options.encoding", options.encoding, "is invalid encoding");
+    }
+    return options;
+  }
+  throw $ERR_INVALID_ARG_TYPE("options", "Object", options);
+}
+
 function opendirSync(path, options) {
   // TODO: validatePath
   // validateString(path, "path");
-  return new Dir(1, path, options);
+  const opts = validateOpendirOptions(options);
+  let entries;
+  try {
+    entries = fs.readdirSync(path, {
+      withFileTypes: true,
+      encoding: opts?.encoding,
+      recursive: opts?.recursive,
+    });
+  } catch (e: any) {
+    if (e && typeof e === "object" && e.syscall === "scandir") {
+      e.syscall = "opendir";
+      if (typeof e.message === "string") e.message = e.message.replace(", scandir ", ", opendir ");
+    }
+    throw e;
+  }
+  return new Dir(1, path, opts, entries);
 }
 
 class Dir {
@@ -1062,12 +1112,13 @@ class Dir {
   #options;
   #entries: DirentType[] | null = null;
 
-  constructor(handle, path: PathLike, options) {
+  constructor(handle, path: PathLike, options, entries: DirentType[] | null = null) {
     if ($isUndefinedOrNull(handle)) throw $ERR_MISSING_ARGS("handle");
     validateInteger(handle, "handle", 0);
     this.#handle = $toLength(handle);
     this.#path = path;
     this.#options = options;
+    this.#entries = entries;
   }
 
   readSync() {
@@ -1132,6 +1183,16 @@ class Dir {
       recursive: this.#options?.recursive,
     })) as DirentType[]);
     yield* entries;
+  }
+
+  [Symbol.dispose]() {
+    if (this.#handle < 0) return;
+    this.closeSync();
+  }
+
+  async [Symbol.asyncDispose]() {
+    if (this.#handle < 0) return;
+    await this.close();
   }
 }
 

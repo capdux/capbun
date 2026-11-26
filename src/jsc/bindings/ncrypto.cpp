@@ -1268,7 +1268,8 @@ bool X509View::isCA() const
 {
     ClearErrorOnReturn clearErrorOnReturn;
     if (cert_ == nullptr) return false;
-    return X509_check_ca(const_cast<X509*>(cert_)) == 1;
+    return X509_check_ca(const_cast<X509*>(cert_)) == 1
+        && (X509_get_extension_flags(const_cast<X509*>(cert_)) & EXFLAG_BCONS) != 0;
 }
 
 bool X509View::isIssuedBy(const X509View& issuer) const
@@ -2042,7 +2043,7 @@ DataPointer hkdf(const Digest& md,
 {
     ClearErrorOnReturn clearErrorOnReturn;
 
-    if (!checkHkdfLength(md, length) || info.len > INT_MAX || salt.len > INT_MAX) {
+    if (length == 0 || !checkHkdfLength(md, length) || info.len > INT_MAX || salt.len > INT_MAX) {
         return {};
     }
 

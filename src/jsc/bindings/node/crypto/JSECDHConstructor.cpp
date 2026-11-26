@@ -70,6 +70,15 @@ JSC_DEFINE_HOST_FUNCTION(constructECDH, (JSC::JSGlobalObject * globalObject, JSC
 
     auto* zigGlobalObject = defaultGlobalObject(globalObject);
     JSC::Structure* structure = zigGlobalObject->m_JSECDHClassStructure.get(zigGlobalObject);
+    JSC::JSValue newTarget = callFrame->newTarget();
+    if (newTarget && zigGlobalObject->m_JSECDHClassStructure.constructor(zigGlobalObject) != newTarget) [[unlikely]] {
+        if (newTarget.isObject()) {
+            auto* functionGlobalObject = defaultGlobalObject(JSC::getFunctionRealm(globalObject, newTarget.getObject()));
+            RETURN_IF_EXCEPTION(scope, {});
+            structure = JSC::InternalFunction::createSubclassStructure(globalObject, newTarget.getObject(), functionGlobalObject->m_JSECDHClassStructure.get(functionGlobalObject));
+            RETURN_IF_EXCEPTION(scope, {});
+        }
+    }
 
     const EC_GROUP* group = key.getGroup();
     return JSC::JSValue::encode(JSECDH::create(vm, structure, globalObject, WTF::move(key), group));

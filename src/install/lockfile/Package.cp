@@ -1187,6 +1187,12 @@ pub fn Package(comptime SemverIntType: type): type {
                             }
                         }
 
+                        if (comptime group.behavior.isOptional()) {
+                            if (name.value.slice(lockfile.buffers.string_bytes.items).len == 0) {
+                                continue :list;
+                            }
+                        }
+
                         const empty_version: Dependency.Version = .{};
                         const dependency = Dependency{
                             name: name.value,

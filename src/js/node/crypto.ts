@@ -273,7 +273,11 @@ Object.assign(Hash.prototype, {
     return new Hash(this[kHandle], options);
   },
   _transform: function (chunk, encoding, callback) {
-    this[kHandle].update(this, chunk, encoding);
+    try {
+      this[kHandle].update(this, chunk, encoding);
+    } catch (err) {
+      if (err?.code !== "ERR_CRYPTO_HASH_FINALIZED") throw err;
+    }
     callback();
   },
   _flush: function (callback) {
@@ -313,7 +317,11 @@ Object.assign(Hmac.prototype, {
     return this[kHandle].digest(outputEncoding);
   },
   _transform: function (chunk, encoding, callback) {
-    this[kHandle].update(this, chunk, encoding);
+    try {
+      this[kHandle].update(this, chunk, encoding);
+    } catch (err) {
+      if (err?.code !== "ERR_CRYPTO_HASH_FINALIZED") throw err;
+    }
     callback();
   },
   _flush: function (callback) {

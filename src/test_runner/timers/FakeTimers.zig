@@ -56,6 +56,7 @@ pub const bun = @import("bun");
 pub const FakeTimers = @This();
 
 active: bool = false,
+firing_depth: u32 = 0,
 timers: TimerHeap = .{ .context = @as(void, undefined) },
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
@@ -183,6 +184,18 @@ pub fn deactivate(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) void {
         ft.active = false;
 }
 
+pub fn insert(ft: *FakeTimers, timer: *bun.api.Timer.EventLoopTimer) void {
+        if ((ft.firing_depth > 0)) {
+            if (current_time.getTimespecNow()) |now| {
+                _ = &now;
+                if ((!timer.next.greater((&now)))) {
+                    timer.next = now.addMs(1);
+                }
+            }
+        }
+        _ = ft.timers.insert(timer);
+}
+
 pub fn clear(ft: *FakeTimers) void {
         while (ft.timers.deleteMin()) |timer| {
             timer.state = .CANCELLED;
@@ -197,16 +210,21 @@ pub fn executeNext(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) bool {
 }
 
 pub fn fire(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, next: *bun.api.Timer.EventLoopTimer) void {
-        _ = &ft;
         var vm = globalObject.bunVM();
         _ = &vm;
-        if (bun.Environment.ci_assert) {
-            const prev = current_time.getTimespecNow();
-            _ = bun.assert((prev != null));
-            _ = bun.assert((next.next.eql((&prev.?)) or next.next.greater((&prev.?))));
+        var now = next.next;
+        _ = &now;
+        if (current_time.getTimespecNow()) |prev| {
+            _ = &prev;
+            if (prev.greater((&now))) {
+                now = prev;
+            }
         }
-        const now = next.next;
         _ = current_time.set(globalObject, .{ .offset = (&now) });
+        ft.firing_depth = (ft.firing_depth + 1);
+        defer {
+        ft.firing_depth = (ft.firing_depth - 1);
+        }
         _ = next.fire((&now), vm);
 }
 
@@ -335,7 +353,7 @@ pub fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFram
                     if (config.now.isDate()) {
                         js_now = config.now.getUnixTimestamp();
                     } else {
-                        return globalObject.throwInvalidArguments("'now' must be a number || Date", .{});
+                        return globalObject.throwInvalidArguments("'now' must be a number or Date", .{});
                     }
                 }
             }
@@ -385,13 +403,20 @@ pub fn advanceTimersByTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Ca
         const current = current_opt.?;
         const arg_number = arg.asNumber();
         const max_advance = std.math.maxInt(u32);
-        if (((arg_number < 0) or (arg_number > max_advance))) {
-            return globalObject.throwInvalidArguments("advanceTimersToNextTimer() ms is out of range. It must be >= 0 && <= {d}. Received {d:.0}", .{ max_advance, arg_number });
+        if ((!((arg_number >= 0) and (arg_number <= max_advance)))) {
+            return globalObject.throwInvalidArguments("advanceTimersToNextTimer() ms is out of range. It must be >= 0 and <= {d}. Received {d:.0}", .{ max_advance, arg_number });
         }
         const effective_advance = (if ((arg_number == 0)) 1 else arg_number);
         const target = current.addMsFloat(effective_advance);
         _ = ft.executeUntil(globalObject, target);
-        _ = current_time.set(globalObject, .{ .offset = (&target) });
+        if (current_time.getTimespecNow()) |now_after| {
+            _ = &now_after;
+            if (target.greater((&now_after))) {
+                _ = current_time.set(globalObject, .{ .offset = (&target) });
+            }
+        } else {
+            _ = current_time.set(globalObject, .{ .offset = (&target) });
+        }
         return callframe.this();
 }
 

@@ -609,7 +609,7 @@ static void NodeHTTPServer__writeHead(
     if (headersObject) {
         if (auto* fetchHeaders = dynamicDowncast<WebCore::JSFetchHeaders>(headersObject)) {
             writeFetchHeadersToUWSResponse<isSSL>(fetchHeaders->wrapped(), response);
-            return;
+            RELEASE_AND_RETURN(scope, void());
         }
 
         if (headersObject->hasNonReifiedStaticProperties()) [[unlikely]] {

@@ -31,6 +31,10 @@
 #include "ErrorEvent.h"
 #include "Event.h"
 #include "EventNames.h"
+#include "JSBroadcastChannel.h"
+#include "JSMessageChannel.h"
+#include "JSMessagePort.h"
+#include "JSWorker.h"
 #include "StructuredSerializeOptions.h"
 #include <JavaScriptCore/IteratorOperations.h>
 #include <JavaScriptCore/ScriptCallStack.h>
@@ -668,12 +672,16 @@ JSValue createNodeWorkerThreadsBinding(Zig::GlobalObject* globalObject)
     ASSERT(environmentData);
     globalObject->setNodeWorkerEnvironmentData(environmentData);
 
-    JSObject* array = constructEmptyArray(globalObject, nullptr, 4);
+    JSObject* array = constructEmptyArray(globalObject, nullptr, 8);
     RETURN_IF_EXCEPTION(scope, {});
     array->putDirectIndex(globalObject, 0, workerData);
     array->putDirectIndex(globalObject, 1, threadId);
     array->putDirectIndex(globalObject, 2, JSFunction::create(vm, globalObject, 1, "receiveMessageOnPort"_s, jsReceiveMessageOnPort, ImplementationVisibility::Public, NoIntrinsic));
     array->putDirectIndex(globalObject, 3, environmentData);
+    array->putDirectIndex(globalObject, 4, JSMessagePort::getConstructor(vm, globalObject));
+    array->putDirectIndex(globalObject, 5, JSMessageChannel::getConstructor(vm, globalObject));
+    array->putDirectIndex(globalObject, 6, JSBroadcastChannel::getConstructor(vm, globalObject));
+    array->putDirectIndex(globalObject, 7, JSWorker::getConstructor(vm, globalObject));
     return array;
 }
 

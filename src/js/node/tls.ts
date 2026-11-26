@@ -201,7 +201,7 @@ function validateCiphers(ciphers: string, name: string = "options") {
     const ciphersSet = getValidCiphersSet();
     const requested = ciphers.split(":");
     for (const r of requested) {
-      if (r && !ciphersSet.has(r)) {
+      if (r && !StringPrototypeStartsWith.$call(r, "TLS_") && !ciphersSet.has(r)) {
         throw $ERR_SSL_NO_CIPHER_MATCH();
       }
     }
@@ -824,7 +824,10 @@ function Server(options, secureConnectionListener): void {
 
         validateCiphers(options.ciphers);
 
-        this.ciphers = options.ciphers;
+        const filtered = options.ciphers.split(":").filter(tlsCipherFilter).join(":");
+        if (filtered) {
+          this.ciphers = filtered;
+        }
       }
 
       if (
@@ -1047,7 +1050,7 @@ function getDefaultCiphers() {
   return `TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256${ciphers ? ":" + ciphers : ""}`;
 }
 
-export default {
+const tlsExports = {
   CLIENT_RENEG_LIMIT,
   CLIENT_RENEG_WINDOW,
   connect,
@@ -1075,8 +1078,15 @@ export default {
   Server,
   TLSSocket,
   checkServerIdentity,
-  get rootCertificates() {
-    return cacheBundledRootCertificates();
-  },
   getCACertificates,
 } as any as typeof import("node:tls");
+
+Object.defineProperty(tlsExports, "rootCertificates", {
+  enumerable: true,
+  configurable: false,
+  get() {
+    return cacheBundledRootCertificates();
+  },
+});
+
+export default tlsExports;

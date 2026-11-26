@@ -1070,6 +1070,11 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                                 }
                             }
                         }
+                        if (comptime group.behavior.isOptional()) {
+                            if (((if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value).slice(lockfile.buffers.string_bytes.items).len == 0)) {
+                                continue :list;
+                            }
+                        }
                         const empty_version: Dependency.Version = .{};
                         const dependency = Dependency{ .name = (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value), .name_hash = name.hash, .behavior = behavior, .version = ((Dependency.parse(allocator, (if (@typeInfo(@TypeOf(name)) == .@"enum") @intFromEnum(name) else name.value), name.hash, sliced.slice, (&sliced), log, pm)) orelse (empty_version)) };
                         if (comptime group.behavior.isOptional()) {

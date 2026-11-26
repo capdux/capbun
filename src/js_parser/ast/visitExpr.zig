@@ -610,7 +610,12 @@ const id_before = ((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) els
             }
 },
 .un_delete => {
-(if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), ExprIn{ .has_chain_parent = true });
+const old_delete_target = p.delete_target;
+            p.delete_target = (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data;
+            defer {
+            p.delete_target = old_delete_target;
+            }
+            (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), ExprIn{ .has_chain_parent = true });
 },
 else => {
 (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = p.visitExprInOut((if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value), ExprIn{ .assign_target = e_.op.unaryAssignTarget() });

@@ -1129,13 +1129,27 @@ var str = ZigString.init("");
                 const length = str.len;
                 var idx: usize = 0;
                 _ = &idx;
-                for (cp_iter_slice(str.slice())) |c| {
-                    _ = &c;
-                    _ = writer.print("\"{d}\": \"{c}\",\n", .{ idx, c });
-                    if ((idx != (length - 1))) {
-                        _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                if (str.is16Bit()) {
+                    for (cp_iter_slice(str.utf16SliceAligned())) |c| {
+                        _ = &c;
+                        var utf8_buf: [4]u8 = undefined;
+                        _ = &utf8_buf;
+                        const utf8_len = (blk_catch_22: { break :blk_catch_22 ((std.unicode.utf8Encode((if (comptime @typeInfo(@TypeOf(c)) == .@"enum") cp_cast_int(u21, @intFromEnum(c)) else cp_cast_int(u21, c)), (&utf8_buf))) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 0; }); });
+                        _ = writer.print("\"{d}\": \"{s}\",\n", .{ idx, utf8_buf[0..utf8_len] });
+                        if ((idx != (length - 1))) {
+                            _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                        }
+                        idx = (idx + 1);
                     }
-                    idx = (idx + 1);
+                } else {
+                    for (cp_iter_slice(str.slice())) |c| {
+                        _ = &c;
+                        _ = writer.print("\"{d}\": \"{c}\",\n", .{ idx, c });
+                        if ((idx != (length - 1))) {
+                            _ = ((self.writeIndent(Writer, writer_)) catch unreachable);
+                        }
+                        idx = (idx + 1);
+                    }
                 }
                 _ = self.resetLine();
                 _ = writer.writeAll("}\n");
@@ -1199,7 +1213,7 @@ _ = unreachable;
                     _ = writer.writeAll(str.slice());
                 } else {
                     if ((str.len > 0)) {
-                        const buf = (blk_catch_23: { break :blk_catch_23 ((strings.allocateLatin1IntoUTF8(bun.default_allocator, str.slice())) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 ""; }); });
+                        const buf = (blk_catch_25: { break :blk_catch_25 ((strings.allocateLatin1IntoUTF8(bun.default_allocator, str.slice())) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 ""; }); });
                         if ((buf.len > 0)) {
                             var buf_guard = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = buf };
                             _ = &buf_guard;
@@ -1386,7 +1400,7 @@ const len: u32 = @truncate(try value.getLength(self.globalThis));
             }
             _ = self.resetLine();
             _ = writer.writeAll("\n");
-            _ = (blk_catch_29: { break :blk_catch_29 ((self.writeIndent(Writer, writer_)) catch |__ce_29| { _ = &__ce_29;  }); });
+            _ = (blk_catch_31: { break :blk_catch_31 ((self.writeIndent(Writer, writer_)) catch |__ce_31| { _ = &__ce_31;  }); });
             _ = writer.writeAll("]");
             if ((self.indent == 0)) {
                 _ = writer.writeAll("\n");
@@ -1397,7 +1411,7 @@ const len: u32 = @truncate(try value.getLength(self.globalThis));
 .Private => {
 if (value.@"as"(jsc.WebCore.Response)) |response| {
                 _ = &response;
-                _ = (blk_catch_30: { break :blk_catch_30 ((response.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                _ = (blk_catch_32: { break :blk_catch_32 ((response.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                 if ((!self.globalThis.hasException())) {
                     return self.globalThis.throwError(e, "failed to print Response");
                 }
@@ -1405,7 +1419,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
             } else {
                 if (value.@"as"(jsc.WebCore.Request)) |request| {
                     _ = &request;
-                    _ = (blk_catch_31: { break :blk_catch_31 ((request.writeFormat(value, Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                    _ = (blk_catch_33: { break :blk_catch_33 ((request.writeFormat(value, Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                     if ((!self.globalThis.hasException())) {
                         return self.globalThis.throwError(e, "failed to print Request");
                     }
@@ -1414,7 +1428,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                 } else {
                     if (value.@"as"(jsc.API.BuildArtifact)) |build| {
                         _ = &build;
-                        _ = (blk_catch_32: { break :blk_catch_32 ((build.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                        _ = (blk_catch_34: { break :blk_catch_34 ((build.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                         if ((!self.globalThis.hasException())) {
                             return self.globalThis.throwError(e, "failed to print BuildArtifact");
                         }
@@ -1422,7 +1436,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                     } else {
                         if (value.@"as"(jsc.WebCore.Blob)) |blob| {
                             _ = &blob;
-                            _ = (blk_catch_33: { break :blk_catch_33 ((blob.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                            _ = (blk_catch_35: { break :blk_catch_35 ((blob.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                             if ((!self.globalThis.hasException())) {
                                 return self.globalThis.throwError(e, "failed to print Blob");
                             }
@@ -1460,15 +1474,15 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                                     } else {
                                         if (value.@"as"(bun.api.BuildMessage)) |build_log| {
                                             _ = &build_log;
-                                            _ = (blk_catch_34: { break :blk_catch_34 ((build_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_34| { _ = &__ce_34;  }); });
+                                            _ = (blk_catch_36: { break :blk_catch_36 ((build_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_36| { _ = &__ce_36;  }); });
                                             return;
                                         } else {
                                             if (value.@"as"(bun.api.ResolveMessage)) |resolve_log| {
                                                 _ = &resolve_log;
-                                                _ = (blk_catch_35: { break :blk_catch_35 ((resolve_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_35| { _ = &__ce_35;  }); });
+                                                _ = (blk_catch_37: { break :blk_catch_37 ((resolve_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_37| { _ = &__ce_37;  }); });
                                                 return;
                                             } else {
-                                                if ((blk_catch_36: { break :blk_catch_36 ((JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, formatter_name_buf, value, enable_ansi_colors)) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 @as(bool, false); }); })) {
+                                                if ((blk_catch_38: { break :blk_catch_38 ((JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, formatter_name_buf, value, enable_ansi_colors)) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 @as(bool, false); }); })) {
                                                     return;
                                                 } else {
                                                     if ((jsType != .DOMWrapper)) {
@@ -1492,7 +1506,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
 .Promise => {
 if (self.goodTimeForANewLine()) {
                 _ = writer.writeAll("\n");
-                _ = (blk_catch_37: { break :blk_catch_37 ((self.writeIndent(Writer, writer_)) catch |__ce_37| { _ = &__ce_37;  }); });
+                _ = (blk_catch_39: { break :blk_catch_39 ((self.writeIndent(Writer, writer_)) catch |__ce_39| { _ = &__ce_39;  }); });
             }
             _ = writer.writeAll("Promise {}");
 },
@@ -1541,7 +1555,7 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
             }
-            _ = (blk_catch_38: { break :blk_catch_38 ((self.writeIndent(Writer, writer_)) catch |__ce_38| { _ = &__ce_38;  }); });
+            _ = (blk_catch_40: { break :blk_catch_40 ((self.writeIndent(Writer, writer_)) catch |__ce_40| { _ = &__ce_40;  }); });
             _ = writer.writeAll("}");
             _ = writer.writeAll("\n");
 },
@@ -1553,7 +1567,7 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
             defer {
             self.quote_strings = prev_quote_strings;
             }
-            _ = (blk_catch_39: { break :blk_catch_39 ((self.writeIndent(Writer, writer_)) catch |__ce_39| { _ = &__ce_39;  }); });
+            _ = (blk_catch_41: { break :blk_catch_41 ((self.writeIndent(Writer, writer_)) catch |__ce_41| { _ = &__ce_41;  }); });
             const set_name = (if ((value.jsType() == .WeakSet)) "WeakSet" else "Set");
             if ((length == 0)) {
                 return writer.print("{s} {{}}", .{ set_name });
@@ -1573,7 +1587,7 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
             }
-            _ = (blk_catch_40: { break :blk_catch_40 ((self.writeIndent(Writer, writer_)) catch |__ce_40| { _ = &__ce_40;  }); });
+            _ = (blk_catch_42: { break :blk_catch_42 ((self.writeIndent(Writer, writer_)) catch |__ce_42| { _ = &__ce_42;  }); });
             _ = writer.writeAll("}");
             _ = writer.writeAll("\n");
 },
@@ -1587,7 +1601,7 @@ var str = DerefGuard(bun.String){ .val = bun.String.empty };
             if ((jsType == .JSDate)) {
                 var iso_string_buf: [36]u8 = undefined;
                 _ = &iso_string_buf;
-                var out_buf: []const u8 = (blk_catch_41: { break :blk_catch_41 ((std.fmt.bufPrint((&iso_string_buf), "{f}", .{ str.val })) catch |__ce_41| { _ = &__ce_41; break :blk_catch_41 ""; }); });
+                var out_buf: []const u8 = (blk_catch_43: { break :blk_catch_43 ((std.fmt.bufPrint((&iso_string_buf), "{f}", .{ str.val })) catch |__ce_43| { _ = &__ce_43; break :blk_catch_43 ""; }); });
                 _ = &out_buf;
                 if ((out_buf.len > 2)) {
                     out_buf = out_buf[1..(out_buf.len - 1)];
@@ -1609,7 +1623,7 @@ const event_type_value: JSValue = brk: {
             }
             break :brk .js_undefined;
 };
-            const mapped_event = (((blk_catch_42: { break :blk_catch_42 ((EventType.map.fromJS(self.globalThis, event_type_value)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 null; }); })) orelse (.unknown));
+            const mapped_event = (((blk_catch_44: { break :blk_catch_44 ((EventType.map.fromJS(self.globalThis, event_type_value)) catch |__ce_44| { _ = &__ce_44; break :blk_catch_44 null; }); })) orelse (.unknown));
             const event_type = (switch (mapped_event) {
 .MessageEvent => EventType.MessageEvent,
 .ErrorEvent => EventType.ErrorEvent,
@@ -1941,7 +1955,7 @@ const prev_quote_strings = self.quote_strings;
                         self.indent = (self.indent - 1);
                     }
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_57: { break :blk_catch_57 ((self.writeIndent(Writer, writer_)) catch |__ce_57| { _ = &__ce_57;  }); });
+                    _ = (blk_catch_59: { break :blk_catch_59 ((self.writeIndent(Writer, writer_)) catch |__ce_59| { _ = &__ce_59;  }); });
                     _ = writer.writeAll("}");
                     self.estimated_line_length = (self.estimated_line_length + 1);
                 } else {
@@ -1969,13 +1983,13 @@ const arrayBuffer = (value.asArrayBuffer(self.globalThis)).?;
                     }
                     _ = writer.writeAll("{\n");
                     self.indent = (self.indent + 1);
-                    _ = (blk_catch_58: { break :blk_catch_58 ((self.writeIndent(Writer, writer_)) catch |__ce_58| { _ = &__ce_58;  }); });
+                    _ = (blk_catch_60: { break :blk_catch_60 ((self.writeIndent(Writer, writer_)) catch |__ce_60| { _ = &__ce_60;  }); });
                     _ = writer.writeAll("\"data\": [");
                     self.indent = (self.indent + 1);
                     for (cp_iter_slice(slice)) |el| {
                         _ = &el;
                         _ = writer.writeAll("\n");
-                        _ = (blk_catch_59: { break :blk_catch_59 ((self.writeIndent(Writer, writer_)) catch |__ce_59| { _ = &__ce_59;  }); });
+                        _ = (blk_catch_61: { break :blk_catch_61 ((self.writeIndent(Writer, writer_)) catch |__ce_61| { _ = &__ce_61;  }); });
                         _ = writer.print("{d},", .{ .el = el });
                     }
                     if ((self.indent > 0)) {
@@ -1983,17 +1997,17 @@ const arrayBuffer = (value.asArrayBuffer(self.globalThis)).?;
                     }
                     if ((slice.len > 0)) {
                         _ = writer.writeAll("\n");
-                        _ = (blk_catch_60: { break :blk_catch_60 ((self.writeIndent(Writer, writer_)) catch |__ce_60| { _ = &__ce_60;  }); });
+                        _ = (blk_catch_62: { break :blk_catch_62 ((self.writeIndent(Writer, writer_)) catch |__ce_62| { _ = &__ce_62;  }); });
                         _ = writer.writeAll("],\n");
                     } else {
                         _ = writer.writeAll("],\n");
                     }
-                    _ = (blk_catch_61: { break :blk_catch_61 ((self.writeIndent(Writer, writer_)) catch |__ce_61| { _ = &__ce_61;  }); });
+                    _ = (blk_catch_63: { break :blk_catch_63 ((self.writeIndent(Writer, writer_)) catch |__ce_63| { _ = &__ce_63;  }); });
                     _ = writer.writeAll("\"type\": \"Buffer\",\n");
                     if ((self.indent > 0)) {
                         self.indent = (self.indent - 1);
                     }
-                    _ = (blk_catch_62: { break :blk_catch_62 ((self.writeIndent(Writer, writer_)) catch |__ce_62| { _ = &__ce_62;  }); });
+                    _ = (blk_catch_64: { break :blk_catch_64 ((self.writeIndent(Writer, writer_)) catch |__ce_64| { _ = &__ce_64;  }); });
                     _ = writer.writeAll("}");
                     if ((self.indent == 0)) {
                         _ = writer.writeAll("\n");
@@ -2023,7 +2037,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i8)) i8 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_63: { break :blk_catch_63 ((self.writeIndent(Writer, writer_)) catch |__ce_63| { _ = &__ce_63;  }); });
+                    _ = (blk_catch_65: { break :blk_catch_65 ((self.writeIndent(Writer, writer_)) catch |__ce_65| { _ = &__ce_65;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2043,7 +2057,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i16)) i16 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_64: { break :blk_catch_64 ((self.writeIndent(Writer, writer_)) catch |__ce_64| { _ = &__ce_64;  }); });
+                    _ = (blk_catch_66: { break :blk_catch_66 ((self.writeIndent(Writer, writer_)) catch |__ce_66| { _ = &__ce_66;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2063,7 +2077,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u16)) u16 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_65: { break :blk_catch_65 ((self.writeIndent(Writer, writer_)) catch |__ce_65| { _ = &__ce_65;  }); });
+                    _ = (blk_catch_67: { break :blk_catch_67 ((self.writeIndent(Writer, writer_)) catch |__ce_67| { _ = &__ce_67;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2083,7 +2097,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i32)) i32 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_66: { break :blk_catch_66 ((self.writeIndent(Writer, writer_)) catch |__ce_66| { _ = &__ce_66;  }); });
+                    _ = (blk_catch_68: { break :blk_catch_68 ((self.writeIndent(Writer, writer_)) catch |__ce_68| { _ = &__ce_68;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2103,7 +2117,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u32)) u32 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_67: { break :blk_catch_67 ((self.writeIndent(Writer, writer_)) catch |__ce_67| { _ = &__ce_67;  }); });
+                    _ = (blk_catch_69: { break :blk_catch_69 ((self.writeIndent(Writer, writer_)) catch |__ce_69| { _ = &__ce_69;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2123,7 +2137,7 @@ const slice_with_type: []align(std.@"meta".alignment([]f16)) f16 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_68: { break :blk_catch_68 ((self.writeIndent(Writer, writer_)) catch |__ce_68| { _ = &__ce_68;  }); });
+                    _ = (blk_catch_70: { break :blk_catch_70 ((self.writeIndent(Writer, writer_)) catch |__ce_70| { _ = &__ce_70;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2143,7 +2157,7 @@ const slice_with_type: []align(std.@"meta".alignment([]f32)) f32 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_69: { break :blk_catch_69 ((self.writeIndent(Writer, writer_)) catch |__ce_69| { _ = &__ce_69;  }); });
+                    _ = (blk_catch_71: { break :blk_catch_71 ((self.writeIndent(Writer, writer_)) catch |__ce_71| { _ = &__ce_71;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2163,7 +2177,7 @@ const slice_with_type: []align(std.@"meta".alignment([]f64)) f64 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_70: { break :blk_catch_70 ((self.writeIndent(Writer, writer_)) catch |__ce_70| { _ = &__ce_70;  }); });
+                    _ = (blk_catch_72: { break :blk_catch_72 ((self.writeIndent(Writer, writer_)) catch |__ce_72| { _ = &__ce_72;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2183,7 +2197,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i64)) i64 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_71: { break :blk_catch_71 ((self.writeIndent(Writer, writer_)) catch |__ce_71| { _ = &__ce_71;  }); });
+                    _ = (blk_catch_73: { break :blk_catch_73 ((self.writeIndent(Writer, writer_)) catch |__ce_73| { _ = &__ce_73;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2203,7 +2217,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u64)) u64 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_72: { break :blk_catch_72 ((self.writeIndent(Writer, writer_)) catch |__ce_72| { _ = &__ce_72;  }); });
+                    _ = (blk_catch_74: { break :blk_catch_74 ((self.writeIndent(Writer, writer_)) catch |__ce_74| { _ = &__ce_74;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2223,7 +2237,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_73: { break :blk_catch_73 ((self.writeIndent(Writer, writer_)) catch |__ce_73| { _ = &__ce_73;  }); });
+                    _ = (blk_catch_75: { break :blk_catch_75 ((self.writeIndent(Writer, writer_)) catch |__ce_75| { _ = &__ce_75;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2231,7 +2245,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = (blk: {
             }
             if ((slice.len > 0)) {
                 _ = writer.writeAll("\n");
-                _ = (blk_catch_74: { break :blk_catch_74 ((self.writeIndent(Writer, writer_)) catch |__ce_74| { _ = &__ce_74;  }); });
+                _ = (blk_catch_76: { break :blk_catch_76 ((self.writeIndent(Writer, writer_)) catch |__ce_76| { _ = &__ce_76;  }); });
                 _ = writer.writeAll("]");
                 if ((self.indent == 0)) {
                     _ = writer.writeAll("\n");

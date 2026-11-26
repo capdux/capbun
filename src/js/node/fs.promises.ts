@@ -128,8 +128,13 @@ function cp(src, dest, options) {
   return fs.cp(src, dest, options.recursive, options.errorOnExist, options.force ?? true, options.mode);
 }
 
-async function opendir(dir: string, options) {
-  return new (require("node:fs").Dir)(1, dir, options);
+function opendir(dir: string, options) {
+  return new Promise((resolve, reject) => {
+    require("node:fs").opendir(dir, options, (err, d) => {
+      if (err) reject(err);
+      else resolve(d);
+    });
+  });
 }
 
 const private_symbols = {
@@ -857,7 +862,7 @@ async function writeFileAsyncIterator(fdOrPath, iterable, optionsOrEncoding, fla
 
   // Handle cleanup outside of try-catch
   if (mustClose) {
-    if (typeof flag === "string" && !flag.includes("a")) {
+    if (typeof flag === "string" && flag.includes("w")) {
       try {
         await fs.ftruncate(fdOrPath, totalBytesWritten);
       } catch {}

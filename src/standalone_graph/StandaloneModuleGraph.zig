@@ -947,7 +947,7 @@ break :brk res;
             var attempt: usize = 0;
             _ = &attempt;
             while ((attempt < 3)) : (attempt = (attempt + 1)) {
-                switch (Syscall.open(zname, ((bun.O.CLOEXEC | bun.O.RDWR) | bun.O.CREAT), 0)) {
+                switch (Syscall.open(zname, ((bun.O.CLOEXEC | bun.O.RDWR) | bun.O.CREAT), 384)) {
 .result => |res| {
 fd = res;
                 attempt = 3;

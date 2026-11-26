@@ -3741,7 +3741,7 @@ fn printErrorInstance(
 
     const _gh_guard = GithubAnnotationGuard{
         exception: exception,
-        active: allow_side_effects && Output.is_github_action,
+        active: allow_side_effects && (Output.is_github_action || Output.isGithubAction()),
     };
 
     // This is a longer number than necessary because we don't handle this case very well

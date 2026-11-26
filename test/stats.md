@@ -161,11 +161,29 @@
 
 ## 四、正在运行中的并发修复
 
-- **无（Batch 48–49 已提交推送，即将派发 Batch 50 三路并发）**
+- **无（Batch 52–58 已提交推送，即将派发 Batch 59 三路并发）**
 
 ---
 
-## 五、下一波待攻克收敛项（Batch 50+）
+## 五、Batch 52–58 新增通过与收敛明细（2026-11-27）
+
+1. **新验证全绿（0 fail，实测 `1.4.5-debug`）**：
+   - **Regression Issues (Batch 52–58 修复转绿 11 个)**：`17190` (1/1)、`21680` (2/2)、`26851` (2/2)、`27890` (4/4)、`31652` (1/1)、`32489` (2/2)、`40268` (1/1)、`40606` (1/1)、`44275` (3/3)、`postgres-null-byte-injection` (5/5)、`s3-header-injection` (7/7)
+   - **Regression Issues (扫描 0 fail)**：`01-08*` (38 files)、`10-14*` (24 files)、`15-24*` (52 files)、`31-36*` (10 files: `31002,31401,31503,31611,31636,3179,3192,3613,36577,3657`)、`37-40*` (4 files: `39846,39900,40401,40561`)、`41-99*` & 字母开头 (46 files)
+   - **`node/tls` & `node/net`**：`node-tls-rootcertificates-immutable` (2/2)、`node-tls-root-certs-concurrent-init` (1/1)、`node-tls-create-secure-context-args` (9/9)、`node-tls-namedpipes` (0 fail/17 skip)、`test-system-ca-https` (0 fail/2 skip)、`blocklist-gc` (1/1)、`connect-autoselectfamily-stale-timer` (1 pass/1 skip)、`double-connect` (1/1)
+   - **`node/crypto`**：`crypto-lazyhash` (4/4)、`x509-subclass` (13/13)、`hkdf-callback-null` (3/3)、`hkdf-zero-length` (16/16)、`crypto-oneshot` (35/35)、`scrypt` (4/4)，外加扫描 0 fail 8 个（`argon2`, `crypto-extra-memory`, `crypto-hmac-algorithm`, `crypto.hmac`, `crypto-invalid-this`, `crypto-sign-regression`, `sign-jwk-ieee-p1363`, `crypto-rsa`）
+   - **`node/fs`**：`dir.test.ts` (23/23)，外加扫描 0 fail 12 个（`cp-symlink-target`, `fs-birthtime-linux`, `fs-eintr-darwin`, `fs-leak`, `fs-mkdir`, `fs-open-cloexec`, `fs-promises-writeFile-async-iterator`, `fs-write-offset-bound`, `fs-writeSync-stdio-windows`, `promises`, `readdir-windows-ntstatus`, `translate-uv-error-windows`）
+   - **`node/http`**：扫描 0 fail 8 个（`client-timeout-error`, `early-hints-crlf-injection`, `node-fetch-cjs`, `node-fetch-primordials`, `node-http-nested-cork`, `node-http-primoridals`, `node-http-res-settimeout-unref`, `node-http.compress.leak`）
+   - **`bun/test`**：`new-snapshot` (2/2)、`bun-test` (5/5)、`snapshot-tests/snapshots/more` (5/5)、`failure-skip` (15/15)，外加扫描 0 fail 56 个
+   - **`bun/http`**：`serve-close-delimited-framing` (2/2)、`bun-serve-static` (47/47)，外加扫描 0 fail 18 个
+   - **`bun/spawn`**：`spawn-kill-signal` (33/33)、`spawn-signal` (13/13)、`spawn-path` (4 pass/0 fail)、`spawn-renamed-cwd` (2/2)，外加扫描 0 fail 22 个
+   - **`bun/util`**：扫描 0 fail 17 个；**`bundler/esbuild`**：`{loader,metafile,tsconfig,lower,extra}.test.ts` 0 fail
+2. **显式冻结（缺依赖 / v1.4.4 缺失新特性 / 预编译 WebKit 限制，不重复排查）**：
+   - `child_process_ipc_handle.test.ts`（`Ipc.ts` FD passing `return null`）、`32178`（`AsyncLocalStorage.enterWith` + TLA 在预编译 `JSC::asyncModuleExecutionResume` 触发 `reportZappedCellAndCrash`）、`socketFaultInjection` 系列、`spawn-cgroup`、`connectrpc`/`grpc`/`lodash`/`immutable`/`uuid`/`string-width`/`strip-ansi` 缺依赖用例、`--no-deprecated-namespace-object-setters`。
+
+---
+
+## 六、下一波待攻克收敛项（Batch 59+）
 
 1. **`test/js/bun/s3/s3-list-objects.test.ts`**（仍超时原因）与 **`test/js/bun/image/` 仅余 1 项**（`metadata()` 警告后 colorspace 检查拒绝）
 2. **`test/js/bun/jsonc/`**（保留 `json.cp` 6 项尾部校验同时修复 `\uXXXX` 孤立代理码元保持）与 **`test/js/node/stream/web-stream-state.test.ts`**（为何重编后部分 `Bun.write`/`Bun.spawn`/`HTMLRewriter` 仍失败）

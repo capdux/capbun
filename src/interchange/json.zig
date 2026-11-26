@@ -1006,7 +1006,8 @@ pub fn validateJSONCTrailing(source: *const logger.Source, log: *logger.Log, sta
                 _ = (blk_catch_11: { break :blk_catch_11 ((log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unexpected null byte")) catch |__ce_11| { _ = &__ce_11;  }); });
                 return error.SyntaxError;
             }
-            break;
+            _ = (blk_catch_12: { break :blk_catch_12 ((log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unexpected trailing token")) catch |__ce_12| { _ = &__ce_12;  }); });
+            return error.SyntaxError;
         }
 }
 

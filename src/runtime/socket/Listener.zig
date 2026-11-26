@@ -1102,6 +1102,7 @@ else => {
                         }
                         _ = bun.assert(prev_tls.this_value.isNotEmpty());
                         prev_tls.handlers = handlers_ptr;
+                        _ = prev_tls.teardownForReconnect(handlers.vm);
                         _ = bun.assert((prev_tls.socket.socket == .detached));
                         if (prev_tls.connection) |old_connection| {
                             _ = &old_connection;
@@ -1158,6 +1159,7 @@ else => unreachable,
                             _ = handlers.vm.allocator.destroy(prev_handlers);
                         }
                         prev_tcp.handlers = handlers_ptr;
+                        _ = prev_tcp.teardownForReconnect(handlers.vm);
                         _ = bun.assert((prev_tcp.socket.socket == .detached));
                         if (prev_tcp.connection) |old_connection| {
                             _ = &old_connection;
@@ -1230,6 +1232,7 @@ else => unreachable,
                         _ = handlers.vm.allocator.destroy(prev_handlers);
                     }
                     prev_sock.handlers = handlers_ptr;
+                    _ = prev_sock.teardownForReconnect(handlers.vm);
                     _ = bun.assert((prev_sock.socket.socket == .detached));
                     if (prev_sock.connection) |old_connection| {
                         _ = &old_connection;

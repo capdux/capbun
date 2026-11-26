@@ -1823,7 +1823,7 @@ return .{ .result = .fromNative(@as(i32, @intCast(rc))) };
 .INTR => {
 _ = continue;
 },
-.NOSYS, .PERM, .INVAL, .@"2BIG" => {
+.NOSYS, .INVAL, .@"2BIG" => {
 _ = openat2_unavailable.store(true, .monotonic);
                 break;
 },

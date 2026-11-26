@@ -1435,9 +1435,7 @@ pub fn utf16Codepoint(input: []const u16) UTF16Replacement {
             }
             const c1 = (if (comptime @typeInfo(@TypeOf(input[1])) == .@"enum") cp_cast_int(u21, @intFromEnum(input[1])) else cp_cast_int(u21, input[1]));
             if (((c1 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) != 56320)) {
-                if ((input.len == 1)) {
-                    return .{ .len = 1 };
-                }
+                return .{ .len = 1 };
             }
             return .{ .len = 2, .code_point = (65536 + (cp_shl((c0 & 1023), 10) | (c1 & 1023))) };
         } else {

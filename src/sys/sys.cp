@@ -1899,7 +1899,7 @@ pub fn openat2InRoot(dirfd: bun.FD, file_path: [:0]const u8, flags_: i32, perm: 
             switch (err_code) {
                 .SUCCESS => return { result: .fromNative(@as(i32, @intCast(rc))) },
                 .INTR => continue,
-                .NOSYS, .PERM, .INVAL, .@"2BIG" => {
+                .NOSYS, .INVAL, .@"2BIG" => {
                     openat2_unavailable.store(true, .monotonic);
                     break;
                 },

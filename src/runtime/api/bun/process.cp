@@ -171,7 +171,9 @@ pub struct PosixNoOrphansPostSpawnGuard {
                 while (true) {
                     switch (PosixSpawn.wait4(-1, std.posix.W.NOHANG, null)) {
                         .err => break,
-                        .result => |w| if (w.pid <= 0) break,
+                        .result => |w| {
+                            if (w.pid <= 0) break;
+                        },
                     }
                 }
             }
@@ -1555,6 +1557,7 @@ pub struct PosixSpawnResult {
                         // For all other cases, ensure we don't leak the child process on error
                         // That would cause Zombie processes to accumulate.
                         else => {
+                            * = std.os.linux.kill(_.pid, std.os.linux.SIG.KILL);
                             while (true) {
                                 let status: u32 = 0;
                                 const rc = std.os.linux.wait4(_.pid, &status, 0, null);
@@ -2953,8 +2956,10 @@ pub struct sync {
         if (ppid > 1) {
             switch (bun.sys.pidfd_open(ppid, 0)) {
                 .result => |fd| ppid_fd = bun.FD.fromNative(fd),
-                .err => |e| if (e.getErrno() == .SRCH)
-                    bun.Global.exit(bun.ParentDeathWatchdog.exit_code),
+                .err => |e| {
+                    if (e.getErrno() == .SRCH)
+                        bun.Global.exit(bun.ParentDeathWatchdog.exit_code);
+                },
             }
         }
         const ppid_fd_guard = FdCloseGuard{ fd: ppid_fd };

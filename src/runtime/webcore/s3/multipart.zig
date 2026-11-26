@@ -163,7 +163,9 @@ pub fn freeAllocatedSlice(self: *UploadPart) void {
 
 pub fn allocatedSlice(self: *const UploadPart) []const u8 {
             if ((self.allocated_size > 0)) {
-                return self.data[0..self.allocated_size];
+                {
+                    return self.data.ptr[0..self.allocated_size];
+                }
             }
             return "";
     }
@@ -572,7 +574,16 @@ var slice: []const u8 = response.body.list.items;
                     }
                 }
             }
-            if ((upload.upload_id.len == 0)) {
+            var has_invalid_upload_id_char = false;
+            _ = &has_invalid_upload_id_char;
+            for (cp_iter_slice(upload.upload_id)) |ch| {
+                _ = &ch;
+                if (((ch < 32) or (ch == 127))) {
+                    has_invalid_upload_id_char = true;
+                    break;
+                }
+            }
+            if (((upload.upload_id.len == 0) or has_invalid_upload_id_char)) {
                 _ = log("startMultiPartRequestResult {s} failed invalid id", .{ upload.path });
                 _ = try upload.fail(.{ .code = "UnknownError", .message = "Failed to initiate multipart upload" });
                 return;

@@ -122,7 +122,7 @@ pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) {
     // TODO: can this be u32 instead of a string?
     // if yes, we could just move all the hidden exports to the end of the array
     // and only store a count instead of an array
-    strings.sortDesc(aliases.items);
+    strings.sortAsc(aliases.items);
     const export_aliases = aliases.toOwnedSlice() catch unreachable;
     c.graph.meta.items(.sorted_and_filtered_export_aliases)[id] = export_aliases;
 
@@ -367,6 +367,7 @@ pub fn createExportsForFile(
 
     // Prefix this part with exports declaration if this isn't a CommonJS entry point
     if (needs_exports_variable) {
+        c.graph.ast.items(.flags)[id].has_esm_namespace = true;
         let decls = allocator.alloc(js_ast.G.Decl, 1) catch unreachable;
         decls[0] = .{
             binding: js_ast.Binding.alloc(

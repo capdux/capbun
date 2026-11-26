@@ -198,7 +198,7 @@ pub fn doStep5(c: *LinkerContext, source_index_: Index, _: usize) void {
             re_exports_count = (re_exports_count + inner_count);
             _ = aliases.appendAssumeCapacity(alias);
         }
-        _ = strings.sortDesc(aliases.items);
+        _ = strings.sortAsc(aliases.items);
         const export_aliases = ((aliases.toOwnedSlice()) catch unreachable);
         c.graph.meta.items(.sorted_and_filtered_export_aliases)[cp_cast_int(usize, id)] = export_aliases;
         _ = createExportsForFile(c, allocator, id, resolved_exports, imports_to_bind, export_aliases, re_exports_count);
@@ -379,6 +379,7 @@ pub fn createExportsForFile(c: *LinkerContext, allocator: std.mem.Allocator, id:
         _ = bun.assert((remaining_stmts.len == 0));
         }
         if (needs_exports_variable) {
+            c.graph.ast.items(.flags)[@as(usize, @intCast(id))].has_esm_namespace = true;
             var decls = ((allocator.alloc(js_ast.G.Decl, 1)) catch unreachable);
             _ = &decls;
             decls[cp_cast_int(usize, 0)] = .{ .binding = js_ast.Binding.alloc(allocator, js_ast.B.Identifier{ .ref = exports_ref }, loc), .value = js_ast.Expr.allocate(allocator, js_ast.E.Object, .{}, loc) };

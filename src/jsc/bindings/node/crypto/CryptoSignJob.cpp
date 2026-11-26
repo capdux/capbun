@@ -342,10 +342,11 @@ std::optional<SignJobCtx> SignJobCtx::fromJS(JSGlobalObject* globalObject, Throw
         }
     }
 
-    GCOwnedDataScope<std::span<const uint8_t>> signatureView = { nullptr, {} };
+    Vector<uint8_t> signatureBytes;
     if (mode == Mode::Verify) {
-        signatureView = getArrayBufferOrView2(globalObject, scope, signatureValue, "signature"_s, jsUndefined(), true);
+        auto signatureView = getArrayBufferOrView2(globalObject, scope, signatureValue, "signature"_s, jsUndefined(), true);
         RETURN_IF_EXCEPTION(scope, {});
+        signatureBytes.append(std::span { signatureView->data(), signatureView->size() });
     }
 
     auto prepareResult = mode == Mode::Verify
@@ -440,13 +441,13 @@ std::optional<SignJobCtx> SignJobCtx::fromJS(JSGlobalObject* globalObject, Throw
         if (keyObject.asymmetricKey().isSigVariant() && dsaSigEnc == DSASigEnc::P1363) {
             convertP1363ToDER(
                 ncrypto::Buffer<const uint8_t> {
-                    .data = signatureView->data(),
-                    .len = signatureView->size(),
+                    .data = signatureBytes.begin(),
+                    .len = signatureBytes.size(),
                 },
                 keyObject.asymmetricKey(),
                 signature);
         } else {
-            signature.append(std::span { signatureView->data(), signatureView->size() });
+            signature = WTF::move(signatureBytes);
         }
 
         return SignJobCtx(

@@ -414,8 +414,8 @@ pub class PasswordObject {
     }
 }
 
-pub fn formatPasswordErrorCode(err_name: []const u8): []const u8 {
-    let out = bun.default_allocator.alloc(u8, err_name.len * 2 + 9) catch return "PASSWORD_ERROR";
+pub fn formatPasswordErrorCode(err_name: []const u8): ([]const u8)? {
+    let out = bun.default_allocator.alloc(u8, err_name.len * 2 + 9) catch return null;
     @memcpy(out[0..8], "PASSWORD");
     let j: usize = 8;
     for (i of 0..err_name.len) {
@@ -442,8 +442,9 @@ pub enum HashJobResultValue {
 
     pub fn toErrorInstance(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         const err_name = @errorName(_.err);
-        const error_code = formatPasswordErrorCode(err_name);
-        const _err_code_guard = FreeGuard<u8>{ slice: error_code };
+        const error_code_opt = formatPasswordErrorCode(err_name);
+        const _err_code_guard = FreeGuard<u8>{ slice: error_code_opt };
+        const error_code = error_code_opt ?? "PASSWORD_ERROR";
         const instance = globalObject.createErrorInstance("Password hashing failed with error \"{s}\"", .{ err_name });
         instance.put(globalObject, ZigString.static("code"), jsc.ZigString.init(error_code).toJS(globalObject));
         return instance;
@@ -539,8 +540,9 @@ pub enum VerifyJobResultValue {
 
     pub fn toErrorInstance(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
         const err_name = @errorName(_.err);
-        const error_code = formatPasswordErrorCode(err_name);
-        const _err_code_guard = FreeGuard<u8>{ slice: error_code };
+        const error_code_opt = formatPasswordErrorCode(err_name);
+        const _err_code_guard = FreeGuard<u8>{ slice: error_code_opt };
+        const error_code = error_code_opt ?? "PASSWORD_ERROR";
         const instance = globalObject.createErrorInstance("Password verification failed with error \"{s}\"", .{ err_name });
         instance.put(globalObject, ZigString.static("code"), jsc.ZigString.init(error_code).toJS(globalObject));
         return instance;
@@ -715,8 +717,8 @@ pub class JSPasswordObject {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.ptr[0..arguments_.len];
 
-        if (arguments.len < 1) {
-            return globalObject.throwNotEnoughArguments("hash", 1, 0);
+        if (arguments.len < 1 || arguments[0].isEmptyOrUndefinedOrNull()) {
+            return globalObject.throwInvalidArgumentType("hash", "password", "string or TypedArray");
         }
 
         let algorithm = Algorithm_Value{ .argon2id = .{} };
@@ -741,8 +743,8 @@ pub class JSPasswordObject {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.ptr[0..arguments_.len];
 
-        if (arguments.len < 1) {
-            return globalObject.throwNotEnoughArguments("hash", 1, 0);
+        if (arguments.len < 1 || arguments[0].isEmptyOrUndefinedOrNull()) {
+            return globalObject.throwInvalidArgumentType("hash", "password", "string or TypedArray");
         }
 
         let algorithm = Algorithm_Value{ .argon2id = .{} };
@@ -769,8 +771,11 @@ pub class JSPasswordObject {
         const arguments_ = callframe.arguments_old(3);
         const arguments = arguments_.ptr[0..arguments_.len];
 
-        if (arguments.len < 2) {
-            return globalObject.throwNotEnoughArguments("verify", 2, 0);
+        if (arguments.len < 1 || arguments[0].isEmptyOrUndefinedOrNull()) {
+            return globalObject.throwInvalidArgumentType("verify", "password", "string or TypedArray");
+        }
+        if (arguments.len < 2 || arguments[1].isEmptyOrUndefinedOrNull()) {
+            return globalObject.throwInvalidArgumentType("verify", "hash", "string or TypedArray");
         }
 
         let algorithm: AlgorithmEnum? = null;
@@ -816,8 +821,11 @@ pub class JSPasswordObject {
         const arguments_ = callframe.arguments_old(3);
         const arguments = arguments_.ptr[0..arguments_.len];
 
-        if (arguments.len < 2) {
-            return globalObject.throwNotEnoughArguments("verify", 2, 0);
+        if (arguments.len < 1 || arguments[0].isEmptyOrUndefinedOrNull()) {
+            return globalObject.throwInvalidArgumentType("verify", "password", "string or TypedArray");
+        }
+        if (arguments.len < 2 || arguments[1].isEmptyOrUndefinedOrNull()) {
+            return globalObject.throwInvalidArgumentType("verify", "hash", "string or TypedArray");
         }
 
         let algorithm: AlgorithmEnum? = null;

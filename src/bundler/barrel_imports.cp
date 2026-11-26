@@ -359,26 +359,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
             continue;
         }
 
-        const gop = client.requested_exports.getOrPut(client.allocator(), target)?;
-        if (ni.alias_is_star) {
-            gop.value_ptr.* = .all;
-        } else if (alias := ni.alias) {
-            if (gop.found_existing) {
-                switch (gop.value_ptr.*) {
-                    .all => {},
-                    .partial => |*p| p.put(client.allocator(), alias, undefined)?,
-                }
-            } else {
-                gop.value_ptr.* = .{ partial: .{} };
-                gop.value_ptr.partial.put(client.allocator(), alias, undefined)?;
-            }
-            // Persist the export request on DevServer so it survives across builds.
-            if (dev := client.transpiler.options.dev_server) {
-                persistBarrelExport(dev, resolved_path_text, alias);
-            }
-        } else if (!gop.found_existing) {
-            gop.value_ptr.* = .{ partial: .{} };
-        }
+        * = seedRequestedExport(client, target, ni.alias_is_star, ni.alias, resolved_path_text)?;
     }
 
     // Handle import records without named bindings (not in named_imports).
@@ -408,13 +389,8 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
         if (ir.flags.is_internal) continue;
         if (named_ir_indices.contains(@as(u32, @intCast(idx)))) continue;
         if (ir.flags.was_originally_bare_import) continue;
-        if (ir.kind == .require) {
-            const gop = client.requested_exports.getOrPut(client.allocator(), target)?;
-            gop.value_ptr.* = .all;
-        } else if (ir.kind == .dynamic) {
-            // import() returns the full module namespace — must preserve all exports.
-            const gop = client.requested_exports.getOrPut(client.allocator(), target)?;
-            gop.value_ptr.* = .all;
+        if (ir.kind == .require || ir.kind == .dynamic) {
+            * = seedRequestedExport(client, target, true, null, null)?;
         }
     }
 
@@ -505,13 +481,63 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
     }
 
     if (queue.items.len == 0) return 0;
+    return runBarrelUnDeferBFS(client, &queue, queue_alloc, queue.items.len);
+}
 
+fn seedRequestedExport(client: *BundleV2, target: u32, is_star: bool, alias_opt: ([]const u8)?, dev_path_opt: ([]const u8)?): !bool {
+    const gop = client.requested_exports.getOrPut(client.allocator(), target)?;
+    if (is_star) { gop.value_ptr.* = .all; return false; }
+    if (alias := alias_opt) {
+        if (gop.found_existing) {
+            if (gop.value_ptr.* == .all) return true;
+            const ag = gop.value_ptr.partial.getOrPut(client.allocator(), alias)?; if (ag.found_existing) return true;
+        } else {
+            gop.value_ptr.* = .{ partial: .{} };
+            gop.value_ptr.partial.put(client.allocator(), alias, undefined)?;
+        }
+        if (dev_path := dev_path_opt) if (dev := client.transpiler.options.dev_server) persistBarrelExport(dev, dev_path, alias);
+    } else if (!gop.found_existing) {
+        gop.value_ptr.* = .{ partial: .{} };
+    }
+    return false;
+}
+
+pub fn onAsyncImportRecordResolved(client: *BundleV2, importer_source_index: u32, import_record_index: u32, target_source_index: u32): !i32 {
+    if (!client.isBarrelOptimizationEnabled() || importer_source_index >= client.graph.ast.len) return 0;
+    const graph_ast = client.graph.ast.slice();
+    const import_records = graph_ast.items(.import_records)[importer_source_index];
+    if (import_record_index >= import_records.len) return 0;
+    for (s_idx of graph_ast.items(.export_star_import_records)[importer_source_index]) {
+        if (s_idx == import_record_index) { client.graph.input_files.items(.flags)[target_source_index].is_export_star_target = true; break; }
+    }
+    let queue_stack = std.heap.stackFallback(1024, client.allocator());
+    const queue_alloc = queue_stack.get();
+    let queue: std.ArrayListUnmanaged(BarrelWorkItem) = {};
+    const queue_guard = DeinitWithAllocGuard<@TypeOf(queue)>{ ptr: &queue, alloc: queue_alloc };
+    let has_named = false;
+    const ir = import_records.slice()[import_record_index];
+    let ni_iter = graph_ast.items(.named_imports)[importer_source_index].iterator();
+    while (ni_entry := ni_iter.next()) {
+        const ni = ni_entry.value_ptr;
+        if (ni.import_record_index != import_record_index) continue;
+        has_named = true;
+        * = seedRequestedExport(client, target_source_index, ni.alias_is_star, ni.alias, ir.path.text)?;
+        if (ni.alias_is_star || ni.alias != null) queue.append(queue_alloc, .{ barrel_source_index: target_source_index, alias: ni.alias ?? "", is_star: ni.alias_is_star })?;
+    }
+    if (!has_named && !ir.flags.is_internal && !ir.flags.was_originally_bare_import && (ir.kind == .require || ir.kind == .dynamic)) {
+        * = seedRequestedExport(client, target_source_index, true, null, null)?;
+        queue.append(queue_alloc, .{ barrel_source_index: target_source_index, alias: "", is_star: true })?;
+    }
+    if (queue.items.len == 0) return 0;
+    return runBarrelUnDeferBFS(client, &queue, queue_alloc, queue.items.len);
+}
+
+fn runBarrelUnDeferBFS(client: *BundleV2, queue: *std.ArrayListUnmanaged(BarrelWorkItem), queue_alloc: std.mem.Allocator, initial_queue_len: usize): !i32 {
     // Items [0, initial_queue_len) are from this file's imports and were
     // already recorded in requested_exports during seeding (phase 1).
     // Skip dedup for them so un-deferral proceeds correctly.
     // Items added during BFS propagation (>= initial_queue_len) use normal
     // dedup via requested_exports to prevent cycles.
-    const initial_queue_len = queue.items.len;
 
     let barrels_to_resolve: std.AutoArrayHashMapUnmanaged(u32, void) = {};
     let barrels_to_resolve_stack = std.heap.stackFallback(1024, client.allocator());
@@ -527,21 +553,8 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
         // For BFS-propagated items (not from initial queue), use
         // requested_exports for dedup and cycle detection.
         if (qi >= initial_queue_len) {
-            const gop = client.requested_exports.getOrPut(client.allocator(), barrel_idx)?;
-            if (item.is_star) {
-                gop.value_ptr.* = .all;
-            } else if (gop.found_existing) {
-                switch (gop.value_ptr.*) {
-                    .all => continue,
-                    .partial => |*p| {
-                        const alias_gop = p.getOrPut(client.allocator(), item.alias)?;
-                        if (alias_gop.found_existing) continue;
-                    },
-                }
-            } else {
-                gop.value_ptr.* = .{ partial: .{} };
-                gop.value_ptr.partial.put(client.allocator(), item.alias, undefined)?;
-            }
+            const already = seedRequestedExport(client, barrel_idx, item.is_star, item.alias, null)?;
+            if (!item.is_star && already) continue;
         }
 
         if (barrel_idx >= client.graph.ast.len) continue;

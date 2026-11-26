@@ -1168,10 +1168,20 @@ pub struct PrettyFormatter {
                     _.writeIndent(Writer, writer_) catch unreachable;
                     const length = str.len;
                     let idx: usize = 0;
-                    for (c of str.slice()) {
-                        writer.print("\"{d}\": \"{c}\",\n", .{ idx, c });
-                        if (idx != length - 1) _.writeIndent(Writer, writer_) catch unreachable;
-                        idx += 1;
+                    if (str.is16Bit()) {
+                        for (c of str.utf16SliceAligned()) {
+                            let utf8_buf: [4]u8 = undefined;
+                            const utf8_len = std.unicode.utf8Encode(@as(u21, c), &utf8_buf) catch 0;
+                            writer.print("\"{d}\": \"{s}\",\n", .{ idx, utf8_buf[0..utf8_len] });
+                            if (idx != length - 1) _.writeIndent(Writer, writer_) catch unreachable;
+                            idx += 1;
+                        }
+                    } else {
+                        for (c of str.slice()) {
+                            writer.print("\"{d}\": \"{c}\",\n", .{ idx, c });
+                            if (idx != length - 1) _.writeIndent(Writer, writer_) catch unreachable;
+                            idx += 1;
+                        }
                     }
                     _.resetLine();
                     writer.writeAll("}\n");

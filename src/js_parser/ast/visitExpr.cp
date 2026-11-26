@@ -789,6 +789,9 @@ fn VisitExprVisitors(
                     }
                 },
                 .un_delete => {
+                    const old_delete_target = p.delete_target;
+                    p.delete_target = e_.value.data;
+                    defer p.delete_target = old_delete_target;
                     e_.value = p.visitExprInOut(e_.value, ExprIn{ has_chain_parent: true });
                 },
                 else => {

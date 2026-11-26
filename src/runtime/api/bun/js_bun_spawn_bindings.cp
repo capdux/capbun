@@ -184,6 +184,7 @@ pub fn spawnMaybeSync(
     let jsc_vm = globalThis.bunVM();
 
     let cwd = jsc_vm.transpiler.fs.top_level_dir;
+    let spawn_cwd: []const u8 = "";
 
     let stdio: [3]Stdio = undefined;
     stdio[0] = Stdio.ignore;
@@ -272,6 +273,7 @@ pub fn spawnMaybeSync(
                         return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'options.cwd' must be a string without null bytes. Received {f}", .{ bun.fmt.quote(owned_cwd) }).throw();
                     }
                     cwd = owned_cwd;
+                    spawn_cwd = owned_cwd;
                 }
             }
         }
@@ -313,6 +315,9 @@ pub fn spawnMaybeSync(
 
             if (signal_val := args.getTruthy(globalThis, "signal")?) {
                 if (signal := signal_val.@"as"(jsc.WebCore.AbortSignal)) {
+                    if (err := signal.nodeAbortErrorIfAborted(globalThis)) {
+                        return globalThis.throwValue(err);
+                    }
                     abort_signal = signal.ref();
                 } else {
                     return globalThis.throwInvalidArgumentTypeValue("signal", "AbortSignal", signal_val);
@@ -657,7 +662,7 @@ pub fn spawnMaybeSync(
     const loop_handle = jsc.EventLoopHandle.init(event_loop);
 
     const spawn_options = bun.spawn.SpawnOptions{
-        cwd: cwd,
+        cwd: spawn_cwd,
         detached: detached,
         stdin: switch (stdio[0].asSpawnOption(0)) {
             .result => |opt| opt,

@@ -834,9 +834,11 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                         entry.value_ptr.* = idx;
                         const record: *ImportRecord = (&self.graph.ast.items(.import_records)[@as(usize, @intCast(import_record.importer_source_index))].slice()[@as(usize, @intCast(import_record.import_record_index))]);
                         record.source_index = Index.init(idx);
+                        _ = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(self, import_record.importer_source_index, import_record.import_record_index, idx));
                     } else {
                         const record: *ImportRecord = (&self.graph.ast.items(.import_records)[@as(usize, @intCast(import_record.importer_source_index))].slice()[@as(usize, @intCast(import_record.import_record_index))]);
                         record.source_index = Index.init(entry.value_ptr.*);
+                        _ = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(self, import_record.importer_source_index, import_record.import_record_index, entry.value_ptr.*));
                     }
                     return;
                 }
@@ -958,6 +960,7 @@ a = self.pathToSourceIndexMap(self.transpiler.options.target);
                 _ = &source_index;
                 const record: *ImportRecord = (&self.graph.ast.items(.import_records)[@as(usize, @intCast(import_record.importer_source_index))].slice()[@as(usize, @intCast(import_record.import_record_index))]);
                 record.source_index = source_index;
+                _ = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(self, import_record.importer_source_index, import_record.import_record_index, source_index.get()));
             }
     }
 
@@ -1899,6 +1902,7 @@ var out_source_index: ?Index = null;
                     } else {
                         const import_record: *ImportRecord = (&source_import_records.slice()[@as(usize, @intCast(resolve.import_record.import_record_index))]);
                         import_record.source_index = source_index;
+                        _ = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(bundle, resolve.import_record.importer_source_index, resolve.import_record.import_record_index, source_index.get()));
                     }
                 }
             }
@@ -2959,7 +2963,10 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
             if (((result.unique_key_for_additional_file.len > 0) and result.loader.shouldCopyForBundling())) {
                 if (bundle.transpiler.options.dev_server) |dev| {
                     _ = &dev;
-                    _ = (blk_catch_81: { break :blk_catch_81 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_81 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_81: { break :blk_catch_81 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, (blk: {
+                    break :blk @constCast(result.source.contents);
+
+}))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_81 bun.handleOom(oom_err); }); });
                 }
             }
             graph.input_files.items(.loader)[cp_cast_int(usize, result.source.index.get())] = result.loader;

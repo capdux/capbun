@@ -286,6 +286,8 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
         _ = &jsc_vm;
         var cwd = jsc_vm.transpiler.fs.top_level_dir;
         _ = &cwd;
+        var spawn_cwd: []const u8 = "";
+        _ = &spawn_cwd;
         var stdio: [3]Stdio = undefined;
         _ = &stdio;
         stdio[cp_cast_int(usize, 0)] = Stdio.ignore;
@@ -402,6 +404,7 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                             return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'options.cwd' must be a string without null bytes. Received {f}", .{ bun.fmt.quote(owned_cwd) }).throw();
                         }
                         cwd = owned_cwd;
+                        spawn_cwd = owned_cwd;
                     }
                 }
             }
@@ -442,6 +445,10 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                     _ = &signal_val;
                     if (signal_val.@"as"(jsc.WebCore.AbortSignal)) |signal| {
                         _ = &signal;
+                        if (signal.nodeAbortErrorIfAborted(globalThis)) |err| {
+                            _ = &err;
+                            return globalThis.throwValue(err);
+                        }
                         abort_signal = signal.ref();
                     } else {
                         return globalThis.throwInvalidArgumentTypeValue("signal", "AbortSignal", signal_val);
@@ -748,7 +755,7 @@ inline else => |t| ("NODE_CHANNEL_SERIALIZATION_MODE=" ++ @tagName(t)),
         }
         }
         const loop_handle = jsc.EventLoopHandle.init(event_loop);
-        const spawn_options = bun.spawn.SpawnOptions{ .cwd = cwd, .detached = detached, .stdin = (switch (stdio[0].asSpawnOption(0)) {
+        const spawn_options = bun.spawn.SpawnOptions{ .cwd = spawn_cwd, .detached = detached, .stdin = (switch (stdio[0].asSpawnOption(0)) {
 .result => |opt| opt,
 .err => |e| {
 return e.throwJS(globalThis);

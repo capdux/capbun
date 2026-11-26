@@ -670,20 +670,6 @@ pub struct Scrypt {
             }
         }
 
-        const password_opt = Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, password_value, is_async, true)?;
-        if (password_opt == null) {
-            return global.throwInvalidArgumentTypeValue("password", "string, ArrayBuffer, Buffer, TypedArray, or DataView", password_value);
-        }
-        let password = password_opt.?;
-        let _pw_guard = StringOrBufferGuard{ ptr: unsafe { &password }, is_async: is_async };
-
-        const salt_opt = Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, salt_value, is_async, true)?;
-        if (salt_opt == null) {
-            return global.throwInvalidArgumentTypeValue("salt", "string, ArrayBuffer, Buffer, TypedArray, or DataView", salt_value);
-        }
-        let salt = salt_opt.?;
-        let _salt_guard = StringOrBufferGuard{ ptr: unsafe { &salt }, is_async: is_async };
-
         const keylen = validators.validateInt32(global, keylen_value, "keylen", .{}, 0, null)?;
 
         let N: u32? = null;
@@ -735,6 +721,34 @@ pub struct Scrypt {
             }
         }
 
+        if (is_async) {
+            * = validators.validateFunction(global, "callback", callback)?;
+        }
+
+        const password_opt = Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, password_value, is_async, true)?;
+        if (password_opt == null) {
+            return global.throwInvalidArgumentTypeValue("password", "string, ArrayBuffer, Buffer, TypedArray, or DataView", password_value);
+        }
+        let password = password_opt.?;
+        let _pw_guard = StringOrBufferGuard{ ptr: unsafe { &password }, is_async: is_async };
+        if (is_async && password == .buffer) {
+            const owned = bun.default_allocator.dupe(u8, password.slice()) catch return error.OutOfMemory;
+            password.buffer.buffer.value.unprotect();
+            password = .{ encoded_slice: jsc.ZigString.Slice.init(bun.default_allocator, owned) };
+        }
+
+        const salt_opt = Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, salt_value, is_async, true)?;
+        if (salt_opt == null) {
+            return global.throwInvalidArgumentTypeValue("salt", "string, ArrayBuffer, Buffer, TypedArray, or DataView", salt_value);
+        }
+        let salt = salt_opt.?;
+        let _salt_guard = StringOrBufferGuard{ ptr: unsafe { &salt }, is_async: is_async };
+        if (is_async && salt == .buffer) {
+            const owned = bun.default_allocator.dupe(u8, salt.slice()) catch return error.OutOfMemory;
+            salt.buffer.buffer.value.unprotect();
+            salt = .{ encoded_slice: jsc.ZigString.Slice.init(bun.default_allocator, owned) };
+        }
+
         const N_default: u32 = 16384;
         const r_default: u32 = 8;
         const p_default: u32 = 1;
@@ -762,10 +776,6 @@ pub struct Scrypt {
             .maxmem = @as(u64, @intCast(maxmem.?)),
             .keylen = @as(u32, @intCast(keylen)),
         };
-
-        if (is_async) {
-            * = validators.validateFunction(global, "callback", callback)?;
-        }
 
         ctx.checkScryptParams(global)?;
 

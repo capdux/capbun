@@ -341,6 +341,11 @@ pub static struct GeneratePlatformImpl {
         if (comptime !Environment.isLinux) {
             return 0;
         }
+        if (v := bun.getenvZ("BUN_FEATURE_FLAG_DISABLE_EPOLL_PWAIT2")) {
+            if (bun.strings.eqlComptime(v, "1") || bun.strings.eqlComptime(v, "true")) {
+                return 0;
+            }
+        }
 
         const min_epoll_pwait2 = Semver.Version{
             major: 5,

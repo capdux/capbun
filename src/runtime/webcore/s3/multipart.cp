@@ -91,7 +91,9 @@ export struct UploadPart {
 
     fn allocatedSlice(_: *const UploadPart): string {
         if (_.allocated_size > 0) {
-            return _.data[0.._.allocated_size];
+            unsafe {
+                return _.data.ptr[0.._.allocated_size];
+            }
         }
         return "";
     }
@@ -455,7 +457,14 @@ export class MultiPartUpload {
                         }
                     }
                 }
-                if (upload.upload_id.len == 0) {
+                let has_invalid_upload_id_char = false;
+                for (ch of upload.upload_id) {
+                    if (ch < 0x20 || ch == 0x7f) {
+                        has_invalid_upload_id_char = true;
+                        break;
+                    }
+                }
+                if (upload.upload_id.len == 0 || has_invalid_upload_id_char) {
                     log("startMultiPartRequestResult {s} failed invalid id", .{ upload.path });
                     upload.fail(.{
                         .code = "UnknownError",

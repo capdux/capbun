@@ -77,7 +77,7 @@ void HkdfJobCtx::runFromJS(JSGlobalObject* lexicalGlobalObject, JSValue callback
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     if (!m_result) {
-        JSObject* err = createError(lexicalGlobalObject, ErrorCode::ERR_CRYPTO_OPERATION_FAILED, "hkdf operation failed"_s);
+        JSObject* err = createError(lexicalGlobalObject, "HKDF derivation failed"_s);
         Bun__EventLoop__runCallback1(lexicalGlobalObject, JSValue::encode(callback), JSValue::encode(jsUndefined()), JSValue::encode(err));
         return;
     }
@@ -134,7 +134,10 @@ void HkdfJob::createAndSchedule(JSGlobalObject* globalObject, HkdfJobCtx&& ctx, 
 KeyObject prepareKey(JSGlobalObject* globalObject, ThrowScope& scope, JSValue key)
 {
     if (JSKeyObject* keyObject = dynamicDowncast<JSKeyObject>(key)) {
-        // Node doesn't check for CryptoKeyType::Secret, so we don't either
+        if (keyObject->handle().type() != CryptoKeyType::Secret) {
+            ERR::CRYPTO_INVALID_KEY_OBJECT_TYPE(scope, globalObject, keyObject->handle().type(), "secret"_s);
+            return {};
+        }
         return keyObject->handle();
     }
 
@@ -267,7 +270,8 @@ JSC_DEFINE_HOST_FUNCTION(jsHkdfSync, (JSGlobalObject * lexicalGlobalObject, JSC:
     ctx->runTask(lexicalGlobalObject);
 
     if (!ctx->m_result.has_value()) {
-        return ERR::CRYPTO_OPERATION_FAILED(scope, lexicalGlobalObject, "hkdf operation failed"_s);
+        JSC::throwException(lexicalGlobalObject, scope, JSC::createError(lexicalGlobalObject, "HKDF derivation failed"_s));
+        return {};
     }
 
     auto& result = ctx->m_result.value();

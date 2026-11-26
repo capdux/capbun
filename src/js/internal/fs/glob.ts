@@ -1,5 +1,5 @@
 import type { GlobScanOptions } from "bun";
-const { validateObject, validateString, validateFunction, validateArray } = require("internal/validators");
+const { validateObject, validateString, validateFunction, validateArray, validateBoolean } = require("internal/validators");
 const { sep } = require("node:path");
 
 const isWindows = process.platform === "win32";
@@ -86,6 +86,10 @@ function mapOptions(options: GlobOptions): GlobScanOptions & { exclude: GlobOpti
     validateFunction(exclude, "options.exclude");
   }
 
+  if (options.followSymlinks !== undefined) {
+    validateBoolean(options.followSymlinks, "options.followSymlinks");
+  }
+
   if (options.withFileTypes) {
     throw new TypeError("fs.glob does not support options.withFileTypes yet. Please open an issue on GitHub.");
   }
@@ -96,7 +100,7 @@ function mapOptions(options: GlobOptions): GlobScanOptions & { exclude: GlobOpti
     // cached `getcwd` on BunProcess.
     cwd: options?.cwd ?? process.cwd(),
     // https://github.com/nodejs/node/blob/a9546024975d0bfb0a8ae47da323b10fb5cbb88b/lib/internal/fs/glob.js#L655
-    followSymlinks: true,
+    followSymlinks: options.followSymlinks ?? true,
     // https://github.com/oven-sh/bun/issues/20507
     onlyFiles: false,
     exclude,

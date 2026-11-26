@@ -932,7 +932,11 @@ pub fn onWritableResponseBuffer(self: *@This(), _: u64, resp: *App.Response) boo
             if (self.isAbortedOrEnded()) {
                 return false;
             }
-            _ = self.end("", self.shouldCloseConnection());
+            if (resp.state().isHttpWriteCalled()) {
+                _ = self.endStream(self.shouldCloseConnection());
+            } else {
+                _ = self.end("", self.shouldCloseConnection());
+            }
             return false;
     }
 

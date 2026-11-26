@@ -1,5 +1,6 @@
 
 #include "root.h"
+#include "BunString.h"
 
 #include <wtf/text/WTFString.h>
 #include <wtf/SIMDHelpers.h>
@@ -280,27 +281,48 @@ JSC_DEFINE_HOST_FUNCTION(jsFunctionDecodeURIComponentSIMD, (JSC::JSGlobalObject 
         auto string = input.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
 
-        if (!string.is8Bit()) {
-            const auto span = string.span16();
-            size_t expected_length = simdutf::latin1_length_from_utf16(span.size());
-            std::span<Latin1Character> ptr;
-            WTF::String convertedString = WTF::String::tryCreateUninitialized(expected_length, ptr);
-            if (convertedString.isNull()) [[unlikely]] {
+        if (string.is8Bit() && string.containsOnlyASCII()) {
+            auto&& output = decodeURIComponentSIMD(string.span8());
+            if (output.isNull() && !string.isEmpty()) [[unlikely]] {
                 throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
                 return {};
             }
-
-            auto result = simdutf::convert_utf16le_to_latin1_with_errors(span.data(), span.size(), reinterpret_cast<char*>(ptr.data()));
-
-            if (result.error) {
-                scope.throwException(globalObject, createRangeError(globalObject, "Invalid character in input"_s));
-                return {};
-            }
-            string = convertedString;
+            return JSC::JSValue::encode(JSC::jsString(vm, output));
         }
 
-        auto span = string.span8();
-        auto&& output = decodeURIComponentSIMD(span);
+        Bun::UTF8View utf8View(string);
+        if (utf8View.m_isCString && utf8View.m_underlying.isNull()) [[unlikely]] {
+            throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
+            return {};
+        }
+
+        auto bytes = utf8View.bytes();
+        if (string.find('%') == notFound) {
+            return JSC::JSValue::encode(JSC::jsString(vm, string));
+        }
+
+        Vector<char> decoded;
+        if (!decoded.tryReserveInitialCapacity(bytes.size())) [[unlikely]] {
+            throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
+            return {};
+        }
+        for (size_t i = 0; i < bytes.size(); ++i) {
+            if (bytes[i] == '%' && i + 2 < bytes.size()) {
+                uint8_t hi = hexToInt(bytes[i + 1]);
+                uint8_t lo = hexToInt(bytes[i + 2]);
+                if (hi <= 15 && lo <= 15) {
+                    decoded.append(static_cast<char>((hi << 4) | lo));
+                    i += 2;
+                    continue;
+                }
+            }
+            decoded.append(static_cast<char>(bytes[i]));
+        }
+        auto output = WTF::String::fromUTF8(std::span<const char>(decoded.span().data(), decoded.size()));
+        if (output.isNull()) [[unlikely]] {
+            throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
+            return {};
+        }
         return JSC::JSValue::encode(JSC::jsString(vm, output));
     }
 

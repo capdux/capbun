@@ -377,8 +377,8 @@ const stat_size: u64 = @intCast(@max(stat.size, 0));
 };
         _ = req.setYield(false);
         _ = FileRoute.writeStatusCode(status_code, resp);
-        _ = resp.writeMark();
         _ = self.writeHeaders(resp);
+        _ = resp.writeMark();
         if (((HTTPStatusText.isNullBody(status_code) or (status_code == 307)) or (status_code == 308))) {
             _ = resp.endWithoutBody(resp.shouldCloseConnection());
             return;

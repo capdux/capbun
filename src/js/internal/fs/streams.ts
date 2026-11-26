@@ -585,7 +585,7 @@ function underscoreWriteFast(this: FSStream, data: any, encoding: any, cb: any) 
       maybePromise.then(
         () => {
           if (cb) cb(null);
-          this.emit("drain");
+          if (!this.writableEnded && !this.destroyed) this.emit("drain");
         },
         err => {
           if (cb) cb(err);
@@ -626,7 +626,7 @@ function writeFast(this: FSStream, data: any, encoding: any, cb: any) {
       // mistaken for a write failure.
       maybePromise.then(
         () => {
-          this.emit("drain"); // Emit drain event
+          if (!this.writableEnded && !this.destroyed) this.emit("drain"); // Emit drain event
           cb(null);
         },
         err => {
@@ -669,7 +669,7 @@ writeStreamPrototype._writev = function (data, cb) {
     if ($isPromise(maybePromise)) {
       maybePromise
         .then(() => {
-          this.emit("drain");
+          if (!this.writableEnded && !this.destroyed) this.emit("drain");
           cb(null);
         })
         .catch(cb);

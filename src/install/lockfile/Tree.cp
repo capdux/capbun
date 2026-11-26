@@ -619,7 +619,11 @@ pub fn isFilteredDependencyOrWorkspace(
             }
 
             const dependency = builder.dependencies[dep_id];
-            if (!Dependency.isSafeInstallFolderName(dependency.name.slice(builder.buf()))) {
+            const dep_name = dependency.name.slice(builder.buf());
+            if (dep_name.len == 0 && dependency.behavior.isOptional() && pkg_id == invalid_package_id) {
+                continue;
+            }
+            if (!Dependency.isSafeInstallFolderName(dep_name)) {
                 builder.maybeReportError("Invalid dependency name \"{f}\"", .{dependency.name.fmt(builder.buf())});
                 continue;
             }

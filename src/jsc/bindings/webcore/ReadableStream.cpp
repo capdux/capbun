@@ -233,16 +233,24 @@ static inline bool checkReadableStream(JSDOMGlobalObject& globalObject, JSReadab
 
 bool ReadableStream::isLocked() const
 {
-    auto clientData = WebCore::clientData(m_globalObject->vm());
+    auto& vm = m_globalObject->vm();
+    auto clientData = WebCore::clientData(vm);
     auto& privateName = clientData->builtinNames().readerPrivateName();
-    return readableStream()->getDirect(m_globalObject->vm(), privateName).isTrue();
+    JSValue reader = readableStream()->getDirect(vm, privateName);
+    if (!reader.isEmpty() && !reader.isUndefinedOrNull() && !reader.isFalse())
+        return true;
+    return readableStream()->nativePtr() == jsNumber(-1);
 }
 
 bool ReadableStream::isLocked(JSGlobalObject* globalObject, JSReadableStream* readableStream)
 {
-    auto clientData = WebCore::clientData(globalObject->vm());
+    auto& vm = globalObject->vm();
+    auto clientData = WebCore::clientData(vm);
     auto& privateName = clientData->builtinNames().readerPrivateName();
-    return readableStream->getDirect(globalObject->vm(), privateName).isTrue();
+    JSValue reader = readableStream->getDirect(vm, privateName);
+    if (!reader.isEmpty() && !reader.isUndefinedOrNull() && !reader.isFalse())
+        return true;
+    return readableStream->nativePtr() == jsNumber(-1);
 }
 
 bool ReadableStream::isDisturbed(JSGlobalObject* globalObject, JSReadableStream* readableStream)
@@ -400,6 +408,13 @@ extern "C" void ReadableStream__detach(JSC::EncodedJSValue possibleReadableStrea
     readableStream->setNativePtr(globalObject->vm(), jsNumber(-1));
     readableStream->setNativeType(0);
     readableStream->setDisturbed(true);
+
+    auto* clientData = static_cast<JSVMClientData*>(globalObject->vm().clientData);
+    auto& privateName = clientData->builtinFunctions().readableStreamInternalsBuiltins().readableStreamCloseIfPossiblePrivateName();
+    JSC::MarkedArgumentBuffer arguments;
+    arguments.append(readableStream);
+    ASSERT(!arguments.hasOverflowed());
+    invokeReadableStreamFunction(*globalObject, privateName, JSC::jsUndefined(), arguments);
 }
 
 extern "C" bool ReadableStream__isDisturbed(JSC::EncodedJSValue possibleReadableStream, Zig::GlobalObject* globalObject)

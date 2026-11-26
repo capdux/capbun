@@ -215,7 +215,7 @@ pub union(enum) CryptoHasher {
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob && input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
         const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), &output_digest_buf);
@@ -235,7 +235,7 @@ pub union(enum) CryptoHasher {
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob && input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
         if (output_buf := output) {
@@ -381,18 +381,31 @@ pub union(enum) CryptoHasher {
         const arguments = callframe.arguments_old(2);
         const input = unsafe { arguments.ptr[0] };
         if (input.isEmptyOrUndefinedOrNull()) {
-            return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
         }
         const encoding = unsafe { arguments.ptr[1] };
+        if ((input.isString() || input.isStringObjectLike()) && encoding.isString()) {
+            if (enc := jsc.Node.Encoding.fromJS(encoding, globalThis)?) {
+                if (enc == .hex) {
+                    const js_str = input.toJSString(globalThis)?;
+                    const str_len = js_str.length();
+                    if (str_len % 2 != 0) {
+                        let enc_str = bun.String.fromJS(encoding, globalThis)?;
+                        defer enc_str.deref();
+                        return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'encoding' is invalid for data of length {d}. Received '{f}'", .{ str_len, enc_str }).throw();
+                    }
+                }
+            }
+        }
         const buffer_opt = jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValue(globalThis, globalThis.bunVM().allocator, input, encoding)?;
         if (buffer_opt == null) {
-            if (!globalThis.hasException()) return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+            if (!globalThis.hasException()) return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
             return error.JSError;
         }
         let buf = buffer_opt.?;
         const buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buf } };
         if (buf == .blob && buf.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
         switch (_.*) {
@@ -529,7 +542,9 @@ pub union(enum) CryptoHasher {
         switch (_.*) {
             .evp => _.evp.deinit(),
             .@"zig" => _.@"zig".deinit(),
-            .hmac => if (h := _.hmac) h.deinit(),
+            .hmac => if (h := _.hmac) {
+                h.deinit();
+            } else @as(void, undefined),
         }
         bun.destroy(_);
     }
@@ -609,7 +624,7 @@ struct CryptoHasherZig {
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob && input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
         let h = Algorithm.init(.{});
@@ -628,7 +643,7 @@ struct CryptoHasherZig {
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
         if (input == .blob && input.blob.isBunFile()) {
-            return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
         let h = Algorithm.init(.{});
@@ -771,7 +786,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             let output_digest_buf: Hasher.Digest = undefined;
 
             if (input == .blob && input.blob.isBunFile()) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
 
             if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
@@ -818,7 +833,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
             if (input == .blob && input.blob.isBunFile()) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
 
             if (string_or_buffer := output) {
@@ -862,15 +877,18 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             }
             const thisValue = callframe.this();
             const input = callframe.argument(0);
+            if (input.isEmptyOrUndefinedOrNull()) {
+                return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+            }
             const buffer_opt = jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input)?;
             const buffer = buffer_opt ?? {
-                return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
             };
             let buf = buffer;
             const buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buf } };
 
             if (buffer == .blob && buffer.blob.isBunFile()) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             _.hashing.update(buffer.slice());
             return thisValue;

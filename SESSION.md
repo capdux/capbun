@@ -1124,3 +1124,9 @@
   - **新全绿（0 fail）**：`bun/toml/toml.test.ts`、`bun/jsonc/{json-differential-fuzz,jsonc}.test.ts`、`node/perf_hooks/perf_hooks.test.ts`（17/17）。
   - **显著收敛**：`web-stream-state.test.ts`（44/46 通过，仅余 3 项，零超时/UAF）、`process-stdin.test.ts`（21/22 通过，`paused` 退出已修）、`bun/jsonc/json-test-suite.test.ts`（仅余 1 项）、`bun/image/`（JPEG 警告与 colorspace 检查全部通过）。
   - **待下轮编译复测**：`src/patch/patch.cp`（`gitDiffPostprocess` 同步 `line_iter.buffer = stdout.items`）。
+
+### [2026-11-27 Batch 52–58] 全仓扫描与集中修复（29 个修改文件转绿 + 200+ 扫描 0 fail 固化）
+- **核心动作**：保持 3 路一次性子智能体并发与主智能体并行，跨 `regression/issue`、`node/{stream,child_process,http,tls,net,crypto,fs}`、`bun/{test,util,http,spawn,jsonc}`、`bundler/esbuild` 完成多轮扫描与修复，并通过 `bun run zig:check` 与 `bun bd` 重编 `1.4.5-debug` 验收。
+- **验收摘要**：
+  - 29 个修复套件实测 `1.4.5-debug` 全部 `0 fail`（含 `17190/21680/26851/27890/31652/32489/40268/40606/44275/postgres-null-byte-injection/s3-header-injection`、`node-tls-rootcertificates-immutable/concurrent-init`、`crypto-{lazyhash,oneshot}`/`x509-subclass`/`hkdf-*`/`scrypt`、`node/fs/dir`、`serve-close-delimited-framing`/`bun-serve-static`、`spawn-{kill-signal,signal,path,renamed-cwd}`、`bun-test`/`new-snapshot`/`snapshots/more`）。
+  - 另新扫描确认 200+ 文件 0 fail 并记入 `test/stats.md`（不再重复测试）。

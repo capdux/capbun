@@ -1098,7 +1098,7 @@ class ChildProcess extends EventEmitter {
     {
       if (this.#stdin) {
         this.#stdin.destroy();
-      } else {
+      } else if (this.#stdioOptions[0] === "pipe") {
         this.#stdioOptions[0] = "destroyed";
       }
 
@@ -1450,6 +1450,16 @@ class ChildProcess extends EventEmitter {
   }
 
   #emitIpcMessage(message, _, handle) {
+    if (
+      message &&
+      typeof message === "object" &&
+      typeof message.cmd === "string" &&
+      message.cmd.length > 5 &&
+      message.cmd.startsWith("NODE_")
+    ) {
+      this.emit("internalMessage", message, handle);
+      return;
+    }
     this.emit("message", message, handle);
   }
 
@@ -1644,6 +1654,9 @@ function nodeToBun(item: string, index: number): string | number | null | NodeJS
   if (typeof item === "number") {
     return item;
   }
+  if (typeof item === "object" && item !== null && (item as any).encrypted && item instanceof require("node:tls").TLSSocket) {
+    throw $ERR_INVALID_ARG_VALUE("stdio", "[TLSSocket]");
+  }
   if (isNodeStreamReadable(item)) {
     if (Object.hasOwn(item, "fd") && typeof item.fd === "number") return item.fd;
     if (item._handle && typeof item._handle.fd === "number") return item._handle.fd;
@@ -1740,6 +1753,8 @@ function normalizeStdio(stdio): string[] {
         return ["pipe", "pipe", "pipe"];
       case "inherit":
         return ["inherit", "inherit", "inherit"];
+      case "overlapped":
+        return ["overlapped", "overlapped", "overlapped"];
       default:
         throw ERR_INVALID_OPT_VALUE("stdio", stdio);
     }
@@ -1830,7 +1845,7 @@ function nullCheck(path, propName, throwError = true) {
 
 function validatePath(path, propName = "path") {
   if (typeof path !== "string" && !isUint8Array(path)) {
-    throw $ERR_INVALID_ARG_TYPE(propName, ["string", "Buffer", "URL"], path);
+    throw $ERR_INVALID_ARG_TYPE(propName, "string or an instance of Buffer or URL", path);
   }
 
   const err = nullCheck(path, propName, false);

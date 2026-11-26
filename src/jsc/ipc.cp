@@ -915,12 +915,17 @@ pub const SendQueueOwner = IPCSendQueueOwner;
 
     pub fn serializeAndSend(*_, global: *JSGlobalObject, value: JSValue, is_internal: IsInternal, callback: jsc.JSValue, handle: Handle?): SerializeAndSendResult {
         log("SendQueue#serializeAndSend", .{});
+        // Serialize into a temporary buffer first so re-entrant process.send() calls
+        // inside JS getters cannot reallocate `_.queue` and invalidate `msg`.
+        let temp_buf: bun.io.StreamBuffer = .{};
+        defer temp_buf.deinit();
+        const payload_length = serialize(_.mode, &temp_buf, global, value, is_internal) catch return .failure;
+
         const indicate_backoff = _.waiting_for_ack != null && _.queue.items.len > 0;
         const msg = _.startMessage(global, callback, handle) catch return .failure;
-        const start_offset = msg.data.list.items.len;
-
-        const payload_length = serialize(_.mode, &msg.data, global, value, is_internal) catch return .failure;
-        bun.assert(msg.data.list.items.len == start_offset + payload_length);
+        const start_unread = msg.data.list.items.len - msg.data.cursor;
+        bun.handleOom(msg.data.write(temp_buf.list.items[temp_buf.cursor..]));
+        bun.assert(msg.data.list.items.len - msg.data.cursor == start_unread + payload_length);
         // log("enqueueing ipc message: '{'}'", .{std.zig.fmtString(msg.data.list.items[start_offset..])});
 
         log("IPC call continueSend() from serializeAndSend", .{});

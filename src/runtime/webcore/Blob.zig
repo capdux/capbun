@@ -1872,6 +1872,9 @@ pub fn getExistsSync(self: *Blob) JSValue {
         if ((store.data == .bytes)) {
             return .true;
         }
+        if (((store.data == .file) and (store.data.file.seekable == null))) {
+            _ = Blob.resolveFileStat(store);
+        }
         return JSValue.jsBoolean((bun.isRegularFile(store.data.file.mode) or bun.sys.S.ISFIFO(store.data.file.mode)));
 }
 
@@ -3218,6 +3221,7 @@ const written = file_sink.written;
 },
 .rejected => {
 _ = file_sink.deref();
+                _ = promise_mut.setHandled(globalThis.vm());
                 _ = readable_stream.cancel(globalThis);
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise_mut.result(globalThis.vm()));
 },

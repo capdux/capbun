@@ -679,6 +679,9 @@ pub fn writeHead(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, c
         _ = writeHeadInternal(client.raw_response.?, globalObject, status_message, headers_object_value);
         break :do_it;
 };
+        if (globalObject.hasException()) {
+            return error.JSError;
+        }
         return .js_undefined;
 }
 

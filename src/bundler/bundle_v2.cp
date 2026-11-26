@@ -812,9 +812,11 @@ pub struct BundleV2 {
                     entry.value_ptr.* = idx;
                     const record: *ImportRecord = &_.graph.ast.items(.import_records)[import_record.importer_source_index].slice()[import_record.import_record_index];
                     record.source_index = Index.init(idx);
+                    * = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(_, import_record.importer_source_index, import_record.import_record_index, idx));
                 } else {
                     const record: *ImportRecord = &_.graph.ast.items(.import_records)[import_record.importer_source_index].slice()[import_record.import_record_index];
                     record.source_index = Index.init(entry.value_ptr.*);
+                    * = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(_, import_record.importer_source_index, import_record.import_record_index, entry.value_ptr.*));
                 }
                 return;
             }
@@ -1023,6 +1025,7 @@ pub struct BundleV2 {
         if (source_index := out_source_index) {
             const record: *ImportRecord = &_.graph.ast.items(.import_records)[import_record.importer_source_index].slice()[import_record.import_record_index];
             record.source_index = source_index;
+            * = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(_, import_record.importer_source_index, import_record.import_record_index, source_index.get()));
         }
     }
 
@@ -2469,6 +2472,7 @@ pub struct BundleV2 {
                         } else {
                             const import_record: *ImportRecord = &source_import_records.slice()[resolve.import_record.import_record_index];
                             import_record.source_index = source_index;
+                            * = bun.handleOom(barrel_imports.onAsyncImportRecordResolved(bundle, resolve.import_record.importer_source_index, resolve.import_record.import_record_index, source_index.get()));
                         }
                     }
                 }
@@ -3974,7 +3978,7 @@ pub struct BundleV2 {
                             &result.source.path,
                             // SAFETY: when shouldCopyForBundling is true, the
                             // contents are allocated by bun.default_allocator
-                            &.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents)),
+                            &.fromOwnedSlice(bun.default_allocator, unsafe { @constCast(result.source.contents) }),
                             result.content_hash_for_additional_file,
                         ) catch oom_err => bun.handleOom(oom_err);
                     }

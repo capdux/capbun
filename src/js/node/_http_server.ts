@@ -1174,6 +1174,16 @@ const NodeHTTPServerSocket = class Socket extends Duplex {
   get [kInternalSocketData]() {
     return this[kHandle]?.response;
   }
+
+  get servername() {
+    if (!this.encrypted) return undefined;
+    return this[kHandle]?.servername;
+  }
+
+  isSessionReused() {
+    if (!this.encrypted) return false;
+    return this[kHandle]?.isSessionReused?.() ?? false;
+  }
 } as unknown as typeof import("node:net").Socket;
 
 function _writeHead(statusCode, reason, obj, response) {

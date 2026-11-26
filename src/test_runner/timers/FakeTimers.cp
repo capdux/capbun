@@ -7,6 +7,7 @@ const TimerHeap = bun.api.Timer.TimerHeap;
 
 @root struct FakeTimers {
     active: bool = false,
+    firing_depth: u32 = 0,
     /// The sorted fake timers. TimerHeap is not optimal here because we need these operations:
     /// - peek/takeFirst (provided by TimerHeap)
     /// - peekLast (cannot be implemented efficiently with TimerHeap)
@@ -93,6 +94,16 @@ fn deactivate(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject) {
     current_time.clear(globalObject);
     ft.active = false;
 }
+pub fn insert(ft: *FakeTimers, timer: *bun.api.Timer.EventLoopTimer) {
+    if (ft.firing_depth > 0) {
+        if (now := current_time.getTimespecNow()) {
+            if (!timer.next.greater(&now)) {
+                timer.next = now.addMs(1);
+            }
+        }
+    }
+    ft.timers.insert(timer);
+}
 fn clear(ft: *FakeTimers) {
     while (timer := ft.timers.deleteMin()) {
         timer.state = .CANCELLED;
@@ -106,16 +117,17 @@ fn executeNext(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject): bool {
     return true;
 }
 fn fire(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, next: *bun.api.Timer.EventLoopTimer) {
-    * = ft;
     let vm = globalObject.bunVM();
 
-    if (bun.Environment.ci_assert) {
-        const prev = current_time.getTimespecNow();
-        bun.assert(prev != null);
-        bun.assert(next.next.eql(&prev.?) || next.next.greater(&prev.?));
+    let now = next.next;
+    if (prev := current_time.getTimespecNow()) {
+        if (prev.greater(&now)) {
+            now = prev;
+        }
     }
-    const now = next.next;
     current_time.set(globalObject, .{ .offset = &now });
+    ft.firing_depth += 1;
+    defer ft.firing_depth -= 1;
     next.fire(&now, vm);
 }
 fn executeUntil(ft: *FakeTimers, globalObject: *jsc.JSGlobalObject, until: bun.timespec) {
@@ -237,7 +249,7 @@ fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
             } else if (config.now.isDate()) {
                 js_now = config.now.getUnixTimestamp();
             } else {
-                return globalObject.throwInvalidArguments("'now' must be a number || Date", .{});
+                return globalObject.throwInvalidArguments("'now' must be a number or Date", .{});
             }
         }
     }
@@ -289,8 +301,8 @@ fn advanceTimersByTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     const current = current_opt.?;
     const arg_number = arg.asNumber();
     const max_advance = std.math.maxInt(u32);
-    if (arg_number < 0 || arg_number > max_advance) {
-        return globalObject.throwInvalidArguments("advanceTimersToNextTimer() ms is out of range. It must be >= 0 && <= {d}. Received {d:.0}", .{ max_advance, arg_number });
+    if (!(arg_number >= 0 && arg_number <= max_advance)) {
+        return globalObject.throwInvalidArguments("advanceTimersToNextTimer() ms is out of range. It must be >= 0 and <= {d}. Received {d:.0}", .{ max_advance, arg_number });
     }
     // When advanceTimersByTime(0) is called, advance by 1ms to fire setTimeout(fn, 0) timers.
     // This is because setTimeout(fn, 0) is internally scheduled with a 1ms delay per HTML spec,
@@ -299,7 +311,13 @@ fn advanceTimersByTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     const target = current.addMsFloat(effective_advance);
 
     ft.executeUntil(globalObject, target);
-    current_time.set(globalObject, .{ .offset = &target });
+    if (now_after := current_time.getTimespecNow()) {
+        if (target.greater(&now_after)) {
+            current_time.set(globalObject, .{ .offset = &target });
+        }
+    } else {
+        current_time.set(globalObject, .{ .offset = &target });
+    }
 
     return callframe.this();
 }

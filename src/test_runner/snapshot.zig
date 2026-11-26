@@ -360,7 +360,10 @@ pub fn writeSnapshotFile(self: *Snapshots) !void {
                     self._current_file = null;
                 }
                 }
-                _ = (blk_catch_0: { break :blk_catch_0 ((file.file.writeAll(self.file_buf.items)) catch |__ce_0| { _ = &__ce_0; return error.FailedToWriteSnapshotFile; }); });
+                if (self.update_snapshots) {
+                    _ = (blk_catch_0: { break :blk_catch_0 ((file.file.setEndPos(0)) catch |__ce_0| { _ = &__ce_0; return error.FailedToWriteSnapshotFile; }); });
+                }
+                _ = (blk_catch_1: { break :blk_catch_1 ((file.file.writeAll(self.file_buf.items)) catch |__ce_1| { _ = &__ce_1; return error.FailedToWriteSnapshotFile; }); });
                 _ = self.file_buf.clearAndFree();
                 var value_itr = self.values.valueIterator();
                 _ = &value_itr;
@@ -410,7 +413,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                 defer {
                 {
                     if ((log.errors > 0)) {
-                        _ = (blk_catch_1: { break :blk_catch_1 ((log.print(bun.Output.errorWriter())) catch |__ce_1| { _ = &__ce_1;  }); });
+                        _ = (blk_catch_2: { break :blk_catch_2 ((log.print(bun.Output.errorWriter())) catch |__ce_2| { _ = &__ce_2;  }); });
                         success = false;
                     }
                 }
@@ -423,7 +426,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
 .result => |r| r,
 .err => |e| {
 {
-                    _ = (blk_catch_2: { break :blk_catch_2 ((log.addErrorFmt((&bun.logger.Source.initEmptyFile(test_filename)), .{ .start = 0 }, arena_, "Failed to update inline snapshot: Failed to open file: {s}", .{ e.name() })) catch |__ce_2| { _ = &__ce_2;  }); });
+                    _ = (blk_catch_3: { break :blk_catch_3 ((log.addErrorFmt((&bun.logger.Source.initEmptyFile(test_filename)), .{ .start = 0 }, arena_, "Failed to update inline snapshot: Failed to open file: {s}", .{ e.name() })) catch |__ce_3| { _ = &__ce_3;  }); });
                     continue;
                 }
 },
@@ -452,7 +455,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     _ = &ils;
                     if (((ils.line == last_line) and (ils.col == last_col))) {
                         if ((!bun.strings.eql((if (@typeInfo(@TypeOf(ils)) == .@"enum") @intFromEnum(ils) else ils.value), last_value))) {
-                            _ = (blk_catch_3: { break :blk_catch_3 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(uncommitted_segment_end)) }, arena_, "Failed to update inline snapshot: Multiple inline snapshots on the same line must all have the same value:\n{f}", .{ DiffFormatter{ .received_string = (if (@typeInfo(@TypeOf(ils)) == .@"enum") @intFromEnum(ils) else ils.value), .expected_string = last_value, .globalThis = vm.global } })) catch |__ce_3| { _ = &__ce_3;  }); });
+                            _ = (blk_catch_4: { break :blk_catch_4 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(uncommitted_segment_end)) }, arena_, "Failed to update inline snapshot: Multiple inline snapshots on the same line must all have the same value:\n{f}", .{ DiffFormatter{ .received_string = (if (@typeInfo(@TypeOf(ils)) == .@"enum") @intFromEnum(ils) else ils.value), .expected_string = last_value, .globalThis = vm.global } })) catch |__ce_4| { _ = &__ce_4;  }); });
                         }
                         continue;
                     }
@@ -460,7 +463,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     const byte_offset_add_opt = logger.Source.lineColToByteOffset(file_text[last_byte..], last_line, last_col, ils.line, ils.col);
                     if ((byte_offset_add_opt == null)) {
                         _ = inline_snapshot_dbg("-> Could not find byte", .{});
-                        _ = (blk_catch_4: { break :blk_catch_4 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(uncommitted_segment_end)) }, arena_, "Failed to update inline snapshot: Ln {d}, Col {d} not found", .{ ils.line, ils.col })) catch |__ce_4| { _ = &__ce_4;  }); });
+                        _ = (blk_catch_5: { break :blk_catch_5 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(uncommitted_segment_end)) }, arena_, "Failed to update inline snapshot: Ln {d}, Col {d} not found", .{ ils.line, ils.col })) catch |__ce_5| { _ = &__ce_5;  }); });
                         continue;
                     }
                     const byte_offset_add = byte_offset_add_opt.?;
@@ -474,7 +477,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     const range_info = blk: {
                     const fn_name = ils.kind;
                     if ((!bun.strings.startsWith(file_text[next_start..], fn_name))) {
-                        _ = (blk_catch_5: { break :blk_catch_5 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(next_start)) }, arena_, "Failed to update inline snapshot: Could not find '{s}' here", .{ fn_name })) catch |__ce_5| { _ = &__ce_5;  }); });
+                        _ = (blk_catch_6: { break :blk_catch_6 ((log.addErrorFmt(source, .{ .start = @as(i32, @intCast(next_start)) }, arena_, "Failed to update inline snapshot: Could not find '{s}' here", .{ fn_name })) catch |__ce_6| { _ = &__ce_6;  }); });
                         continue;
                     }
                     next_start = (next_start + fn_name.len);
@@ -484,32 +487,32 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                         lexer.current = (lexer.current + (next_start - (lexer.current - lexer.end)));
                         _ = lexer.step();
                     }
-                    _ = (blk_catch_6: { break :blk_catch_6 ((lexer.next()) catch |__ce_6| { _ = &__ce_6; continue; }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((lexer.next()) catch |__ce_7| { _ = &__ce_7; continue; }); });
                     var parser: bun.js_parser.TSXParser = undefined;
                     _ = &parser;
-                    _ = (blk_catch_7: { break :blk_catch_7 ((bun.js_parser.TSXParser.init(arena_, (&log), source, vm.transpiler.options.define, lexer, opts, (&parser))) catch |__ce_7| { _ = &__ce_7; continue; }); });
-                    _ = (blk_catch_8: { break :blk_catch_8 ((parser.lexer.expect(.t_open_paren)) catch |__ce_8| { _ = &__ce_8; continue; }); });
+                    _ = (blk_catch_8: { break :blk_catch_8 ((bun.js_parser.TSXParser.init(arena_, (&log), source, vm.transpiler.options.define, lexer, opts, (&parser))) catch |__ce_8| { _ = &__ce_8; continue; }); });
+                    _ = (blk_catch_9: { break :blk_catch_9 ((parser.lexer.expect(.t_open_paren)) catch |__ce_9| { _ = &__ce_9; continue; }); });
                     const after_open_paren_loc = parser.lexer.loc().start;
                     if ((parser.lexer.token == .t_close_paren)) {
                         if (ils.has_matchers) {
-                            _ = (blk_catch_9: { break :blk_catch_9 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Snapshot has matchers and yet has no arguments", .{})) catch |__ce_9| { _ = &__ce_9;  }); });
+                            _ = (blk_catch_10: { break :blk_catch_10 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Snapshot has matchers and yet has no arguments", .{})) catch |__ce_10| { _ = &__ce_10;  }); });
                             continue;
                         }
                         const close_paren_loc = parser.lexer.loc().start;
-                        _ = (blk_catch_10: { break :blk_catch_10 ((parser.lexer.expect(.t_close_paren)) catch |__ce_10| { _ = &__ce_10; continue; }); });
+                        _ = (blk_catch_11: { break :blk_catch_11 ((parser.lexer.expect(.t_close_paren)) catch |__ce_11| { _ = &__ce_11; continue; }); });
                         break :blk UpdateRange{ .final_start = after_open_paren_loc, .final_end = close_paren_loc, .needs_pre_comma = false };
                     }
                     if ((parser.lexer.token == .t_dot_dot_dot)) {
-                        _ = (blk_catch_11: { break :blk_catch_11 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Spread is not allowed", .{})) catch |__ce_11| { _ = &__ce_11;  }); });
+                        _ = (blk_catch_12: { break :blk_catch_12 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Spread is not allowed", .{})) catch |__ce_12| { _ = &__ce_12;  }); });
                         continue;
                     }
                     const before_expr_loc = parser.lexer.loc().start;
-                    const expr_1 = (blk_catch_12: { break :blk_catch_12 ((parser.parseExpr(.comma)) catch |__ce_12| { _ = &__ce_12; continue; }); });
+                    const expr_1 = (blk_catch_13: { break :blk_catch_13 ((parser.parseExpr(.comma)) catch |__ce_13| { _ = &__ce_13; continue; }); });
                     const after_expr_loc = parser.lexer.loc().start;
                     var is_one_arg = false;
                     _ = &is_one_arg;
                     if ((parser.lexer.token == .t_comma)) {
-                        _ = (blk_catch_13: { break :blk_catch_13 ((parser.lexer.expect(.t_comma)) catch |__ce_13| { _ = &__ce_13; continue; }); });
+                        _ = (blk_catch_14: { break :blk_catch_14 ((parser.lexer.expect(.t_comma)) catch |__ce_14| { _ = &__ce_14; continue; }); });
                         if ((parser.lexer.token == .t_close_paren)) {
                             is_one_arg = true;
                         }
@@ -518,40 +521,40 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     }
                     const after_comma_loc = parser.lexer.loc().start;
                     if (is_one_arg) {
-                        _ = (blk_catch_14: { break :blk_catch_14 ((parser.lexer.expect(.t_close_paren)) catch |__ce_14| { _ = &__ce_14; continue; }); });
+                        _ = (blk_catch_15: { break :blk_catch_15 ((parser.lexer.expect(.t_close_paren)) catch |__ce_15| { _ = &__ce_15; continue; }); });
                         if (ils.has_matchers) {
                             break :blk UpdateRange{ .final_start = after_expr_loc, .final_end = after_comma_loc, .needs_pre_comma = true };
                         } else {
                             if ((expr_1.data != .e_string)) {
-                                _ = (blk_catch_15: { break :blk_catch_15 ((log.addErrorFmt(source, expr_1.loc, arena_, "Failed to update inline snapshot: Argument must be a string literal", .{})) catch |__ce_15| { _ = &__ce_15;  }); });
+                                _ = (blk_catch_16: { break :blk_catch_16 ((log.addErrorFmt(source, expr_1.loc, arena_, "Failed to update inline snapshot: Argument must be a string literal", .{})) catch |__ce_16| { _ = &__ce_16;  }); });
                                 continue;
                             }
                             break :blk UpdateRange{ .final_start = before_expr_loc, .final_end = after_expr_loc, .needs_pre_comma = false };
                         }
                     }
                     if ((parser.lexer.token == .t_dot_dot_dot)) {
-                        _ = (blk_catch_16: { break :blk_catch_16 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Spread is not allowed", .{})) catch |__ce_16| { _ = &__ce_16;  }); });
+                        _ = (blk_catch_17: { break :blk_catch_17 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Spread is not allowed", .{})) catch |__ce_17| { _ = &__ce_17;  }); });
                         continue;
                     }
                     const before_expr_2_loc = parser.lexer.loc().start;
-                    const expr_2 = (blk_catch_17: { break :blk_catch_17 ((parser.parseExpr(.comma)) catch |__ce_17| { _ = &__ce_17; continue; }); });
+                    const expr_2 = (blk_catch_18: { break :blk_catch_18 ((parser.parseExpr(.comma)) catch |__ce_18| { _ = &__ce_18; continue; }); });
                     const after_expr_2_loc = parser.lexer.loc().start;
                     if ((!ils.has_matchers)) {
-                        _ = (blk_catch_18: { break :blk_catch_18 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Snapshot does not have matchers and yet has two arguments", .{})) catch |__ce_18| { _ = &__ce_18;  }); });
+                        _ = (blk_catch_19: { break :blk_catch_19 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Snapshot does not have matchers and yet has two arguments", .{})) catch |__ce_19| { _ = &__ce_19;  }); });
                         continue;
                     }
                     if ((expr_2.data != .e_string)) {
-                        _ = (blk_catch_19: { break :blk_catch_19 ((log.addErrorFmt(source, expr_2.loc, arena_, "Failed to update inline snapshot: Argument must be a string literal", .{})) catch |__ce_19| { _ = &__ce_19;  }); });
+                        _ = (blk_catch_20: { break :blk_catch_20 ((log.addErrorFmt(source, expr_2.loc, arena_, "Failed to update inline snapshot: Argument must be a string literal", .{})) catch |__ce_20| { _ = &__ce_20;  }); });
                         continue;
                     }
                     if ((parser.lexer.token == .t_comma)) {
-                        _ = (blk_catch_20: { break :blk_catch_20 ((parser.lexer.expect(.t_comma)) catch |__ce_20| { _ = &__ce_20; continue; }); });
+                        _ = (blk_catch_21: { break :blk_catch_21 ((parser.lexer.expect(.t_comma)) catch |__ce_21| { _ = &__ce_21; continue; }); });
                     }
                     if ((parser.lexer.token != .t_close_paren)) {
-                        _ = (blk_catch_21: { break :blk_catch_21 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Snapshot expects at most two arguments", .{})) catch |__ce_21| { _ = &__ce_21;  }); });
+                        _ = (blk_catch_22: { break :blk_catch_22 ((log.addErrorFmt(source, parser.lexer.loc(), arena_, "Failed to update inline snapshot: Snapshot expects at most two arguments", .{})) catch |__ce_22| { _ = &__ce_22;  }); });
                         continue;
                     }
-                    _ = (blk_catch_22: { break :blk_catch_22 ((parser.lexer.expect(.t_close_paren)) catch |__ce_22| { _ = &__ce_22; continue; }); });
+                    _ = (blk_catch_23: { break :blk_catch_23 ((parser.lexer.expect(.t_close_paren)) catch |__ce_23| { _ = &__ce_23; continue; }); });
                     break :blk UpdateRange{ .final_start = before_expr_2_loc, .final_end = after_expr_2_loc, .needs_pre_comma = false };
 };
                     const final_start = range_info.final_start;
@@ -561,7 +564,7 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                     const final_end_usize = ((std.math.cast(usize, final_end)) orelse ((if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
                     _ = inline_snapshot_dbg("  -> Found update range {}-{}", .{ final_start_usize, final_end_usize });
                     if (((final_end_usize < final_start_usize) or (final_start_usize < uncommitted_segment_end))) {
-                        _ = (blk_catch_23: { break :blk_catch_23 ((log.addErrorFmt(source, .{ .start = final_start }, arena_, "Failed to update inline snapshot: Did not advance.", .{})) catch |__ce_23| { _ = &__ce_23;  }); });
+                        _ = (blk_catch_24: { break :blk_catch_24 ((log.addErrorFmt(source, .{ .start = final_start }, arena_, "Failed to update inline snapshot: Did not advance.", .{})) catch |__ce_24| { _ = &__ce_24;  }); });
                         continue;
                     }
                     _ = try result_text.appendSlice(file_text[uncommitted_segment_end..final_start_usize]);
@@ -647,12 +650,12 @@ pub fn writeInlineSnapshots(self: *Snapshots) !bool {
                 if ((log.errors > 0)) {
                     continue;
                 }
-                _ = (blk_catch_24: { break :blk_catch_24 ((file.file.seekTo(0)) catch |e| { _ = &e; _ = (blk_catch_25: { break :blk_catch_25 ((log.addErrorFmt(source, .{ .start = 0 }, arena_, "Failed to update inline snapshot: Seek file error: {s}", .{ @errorName(e) })) catch |__ce_25| { _ = &__ce_25;  }); });
+                _ = (blk_catch_25: { break :blk_catch_25 ((file.file.seekTo(0)) catch |e| { _ = &e; _ = (blk_catch_26: { break :blk_catch_26 ((log.addErrorFmt(source, .{ .start = 0 }, arena_, "Failed to update inline snapshot: Seek file error: {s}", .{ @errorName(e) })) catch |__ce_26| { _ = &__ce_26;  }); });
                 continue; }); });
-                _ = (blk_catch_26: { break :blk_catch_26 ((file.file.writeAll(result_text.items)) catch |e| { _ = &e; _ = (blk_catch_27: { break :blk_catch_27 ((log.addErrorFmt(source, .{ .start = 0 }, arena_, "Failed to update inline snapshot: Write file error: {s}", .{ @errorName(e) })) catch |__ce_27| { _ = &__ce_27;  }); });
+                _ = (blk_catch_27: { break :blk_catch_27 ((file.file.writeAll(result_text.items)) catch |e| { _ = &e; _ = (blk_catch_28: { break :blk_catch_28 ((log.addErrorFmt(source, .{ .start = 0 }, arena_, "Failed to update inline snapshot: Write file error: {s}", .{ @errorName(e) })) catch |__ce_28| { _ = &__ce_28;  }); });
                 continue; }); });
                 if ((result_text.items.len < file_text.len)) {
-                    _ = (blk_catch_28: { break :blk_catch_28 ((file.file.setEndPos(result_text.items.len)) catch |__ce_28| { _ = &__ce_28; @panic("Failed to update inline snapshot: File was left in an invalid state"); }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((file.file.setEndPos(result_text.items.len)) catch |__ce_29| { _ = &__ce_29; @panic("Failed to update inline snapshot: File was left in an invalid state"); }); });
                 }
             }
             return success;
@@ -697,11 +700,7 @@ return .initErr(e);
                 remain = remain[".snap".len..];
                 remain[cp_cast_int(usize, 0)] = 0;
                 const snapshot_file_path = snapshot_file_path_buf[0..(snapshot_file_path_buf.len - remain.len) :0];
-                var flags: i32 = (bun.O.CREAT | bun.O.RDWR);
-                _ = &flags;
-                if (self.update_snapshots) {
-                    flags = (flags | bun.O.TRUNC);
-                }
+                const flags: i32 = (bun.O.CREAT | bun.O.RDWR);
                 const fd = (switch (bun.sys.open(snapshot_file_path, flags, 420)) {
 .result => |_fd| _fd,
 .err => |e| {

@@ -392,35 +392,7 @@ pub fn scheduleBarrelDeferredImports(client: *BundleV2, result: *ParseTask.Resul
                     continue;
                 }
             }
-            const gop = try client.requested_exports.getOrPut(client.allocator(), target);
-            if (ni.alias_is_star) {
-                gop.value_ptr.* = .all;
-            } else {
-                if (ni.alias) |alias| {
-                    _ = &alias;
-                    if (gop.found_existing) {
-                        switch (gop.value_ptr.*) {
-.all => {
-
-},
-.partial => |*p| {
-_ = try p.put(client.allocator(), alias, undefined);
-},
-}
-                    } else {
-                        gop.value_ptr.* = .{ .partial = .{} };
-                        _ = try gop.value_ptr.partial.put(client.allocator(), alias, undefined);
-                    }
-                    if (client.transpiler.options.dev_server) |dev| {
-                        _ = &dev;
-                        _ = persistBarrelExport(dev, resolved_path_text, alias);
-                    }
-                } else {
-                    if ((!gop.found_existing)) {
-                        gop.value_ptr.* = .{ .partial = .{} };
-                    }
-                }
-            }
+            _ = try seedRequestedExport(client, target, ni.alias_is_star, ni.alias, resolved_path_text);
         }
         var fir_idx: usize = 0;
         _ = &fir_idx;
@@ -454,14 +426,8 @@ _ = try p.put(client.allocator(), alias, undefined);
             if (ir.flags.was_originally_bare_import) {
                 continue;
             }
-            if ((ir.kind == .require)) {
-                const gop = try client.requested_exports.getOrPut(client.allocator(), target);
-                gop.value_ptr.* = .all;
-            } else {
-                if ((ir.kind == .dynamic)) {
-                    const gop = try client.requested_exports.getOrPut(client.allocator(), target);
-                    gop.value_ptr.* = .all;
-                }
+            if (((ir.kind == .require) or (ir.kind == .dynamic))) {
+                _ = try seedRequestedExport(client, target, true, null, null);
             }
         }
         var queue_stack = std.heap.stackFallback(8192, client.allocator());
@@ -564,7 +530,96 @@ var partial_iter = partial.iterator();
         if ((queue.items.len == 0)) {
             return 0;
         }
-        const initial_queue_len = queue.items.len;
+        return runBarrelUnDeferBFS(client, (&queue), queue_alloc, queue.items.len);
+}
+
+pub fn seedRequestedExport(client: *BundleV2, target: u32, is_star: bool, alias_opt: ?[]const u8, dev_path_opt: ?[]const u8) !bool {
+        const gop = try client.requested_exports.getOrPut(client.allocator(), target);
+        if (is_star) {
+            gop.value_ptr.* = .all;
+            return false;
+        }
+        if (alias_opt) |alias| {
+            _ = &alias;
+            if (gop.found_existing) {
+                if ((gop.value_ptr.* == .all)) {
+                    return true;
+                }
+                const ag = try gop.value_ptr.partial.getOrPut(client.allocator(), alias);
+                if (ag.found_existing) {
+                    return true;
+                }
+            } else {
+                gop.value_ptr.* = .{ .partial = .{} };
+                _ = try gop.value_ptr.partial.put(client.allocator(), alias, undefined);
+            }
+            if (dev_path_opt) |dev_path| {
+                _ = &dev_path;
+                if (client.transpiler.options.dev_server) |dev| {
+                    _ = &dev;
+                    _ = persistBarrelExport(dev, dev_path, alias);
+                }
+            }
+        } else {
+            if ((!gop.found_existing)) {
+                gop.value_ptr.* = .{ .partial = .{} };
+            }
+        }
+        return false;
+}
+
+pub fn onAsyncImportRecordResolved(client: *BundleV2, importer_source_index: u32, import_record_index: u32, target_source_index: u32) !i32 {
+        if (((!client.isBarrelOptimizationEnabled()) or (importer_source_index >= client.graph.ast.len))) {
+            return 0;
+        }
+        const graph_ast = client.graph.ast.slice();
+        const import_records = graph_ast.items(.import_records)[@as(usize, @intCast(importer_source_index))];
+        if ((import_record_index >= import_records.len)) {
+            return 0;
+        }
+        for (cp_iter_slice(graph_ast.items(.export_star_import_records)[@as(usize, @intCast(importer_source_index))])) |s_idx| {
+            _ = &s_idx;
+            if ((s_idx == import_record_index)) {
+                client.graph.input_files.items(.flags)[@as(usize, @intCast(target_source_index))].is_export_star_target = true;
+                break;
+            }
+        }
+        var queue_stack = std.heap.stackFallback(1024, client.allocator());
+        _ = &queue_stack;
+        const queue_alloc = queue_stack.get();
+        var queue: std.ArrayListUnmanaged(BarrelWorkItem) = .{};
+        _ = &queue;
+        var queue_guard = DeinitWithAllocGuard(@TypeOf(queue)){ .ptr = (&queue), .alloc = queue_alloc };
+        _ = &queue_guard;
+        var __queue_guard_moved = false; _ = &__queue_guard_moved;
+        defer if (!__queue_guard_moved) { __queue_guard_moved = true; const __T = @TypeOf(queue_guard); if (@typeInfo(__T) == .optional) { if (queue_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { queue_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = queue_guard; _drop_val.__cp_deinit(); } };
+        var has_named = false;
+        _ = &has_named;
+        const ir = import_records.slice()[@as(usize, @intCast(import_record_index))];
+        var ni_iter = graph_ast.items(.named_imports)[@as(usize, @intCast(importer_source_index))].iterator();
+        _ = &ni_iter;
+        while (ni_iter.next()) |ni_entry| {
+            const ni = ni_entry.value_ptr;
+            if ((ni.import_record_index != import_record_index)) {
+                continue;
+            }
+            has_named = true;
+            _ = try seedRequestedExport(client, target_source_index, ni.alias_is_star, ni.alias, ir.path.text);
+            if ((ni.alias_is_star or (ni.alias != null))) {
+                _ = try queue.append(queue_alloc, .{ .barrel_source_index = target_source_index, .alias = ((ni.alias) orelse ("")), .is_star = ni.alias_is_star });
+            }
+        }
+        if (((((!has_named) and (!ir.flags.is_internal)) and (!ir.flags.was_originally_bare_import)) and ((ir.kind == .require) or (ir.kind == .dynamic)))) {
+            _ = try seedRequestedExport(client, target_source_index, true, null, null);
+            _ = try queue.append(queue_alloc, .{ .barrel_source_index = target_source_index, .alias = "", .is_star = true });
+        }
+        if ((queue.items.len == 0)) {
+            return 0;
+        }
+        return runBarrelUnDeferBFS(client, (&queue), queue_alloc, queue.items.len);
+}
+
+pub fn runBarrelUnDeferBFS(client: *BundleV2, queue: *std.ArrayListUnmanaged(BarrelWorkItem), queue_alloc: std.mem.Allocator, initial_queue_len: usize) !i32 {
         var barrels_to_resolve: std.AutoArrayHashMapUnmanaged(u32, void) = .{};
         _ = &barrels_to_resolve;
         var barrels_to_resolve_stack = std.heap.stackFallback(1024, client.allocator());
@@ -582,26 +637,9 @@ var partial_iter = partial.iterator();
             const item = queue.items[@as(usize, @intCast(qi))];
             const barrel_idx = item.barrel_source_index;
             if ((qi >= initial_queue_len)) {
-                const gop = try client.requested_exports.getOrPut(client.allocator(), barrel_idx);
-                if (item.is_star) {
-                    gop.value_ptr.* = .all;
-                } else {
-                    if (gop.found_existing) {
-                        switch (gop.value_ptr.*) {
-.all => {
-_ = continue;
-},
-.partial => |*p| {
-const alias_gop = try p.getOrPut(client.allocator(), item.alias);
-                        if (alias_gop.found_existing) {
-                            continue;
-                        }
-},
-}
-                    } else {
-                        gop.value_ptr.* = .{ .partial = .{} };
-                        _ = try gop.value_ptr.partial.put(client.allocator(), item.alias, undefined);
-                    }
+                const already = try seedRequestedExport(client, barrel_idx, item.is_star, item.alias, null);
+                if (((!item.is_star) and already)) {
+                    continue;
                 }
             }
             if ((barrel_idx >= client.graph.ast.len)) {

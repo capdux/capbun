@@ -242,7 +242,7 @@ pub fn onHEAD(self: *StaticRoute, resp: AnyResponse) void {
 pub fn renderMetadataAndEnd(self: *StaticRoute, resp: AnyResponse) void {
         _ = self.renderMetadata(resp);
         if ((self.status_code != 304)) {
-            const size = (if (HTTPStatusText.isNullBody(self.status_code)) 0 else self.cached_blob_size);
+            const size = (if (HTTPStatusText.isNullBody(self.status_code)) 0 else self.blob.slice().len);
             _ = resp.writeHeaderInt("Content-Length", size);
         }
         _ = resp.endWithoutBody(resp.shouldCloseConnection());

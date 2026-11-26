@@ -2405,14 +2405,15 @@ pub fn format(self: _AllCallsFormatter, writer: *std.Io.Writer) std.Io.Writer.Er
                 printed_once = true;
                 num_calls = (num_calls + 1);
                 _ = try writer.print("           {d: >2}: ", .{ num_calls });
-                const value = (blk_catch_23: { break :blk_catch_23 ((mock.jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
-                switch ((blk_catch_24: { break :blk_catch_24 ((mock.jestMockReturnObject_type(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) {
+                switch ((blk_catch_23: { break :blk_catch_23 ((mock.jestMockReturnObject_type(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) {
 .@"return" => {
-_ = try writer.print("{f}", .{ value.toFmt(self.formatter) });
+const value = (blk_catch_24: { break :blk_catch_24 ((mock.jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                _ = try writer.print("{f}", .{ value.toFmt(self.formatter) });
                 num_returns = (num_returns + 1);
 },
 .throw => {
-_ = try writer.print("function call threw an error: {f}", .{ value.toFmt(self.formatter) });
+const value = (blk_catch_25: { break :blk_catch_25 ((mock.jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                _ = try writer.print("function call threw an error: {f}", .{ value.toFmt(self.formatter) });
 },
 .incomplete => {
 _ = try writer.print("<incomplete call>", .{});
@@ -2464,12 +2465,14 @@ pub fn jestMockIterator(globalThis: *JSGlobalObject, value: bun.jsc.JSValue) bun
     }
 
 pub fn jestMockReturnObject_type(globalThis: *JSGlobalObject, value: bun.jsc.JSValue) bun.JSError!ReturnStatus {
-            if (try value.fastGet(globalThis, .@"type")) |type_string| {
-                _ = &type_string;
-                if (type_string.isString()) {
-                    if (try ReturnStatus.Map.fromJS(globalThis, type_string)) |val| {
-                        _ = &val;
-                        return val;
+            if (value.isObject()) {
+                if (try value.fastGet(globalThis, .@"type")) |type_string| {
+                    _ = &type_string;
+                    if (type_string.isString()) {
+                        if (try ReturnStatus.Map.fromJS(globalThis, type_string)) |val| {
+                            _ = &val;
+                            return val;
+                        }
                     }
                 }
             }
@@ -2481,6 +2484,9 @@ pub fn jestMockReturnObject_type(globalThis: *JSGlobalObject, value: bun.jsc.JSV
     }
 
 pub fn jestMockReturnObject_value(globalThis: *JSGlobalObject, value: bun.jsc.JSValue) bun.JSError!JSValue {
+            if ((!value.isObject())) {
+                return .js_undefined;
+            }
             return ((try value.get(globalThis, "value")) orelse (.js_undefined));
     }
     pub const AllCallsWithArgsFormatter = _AllCallsWithArgsFormatter;

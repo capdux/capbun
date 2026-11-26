@@ -47,7 +47,7 @@ pub enum SignalCode: u8 {
     SIGPIPE = 13,
     SIGALRM = 14,
     SIGTERM = 15,
-    SIG16 = 16,
+    SIGSTKFLT = 16,
     SIGCHLD = 17,
     SIGCONT = 18,
     SIGSTOP = 19,
@@ -86,7 +86,7 @@ pub enum SignalCode: u8 {
     /// https://tldp.org/LDP/abs/html/exitcodes.html
     static fn toExitCode(value: SignalCode): u8? {
         return switch (@intFromEnum(value)) {
-            1..=31 => 128 +% @intFromEnum(value),
+            1..=127 => 128 +% @intFromEnum(value),
             else => null,
         };
     }

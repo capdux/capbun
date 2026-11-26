@@ -273,7 +273,7 @@ pub fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.Bl
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), (&output_digest_buf));
             if ((len_opt == null)) {
@@ -299,7 +299,7 @@ pub fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobO
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             if (output) |output_buf| {
                 _ = &output_buf;
@@ -461,16 +461,33 @@ pub fn update(self: *CryptoHasher, globalThis: *jsc.JSGlobalObject, callframe: *
 
 });
             if (input.isEmptyOrUndefinedOrNull()) {
-                return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
             }
             const encoding = (blk: {
             break :blk arguments.ptr[1];
 
 });
+            if (((input.isString() or input.isStringObjectLike()) and encoding.isString())) {
+                if (try jsc.Node.Encoding.fromJS(encoding, globalThis)) |enc| {
+                    _ = &enc;
+                    if ((enc == .hex)) {
+                        const js_str = try input.toJSString(globalThis);
+                        const str_len = js_str.length();
+                        if (((str_len % 2) != 0)) {
+                            var enc_str = try bun.String.fromJS(encoding, globalThis);
+                            _ = &enc_str;
+                            defer {
+                            _ = enc_str.deref();
+                            }
+                            return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'encoding' is invalid for data of length {d}. Received '{f}'", .{ str_len, enc_str }).throw();
+                        }
+                    }
+                }
+            }
             const buffer_opt = try jsc.Node.BlobOrStringOrBuffer.fromJSWithEncodingValue(globalThis, globalThis.bunVM().allocator, input, encoding);
             if ((buffer_opt == null)) {
                 if ((!globalThis.hasException())) {
-                    return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+                    return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
                 }
                 return error.JSError;
             }
@@ -484,7 +501,7 @@ pub fn update(self: *CryptoHasher, globalThis: *jsc.JSGlobalObject, callframe: *
             var __buf_guard_moved = false; _ = &__buf_guard_moved;
             defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             if (((buf == .blob) and buf.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             switch (self.*) {
 .evp => {
@@ -634,7 +651,10 @@ _ = self.evp.deinit();
 _ = self.@"zig".deinit();
 },
 .hmac => {
-_ = (if (self.hmac) |h| h.deinit() else null);
+_ = (if (self.hmac) |h| blk: {
+            break :blk h.deinit();
+
+} else @as(void, undefined));
 },
 }
             _ = bun.destroy(self);
@@ -730,7 +750,7 @@ pub fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: 
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             var h = Algorithm.init(.{});
             _ = &h;
@@ -755,7 +775,7 @@ pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: t
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             var h = Algorithm.init(.{});
             _ = &h;
@@ -909,7 +929,7 @@ pub fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringO
             var output_digest_buf: Hasher.Digest = undefined;
             _ = &output_digest_buf;
             if (((input == .blob) and input.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             if (comptime (@typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3)) {
                 _ = Hasher.hash(input.slice(), (&output_digest_buf), jsc.VirtualMachine.get().rareData().boringEngine());
@@ -959,7 +979,7 @@ pub fn hash_(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, 
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             if (((input == .blob) and input.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             if (output) |string_or_buffer| {
                 _ = &string_or_buffer;
@@ -1006,9 +1026,12 @@ pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             }
             const thisValue = callframe.this();
             const input = callframe.argument(0);
+            if (input.isEmptyOrUndefinedOrNull()) {
+                return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+            }
             const buffer_opt = try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input);
             const buffer = ((buffer_opt) orelse {
-            return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
 });
             var buf = buffer;
             _ = &buf;
@@ -1020,7 +1043,7 @@ pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             var __buf_guard_moved = false; _ = &__buf_guard_moved;
             defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             if (((buffer == .blob) and buffer.blob.isBunFile())) {
-                return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
+                return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             _ = self.hashing.update(buffer.slice());
             return thisValue;

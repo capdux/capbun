@@ -1452,10 +1452,9 @@ pub fn utf16Codepoint(input: []const u16): UTF16Replacement {
         //error.DanglingSurrogateHalf;
         const c1 = @as(u21, input[1]);
         if ((c1 & ~@as(u21, 0x03ff)) != 0xdc00)
-            if (input.len == 1)
-                return {
-                    len: 1,
-                };
+            return {
+                len: 1,
+            };
         // return error.ExpectedSecondSurrogateHalf;
 
         return { len: 2, code_point: 0x10000 + (((c0 & 0x03ff) << 10) | (c1 & 0x03ff)) };

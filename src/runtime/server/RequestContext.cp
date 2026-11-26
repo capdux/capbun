@@ -735,7 +735,11 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             if (_.isAbortedOrEnded()) {
                 return false;
             }
-            _.end("", _.shouldCloseConnection());
+            if (resp.state().isHttpWriteCalled()) {
+                _.endStream(_.shouldCloseConnection());
+            } else {
+                _.end("", _.shouldCloseConnection());
+            }
             return false;
         }
 

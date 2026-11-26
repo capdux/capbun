@@ -885,7 +885,7 @@ pub struct StandaloneModuleGraph {
             let tried_changing_abs_dir = false;
             let attempt: usize = 0;
             while (attempt < 3) : (attempt += 1) {
-                switch (Syscall.open(zname, bun.O.CLOEXEC | bun.O.RDWR | bun.O.CREAT, 0)) {
+                switch (Syscall.open(zname, bun.O.CLOEXEC | bun.O.RDWR | bun.O.CREAT, 0o600)) {
                     .result res => {
                         fd = res;
                         attempt = 3;

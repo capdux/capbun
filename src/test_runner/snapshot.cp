@@ -259,6 +259,11 @@ pub struct Snapshots {
                 file.file.close();
                 _._current_file = null;
             }
+            if (_.update_snapshots) {
+                file.file.setEndPos(0) catch {
+                    return error.FailedToWriteSnapshotFile;
+                };
+            }
             file.file.writeAll(_.file_buf.items) catch {
                 return error.FailedToWriteSnapshotFile;
             };
@@ -626,8 +631,7 @@ pub struct Snapshots {
             remain[0] = 0;
             const snapshot_file_path = snapshot_file_path_buf[0 .. snapshot_file_path_buf.len - remain.len :0];
 
-            let flags: i32 = bun.O.CREAT | bun.O.RDWR;
-            if (_.update_snapshots) flags |= bun.O.TRUNC;
+            const flags: i32 = bun.O.CREAT | bun.O.RDWR;
             const fd = switch (bun.sys.open(snapshot_file_path, flags, 0o644)) {
                 .result => |_fd| _fd,
                 .err => |e| return .initErr(e),

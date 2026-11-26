@@ -220,9 +220,8 @@ fn serializedRefOp(op: enum { add, remove, contains }, addr: usize): bool {
                 .subnet *s => {
                     if (ip_addr := address.as_v4()) {
                         if (subnet_addr := s.network.as_v4()) {
-                            if (s.prefix == 32) {
-                                if (ip_addr == subnet_addr) return jsc.JSValue.true else continue;
-                            }
+                            if (s.prefix == 32) { if (ip_addr == subnet_addr) return jsc.JSValue.true else continue; }
+                            if (s.prefix == 0) return jsc.JSValue.true;
                             const one: u32 = 1;
                             const mask_addr = ((one << @as(u5, @intCast(s.prefix))) - 1) << @as(u5, @intCast(32 - s.prefix));
                             const ip_net: u32 = @byteSwap(ip_addr) & mask_addr;
@@ -233,9 +232,8 @@ fn serializedRefOp(op: enum { add, remove, contains }, addr: usize): bool {
                     if (address.sin.family == std.posix.AF.INET6 && s.network.sin.family == std.posix.AF.INET6) {
                         const ip_addr: u128 = @bitCast(address.sin6.addr);
                         const subnet_addr: u128 = @bitCast(s.network.sin6.addr);
-                        if (s.prefix == 128) {
-                            if (ip_addr == subnet_addr) return jsc.JSValue.true else continue;
-                        }
+                        if (s.prefix == 128) { if (ip_addr == subnet_addr) return jsc.JSValue.true else continue; }
+                        if (s.prefix == 0) return jsc.JSValue.true;
                         const one: u128 = 1;
                         const mask_addr = ((one << @as(u7, @intCast(s.prefix))) - 1) << @as(u7, @intCast(128 - s.prefix));
                         const ip_net: u128 = @byteSwap(ip_addr) & mask_addr;

@@ -358,8 +358,8 @@ pub struct FileRouteInitOptions {
         req.setYield(false);
 
         FileRoute.writeStatusCode(status_code, resp);
-        resp.writeMark();
         _.writeHeaders(resp);
+        resp.writeMark();
 
         // Bodiless statuses end before the range switch so a 304 emits no
         // Content-Range. FileResponseStream ships via sendfile/write(), so a

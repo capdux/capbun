@@ -1103,6 +1103,12 @@ struct us_socket_t *us_internal_ssl_on_close(struct us_socket_t *s, int code, vo
 
 struct us_socket_t *us_internal_ssl_on_end(struct us_socket_t *s) {
   ssl_set_loop_data(s);
+  if (!ssl_gone(s) && !(SSL_get_shutdown(s_ssl(s)) & SSL_SENT_SHUTDOWN) && s->ssl_handshake_state == HANDSHAKE_COMPLETED) {
+    if (SSL_get_shutdown(s_ssl(s)) & SSL_RECEIVED_SHUTDOWN) {
+      return s;
+    }
+    return us_dispatch_end(s);
+  }
   /* TCP FIN under TLS — send our close_notify (if not already) and raw-close. */
   return ssl_close(s, 0, NULL);
 }
@@ -1169,10 +1175,13 @@ restart:
           if (ssl_gone(s)) return NULL;
           err = SSL_ERROR_SSL;
         } else if (err == SSL_ERROR_ZERO_RETURN) {
-          /* Remote close_notify. Flush what we decrypted, then close. */
+          /* Remote close_notify. Flush what we decrypted. */
           if (read) {
             s = us_dispatch_data(s, loop_ssl_data->ssl_read_output + LIBUS_RECV_BUFFER_PADDING, read);
             if (!s || ssl_gone(s)) return NULL;
+          }
+          if (!(SSL_get_shutdown(s_ssl(s)) & SSL_SENT_SHUTDOWN) && s->ssl_handshake_state == HANDSHAKE_COMPLETED) {
+            return us_dispatch_end(s);
           }
           ssl_close(s, 0, NULL);
           return NULL;

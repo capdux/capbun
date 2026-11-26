@@ -942,7 +942,10 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             res.clearOnWritable();
             _.handleFirstWriteIfNecessary();
             if (_.requested_end) {
-                res.end(buf, false);
+                if (buf.len > 0) {
+                    * = res.write(buf);
+                }
+                res.endStream(false);
                 _.has_backpressure = false;
             } else {
                 _.has_backpressure = res.write(buf) == .backpressure;
@@ -1212,7 +1215,13 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
                     return .{ .result = value };
                 }
             } else {
-                if (res := _.res) { res.end("", false); }
+                if (res := _.res) {
+                    if (res.state().isHttpWriteCalled()) {
+                        res.endStream(false);
+                    } else {
+                        res.end("", false);
+                    }
+                }
             }
             _.markDone();
             _.flushPromise() catch {};

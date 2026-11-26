@@ -1223,6 +1223,12 @@ Socket.prototype._final = function _final(callback) {
   if (this.connecting) {
     return this.once("connect", () => this._final(callback));
   }
+  if (this.secureConnecting) {
+    return this.once("secure", () => {
+      if (this.destroyed) return callback();
+      this._final(callback);
+    });
+  }
   const socket = this._handle;
 
   // already closed call destroy

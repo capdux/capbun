@@ -387,32 +387,6 @@ pub fn fromJS(global: *JSGlobalObject, callFrame: *jsc.CallFrame, comptime is_as
                     maybe_options_value = null;
                 }
             }
-            const password_opt = try Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, password_value, is_async, true);
-            if ((password_opt == null)) {
-                return global.throwInvalidArgumentTypeValue("password", "string, ArrayBuffer, Buffer, TypedArray, or DataView", password_value);
-            }
-            var password = password_opt.?;
-            _ = &password;
-            var _pw_guard = StringOrBufferGuard{ .ptr = (blk: {
-            break :blk (&password);
-
-}), .is_async = is_async };
-            _ = &_pw_guard;
-            var ___pw_guard_moved = false; _ = &___pw_guard_moved;
-            defer if (!___pw_guard_moved) { ___pw_guard_moved = true; const __T = @TypeOf(_pw_guard); if (@typeInfo(__T) == .optional) { if (_pw_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pw_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pw_guard; _drop_val.__cp_deinit(); } };
-            const salt_opt = try Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, salt_value, is_async, true);
-            if ((salt_opt == null)) {
-                return global.throwInvalidArgumentTypeValue("salt", "string, ArrayBuffer, Buffer, TypedArray, or DataView", salt_value);
-            }
-            var salt = salt_opt.?;
-            _ = &salt;
-            var _salt_guard = StringOrBufferGuard{ .ptr = (blk: {
-            break :blk (&salt);
-
-}), .is_async = is_async };
-            _ = &_salt_guard;
-            var ___salt_guard_moved = false; _ = &___salt_guard_moved;
-            defer if (!___salt_guard_moved) { ___salt_guard_moved = true; const __T = @TypeOf(_salt_guard); if (@typeInfo(__T) == .optional) { if (_salt_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _salt_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _salt_guard; _drop_val.__cp_deinit(); } };
             const keylen = try validators.validateInt32(global, keylen_value, "keylen", .{}, 0, null);
             var N: ?u32 = null;
             _ = &N;
@@ -465,6 +439,45 @@ pub fn fromJS(global: *JSGlobalObject, callFrame: *jsc.CallFrame, comptime is_as
                     }
                 }
             }
+            if (is_async) {
+                _ = try validators.validateFunction(global, "callback", callback);
+            }
+            const password_opt = try Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, password_value, is_async, true);
+            if ((password_opt == null)) {
+                return global.throwInvalidArgumentTypeValue("password", "string, ArrayBuffer, Buffer, TypedArray, or DataView", password_value);
+            }
+            var password = password_opt.?;
+            _ = &password;
+            var _pw_guard = StringOrBufferGuard{ .ptr = (blk: {
+            break :blk (&password);
+
+}), .is_async = is_async };
+            _ = &_pw_guard;
+            var ___pw_guard_moved = false; _ = &___pw_guard_moved;
+            defer if (!___pw_guard_moved) { ___pw_guard_moved = true; const __T = @TypeOf(_pw_guard); if (@typeInfo(__T) == .optional) { if (_pw_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pw_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pw_guard; _drop_val.__cp_deinit(); } };
+            if ((is_async and (password == .buffer))) {
+                const owned = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, password.slice())) catch |__ce_0| { _ = &__ce_0; return error.OutOfMemory; }); });
+                _ = (if (@typeInfo(@TypeOf(password.buffer.buffer)) == .@"enum") @intFromEnum(password.buffer.buffer) else password.buffer.buffer.value).unprotect();
+                password = .{ .encoded_slice = jsc.ZigString.Slice.init(bun.default_allocator, owned) };
+            }
+            const salt_opt = try Node.StringOrBuffer.fromJSMaybeAsync(global, bun.default_allocator, salt_value, is_async, true);
+            if ((salt_opt == null)) {
+                return global.throwInvalidArgumentTypeValue("salt", "string, ArrayBuffer, Buffer, TypedArray, or DataView", salt_value);
+            }
+            var salt = salt_opt.?;
+            _ = &salt;
+            var _salt_guard = StringOrBufferGuard{ .ptr = (blk: {
+            break :blk (&salt);
+
+}), .is_async = is_async };
+            _ = &_salt_guard;
+            var ___salt_guard_moved = false; _ = &___salt_guard_moved;
+            defer if (!___salt_guard_moved) { ___salt_guard_moved = true; const __T = @TypeOf(_salt_guard); if (@typeInfo(__T) == .optional) { if (_salt_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _salt_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _salt_guard; _drop_val.__cp_deinit(); } };
+            if ((is_async and (salt == .buffer))) {
+                const owned = (blk_catch_1: { break :blk_catch_1 ((bun.default_allocator.dupe(u8, salt.slice())) catch |__ce_1| { _ = &__ce_1; return error.OutOfMemory; }); });
+                _ = (if (@typeInfo(@TypeOf(salt.buffer.buffer)) == .@"enum") @intFromEnum(salt.buffer.buffer) else salt.buffer.buffer.value).unprotect();
+                salt = .{ .encoded_slice = jsc.ZigString.Slice.init(bun.default_allocator, owned) };
+            }
             const N_default: u32 = 16384;
             const r_default: u32 = 8;
             const p_default: u32 = 1;
@@ -482,9 +495,6 @@ pub fn fromJS(global: *JSGlobalObject, callFrame: *jsc.CallFrame, comptime is_as
                 maxmem = maxmem_default;
             }
             const ctx: Scrypt = .{ .password = password, .salt = salt, .N = N.?, .r = r.?, .p = p.?, .maxmem = @as(u64, @intCast(maxmem.?)), .keylen = @as(u32, @intCast(keylen)) };
-            if (is_async) {
-                _ = try validators.validateFunction(global, "callback", callback);
-            }
             _ = try ctx.checkScryptParams(global);
             _pw_guard.ptr = null;
             _salt_guard.ptr = null;

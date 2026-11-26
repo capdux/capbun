@@ -233,7 +233,7 @@ pub fn insert(self: *All, timer: *EventLoopTimer) void {
                 flags.epoch = self.epoch;
             }
             if ((self.fake_timers.isActive() and timer.tag.allowFakeTimers())) {
-                _ = self.fake_timers.timers.insert(timer);
+                _ = self.fake_timers.insert(timer);
                 timer.state = .ACTIVE;
                 timer.in_heap = .fake;
             } else {
@@ -253,7 +253,7 @@ pub fn remove(self: *All, timer: *EventLoopTimer) void {
             _ = self.assertJSThread();
             switch (timer.in_heap) {
 .none => {
-_ = (if (Environment.ci_assert) bun.assert(false) else null);
+_ = (if (Environment.ci_assert) bun.assert(false) else @as(void, undefined));
 },
 .regular => {
 _ = self.timers.remove(timer);

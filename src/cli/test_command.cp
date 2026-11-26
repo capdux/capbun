@@ -1999,6 +1999,10 @@ pub struct TestCommand {
 
         let all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
         const _guard_test_files = FreeGuard<@TypeOf(all_test_files)>{ allocator: ctx.allocator, slice: all_test_files };
+        if (all_test_files.len > 1) {
+            const empty_sort_ctx: void = undefined;
+            std.sort.pdq(PathString, all_test_files, empty_sort_ctx, PathStringSortCtx.lessThan);
+        }
         if (scanner.filter_names.len > 1 && all_test_files.len > 1) {
             const OrderedFilterItem = struct {
                 path: PathString,

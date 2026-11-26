@@ -357,6 +357,9 @@ if (address.as_v4()) |ip_addr| {
                             continue;
                         }
                     }
+                    if ((s.prefix == 0)) {
+                        return jsc.JSValue.true;
+                    }
                     const one: u32 = 1;
                     const mask_addr = cp_shl((cp_shl(one, @as(u5, @intCast(s.prefix))) - 1), @as(u5, @intCast((32 - s.prefix))));
                     const ip_net: u32 = (@byteSwap(ip_addr) & mask_addr);
@@ -375,6 +378,9 @@ if (address.as_v4()) |ip_addr| {
                     } else {
                         continue;
                     }
+                }
+                if ((s.prefix == 0)) {
+                    return jsc.JSValue.true;
                 }
                 const one: u128 = 1;
                 const mask_addr = cp_shl((cp_shl(one, @as(u7, @intCast(s.prefix))) - 1), @as(u7, @intCast((128 - s.prefix))));

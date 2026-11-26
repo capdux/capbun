@@ -4330,10 +4330,27 @@ extern "C" void Process__emitMessageEvent(Zig::GlobalObject* global, EncodedJSVa
     auto* process = global->processObject();
     auto& vm = JSC::getVM(global);
 
+    JSValue decodedValue = JSValue::decode(value);
     auto ident = vm.propertyNames->message;
+    if (decodedValue.isObject()) {
+        auto scope = DECLARE_THROW_SCOPE(vm);
+        JSObject* obj = decodedValue.getObject();
+        JSValue cmdVal = obj->getIfPropertyExists(global, Identifier::fromString(vm, "cmd"_s));
+        if (scope.exception()) [[unlikely]] {
+            (void)scope.tryClearException();
+        } else if (cmdVal && cmdVal.isString()) {
+            WTF::String cmdStr = cmdVal.toWTFString(global);
+            if (scope.exception()) [[unlikely]] {
+                (void)scope.tryClearException();
+            } else if (cmdStr.length() > 5 && cmdStr.startsWith("NODE_"_s)) {
+                ident = Identifier::fromString(vm, "internalMessage"_s);
+            }
+        }
+    }
+
     if (process->wrapped().hasEventListeners(ident)) {
         JSC::MarkedArgumentBuffer args;
-        args.append(JSValue::decode(value));
+        args.append(decodedValue);
         args.append(JSValue::decode(handle));
         process->wrapped().emit(ident, args);
     }

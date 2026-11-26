@@ -257,7 +257,7 @@ static JSC::JSValue constructTimerFunction(JSC::VM& vm, JSC::JSObject* object, N
 {
     auto* globalObject = object->globalObject();
     auto* fn = JSC::JSFunction::create(vm, globalObject, 1, String(name), nativeFn, ImplementationVisibility::Public, NoIntrinsic);
-    auto* getter = JSC::JSFunction::create(vm, globalObject, 0, "get [nodejs.util.promisify.custom]"_s, jsTimerPromisifyCustomGetter<name>, ImplementationVisibility::Public, NoIntrinsic);
+    auto* getter = JSC::JSFunction::create(vm, globalObject, 0, "get"_s, jsTimerPromisifyCustomGetter<name>, ImplementationVisibility::Public, NoIntrinsic);
     auto sym = JSC::Identifier::fromUid(vm.symbolRegistry().symbolForKey("nodejs.util.promisify.custom"_s));
     fn->putDirectAccessor(globalObject, sym, JSC::GetterSetter::create(vm, globalObject, getter, nullptr), JSC::PropertyAttribute::Accessor | JSC::PropertyAttribute::DontDelete);
     return fn;

@@ -371,7 +371,9 @@ pub fn __cp_deinit(self: *PosixNoOrphansPostSpawnGuard) void {
 break;
 },
 .result => |w| {
-_ = (if ((w.pid <= 0)) break else null);
+if ((w.pid <= 0)) {
+                            break;
+                        }
 },
 }
                     }
@@ -1512,7 +1514,8 @@ _ = WaiterThread.setShouldUseWaiterThread();
 
 },
 else => {
-while (true) {
+_ = std.os.linux.kill(self.pid, std.os.linux.SIG.KILL);
+                while (true) {
                     var status: u32 = 0;
                     _ = &status;
                     const rc = std.os.linux.wait4(self.pid, (&status), 0, null);
@@ -2166,7 +2169,9 @@ else => break :blk bun.invalid_fd,
 ppid_fd = bun.FD.fromNative(fd);
 },
 .err => |e| {
-_ = (if ((e.getErrno() == .SRCH)) bun.Global.exit(bun.ParentDeathWatchdog.exit_code) else null);
+if ((e.getErrno() == .SRCH)) {
+                    _ = bun.Global.exit(bun.ParentDeathWatchdog.exit_code);
+                }
 },
 }
             }

@@ -7,16 +7,9 @@ const EventEmitter = require("node:events");
 const Readable = require("internal/streams/readable");
 const { throwNotImplemented, warnNotImplementedOnce } = require("internal/shared");
 
-const {
-  MessageChannel,
-  BroadcastChannel,
-  Worker: WebWorker,
-} = globalThis as typeof globalThis & {
-  // The Worker constructor secretly takes an extra parameter to provide the node:worker_threads
-  // instance. This is so that it can emit the `worker` event on the process with the
-  // node:worker_threads instance instead of the Web Worker instance.
-  Worker: new (...args: [...ConstructorParameters<typeof globalThis.Worker>, nodeWorker: Worker]) => WebWorker;
-};
+type WebWorkerConstructor = new (
+  ...args: [...ConstructorParameters<typeof globalThis.Worker>, nodeWorker: Worker]
+) => InstanceType<typeof globalThis.Worker>;
 const SHARE_ENV = Symbol("nodejs.worker_threads.SHARE_ENV");
 
 const isMainThread = Bun.isMainThread;
@@ -25,11 +18,19 @@ const {
   1: _threadId,
   2: _receiveMessageOnPort,
   3: environmentData,
+  4: _MessagePort,
+  5: MessageChannel,
+  6: BroadcastChannel,
+  7: WebWorker,
 } = $cpp("Worker.cpp", "createNodeWorkerThreadsBinding") as [
   unknown,
   number,
   (port: unknown) => unknown,
   Map<unknown, unknown>,
+  typeof globalThis.MessagePort,
+  typeof globalThis.MessageChannel,
+  typeof globalThis.BroadcastChannel,
+  WebWorkerConstructor,
 ];
 
 type NodeWorkerOptions = import("node:worker_threads").WorkerOptions;
@@ -110,7 +111,7 @@ function injectFakeEmitter(Class) {
   Class.prototype.prependOnceListener = Class.prototype.once;
 }
 
-const _MessagePort = globalThis.MessagePort;
+// _MessagePort is captured from Worker.cpp binding above to avoid globalThis tampering (issue #40268)
 injectFakeEmitter(_MessagePort);
 
 const MessagePort = _MessagePort;

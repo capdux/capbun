@@ -147,7 +147,7 @@ export class All {
             flags.epoch = _.epoch;
         }
         if (_.fake_timers.isActive() && timer.tag.allowFakeTimers()) {
-            _.fake_timers.timers.insert(timer);
+            _.fake_timers.insert(timer);
             timer.state = .ACTIVE;
             timer.in_heap = .fake;
         } else {
@@ -164,7 +164,7 @@ export class All {
     pub fn remove(_: *All, timer: *EventLoopTimer) {
         _.assertJSThread();
         switch (timer.in_heap) {
-            .none => if (Environment.ci_assert) bun.assert(false),
+            .none => if (Environment.ci_assert) bun.assert(false) else @as(void, undefined),
             .regular => _.timers.remove(timer),
             .fake => _.fake_timers.timers.remove(timer),
         }

@@ -258,7 +258,11 @@ pub fn processSubtree(self: Tree, dependency_id: DependencyID, hoist_root_id: Tr
                 }
             }
             const dependency = builder.dependencies[@as(usize, @intCast(dep_id))];
-            if ((!Dependency.isSafeInstallFolderName((if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name).slice(builder.buf())))) {
+            const dep_name = (if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name).slice(builder.buf());
+            if ((((dep_name.len == 0) and dependency.behavior.isOptional()) and (pkg_id == invalid_package_id))) {
+                continue;
+            }
+            if ((!Dependency.isSafeInstallFolderName(dep_name))) {
                 _ = builder.maybeReportError("Invalid dependency name \"{f}\"", .{ (if (@typeInfo(@TypeOf(dependency)) == .@"enum" or @typeInfo(@TypeOf(dependency)) == .@"union") @tagName(dependency) else dependency.name).fmt(builder.buf()) });
                 continue;
             }

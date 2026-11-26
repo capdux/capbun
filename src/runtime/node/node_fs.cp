@@ -1613,7 +1613,9 @@ pub struct _ArgumentsTruncate {
         };
         let len: u63 = 0;
         if (len_value := arguments.next()) {
-            len = @max(0, jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null)?);
+            if (!len_value.isUndefined()) {
+                len = @max(0, jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null)?);
+            }
         }
         return { path: path, len: len };
     }
@@ -1763,13 +1765,18 @@ pub struct _ArgumentsFTruncate {
             return throwInvalidFdError(ctx, fd_value);
         };
 
-        const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(jsc.Node.validators.validateInteger(
-            ctx,
-            arguments.next() ?? jsc.JSValue.jsNumber(0),
-            "len",
-            std.math.minInt(i52),
-            std.math.maxInt(jsc.WebCore.Blob.SizeType),
-        )?, 0)));
+        let len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, 0);
+        if (len_value := arguments.next()) {
+            if (!len_value.isUndefined()) {
+                len = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(jsc.Node.validators.validateInteger(
+                    ctx,
+                    len_value,
+                    "len",
+                    std.math.minInt(i52),
+                    std.math.maxInt(jsc.WebCore.Blob.SizeType),
+                )?, 0)));
+            }
+        }
 
         return _ArgumentsFTruncate{ fd: fd, len: len };
     }
@@ -3780,6 +3787,17 @@ pub union(enum) _ReturnReadFileWithOptions {
     null_terminated: [:0]const u8,
 }
 
+pub struct _ReturnMkdtemp {
+    bytes: []u8,
+    encoding: Encoding = .utf8,
+
+    fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        const bytes = _.bytes;
+        defer bun.default_allocator.free(bytes);
+        return Encoding.encodeWithMaxSize(_.encoding, globalObject, bun.MAX_PATH_BYTES, bytes);
+    }
+}
+
 struct Return {
     pub const Access = Null;
     pub const AppendFile = void;
@@ -3801,7 +3819,7 @@ struct Return {
     pub const Link = void;
     pub const Lstat = StatOrNotFound;
     pub const Mkdir = StringOrUndefined;
-    pub const Mkdtemp = jsc.ZigString;
+    pub const Mkdtemp = _ReturnMkdtemp;
     pub const Open = FD;
     pub const WriteFile = void;
     pub const Readv = Read;
@@ -4715,6 +4733,15 @@ pub struct NodeFS {
     fn mkdtemp(*_, args: Arguments.MkdirTemp, _: Flavor): Maybe(Return.Mkdtemp) {
         let prefix_buf = &_.sync_error_buf;
         const prefix_slice = args.prefix.slice();
+        if (prefix_slice.len == 0) {
+            return {
+                err: Syscall.Error{
+                    errno: @as(Syscall.Error.Int, @truncate(@intFromEnum(bun.sys.E.INVAL))),
+                    syscall: .mkdtemp,
+                    path: "",
+                },
+            };
+        }
         const len = @min(prefix_slice.len, prefix_buf.len -| 7);
         if (len > 0) {
             @memcpy(prefix_buf[0..len], prefix_slice[0..len]);
@@ -4737,12 +4764,18 @@ pub struct NodeFS {
                     path: prefix_buf[0 .. len + 6],
                 } };
             }
-            return .initResult(bun.handleOom(jsc.ZigString.dupeForJS(bun.sliceTo(req.path, 0), bun.default_allocator)));
+            return .initResult({
+                bytes: bun.handleOom(bun.default_allocator.dupe(u8, bun.sliceTo(req.path, 0))),
+                encoding: args.encoding,
+            });
         }
 
         const rc = c.mkdtemp(prefix_buf);
         if (ptr := rc) {
-            return .initResult(bun.handleOom(jsc.ZigString.dupeForJS(bun.sliceTo(ptr, 0), bun.default_allocator)));
+            return .initResult({
+                bytes: bun.handleOom(bun.default_allocator.dupe(u8, bun.sliceTo(ptr, 0))),
+                encoding: args.encoding,
+            });
         }
 
         // c.getErrno(rc) returns SUCCESS if rc is -1 so we call std.c._errno() directly
@@ -5898,7 +5931,14 @@ pub struct NodeFS {
 
         // Attempt to pre-allocate large files
         // Worthwhile after 6 MB at least on ext4 linux
-        if (bun.sys.preallocate_supported && buf.len >= bun.sys.preallocate_length) preallocate: {
+        // Do not preallocate when O_APPEND is set, as fallocate grows EOF before write() appends.
+        const is_append = if (args.file == .path)
+            (args.flag.asInt() & bun.O.APPEND) != 0
+        else if (!Environment.isWindows)
+            ((std.posix.fcntl(fd.cast(), std.posix.F.GETFL, 0) catch 0) & @as(usize, @intCast(bun.O.APPEND))) != 0
+        else
+            false;
+        if (!is_append && bun.sys.preallocate_supported && buf.len >= bun.sys.preallocate_length) preallocate: {
             const offset: usize = if (args.file == .path)
                 // on mac, it's relatively positioned
                 0

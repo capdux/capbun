@@ -2968,6 +2968,9 @@ pub struct BlobExternalSharedDescriptor {
         if (store.data == .bytes) {
             return .true;
         }
+        if (store.data == .file && store.data.file.seekable == null) {
+            resolveFileStat(store);
+        }
         return JSValue.jsBoolean(
             bun.isRegularFile(store.data.file.mode) || bun.sys.S.ISFIFO(store.data.file.mode),
         );
@@ -4372,6 +4375,7 @@ pub struct BlobExternalSharedDescriptor {
                     },
                     .rejected => {
                         file_sink.deref();
+                        promise_mut.setHandled(globalThis.vm());
                         readable_stream.cancel(globalThis);
                         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, promise_mut.result(globalThis.vm()));
                     },

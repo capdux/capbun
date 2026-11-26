@@ -1086,7 +1086,8 @@ fn validateJSONCTrailing(source: *const logger.Source, log: *logger.Log, start_p
             log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unexpected null byte") catch {};
             return error.SyntaxError;
         }
-        break;
+        log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unexpected trailing token") catch {};
+        return error.SyntaxError;
     }
 }
 
