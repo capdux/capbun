@@ -678,7 +678,9 @@ pub fn deinit(job: *@This()) void {
 
 pub fn schedule(job: *@This()) callconv(.c) void {
             _ = job.poll.ref(job.vm);
-            job.ticket = job.vm.ticket();
+            if ((job.vm.handle != null)) {
+                job.ticket = job.vm.ticket();
+            }
             _ = jsc.WorkPool.schedule((&job.task));
     }
     const Ctx = opaque {
@@ -783,7 +785,9 @@ pub fn deinit(job: *@This()) void {
 
 pub fn schedule(job: *@This()) callconv(.c) void {
             _ = job.poll.ref(job.vm);
-            job.ticket = job.vm.ticket();
+            if ((job.vm.handle != null)) {
+                job.ticket = job.vm.ticket();
+            }
             _ = jsc.WorkPool.schedule((&job.task));
     }
 };

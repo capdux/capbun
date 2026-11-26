@@ -131,7 +131,7 @@ pub fn decode(encoded: string, start: usize): VLQResult {
 
     return VLQResult {
         value: 0,
-        start: start + encoded_.len,
+        start: start,
     };
 }
 

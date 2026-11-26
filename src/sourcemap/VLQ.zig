@@ -209,7 +209,7 @@ pub fn decode(encoded: []const u8, start: usize) VLQResult {
                 }
             }
         }
-        return VLQResult{ .value = 0, .start = (start + encoded_.len) };
+        return VLQResult{ .value = 0, .start = start };
 }
 
 pub fn decodeAssumeValid(encoded: []const u8, start: usize) VLQResult {

@@ -142,7 +142,9 @@ fn ExternCryptoJob(comptime name: []const u8): type {
 
         pub static fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
-            job.ticket = job.vm.ticket();
+            if (job.vm.handle != null) {
+                job.ticket = job.vm.ticket();
+            }
             jsc.WorkPool.schedule(&job.task);
         }
 
@@ -260,7 +262,9 @@ fn CryptoJob(comptime Ctx: type): type {
 
         pub static fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
-            job.ticket = job.vm.ticket();
+            if (job.vm.handle != null) {
+                job.ticket = job.vm.ticket();
+            }
             jsc.WorkPool.schedule(&job.task);
         }
     };

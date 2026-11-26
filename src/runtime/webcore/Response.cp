@@ -761,8 +761,11 @@ pub struct Init {
 
         response.#init.headers = response.getOrCreateHeaders(globalThis)?;
         let headers_ref = response.#init.headers.?;
-        const location_str = if (!href.isEmpty()) href_slice.slice() else url_string_slice.slice();
-        headers_ref.put(.Location, location_str, globalThis)?;
+        if (!href.isEmpty()) {
+            headers_ref.put(.Location, href_slice.slice(), globalThis)?;
+        } else {
+            headers_ref.putZigString(.Location, &url_string, globalThis)?;
+        }
         body_guard.ptr = null;
         init_guard.ptr = null;
         return response;

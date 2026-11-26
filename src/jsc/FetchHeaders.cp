@@ -286,6 +286,15 @@ pub enum _HTTPHeaderName: u8 {
         return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__put, [ _, name_, &str, global ]);
     }
 
+    fn putZigString(
+        *_,
+        name_: _HTTPHeaderName,
+        value: *const ZigString,
+        global: *JSGlobalObject,
+    ): bun.JSError!void {
+        return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__put, [ _, name_, value, global ]);
+    }
+
     fn get_(
         *_,
         name_: *const ZigString,

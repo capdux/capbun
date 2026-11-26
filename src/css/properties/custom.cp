@@ -99,10 +99,11 @@ pub struct ParseIntoClosure {
 pub struct UnresolvedColorRgbClosure {
     options: *const css.ParserOptions,
     parser: *ComponentParser,
+    token_list_failed: *bool,
     static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
-        return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{c.options});
+        return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{ c.options, c.token_list_failed });
     }
-    static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
+    static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions, token_list_failed: *bool): Result(UnresolvedColor) {
         const rgb = switch (css.css_values.color.parseRGBComponents(i, p)) {
             .result vv => vv,
             .err e => return { err: e },
@@ -117,7 +118,10 @@ pub struct UnresolvedColorRgbClosure {
         if (e := i.expectDelim('/').asErr()) return { err: e };
         const alpha = switch (TokenListFns.parse(i, opts, 0)) {
             .result vv => vv,
-            .err e => return { err: e },
+            .err e => {
+                token_list_failed.* = true;
+                return { err: e };
+            },
         };
         return { result: UnresolvedColor{
             RGB: {
@@ -133,10 +137,11 @@ pub struct UnresolvedColorRgbClosure {
 pub struct UnresolvedColorHslClosure {
     options: *const css.ParserOptions,
     parser: *ComponentParser,
+    token_list_failed: *bool,
     static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
-        return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{c.options});
+        return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{ c.options, c.token_list_failed });
     }
-    static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
+    static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions, token_list_failed: *bool): Result(UnresolvedColor) {
         const hsl = switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
             .result vv => vv,
             .err e => return { err: e },
@@ -151,7 +156,10 @@ pub struct UnresolvedColorHslClosure {
         if (e := i.expectDelim('/').asErr()) return { err: e };
         const alpha = switch (TokenListFns.parse(i, opts, 0)) {
             .result vv => vv,
-            .err e => return { err: e },
+            .err e => {
+                token_list_failed.* = true;
+                return { err: e };
+            },
         };
         return { result: UnresolvedColor{
             HSL: {
@@ -167,12 +175,33 @@ pub struct UnresolvedColorHslClosure {
 pub struct UnresolvedColorLightDarkClosure {
     options: *const css.ParserOptions,
     parser: *ComponentParser,
+    token_list_failed: *bool,
     static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
+        // Scan for a top-level comma before buffering light/dark halves so
+        // nested light-dark() without a comma fails in O(1) without O(2^n) backtracking.
+        let has_comma = false;
+        {
+            const scan_state = input2.state();
+            defer input2.reset(&scan_state);
+            while (tok := input2.nextIncludingWhitespace().asValue()) {
+                if (tok.* == .comma) {
+                    has_comma = true;
+                    break;
+                }
+            }
+        }
+        if (!has_comma) {
+            return { err: input2.newCustomError(css.ParserError.invalid_value) };
+        }
+
         // errdefer doesn't fire on `return .{ .err = ... }` — Result(T) is a
         // tagged union, not an error union. Clean up `light` inline.
         let light = switch (input2.parseUntilBefore(css.Delimiters{ comma: true }, TokenList, c, @This().parsefn2)) {
             .result vv => vv,
-            .err e => return { err: e },
+            .err e => {
+                c.token_list_failed.* = true;
+                return { err: e };
+            },
         };
         if (e := input2.expectComma().asErr()) {
             light.deinit(input2.allocator());
@@ -182,6 +211,7 @@ pub struct UnresolvedColorLightDarkClosure {
             .result vv => vv,
             .err e => {
                 light.deinit(input2.allocator());
+                c.token_list_failed.* = true;
                 return { err: e };
             },
         };
@@ -512,14 +542,19 @@ pub struct TokenList {
                         ) catch unreachable;
                         last_is_delim = false;
                         last_is_whitespace = false;
-                    } else if (color := input.tryParse(UnresolvedColor.parse, .{ f, options }).asValue()) {
-                        tokens.append(
-                            input.allocator(),
-                            { unresolved_color: color },
-                        ) catch unreachable;
-                        last_is_delim = false;
-                        last_is_whitespace = false;
-                    } else if (bun.strings.eql(f, "url")) {
+                    } else {
+                        let token_list_failed = false;
+                        const unresolved_res = input.tryParse(UnresolvedColor.parseWithFlag, .{ f, options, &token_list_failed });
+                        if (color := unresolved_res.asValue()) {
+                            tokens.append(
+                                input.allocator(),
+                                { unresolved_color: color },
+                            ) catch unreachable;
+                            last_is_delim = false;
+                            last_is_whitespace = false;
+                        } else if (token_list_failed) {
+                            return { err: unresolved_res.err };
+                        } else if (bun.strings.eql(f, "url")) {
                         input.reset(&state);
                         tokens.append(
                             input.allocator(),
@@ -581,6 +616,7 @@ pub struct TokenList {
                         ) catch unreachable;
                         last_is_delim = true; // Whitespace is not required after any of these chars.
                         last_is_whitespace = false;
+                    }
                     }
                     continue;
                 },
@@ -1015,24 +1051,37 @@ pub union(enum) UnresolvedColor {
         f: []const u8,
         options: *const css.ParserOptions,
     ): Result(UnresolvedColor) {
+        let token_list_failed = false;
+        return parseWithFlag(input, f, options, &token_list_failed);
+    }
+
+    static fn parseWithFlag(
+        input: *css.Parser,
+        f: []const u8,
+        options: *const css.ParserOptions,
+        token_list_failed: *bool,
+    ): Result(UnresolvedColor) {
         let parser = ComponentParser.new(false);
         // css.todo_stuff.match_ignore_ascii_case
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "rgb")) {
             let closure = UnresolvedColorRgbClosure{
                 options: options,
                 parser: &parser,
+                token_list_failed: token_list_failed,
             };
             return input.parseNestedBlock(UnresolvedColor, &closure, UnresolvedColorRgbClosure.parsefn);
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "hsl")) {
             let closure = UnresolvedColorHslClosure{
                 options: options,
                 parser: &parser,
+                token_list_failed: token_list_failed,
             };
             return input.parseNestedBlock(UnresolvedColor, &closure, UnresolvedColorHslClosure.parsefn);
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "light-dark")) {
             let closure = UnresolvedColorLightDarkClosure{
                 options: options,
                 parser: &parser,
+                token_list_failed: token_list_failed,
             };
             return input.parseNestedBlock(UnresolvedColor, &closure, UnresolvedColorLightDarkClosure.parsefn);
         } else {

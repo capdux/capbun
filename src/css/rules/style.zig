@@ -115,9 +115,23 @@ pub fn isCompatible(self: *@This(), targets: css.targets.Targets) bool {
     }
 
 pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
+            if ((dest.in_non_final_prefix_pass and (!self.vendor_prefix.isEmpty()))) {
+                return;
+            }
             if (self.vendor_prefix.isEmpty()) {
                 _ = try self.toCssBase(dest);
             } else {
+                var last_field: []const u8 = "";
+                _ = &last_field;
+                inline for (css.VendorPrefix.FIELDS) |f| {
+                    if (@field(self.vendor_prefix, f)) {
+                        last_field = f;
+                    }
+                }
+                const saved_non_final = dest.in_non_final_prefix_pass;
+                defer {
+                dest.in_non_final_prefix_pass = saved_non_final;
+                }
                 var first_rule = true;
                 _ = &first_rule;
                 var emitted_first_pass = false;
@@ -130,16 +144,15 @@ pub fn toCss(self: *@This(), dest: *Printer) PrintErr!void {
                             }
                             _ = try dest.newline();
                         }
-                        const prefix = css.VendorPrefix.fromName(field);
-                        dest.vendor_prefix = prefix;
+                        dest.vendor_prefix = css.VendorPrefix.fromName(field);
+                        dest.in_non_final_prefix_pass = (saved_non_final or (!std.mem.eql(u8, field, last_field)));
                         const line = dest.line;
                         const col = dest.col;
                         const is_duplicate_pass = emitted_first_pass;
                         const bytes_before: usize = (if (is_duplicate_pass) dest.bytesWritten() else 0);
                         _ = try self.toCssBase(dest);
                         if (is_duplicate_pass) {
-                            const emitted = (dest.bytesWritten() -| bytes_before);
-                            dest.prefix_expansion_bytes = (dest.prefix_expansion_bytes +| emitted);
+                            dest.prefix_expansion_bytes = (dest.prefix_expansion_bytes +| (dest.bytesWritten() -| bytes_before));
                             if ((dest.prefix_expansion_bytes > MAX_PREFIX_EXPANSION_BYTES)) {
                                 return dest.newError(css.PrinterErrorKind.maximum_vendor_prefix_expansion, null);
                             }
@@ -200,6 +213,11 @@ pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
                         _ = try dest.writeChar(10);
                     }
                     _ = try dest.newline();
+                }
+                const saved_in_non_final = dest.in_non_final_prefix_pass;
+                dest.in_non_final_prefix_pass = false;
+                defer {
+                dest.in_non_final_prefix_pass = saved_in_non_final;
                 }
                 _ = try self.rules.toCss(dest);
                 if (has_declarations) {

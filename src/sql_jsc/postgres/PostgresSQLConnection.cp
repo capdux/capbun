@@ -1435,7 +1435,9 @@ pub struct DataCellsGuard<P, C> {
                                         debug("parse, bind and execute unnamed stmt", .{});
                                         let query_str = req.query.toUTF8(bun.default_allocator);
                                         const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
+                                        const saved_write_len = _.write_buffer.byte_list.len;
                                         PostgresRequest.parseAndBindAndExecute(_.globalObject, query_str.slice(), statement, binding_value, columns_value, false, Writer, _.writer()) catch e => {
+                                            _.write_buffer.byte_list.len = saved_write_len;
                                             if (err_ := _.globalObject.tryTakeException()) {
                                                 req.onJSError(err_, _.globalObject);
                                             } else {
@@ -1453,7 +1455,9 @@ pub struct DataCellsGuard<P, C> {
                                         };
                                     } else {
                                         debug("binding and executing stmt", .{});
+                                        const saved_write_len = _.write_buffer.byte_list.len;
                                         PostgresRequest.bindAndExecute(_.globalObject, statement, binding_value, columns_value, Writer, _.writer()) catch e => {
+                                            _.write_buffer.byte_list.len = saved_write_len;
                                             if (err_ := _.globalObject.tryTakeException()) {
                                                 req.onJSError(err_, _.globalObject);
                                             } else {
@@ -1547,7 +1551,9 @@ pub struct DataCellsGuard<P, C> {
                                         const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) ?? .zero;
                                         const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) ?? .zero;
                                         debug("parseAndBindAndExecute (unnamed, first execution)", .{});
+                                        const saved_write_len = _.write_buffer.byte_list.len;
                                         PostgresRequest.parseAndBindAndExecute(_.globalObject, query_str.slice(), statement, binding_value, columns_value, true, Writer, _.writer()) catch e => {
+                                            _.write_buffer.byte_list.len = saved_write_len;
                                             if (err_ := _.globalObject.tryTakeException()) {
                                                 req.onJSError(err_, _.globalObject);
                                             } else {
@@ -1768,6 +1774,9 @@ pub struct DataCellsGuard<P, C> {
             .ReadyForQuery => {
                 let ready_for_query: protocol.ReadyForQuery = undefined;
                 ready_for_query.decodeInternal(Context, reader)?;
+                if (_.authentication_state != .ok) {
+                    return error.UnexpectedMessage;
+                }
 
                 _.setStatus(.connected);
                 _.flags.waiting_to_prepare = false;
@@ -2069,7 +2078,7 @@ pub struct DataCellsGuard<P, C> {
                 _.backend_key_data.decodeInternal(Context, reader)?;
             },
             .ErrorResponse => {
-                let err_resp: protocol.ErrorResponse = undefined;
+                let err_resp = protocol.ErrorResponse{};
                 err_resp.decodeInternal(Context, reader)?;
 
                 if (_.status == .connecting || _.status == .sent_startup_message) {
@@ -2118,7 +2127,7 @@ pub struct DataCellsGuard<P, C> {
             },
             .NoticeResponse => {
                 debug("UNSUPPORTED NoticeResponse", .{});
-                let resp: protocol.NoticeResponse = undefined;
+                let resp = protocol.NoticeResponse{};
 
                 resp.decodeInternal(Context, reader)?;
                 resp.deinit();

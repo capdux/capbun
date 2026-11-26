@@ -1081,11 +1081,11 @@ pub struct serialize {
             .dir => unreachable,
             .custom name => {
                 dest.writeChar(':')?;
-                return dest.writeStr(name.name);
+                return dest.writeIdent(name.name, false);
             },
             .custom_function v => {
                 dest.writeChar(':')?;
-                dest.writeStr(v.name)?;
+                dest.writeIdent(v.name, false)?;
                 dest.writeChar('(')?;
                 v.arguments.toCssRaw(dest)?;
                 dest.writeChar(')')?;
@@ -1203,12 +1203,12 @@ pub struct serialize {
             },
             .custom val => {
                 dest.writeStr("::")?;
-                return dest.writeStr(val.name);
+                return dest.writeIdent(val.name, false);
             },
             .custom_function v => {
                 const name = v.name;
                 dest.writeStr("::")?;
-                dest.writeStr(name)?;
+                dest.writeIdent(name, false)?;
                 dest.writeChar('(')?;
                 v.arguments.toCssRaw(dest)?;
                 dest.writeChar(')')?;
@@ -1412,13 +1412,11 @@ pub struct tocss_servo {
             },
             .id s => {
                 dest.writeChar('#')?;
-                const str = dest.lookupIdentOrRef(s);
-                dest.writeStr(str)?;
+                return dest.writeIdentOrRef(s, dest.css_module != null);
             },
             .class s => {
                 dest.writeChar('.')?;
-                const str = dest.lookupIdentOrRef(s);
-                dest.writeStr(str)?;
+                return dest.writeIdentOrRef(s, dest.css_module != null);
             },
             .local_name local_name => {
                 local_name.toCss(dest)?;

@@ -536,7 +536,9 @@ self.statement = null;
 if (((!connection.hasQueryRunning()) or connection.canPipeline())) {
                     self.flags.binary = (self.statement.?.fields.len > 0);
                     _ = debug("bindAndExecute", .{});
-                    _ = (blk_catch_8: { break :blk_catch_8 ((PostgresRequest.bindAndExecute(globalObject, self.statement.?, binding_value, columns_value, PostgresSQLConnection.Writer, writer)) catch |e| { _ = &e; self.statement = null;
+                    const saved_write_len = connection.write_buffer.byte_list.len;
+                    _ = (blk_catch_8: { break :blk_catch_8 ((PostgresRequest.bindAndExecute(globalObject, self.statement.?, binding_value, columns_value, PostgresSQLConnection.Writer, writer)) catch |e| { _ = &e; connection.write_buffer.byte_list.len = saved_write_len;
+                    self.statement = null;
                     _ = stmt.deref();
                     _ = self.deref();
                     if ((!globalObject.hasException())) {

@@ -2390,7 +2390,13 @@ pub struct Parser<const enc: Encoding> {
             }
         }
 
-        _.scan({})?;
+        if (_.context.get() == .flow_in) {
+            _.context.set(.flow_key)?;
+            defer _.context.unset(.flow_key);
+            _.scan({})?;
+        } else {
+            _.scan({})?;
+        }
 
         return Expr.init(E.Array, E.Array{ items: bun.BabyList(Expr).moveFromList(&seq) }, sequence_start.loc());
     }
@@ -2493,7 +2499,13 @@ pub struct Parser<const enc: Encoding> {
             }
         }
 
-        _.scan({})?;
+        if (_.context.get() == .flow_in) {
+            _.context.set(.flow_key)?;
+            defer _.context.unset(.flow_key);
+            _.scan({})?;
+        } else {
+            _.scan({})?;
+        }
 
         return Expr.init(E.Object, { properties: props.moveList() }, mapping_start.loc());
     }
@@ -3151,7 +3163,13 @@ pub struct Parser<const enc: Encoding> {
                 const scalar_line = _.token.line;
                 const scalar_tab_after_indent = _.tab_after_indent;
 
-                _.scan({ tag: node_props.tag(), outside_context: true })?;
+                if (_.context.get() == .flow_in && scalar.style == .quoted) {
+                    _.context.set(.flow_key)?;
+                    defer _.context.unset(.flow_key);
+                    _.scan({ tag: node_props.tag(), outside_context: true })?;
+                } else {
+                    _.scan({ tag: node_props.tag(), outside_context: true })?;
+                }
 
                 if (_.token.data == .mapping_value) {
                     if (_.token.indent.isLessThan(scalar_indent) ||
@@ -3810,9 +3828,6 @@ pub struct Parser<const enc: Encoding> {
                 if (explicit_indent == null) {
                     ctx.content_indent = _.line_indent;
                 }
-                if (_.line_indent.cast() > 0) {
-                    ctx.leading_newlines += 1;
-                }
                 return ctx.done();
             },
 
@@ -3843,7 +3858,13 @@ pub struct Parser<const enc: Encoding> {
                     }
                     _.line_indent = indent;
                     const nc = _.next();
-                    if (nc == 0 || nc == '\n' || nc == '\r') {
+                    if (nc == 0) {
+                        if (explicit_indent == null) {
+                            ctx.leading_newlines += 1;
+                        }
+                        first_ch = nc; continue :first_sw;
+                    }
+                    if (nc == '\n' || nc == '\r') {
                         first_ch = nc; continue :first_sw;
                     }
                     ctx.content_indent = ci; first = nc; break :first_sw;
@@ -3858,6 +3879,9 @@ pub struct Parser<const enc: Encoding> {
                 }
 
                 _.line_indent = indent;
+                if (_.next() == 0) {
+                    ctx.leading_newlines += 1;
+                }
 
                 first_ch = _.next(); continue :first_sw;
             },

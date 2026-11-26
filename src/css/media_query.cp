@@ -301,7 +301,7 @@ static fn _tryParseQualifierAndMediaType(i: *css.Parser): Result(struct { OptQua
                 dest.writeStr("screen")?;
             },
             .custom => |desc| {
-                dest.writeStr(desc)?;
+                css.serializer.serializeIdentifier(desc, dest) catch return dest.addFmtError();
             },
         }
 

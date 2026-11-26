@@ -2314,7 +2314,15 @@ pub fn parseFlowSequence(self: *@This()) ParseError!Expr {
                         _ = try self.scan(.{});
                     }
                 }
-                _ = try self.scan(.{});
+                if ((self.context.get() == .flow_in)) {
+                    _ = try self.context.set(.flow_key);
+                    defer {
+                    _ = self.context.unset(.flow_key);
+                    }
+                    _ = try self.scan(.{});
+                } else {
+                    _ = try self.scan(.{});
+                }
                 return Expr.init(E.Array, E.Array{ .items = bun.BabyList(Expr).moveFromList((&seq)) }, sequence_start.loc());
         }
 
@@ -2410,7 +2418,15 @@ return error.UnexpectedToken;
 }
                     }
                 }
-                _ = try self.scan(.{});
+                if ((self.context.get() == .flow_in)) {
+                    _ = try self.context.set(.flow_key);
+                    defer {
+                    _ = self.context.unset(.flow_key);
+                    }
+                    _ = try self.scan(.{});
+                } else {
+                    _ = try self.scan(.{});
+                }
                 return Expr.init(E.Object, .{ .properties = props.moveList() }, mapping_start.loc());
         }
 
@@ -2926,7 +2942,15 @@ const scalar_start = self.token.start;
                     const scalar_indent = self.token.indent;
                     const scalar_line = self.token.line;
                     const scalar_tab_after_indent = self.tab_after_indent;
-                    _ = try self.scan(.{ .tag = node_props.tag(), .outside_context = true });
+                    if (((self.context.get() == .flow_in) and (scalar.style == .quoted))) {
+                        _ = try self.context.set(.flow_key);
+                        defer {
+                        _ = self.context.unset(.flow_key);
+                        }
+                        _ = try self.scan(.{ .tag = node_props.tag(), .outside_context = true });
+                    } else {
+                        _ = try self.scan(.{ .tag = node_props.tag(), .outside_context = true });
+                    }
                     if ((self.token.data == .mapping_value)) {
                         if ((self.token.indent.isLessThan(scalar_indent) or ((opts.explicit_mapping_key and (scalar_line != self.token.line)) and self.token.indent.isLessThanOrEqual(scalar_indent)))) {
                             node = scalar.data.toExpr(scalar_start, self.input);
@@ -3463,9 +3487,6 @@ if ((!self.isEof())) {
                     if ((explicit_indent == null)) {
                         ctx.content_indent = self.line_indent;
                     }
-                    if ((self.line_indent.cast() > 0)) {
-                        ctx.leading_newlines = (ctx.leading_newlines + 1);
-                    }
                     return ctx.done();
 },
 13 => {
@@ -3497,7 +3518,14 @@ var indent: Indent = Indent.@"from"(1);
                         }
                         self.line_indent = indent;
                         const nc = self.next();
-                        if ((((nc == 0) or (nc == 10)) or (nc == 13))) {
+                        if ((nc == 0)) {
+                            if ((explicit_indent == null)) {
+                                ctx.leading_newlines = (ctx.leading_newlines + 1);
+                            }
+                            first_ch = nc;
+                            continue :first_sw;
+                        }
+                        if (((nc == 10) or (nc == 13))) {
                             first_ch = nc;
                             continue :first_sw;
                         }
@@ -3513,6 +3541,9 @@ var indent: Indent = Indent.@"from"(1);
                         ctx.max_leading_indent = indent;
                     }
                     self.line_indent = indent;
+                    if ((self.next() == 0)) {
+                        ctx.leading_newlines = (ctx.leading_newlines + 1);
+                    }
                     first_ch = self.next();
                     continue :first_sw;
 },

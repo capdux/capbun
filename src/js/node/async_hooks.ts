@@ -223,14 +223,17 @@ if (IS_BUN_DEVELOPMENT) {
 class AsyncResource {
   type;
   #snapshot;
+  #triggerAsyncId;
 
   constructor(type, opts?) {
     validateString(type, "type");
 
-    let triggerAsyncId = opts;
+    let triggerAsyncId = 0;
     if (opts != null) {
-      if (typeof opts !== "number") {
-        triggerAsyncId = opts.triggerAsyncId === undefined ? 1 : opts.triggerAsyncId;
+      if (typeof opts === "number") {
+        triggerAsyncId = opts;
+      } else {
+        triggerAsyncId = opts.triggerAsyncId === undefined ? 0 : opts.triggerAsyncId;
       }
       if (!Number.isSafeInteger(triggerAsyncId) || triggerAsyncId < -1) {
         throw $ERR_INVALID_ASYNC_ID("triggerAsyncId", triggerAsyncId);
@@ -243,6 +246,7 @@ class AsyncResource {
     setAsyncHooksEnabled(true);
     this.type = type;
     this.#snapshot = get();
+    this.#triggerAsyncId = triggerAsyncId;
   }
 
   emitBefore() {
@@ -258,7 +262,7 @@ class AsyncResource {
   }
 
   triggerAsyncId() {
-    return 0;
+    return this.#triggerAsyncId;
   }
 
   emitDestroy() {

@@ -176,12 +176,13 @@ pub fn parsefn(c: *@This(), input2: *css.Parser) Result(void) {
 pub const UnresolvedColorRgbClosure = struct {
     options: *const css.ParserOptions,
     parser: *ComponentParser,
+    token_list_failed: *bool,
 
 pub fn parsefn(c: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
-            return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{ c.options });
+            return c.parser.parseRelative(input2, SRGB, UnresolvedColor, @This().innerParseFn, .{ c.options, c.token_list_failed });
     }
 
-pub fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions) Result(UnresolvedColor) {
+pub fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions, token_list_failed: *bool) Result(UnresolvedColor) {
             const rgb = (switch (css.css_values.color.parseRGBComponents(i, p)) {
 .result => |vv| vv,
 .err => |e| {
@@ -202,7 +203,10 @@ return .{ .err = e };
             const alpha = (switch (TokenListFns.parse(i, opts, 0)) {
 .result => |vv| vv,
 .err => |e| {
-return .{ .err = e };
+{
+                token_list_failed.* = true;
+                return .{ .err = e };
+            }
 },
 });
             return .{ .result = UnresolvedColor{ .RGB = .{ .r = r, .g = g, .b = b, .alpha = alpha } } };
@@ -212,12 +216,13 @@ return .{ .err = e };
 pub const UnresolvedColorHslClosure = struct {
     options: *const css.ParserOptions,
     parser: *ComponentParser,
+    token_list_failed: *bool,
 
 pub fn parsefn(c: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
-            return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{ c.options });
+            return c.parser.parseRelative(input2, HSL, UnresolvedColor, @This().innerParseFn, .{ c.options, c.token_list_failed });
     }
 
-pub fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions) Result(UnresolvedColor) {
+pub fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions, token_list_failed: *bool) Result(UnresolvedColor) {
             const hsl = (switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
 .result => |vv| vv,
 .err => |e| {
@@ -238,7 +243,10 @@ return .{ .err = e };
             const alpha = (switch (TokenListFns.parse(i, opts, 0)) {
 .result => |vv| vv,
 .err => |e| {
-return .{ .err = e };
+{
+                token_list_failed.* = true;
+                return .{ .err = e };
+            }
 },
 });
             return .{ .result = UnresolvedColor{ .HSL = .{ .h = h, .s = s, .l = l, .alpha = alpha } } };
@@ -248,12 +256,33 @@ return .{ .err = e };
 pub const UnresolvedColorLightDarkClosure = struct {
     options: *const css.ParserOptions,
     parser: *ComponentParser,
+    token_list_failed: *bool,
 
 pub fn parsefn(c: *@This(), input2: *css.Parser) Result(UnresolvedColor) {
+            var has_comma = false;
+            _ = &has_comma;
+            {
+                const scan_state = input2.state();
+                defer {
+                _ = input2.reset((&scan_state));
+                }
+                while (input2.nextIncludingWhitespace().asValue()) |tok| {
+                    if ((tok.* == .comma)) {
+                        has_comma = true;
+                        break;
+                    }
+                }
+            }
+            if ((!has_comma)) {
+                return .{ .err = input2.newCustomError(css.ParserError.invalid_value) };
+            }
             var light = (switch (input2.parseUntilBefore(css.Delimiters{ .comma = true }, TokenList, c, @This().parsefn2)) {
 .result => |vv| vv,
 .err => |e| {
-return .{ .err = e };
+{
+                c.token_list_failed.* = true;
+                return .{ .err = e };
+            }
 },
 });
             _ = &light;
@@ -267,6 +296,7 @@ return .{ .err = e };
 .err => |e| {
 {
                 _ = light.deinit(input2.allocator());
+                c.token_list_failed.* = true;
                 return .{ .err = e };
             }
 },
@@ -548,60 +578,67 @@ if (tryParseColorToken(f, (&state), input)) |color| {
                     last_is_delim = false;
                     last_is_whitespace = false;
                 } else {
-                    if (input.tryParse(UnresolvedColor.parse, .{ f, options }).asValue()) |color| {
+                    var token_list_failed = false;
+                    _ = &token_list_failed;
+                    const unresolved_res = input.tryParse(UnresolvedColor.parseWithFlag, .{ f, options, (&token_list_failed) });
+                    if (unresolved_res.asValue()) |color| {
                         _ = &color;
                         _ = ((tokens.append(input.allocator(), .{ .unresolved_color = color })) catch unreachable);
                         last_is_delim = false;
                         last_is_whitespace = false;
                     } else {
-                        if (bun.strings.eql(f, "url")) {
-                            _ = input.reset((&state));
-                            _ = ((tokens.append(input.allocator(), .{ .url = (switch (Url.parse(input)) {
+                        if (token_list_failed) {
+                            return .{ .err = unresolved_res.err };
+                        } else {
+                            if (bun.strings.eql(f, "url")) {
+                                _ = input.reset((&state));
+                                _ = ((tokens.append(input.allocator(), .{ .url = (switch (Url.parse(input)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
 },
 }) })) catch unreachable);
-                            last_is_delim = false;
-                            last_is_whitespace = false;
-                        } else {
-                            if (bun.strings.eql(f, "var")) {
-                                var closure = ParseVarClosure{ .options = options, .depth = depth, .tokens = tokens };
-                                _ = &closure;
-                                const var_val = (switch (input.parseNestedBlock(TokenOrValue, (&closure), ParseVarClosure.parsefn)) {
-.result => |vv| vv,
-.err => |e| {
-return .{ .err = e };
-},
-});
-                                _ = ((tokens.append(input.allocator(), var_val)) catch unreachable);
-                                last_is_delim = true;
+                                last_is_delim = false;
                                 last_is_whitespace = false;
                             } else {
-                                if (bun.strings.eql(f, "env")) {
-                                    var closure = ParseEnvClosure{ .options = options, .depth = depth };
+                                if (bun.strings.eql(f, "var")) {
+                                    var closure = ParseVarClosure{ .options = options, .depth = depth, .tokens = tokens };
                                     _ = &closure;
-                                    const env = (switch (input.parseNestedBlock(TokenOrValue, (&closure), ParseEnvClosure.parsefn)) {
+                                    const var_val = (switch (input.parseNestedBlock(TokenOrValue, (&closure), ParseVarClosure.parsefn)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
 },
 });
-                                    _ = ((tokens.append(input.allocator(), env)) catch unreachable);
+                                    _ = ((tokens.append(input.allocator(), var_val)) catch unreachable);
                                     last_is_delim = true;
                                     last_is_whitespace = false;
                                 } else {
-                                    var closure = ParseArgsClosure{ .options = options, .depth = depth };
-                                    _ = &closure;
-                                    const arguments = (switch (input.parseNestedBlock(TokenList, (&closure), ParseArgsClosure.parsefn)) {
+                                    if (bun.strings.eql(f, "env")) {
+                                        var closure = ParseEnvClosure{ .options = options, .depth = depth };
+                                        _ = &closure;
+                                        const env = (switch (input.parseNestedBlock(TokenOrValue, (&closure), ParseEnvClosure.parsefn)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
 },
 });
-                                    _ = ((tokens.append(input.allocator(), .{ .function = .{ .name = .{ .v = f }, .arguments = arguments } })) catch unreachable);
-                                    last_is_delim = true;
-                                    last_is_whitespace = false;
+                                        _ = ((tokens.append(input.allocator(), env)) catch unreachable);
+                                        last_is_delim = true;
+                                        last_is_whitespace = false;
+                                    } else {
+                                        var closure = ParseArgsClosure{ .options = options, .depth = depth };
+                                        _ = &closure;
+                                        const arguments = (switch (input.parseNestedBlock(TokenList, (&closure), ParseArgsClosure.parsefn)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                                        _ = ((tokens.append(input.allocator(), .{ .function = .{ .name = .{ .v = f }, .arguments = arguments } })) catch unreachable);
+                                        last_is_delim = true;
+                                        last_is_whitespace = false;
+                                    }
                                 }
                             }
                         }
@@ -996,20 +1033,26 @@ const light: *const TokenList = (&ld.light);
     }
 
 pub fn parse(input: *css.Parser, f: []const u8, options: *const css.ParserOptions) Result(UnresolvedColor) {
+            var token_list_failed = false;
+            _ = &token_list_failed;
+            return parseWithFlag(input, f, options, (&token_list_failed));
+    }
+
+pub fn parseWithFlag(input: *css.Parser, f: []const u8, options: *const css.ParserOptions, token_list_failed: *bool) Result(UnresolvedColor) {
             var parser = ComponentParser.new(false);
             _ = &parser;
             if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "rgb")) {
-                var closure = UnresolvedColorRgbClosure{ .options = options, .parser = (&parser) };
+                var closure = UnresolvedColorRgbClosure{ .options = options, .parser = (&parser), .token_list_failed = token_list_failed };
                 _ = &closure;
                 return input.parseNestedBlock(UnresolvedColor, (&closure), UnresolvedColorRgbClosure.parsefn);
             } else {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "hsl")) {
-                    var closure = UnresolvedColorHslClosure{ .options = options, .parser = (&parser) };
+                    var closure = UnresolvedColorHslClosure{ .options = options, .parser = (&parser), .token_list_failed = token_list_failed };
                     _ = &closure;
                     return input.parseNestedBlock(UnresolvedColor, (&closure), UnresolvedColorHslClosure.parsefn);
                 } else {
                     if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "light-dark")) {
-                        var closure = UnresolvedColorLightDarkClosure{ .options = options, .parser = (&parser) };
+                        var closure = UnresolvedColorLightDarkClosure{ .options = options, .parser = (&parser), .token_list_failed = token_list_failed };
                         _ = &closure;
                         return input.parseNestedBlock(UnresolvedColor, (&closure), UnresolvedColorLightDarkClosure.parsefn);
                     } else {

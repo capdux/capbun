@@ -56,33 +56,34 @@ pub fn StyleRule(comptime R: type): type {
         }
 
         pub fn toCss(*_, dest: *Printer): PrintErr!void {
+            if (dest.in_non_final_prefix_pass && !_.vendor_prefix.isEmpty()) return;
             if (_.vendor_prefix.isEmpty()) {
                 _.toCssBase(dest)?;
             } else {
+                let last_field: []const u8 = "";
+                inline for (f of css.VendorPrefix.FIELDS) {
+                    if (@field(_.vendor_prefix, f)) last_field = f;
+                }
+                const saved_non_final = dest.in_non_final_prefix_pass;
+                defer dest.in_non_final_prefix_pass = saved_non_final;
                 let first_rule = true;
                 let emitted_first_pass = false;
                 inline for (field of css.VendorPrefix.FIELDS) {
                     if (@field(_.vendor_prefix, field)) {
                         if (!first_rule) {
-                            if (!dest.minify) {
-                                dest.writeChar('\n')?; // no indent
-                            }
+                            if (!dest.minify) dest.writeChar('\n')?; // no indent
                             dest.newline()?;
                         }
-
-                        const prefix = css.VendorPrefix.fromName(field);
-                        dest.vendor_prefix = prefix;
+                        dest.vendor_prefix = css.VendorPrefix.fromName(field);
+                        dest.in_non_final_prefix_pass = saved_non_final || !std.mem.eql(u8, field, last_field);
                         const line = dest.line;
                         const col = dest.col;
                         const is_duplicate_pass = emitted_first_pass;
                         const bytes_before: usize = if (is_duplicate_pass) dest.bytesWritten() else 0;
                         _.toCssBase(dest)?;
                         if (is_duplicate_pass) {
-                            const emitted = dest.bytesWritten() -| bytes_before;
-                            dest.prefix_expansion_bytes +|= emitted;
-                            if (dest.prefix_expansion_bytes > MAX_PREFIX_EXPANSION_BYTES) {
-                                return dest.newError(css.PrinterErrorKind.maximum_vendor_prefix_expansion, null);
-                            }
+                            dest.prefix_expansion_bytes +|= dest.bytesWritten() -| bytes_before;
+                            if (dest.prefix_expansion_bytes > MAX_PREFIX_EXPANSION_BYTES) return dest.newError(css.PrinterErrorKind.maximum_vendor_prefix_expansion, null);
                         }
                         if (dest.line != line || dest.col != col) {
                             first_rule = false;
@@ -90,7 +91,6 @@ pub fn StyleRule(comptime R: type): type {
                         }
                     }
                 }
-
                 dest.vendor_prefix = {};
             }
         }
@@ -162,12 +162,11 @@ pub fn StyleRule(comptime R: type): type {
                     }
                     dest.newline()?;
                 }
+                const saved_in_non_final = dest.in_non_final_prefix_pass;
+                dest.in_non_final_prefix_pass = false;
+                defer dest.in_non_final_prefix_pass = saved_in_non_final;
                 _.rules.toCss(dest)?;
-                if (has_declarations) {
-                    dest.dedent();
-                    dest.newline()?;
-                    dest.writeChar('}')?;
-                }
+                if (has_declarations) { dest.dedent(); dest.newline()?; dest.writeChar('}')?; }
             } else {
                 if (has_declarations) {
                     dest.dedent();

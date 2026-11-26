@@ -14,6 +14,125 @@ function notimpl(message) {
   throwNotImplemented("node:v8 " + message);
 }
 
+const jscSerialize = jsc.serialize;
+const jscDeserialize = jsc.deserialize;
+const BufferCtor = Buffer;
+const BufferPrototype = BufferCtor.prototype;
+const BufferIsBuffer = BufferCtor.isBuffer;
+const BufferAllocUnsafe = BufferCtor.allocUnsafe;
+const Uint8ArrayCtor = Uint8Array;
+const Uint8ArrayPrototype = Uint8ArrayCtor.prototype;
+const TypedArrayProto = Object.getPrototypeOf(Uint8ArrayPrototype);
+const TypedArrayPrototypeSet = TypedArrayProto.set;
+const getTypedArrayBuffer = Object.getOwnPropertyDescriptor(TypedArrayProto, "buffer")!.get!;
+const getTypedArrayByteOffset = Object.getOwnPropertyDescriptor(TypedArrayProto, "byteOffset")!.get!;
+const getTypedArrayByteLength = Object.getOwnPropertyDescriptor(TypedArrayProto, "byteLength")!.get!;
+const DataViewProto = DataView.prototype;
+const getDataViewBuffer = Object.getOwnPropertyDescriptor(DataViewProto, "buffer")!.get!;
+const getDataViewByteOffset = Object.getOwnPropertyDescriptor(DataViewProto, "byteOffset")!.get!;
+const getDataViewByteLength = Object.getOwnPropertyDescriptor(DataViewProto, "byteLength")!.get!;
+const getArrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")!.get!;
+const getSharedArrayBufferByteLength =
+  typeof SharedArrayBuffer !== "undefined"
+    ? Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, "byteLength")!.get!
+    : null;
+const ObjectSetPrototypeOf = Object.setPrototypeOf;
+const ObjectGetPrototypeOf = Object.getPrototypeOf;
+const ObjectKeys = Object.keys;
+const ArrayIsArray = Array.isArray;
+const ArrayBufferIsView = ArrayBuffer.isView;
+const SetCtor = Set;
+const SetPrototypeHas = SetCtor.prototype.has;
+const SetPrototypeAdd = SetCtor.prototype.add;
+const SetPrototypeForEach = SetCtor.prototype.forEach;
+const getSetSize = Object.getOwnPropertyDescriptor(SetCtor.prototype, "size")!.get!;
+const MapPrototypeForEach = Map.prototype.forEach;
+const getMapSize = Object.getOwnPropertyDescriptor(Map.prototype, "size")!.get!;
+const ReflectApply = Reflect.apply;
+
+function isMapObject(val: unknown): boolean {
+  try {
+    ReflectApply(getMapSize, val, []);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSetObject(val: unknown): boolean {
+  try {
+    ReflectApply(getSetSize, val, []);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function collectBuffers(val: unknown, visited: Set<unknown>, buffers: Buffer[]) {
+  if (val === null || typeof val !== "object") return;
+  if (ReflectApply(SetPrototypeHas, visited, [val])) return;
+  ReflectApply(SetPrototypeAdd, visited, [val]);
+  if (BufferIsBuffer(val)) {
+    $arrayPush(buffers, val);
+    return;
+  }
+  if (ArrayIsArray(val)) {
+    for (let i = 0; i < val.length; i++) {
+      collectBuffers(val[i], visited, buffers);
+    }
+    return;
+  }
+  if (ArrayBufferIsView(val)) return;
+  if (isMapObject(val)) {
+    ReflectApply(MapPrototypeForEach, val, [
+      (v: unknown, k: unknown) => {
+        collectBuffers(k, visited, buffers);
+        collectBuffers(v, visited, buffers);
+      },
+    ]);
+    return;
+  }
+  if (isSetObject(val)) {
+    ReflectApply(SetPrototypeForEach, val, [
+      (v: unknown) => {
+        collectBuffers(v, visited, buffers);
+      },
+    ]);
+    return;
+  }
+  const keys = ObjectKeys(val);
+  for (let i = 0; i < keys.length; i++) {
+    collectBuffers((val as Record<string, unknown>)[keys[i]], visited, buffers);
+  }
+}
+
+function toSliceInfo(val: unknown): [ArrayBufferLike, number, number] | null {
+  if (ArrayBufferIsView(val)) {
+    try {
+      return [
+        ReflectApply(getTypedArrayBuffer, val, []),
+        ReflectApply(getTypedArrayByteOffset, val, []),
+        ReflectApply(getTypedArrayByteLength, val, []),
+      ];
+    } catch {
+      return [
+        ReflectApply(getDataViewBuffer, val, []),
+        ReflectApply(getDataViewByteOffset, val, []),
+        ReflectApply(getDataViewByteLength, val, []),
+      ];
+    }
+  }
+  try {
+    return [val as ArrayBuffer, 0, ReflectApply(getArrayBufferByteLength, val, [])];
+  } catch {}
+  if (getSharedArrayBufferByteLength) {
+    try {
+      return [val as SharedArrayBuffer, 0, ReflectApply(getSharedArrayBufferByteLength, val, [])];
+    } catch {}
+  }
+  return null;
+}
+
 class Deserializer {
   constructor() {
     notimpl("Deserializer");
@@ -182,7 +301,28 @@ function setFlagsFromString() {
   notimpl("setFlagsFromString");
 }
 function deserialize(value) {
-  return jsc.deserialize(value);
+  const info = toSliceInfo(value);
+  if (!info) return jscDeserialize(value);
+  const [buf, off, len] = info;
+  const bytes = new Uint8ArrayCtor(buf, off, len);
+  if (len < 5 || bytes[0] !== 0xff || bytes[1] !== 0x42 || bytes[2] !== 0x55 || bytes[3] !== 0x4e || bytes[4] !== 0x01) {
+    return jscDeserialize(value);
+  }
+  const payload = new Uint8ArrayCtor(buf, off + 5, len - 5);
+  const decoded = jscDeserialize(payload);
+  if (!ArrayIsArray(decoded) || decoded.length !== 2 || !ArrayIsArray(decoded[1])) {
+    throw new Error("failed to parse serialized buffer envelope");
+  }
+  const buffers = decoded[1];
+  for (let i = 0; i < buffers.length; i++) {
+    const entry = buffers[i];
+    const proto = entry !== null && typeof entry === "object" ? ObjectGetPrototypeOf(entry) : null;
+    if (proto !== Uint8ArrayPrototype && proto !== BufferPrototype) {
+      throw new Error("failed to parse serialized buffer envelope");
+    }
+    ObjectSetPrototypeOf(entry, BufferPrototype);
+  }
+  return decoded[0];
 }
 function takeCoverage() {
   notimpl("takeCoverage");
@@ -191,7 +331,21 @@ function stopCoverage() {
   notimpl("stopCoverage");
 }
 function serialize(arg1) {
-  return jsc.serialize(arg1, { binaryType: "nodebuffer" });
+  const buffers: Buffer[] = [];
+  collectBuffers(arg1, new SetCtor(), buffers);
+  if (buffers.length === 0) {
+    return jscSerialize(arg1, { binaryType: "nodebuffer" });
+  }
+  const payload = jscSerialize([arg1, buffers], { binaryType: "nodebuffer" });
+  const len = ReflectApply(getTypedArrayByteLength, payload, []);
+  const out = BufferAllocUnsafe(5 + len);
+  out[0] = 0xff;
+  out[1] = 0x42;
+  out[2] = 0x55;
+  out[3] = 0x4e;
+  out[4] = 0x01;
+  ReflectApply(TypedArrayPrototypeSet, out, [payload, 5]);
+  return out;
 }
 
 function getDefaultHeapSnapshotPath() {

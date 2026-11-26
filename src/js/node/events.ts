@@ -796,12 +796,20 @@ class EventEmitterAsyncResource extends EventEmitter {
     }
     var { captureRejections = false, triggerAsyncId, name = new.target.name, requireManualDestroy } = options || {};
     super({ captureRejections });
+    if (Object.hasOwn(this, "emit")) {
+      delete this.emit;
+    }
     this.triggerAsyncId = triggerAsyncId ?? 0;
     this.asyncResource = new AsyncResource(name, { triggerAsyncId, requireManualDestroy });
   }
 
   emit(...args) {
-    this.asyncResource.runInAsyncScope(() => super.emit(...args));
+    return this.asyncResource.runInAsyncScope(() => {
+      if (this[kCapture] && super.emit === emitWithoutRejectionCapture) {
+        return emitWithRejectionCapture.$apply(this, args);
+      }
+      return super.emit(...args);
+    });
   }
 
   emitDestroy() {

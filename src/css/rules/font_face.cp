@@ -74,7 +74,7 @@ pub union(enum) FontFaceProperty {
             .font_stretch => |value| writeFontFaceProperty(dest, "font-stretch", value, false),
             .unicode_range => |value| writeFontFaceProperty(dest, "unicode-range", value, true),
             .custom => |custom| {
-                dest.writeStr(_.custom.name.asStr())?;
+                custom.name.toCss(dest)?;
                 dest.delim(':', false)?;
                 return custom.value.toCss(dest, true);
             },
@@ -426,7 +426,7 @@ pub union(enum) FontFormat {
             .embedded_opentype => dest.writeStr("embedded-opentype")?,
             .collection => dest.writeStr("collection")?,
             .svg => dest.writeStr("svg")?,
-            .string => dest.writeStr(_.string)?,
+            .string => |s| css.serializer.serializeString(s, dest) catch return dest.addFmtError(),
         }
     }
 

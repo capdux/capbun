@@ -155,6 +155,7 @@ pub struct Printer {
     minify: bool,
     targets: Targets,
     vendor_prefix: css.VendorPrefix = {},
+    in_non_final_prefix_pass: bool = false,
     in_calc: bool = false,
     css_module: css.CssModule? = null,
     dependencies: ArrayList(css.Dependency)? = null,
@@ -390,6 +391,21 @@ pub struct Printer {
         _.col = 0;
         const last_line_start = comment.len - (std.mem.lastIndexOfScalar(u8, comment, '\n') ?? comment.len);
         _.col += @as(u32, @intCast(last_line_start));
+        return;
+    }
+
+    /// Writes a raw string to the underlying destination, updating line/column
+    /// tracking if the string contains newlines.
+    fn writeStrWithNewlines(*_, s: []const u8)!PrintErr {
+        if (last_nl := std.mem.lastIndexOfScalar(u8, s, '\n')) {
+            _.line += @as(u32, @intCast(std.mem.count(u8, s, "\n")));
+            _.col = @as(u32, @intCast(s.len - last_nl - 1));
+        } else {
+            _.col += @as(u32, @intCast(s.len));
+        }
+        * = _.dest.writeAll(s) catch {
+            return _.addFmtError();
+        };
         return;
     }
 

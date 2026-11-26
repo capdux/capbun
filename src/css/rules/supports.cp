@@ -20,7 +20,8 @@ pub struct SupportsDeclaration {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const self_val = _;
+        return css.implementDeepClone(@This(), &self_val, allocator);
     }
 }
 
@@ -373,7 +374,7 @@ pub union(enum) SupportsCondition {
                         @field(p, field) = true;
                         css.serializer.serializeName(name, dest) catch return dest.addFmtError();
                         dest.delim(':', false)?;
-                        dest.writeStr(value)?;
+                        dest.writeStrWithNewlines(value)?;
                     }
                 }
 
@@ -384,11 +385,11 @@ pub union(enum) SupportsCondition {
             },
             .selector => |sel| {
                 dest.writeStr("selector(")?;
-                dest.writeStr(sel)?;
+                dest.writeStrWithNewlines(sel)?;
                 dest.writeChar(')')?;
             },
             .unknown => |unk| {
-                dest.writeStr(unk)?;
+                dest.writeStrWithNewlines(unk)?;
             },
         }
     }

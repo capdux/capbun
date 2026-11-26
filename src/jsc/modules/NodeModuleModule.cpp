@@ -364,7 +364,7 @@ JSC_DEFINE_HOST_FUNCTION(jsFunctionResolveFileName,
         JSC::EncodedJSValue result;
 
         // If paths are provided, use Bun__resolveSyncWithPaths
-        if (!pathsValue.isUndefinedOrNull()) {
+        if (pathsValue && !pathsValue.isUndefinedOrNull()) {
             // Node.js requires options.paths to be an array
             if (!JSC::isArray(globalObject, pathsValue)) {
                 Bun::throwError(globalObject, scope,
@@ -916,7 +916,7 @@ _stat                   &Generated::NodeModuleModule::js_stat Function 1
 builtinModules          getBuiltinModulesObject           PropertyCallback
 constants               getConstantsObject                PropertyCallback
 createRequire           jsFunctionNodeModuleCreateRequire Function 1
-enableCompileCache      jsFunctionEnableCompileCache      Function 0
+enableCompileCache      jsFunctionEnableCompileCache      Function 1
 findSourceMap           Bun__JSSourceMap__find           Function 1
 getCompileCacheDir      jsFunctionGetCompileCacheDir      Function 0
 globalPaths             getGlobalPathsObject              PropertyCallback

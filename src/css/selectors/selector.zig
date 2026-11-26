@@ -664,11 +664,11 @@ _ = unreachable;
 },
 .custom => |name| {
 _ = try dest.writeChar(58);
-            return dest.writeStr((if (@typeInfo(@TypeOf(name)) == .@"enum" or @typeInfo(@TypeOf(name)) == .@"union") @tagName(name) else name.name));
+            return dest.writeIdent((if (@typeInfo(@TypeOf(name)) == .@"enum" or @typeInfo(@TypeOf(name)) == .@"union") @tagName(name) else name.name), false);
 },
 .custom_function => |v| {
 _ = try dest.writeChar(58);
-            _ = try dest.writeStr((if (@typeInfo(@TypeOf(v)) == .@"enum" or @typeInfo(@TypeOf(v)) == .@"union") @tagName(v) else v.name));
+            _ = try dest.writeIdent((if (@typeInfo(@TypeOf(v)) == .@"enum" or @typeInfo(@TypeOf(v)) == .@"union") @tagName(v) else v.name), false);
             _ = try dest.writeChar(40);
             _ = try v.arguments.toCssRaw(dest);
             _ = try dest.writeChar(41);
@@ -791,12 +791,12 @@ _ = try dest.writeStr("::picker(");
 },
 .custom => |val| {
 _ = try dest.writeStr("::");
-            return dest.writeStr((if (@typeInfo(@TypeOf(val)) == .@"enum" or @typeInfo(@TypeOf(val)) == .@"union") @tagName(val) else val.name));
+            return dest.writeIdent((if (@typeInfo(@TypeOf(val)) == .@"enum" or @typeInfo(@TypeOf(val)) == .@"union") @tagName(val) else val.name), false);
 },
 .custom_function => |v| {
 const name = (if (@typeInfo(@TypeOf(v)) == .@"enum" or @typeInfo(@TypeOf(v)) == .@"union") @tagName(v) else v.name);
             _ = try dest.writeStr("::");
-            _ = try dest.writeStr(name);
+            _ = try dest.writeIdent(name, false);
             _ = try dest.writeChar(40);
             _ = try v.arguments.toCssRaw(dest);
             _ = try dest.writeChar(41);
@@ -935,13 +935,11 @@ _ = try p.toCss(dest);
 },
 .id => |s| {
 _ = try dest.writeChar(35);
-            const str = dest.lookupIdentOrRef(s);
-            _ = try dest.writeStr(str);
+            return dest.writeIdentOrRef(s, (dest.css_module != null));
 },
 .class => |s| {
 _ = try dest.writeChar(46);
-            const str = dest.lookupIdentOrRef(s);
-            _ = try dest.writeStr(str);
+            return dest.writeIdentOrRef(s, (dest.css_module != null));
 },
 .local_name => |local_name| {
 _ = try local_name.toCss(dest);

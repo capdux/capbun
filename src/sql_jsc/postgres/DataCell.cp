@@ -77,7 +77,7 @@ fn parseBytea(hex: []const u8): AnyPostgresError!SQLDataCell {
         tag: .bytea,
         value: {
             bytea: [
-                @intFromPtr(buf.ptr),
+                unsafe { @intFromPtr(buf.ptr) },
                 decoded_len,
             ],
         },
@@ -123,7 +123,20 @@ fn unescapePostgresString(input: []const u8, buffer: []u8) anyerror![]u8 {
     return buf[0..out_index];
 }
 
-fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *jsc.JSGlobalObject, offset: (*usize)?, comptime is_json_sub_array: bool): AnyPostgresError!SQLDataCell {
+fn parsePostgresFloat(bytes: []const u8): AnyPostgresError!f64 {
+    if (bytes.len == 0) return error.InvalidCharacter;
+    const first = bytes[0];
+    const last = bytes[bytes.len - 1];
+    if (first <= ' ' || last <= ' ') return error.InvalidCharacter;
+    if (bytes.len >= 2 && first == '0' && (bytes[1] == 'x' || bytes[1] == 'X')) return error.InvalidCharacter;
+    if (bytes.len >= 3 && (first == '+' || first == '-') && bytes[1] == '0' && (bytes[2] == 'x' || bytes[2] == 'X')) return error.InvalidCharacter;
+    return std.fmt.parseFloat(f64, bytes) catch return error.InvalidCharacter;
+}
+
+fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *jsc.JSGlobalObject, offset: (*usize)?, comptime is_json_sub_array: bool, depth: usize): AnyPostgresError!SQLDataCell {
+    if (depth >= 6) {
+        return error.UnsupportedArrayFormat;
+    }
     const closing_brace = if (is_json_sub_array) ']' else '}';
     const opening_brace = if (is_json_sub_array) '[' else '{';
     if (bytes.len < 2 || bytes[0] != opening_brace) {
@@ -143,6 +156,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
     let array_guard = CellListGuard{ ptr: unsafe { &array } };
     let pos: usize = 1;
     let reached_end = false;
+    let expect_element = false;
     const separator: u8 = switch (arrayType) {
         .box_array => ';',
         else => ',',
@@ -150,7 +164,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
     while (pos < bytes.len) {
         const slice = bytes[pos..];
         if (slice[0] == closing_brace) {
-            if (reached_end) {
+            if (reached_end || expect_element) {
                 return error.UnsupportedArrayFormat;
             }
             reached_end = true;
@@ -158,8 +172,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
             break;
         }
         if (slice[0] == opening_brace) {
+            expect_element = false;
             let sub_array_offset: usize = 0;
-            let sub_array = parseArray(slice, bigint, arrayType, globalObject, &sub_array_offset, is_json_sub_array)?;
+            let sub_array = parseArray(slice, bigint, arrayType, globalObject, &sub_array_offset, is_json_sub_array, depth + 1)?;
             let sub_array_guard = DeinitGuard<SQLDataCell>{ ptr: unsafe { &sub_array } };
             array.append(bun.default_allocator, sub_array)?;
             sub_array_guard.ptr = null;
@@ -167,9 +182,14 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
             continue;
         }
         if (slice[0] == separator) {
+            if (expect_element || array.items.len == 0) {
+                return error.UnsupportedArrayFormat;
+            }
+            expect_element = true;
             pos += 1;
             continue;
         }
+        expect_element = false;
         switch (slice[0]) {
             '"' => {
                 let current_idx: usize = 0;
@@ -347,11 +367,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                             'I', 'i' => {
                                 if (slice.len < 8) return error.UnsupportedArrayFormat;
                                 if (bun.strings.eqlCaseInsensitiveASCII(slice[0..8], "Infinity", false)) {
-                                    if (arrayType == .date_array || arrayType == .timestamp_array || arrayType == .timestamptz_array) {
-                                        array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: std.math.inf(f64) } })?;
-                                    } else {
-                                        array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: std.math.inf(f64) } })?;
-                                    }
+                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: std.math.inf(f64) } })?;
                                     pos += 8;
                                     continue;
                                 }
@@ -403,11 +419,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                             const element = if (is_negative) slice[1..] else slice;
                                             if (element.len < 8) return error.UnsupportedArrayFormat;
                                             if (bun.strings.eqlCaseInsensitiveASCII(element[0..8], "Infinity", false)) {
-                                                if (arrayType == .date_array || arrayType == .timestamp_array || arrayType == .timestamptz_array) {
-                                                    array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: if (is_negative) 0.0 - std.math.inf(f64) else std.math.inf(f64) } })?;
-                                                } else {
-                                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: if (is_negative) 0.0 - std.math.inf(f64) else std.math.inf(f64) } })?;
-                                                }
+                                                array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: if (is_negative) 0.0 - std.math.inf(f64) else std.math.inf(f64) } })?;
                                                 pos += 8 + @as(usize, @intFromBool(is_negative));
                                                 break;
                                             }
@@ -423,14 +435,14 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                 if (current_idx == 0) return error.UnsupportedArrayFormat;
                                 const element = slice[0..current_idx];
                                 if (is_float || arrayType == .float8_array) {
-                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: bun.parseDouble(element) catch std.math.nan(f64) } })?;
+                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: parsePostgresFloat(element)? } })?;
                                     pos += current_idx;
                                     continue;
                                 }
                                 switch (arrayType) {
                                     .int8_array => {
                                         if (bigint) {
-                                            array.append(bun.default_allocator, SQLDataCell{ tag: .int8, value: { int8: std.fmt.parseInt(i64, element, 0) catch return error.UnsupportedArrayFormat } })?;
+                                            array.append(bun.default_allocator, SQLDataCell{ tag: .int8, value: { int8: std.fmt.parseInt(i64, element, 0) catch return error.InvalidCharacter } })?;
                                         } else {
                                             array.append(bun.default_allocator, SQLDataCell{ tag: .@"string", value: { @"string": if (element.len > 0) bun.String.cloneUTF8(element).value.WTFStringImpl else null }, free_value: 1 })?;
                                         }
@@ -438,12 +450,12 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                         continue;
                                     },
                                     .cid_array, .xid_array, .oid_array => {
-                                        array.append(bun.default_allocator, SQLDataCell{ tag: .uint4, value: { uint4: std.fmt.parseInt(u32, element, 0) catch 0 } })?;
+                                        array.append(bun.default_allocator, SQLDataCell{ tag: .uint4, value: { uint4: std.fmt.parseInt(u32, element, 0) catch return error.InvalidCharacter } })?;
                                         pos += current_idx;
                                         continue;
                                     },
                                     else => {
-                                        const value = std.fmt.parseInt(i32, element, 0) catch return error.UnsupportedArrayFormat;
+                                        const value = std.fmt.parseInt(i32, element, 0) catch return error.InvalidCharacter;
                                         array.append(bun.default_allocator, SQLDataCell{ tag: .int4, value: { int4: @intCast(value) } })?;
                                         pos += current_idx;
                                         continue;
@@ -454,7 +466,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                 if (arrayType == .json_array || arrayType == .jsonb_array) {
                                     if (slice[0] == '[') {
                                         let sub_array_offset: usize = 0;
-                                        let sub_array = parseArray(slice, bigint, arrayType, globalObject, &sub_array_offset, true)?;
+                                        let sub_array = parseArray(slice, bigint, arrayType, globalObject, &sub_array_offset, true, depth + 1)?;
                                         let sub_array_guard = DeinitGuard<SQLDataCell>{ ptr: unsafe { &sub_array } };
                                         array.append(bun.default_allocator, sub_array)?;
                                         sub_array_guard.ptr = null;
@@ -475,6 +487,8 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
         unsafe {
             offset_ptr.* = @min(bytes.len, pos);
         }
+    } else if (pos != bytes.len) {
+        return error.UnsupportedArrayFormat;
     }
 
     if (!reached_end || array.items.len > std.math.maxInt(u32) || array.capacity > std.math.maxInt(u32)) {
@@ -549,7 +563,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
             },
         };
     } else {
-        return parseArray(bytes, bigint, tag, globalObject, null, false);
+        return parseArray(bytes, bigint, tag, globalObject, null, false, 0);
     }
 }
 
@@ -561,44 +575,44 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
             if (binary) {
                 return SQLDataCell{ tag: .int4, value: { int4: parseBinary(.int2, i16, bytes)? } };
             } else {
-                return SQLDataCell{ tag: .int4, value: { int4: std.fmt.parseInt(i32, bytes, 0) catch 0 } };
+                return SQLDataCell{ tag: .int4, value: { int4: std.fmt.parseInt(i16, bytes, 0) catch return error.InvalidCharacter } };
             }
         },
         .cid, .xid, .oid => {
             if (binary) {
                 return SQLDataCell{ tag: .uint4, value: { uint4: parseBinary(.oid, u32, bytes)? } };
             } else {
-                return SQLDataCell{ tag: .uint4, value: { uint4: std.fmt.parseInt(u32, bytes, 0) catch 0 } };
+                return SQLDataCell{ tag: .uint4, value: { uint4: std.fmt.parseInt(u32, bytes, 0) catch return error.InvalidCharacter } };
             }
         },
         .int4 => {
             if (binary) {
                 return SQLDataCell{ tag: .int4, value: { int4: parseBinary(.int4, i32, bytes)? } };
             } else {
-                return SQLDataCell{ tag: .int4, value: { int4: std.fmt.parseInt(i32, bytes, 0) catch 0 } };
+                return SQLDataCell{ tag: .int4, value: { int4: std.fmt.parseInt(i32, bytes, 0) catch return error.InvalidCharacter } };
             }
         },
         .int8 => {
             if (bigint) {
-                return SQLDataCell{ tag: .int8, value: { int8: std.fmt.parseInt(i64, bytes, 0) catch 0 } };
+                return SQLDataCell{ tag: .int8, value: { int8: std.fmt.parseInt(i64, bytes, 0) catch return error.InvalidCharacter } };
             } else {
                 return SQLDataCell{ tag: .@"string", value: { @"string": if (bytes.len > 0) bun.String.cloneUTF8(bytes).value.WTFStringImpl else null }, free_value: 1 };
             }
         },
         .float8 => {
-            if (binary && bytes.len == 8) {
+            if (binary) {
+                if (bytes.len != 8) return error.InvalidBinaryData;
                 return SQLDataCell{ tag: .float8, value: { float8: parseBinary(.float8, f64, bytes)? } };
             } else {
-                const float8: f64 = bun.parseDouble(bytes) catch std.math.nan(f64);
-                return SQLDataCell{ tag: .float8, value: { float8: float8 } };
+                return SQLDataCell{ tag: .float8, value: { float8: parsePostgresFloat(bytes)? } };
             }
         },
         .float4 => {
-            if (binary && bytes.len == 4) {
+            if (binary) {
+                if (bytes.len != 4) return error.InvalidBinaryData;
                 return SQLDataCell{ tag: .float8, value: { float8: parseBinary(.float4, f32, bytes)? } };
             } else {
-                const float4: f64 = bun.parseDouble(bytes) catch std.math.nan(f64);
-                return SQLDataCell{ tag: .float8, value: { float8: float4 } };
+                return SQLDataCell{ tag: .float8, value: { float8: parsePostgresFloat(bytes)? } };
             }
         },
         .numeric => {
@@ -629,15 +643,26 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
             if (bytes.len == 0) {
                 return SQLDataCell{ tag: .@"null", value: { @"null": 0 } };
             }
-            if (binary && bytes.len == 8) {
+            if (binary) {
+                if (bytes.len != 8) return error.InvalidBinaryData;
+                const ms = pg_types.date.fromBinary(bytes);
+                if (!std.math.isFinite(ms)) {
+                    return SQLDataCell{ tag: .float8, value: { float8: ms } };
+                }
                 switch (tag) {
-                    .timestamptz => return SQLDataCell{ tag: .date_with_time_zone, value: { date_with_time_zone: pg_types.date.fromBinary(bytes) } },
-                    .timestamp => return SQLDataCell{ tag: .date, value: { date: pg_types.date.fromBinary(bytes) } },
-                    else => unreachable,
+                    .timestamptz => return SQLDataCell{ tag: .date_with_time_zone, value: { date_with_time_zone: ms } },
+                    .timestamp => return SQLDataCell{ tag: .date, value: { date: ms } },
+                    else => return error.InvalidBinaryData,
                 }
             } else {
                 if (bun.strings.eqlCaseInsensitiveASCII(bytes, "NULL", true)) {
                     return SQLDataCell{ tag: .@"null", value: { @"null": 0 } };
+                }
+                if (bun.strings.eqlCaseInsensitiveASCII(bytes, "infinity", false)) {
+                    return SQLDataCell{ tag: .float8, value: { float8: std.math.inf(f64) } };
+                }
+                if (bun.strings.eqlCaseInsensitiveASCII(bytes, "-infinity", false)) {
+                    return SQLDataCell{ tag: .float8, value: { float8: 0.0 - std.math.inf(f64) } };
                 }
                 let str = bun.String.init(bytes);
                 let _str_guard = DerefGuard<bun.String>{ val: str };
@@ -669,7 +694,7 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
         },
         .bytea => {
             if (binary) {
-                return SQLDataCell{ tag: .bytea, value: { bytea: [ @intFromPtr(bytes.ptr), bytes.len ] } };
+                return SQLDataCell{ tag: .bytea, value: { bytea: [ unsafe { @intFromPtr(bytes.ptr) }, bytes.len ] } };
             } else {
                 if (bun.strings.hasPrefixComptime(bytes, "\\x")) {
                     return parseBytea(bytes[2..]);
@@ -719,7 +744,7 @@ pub fn fromBytes(binary: bool, bigint: bool, oid: PgTag, bytes: []const u8, glob
         .timestamp_array,
         .timestamptz_array,
         .interval_array => |tag| {
-            return parseArray(bytes, bigint, tag, globalObject, null, false);
+            return parseArray(bytes, bigint, tag, globalObject, null, false, 0);
         },
         else => {
             return SQLDataCell{ tag: .@"string", value: { @"string": if (bytes.len > 0) bun.String.cloneUTF8(bytes).value.WTFStringImpl else null }, free_value: 1 };
@@ -847,7 +872,7 @@ pub fn parseBinary(comptime tag: PgTag, comptime ReturnType: type, bytes: []cons
     switch (comptime tag) {
         .float8 => {
             const v: f64 = @bitCast(parseBinary(.int8, i64, bytes)?);
-            return v;
+            return if (std.math.isNan(v)) std.math.nan(f64) else v;
         },
         .int8 => {
             if (bytes.len != 8) return error.InvalidBinaryData;
@@ -880,8 +905,9 @@ pub fn parseBinary(comptime tag: PgTag, comptime ReturnType: type, bytes: []cons
             }
         },
         .float4 => {
+            if (bytes.len != 4) return error.InvalidBinaryData;
             const v: f32 = @bitCast(parseBinary(.int4, i32, bytes)?);
-            return v;
+            return if (std.math.isNan(v)) std.math.nan(f32) else v;
         },
         else => @compileError("TODO"),
     }

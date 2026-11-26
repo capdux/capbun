@@ -2842,7 +2842,7 @@ extern "C" napi_status napi_new_instance(napi_env env, napi_value constructor,
 
 extern "C" napi_status napi_instanceof(napi_env env, napi_value object, napi_value constructor, bool* result)
 {
-    NAPI_PREAMBLE_NO_THROW_SCOPE(env);
+    NAPI_PREAMBLE(env);
     NAPI_CHECK_ARG(env, result);
     NAPI_CHECK_ARG(env, object);
     NAPI_CHECK_ARG(env, constructor);
@@ -2853,10 +2853,8 @@ extern "C" napi_status napi_instanceof(napi_env env, napi_value object, napi_val
     JSValue constructorValue = toJS(constructor);
     JSC::JSObject* constructorObject = constructorValue.getObject();
 
-    auto scope = DECLARE_THROW_SCOPE(JSC::getVM(globalObject));
-
-    if (!constructorObject || !constructorValue.isConstructor()) {
-        throwVMError(globalObject, scope, JSC::createTypeError(globalObject, "Constructor must be a function"_s));
+    if (!constructorObject || !constructorValue.isCallable()) {
+        throwVMError(globalObject, throwScope, JSC::createTypeError(globalObject, "Constructor must be a function"_s));
         return napi_set_last_error(env, napi_pending_exception);
     }
 
@@ -2866,7 +2864,7 @@ extern "C" napi_status napi_instanceof(napi_env env, napi_value object, napi_val
         *result = constructorObject->hasInstance(globalObject, objectValue);
     }
 
-    return napi_set_last_error(env, napi_ok);
+    NAPI_RETURN_SUCCESS_UNLESS_EXCEPTION(env);
 }
 
 extern "C" napi_status napi_call_function(napi_env env, napi_value recv,

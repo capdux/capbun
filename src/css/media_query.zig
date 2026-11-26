@@ -894,7 +894,7 @@ _ = try dest.writeStr("print");
 _ = try dest.writeStr("screen");
 },
 .custom => |desc| {
-_ = try dest.writeStr(desc);
+_ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier(desc, dest)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });
 },
 }
             if (self.condition) |condition| {

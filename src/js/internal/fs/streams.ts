@@ -608,7 +608,9 @@ function underscoreWriteFast(this: FSStream, data: any, encoding: any, cb: any) 
 const writablePrototypeWrite = Writable.prototype.write;
 const kWriteMonkeyPatchDefense = Symbol("!");
 function writeFast(this: FSStream, data: any, encoding: any, cb: any) {
-  if (this[kWriteMonkeyPatchDefense]) return writablePrototypeWrite.$call(this, data, encoding, cb);
+  if (this[kWriteMonkeyPatchDefense] || this.writableEnded || this.destroyed) {
+    return writablePrototypeWrite.$call(this, data, encoding, cb);
+  }
 
   if (typeof encoding === "function") {
     cb = encoding;

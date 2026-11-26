@@ -111,6 +111,8 @@ interface CppSQLStatement {
   get: (...args: TODO[]) => TODO;
   all: (...args: TODO[]) => TODO;
   iterate: (...args: TODO[]) => TODO;
+  next: () => TODO;
+  reset: () => void;
   as: (...args: TODO[]) => TODO;
   values: (...args: TODO[]) => TODO;
   raw: (...args: TODO[]) => TODO;
@@ -165,6 +167,7 @@ class Statement {
   }
 
   #raw: CppSQLStatement;
+  #generation = 0;
 
   get: SqliteTypes.Statement["get"];
   all: SqliteTypes.Statement["all"];
@@ -198,28 +201,59 @@ class Statement {
   }
 
   #getNoArgs() {
+    this.#generation++;
     return this.#raw.get();
   }
 
   #allNoArgs() {
+    this.#generation++;
     return this.#raw.all();
   }
 
-  *#iterateNoArgs() {
-    for (let res = this.#raw.iterate(); res; res = this.#raw.iterate()) {
-      yield res;
+  #iterateNoArgs() {
+    const gen = ++this.#generation;
+    return this.#iterateLoop(gen);
+  }
+
+  *#iterateLoop(gen: number, firstArg?: any, spread = false) {
+    let done = false;
+    try {
+      if (gen !== this.#generation) {
+        throw new Error("This iterator was invalidated: its statement was run again");
+      }
+      let res =
+        firstArg !== undefined
+          ? spread
+            ? this.#raw.iterate(...firstArg)
+            : this.#raw.iterate(firstArg)
+          : this.#raw.iterate();
+      while (res) {
+        yield res;
+        if (gen !== this.#generation) {
+          throw new Error("This iterator was invalidated: its statement was run again");
+        }
+        res = this.#raw.next();
+      }
+      done = true;
+    } finally {
+      if (!done && gen === this.#generation && !this.#raw.isFinalized) {
+        this.#raw.reset();
+      }
     }
   }
 
   #valuesNoArgs() {
+    this.#generation++;
     return this.#raw.values();
   }
 
   #rawNoArgs() {
+    this.#generation++;
     return this.#raw.raw();
   }
 
   #runNoArgs() {
+    this.#generation++;
     this.#raw.run(internalFieldTuple);
 
     return createChangesObject();
@@ -242,6 +276,7 @@ class Statement {
 
   #get(...args) {
     if (args.length === 0) return this.#getNoArgs();
+    this.#generation++;
     var arg0 = args[0];
     // ["foo"] => ["foo"]
     // ("foo") => ["foo"]
@@ -254,6 +289,7 @@ class Statement {
 
   #all(...args) {
     if (args.length === 0) return this.#allNoArgs();
+    this.#generation++;
     var arg0 = args[0];
     // ["foo"] => ["foo"]
     // ("foo") => ["foo"]
@@ -264,24 +300,22 @@ class Statement {
       : this.#raw.all(...args);
   }
 
-  *#iterate(...args) {
-    if (args.length === 0) return yield* this.#iterateNoArgs();
+  #iterate(...args) {
+    if (args.length === 0) return this.#iterateNoArgs();
+    const gen = ++this.#generation;
     var arg0 = args[0];
     // ["foo"] => ["foo"]
     // ("foo") => ["foo"]
     // (Uint8Array(1024)) => [Uint8Array]
     // (123) => [123]
-    let res =
-      !isArray(arg0) && (!arg0 || typeof arg0 !== "object" || isTypedArray(arg0))
-        ? this.#raw.iterate(args)
-        : this.#raw.iterate(...args);
-    for (; res; res = this.#raw.iterate()) {
-      yield res;
-    }
+    return !isArray(arg0) && (!arg0 || typeof arg0 !== "object" || isTypedArray(arg0))
+      ? this.#iterateLoop(gen, args, false)
+      : this.#iterateLoop(gen, args, true);
   }
 
   #values(...args) {
     if (args.length === 0) return this.#valuesNoArgs();
+    this.#generation++;
     var arg0 = args[0];
     // ["foo"] => ["foo"]
     // ("foo") => ["foo"]
@@ -294,6 +328,7 @@ class Statement {
 
   #rawValues(...args) {
     if (args.length === 0) return this.#rawNoArgs();
+    this.#generation++;
     var arg0 = args[0];
     // ["foo"] => ["foo"]
     // ("foo") => ["foo"]
@@ -310,6 +345,7 @@ class Statement {
       return createChangesObject();
     }
 
+    this.#generation++;
     var arg0 = args[0];
 
     if (!isArray(arg0) && (!arg0 || typeof arg0 !== "object" || isTypedArray(arg0))) {
@@ -326,6 +362,7 @@ class Statement {
   }
 
   get columnTypes() {
+    this.#generation++;
     return this.#raw.columnTypes;
   }
 
@@ -377,7 +414,9 @@ class Database implements SqliteTypes.Database {
           }
         }
 
-        this.#handle = Database.#deserialize(filenameGiven, this.#internalFlags, deserializeFlags, this);
+        const [handle, memory] = Database.#deserialize(filenameGiven, this.#internalFlags, deserializeFlags, this);
+        this.#handle = handle;
+        this.#memory = memory;
         this.filename = ":memory:";
 
         return;
@@ -497,7 +536,7 @@ class Database implements SqliteTypes.Database {
   fileControl(_cmd, _arg) {
     const handle = this.#handle;
 
-    if (arguments.length <= 2) {
+    if (arguments.length === 1 || (arguments.length === 2 && typeof arguments[0] !== "string")) {
       return SQL.fcntl(handle, null, arguments[0], arguments[1]);
     }
 
@@ -505,9 +544,12 @@ class Database implements SqliteTypes.Database {
     return SQL.fcntl(handle, ...arguments);
   }
 
+  #memory: CppSQLStatement | undefined;
+
   close(throwOnError = false) {
     // native close finalizes every kOwnedByDatabaseFlag statement (query cache + transaction controller)
     this.#queryCache.$clear();
+    this.#memory = undefined;
     controllers?.delete(this);
     return SQL.close(this.#handle, throwOnError);
   }
@@ -567,9 +609,10 @@ class Database implements SqliteTypes.Database {
       return stmt;
     }
 
-    stmt = this[kPrepareOwned](query, constants.SQLITE_PREPARE_PERSISTENT);
+    const shouldCache = query.length <= 64 * 1024;
+    stmt = this[kPrepareOwned](query, shouldCache ? constants.SQLITE_PREPARE_PERSISTENT : 0);
     const max = Database.MAX_QUERY_CACHE_SIZE;
-    if (max > 0) {
+    if (shouldCache && max > 0) {
       // evicted statements stay usable; close() still finalizes them via kOwnedByDatabaseFlag
       if (cache.$size >= max) cache.$delete(cache.$keys().next().value);
       cache.$set(query, stmt);

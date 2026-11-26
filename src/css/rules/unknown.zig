@@ -55,7 +55,7 @@ pub const UnknownAtRule = struct {
 
 pub fn toCss(self: UnknownAtRule, dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(64);
-            _ = try dest.writeStr(self.name);
+            _ = (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier(self.name, dest)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); });
             if ((self.prelude.v.items.len > 0)) {
                 _ = try dest.writeChar(32);
                 _ = try self.prelude.toCss(dest, false);

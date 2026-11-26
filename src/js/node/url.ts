@@ -76,16 +76,19 @@ var protocolPattern = /^([a-z0-9.+-]+:)/i,
   hostnameMaxLen = 255,
   // protocols that can allow "unsafe" and "unwise" chars.
   unsafeProtocol = {
+    __proto__: null,
     javascript: true,
     "javascript:": true,
   },
   // protocols that never have a hostname.
   hostlessProtocol = {
+    __proto__: null,
     javascript: true,
     "javascript:": true,
   },
   // protocols that always contain a // bit.
   slashedProtocol = {
+    __proto__: null,
     http: true,
     https: true,
     ftp: true,
@@ -109,7 +112,9 @@ function urlParse(
   try {
     u.parse(url, parseQueryString, slashesDenoteHost);
   } catch (e) {
-    $putByIdDirect(e, "input", url);
+    if ($isObject(e) && e.code === "ERR_INVALID_URL") {
+      $putByIdDirect(e, "input", url);
+    }
     throw e;
   }
   return u;
@@ -200,7 +205,7 @@ Url.prototype.parse = function parse(url: string, parseQueryString?: boolean, sl
       if (simplePath[2]) {
         this.search = simplePath[2];
         if (parseQueryString) {
-          this.query = new URLSearchParams(this.search.slice(1)).toJSON();
+          this.query = Object.setPrototypeOf(new URLSearchParams(this.search.slice(1)).toJSON(), null);
         } else {
           this.query = this.search.slice(1);
         }
@@ -229,13 +234,13 @@ Url.prototype.parse = function parse(url: string, parseQueryString?: boolean, sl
   let slashes;
   if (slashesDenoteHost || proto || rest.match(/^\/\/[^@/]+@[^@/]+/)) {
     slashes = rest.substring(0, 2) === "//";
-    if (slashes && !(proto && hostlessProtocol[proto])) {
+    if (slashes && !(lowerProto && hostlessProtocol[lowerProto])) {
       rest = rest.substring(2);
       this.slashes = true;
     }
   }
 
-  if (!hostlessProtocol[proto] && (slashes || (proto && !slashedProtocol[proto]))) {
+  if (!hostlessProtocol[lowerProto] && (slashes || (lowerProto && !slashedProtocol[lowerProto]))) {
     /*
      * there's a hostname.
      * the first instance of /, ?, ;, or # ends the host.
@@ -343,7 +348,14 @@ Url.prototype.parse = function parse(url: string, parseQueryString?: boolean, sl
      * you call it with a domain that already is ASCII-only.
      */
     if (this.hostname) {
-      this.hostname = new URL("http://" + this.hostname).hostname;
+      if (ipv6Hostname) {
+        this.hostname = this.hostname.replace(/[\t\r\n]/g, "");
+        if (/[\0 #/?@\[\\\]]/.test(this.hostname.slice(1, -1))) {
+          throw $ERR_INVALID_URL(url);
+        }
+      } else {
+        this.hostname = new URL("http://" + this.hostname).hostname;
+      }
     }
 
     var p = this.port ? ":" + this.port : "";
@@ -399,13 +411,13 @@ Url.prototype.parse = function parse(url: string, parseQueryString?: boolean, sl
     this.query = rest.substring(qm + 1);
     if (parseQueryString) {
       const query = this.query;
-      this.query = new URLSearchParams(query).toJSON();
+      this.query = Object.setPrototypeOf(new URLSearchParams(query).toJSON(), null);
     }
     rest = rest.slice(0, qm);
   } else if (parseQueryString) {
     // no query string, but parseQueryString still requested
     this.search = null;
-    this.query = {};
+    this.query = Object.create(null);
   }
   if (rest) {
     this.pathname = rest;
@@ -461,8 +473,8 @@ function getHostname(self, rest, hostname: string, url) {
 }
 
 // format a parsed object into a url string
-declare function urlFormat(urlObject: string | URL | Url): string;
-function urlFormat(urlObject: unknown) {
+declare function urlFormat(urlObject: string | URL | Url, options?: any): string;
+function urlFormat(urlObject: unknown, options?: any) {
   /*
    * ensure it's an object, and not a string url.
    * If it's an obj, this is a no-op.
@@ -474,6 +486,60 @@ function urlFormat(urlObject: unknown) {
     // NOTE: $isObject returns true for functions
   } else if (typeof urlObject !== "object" || urlObject === null) {
     throw $ERR_INVALID_ARG_TYPE("urlObject", ["Object", "string"], urlObject);
+  }
+
+  if (urlObject instanceof URL) {
+    let auth = true;
+    let fragment = true;
+    let search = true;
+    let unicode = false;
+    if (options !== undefined) {
+      if (typeof options !== "object" || options === null) {
+        throw $ERR_INVALID_ARG_TYPE("options", "Object", options);
+      }
+      if (options.auth !== undefined) auth = Boolean(options.auth);
+      if (options.fragment !== undefined) fragment = Boolean(options.fragment);
+      if (options.search !== undefined) search = Boolean(options.search);
+      if (options.unicode !== undefined) unicode = Boolean(options.unicode);
+    }
+
+    let href = urlObject.href;
+    const hashIdx = href.indexOf("#");
+    const hashPart = hashIdx !== -1 && fragment ? href.slice(hashIdx) : "";
+    let beforeHash = hashIdx !== -1 ? href.slice(0, hashIdx) : href;
+    if (!search) {
+      const qIdx = beforeHash.indexOf("?");
+      if (qIdx !== -1) {
+        beforeHash = beforeHash.slice(0, qIdx);
+      }
+    }
+
+    const protoLen = urlObject.protocol.length;
+    if (beforeHash.slice(protoLen, protoLen + 2) === "//") {
+      const hasAuth = Boolean(urlObject.username || urlObject.password);
+      const afterSlashes = protoLen + 2;
+      let hostStart = afterSlashes;
+      if (hasAuth) {
+        const atIdx = beforeHash.indexOf("@", afterSlashes);
+        if (atIdx !== -1) {
+          if (!auth) {
+            beforeHash = beforeHash.slice(0, afterSlashes) + beforeHash.slice(atIdx + 1);
+          } else {
+            hostStart = atIdx + 1;
+          }
+        }
+      }
+      if (unicode && urlObject.hostname && !urlObject.hostname.startsWith("[")) {
+        const unicodeHost = domainToUnicode(urlObject.hostname);
+        if (unicodeHost && unicodeHost !== urlObject.hostname) {
+          beforeHash =
+            beforeHash.slice(0, hostStart) +
+            unicodeHost +
+            beforeHash.slice(hostStart + urlObject.hostname.length);
+        }
+      }
+    }
+    return beforeHash + hashPart;
   }
 
   if (!(urlObject instanceof Url)) {
@@ -920,6 +986,83 @@ const enum Char {
   ZERO_WIDTH_NOBREAK_SPACE = 65279, // \uFEFF
 }
 
+function decodePercentBytes(pathname: string): Buffer {
+  const bytes: number[] = [];
+  for (let i = 0; i < pathname.length; i++) {
+    const code = pathname.charCodeAt(i);
+    if (code === Char.PERCENT && i + 2 < pathname.length) {
+      const hi = pathname.charCodeAt(i + 1);
+      const lo = pathname.charCodeAt(i + 2);
+      const h =
+        hi >= 48 && hi <= 57 ? hi - 48 : hi >= 65 && hi <= 70 ? hi - 55 : hi >= 97 && hi <= 102 ? hi - 87 : -1;
+      const l =
+        lo >= 48 && lo <= 57 ? lo - 48 : lo >= 65 && lo <= 70 ? lo - 55 : lo >= 97 && lo <= 102 ? lo - 87 : -1;
+      if (h !== -1 && l !== -1) {
+        bytes.push((h << 4) | l);
+        i += 2;
+        continue;
+      }
+    }
+    if (code < 0x80) {
+      bytes.push(code);
+    } else {
+      const encoded = Buffer.from(pathname[i]);
+      for (let j = 0; j < encoded.length; j++) {
+        bytes.push(encoded[j]);
+      }
+    }
+  }
+  return Buffer.from(bytes);
+}
+
+function fileURLToPathBuffer(path: string | URL, options?: { windows?: boolean }): Buffer {
+  let urlObj: any;
+  if (typeof path === "string") {
+    urlObj = new URL(path);
+  } else if (
+    typeof path === "object" &&
+    path !== null &&
+    !(path instanceof Url) &&
+    typeof (path as any).href === "string" &&
+    typeof (path as any).protocol === "string" &&
+    typeof (path as any).pathname === "string" &&
+    typeof (path as any).hostname === "string"
+  ) {
+    urlObj = path;
+  } else {
+    throw $ERR_INVALID_ARG_TYPE("path", ["string", "URL"], path);
+  }
+
+  if (urlObj.protocol !== "file:") {
+    throw $ERR_INVALID_URL_SCHEME("The URL must be of scheme file");
+  }
+
+  const isWindows = options?.windows ?? process.platform === "win32";
+  const hostname: string = urlObj.hostname;
+  let pathname: string = urlObj.pathname;
+
+  if (isWindows) {
+    if (hostname !== "" && hostname !== "localhost") {
+      return Buffer.concat([Buffer.from(`\\\\${hostname}`), decodePercentBytes(pathname.replace(/\//g, "\\"))]);
+    }
+    if (
+      pathname.length < 3 ||
+      pathname.charCodeAt(0) !== Char.FORWARD_SLASH ||
+      !((pathname.charCodeAt(1) >= 65 && pathname.charCodeAt(1) <= 90) || (pathname.charCodeAt(1) >= 97 && pathname.charCodeAt(1) <= 122)) ||
+      pathname.charCodeAt(2) !== Char.COLON
+    ) {
+      throw $ERR_INVALID_FILE_URL_PATH("File URL path must be absolute");
+    }
+    pathname = pathname.slice(1).replace(/\//g, "\\");
+    return decodePercentBytes(pathname);
+  }
+
+  if (hostname !== "") {
+    throw $ERR_INVALID_FILE_URL_HOST(`File URL host must be "localhost" or empty on ${process.platform}`);
+  }
+  return decodePercentBytes(pathname);
+}
+
 export default {
   parse: urlParse,
   resolve: urlResolve,
@@ -930,6 +1073,7 @@ export default {
   URL,
   pathToFileURL: Bun.pathToFileURL,
   fileURLToPath: Bun.fileURLToPath,
+  fileURLToPathBuffer,
   urlToHttpOptions,
   domainToASCII,
   domainToUnicode,

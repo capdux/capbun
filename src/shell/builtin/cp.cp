@@ -292,6 +292,12 @@ pub struct ShellCpTask {
         }
     }
 
+    static fn joinZOwned(spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8): [:0]const u8 {
+        const needed = ResolvePath.joinNeeded(parts);
+        bun.handleOom(spill.resize(bun.default_allocator, @max(needed, 1)));
+        return ResolvePath.joinZBuf(spill.items, parts, .auto);
+    }
+
     fn runFromThreadPoolImpl(*_): bun.shell.ShellErr? {
         let src_spill: std.ArrayListUnmanaged(u8) = {};
         defer src_spill.deinit(bun.default_allocator);
@@ -306,7 +312,7 @@ pub struct ShellCpTask {
                 _.cwd_path[0..],
                 _.src[0..],
             ];
-            src = bun.handleOom(ResolvePath.joinZSpill(&src_spill, bun.default_allocator, &parts, .auto));
+            src = joinZOwned(&src_spill, &parts);
         }
 
         let tgt: [:0]const u8 = _.tgt;
@@ -315,7 +321,7 @@ pub struct ShellCpTask {
                 _.cwd_path[0..],
                 _.tgt[0..],
             ];
-            tgt = bun.handleOom(ResolvePath.joinZSpill(&tgt_spill, bun.default_allocator, &parts, .auto));
+            tgt = joinZOwned(&tgt_spill, &parts);
         }
 
         const src_is_dir = switch (_.isDir(src)) {
@@ -360,7 +366,7 @@ pub struct ShellCpTask {
                     tgt[0..tgt.len],
                     basename,
                 ];
-                tgt = bun.handleOom(ResolvePath.joinZSpill(&tgt_join_spill, bun.default_allocator, &parts, .auto));
+                tgt = joinZOwned(&tgt_join_spill, &parts);
             } else if (_.operands == 2) {
             } else {
                 const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "directory {s} does not exist", .{_.tgt}));

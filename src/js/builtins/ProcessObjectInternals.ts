@@ -55,6 +55,9 @@ export function getStdioWriteStream(
     stream = new fs.WriteStream(null, { autoClose: false, fd, $fastPath: true });
     stream.readable = false;
     stream._type = "fs";
+    if (fdType === BunProcessStdinFdType.file) {
+      stream._writableState.autoDestroy = true;
+    }
 
     // When stdout/stderr are piped or connected to a socket, they should have Symbol.asyncIterator
     // to match Node.js behavior where they become Duplex streams (Socket)

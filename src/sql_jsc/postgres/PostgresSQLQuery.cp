@@ -452,7 +452,9 @@ pub enum QueryStatus: u8 {
                                 _.flags.binary = _.statement.?.fields.len > 0;
                                 debug("bindAndExecute", .{});
 
+                                const saved_write_len = connection.write_buffer.byte_list.len;
                                 PostgresRequest.bindAndExecute(globalObject, _.statement.?, binding_value, columns_value, PostgresSQLConnection.Writer, writer) catch e => {
+                                    connection.write_buffer.byte_list.len = saved_write_len;
                                     _.statement = null;
                                     stmt.deref();
                                     _.deref();

@@ -80,7 +80,8 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn deepClone(self: SupportsDeclaration, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            const self_val = self;
+            return css.implementDeepClone(@This(), (&self_val), allocator);
     }
 };
 
@@ -439,7 +440,7 @@ const property_id = decl.property_id;
                     @field(p, field) = true;
                     _ = (blk_catch_3: { break :blk_catch_3 ((css.serializer.serializeName(name, dest)) catch |__ce_3| { _ = &__ce_3; return dest.addFmtError(); }); });
                     _ = try dest.delim(58, false);
-                    _ = try dest.writeStr(value);
+                    _ = try dest.writeStrWithNewlines(value);
                 }
             }
             if ((prefix != css.VendorPrefix{ .none = true })) {
@@ -449,11 +450,11 @@ const property_id = decl.property_id;
 },
 .selector => |sel| {
 _ = try dest.writeStr("selector(");
-            _ = try dest.writeStr(sel);
+            _ = try dest.writeStrWithNewlines(sel);
             _ = try dest.writeChar(41);
 },
 .unknown => |unk| {
-_ = try dest.writeStr(unk);
+_ = try dest.writeStrWithNewlines(unk);
 },
 }
     }

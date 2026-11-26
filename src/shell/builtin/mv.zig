@@ -146,14 +146,11 @@ pub fn runFromThreadPool(self: *ShellMvCheckTargetTask) void {
             const fd = (switch (ShellSyscall.openat(self.cwd, self.target, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
 .err => |e| {
 {
-                switch (e.getErrno()) {
-.NOTDIR => {
-self.result = .{ .result = null };
-},
-else => {
-self.result = .{ .err = e };
-},
-}
+                if ((e.getErrno() == .NOTDIR)) {
+                    self.result = .{ .result = null };
+                } else {
+                    self.result = .{ .err = e };
+                }
                 return;
             }
 },
@@ -218,7 +215,7 @@ self.err = (if ((e.path.len == 0)) e.withPath(src) else e);
             switch (Syscall.renameat(self.cwd, src, self.cwd, self.target)) {
 .err => |e| {
 if ((e.getErrno() == .XDEV)) {
-                _ = self.moveAcrossFilesystems(self.cwd, src, self.cwd, self.target, self.target);
+                _ = self.moveAcrossFilesystems(self.cwd, src, self.cwd, self.target, self.target, false);
                 return;
             }
             if ((e.getErrno() == .NOTDIR)) {
@@ -291,7 +288,7 @@ var spill: std.ArrayListUnmanaged(u8) = .{};
             const parts: [2][]const u8 = .{ self.target[0..], ResolvePath.basename(src) };
             const target_path = bun.handleOom(ResolvePath.joinZSpill((&spill), bun.default_allocator, (&parts), .auto));
             if ((e.getErrno() == .XDEV)) {
-                return self.moveAcrossFilesystems(self.cwd, src, self.target_fd.?, path_in_dir, target_path);
+                return self.moveAcrossFilesystems(self.cwd, src, self.target_fd.?, path_in_dir, target_path, true);
             }
             self.err = e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, target_path[0..])));
             self.err_path_owned = true;
@@ -330,7 +327,7 @@ pub fn setExdevErr(self: *ShellMvBatchedTask, e: Syscall.Error, err_path: []cons
             return false;
     }
 
-pub fn copyEntryExdev(self: *ShellMvBatchedTask, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8) bool {
+pub fn copyEntryExdev(self: *ShellMvBatchedTask, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8, has_dest_parent: bool, dest_parent_dev: u64, dest_parent_ino: u64) bool {
             const st = (switch (Syscall.lstatat(src_dir, src)) {
 .result => |s| s,
 .err => |e| {
@@ -403,6 +400,9 @@ return self.setExdevErr(e, err_path);
                 return true;
             }
             if (std.posix.S.ISDIR(st.mode)) {
+                if (((has_dest_parent and (st.dev == dest_parent_dev)) and (st.ino == dest_parent_ino))) {
+                    return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), err_path);
+                }
                 const sfd = (switch (ShellSyscall.openat(src_dir, src, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
 .result => |f| f,
 .err => |e| {
@@ -444,7 +444,7 @@ return self.setExdevErr(e, err_path);
                     _ = @memcpy(nbuf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len], (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
                     nbuf[cp_cast_int(usize, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len)] = 0;
                     const cname = nbuf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len :0];
-                    if ((!self.copyEntryExdev(sfd, cname, dfd, cname, err_path))) {
+                    if ((!self.copyEntryExdev(sfd, cname, dfd, cname, err_path, has_dest_parent, dest_parent_dev, dest_parent_ino))) {
                         return false;
                     }
                 }
@@ -491,13 +491,19 @@ return;
             _ = (blk_catch_5: { break :blk_catch_5 ((std.posix.unlinkat(dir_fd.cast(), name, std.posix.AT.REMOVEDIR)) catch |__ce_5| { _ = &__ce_5;  }); });
     }
 
-pub fn moveAcrossFilesystems(self: *ShellMvBatchedTask, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8) bool {
+pub fn moveAcrossFilesystems(self: *ShellMvBatchedTask, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8, is_into_dir: bool) bool {
             const st = (switch (Syscall.lstatat(src_dir, src)) {
 .result => |s| s,
 .err => |e| {
 return self.setExdevErr(e, src);
 },
 });
+            var has_dest_parent = false;
+            _ = &has_dest_parent;
+            var dest_parent_dev: u64 = 0;
+            _ = &dest_parent_dev;
+            var dest_parent_ino: u64 = 0;
+            _ = &dest_parent_ino;
             if (std.posix.S.ISDIR(st.mode)) {
                 var cur_fd = dest_dir;
                 _ = &cur_fd;
@@ -507,6 +513,23 @@ return self.setExdevErr(e, src);
                 if (owns_cur) {
                     _ = cur_fd.close();
                 }
+                }
+                if (std.fs.path.dirname(dest)) |parent_rel| {
+                    _ = &parent_rel;
+                    var pbuf: bun.PathBuffer = undefined;
+                    _ = &pbuf;
+                    if ((parent_rel.len < pbuf.len)) {
+                        _ = @memcpy(pbuf[0..parent_rel.len], parent_rel);
+                        pbuf[cp_cast_int(usize, parent_rel.len)] = 0;
+                        if ((switch (ShellSyscall.openat(dest_dir, pbuf[0..parent_rel.len :0], (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |fd| fd,
+.err => null,
+})) |pfd| {
+                            _ = &pfd;
+                            cur_fd = pfd;
+                            owns_cur = true;
+                        }
+                    }
                 }
                 var prev_dev = st.dev;
                 _ = &prev_dev;
@@ -519,8 +542,13 @@ return self.setExdevErr(e, src);
 .result => |s| s,
 .err => break,
 });
+                    if (first) {
+                        has_dest_parent = true;
+                        dest_parent_dev = cst.dev;
+                        dest_parent_ino = cst.ino;
+                    }
                     if (((cst.dev == st.dev) and (cst.ino == st.ino))) {
-                        return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), err_path);
+                        return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), (if (is_into_dir) err_path else src));
                     }
                     if ((((!first) and (cst.dev == prev_dev)) and (cst.ino == prev_ino))) {
                         break;
@@ -572,7 +600,7 @@ return self.setExdevErr(e, err_path);
 
 },
 }
-            if ((!self.copyEntryExdev(src_dir, src, dest_dir, dest, err_path))) {
+            if ((!self.copyEntryExdev(src_dir, src, dest_dir, dest, err_path, has_dest_parent, dest_parent_dev, dest_parent_ino))) {
                 return false;
             }
             _ = self.removeEntryExdev(src_dir, src);

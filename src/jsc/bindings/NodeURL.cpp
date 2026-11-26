@@ -2,6 +2,8 @@
 #include "wtf/URLParser.h"
 #include <unicode/uidna.h>
 
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
+
 namespace Bun {
 
 JSC_DEFINE_HOST_FUNCTION(jsDomainToASCII, (JSC::JSGlobalObject * globalObject, JSC::CallFrame* callFrame))
@@ -15,18 +17,10 @@ JSC_DEFINE_HOST_FUNCTION(jsDomainToASCII, (JSC::JSGlobalObject * globalObject, J
     }
 
     auto arg0 = callFrame->argument(0);
-    if (arg0.isUndefined())
-        return JSC::JSValue::encode(jsUndefined());
-    if (arg0.isNull())
-        return JSC::JSValue::encode(jsNull());
-    if (!arg0.isString()) {
-        throwTypeError(globalObject, scope, "the \"domain\" argument must be a string"_s);
-        return {};
-    }
-
     auto domain = arg0.toWTFString(globalObject);
+    RETURN_IF_EXCEPTION(scope, {});
     if (domain.isNull())
-        return JSC::JSValue::encode(jsUndefined());
+        return JSC::JSValue::encode(jsEmptyString(vm));
 
     // https://url.spec.whatwg.org/#forbidden-host-code-point
     if (
@@ -82,18 +76,10 @@ JSC_DEFINE_HOST_FUNCTION(jsDomainToUnicode, (JSC::JSGlobalObject * globalObject,
     }
 
     auto arg0 = callFrame->argument(0);
-    if (arg0.isUndefined())
-        return JSC::JSValue::encode(jsUndefined());
-    if (arg0.isNull())
-        return JSC::JSValue::encode(jsNull());
-    if (!arg0.isString()) {
-        throwTypeError(globalObject, scope, "the \"domain\" argument must be a string"_s);
-        return {};
-    }
-
     auto domain = arg0.toWTFString(globalObject);
+    RETURN_IF_EXCEPTION(scope, {});
     if (domain.isNull())
-        return JSC::JSValue::encode(jsUndefined());
+        return JSC::JSValue::encode(jsEmptyString(vm));
 
     // https://url.spec.whatwg.org/#forbidden-host-code-point
     if (
@@ -134,6 +120,25 @@ JSC_DEFINE_HOST_FUNCTION(jsDomainToUnicode, (JSC::JSGlobalObject * globalObject,
     const auto span = domain.span16();
 
     int32_t numCharactersConverted = uidna_nameToUnicode(encoder, span.data(), span.size(), hostnameBuffer, hostnameBufferLength, &processingDetails, &error);
+
+    if (error == U_BUFFER_OVERFLOW_ERROR && numCharactersConverted > 0) {
+        if (static_cast<size_t>(numCharactersConverted) * sizeof(char16_t) > Bun__stringSyntheticAllocationLimit) {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
+        WTF::Vector<char16_t> dynamicBuffer;
+        if (!dynamicBuffer.tryGrow(static_cast<size_t>(numCharactersConverted))) {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
+        error = U_ZERO_ERROR;
+        processingDetails = UIDNA_INFO_INITIALIZER;
+        numCharactersConverted = uidna_nameToUnicode(encoder, span.data(), span.size(), dynamicBuffer.mutableSpan().data(), numCharactersConverted, &processingDetails, &error);
+        if (U_SUCCESS(error) && !(processingDetails.errors & ~allowedNameToUnicodeErrors) && numCharactersConverted) {
+            return JSC::JSValue::encode(JSC::jsString(vm, WTF::String(dynamicBuffer.span().first(static_cast<size_t>(numCharactersConverted)))));
+        }
+        return JSC::JSValue::encode(jsEmptyString(vm));
+    }
 
     if (U_SUCCESS(error) && !(processingDetails.errors & ~allowedNameToUnicodeErrors) && numCharactersConverted) {
         return JSC::JSValue::encode(JSC::jsString(vm, WTF::String(std::span { hostnameBuffer, static_cast<unsigned int>(numCharactersConverted) })));

@@ -247,11 +247,17 @@ pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Li
             var __trace_guard_moved = false; _ = &__trace_guard_moved;
             defer if (!__trace_guard_moved) { __trace_guard_moved = true; const __T = @TypeOf(trace_guard); if (@typeInfo(__T) == .optional) { if (trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = trace_guard; _drop_val.__cp_deinit(); } };
             _ = try trace_guard.trace.ensureTotalCapacityPrecise((max + 1));
+            const max_trace_bytes: usize = ((16 * 1024) * 1024);
+            const frame_bytes: usize = (graph_guard.slice.len * @sizeOf(uint));
             {
                 var _diff_level: i32 = 0;
                 _ = &_diff_level;
                 const __end_0 = (max + 1);
                 while (_diff_level < __end_0) : (_diff_level += 1) {
+                    const diff_level_usize: usize = @intCast(_diff_level);
+                    if (((diff_level_usize > 0) and (frame_bytes > (max_trace_bytes / diff_level_usize)))) {
+                        return error.DiffTooLarge;
+                    }
                     const diff_level: int = @intCast(_diff_level);
                     const new_trace = try trace_alloc.dupe(uint, graph_guard.slice);
                     _ = trace_guard.trace.appendAssumeCapacity(new_trace);

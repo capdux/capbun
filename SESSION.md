@@ -1139,3 +1139,13 @@
 ### [2026-11-27 Batch 62–63] WebFetch / YAML / S3 / Util / Buffer / Shell / FFI / Zlib 收敛与验收
 - **核心动作**：3 路子智能体 + 主智能体并行推进 `Batch 62–63`，修复 `CryptoHasher.cp`、`NativeBrotli.cp`、`FFIObject.cp`、`cp.cp`、`mv.cp`、`Blob.cp`、`http.cp`、`Response.cp`、`yaml.cp`、`YAMLObject.cp`、`credentials_jsc.cp`、`client.cp`、`parse_args.cp`、`node_util_binding.cp`、`ErrorCode.cpp`、`NodeValidator.cpp`、`validators.ts`、`inspect.js`、`util.ts`、`NodeBufferModule.h`、`JSBuffer.cpp`，清理残留 `bun-debug` 孤儿进程并将 `pkill -9 -x bun-debug` 写入 `GEMINI.md`，重编 `1.4.5-debug` 验收。
 - **验收摘要**：`zlib-estimated-size-gc` (6/6)、`ffi-error-messages` (44/44)、`bun/shell/commands/ls` (30/30)、`blob-write` (15/15)、`blob-cow` (5/5)、`s3-numeric-options-coerce` (17/17) 转绿；`bun-cryptohasher` (107/109)、`mv` (13/15)、`fetch-connection-header` (15/16)、`response` (21/23)、`yaml-block-scalar-matrix` (1078/1084)、`yaml-test-suite` (401/402) 显著收敛；新扫描 54 个文件 0 fail。
+
+### [2026-11-27 Batch 64–67 & 交接停机] 跨模块修复与 `PROGRESS.md` 交接归档
+- **用户指令 1**：`top` 发现大量残留 `bun-debug` 进程。
+  - **主智能体回应**：执行 `pkill -9 -x bun-debug` 全部清理，并将测试后 `pkill -9 -x bun-debug || true` 固化进 `GEMINI.md`。
+- **用户指令 2**：询问剩余未完成文件数，以及更新到 1.4.5 后为何暴露大量不通过、CP 版本是否更安全稳定。
+  - **主智能体回应**：给出全仓 1,974 个 `.test.*` 的分层统计（约 600+ 已收敛、~1,300 待扫），客观说明失败主因系 1.4.5 测试集新增未实现特性、加强边界/ASan/UBSan/异常检查暴露原版 C++/Zig 隐患及少量迁移细节瑕疵；确认 CP 借用/RAII/COW/Ticket 加固后整体更安全稳定。
+- **用户指令 3**：会话接近 5 万行需切换新 AGY，暂停开发、审计 `SESSION.md`、固化经验进 `GEMINI.md` 并输出 `PROGRESS.md` 交接文档。
+- **核心动作（Batch 64–67 已改源码，均通过 `cpc_brief.py` 与 `bun run zig:check` 5/5，待新会话 `bun bd` 验收）**：
+  - `FetchHeaders.cp` + `Response.cp`、`yaml.cp`、`cp.cp` + `mv.cp` + `coreutils_error_map.cp`、`sqlite.ts` + `JSSQLStatement.cpp`、`v8.ts`、`internal/url.ts` + `node/url.ts` + `NodeURL.cpp`、`VLQ.cp` + `NodeModuleModule.cpp` + `JSCommonJSModule.cpp`、`napi.cpp`、`src/css/*.cp` (10 文件)、`src/sql_jsc/postgres/*.cp` (4 文件)、`streams.ts` + `ProcessObjectInternals.ts` + `myers_diff.cp` + `assertion_error.ts`、`events.ts` + `async_hooks.ts` + `node_crypto_binding.cp`。
+  - 同步补充 `GEMINI.md` 审计规则，并生成完整交接文档 `PROGRESS.md`。

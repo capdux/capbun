@@ -161,11 +161,26 @@
 
 ## 四、正在运行中的并发修复
 
-- **无（Batch 62–63 已提交推送，即将派发 Batch 64 三路并发）**
+- **无（Batch 64–67 代码修改已提交推送至 `PROGRESS.md` 交接基线，待新会话执行 `bun bd` 编译验收）**
 
 ---
 
-## 五、Batch 62–63 新增通过与收敛明细（2026-11-27）
+## 五、Batch 64–67 已修待编与新扫描清单（2026-11-27）
+
+1. **新扫描 0 fail（已确认，不再重跑）**：
+   - `test/js/bun/sqlite/`：`column-types.test.js`、`sql-timezone.test.js`
+   - `test/js/node/v8/` & `events/`：`event-emitter.test.ts` (91/91)、`v8-date-parser.test.js` (5/5)
+   - `test/js/node/timers/` & `url/`：`pathToFileURL`, `url-fileurltopath`, `url-format-invalid-input`, `url-format`, `url-is-url`, `url-null-char`, `url-pathtofileurl`, `url-relative`, `url-revokeobjecturl`
+   - `test/js/node/module/`：`esm-registry-concurrent-gc`, `module-children-concurrent-gc`, `module-resolve-filename-paths`, `module-sourcemap`
+   - `test/napi/`：`napi-finalizer-delete-ref.test.ts`
+   - `test/js/bun/css/`：`angle-serialization-hang`, `atan2-backtracking-hang`, `nested-selector-list-expansion`
+   - `test/js/sql/`：36 个 `0 fail` 文件（见 `tmp/b67_bunsql.txt`）
+   - `test/js/node/{assert,os,process,async_hooks,string_decoder}/`：13 个 `0 fail` 文件（`assert-promise`, `os`, `process-{array-accessor-crash,exit-during-wasm-tier-up,memory-pressure,signal-listener-count,signal-windows,stdio-invalid-utf16,stdin-stale-hup}`, `async_hooks.node`, `async-local-storage-thenable`, `AsyncLocalStorage`, `string-decoder`）
+2. **已修源码待新会话 `bun bd` 验收**：见 `PROGRESS.md` 第 1 节与第 4 节。
+
+---
+
+## 六、Batch 62–63 新增通过与收敛明细（2026-11-27）
 
 1. **新验证全绿（0 fail，实测 `1.4.5-debug`）**：
    - **Batch 62–63 修复转绿（6 个）**：`zlib-estimated-size-gc` (6/6)、`ffi-error-messages` (44/44)、`bun/shell/commands/ls` (30 pass/0 fail)、`web/fetch/blob-write` (15/15)、`web/fetch/blob-cow` (5/5)、`s3-numeric-options-coerce` (17/17)

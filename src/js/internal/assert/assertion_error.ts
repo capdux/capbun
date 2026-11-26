@@ -213,12 +213,33 @@ function createErrDiff(actual, expected, operator, customMessage) {
     header = "";
   } else {
     const checkCommaDisparity = actual != null && typeof actual === "object";
-    const diff = myersDiff(inspectedActual, inspectedExpected, checkCommaDisparity, true);
+    try {
+      const diff = myersDiff(inspectedActual, inspectedExpected, checkCommaDisparity, true);
 
-    const myersDiffMessage = printMyersDiff(diff);
-    message = myersDiffMessage.message;
+      const myersDiffMessage = printMyersDiff(diff);
+      message = myersDiffMessage.message;
 
-    if (myersDiffMessage.skipped) {
+      if (myersDiffMessage.skipped) {
+        skipped = true;
+      }
+    } catch {
+      const maxPreviewLines = 20;
+      const actualLines = ArrayPrototypeSlice.$call(inspectedSplitActual, 0, maxPreviewLines);
+      const expectedLines = ArrayPrototypeSlice.$call(inspectedSplitExpected, 0, maxPreviewLines);
+      let preview = "\n";
+      for (let i = 0; i < actualLines.length; i++) {
+        preview += `${colors.green}+${colors.white} ${actualLines[i]}\n`;
+      }
+      if (inspectedSplitActual.length > maxPreviewLines) {
+        preview += `${colors.blue}...${colors.white}\n`;
+      }
+      for (let i = 0; i < expectedLines.length; i++) {
+        preview += `${colors.red}-${colors.white} ${expectedLines[i]}\n`;
+      }
+      if (inspectedSplitExpected.length > maxPreviewLines) {
+        preview += `${colors.blue}...${colors.white}\n`;
+      }
+      message = preview.trimEnd();
       skipped = true;
     }
   }

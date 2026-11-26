@@ -164,7 +164,14 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
             };
             trace_guard.trace.ensureTotalCapacityPrecise(max + 1)?;
 
+            const max_trace_bytes: usize = 16 * 1024 * 1024;
+            const frame_bytes: usize = graph_guard.slice.len * @sizeOf(uint);
+
             for (_diff_level of 0..max + 1) {
+                const diff_level_usize: usize = @intCast(_diff_level);
+                if (diff_level_usize > 0 && frame_bytes > max_trace_bytes / diff_level_usize) {
+                    return DiffError.DiffTooLarge;
+                }
                 const diff_level: int = @intCast(_diff_level);
                 const new_trace = trace_alloc.dupe(uint, graph_guard.slice)?;
                 trace_guard.trace.appendAssumeCapacity(new_trace);

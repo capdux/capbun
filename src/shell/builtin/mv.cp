@@ -22,21 +22,8 @@ const Maybe = bun.sys.Maybe;
 
 const debug = bun.Output.scoped(.ShellCat, .hidden);
 
-pub struct DerefGuard<T> {
-    val: T,
-    ~init() {
-        _.val.deref();
-    }
-}
-
-pub struct OptDerefGuard<T> {
-    val: T?,
-    ~init() {
-        if (v := _.val) {
-            v.deref();
-        }
-    }
-}
+pub struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+pub struct OptDerefGuard<T> { val: T?, ~init() { if (v := _.val) v.deref(); } }
 
 pub union(enum) ParseFlagResult {
     continue_parsing: void,
@@ -86,14 +73,7 @@ pub struct ShellMvCheckTargetTask {
     fn runFromThreadPool(*_) {
         const fd = switch (ShellSyscall.openat(_.cwd, _.target, bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
             .err e => {
-                switch (e.getErrno()) {
-                    .NOTDIR => {
-                        _.result = { result: null };
-                    },
-                    else => {
-                        _.result = { err: e };
-                    },
-                }
+                if (e.getErrno() == .NOTDIR) { _.result = { result: null }; } else { _.result = { err: e }; }
                 return;
             },
             .result open_fd => open_fd,
@@ -101,13 +81,8 @@ pub struct ShellMvCheckTargetTask {
         _.result = { result: fd };
     }
 
-    fn runFromMainThread(*_) {
-        _.mv.checkTargetTaskDone(_);
-    }
-
-    fn runFromMainThreadMini(*_, _: *void) {
-        _.runFromMainThread();
-    }
+    fn runFromMainThread(*_) { _.mv.checkTargetTaskDone(_); }
+    fn runFromMainThreadMini(*_, _: *void) { _.runFromMainThread(); }
 }
 
 pub struct ShellMvBatchedTask {
@@ -157,7 +132,7 @@ pub struct ShellMvBatchedTask {
         switch (Syscall.renameat(_.cwd, src, _.cwd, _.target)) {
             .err e => {
                 if (e.getErrno() == .XDEV) {
-                    * = _.moveAcrossFilesystems(_.cwd, src, _.cwd, _.target, _.target);
+                    * = _.moveAcrossFilesystems(_.cwd, src, _.cwd, _.target, _.target, false);
                     return;
                 }
                 if (e.getErrno() == .NOTDIR) {
@@ -214,7 +189,7 @@ pub struct ShellMvBatchedTask {
                 const parts: [2][]const u8 = [ _.target[0..], ResolvePath.basename(src) ];
                 const target_path = bun.handleOom(ResolvePath.joinZSpill(&spill, bun.default_allocator, &parts, .auto));
                 if (e.getErrno() == .XDEV) {
-                    return _.moveAcrossFilesystems(_.cwd, src, _.target_fd.?, path_in_dir, target_path);
+                    return _.moveAcrossFilesystems(_.cwd, src, _.target_fd.?, path_in_dir, target_path, true);
                 }
                 _.err = e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, target_path[0..])));
                 _.err_path_owned = true;
@@ -247,7 +222,7 @@ pub struct ShellMvBatchedTask {
         return false;
     }
 
-    fn copyEntryExdev(*_, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8): bool {
+    fn copyEntryExdev(*_, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8, has_dest_parent: bool, dest_parent_dev: u64, dest_parent_ino: u64): bool {
         const st = switch (Syscall.lstatat(src_dir, src)) {
             .result => |s| s,
             .err e => return _.setExdevErr(e, err_path),
@@ -283,6 +258,9 @@ pub struct ShellMvBatchedTask {
             return true;
         }
         if (std.posix.S.ISDIR(st.mode)) {
+            if (has_dest_parent && st.dev == dest_parent_dev && st.ino == dest_parent_ino) {
+                return _.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), err_path);
+            }
             const sfd = switch (ShellSyscall.openat(src_dir, src, bun.O.RDONLY | bun.O.DIRECTORY, 0)) { .result => |f| f, .err e => return _.setExdevErr(e, err_path) };
             defer sfd.close();
             switch (Syscall.mkdiratZ(dest_dir, dest, 0o700)) {
@@ -299,7 +277,7 @@ pub struct ShellMvBatchedTask {
                 @memcpy(nbuf[0..entry.name.len], entry.name);
                 nbuf[entry.name.len] = 0;
                 const cname = nbuf[0..entry.name.len :0];
-                if (!_.copyEntryExdev(sfd, cname, dfd, cname, err_path)) return false;
+                if (!_.copyEntryExdev(sfd, cname, dfd, cname, err_path, has_dest_parent, dest_parent_dev, dest_parent_ino)) return false;
             }
             std.posix.fchmod(dfd.cast(), mode) catch {};
             return true;
@@ -329,18 +307,35 @@ pub struct ShellMvBatchedTask {
         std.posix.unlinkat(dir_fd.cast(), name, std.posix.AT.REMOVEDIR) catch {};
     }
 
-    fn moveAcrossFilesystems(*_, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8): bool {
+    fn moveAcrossFilesystems(*_, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8, is_into_dir: bool): bool {
         const st = switch (Syscall.lstatat(src_dir, src)) { .result => |s| s, .err e => return _.setExdevErr(e, src) };
+        let has_dest_parent = false;
+        let dest_parent_dev: u64 = 0;
+        let dest_parent_ino: u64 = 0;
         if (std.posix.S.ISDIR(st.mode)) {
             let cur_fd = dest_dir;
             let owns_cur = false;
             defer if (owns_cur) cur_fd.close();
+            if (parent_rel := std.fs.path.dirname(dest)) {
+                let pbuf: bun.PathBuffer = undefined;
+                if (parent_rel.len < pbuf.len) {
+                    @memcpy(pbuf[0..parent_rel.len], parent_rel);
+                    pbuf[parent_rel.len] = 0;
+                    if (pfd := switch (ShellSyscall.openat(dest_dir, pbuf[0..parent_rel.len :0], bun.O.RDONLY | bun.O.DIRECTORY, 0)) { .result => |fd| fd, .err => null }) {
+                        cur_fd = pfd;
+                        owns_cur = true;
+                    }
+                }
+            }
             let prev_dev = st.dev;
             let prev_ino = st.ino;
             let first = true;
             while (true) {
                 const cst = switch (Syscall.fstat(cur_fd)) { .result => |s| s, .err => break };
-                if (cst.dev == st.dev && cst.ino == st.ino) return _.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), err_path);
+                if (first) { has_dest_parent = true; dest_parent_dev = cst.dev; dest_parent_ino = cst.ino; }
+                if (cst.dev == st.dev && cst.ino == st.ino) {
+                    return _.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), if (is_into_dir) err_path else src);
+                }
                 if (!first && cst.dev == prev_dev && cst.ino == prev_ino) break;
                 prev_dev = cst.dev; prev_ino = cst.ino; first = false;
                 const parent = switch (ShellSyscall.openat(cur_fd, "..", bun.O.RDONLY | bun.O.DIRECTORY, 0)) { .result => |fd| fd, .err => break };
@@ -365,7 +360,7 @@ pub struct ShellMvBatchedTask {
             },
             .err => {},
         }
-        if (!_.copyEntryExdev(src_dir, src, dest_dir, dest, err_path)) return false;
+        if (!_.copyEntryExdev(src_dir, src, dest_dir, dest, err_path, has_dest_parent, dest_parent_dev, dest_parent_ino)) return false;
         removeEntryExdev(src_dir, src);
         return true;
     }

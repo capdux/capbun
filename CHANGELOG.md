@@ -2479,10 +2479,20 @@
 - **C++/JS 修复**：`src/jsc/bindings/{NodeVMScript,NodeVMSourceTextModule,Serialization,webcore/JSURLSearchParams}.cpp`, `src/js/bun/ffi.ts`, `src/js/internal/{fs/glob,primordials,streams/duplex,streams/native-readable,streams/readable,webstreams_adapters}.ts|.js`, `src/js/node/tls.ts`。
 - **文档与规则**：`test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`, `GEMINI.md`。
 
+## 2026-11-27 (Batch 64–67: CSS / SQL / URL / SQLite / V8 / Module / Shell / Assert / AsyncHooks 收敛与交接)
+- **CP/Zig 模块修复**：`src/css/{media_query,printer,properties/custom,properties/properties_impl,rules/font_face,rules/style,rules/supports,rules/unknown,selectors/parser,selectors/selector}.cp`, `src/interchange/yaml.cp`, `src/jsc/FetchHeaders.cp`, `src/runtime/node/{assert/myers_diff,node_crypto_binding}.cp`, `src/runtime/webcore/Response.cp`, `src/shell/builtin/{cp,mv}.cp`, `src/sourcemap/VLQ.cp`, `src/sql_jsc/postgres/{DataCell,PostgresSQLConnection,PostgresSQLQuery,types/date}.cp`, `src/sys/coreutils_error_map.cp`（及对应生成 `.zig`）。
+- **C++/JS 修复**：`src/jsc/bindings/{JSCommonJSModule,NodeURL,napi,sqlite/JSSQLStatement}.cpp`, `src/jsc/modules/NodeModuleModule.cpp`, `src/js/builtins/ProcessObjectInternals.ts`, `src/js/bun/sqlite.ts`, `src/js/internal/{assert/assertion_error,fs/streams,url}.ts`, `src/js/node/{async_hooks,events,url,v8}.ts`。
+- **交接与文档**：`PROGRESS.md`, `GEMINI.md`, `test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`。
+
 ## 2026-11-27 (Batch 62–63: WebFetch / YAML / S3 / Util / Buffer / Shell / FFI / Zlib 收敛)
 - **CP/Zig 模块修复**：`src/http/http.cp`, `src/interchange/yaml.cp`, `src/runtime/api/YAMLObject.cp`, `src/runtime/crypto/CryptoHasher.cp`, `src/runtime/ffi/FFIObject.cp`, `src/runtime/node/{node_util_binding,util/parse_args,zlib/NativeBrotli}.cp`, `src/runtime/webcore/{Blob,Response,s3/client,s3/credentials_jsc}.cp`, `src/shell/builtin/{cp,mv}.cp`（及对应生成 `.zig`）。
 - **C++/JS 修复**：`src/jsc/bindings/{ErrorCode,JSBuffer,NodeValidator}.cpp`, `src/jsc/modules/NodeBufferModule.h`, `src/js/internal/{util/inspect.js,validators.ts}`, `src/js/node/util.ts`。
 - **文档与规则**：`test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`, `GEMINI.md`。
+
+## 2026-11-27 (Batch 64–67: CSS / SQL / URL / SQLite / V8 / Module / Shell / Assert / AsyncHooks 收敛与交接)
+- **CP/Zig 模块修复**：`src/css/{media_query,printer,properties/custom,properties/properties_impl,rules/font_face,rules/style,rules/supports,rules/unknown,selectors/parser,selectors/selector}.cp`, `src/interchange/yaml.cp`, `src/jsc/FetchHeaders.cp`, `src/runtime/node/{assert/myers_diff,node_crypto_binding}.cp`, `src/runtime/webcore/Response.cp`, `src/shell/builtin/{cp,mv}.cp`, `src/sourcemap/VLQ.cp`, `src/sql_jsc/postgres/{DataCell,PostgresSQLConnection,PostgresSQLQuery,types/date}.cp`, `src/sys/coreutils_error_map.cp`（及对应生成 `.zig`）。
+- **C++/JS 修复**：`src/jsc/bindings/{JSCommonJSModule,NodeURL,napi,sqlite/JSSQLStatement}.cpp`, `src/jsc/modules/NodeModuleModule.cpp`, `src/js/builtins/ProcessObjectInternals.ts`, `src/js/bun/sqlite.ts`, `src/js/internal/{assert/assertion_error,fs/streams,url}.ts`, `src/js/node/{async_hooks,events,url,v8}.ts`。
+- **交接与文档**：`PROGRESS.md`, `GEMINI.md`, `test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`。
 
 ## 2026-11-27 (Batch 40–47: 1.4.5-debug 并行修复、dedupe 死循环 OOM 根除与回归验收)
 - **CP/Zig 模块修复**：`src/aio/posix_event_loop.cp`, `src/cli/{Arguments,cli,package_manager_command,repl,test_command,update_interactive_command}.cp`, `src/css/values/color.cp`, `src/css_jsc/color_js.cp`, `src/http/http.cp`, `src/http_jsc/websocket_client/{CppWebSocket,WebSocketUpgradeClient}.cp`, `src/install/{dedupe,PackageManager/CommandLineArguments,PackageManager/workspace_selection}.cp`, `src/interchange/toml.cp`, `src/io/PipeReader.cp`, `src/jsc/{JSGlobalObject,array_buffer,web_worker}.cp`, `src/patch/patch.cp`, `src/patch_jsc/testing.cp`, `src/runtime/api/{Archive,JSONCObject,bun/Terminal,bun/h2_frame_parser,bun/spawn/stdio}.cp`, `src/runtime/image/{codecs,codec_jpeg,exif,codec_webp}.cp`, `src/runtime/node/{node_net_binding,path}.cp`, `src/runtime/socket/{Listener,UpgradedDuplex,socket}.cp`, `src/runtime/webcore/{Blob,Body,ReadableStream,S3File,TextDecoder,s3/list_objects,s3/simple_request}.cp`, `src/string/immutable.cp`, `src/test_runner/{expect,expect/toSatisfy,expect/toThrow,jest,timers/FakeTimers}.cp`（及对应生成 `.zig`）。
@@ -2509,7 +2519,17 @@
 - **C++/JS 修复**：`src/jsc/bindings/{NodeVMScript,NodeVMSourceTextModule,Serialization,webcore/JSURLSearchParams}.cpp`, `src/js/bun/ffi.ts`, `src/js/internal/{fs/glob,primordials,streams/duplex,streams/native-readable,streams/readable,webstreams_adapters}.ts|.js`, `src/js/node/tls.ts`。
 - **文档与规则**：`test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`, `GEMINI.md`。
 
+## 2026-11-27 (Batch 64–67: CSS / SQL / URL / SQLite / V8 / Module / Shell / Assert / AsyncHooks 收敛与交接)
+- **CP/Zig 模块修复**：`src/css/{media_query,printer,properties/custom,properties/properties_impl,rules/font_face,rules/style,rules/supports,rules/unknown,selectors/parser,selectors/selector}.cp`, `src/interchange/yaml.cp`, `src/jsc/FetchHeaders.cp`, `src/runtime/node/{assert/myers_diff,node_crypto_binding}.cp`, `src/runtime/webcore/Response.cp`, `src/shell/builtin/{cp,mv}.cp`, `src/sourcemap/VLQ.cp`, `src/sql_jsc/postgres/{DataCell,PostgresSQLConnection,PostgresSQLQuery,types/date}.cp`, `src/sys/coreutils_error_map.cp`（及对应生成 `.zig`）。
+- **C++/JS 修复**：`src/jsc/bindings/{JSCommonJSModule,NodeURL,napi,sqlite/JSSQLStatement}.cpp`, `src/jsc/modules/NodeModuleModule.cpp`, `src/js/builtins/ProcessObjectInternals.ts`, `src/js/bun/sqlite.ts`, `src/js/internal/{assert/assertion_error,fs/streams,url}.ts`, `src/js/node/{async_hooks,events,url,v8}.ts`。
+- **交接与文档**：`PROGRESS.md`, `GEMINI.md`, `test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`。
+
 ## 2026-11-27 (Batch 62–63: WebFetch / YAML / S3 / Util / Buffer / Shell / FFI / Zlib 收敛)
 - **CP/Zig 模块修复**：`src/http/http.cp`, `src/interchange/yaml.cp`, `src/runtime/api/YAMLObject.cp`, `src/runtime/crypto/CryptoHasher.cp`, `src/runtime/ffi/FFIObject.cp`, `src/runtime/node/{node_util_binding,util/parse_args,zlib/NativeBrotli}.cp`, `src/runtime/webcore/{Blob,Response,s3/client,s3/credentials_jsc}.cp`, `src/shell/builtin/{cp,mv}.cp`（及对应生成 `.zig`）。
 - **C++/JS 修复**：`src/jsc/bindings/{ErrorCode,JSBuffer,NodeValidator}.cpp`, `src/jsc/modules/NodeBufferModule.h`, `src/js/internal/{util/inspect.js,validators.ts}`, `src/js/node/util.ts`。
 - **文档与规则**：`test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`, `GEMINI.md`。
+
+## 2026-11-27 (Batch 64–67: CSS / SQL / URL / SQLite / V8 / Module / Shell / Assert / AsyncHooks 收敛与交接)
+- **CP/Zig 模块修复**：`src/css/{media_query,printer,properties/custom,properties/properties_impl,rules/font_face,rules/style,rules/supports,rules/unknown,selectors/parser,selectors/selector}.cp`, `src/interchange/yaml.cp`, `src/jsc/FetchHeaders.cp`, `src/runtime/node/{assert/myers_diff,node_crypto_binding}.cp`, `src/runtime/webcore/Response.cp`, `src/shell/builtin/{cp,mv}.cp`, `src/sourcemap/VLQ.cp`, `src/sql_jsc/postgres/{DataCell,PostgresSQLConnection,PostgresSQLQuery,types/date}.cp`, `src/sys/coreutils_error_map.cp`（及对应生成 `.zig`）。
+- **C++/JS 修复**：`src/jsc/bindings/{JSCommonJSModule,NodeURL,napi,sqlite/JSSQLStatement}.cpp`, `src/jsc/modules/NodeModuleModule.cpp`, `src/js/builtins/ProcessObjectInternals.ts`, `src/js/bun/sqlite.ts`, `src/js/internal/{assert/assertion_error,fs/streams,url}.ts`, `src/js/node/{async_hooks,events,url,v8}.ts`。
+- **交接与文档**：`PROGRESS.md`, `GEMINI.md`, `test/stats.md`, `SESSION.md`, `CHANGELOG.md`, `DEVLOG.md`。

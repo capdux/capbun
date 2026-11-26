@@ -1551,7 +1551,9 @@ const thisValue_opt = req.thisValue.tryGet();
                         _ = &_query_str_deinit_guard;
                         var ___query_str_deinit_guard_moved = false; _ = &___query_str_deinit_guard_moved;
                         defer if (!___query_str_deinit_guard_moved) { ___query_str_deinit_guard_moved = true; const __T = @TypeOf(_query_str_deinit_guard); if (@typeInfo(__T) == .optional) { if (_query_str_deinit_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _query_str_deinit_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _query_str_deinit_guard; _drop_val.__cp_deinit(); } };
-                        _ = (blk_catch_14: { break :blk_catch_14 ((PostgresRequest.parseAndBindAndExecute(self.globalObject, query_str.slice(), statement, binding_value, columns_value, false, Writer, self.writer())) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
+                        const saved_write_len = self.write_buffer.byte_list.len;
+                        _ = (blk_catch_14: { break :blk_catch_14 ((PostgresRequest.parseAndBindAndExecute(self.globalObject, query_str.slice(), statement, binding_value, columns_value, false, Writer, self.writer())) catch |e| { _ = &e; self.write_buffer.byte_list.len = saved_write_len;
+                        if (self.globalObject.tryTakeException()) |err_| {
                             _ = &err_;
                             _ = req.onJSError(err_, self.globalObject);
                         } else {
@@ -1568,7 +1570,9 @@ const thisValue_opt = req.thisValue.tryGet();
                         continue; }); });
                     } else {
                         _ = debug("binding and executing stmt", .{});
-                        _ = (blk_catch_15: { break :blk_catch_15 ((PostgresRequest.bindAndExecute(self.globalObject, statement, binding_value, columns_value, Writer, self.writer())) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
+                        const saved_write_len = self.write_buffer.byte_list.len;
+                        _ = (blk_catch_15: { break :blk_catch_15 ((PostgresRequest.bindAndExecute(self.globalObject, statement, binding_value, columns_value, Writer, self.writer())) catch |e| { _ = &e; self.write_buffer.byte_list.len = saved_write_len;
+                        if (self.globalObject.tryTakeException()) |err_| {
                             _ = &err_;
                             _ = req.onJSError(err_, self.globalObject);
                         } else {
@@ -1659,7 +1663,9 @@ if ((!self.canPrepareQuery())) {
                         const binding_value = ((PostgresSQLQuery.js.bindingGetCached(thisValue)) orelse (.zero));
                         const columns_value = ((PostgresSQLQuery.js.columnsGetCached(thisValue)) orelse (.zero));
                         _ = debug("parseAndBindAndExecute (unnamed, first execution)", .{});
-                        _ = (blk_catch_17: { break :blk_catch_17 ((PostgresRequest.parseAndBindAndExecute(self.globalObject, query_str.slice(), statement, binding_value, columns_value, true, Writer, self.writer())) catch |e| { _ = &e; if (self.globalObject.tryTakeException()) |err_| {
+                        const saved_write_len = self.write_buffer.byte_list.len;
+                        _ = (blk_catch_17: { break :blk_catch_17 ((PostgresRequest.parseAndBindAndExecute(self.globalObject, query_str.slice(), statement, binding_value, columns_value, true, Writer, self.writer())) catch |e| { _ = &e; self.write_buffer.byte_list.len = saved_write_len;
+                        if (self.globalObject.tryTakeException()) |err_| {
                             _ = &err_;
                             _ = req.onJSError(err_, self.globalObject);
                         } else {
@@ -1875,6 +1881,9 @@ var parameter_status: protocol.ParameterStatus = undefined;
 var ready_for_query: protocol.ReadyForQuery = undefined;
         _ = &ready_for_query;
         _ = try ready_for_query.decodeInternal(Context, reader);
+        if ((self.authentication_state != .ok)) {
+            return error.UnexpectedMessage;
+        }
         _ = self.setStatus(.connected);
         self.flags.waiting_to_prepare = false;
         self.flags.is_ready_for_query = true;
@@ -2192,7 +2201,7 @@ _ = try reader.eatMessage(protocol.NoData);
 _ = try self.backend_key_data.decodeInternal(Context, reader);
 },
 .ErrorResponse => {
-var err_resp: protocol.ErrorResponse = undefined;
+var err_resp = protocol.ErrorResponse{  };
         _ = &err_resp;
         _ = try err_resp.decodeInternal(Context, reader);
         if (((self.status == .connecting) or (self.status == .sent_startup_message))) {
@@ -2252,7 +2261,7 @@ _ = debug("TODO CopyInResponse", .{});
 },
 .NoticeResponse => {
 _ = debug("UNSUPPORTED NoticeResponse", .{});
-        var resp: protocol.NoticeResponse = undefined;
+        var resp = protocol.NoticeResponse{  };
         _ = &resp;
         _ = try resp.decodeInternal(Context, reader);
         _ = resp.deinit();

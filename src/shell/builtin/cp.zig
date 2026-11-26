@@ -324,6 +324,12 @@ pub fn runFromThreadPool(task: *WorkPoolTask) void {
             }
     }
 
+pub fn joinZOwned(spill: *std.ArrayListUnmanaged(u8), parts: []const []const u8) [:0]const u8 {
+            const needed = ResolvePath.joinNeeded(parts);
+            _ = bun.handleOom(spill.resize(bun.default_allocator, @max(needed, 1)));
+            return ResolvePath.joinZBuf(spill.items, parts, .auto);
+    }
+
 pub fn runFromThreadPoolImpl(self: *ShellCpTask) ?bun.shell.ShellErr {
             var src_spill: std.ArrayListUnmanaged(u8) = .{};
             _ = &src_spill;
@@ -344,13 +350,13 @@ pub fn runFromThreadPoolImpl(self: *ShellCpTask) ?bun.shell.ShellErr {
             _ = &src;
             if ((!ResolvePath.Platform.auto.isAbsolute(self.src))) {
                 const parts: [2][]const u8 = .{ self.cwd_path[0..], self.src[0..] };
-                src = bun.handleOom(ResolvePath.joinZSpill((&src_spill), bun.default_allocator, (&parts), .auto));
+                src = ShellCpTask.joinZOwned((&src_spill), (&parts));
             }
             var tgt: [:0]const u8 = self.tgt;
             _ = &tgt;
             if ((!ResolvePath.Platform.auto.isAbsolute(self.tgt))) {
                 const parts: [2][]const u8 = .{ self.cwd_path[0..], self.tgt[0..] };
-                tgt = bun.handleOom(ResolvePath.joinZSpill((&tgt_spill), bun.default_allocator, (&parts), .auto));
+                tgt = ShellCpTask.joinZOwned((&tgt_spill), (&parts));
             }
             const src_is_dir = (switch (self.isDir(src)) {
 .result => |x| x,
@@ -392,7 +398,7 @@ if ((e.getErrno() == .NOENT)) {
                     if (tgt_exists) {
                         const basename = ResolvePath.basename(src[0..src.len]);
                         const parts: [2][]const u8 = .{ tgt[0..tgt.len], basename };
-                        tgt = bun.handleOom(ResolvePath.joinZSpill((&tgt_join_spill), bun.default_allocator, (&parts), .auto));
+                        tgt = ShellCpTask.joinZOwned((&tgt_join_spill), (&parts));
                     } else {
                         if ((self.operands == 2)) {
                         } else {

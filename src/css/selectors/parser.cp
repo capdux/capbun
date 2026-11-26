@@ -144,7 +144,8 @@ pub enum _AttrsAttrSelectorOperator {
     }
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 }
 
@@ -180,11 +181,13 @@ pub struct attrs {
             }
 
             pub fn deepClone(allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), &_, allocator);
+                const self_val = _;
+                return css.implementDeepClone(@This(), &self_val, allocator);
             }
 
             pub fn hash(hasher: *std.hash.Wyhash) {
-                return css.implementHash(@This(), &_, hasher);
+                const self_val = _;
+                return css.implementHash(@This(), &self_val, hasher);
             }
         };
     }
@@ -235,11 +238,13 @@ pub struct attrs {
             }
 
             pub fn deepClone(allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), &_, allocator);
+                const self_val = _;
+                return css.implementDeepClone(@This(), &self_val, allocator);
             }
 
             pub fn hash(hasher: *std.hash.Wyhash) {
-                return css.implementHash(@This(), &_, hasher);
+                const self_val = _;
+                return css.implementHash(@This(), &self_val, hasher);
             }
         };
     }
@@ -256,11 +261,13 @@ pub struct attrs {
             }
 
             pub fn hash(hasher: *std.hash.Wyhash) {
-                return css.implementHash(@This(), &_, hasher);
+                const self_val = _;
+                return css.implementHash(@This(), &self_val, hasher);
             }
 
             pub fn deepClone(allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), &_, allocator);
+                const self_val = _;
+                return css.implementDeepClone(@This(), &self_val, allocator);
             }
         };
     }
@@ -284,7 +291,8 @@ pub struct attrs {
             with_value: ParsedAttrSelectorWithValue(AttrValue),
 
             pub fn deepClone(allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), &_, allocator);
+                const self_val = _;
+                return css.implementDeepClone(@This(), &self_val, allocator);
             }
 
             pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -292,7 +300,8 @@ pub struct attrs {
             }
 
             pub fn hash(hasher: *std.hash.Wyhash) {
-                return css.implementHash(@This(), &_, hasher);
+                const self_val = _;
+                return css.implementHash(@This(), &self_val, hasher);
             }
         };
     }
@@ -606,7 +615,11 @@ fn parse_compound_selector(
         empty = false;
     }
 
-    if (parse_type_selector(Impl, parser, input, state.*, builder).asValue() != null) {
+    const had_type_selector = switch (parse_type_selector(Impl, parser, input, state.*, builder)) {
+        .result => |v| v,
+        .err => |e| return .{ .err = e },
+    };
+    if (had_type_selector) {
         empty = false;
     }
 
@@ -1025,11 +1038,13 @@ pub union(enum) PseudoClass {
     }
 
     pub fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 
     pub fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const self_val = _;
+        return css.implementDeepClone(@This(), &self_val, allocator);
     }
 
     pub fn getPrefix(): css.VendorPrefix {
@@ -1709,7 +1724,8 @@ pub fn GenericSelectorList(comptime Impl: type): type {
         }
 
         pub fn hash(hasher: *std.hash.Wyhash) {
-            return css.implementHash(@This(), &_, hasher);
+            const self_val = _;
+            return css.implementHash(@This(), &self_val, hasher);
         }
     };
 }
@@ -1872,11 +1888,13 @@ pub fn GenericSelector(comptime Impl: type): type {
         }
 
         pub fn deepClone(allocator: Allocator): This {
-            return css.implementDeepClone(@This(), &_, allocator);
+            const self_val = _;
+            return css.implementDeepClone(@This(), &self_val, allocator);
         }
 
         pub fn eql(other: *const This): bool {
-            return css.implementEql(This, &_, other);
+            const self_val = _;
+            return css.implementEql(This, &self_val, other);
         }
 
         pub fn hasCombinator(): bool {
@@ -1940,7 +1958,8 @@ pub fn GenericSelector(comptime Impl: type): type {
         }
 
         pub fn hash(hasher: *std.hash.Wyhash) {
-            return css.implementHash(@This(), &_, hasher);
+            const self_val = _;
+            return css.implementHash(@This(), &self_val, hasher);
         }
     };
 }
@@ -2097,7 +2116,8 @@ pub fn GenericComponent(comptime Impl: type): type {
         }
 
         pub fn deepClone(allocator: Allocator): @This() {
-            return css.implementDeepClone(@This(), &_, allocator);
+            const self_val = _;
+            return css.implementDeepClone(@This(), &self_val, allocator);
         }
 
         pub static fn eql(lhs: *const This, rhs: *const This): bool {
@@ -2147,7 +2167,8 @@ pub fn GenericComponent(comptime Impl: type): type {
         }
 
         pub fn hash(hasher: *std.hash.Wyhash) {
-            return css.implementHash(@This(), &_, hasher);
+            const self_val = _;
+            return css.implementHash(@This(), &self_val, hasher);
         }
     };
 }
@@ -2241,7 +2262,8 @@ pub struct NthSelectorData {
     }
 
     pub fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 }
 
@@ -2259,11 +2281,13 @@ pub fn NthOfSelectorData(comptime Impl: type): type {
         }
 
         pub fn hash(hasher: *std.hash.Wyhash) {
-            return css.implementHash(@This(), &_, hasher);
+            const self_val = _;
+            return css.implementHash(@This(), &self_val, hasher);
         }
 
         pub fn deepClone(allocator: Allocator): @This() {
-            return css.implementDeepClone(@This(), &_, allocator);
+            const self_val = _;
+            return css.implementDeepClone(@This(), &self_val, allocator);
         }
 
         pub fn nthData(): NthSelectorData {
@@ -2375,11 +2399,13 @@ pub struct SpecificityAndFlags {
     }
 
     pub fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 
     pub fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const self_val = _;
+        return css.implementDeepClone(@This(), &self_val, allocator);
     }
 }
 
@@ -2648,11 +2674,13 @@ pub union(enum) PseudoElement {
     }
 
     pub fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 
     pub fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const self_val = _;
+        return css.implementDeepClone(@This(), &self_val, allocator);
     }
 
     pub fn getNecessaryPrefixes(*_, targets: css.targets.Targets): css.VendorPrefix {
@@ -3426,7 +3454,7 @@ pub fn parse_nth_pseudo_class(
         parser,
         input,
         &child_state,
-        .ignore_invalid_selector,
+        .discard_list,
         .none,
     )) {
         .err => |e| return .{ .err = e },
@@ -3503,7 +3531,7 @@ pub fn parse_has(
         parser,
         input,
         &child_state,
-        parser.isAndWhereErrorRecovery(),
+        .discard_list,
         .none,
     )) {
         .err => |e| return .{ .err = e },
@@ -3769,11 +3797,13 @@ pub union(enum) ViewTransitionPartName {
     }
 
     pub fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 
     pub fn deepClone(allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const self_val = _;
+        return css.implementDeepClone(@This(), &self_val, allocator);
     }
 }
 

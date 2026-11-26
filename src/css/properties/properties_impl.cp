@@ -26,7 +26,11 @@ pub struct property_id_mixin {
                     dest.delim(',', false)?;
                 }
                 prefix.toCss(dest)?;
-                dest.writeStr(name)?;
+                if (prop.* == .custom) {
+                    css.serializer.serializeIdentifier(name, dest) catch return dest.addFmtError();
+                } else {
+                    dest.writeStr(name)?;
+                }
             }
         }
     }

@@ -106,6 +106,12 @@ const POSTGRES_EPOCH_DATE = 946684800000;
 
 pub fn fromBinary(bytes: []const u8) f64 {
         const microseconds = std.mem.readInt(i64, bytes[0..8], .big);
+        if ((microseconds == std.math.maxInt(i64))) {
+            return std.math.inf(f64);
+        }
+        if ((microseconds == std.math.minInt(i64))) {
+            return (0.0 - std.math.inf(f64));
+        }
         return @floatFromInt((@divFloor(microseconds, std.time.us_per_ms) + POSTGRES_EPOCH_DATE));
 }
 

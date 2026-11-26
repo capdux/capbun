@@ -837,8 +837,11 @@ pub fn constructRedirectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
         response.#init.headers = try response.getOrCreateHeaders(globalThis);
         var headers_ref = response.#init.headers.?;
         _ = &headers_ref;
-        const location_str = (if ((!href.isEmpty())) href_slice.slice() else url_string_slice.slice());
-        _ = try headers_ref.put(.Location, location_str, globalThis);
+        if ((!href.isEmpty())) {
+            _ = try headers_ref.put(.Location, href_slice.slice(), globalThis);
+        } else {
+            _ = try headers_ref.putZigString(.Location, (&url_string), globalThis);
+        }
         body_guard.ptr = null;
         init_guard.ptr = null;
         return response;

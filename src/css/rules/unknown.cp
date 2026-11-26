@@ -22,7 +22,7 @@ pub struct UnknownAtRule {
         // dest.add_mapping(self.loc);
 
         dest.writeChar('@')?;
-        dest.writeStr(_.name)?;
+        css.serializer.serializeIdentifier(_.name, dest) catch return dest.addFmtError();
 
         if (_.prelude.v.items.len > 0) {
             dest.writeChar(' ')?;
