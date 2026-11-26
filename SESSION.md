@@ -1040,3 +1040,9 @@
 - **`sql/sql-close-pending-connection.test.ts`**：`postgres.ts`/`mysql.ts` 修复 `if (timeout !== undefined)`，`PostgresSQLConnection.cp` `refAndClose` 补 `poll_ref.unref` -> `postgres` 4 项 pending close/timeout 全部通过。
 - **`web/streams`**：`CompressionStream.ts`/`DecompressionStream.ts`/`zlib.ts`/`end-of-stream.ts`/`add-abort-signal.ts` 切换为 `$createTransformStream` + `node:zlib` 直驱并修复 `"readable"`/`"writable"` 私有槽位 -> `zstd` 多帧、`ArrayBuffer` chunks、`bounded output`（`gzip`/`deflate`/`deflate-raw`/`zstd`）全部通过。
 - **`bake`**：`bake.cp` 与 `FrameworkRouter.cp` 修复 `getOptionalString` `comptime`、`SplitBundlerOptions` `DeinitGuard`、`match` 空路径、`cursor_at` 偏移 -> `index out of bounds: index 0, len 0` panic 消除。
+
+### 2026-11-26 Batch 7 测试修复与验证（`bun-file` / `sql/mysql` / `node/events` / `TOML.stringify` / `install`）
+- **`bun-file.test.ts`**：`node_fs.cp` `NodeFS.stat` 补齐 `err_val.syscall = .stat` -> **11 pass, 0 fail**（100% 通过）。
+- **`sql/sql-close-pending-connection.test.ts`**：`JSMySQLConnection.cp` `doClose` 非 `.connected` 路径改用 `fail` 立即触发 `on_close` -> `mysql` 全部通过。
+- **`node/events/event-emitter.test.ts`**：`JSEventEmitterCustom.cpp/.h`, `JSEventEmitter.cpp`, `events.ts` 修复异常透传、`async once`、AbortError、GC 释放 -> **88 pass, 3 fail**（原 21 fail 收敛至 3 fail）。
+- **`TOML.stringify` & `cli/install`**：`TOMLObject.cp` 补齐 `Bun.TOML.stringify` 解锁 `test-registry.ts`，`dedupe.cp` 与 `install_with_manager.cp` 补齐 `collapseAppended` 收敛逻辑。

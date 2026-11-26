@@ -6336,7 +6336,9 @@ pub struct NodeFS {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
                         return { result: .not_found };
                     }
-                    break :brk { err: e.withPath(args.path.slice()) };
+                    let err_val = e.withPath(args.path.slice());
+                    err_val.syscall = .stat;
+                    break :brk { err: err_val };
                 },
             };
         } else {
@@ -6348,7 +6350,9 @@ pub struct NodeFS {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
                         return { result: .not_found };
                     }
-                    break :brk { err: e.withPath(args.path.slice()) };
+                    let err_val = e.withPath(args.path.slice());
+                    err_val.syscall = .stat;
+                    break :brk { err: err_val };
                 },
             };
         }

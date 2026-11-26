@@ -23,6 +23,7 @@ const Package = Lockfile.Package;
 
 const Edge = struct {
     dep_id: DependencyID,
+    owner: PackageID,
     direct: bool,
 };
 
@@ -72,6 +73,8 @@ const Pass = struct {
     groups: []const std.array_list.Managed(PackageID),
     group_of: []const u32,
     pinned: *const DynamicBitSet,
+    closed: *const DynamicBitSet,
+    frozen_below: PackageID?,
     edges: []std.array_list.Managed(Edge),
     candidates: std.array_list.Managed(PackageID),
     edge_count: usize = 0,
@@ -93,6 +96,8 @@ const Pass = struct {
         groups: []const std.array_list.Managed(PackageID),
         group_of: []const u32,
         pinned: *const DynamicBitSet,
+        closed: *const DynamicBitSet,
+        frozen_below: PackageID?,
         max_candidates: usize,
         max_edges: usize,
     ): Pass! {
@@ -134,6 +139,8 @@ const Pass = struct {
             groups: groups,
             group_of: group_of,
             pinned: pinned,
+            closed: closed,
+            frozen_below: frozen_below,
             edges: edges,
             candidates: candidates,
             sat: sat,
@@ -242,6 +249,22 @@ const Pass = struct {
         return null;
     }
 
+    fn counts(dep: Dependency): bool {
+        return _.frozen_below == null || !dep.behavior.isBundled();
+    }
+
+    fn anchoredPlacement(e: usize): usize? {
+        const n = _.candidates.items.len;
+        const row = e * n;
+        let c: usize = 0;
+        while (c < n) : (c += 1) {
+            if (_.required.isSet(c) && _.sat.isSet(row + c)) {
+                return c;
+            }
+        }
+        return _.placement(e);
+    }
+
     fn vote(*_, cur: []const PackageID, live: *const DynamicBitSet): []PackageID! {
         const lockfile = _.lockfile;
         const buf = lockfile.buffers.string_bytes.items;
@@ -264,10 +287,11 @@ const Pass = struct {
             const end: usize = slice.end();
             while (dep_id < end) : (dep_id += 1) {
                 const target = cur[dep_id];
-                if (target == invalid_package_id || target >= _.group_of.len) continue;
+                if (target == invalid_package_id || !_.counts(deps[dep_id])) continue;
+                if (target >= _.group_of.len) continue;
                 const g = _.group_of[target];
                 if (g == std.math.maxInt(u32)) continue;
-                _.edges[g].append(Edge{ dep_id: @intCast(dep_id), direct: direct })?;
+                _.edges[g].append(Edge{ dep_id: @intCast(dep_id), owner: @intCast(pkg_id), direct: direct })?;
                 _.voted.set(pkg_id);
             }
         }
@@ -295,6 +319,7 @@ const Pass = struct {
             _.cur_c.clearRetainingCapacity();
             _.cur_c.appendNTimesAssumeCapacity(0, m);
             _.required.unmanaged.setAll(false);
+            let can_move = false;
 
             let e: usize = 0;
             while (e < m) : (e += 1) {
@@ -315,26 +340,47 @@ const Pass = struct {
                 _.cur_c.items[e] = cur_c;
                 const row = e * n;
 
-                const range_opt = if (_.pinned.isSet(target) || dep.behavior.isBundled())
+                const frozen = if (below := _.frozen_below)
+                    (edges[e].direct || target < below)
+                else
+                    false;
+                const range_opt = if (_.pinned.isSet(target) || frozen || dep.behavior.isBundled())
                     null
                 else
                     effectiveNpmRange(lockfile, dep_id, dep);
 
                 if (range := range_opt) {
-                    _.movable.set(e);
                     const query = range.value.npm.version;
                     let c: usize = 0;
                     while (c < n) : (c += 1) {
                         const id = _.candidates.items[c];
-                        if (query.satisfies(pkg_res[id].value.npm.version, buf, buf)) {
+                        if ((c == cur_c || !_.closed.isSet(id)) && query.satisfies(pkg_res[id].value.npm.version, buf, buf)) {
                             _.sat.set(row + c);
+                            _.movable.set(e);
+                            if (c != cur_c) can_move = true;
                         }
+                    }
+                    // No version is in range. An unmet peer follows the others.
+                    if (!_.movable.isSet(e) && dep.behavior.isPeer()) {
+                        _.movable.set(e);
+                        can_move = true;
+                        c = 0;
+                        while (c < n) : (c += 1) {
+                            if (c == cur_c || !_.closed.isSet(_.candidates.items[c])) {
+                                _.sat.set(row + c);
+                            }
+                        }
+                    } else if (!_.movable.isSet(e)) {
+                        _.sat.set(row + cur_c);
+                        _.required.set(cur_c);
                     }
                 } else {
                     _.sat.set(row + cur_c);
                     _.required.set(cur_c);
                 }
             }
+
+            if (!can_move) continue;
 
             const base_size = _.cover();
             _.chosen.unmanaged.copyInto(_.survivors.unmanaged);
@@ -378,8 +424,18 @@ const Pass = struct {
 
             e = 0;
             while (e < m) : (e += 1) {
-                if (!_.movable.isSet(e) || _.survivors.isSet(_.cur_c.items[e])) continue;
-                if (p := _.placement(e)) {
+                if (!_.movable.isSet(e)) continue;
+                const placed_early = if (below := _.frozen_below)
+                    (edges[e].owner >= below && !deps[edges[e].dep_id].behavior.isPeer())
+                else
+                    false;
+                const p_opt = if (placed_early)
+                    _.anchoredPlacement(e)
+                else if (_.survivors.isSet(_.cur_c.items[e]))
+                    continue
+                else
+                    _.placement(e);
+                if (p := p_opt) {
                     next[edges[e].dep_id] = _.candidates.items[p];
                 }
             }
@@ -395,7 +451,7 @@ const Pass = struct {
 
         while (true) {
             const next = _.vote(cur, live)?;
-            let after = reachable(_.allocator, _.lockfile, next) catch e => {
+            let after = reachable(_.allocator, _.lockfile, next, _.frozen_below) catch e => {
                 _.allocator.free(next);
                 return e;
             };
@@ -450,7 +506,7 @@ fn plural(n: usize): []const u8 {
     return if (n == 1) "" else "s";
 }
 
-fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
+fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile, frozen_below: PackageID?): Report! {
     const buf = lockfile.buffers.string_bytes.items;
     const pkg_res = lockfile.packages.items(.resolution);
     const checked = pkg_res.len;
@@ -500,6 +556,19 @@ fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
             candidates.deinit();
             continue;
         }
+        if (below := frozen_below) {
+            let all_below = true;
+            for (id of candidates.items) {
+                if (id >= below) {
+                    all_below = false;
+                    break;
+                }
+            }
+            if (all_below) {
+                candidates.deinit();
+                continue;
+            }
+        }
         const Ctx = struct {
             pkg_res: []const Lockfile.Package.Resolution,
             buf: []const u8,
@@ -540,7 +609,7 @@ fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
         if (ec > max_edges) max_edges = ec;
     }
 
-    let initial = reachable(allocator, lockfile, lockfile.buffers.resolutions.items)?;
+    let initial = reachable(allocator, lockfile, lockfile.buffers.resolutions.items, frozen_below)?;
     defer initial.deinit();
 
     let patched = std.array_list.Managed(PackageID).init(allocator);
@@ -560,6 +629,9 @@ fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
         kept_pairs.deinit();
     }
 
+    let closed = DynamicBitSet.initEmpty(allocator, pkg_res.len)?;
+    defer closed.deinit();
+
     let final_cur: []PackageID = undefined;
     let final_live: DynamicBitSet = undefined;
 
@@ -567,13 +639,13 @@ fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
         let live = initial.clone(allocator)?;
         let cur = allocator.dupe(PackageID, lockfile.buffers.resolutions.items)?;
         {
-            let pass = Pass.init(allocator, lockfile, groups.items, group_of, *pinned, max_candidates, max_edges)?;
+            let pass = Pass.init(allocator, lockfile, groups.items, group_of, *pinned, *closed, frozen_below, max_candidates, max_edges)?;
             defer pass.deinit();
             while (true) {
                 const next = pass.settle(cur, *live)?;
                 allocator.free(cur);
                 cur = next;
-                let after = reachable(allocator, lockfile, cur)?;
+                let after = reachable(allocator, lockfile, cur, frozen_below)?;
                 if (after.unmanaged.eql(live.unmanaged)) {
                     after.deinit();
                     break;
@@ -581,6 +653,39 @@ fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
                 live.deinit();
                 live = after;
             }
+        }
+
+        // One held only by edges that moved onto it won on the vote of a package the move removed.
+        let held = DynamicBitSet.initEmpty(allocator, pkg_res.len)?;
+        defer held.deinit();
+        const dep_slices = lockfile.packages.items(.dependencies);
+        const deps = lockfile.buffers.dependencies.items;
+        let owner_i: usize = 0;
+        while (owner_i < dep_slices.len) : (owner_i += 1) {
+            if (!live.isSet(owner_i)) continue;
+            const slice = dep_slices[owner_i];
+            let dep_id: usize = slice.begin();
+            const end: usize = slice.end();
+            while (dep_id < end) : (dep_id += 1) {
+                const target = lockfile.buffers.resolutions.items[dep_id];
+                const bundled = deps[dep_id].behavior.isBundled();
+                if (target < pkg_res.len && !(bundled && frozen_below != null)) {
+                    held.set(target);
+                }
+            }
+        }
+        const closed_before = closed.count();
+        for (g of groups.items) {
+            for (v of g.items) {
+                if (live.isSet(v) && !held.isSet(v)) {
+                    closed.set(v);
+                }
+            }
+        }
+        if (closed.count() != closed_before) {
+            allocator.free(cur);
+            live.deinit();
+            continue;
         }
 
         let orphaned = std.array_list.Managed(PackageID).init(allocator);
@@ -678,6 +783,8 @@ fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile): Report! {
         }
     }
     if (removed.items.len == 0) {
+        lockfile.buffers.resolutions.clearRetainingCapacity();
+        lockfile.buffers.resolutions.appendSlice(allocator, final_cur)?;
         return report;
     }
 
@@ -807,8 +914,10 @@ pub fn effectiveVersion(
     return version;
 }
 
-fn reachable(allocator: Allocator, lockfile: *const Lockfile, resolutions: []const PackageID): DynamicBitSet! {
-    return reachable_mod.packages(allocator, lockfile, resolutions, reachable_mod.Options.all(0));
+fn reachable(allocator: Allocator, lockfile: *const Lockfile, resolutions: []const PackageID, frozen_below: PackageID?): DynamicBitSet! {
+    let opts = reachable_mod.Options.all(0);
+    opts.bundled = frozen_below == null;
+    return reachable_mod.packages(allocator, lockfile, resolutions, opts);
 }
 
 pub fn dedupeBeforeInstall(
@@ -989,7 +1098,7 @@ pub fn dedupeAfterDiffer(manager: *PackageManager) {
         refuseOutOfDate(manager);
     }
 
-    let report = bun.handleOom(dedupeLockfile(manager.allocator, manager.lockfile));
+    let report = bun.handleOom(dedupeLockfile(manager.allocator, manager.lockfile, null));
     if (report.rows.items.len == 0) {
         defer report.deinit();
         reportAlreadyDeduplicated(manager, *report);
@@ -1030,4 +1139,13 @@ pub fn dedupeAfterDiffer(manager: *PackageManager) {
 
     manager.dedupe_report = report;
     manager.options.enable.force_save_lockfile = true;
+}
+
+/// Runs after resolution. Collapses the versions that were appended in this session onto the fewest
+/// versions that satisfy their dependents.
+pub fn collapseAppended(manager: *PackageManager, loaded_package_count: usize) {
+    const lockfile = manager.lockfile;
+    if (lockfile.packages.len <= loaded_package_count) return;
+    let report = bun.handleOom(dedupeLockfile(manager.allocator, lockfile, @intCast(loaded_package_count)));
+    defer report.deinit();
 }

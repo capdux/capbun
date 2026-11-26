@@ -95,6 +95,7 @@ const invalid_package_id = install.invalid_package_id;
 const Package = Lockfile.Package;
 const Edge = struct {
     dep_id: DependencyID,
+    owner: PackageID,
     direct: bool,
 };
 const KeptPair = struct {
@@ -137,6 +138,8 @@ const Pass = struct {
     groups: []const std.array_list.Managed(PackageID),
     group_of: []const u32,
     pinned: *const DynamicBitSet,
+    closed: *const DynamicBitSet,
+    frozen_below: ?PackageID,
     edges: []std.array_list.Managed(Edge),
     candidates: std.array_list.Managed(PackageID),
     edge_count: usize = 0,
@@ -152,7 +155,7 @@ const Pass = struct {
     count: std.array_list.Managed(u32),
     protected: std.array_list.Managed(usize),
 
-pub fn init(allocator: Allocator, lockfile: *const Lockfile, groups: []const std.array_list.Managed(PackageID), group_of: []const u32, pinned: *const DynamicBitSet, max_candidates: usize, max_edges: usize) !Pass {
+pub fn init(allocator: Allocator, lockfile: *const Lockfile, groups: []const std.array_list.Managed(PackageID), group_of: []const u32, pinned: *const DynamicBitSet, closed: *const DynamicBitSet, frozen_below: ?PackageID, max_candidates: usize, max_edges: usize) !Pass {
             const package_count = lockfile.packages.len;
             var edges = try allocator.alloc(std.array_list.Managed(Edge), groups.len);
             _ = &edges;
@@ -219,7 +222,7 @@ pub fn init(allocator: Allocator, lockfile: *const Lockfile, groups: []const std
             errdefer {
             _ = count.deinit();
             }
-            return Pass{ .allocator = allocator, .lockfile = lockfile, .groups = groups, .group_of = group_of, .pinned = pinned, .edges = edges, .candidates = candidates, .sat = sat, .movable = movable, .cur_c = cur_c, .required = required, .chosen = chosen, .survivors = survivors, .covered = covered, .voters = voters, .voted = voted, .count = count, .protected = std.array_list.Managed(usize).init(allocator) };
+            return Pass{ .allocator = allocator, .lockfile = lockfile, .groups = groups, .group_of = group_of, .pinned = pinned, .closed = closed, .frozen_below = frozen_below, .edges = edges, .candidates = candidates, .sat = sat, .movable = movable, .cur_c = cur_c, .required = required, .chosen = chosen, .survivors = survivors, .covered = covered, .voters = voters, .voted = voted, .count = count, .protected = std.array_list.Managed(usize).init(allocator) };
     }
 
 pub fn deinit(self: *@This()) void {
@@ -328,6 +331,23 @@ pub fn placement(self: @This(), e: usize) ?usize {
             return null;
     }
 
+pub fn counts(self: @This(), dep: Dependency) bool {
+            return ((self.frozen_below == null) or (!dep.behavior.isBundled()));
+    }
+
+pub fn anchoredPlacement(self: @This(), e: usize) ?usize {
+            const n = self.candidates.items.len;
+            const row = (e * n);
+            var c: usize = 0;
+            _ = &c;
+            while ((c < n)) : (c = (c + 1)) {
+                if ((self.required.isSet(c) and self.sat.isSet((row + c)))) {
+                    return c;
+                }
+            }
+            return self.placement(e);
+    }
+
 pub fn vote(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet) ![]PackageID {
             const lockfile = self.lockfile;
             const buf = lockfile.buffers.string_bytes.items;
@@ -353,14 +373,17 @@ pub fn vote(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet) 
                 const end: usize = slice.end();
                 while ((dep_id < end)) : (dep_id = (dep_id + 1)) {
                     const target = cur[@as(usize, @intCast(dep_id))];
-                    if (((target == invalid_package_id) or (target >= self.group_of.len))) {
+                    if (((target == invalid_package_id) or (!self.counts(deps[@as(usize, @intCast(dep_id))])))) {
+                        continue;
+                    }
+                    if ((target >= self.group_of.len)) {
                         continue;
                     }
                     const g = self.group_of[@as(usize, @intCast(target))];
                     if ((g == std.math.maxInt(u32))) {
                         continue;
                     }
-                    _ = try self.edges[@as(usize, @intCast(g))].append(Edge{ .dep_id = @intCast(dep_id), .direct = direct });
+                    _ = try self.edges[@as(usize, @intCast(g))].append(Edge{ .dep_id = @intCast(dep_id), .owner = @intCast(pkg_id), .direct = direct });
                     _ = self.voted.set(pkg_id);
                 }
             }
@@ -394,6 +417,8 @@ pub fn vote(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet) 
                 _ = self.cur_c.clearRetainingCapacity();
                 _ = self.cur_c.appendNTimesAssumeCapacity(0, m);
                 _ = self.required.unmanaged.setAll(false);
+                var can_move = false;
+                _ = &can_move;
                 var e: usize = 0;
                 _ = &e;
                 while ((e < m)) : (e = (e + 1)) {
@@ -418,23 +443,45 @@ pub fn vote(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet) 
                     }
                     self.cur_c.items[cp_cast_int(usize, e)] = cur_c;
                     const row = (e * n);
-                    const range_opt = (if ((self.pinned.isSet(target) or dep.behavior.isBundled())) null else effectiveNpmRange(lockfile, dep_id, dep));
+                    const frozen = (if (self.frozen_below) |below| (edges[@as(usize, @intCast(e))].direct or (target < below)) else false);
+                    const range_opt = (if (((self.pinned.isSet(target) or frozen) or dep.behavior.isBundled())) null else effectiveNpmRange(lockfile, dep_id, dep));
                     if (range_opt) |range| {
                         _ = &range;
-                        _ = self.movable.set(e);
                         const query = (if (@typeInfo(@TypeOf(range)) == .@"enum") @intFromEnum(range) else range.value).npm.version;
                         var c: usize = 0;
                         _ = &c;
                         while ((c < n)) : (c = (c + 1)) {
                             const id = self.candidates.items[@as(usize, @intCast(c))];
-                            if (query.satisfies((if (@typeInfo(@TypeOf(pkg_res[@as(usize, @intCast(id))])) == .@"enum") @intFromEnum(pkg_res[@as(usize, @intCast(id))]) else pkg_res[@as(usize, @intCast(id))].value).npm.version, buf, buf)) {
+                            if ((((c == cur_c) or (!self.closed.isSet(id))) and query.satisfies((if (@typeInfo(@TypeOf(pkg_res[@as(usize, @intCast(id))])) == .@"enum") @intFromEnum(pkg_res[@as(usize, @intCast(id))]) else pkg_res[@as(usize, @intCast(id))].value).npm.version, buf, buf))) {
                                 _ = self.sat.set((row + c));
+                                _ = self.movable.set(e);
+                                if ((c != cur_c)) {
+                                    can_move = true;
+                                }
+                            }
+                        }
+                        if (((!self.movable.isSet(e)) and dep.behavior.isPeer())) {
+                            _ = self.movable.set(e);
+                            can_move = true;
+                            c = 0;
+                            while ((c < n)) : (c = (c + 1)) {
+                                if (((c == cur_c) or (!self.closed.isSet(self.candidates.items[@as(usize, @intCast(c))])))) {
+                                    _ = self.sat.set((row + c));
+                                }
+                            }
+                        } else {
+                            if ((!self.movable.isSet(e))) {
+                                _ = self.sat.set((row + cur_c));
+                                _ = self.required.set(cur_c);
                             }
                         }
                     } else {
                         _ = self.sat.set((row + cur_c));
                         _ = self.required.set(cur_c);
                     }
+                }
+                if ((!can_move)) {
+                    continue;
                 }
                 const base_size = self.cover();
                 _ = self.chosen.unmanaged.copyInto(self.survivors.unmanaged);
@@ -485,10 +532,12 @@ pub fn lt(ctx: void, a: usize, b: usize) bool {
                 }
                 e = 0;
                 while ((e < m)) : (e = (e + 1)) {
-                    if (((!self.movable.isSet(e)) or self.survivors.isSet(self.cur_c.items[@as(usize, @intCast(e))]))) {
+                    if ((!self.movable.isSet(e))) {
                         continue;
                     }
-                    if (self.placement(e)) |p| {
+                    const placed_early = (if (self.frozen_below) |below| ((edges[@as(usize, @intCast(e))].owner >= below) and (!deps[@as(usize, @intCast(edges[@as(usize, @intCast(e))].dep_id))].behavior.isPeer())) else false);
+                    const p_opt = (if (placed_early) self.anchoredPlacement(e) else (if (self.survivors.isSet(self.cur_c.items[@as(usize, @intCast(e))])) continue else self.placement(e)));
+                    if (p_opt) |p| {
                         _ = &p;
                         next[cp_cast_int(usize, edges[@as(usize, @intCast(e))].dep_id)] = self.candidates.items[@as(usize, @intCast(p))];
                     }
@@ -514,7 +563,7 @@ pub fn settle(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet
             }
             while (true) {
                 const next = try self.vote(cur, live);
-                var after = (blk_catch_0: { break :blk_catch_0 ((reachable(self.allocator, self.lockfile, next)) catch |e| { _ = &e; _ = self.allocator.free(next);
+                var after = (blk_catch_0: { break :blk_catch_0 ((reachable(self.allocator, self.lockfile, next, self.frozen_below)) catch |e| { _ = &e; _ = self.allocator.free(next);
                 return e; }); });
                 _ = &after;
                 defer {
@@ -579,7 +628,7 @@ pub fn plural(n: usize) []const u8 {
         return (if ((n == 1)) "" else "s");
 }
 
-pub fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile) !Report {
+pub fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile, frozen_below: ?PackageID) !Report {
         const buf = lockfile.buffers.string_bytes.items;
         const pkg_res = lockfile.packages.items(.resolution);
         const checked = pkg_res.len;
@@ -645,6 +694,22 @@ pub fn dedupeLockfile(allocator: Allocator, lockfile: *Lockfile) !Report {
                 _ = candidates.deinit();
                 continue;
             }
+            if (frozen_below) |below| {
+                _ = &below;
+                var all_below = true;
+                _ = &all_below;
+                for (candidates.items) |id| {
+                    _ = &id;
+                    if ((id >= below)) {
+                        all_below = false;
+                        break;
+                    }
+                }
+                if (all_below) {
+                    _ = candidates.deinit();
+                    continue;
+                }
+            }
             const Ctx = struct {
     pkg_res: []const Lockfile.Package.Resolution,
     buf: []const u8,
@@ -694,7 +759,7 @@ pub fn lt(ctx: @This(), a: PackageID, b: PackageID) bool {
                 max_edges = ec;
             }
         }
-        var initial = try reachable(allocator, lockfile, lockfile.buffers.resolutions.items);
+        var initial = try reachable(allocator, lockfile, lockfile.buffers.resolutions.items, frozen_below);
         _ = &initial;
         defer {
         _ = initial.deinit();
@@ -722,6 +787,11 @@ pub fn lt(ctx: @This(), a: PackageID, b: PackageID) bool {
             _ = kept_pairs.deinit();
         }
         }
+        var closed = try DynamicBitSet.initEmpty(allocator, pkg_res.len);
+        _ = &closed;
+        defer {
+        _ = closed.deinit();
+        }
         var final_cur: []PackageID = undefined;
         _ = &final_cur;
         var final_live: DynamicBitSet = undefined;
@@ -732,7 +802,7 @@ pub fn lt(ctx: @This(), a: PackageID, b: PackageID) bool {
             var cur = try allocator.dupe(PackageID, lockfile.buffers.resolutions.items);
             _ = &cur;
             {
-                var pass = try Pass.init(allocator, lockfile, groups.items, group_of, (&pinned), max_candidates, max_edges);
+                var pass = try Pass.init(allocator, lockfile, groups.items, group_of, (&pinned), (&closed), frozen_below, max_candidates, max_edges);
                 _ = &pass;
                 defer {
                 _ = pass.deinit();
@@ -741,7 +811,7 @@ pub fn lt(ctx: @This(), a: PackageID, b: PackageID) bool {
                     const next = try pass.settle(cur, (&live));
                     _ = allocator.free(cur);
                     cur = next;
-                    var after = try reachable(allocator, lockfile, cur);
+                    var after = try reachable(allocator, lockfile, cur, frozen_below);
                     _ = &after;
                     if (after.unmanaged.eql(live.unmanaged)) {
                         _ = after.deinit();
@@ -750,6 +820,46 @@ pub fn lt(ctx: @This(), a: PackageID, b: PackageID) bool {
                     _ = live.deinit();
                     live = after;
                 }
+            }
+            var held = try DynamicBitSet.initEmpty(allocator, pkg_res.len);
+            _ = &held;
+            defer {
+            _ = held.deinit();
+            }
+            const dep_slices = lockfile.packages.items(.dependencies);
+            const deps = lockfile.buffers.dependencies.items;
+            var owner_i: usize = 0;
+            _ = &owner_i;
+            while ((owner_i < dep_slices.len)) : (owner_i = (owner_i + 1)) {
+                if ((!live.isSet(owner_i))) {
+                    continue;
+                }
+                const slice = dep_slices[@as(usize, @intCast(owner_i))];
+                var dep_id: usize = slice.begin();
+                _ = &dep_id;
+                const end: usize = slice.end();
+                while ((dep_id < end)) : (dep_id = (dep_id + 1)) {
+                    const target = lockfile.buffers.resolutions.items[@as(usize, @intCast(dep_id))];
+                    const bundled = deps[@as(usize, @intCast(dep_id))].behavior.isBundled();
+                    if (((target < pkg_res.len) and (!(bundled and (frozen_below != null))))) {
+                        _ = held.set(target);
+                    }
+                }
+            }
+            const closed_before = closed.count();
+            for (groups.items) |g| {
+                _ = &g;
+                for (g.items) |v| {
+                    _ = &v;
+                    if ((live.isSet(v) and (!held.isSet(v)))) {
+                        _ = closed.set(v);
+                    }
+                }
+            }
+            if ((closed.count() != closed_before)) {
+                _ = allocator.free(cur);
+                _ = live.deinit();
+                continue;
             }
             var orphaned = std.array_list.Managed(PackageID).init(allocator);
             _ = &orphaned;
@@ -873,6 +983,8 @@ pub fn lt(ctx: @This(), a: KeptPair, b: KeptPair) bool {
             }
         }
         if ((removed.items.len == 0)) {
+            _ = lockfile.buffers.resolutions.clearRetainingCapacity();
+            _ = try lockfile.buffers.resolutions.appendSlice(allocator, final_cur);
             return report;
         }
         _ = sortByNameThenVersion(lockfile, removed.items);
@@ -1014,8 +1126,11 @@ pub fn effectiveVersion(lockfile: *const Lockfile, dep_id: DependencyID, dep: De
         return version;
 }
 
-pub fn reachable(allocator: Allocator, lockfile: *const Lockfile, resolutions: []const PackageID) !DynamicBitSet {
-        return reachable_mod.packages(allocator, lockfile, resolutions, reachable_mod.Options.all(0));
+pub fn reachable(allocator: Allocator, lockfile: *const Lockfile, resolutions: []const PackageID, frozen_below: ?PackageID) !DynamicBitSet {
+        var opts = reachable_mod.Options.all(0);
+        _ = &opts;
+        opts.bundled = (frozen_below == null);
+        return reachable_mod.packages(allocator, lockfile, resolutions, opts);
 }
 
 pub fn dedupeBeforeInstall(manager: *PackageManager, load_result: *const Lockfile.LoadResult) !void {
@@ -1192,7 +1307,7 @@ pub fn dedupeAfterDiffer(manager: *PackageManager) void {
         if (manager.summary.changesDependencies()) {
             _ = refuseOutOfDate(manager);
         }
-        var report = bun.handleOom(dedupeLockfile(manager.allocator, manager.lockfile));
+        var report = bun.handleOom(dedupeLockfile(manager.allocator, manager.lockfile, null));
         _ = &report;
         if ((report.rows.items.len == 0)) {
             defer {
@@ -1229,4 +1344,16 @@ pub fn dedupeAfterDiffer(manager: *PackageManager) void {
         }
         manager.dedupe_report = report;
         manager.options.enable.force_save_lockfile = true;
+}
+
+pub fn collapseAppended(manager: *PackageManager, loaded_package_count: usize) void {
+        const lockfile = manager.lockfile;
+        if ((lockfile.packages.len <= loaded_package_count)) {
+            return;
+        }
+        var report = bun.handleOom(dedupeLockfile(manager.allocator, lockfile, @intCast(loaded_package_count)));
+        _ = &report;
+        defer {
+        _ = report.deinit();
+        }
 }

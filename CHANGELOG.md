@@ -2405,3 +2405,10 @@
 - `src/js/builtins/CompressionStream.ts`, `src/js/builtins/DecompressionStream.ts`, `src/js/node/zlib.ts`, `src/js/internal/streams/end-of-stream.ts`, `src/js/internal/streams/add-abort-signal.ts`
 - `src/bake/bake.cp` (.zig), `src/bake/FrameworkRouter.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 7 测试收敛提交
+- `src/runtime/node/node_fs.cp` (.zig)
+- `src/jsc/bindings/webcore/JSEventEmitterCustom.cpp`, `src/jsc/bindings/webcore/JSEventEmitterCustom.h`, `src/jsc/bindings/webcore/JSEventEmitter.cpp`, `src/js/node/events.ts`
+- `src/sql_jsc/mysql/JSMySQLConnection.cp` (.zig)
+- `src/runtime/api/TOMLObject.cp` (.zig), `src/install/dedupe.cp` (.zig), `src/install/PackageManager/install_with_manager.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`

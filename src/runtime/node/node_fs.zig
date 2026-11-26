@@ -5602,7 +5602,10 @@ pub fn stat(self: *NodeFS, args: Arguments.Stat, _: Flavor) Maybe(Return.Stat) {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
                     return .{ .result = .not_found };
                 }
-                break :brk .{ .err = e.withPath(args.path.slice()) };
+                var err_val = e.withPath(args.path.slice());
+                _ = &err_val;
+                err_val.syscall = .stat;
+                break :brk .{ .err = err_val };
 },
 });
             } else {
@@ -5612,7 +5615,10 @@ pub fn stat(self: *NodeFS, args: Arguments.Stat, _: Flavor) Maybe(Return.Stat) {
                 if (((!args.throw_if_no_entry) and (e.getErrno() == .NOENT))) {
                     return .{ .result = .not_found };
                 }
-                break :brk .{ .err = e.withPath(args.path.slice()) };
+                var err_val = e.withPath(args.path.slice());
+                _ = &err_val;
+                err_val.syscall = .stat;
+                break :brk .{ .err = err_val };
 },
 });
             }

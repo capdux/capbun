@@ -33,6 +33,7 @@ const {
 } = require("internal/validators");
 
 const types = require("node:util/types");
+const { kResistStopPropagation } = require("internal/shared");
 let inspect: typeof import("node:util").inspect | undefined;
 
 const SymbolFor = Symbol.for;
@@ -309,10 +310,14 @@ function _onceWrap(target, type, listener) {
 
 function onceWrapper() {
   if (!this.fired) {
-    this.target.removeListener(this.type, this.wrapFn);
+    const { target, listener } = this;
+    target.removeListener(this.type, this.wrapFn);
     this.fired = true;
-    if (arguments.length === 0) return this.listener.$call(this.target);
-    return this.listener.$apply(this.target, arguments);
+    this.target = undefined;
+    this.wrapFn = undefined;
+    this.listener = undefined;
+    if (arguments.length === 0) return listener.$call(target);
+    return listener.$apply(target, arguments);
   }
 }
 
@@ -441,12 +446,12 @@ EventEmitterPrototype.eventNames = function eventNames() {
 
 EventEmitterPrototype[kCapture] = false;
 
-function once(emitter, type, options = kEmptyObject) {
+async function once(emitter, type, options = kEmptyObject) {
   validateObject(options, "options");
   var signal = options?.signal;
   validateAbortSignal(signal, "options.signal");
   if (signal?.aborted) {
-    throw $makeAbortError(undefined, { cause: signal?.reason });
+    throw $makeAbortError("The operation was aborted", { cause: signal?.reason });
   }
   const { resolve, reject, promise } = $newPromiseCapability(Promise);
   const errorListener = err => {
@@ -474,13 +479,13 @@ function once(emitter, type, options = kEmptyObject) {
   function abortListener() {
     eventTargetAgnosticRemoveListener(emitter, type, resolver);
     eventTargetAgnosticRemoveListener(emitter, "error", errorListener);
-    reject($makeAbortError(undefined, { cause: signal?.reason }));
+    reject($makeAbortError("The operation was aborted", { cause: signal?.reason }));
   }
   if (signal != null) {
-    eventTargetAgnosticAddListener(signal, "abort", abortListener, { once: true });
+    eventTargetAgnosticAddListener(signal, "abort", abortListener, { once: true, [kResistStopPropagation]: true });
   }
 
-  return promise;
+  return await promise;
 }
 Object.defineProperty(once, "name", { value: "once" });
 
@@ -493,7 +498,7 @@ function on(emitter, event, options = kEmptyObject) {
   validateObject(options, "options");
   const signal = options.signal;
   validateAbortSignal(signal, "options.signal");
-  if (signal?.aborted) throw $makeAbortError(undefined, { cause: signal?.reason });
+  if (signal?.aborted) throw $makeAbortError("The operation was aborted", { cause: signal?.reason });
   // Support both highWaterMark and highWatermark for backward compatibility
   const highWatermark = options.highWaterMark ?? options.highWatermark ?? Number.MAX_SAFE_INTEGER;
   validateInteger(highWatermark, "options.highWaterMark", 1);
@@ -517,7 +522,7 @@ function on(emitter, event, options = kEmptyObject) {
         if (size) {
           const value = unconsumedEvents.shift();
           size--;
-          if (paused && size < lowWatermark) {
+          if (!finished && paused && size < lowWatermark) {
             emitter.resume();
             paused = false;
           }
@@ -600,7 +605,7 @@ function on(emitter, event, options = kEmptyObject) {
   return iterator;
 
   function abortListener() {
-    errorHandler($makeAbortError(undefined, { cause: signal?.reason }));
+    errorHandler($makeAbortError("The operation was aborted", { cause: signal?.reason }));
   }
 
   function eventHandler(value) {
@@ -694,31 +699,19 @@ const jsEventTargetGetEventListenersCount = $newCppFunction(
 );
 
 function listenerCount(emitter, type) {
-  if ($isCallable(emitter.listenerCount)) {
+  if ($isCallable(emitter?.listenerCount)) {
     return emitter.listenerCount(type);
   }
 
   // EventTarget
-  const evt_count = jsEventTargetGetEventListenersCount(emitter, type);
-  if (evt_count !== undefined) return evt_count;
+  if (types.isEventTarget(emitter)) {
+    const evt_count = jsEventTargetGetEventListenersCount(emitter, type);
+    if (evt_count !== undefined) return evt_count;
+  }
 
-  // EventEmitter's with no `.listenerCount`
-  return listenerCountSlow(emitter, type);
+  throw $ERR_INVALID_ARG_TYPE("emitter", ["EventEmitter", "EventTarget"], emitter);
 }
 Object.defineProperty(listenerCount, "name", { value: "listenerCount" });
-
-function listenerCountSlow(emitter, type) {
-  const events = emitter._events;
-  if (events !== undefined) {
-    const evlistener = events[type];
-    if (typeof evlistener === "function") {
-      return 1;
-    } else if (evlistener !== undefined) {
-      return evlistener.length;
-    }
-  }
-  return 0;
-}
 
 function eventTargetAgnosticRemoveListener(emitter, name, listener, flags?) {
   if (typeof emitter.removeListener === "function") {
@@ -780,7 +773,7 @@ function addAbortListener(signal, listener) {
   if (signal.aborted) {
     queueMicrotask(() => listener());
   } else {
-    signal.addEventListener("abort", listener, { __proto__: null, once: true });
+    signal.addEventListener("abort", listener, { __proto__: null, once: true, [kResistStopPropagation]: true });
     removeEventListener = () => {
       signal.removeEventListener("abort", listener);
     };

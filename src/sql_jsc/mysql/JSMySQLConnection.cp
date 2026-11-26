@@ -675,6 +675,11 @@ struct TlsSetupGuard {
         * = callframe;
         _.stopTimers();
 
+        if (_.#connection.status != .connected && _.#connection.status != .disconnected && _.#connection.status != .failed) {
+            _.fail("Connection closed", err.ConnectionClosed);
+            return JSValue.js_undefined;
+        }
+
         defer _.updateReferenceType();
         _.#connection.cleanQueueAndClose(null, _.getQueriesArray());
         return JSValue.js_undefined;

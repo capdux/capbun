@@ -46,9 +46,62 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val << @as(ShiftType, @truncate(u_shift));
+    }
+    return val << shift;
+}
+fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
+    const __T = @TypeOf(val);
+    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
+    if (comptime @typeInfo(__T) == .int) {
+        const ShiftType = std.math.Log2Int(__T);
+        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
+        return val >> @as(ShiftType, @truncate(u_shift));
+    }
+    return val >> shift;
+}
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const StringifyError = error{
+    JSError,
+    JSTerminated,
+    OutOfMemory,
+    StackOverflow,
+};
+
+pub const Layout = enum {
+    keyval,
+    table,
+    array_of_tables,
+    skip,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -88,6 +141,433 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const Path = struct {
+    parent: ?*const Path,
+    key: *const bun.String,
+};
+
+pub const Stringifier = struct {
+    stack_check: bun.StackCheck,
+    builder: wtf.StringBuilder.StringBuilder,
+    visiting: std.AutoHashMapUnmanaged(JSValue, void),
+    allocator: std.mem.Allocator,
+    wrote: bool,
+
+pub fn init() Stringifier {
+            return .{ .stack_check = .init(), .builder = .init(), .visiting = .empty, .allocator = bun.default_allocator, .wrote = false };
+    }
+
+pub fn deinit(self: *Stringifier) void {
+            _ = self.builder.deinit();
+            _ = self.visiting.deinit(self.allocator);
+    }
+
+pub fn stringifyRoot(self: *Stringifier, global: *jsc.JSGlobalObject, root: JSValue) StringifyError!void {
+            _ = try self.markVisiting(global, root);
+            defer {
+            _ = self.visiting.remove(root);
+            }
+            _ = try self.stringifyTableBody(global, root, null, false);
+    }
+
+pub fn markVisiting(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
+            const gop = try self.visiting.getOrPut(self.allocator, value);
+            if (gop.found_existing) {
+                return global.throw("Converting circular structure to TOML", .{});
+            }
+    }
+
+pub fn layoutOf(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!Layout {
+        _ = self;
+            if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
+                return .skip;
+            }
+            if (value.isArray()) {
+                var iter = try value.arrayIterator(global);
+                _ = &iter;
+                if ((iter.len == 0)) {
+                    return .keyval;
+                }
+                while (try iter.next()) |item_raw| {
+                    const item = try item_raw.unwrapBoxedPrimitive(global);
+                    if (((((!item.isObject()) or item.isArray()) or item.isDate()) or item.isFunction())) {
+                        return .keyval;
+                    }
+                }
+                return .array_of_tables;
+            }
+            if ((value.isObject() and (!value.isDate()))) {
+                return .table;
+            }
+            return .keyval;
+    }
+
+pub fn stringifyTableBody(self: *Stringifier, global: *jsc.JSGlobalObject, table: JSValue, path: ?*const Path, own_header: bool) StringifyError!void {
+            if ((!self.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
+            var header_pending = own_header;
+            _ = &header_pending;
+            const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
+            {
+                var iter: PropIter = try PropIter.init(global, try table.toObject(global));
+                _ = &iter;
+                var iter_guard = DeinitGuard(PropIter){ .ptr = (&iter) };
+                _ = &iter_guard;
+                var __iter_guard_moved = false; _ = &__iter_guard_moved;
+                defer if (!__iter_guard_moved) { __iter_guard_moved = true; const __T = @TypeOf(iter_guard); if (@typeInfo(__T) == .optional) { if (iter_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { iter_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = iter_guard; _drop_val.__cp_deinit(); } };
+                while (try iter.next()) |prop_name| {
+                    const value = try (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).unwrapBoxedPrimitive(global);
+                    if (value.isNull()) {
+                        return self.errNullValue(global, (&prop_name));
+                    }
+                    switch (try self.layoutOf(global, value)) {
+.keyval => {
+
+},
+.table, .array_of_tables, .skip => {
+_ = continue;
+},
+}
+                    if (header_pending) {
+                        header_pending = false;
+                        _ = self.appendHeader(path, false);
+                    }
+                    _ = self.appendKeySegment((&prop_name));
+                    _ = self.builder.append(.latin1, " = ");
+                    _ = try self.stringifyInlineValue(global, value);
+                    _ = self.builder.append(.lchar, 10);
+                    self.wrote = true;
+                }
+            }
+            {
+                var iter: PropIter = try PropIter.init(global, try table.toObject(global));
+                _ = &iter;
+                var iter_guard = DeinitGuard(PropIter){ .ptr = (&iter) };
+                _ = &iter_guard;
+                var __iter_guard_moved = false; _ = &__iter_guard_moved;
+                defer if (!__iter_guard_moved) { __iter_guard_moved = true; const __T = @TypeOf(iter_guard); if (@typeInfo(__T) == .optional) { if (iter_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { iter_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = iter_guard; _drop_val.__cp_deinit(); } };
+                while (try iter.next()) |prop_name| {
+                    const value = try (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).unwrapBoxedPrimitive(global);
+                    switch (try self.layoutOf(global, value)) {
+.keyval, .skip => {
+
+},
+.table => {
+header_pending = false;
+                    _ = try self.markVisiting(global, value);
+                    defer {
+                    _ = self.visiting.remove(value);
+                    }
+                    const child = Path{ .parent = path, .key = (&prop_name) };
+                    _ = try self.stringifyTableBody(global, value, (&child), true);
+},
+.array_of_tables => {
+header_pending = false;
+                    _ = try self.markVisiting(global, value);
+                    defer {
+                    _ = self.visiting.remove(value);
+                    }
+                    const child = Path{ .parent = path, .key = (&prop_name) };
+                    var items = try value.arrayIterator(global);
+                    _ = &items;
+                    while (try items.next()) |item_raw| {
+                        const item = try item_raw.unwrapBoxedPrimitive(global);
+                        if (((((!item.isObject()) or item.isArray()) or item.isDate()) or item.isFunction())) {
+                            return self.errChanged(global);
+                        }
+                        _ = try self.markVisiting(global, item);
+                        defer {
+                        _ = self.visiting.remove(item);
+                        }
+                        _ = self.appendHeader((&child), true);
+                        _ = try self.stringifyTableBody(global, item, (&child), false);
+                    }
+},
+}
+                }
+            }
+            if (header_pending) {
+                _ = self.appendHeader(path, false);
+            }
+    }
+
+pub fn stringifyInlineValue(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
+            if ((!self.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
+            if (value.isBoolean()) {
+                _ = self.builder.append(.latin1, (if (value.asBoolean()) "true" else "false"));
+                return;
+            }
+            if (value.isNumber()) {
+                _ = self.appendNumber(value);
+                return;
+            }
+            if (value.isBigInt()) {
+                return global.throw("TOML.stringify cannot serialize BigInt", .{});
+            }
+            if (value.isString()) {
+                var str = try value.toBunString(global);
+                _ = &str;
+                var str_guard = DerefGuard(bun.String){ .ptr = (&str) };
+                _ = &str_guard;
+                var __str_guard_moved = false; _ = &__str_guard_moved;
+                defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
+                _ = self.appendBasicQuoted((&str));
+                return;
+            }
+            if (value.isDate()) {
+                return self.appendDatetime(global, value);
+            }
+            if (value.isArray()) {
+                _ = try self.markVisiting(global, value);
+                defer {
+                _ = self.visiting.remove(value);
+                }
+                _ = self.builder.append(.lchar, 91);
+                var iter = try value.arrayIterator(global);
+                _ = &iter;
+                var first = true;
+                _ = &first;
+                while (try iter.next()) |item_raw| {
+                    if ((!first)) {
+                        _ = self.builder.append(.latin1, ", ");
+                    }
+                    first = false;
+                    const item = try item_raw.unwrapBoxedPrimitive(global);
+                    if ((((item.isNull() or item.isUndefined()) or item.isSymbol()) or item.isFunction())) {
+                        return self.errInArray(global, item);
+                    }
+                    _ = try self.stringifyInlineValue(global, item);
+                }
+                _ = self.builder.append(.lchar, 93);
+                return;
+            }
+            _ = try self.markVisiting(global, value);
+            defer {
+            _ = self.visiting.remove(value);
+            }
+            const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
+            var iter: PropIter = try PropIter.init(global, try value.toObject(global));
+            _ = &iter;
+            var iter_guard = DeinitGuard(PropIter){ .ptr = (&iter) };
+            _ = &iter_guard;
+            var __iter_guard_moved = false; _ = &__iter_guard_moved;
+            defer if (!__iter_guard_moved) { __iter_guard_moved = true; const __T = @TypeOf(iter_guard); if (@typeInfo(__T) == .optional) { if (iter_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { iter_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = iter_guard; _drop_val.__cp_deinit(); } };
+            var first = true;
+            _ = &first;
+            while (try iter.next()) |prop_name| {
+                const prop_value = try (if (@typeInfo(@TypeOf(iter)) == .@"enum") @intFromEnum(iter) else iter.value).unwrapBoxedPrimitive(global);
+                if (((prop_value.isUndefined() or prop_value.isSymbol()) or prop_value.isFunction())) {
+                    continue;
+                }
+                if (prop_value.isNull()) {
+                    return self.errNullValue(global, (&prop_name));
+                }
+                _ = self.builder.append(.latin1, (if (first) "{ " else ", "));
+                first = false;
+                _ = self.appendKeySegment((&prop_name));
+                _ = self.builder.append(.latin1, " = ");
+                _ = try self.stringifyInlineValue(global, prop_value);
+            }
+            _ = self.builder.append(.latin1, (if (first) "{}" else " }"));
+    }
+
+pub fn appendHeader(self: *Stringifier, path: ?*const Path, array_of_tables: bool) void {
+            if (self.wrote) {
+                _ = self.builder.append(.lchar, 10);
+            }
+            _ = self.builder.append(.latin1, (if (array_of_tables) "[[" else "["));
+            if (path) |p| {
+                _ = &p;
+                _ = self.appendPath(p);
+            }
+            _ = self.builder.append(.latin1, (if (array_of_tables) "]]\n" else "]\n"));
+            self.wrote = true;
+    }
+
+pub fn appendPath(self: *Stringifier, path: *const Path) void {
+            var chain = std.ArrayListUnmanaged(*const bun.String).empty;
+            _ = &chain;
+            defer {
+            _ = chain.deinit(self.allocator);
+            }
+            var next: ?*const Path = path;
+            _ = &next;
+            while (next) |link| {
+                _ = bun.handleOom(chain.append(self.allocator, link.key));
+                next = link.parent;
+            }
+            var i = chain.items.len;
+            _ = &i;
+            var first = true;
+            _ = &first;
+            while ((i > 0)) {
+                i = (i - 1);
+                if ((!first)) {
+                    _ = self.builder.append(.lchar, 46);
+                }
+                first = false;
+                _ = self.appendKeySegment(chain.items[@as(usize, @intCast(i))]);
+            }
+    }
+
+pub fn appendKeySegment(self: *Stringifier, name: *const bun.String) void {
+            if (Stringifier.isBareKey(name)) {
+                _ = self.builder.append(.@"string", name.*);
+            } else {
+                _ = self.appendBasicQuoted(name);
+            }
+    }
+
+pub fn appendBasicQuoted(self: *Stringifier, str: *const bun.String) void {
+            _ = self.builder.append(.lchar, 34);
+            const len = str.length();
+            var i: usize = 0;
+            _ = &i;
+            while ((i < len)) : (i = (i + 1)) {
+                const c = str.charAt(i);
+                switch (c) {
+8 => {
+_ = self.builder.append(.latin1, "\\b");
+},
+9 => {
+_ = self.builder.append(.latin1, "\\t");
+},
+10 => {
+_ = self.builder.append(.latin1, "\\n");
+},
+12 => {
+_ = self.builder.append(.latin1, "\\f");
+},
+13 => {
+_ = self.builder.append(.latin1, "\\r");
+},
+'"' => {
+_ = self.builder.append(.latin1, "\\\"");
+},
+'\\' => {
+_ = self.builder.append(.latin1, "\\\\");
+},
+0...7, 11, 14...31, 127 => {
+_ = self.builder.append(.latin1, "\\u00");
+                _ = self.builder.append(.lchar, Stringifier.hexDigit(cp_shr(c, 4)));
+                _ = self.builder.append(.lchar, Stringifier.hexDigit((c & 15)));
+},
+55296...56319 => {
+if (((i + 1) < len)) {
+                    const next_c = str.charAt((i + 1));
+                    if (((next_c >= 56320) and (next_c <= 57343))) {
+                        _ = self.builder.append(.uchar, c);
+                        _ = self.builder.append(.uchar, next_c);
+                        i = (i + 1);
+                    } else {
+                        _ = self.builder.append(.uchar, 65533);
+                    }
+                } else {
+                    _ = self.builder.append(.uchar, 65533);
+                }
+},
+56320...57343 => {
+_ = self.builder.append(.uchar, 65533);
+},
+else => {
+_ = self.builder.append(.uchar, c);
+},
+}
+            }
+            _ = self.builder.append(.lchar, 34);
+    }
+
+pub fn appendNumber(self: *Stringifier, value: JSValue) void {
+            if (value.isInt32()) {
+                _ = self.builder.append(.int, value.asInt32());
+                return;
+            }
+            const num = value.asNumber();
+            if (std.math.isNan(num)) {
+                _ = self.builder.append(.latin1, "nan");
+                return;
+            }
+            if (std.math.isInf(num)) {
+                _ = self.builder.append(.latin1, (if ((num < 0.0)) "-inf" else "inf"));
+                return;
+            }
+            if ((num == 0.0)) {
+                _ = self.builder.append(.latin1, (if (std.math.signbit(num)) "-0.0" else "0"));
+                return;
+            }
+            _ = self.builder.append(.double, num);
+            if ((((@mod(num, 1.0) == 0.0) and (@abs(num) > MAX_SAFE_INTEGER_F)) and (@abs(num) < 1000000000000000000000.0))) {
+                _ = self.builder.append(.latin1, ".0");
+            }
+    }
+
+pub fn appendDatetime(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError!void {
+            var buf: [28]u8 = @splat(0);
+            _ = &buf;
+            const iso = value.toISOString(global, (&buf));
+            if ((iso.len == 0)) {
+                return global.throw("TOML.stringify cannot serialize an invalid Date", .{});
+            }
+            if ((!std.ascii.isDigit(iso[0]))) {
+                return global.throw("TOML.stringify cannot serialize a Date outside years 0000-9999", .{});
+            }
+            var end: usize = 23;
+            _ = &end;
+            while (((end > 20) and (iso[@as(usize, @intCast((end - 1)))] == 48))) : (end = (end - 1)) {
+            }
+            if ((end == 20)) {
+                end = 19;
+            }
+            _ = self.builder.append(.latin1, iso[0..end]);
+            _ = self.builder.append(.lchar, 90);
+    }
+
+pub fn errNullValue(self: *Stringifier, global: *jsc.JSGlobalObject, key: *const bun.String) StringifyError {
+        _ = self;
+            return global.throw("TOML cannot represent null (key '{f}'); remove the key or use a sentinel value", .{ key.* });
+    }
+
+pub fn errInArray(self: *Stringifier, global: *jsc.JSGlobalObject, value: JSValue) StringifyError {
+        _ = self;
+            const what: []const u8 = (if (value.isNull()) "null" else (if (value.isUndefined()) "undefined" else (if (value.isSymbol()) "a symbol" else "a function")));
+            return global.throw("TOML cannot represent {s} in an array", .{ what });
+    }
+
+pub fn errChanged(self: *Stringifier, global: *jsc.JSGlobalObject) StringifyError {
+        _ = self;
+            return global.throw("TOML.stringify cannot serialize a value that changed during serialization", .{});
+    }
+
+pub fn hexDigit(v: u16) u8 {
+            const nibble: u8 = @as(u8, @truncate((v & 15)));
+            return (if ((nibble < 10)) (48 + nibble) else ((97 + nibble) - 10));
+    }
+
+pub fn isBareKey(name: *const bun.String) bool {
+            const len = name.length();
+            if ((len == 0)) {
+                return false;
+            }
+            var i: usize = 0;
+            _ = &i;
+            while ((i < len)) : (i = (i + 1)) {
+                const c = name.charAt(i);
+                if ((c >= 128)) {
+                    return false;
+                }
+                const b: u8 = @as(u8, @truncate(c));
+                if ((!((std.ascii.isAlphanumeric(b) or (b == 45)) or (b == 95)))) {
+                    return false;
+                }
+            }
+            return true;
+    }
+};
+
+const MAX_SAFE_INTEGER_F: f64 = 9007199254740991.0;
 const ast = bun.ast;
 const default_allocator = bun.default_allocator;
 const js_printer = bun.js_printer;
@@ -97,11 +577,47 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
+const wtf = jsc.wtf;
 
 pub fn create(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
-        const object = JSValue.createEmptyObject(globalThis, 1);
+        const object = JSValue.createEmptyObject(globalThis, 2);
         _ = object.put(globalThis, ZigString.static("parse"), jsc.JSFunction.create(globalThis, "parse", parse, 1, .{}));
+        _ = object.put(globalThis, ZigString.static("stringify"), jsc.JSFunction.create(globalThis, "stringify", stringify, 3, .{}));
         return object;
+}
+
+pub fn stringify(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const args = callframe.argumentsAsArray(3);
+        const value = args[0];
+        const replacer = args[1];
+        _ = value.ensureStillAlive();
+        if (((value.isUndefined() or value.isSymbol()) or value.isFunction())) {
+            return jsc.JSValue.js_undefined;
+        }
+        if ((!replacer.isUndefinedOrNull())) {
+            return global.throw("TOML.stringify does not support the replacer argument", .{});
+        }
+        const unwrapped = try value.unwrapBoxedPrimitive(global);
+        if ((((!unwrapped.isObject()) or unwrapped.isArray()) or unwrapped.isDate())) {
+            return global.throw("TOML.stringify expects an object at the top level (a TOML document is a table)", .{});
+        }
+        var stringifier: Stringifier = .init();
+        _ = &stringifier;
+        var stringifier_guard = DeinitGuard(Stringifier){ .ptr = (&stringifier) };
+        _ = &stringifier_guard;
+        var __stringifier_guard_moved = false; _ = &__stringifier_guard_moved;
+        defer if (!__stringifier_guard_moved) { __stringifier_guard_moved = true; const __T = @TypeOf(stringifier_guard); if (@typeInfo(__T) == .optional) { if (stringifier_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stringifier_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stringifier_guard; _drop_val.__cp_deinit(); } };
+        _ = (blk_catch_0: { break :blk_catch_0 ((stringifier.stringifyRoot(global, unwrapped)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+            return global.throwStackOverflow();
+        }
+        if ((e == error.OutOfMemory)) {
+            return error.OutOfMemory;
+        }
+        if ((e == error.JSTerminated)) {
+            return error.JSTerminated;
+        }
+        return error.JSError; }); });
+        return stringifier.builder.toString(global);
 }
 
 pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -142,14 +658,14 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         }
         const source = (&logger.Source.initPathString("input.toml", input_bytes));
         const log_ptr: *logger.Log = (&log);
-        const parse_result = (blk_catch_0: { break :blk_catch_0 ((TOML.parse(source, log_ptr, allocator, false)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+        const parse_result = (blk_catch_1: { break :blk_catch_1 ((TOML.parse(source, log_ptr, allocator, false)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return globalThis.throwStackOverflow();
         }
         return globalThis.throwValue(try log.toJS(globalThis, default_allocator, "Failed to parse toml")); }); });
         const buffer_writer = js_printer.BufferWriter.init(allocator);
         var writer = js_printer.BufferPrinter.init(buffer_writer);
         _ = &writer;
-        _ = (blk_catch_1: { break :blk_catch_1 ((js_printer.printJSON(*js_printer.BufferPrinter, (&writer), parse_result, source, .{ .mangled_props = null })) catch |__ce_1| { _ = &__ce_1; return globalThis.throwValue(try log.toJS(globalThis, default_allocator, "Failed to print toml")); }); });
+        _ = (blk_catch_2: { break :blk_catch_2 ((js_printer.printJSON(*js_printer.BufferPrinter, (&writer), parse_result, source, .{ .mangled_props = null })) catch |__ce_2| { _ = &__ce_2; return globalThis.throwValue(try log.toJS(globalThis, default_allocator, "Failed to print toml")); }); });
         const slice = writer.ctx.buffer.slice();
         var out = bun.String.borrowUTF8(slice);
         _ = &out;

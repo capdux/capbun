@@ -816,6 +816,10 @@ pub fn doClose(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, call
         _ = &globalObject;
         _ = &callframe;
         _ = self.stopTimers();
+        if ((((self.#connection.status != .connected) and (self.#connection.status != .disconnected)) and (self.#connection.status != .failed))) {
+            _ = self.fail("Connection closed", error.ConnectionClosed);
+            return JSValue.js_undefined;
+        }
         defer {
         _ = self.updateReferenceType();
         }

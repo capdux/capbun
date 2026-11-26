@@ -687,6 +687,9 @@ pub fn installWithManager(
     if (bare_update) {
         transitive.redirectDependents(manager.lockfile);
     }
+    if (manager.subcommand != .dedupe) {
+        bun.install.dedupe.collapseAppended(manager, loaded_package_count);
+    }
     bun.install.update_transitive.printKeptPatched(manager);
     transitive.printPlan(manager, &direct_deps_before, []);
 

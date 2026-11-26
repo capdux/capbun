@@ -752,6 +752,9 @@ else => {
         if (bare_update) {
             _ = transitive.redirectDependents(manager.lockfile);
         }
+        if ((manager.subcommand != .dedupe)) {
+            _ = bun.install.dedupe.collapseAppended(manager, loaded_package_count);
+        }
         _ = bun.install.update_transitive.printKeptPatched(manager);
         _ = transitive.printPlan(manager, (&direct_deps_before), &.{});
         const lockfile_before_clean = manager.lockfile;
