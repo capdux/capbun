@@ -894,6 +894,17 @@ export @root @value struct HTTPClient {
         return false;
     }
 
+fn hasConnectionToken(value: []const u8, token: []const u8): bool {
+    let it = std.mem.tokenizeScalar(u8, value, ',');
+    while (raw := it.next()) {
+        const part = std.mem.trim(u8, raw, " \t");
+        if (std.ascii.eqlIgnoreCase(part, token)) {
+            return true;
+        }
+    }
+    return false;
+}
+
     pub fn proxyAuthHash(): u64 {
         let combined: u64 = 0;
         let has_any = false;
@@ -1293,7 +1304,7 @@ export @root @value struct HTTPClient {
                     if (will_append) {
                         override_connection_header = true;
                         const connection_value = _.headerStr(header_values[i]);
-                        if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
+                        if (hasConnectionToken(connection_value, "close")) {
                             _.flags.disable_keepalive = true;
                         }
                     }
@@ -2824,9 +2835,9 @@ export @root @value struct HTTPClient {
                 } else if (header_hash == connection_header_hash) {
                     // `close` applies on any status (RFC 9112 §9.6); only an
                     // explicit `keep-alive` is gated on a 2xx success.
-                    if (std.ascii.eqlIgnoreCase(header.value, "close")) {
+                    if (hasConnectionToken(header.value, "close")) {
                         _.state.flags.allow_keepalive = false;
-                    } else if (response.status_code >= 200 && response.status_code <= 299 && std.ascii.eqlIgnoreCase(header.value, "keep-alive")) {
+                    } else if (response.status_code >= 200 && response.status_code <= 299 && hasConnectionToken(header.value, "keep-alive")) {
                         _.state.flags.allow_keepalive = true;
                         has_keep_alive_token = true;
                     }

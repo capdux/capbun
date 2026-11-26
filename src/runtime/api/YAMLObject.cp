@@ -25,6 +25,11 @@ pub struct ExitGuard<T> {
     }
 }
 
+struct PropNewlineResult {
+    needs_newline: bool,
+    unwrapped: JSValue,
+}
+
 pub fn create(globalThis: *jsc.JSGlobalObject): jsc.JSValue {
     const object = JSValue.createEmptyObject(globalThis, 2);
     object.put(
@@ -320,6 +325,13 @@ pub struct Stringifier {
         }
 
         const unwrapped = value.unwrapBoxedPrimitive(global)?;
+        return _.stringifyUnwrappedValue(global, unwrapped);
+    }
+
+    fn stringifyUnwrappedValue(*_, global: *JSGlobalObject, unwrapped: JSValue): StringifyError!void {
+        if (!_.stack_check.isSafeToRecurse()) {
+            return error.StackOverflow;
+        }
 
         if (unwrapped.isNull()) {
             _.builder.append(.latin1, "null");
@@ -469,6 +481,9 @@ pub struct Stringifier {
                         _.stringifyValue(global, item)?;
                         _.indent -= 1;
                     }
+                    if (first) {
+                        _.builder.append(.latin1, "[]");
+                    }
                 },
             }
 
@@ -522,16 +537,17 @@ pub struct Stringifier {
                     first = false;
 
                     _.appendString(prop_name);
-                    if (_.propValueNeedsNewline(global, iter_props.value)?) {
+                    const nl = _.propValueNeedsNewline(global, iter_props.value)?;
+                    if (nl.needs_newline) {
                         _.builder.append(.lchar, ':');
                         _.indent += 1;
                         _.newline();
-                        _.stringifyValue(global, iter_props.value)?;
+                        _.stringifyUnwrappedValue(global, nl.unwrapped)?;
                         _.indent -= 1;
                     } else {
                         _.builder.append(.latin1, ": ");
                         _.indent += 1;
-                        _.stringifyValue(global, iter_props.value)?;
+                        _.stringifyUnwrappedValue(global, nl.unwrapped)?;
                         _.indent -= 1;
                     }
                 }
@@ -543,27 +559,27 @@ pub struct Stringifier {
     }
 
     /// Does this object property value need a newline? True for non-empty or anchored/aliased arrays and objects.
-    fn propValueNeedsNewline(*_, global: *JSGlobalObject, value: JSValue): JSError!bool {
+    fn propValueNeedsNewline(*_, global: *JSGlobalObject, value: JSValue): JSError!PropNewlineResult {
         if (value.isNumber() || value.isBoolean() || value.isNull() || value.isString()) {
-            return false;
+            return PropNewlineResult{ needs_newline: false, unwrapped: value };
         }
-        const unwrapped = value.unwrapBoxedPrimitive(global) catch return false;
+        const unwrapped = value.unwrapBoxedPrimitive(global)?;
         if (unwrapped.isNumber() || unwrapped.isBoolean() || unwrapped.isNull() || unwrapped.isString()) {
-            return false;
+            return PropNewlineResult{ needs_newline: false, unwrapped: unwrapped };
         }
         if (anchor := _.known_collections.getPtr(unwrapped)) {
             if (anchor.used) {
-                return true;
+                return PropNewlineResult{ needs_newline: true, unwrapped: unwrapped };
             }
         }
         if (unwrapped.isArray()) {
             let iter = unwrapped.arrayIterator(global)?;
             while (item := iter.next()?) {
                 if (!item.isUndefined() && !item.isSymbol() && !item.isFunction()) {
-                    return true;
+                    return PropNewlineResult{ needs_newline: true, unwrapped: unwrapped };
                 }
             }
-            return false;
+            return PropNewlineResult{ needs_newline: false, unwrapped: unwrapped };
         }
         let iter_props: PropIter = (PropIter.init(
             global,
@@ -573,10 +589,10 @@ pub struct Stringifier {
         while (prop := iter_props.next()?) {
             * = prop;
             if (!iter_props.value.isUndefined() && !iter_props.value.isSymbol() && !iter_props.value.isFunction()) {
-                return true;
+                return PropNewlineResult{ needs_newline: true, unwrapped: unwrapped };
             }
         }
-        return false;
+        return PropNewlineResult{ needs_newline: false, unwrapped: unwrapped };
     }
 
     fn newline(*_) {

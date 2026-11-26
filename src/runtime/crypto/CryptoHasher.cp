@@ -183,7 +183,7 @@ pub union(enum) CryptoHasher {
     static fn hashJS(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(3);
         const args = arguments.ptr[0..arguments.len];
-        if (args.len < 1 || args[0].isEmptyOrUndefinedOrNull() || !args[0].isString()) {
+        if (args.len < 1 || args[0].isEmptyOrUndefinedOrNull() || args[0].isObject() || !args[0].isString()) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "algorithm must be a string", .{}).throw();
         }
         const algorithm = args[0].getZigString(globalThis)?;
@@ -253,10 +253,7 @@ pub union(enum) CryptoHasher {
 
         if (output_buf := output) {
             const size = evp.size();
-            let bytes = output_buf.byteSlice();
-            if (bytes.len < size) {
-                return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{size});
-            }
+            const bytes = checkOutputBuffer(globalThis, output_buf, size)?;
             const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]);
             if (len_opt == null) {
                 const e = getSSLErr();
@@ -506,10 +503,7 @@ pub union(enum) CryptoHasher {
 
     fn digestToBytes(*_, globalThis: *JSGlobalObject, output: jsc.ArrayBuffer?): jsc.JSValue ! bun.JSError {
         if (output_buf := output) {
-            let bytes = output_buf.byteSlice();
-            if (bytes.len < BoringSSL.EVP_MAX_MD_SIZE) {
-                return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{BoringSSL.EVP_MAX_MD_SIZE}), .{});
-            }
+            const bytes = checkOutputBuffer(globalThis, output_buf, BoringSSL.EVP_MAX_MD_SIZE)?;
             * = _.final(globalThis, bytes[0..bytes.len]) catch return .zero;
             if (globalThis.hasException()) {
                 return error.JSError;
@@ -663,17 +657,12 @@ struct CryptoHasherZig {
         const digest_length_comptime = digestLength(Algorithm);
 
         if (output_buf := output) {
-            if (output_buf.byteSlice().len < digest_length_comptime) {
-                return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{digest_length_comptime});
-            }
-        }
-
-        h.update(input.slice());
-
-        if (output_buf := output) {
-            h.final(output_buf.slice()[0..digest_length_comptime]);
+            const bytes = checkOutputBuffer(globalThis, output_buf, digest_length_comptime)?;
+            h.update(input.slice());
+            h.final(bytes[0..digest_length_comptime]);
             return output_buf.value;
         } else {
+            h.update(input.slice());
             const digest_len = comptime digestLength(Algorithm);
             let out: [digest_len]u8 = undefined;
             h.final(&out);
@@ -760,6 +749,15 @@ struct CryptoHasherZig {
     fn deinit(*_) {
         _.release();
     }
+}
+
+fn checkOutputBuffer(globalThis: *JSGlobalObject, output_buf: jsc.ArrayBuffer, min_size: usize): bun.JSError![]u8 {
+    const fresh = output_buf.value.asArrayBuffer(globalThis) ?? output_buf;
+    const bytes = fresh.byteSlice();
+    if (bytes.len < min_size) {
+        return globalThis.ERR(.INVALID_ARG_TYPE, "TypedArray must be at least {d} bytes", .{min_size}).throw();
+    }
+    return bytes;
 }
 
 const ParsedHashArgs = struct {
@@ -873,10 +871,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
 
         static fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.ArrayBuffer?): jsc.JSValue ! bun.JSError {
             if (output_buf := output) {
-                const bytes = output_buf.byteSlice();
-                if (bytes.len < Hasher.digest) {
-                    return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{Hasher.digest}), .{});
-                }
+                const bytes = checkOutputBuffer(globalThis, output_buf, Hasher.digest)?;
                 const slice = bytes[0..Hasher.digest];
                 if (comptime @typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3) {
                     Hasher.hash(input.slice(), slice, jsc.VirtualMachine.get().rareData().boringEngine());
@@ -999,10 +994,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
 
         fn digestToBytes(*_, globalThis: *JSGlobalObject, output: jsc.ArrayBuffer?): jsc.JSValue ! bun.JSError {
             if (output_buf := output) {
-                const bytes = output_buf.byteSlice();
-                if (bytes.len < Hasher.digest) {
-                    return globalThis.throwInvalidArguments(comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{Hasher.digest}), .{});
-                }
+                const bytes = checkOutputBuffer(globalThis, output_buf, Hasher.digest)?;
                 _.hashing.final(bytes[0..Hasher.digest]);
                 _.digested = true;
                 return output_buf.value;

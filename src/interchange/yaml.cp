@@ -2415,7 +2415,19 @@ pub struct Parser<const enc: Encoding> {
             }
 
             while (_.token.data != .mapping_end) {
-                const key = key: {
+                const key = if (_.token.data == .mapping_key) blk: {
+                    {
+                        _.context.set(.flow_key)?;
+                        defer _.context.unset(.flow_key);
+                        _.scan({})?;
+                    }
+                    if (_.token.data == .mapping_value || _.token.data == .collect_entry || _.token.data == .mapping_end) {
+                        break :blk Expr.init(E.Null, {}, _.token.start.loc());
+                    }
+                    _.context.set(.flow_key)?;
+                    defer _.context.unset(.flow_key);
+                    break :blk _.parseNode({})?;
+                } else key: {
                     _.context.set(.flow_key)?;
                     defer _.context.unset(.flow_key);
                     break :key _.parseNode({})?;
@@ -3797,6 +3809,9 @@ pub struct Parser<const enc: Encoding> {
                 }
                 if (explicit_indent == null) {
                     ctx.content_indent = _.line_indent;
+                }
+                if (_.line_indent.cast() > 0) {
+                    ctx.leading_newlines += 1;
                 }
                 return ctx.done();
             },

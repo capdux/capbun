@@ -472,6 +472,13 @@ pub noinline fn mkdirIfNotExists(ctx: auto, e: bun.sys.Error, path_string: [:0]c
     return .no;
 }
 
+fn isValidBlobType(s: []const u8): bool {
+    for (c of s) {
+        if (c < 0x20 || c > 0x7E) return false;
+    }
+    return true;
+}
+
 fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob: *Blob, options: WriteFileOptions): JSValue ! JSError {
     const destination_store = destination_blob.store.?;
     const _guard_dest_blob = DetachGuard<Blob>{ ptr: destination_blob };
@@ -2706,7 +2713,7 @@ pub struct BlobExternalSharedDescriptor {
                         let str = file_type.toSlice(globalObject, default_allocator)?;
                         const _guard_str = DeinitGuard<ZigString.Slice>{ ptr: &str };
                         const slice = str.slice();
-                        if (strings.isAllASCII(slice)) {
+                        if (isValidBlobType(slice)) {
                             blob.content_type_was_set = true;
                             if (entry := vm.mimeType(slice)) {
                                 blob.content_type = entry.value;
@@ -2888,7 +2895,7 @@ pub struct BlobExternalSharedDescriptor {
                                     let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
                                     const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                                     const slice = content_type_str.slice();
-                                    if (!strings.isAllASCII(slice)) {
+                                    if (!isValidBlobType(slice)) {
                                         break :inner;
                                     }
                                     blob.content_type_was_set = true;
@@ -3215,6 +3222,10 @@ pub struct BlobExternalSharedDescriptor {
                     return global.throwOutOfMemory();
                 }
                 const store = blob.store.?;
+                if (!store.hasOneRef()) {
+                    defer blob.detach();
+                    return jsc.ArrayBuffer.create(global, buf, TypedArrayView);
+                }
                 blob.transfer();
                 let ab = jsc.ArrayBuffer.fromBytes(buf, TypedArrayView);
                 return ab.toJSWithContext(
@@ -3463,7 +3474,7 @@ pub struct BlobExternalSharedDescriptor {
                 let slicer = zig_str.toSlice(default_allocator);
                 const _guard_slicer = DeinitGuard<ZigString.Slice>{ ptr: &slicer };
                 const s = slicer.slice();
-                if (strings.isAllASCII(s)) {
+                if (isValidBlobType(s)) {
                     if (mime := globalThis.bunVM().mimeType(s)) {
                         content_type = mime.value;
                     } else {
@@ -3567,7 +3578,7 @@ pub struct BlobExternalSharedDescriptor {
                     let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
                     const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                     const s = content_type_str.slice();
-                    if (strings.isAllASCII(s)) {
+                    if (isValidBlobType(s)) {
                         if (_.content_type_allocated) {
                             default_allocator.free(_.content_type);
                             _.content_type_allocated = false;
@@ -3617,7 +3628,7 @@ pub struct BlobExternalSharedDescriptor {
                         let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
                         const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                         const slice = content_type_str.slice();
-                        if (strings.isAllASCII(slice)) {
+                        if (isValidBlobType(slice)) {
                             if (_.content_type_allocated) {
                                 default_allocator.free(_.content_type);
                                 _.content_type_allocated = false;
@@ -4606,7 +4617,7 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
                         let content_type_str = content_type.toSlice(globalThis, default_allocator)?;
                         const _guard_ct = DeinitGuard<ZigString.Slice>{ ptr: &content_type_str };
                         const slice = content_type_str.slice();
-                        if (!strings.isAllASCII(slice)) {
+                        if (!isValidBlobType(slice)) {
                             break :inner;
                         }
                         blob.content_type_was_set = true;

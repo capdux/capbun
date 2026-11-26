@@ -244,7 +244,7 @@ fn checkOptionUsage(globalThis: *JSGlobalObject, options: []const OptionDefiniti
                     },
                 );
                 return globalThis.throwValue(err);
-            },
+            } else @as(void, undefined),
             OptionValueType.boolean => if (token.value != .jsvalue || !token.value.jsvalue.isUndefined()) {
                 const err = globalThis.toTypeError(
                     .PARSE_ARGS_INVALID_OPTION_VALUE,
@@ -257,7 +257,7 @@ fn checkOptionUsage(globalThis: *JSGlobalObject, options: []const OptionDefiniti
                     },
                 );
                 return globalThis.throwValue(err);
-            },
+            } else @as(void, undefined),
         }
     } else {
         const raw_name = RawNameFormatter{ token: token, globalThis: globalThis };
@@ -680,9 +680,9 @@ pub struct ParseArgsState {
             obj.put(globalThis, ZigString.static("kind"), kind_jsvalue ?? unreachable);
             switch (token_generic) {
                 .option => |token| {
-                    obj.put(globalThis, ZigString.static("index"), JSValue.jsNumber(token.index));
                     obj.put(globalThis, ZigString.static("name"), token.name.asJSValue(globalThis)?);
                     obj.put(globalThis, ZigString.static("rawName"), token.makeRawNameJSValue(globalThis)?);
+                    obj.put(globalThis, ZigString.static("index"), JSValue.jsNumber(token.index));
 
                     // value exists only for string options, otherwise the property exists with "undefined" as value
                     let value = token.value.asJSValue(globalThis)?;
@@ -776,6 +776,9 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
         }
     }
 
+    if (config_strict.isUndefinedOrNull()) {
+        config_strict = .true;
+    }
     const strict = validators.validateBoolean(globalThis, config_strict, "strict", .{})?;
 
     if (config_allow_positionals.isUndefinedOrNull()) {
@@ -784,7 +787,14 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
     const allow_positionals = validators.validateBoolean(globalThis, config_allow_positionals, "allowPositionals", .{})?;
 
+    if (config_return_tokens.isUndefinedOrNull()) {
+        config_return_tokens = .false;
+    }
     const return_tokens = validators.validateBoolean(globalThis, config_return_tokens, "tokens", .{})?;
+
+    if (config_allow_negative.isUndefinedOrNull()) {
+        config_allow_negative = .false;
+    }
     const allow_negative = validators.validateBoolean(globalThis, config_allow_negative, "allowNegative", .{})?;
 
     // Phase 0.C: Parse the options definitions
@@ -850,10 +860,10 @@ pub fn parseArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     log("Phase 4: Build result object", .{});
 
     let result = JSValue.createEmptyObject(globalThis, if (return_tokens) 3 else 2);
+    result.put(globalThis, ZigString.static("values"), state.values);
+    result.put(globalThis, ZigString.static("positionals"), state.positionals);
     if (return_tokens) {
         result.put(globalThis, ZigString.static("tokens"), state.tokens);
     }
-    result.put(globalThis, ZigString.static("values"), state.values);
-    result.put(globalThis, ZigString.static("positionals"), state.positionals);
     return result;
 }

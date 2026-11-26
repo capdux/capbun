@@ -714,8 +714,40 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_validateObject, (JSC::JSGlobalObject * globa
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     auto value = callFrame->argument(0);
+    auto options = callFrame->argument(2);
 
-    if (value.isNull() || JSC::isArray(globalObject, value) || value.isCallable()) {
+    bool allowNullable = false;
+    bool allowArray = false;
+    bool allowFunction = false;
+
+    if (options.isInt32()) {
+        int32_t flags = options.asInt32();
+        allowNullable = (flags & 1) != 0;
+        allowArray = (flags & 2) != 0;
+        allowFunction = (flags & 4) != 0;
+    } else if (options.isObject()) {
+        auto* obj = options.getObject();
+        auto nullableVal = obj->get(globalObject, JSC::Identifier::fromString(vm, "nullable"_s));
+        RETURN_IF_EXCEPTION(scope, {});
+        allowNullable = nullableVal.toBoolean(globalObject);
+        auto allowArrayVal = obj->get(globalObject, JSC::Identifier::fromString(vm, "allowArray"_s));
+        RETURN_IF_EXCEPTION(scope, {});
+        allowArray = allowArrayVal.toBoolean(globalObject);
+        auto allowFunctionVal = obj->get(globalObject, JSC::Identifier::fromString(vm, "allowFunction"_s));
+        RETURN_IF_EXCEPTION(scope, {});
+        allowFunction = allowFunctionVal.toBoolean(globalObject);
+    }
+
+    if (value.isNull()) {
+        if (allowNullable) return JSValue::encode(jsUndefined());
+        return Bun::ERR::INVALID_ARG_TYPE(scope, globalObject, callFrame->argument(1), "object"_s, value);
+    }
+    if (JSC::isArray(globalObject, value)) {
+        if (allowArray) return JSValue::encode(jsUndefined());
+        return Bun::ERR::INVALID_ARG_TYPE(scope, globalObject, callFrame->argument(1), "object"_s, value);
+    }
+    if (value.isCallable()) {
+        if (allowFunction) return JSValue::encode(jsUndefined());
         return Bun::ERR::INVALID_ARG_TYPE(scope, globalObject, callFrame->argument(1), "object"_s, value);
     }
 

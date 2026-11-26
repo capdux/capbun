@@ -161,11 +161,20 @@
 
 ## 四、正在运行中的并发修复
 
-- **无（Batch 59–61 已提交推送，即将派发 Batch 62 并发）**
+- **无（Batch 62–63 已提交推送，即将派发 Batch 64 三路并发）**
 
 ---
 
-## 五、Batch 59–61 新增通过与收敛明细（2026-11-27）
+## 五、Batch 62–63 新增通过与收敛明细（2026-11-27）
+
+1. **新验证全绿（0 fail，实测 `1.4.5-debug`）**：
+   - **Batch 62–63 修复转绿（6 个）**：`zlib-estimated-size-gc` (6/6)、`ffi-error-messages` (44/44)、`bun/shell/commands/ls` (30 pass/0 fail)、`web/fetch/blob-write` (15/15)、`web/fetch/blob-cow` (5/5)、`s3-numeric-options-coerce` (17/17)
+   - **显著收敛**：`bun-cryptohasher` (107/109，仅余 codegen 冻结项)、`mv` (13/15)、`fetch-connection-header` (15/16)、`response` (21/23)、`yaml-block-scalar-matrix` (1078/1084)、`yaml-test-suite` (401/402)
+   - **新扫描 0 fail（54 个）**：`web/fetch/` 20 个、`bun/s3/` 16 个、`node/util/` 6 个、`node/buffer*` 12 个（均已记录，不重复测试）
+
+---
+
+## 六、Batch 59–61 新增通过与收敛明细（2026-11-27）
 
 1. **新验证全绿（0 fail，实测 `1.4.5-debug`）**：
    - **Batch 59–61 修复转绿（7 个）**：`38087` (2/2)、`node-tls-no-cipher-match-error` (1/1)、`spawn-pidfd-emfile` (2/2)、`node/fs/glob` (34/34)、`bun/shell/lex` (43/43)、`bun/util/escapeHTML.test.js`、`bun/util/bun-file-exists.test.js`

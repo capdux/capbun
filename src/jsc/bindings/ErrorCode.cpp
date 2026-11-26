@@ -263,6 +263,10 @@ void JSValueToStringSafe(JSC::JSGlobalObject* globalObject, WTF::StringBuilder& 
 {
     ASSERT(!arg.isEmpty());
     if (!arg.isCell()) {
+        if (arg.isNumber() && arg.asNumber() == 0 && std::signbit(arg.asNumber())) {
+            builder.append("-0"_s);
+            return;
+        }
         builder.append(arg.toWTFStringForConsole(globalObject));
         return;
     }

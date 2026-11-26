@@ -215,6 +215,7 @@ pub struct Context {
 
     ref_count: RefCount,
     globalThis: *jsc.JSGlobalObject,
+    estimated_size: usize = @sizeOf(NativeBrotli),
     stream: Context = {},
     write_result: ([*]u32)? = null,
     poll_ref: CountedKeepAlive = {},
@@ -241,22 +242,23 @@ pub struct Context {
             return globalThis.throwRangeError(mode_int, { field_name: "mode", min: 8, max: 9 });
         }
 
+        const mode_enum: bun.zlib.NodeMode = @enumFromInt(mode_int);
+        const extra: usize = switch (mode_enum) {
+            .BROTLI_ENCODE => 5143,
+            .BROTLI_DECODE => 855,
+            else => 0,
+        };
         const ptr = bun.new(NativeBrotli, {
             ref_count: RefCount.init(),
             globalThis: globalThis,
+            estimated_size: @sizeOf(NativeBrotli) + extra,
         });
-        ptr.stream.mode = @enumFromInt(mode_int);
+        ptr.stream.mode = mode_enum;
         return ptr;
     }
 
     fn estimatedSize(*_): usize {
-        const encoder_state_size: usize = 5143;
-        const decoder_state_size: usize = 855;
-        return @sizeOf(NativeBrotli) + switch (_.stream.mode) {
-            .BROTLI_ENCODE => encoder_state_size,
-            .BROTLI_DECODE => decoder_state_size,
-            else => 0,
-        };
+        return _.estimated_size;
     }
 
     fn init(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {

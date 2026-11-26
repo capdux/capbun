@@ -330,7 +330,9 @@ pub fn callback(chunk: MutableString, has_more: bool, request_err: ?S3Error, wra
                 if ((readable.ptr == .Bytes)) {
                     if (request_err) |s3_err| {
                         _ = &s3_err;
-                        _ = try readable.ptr.Bytes.onData(.{ .err = .{ .JSValue = s3_err.toJS(wrapper.global, wrapper.path) } }, default_allocator);
+                        const js_err = s3_err.toJS(wrapper.global, wrapper.path);
+                        _ = js_err.protect();
+                        _ = try readable.ptr.Bytes.onData(.{ .err = .{ .JSValue = js_err } }, default_allocator);
                         return;
                     }
                     if (has_more) {

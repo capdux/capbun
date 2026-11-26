@@ -149,6 +149,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const PropNewlineResult = struct {
+    needs_newline: bool,
+    unwrapped: JSValue,
+};
+
 pub const PropValue = struct {
     prop_name: String,
     counter: usize,
@@ -294,6 +299,13 @@ pub fn stringifyValue(self: *Stringifier, global: *JSGlobalObject, value: JSValu
                 return error.StackOverflow;
             }
             const unwrapped = try value.unwrapBoxedPrimitive(global);
+            return self.stringifyUnwrappedValue(global, unwrapped);
+    }
+
+pub fn stringifyUnwrappedValue(self: *Stringifier, global: *JSGlobalObject, unwrapped: JSValue) StringifyError!void {
+            if ((!self.stack_check.isSafeToRecurse())) {
+                return error.StackOverflow;
+            }
             if (unwrapped.isNull()) {
                 _ = self.builder.append(.latin1, "null");
                 return;
@@ -439,6 +451,9 @@ _ = self.builder.ensureUnusedCapacity((iter.len * "- ".len));
                     _ = try self.stringifyValue(global, item);
                     self.indent = (self.indent - 1);
                 }
+                if (first) {
+                    _ = self.builder.append(.latin1, "[]");
+                }
 },
 }
                 return;
@@ -488,16 +503,17 @@ _ = self.builder.ensureUnusedCapacity((iter_props.len * ": ".len));
                 }
                 first = false;
                 _ = self.appendString(prop_name);
-                if (try self.propValueNeedsNewline(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value))) {
+                const nl = try self.propValueNeedsNewline(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value));
+                if (nl.needs_newline) {
                     _ = self.builder.append(.lchar, 58);
                     self.indent = (self.indent + 1);
                     _ = self.newline();
-                    _ = try self.stringifyValue(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value));
+                    _ = try self.stringifyUnwrappedValue(global, nl.unwrapped);
                     self.indent = (self.indent - 1);
                 } else {
                     _ = self.builder.append(.latin1, ": ");
                     self.indent = (self.indent + 1);
-                    _ = try self.stringifyValue(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value));
+                    _ = try self.stringifyUnwrappedValue(global, nl.unwrapped);
                     self.indent = (self.indent - 1);
                 }
             }
@@ -508,18 +524,18 @@ _ = self.builder.ensureUnusedCapacity((iter_props.len * ": ".len));
 }
     }
 
-pub fn propValueNeedsNewline(self: *Stringifier, global: *JSGlobalObject, value: JSValue) JSError!bool {
+pub fn propValueNeedsNewline(self: *Stringifier, global: *JSGlobalObject, value: JSValue) JSError!PropNewlineResult {
             if ((((value.isNumber() or value.isBoolean()) or value.isNull()) or value.isString())) {
-                return false;
+                return PropNewlineResult{ .needs_newline = false, .unwrapped = value };
             }
-            const unwrapped = (blk_catch_0: { break :blk_catch_0 ((value.unwrapBoxedPrimitive(global)) catch |__ce_0| { _ = &__ce_0; return false; }); });
+            const unwrapped = try value.unwrapBoxedPrimitive(global);
             if ((((unwrapped.isNumber() or unwrapped.isBoolean()) or unwrapped.isNull()) or unwrapped.isString())) {
-                return false;
+                return PropNewlineResult{ .needs_newline = false, .unwrapped = unwrapped };
             }
             if (self.known_collections.getPtr(unwrapped)) |anchor| {
                 _ = &anchor;
                 if (anchor.used) {
-                    return true;
+                    return PropNewlineResult{ .needs_newline = true, .unwrapped = unwrapped };
                 }
             }
             if (unwrapped.isArray()) {
@@ -527,10 +543,10 @@ pub fn propValueNeedsNewline(self: *Stringifier, global: *JSGlobalObject, value:
                 _ = &iter;
                 while (try iter.next()) |item| {
                     if ((((!item.isUndefined()) and (!item.isSymbol())) and (!item.isFunction()))) {
-                        return true;
+                        return PropNewlineResult{ .needs_newline = true, .unwrapped = unwrapped };
                     }
                 }
-                return false;
+                return PropNewlineResult{ .needs_newline = false, .unwrapped = unwrapped };
             }
             var iter_props: PropIter = try PropIter.init(global, try unwrapped.toObject(global));
             _ = &iter_props;
@@ -544,10 +560,10 @@ pub fn propValueNeedsNewline(self: *Stringifier, global: *JSGlobalObject, value:
             while (try iter_props.next()) |prop| {
                 _ = &prop;
                 if ((((!(if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isUndefined()) and (!(if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isSymbol())) and (!(if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value).isFunction()))) {
-                    return true;
+                    return PropNewlineResult{ .needs_newline = true, .unwrapped = unwrapped };
                 }
             }
-            return false;
+            return PropNewlineResult{ .needs_newline = false, .unwrapped = unwrapped };
     }
 
 pub fn newline(self: *Stringifier) void {
@@ -854,7 +870,7 @@ pub fn deinit(ctx: *ParserCtx) void {
     }
 
 pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
-            const parsed = (blk_catch_1: { break :blk_catch_1 ((ctx.toJS(args, ctx.root)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+            const parsed = (blk_catch_0: { break :blk_catch_0 ((ctx.toJS(args, ctx.root)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                 ctx.result = ctx.global.throwOutOfMemoryValue();
                 return;
             } else {
@@ -873,7 +889,7 @@ pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
             unreachable; }); });
             for (ctx.pending.items) |p| {
                 _ = &p;
-                var key_str = (blk_catch_2: { break :blk_catch_2 ((p.key.toBunString(ctx.global)) catch |e| { _ = &e; _ = &e;
+                var key_str = (blk_catch_1: { break :blk_catch_1 ((p.key.toBunString(ctx.global)) catch |e| { _ = &e; _ = &e;
                 ctx.result = .zero;
                 return; }); });
                 _ = &key_str;
@@ -884,7 +900,7 @@ pub fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) callconv(.c) void {
                 _ = &_key_str_guard;
                 var ___key_str_guard_moved = false; _ = &___key_str_guard_moved;
                 defer if (!___key_str_guard_moved) { ___key_str_guard_moved = true; const __T = @TypeOf(_key_str_guard); if (@typeInfo(__T) == .optional) { if (_key_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _key_str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _key_str_guard; _drop_val.__cp_deinit(); } };
-                _ = (blk_catch_3: { break :blk_catch_3 ((p.mapping.putMayBeIndex(ctx.global, (&key_str), (if (@typeInfo(@TypeOf(p)) == .@"enum") @intFromEnum(p) else p.value))) catch |e| { _ = &e; _ = &e;
+                _ = (blk_catch_2: { break :blk_catch_2 ((p.mapping.putMayBeIndex(ctx.global, (&key_str), (if (@typeInfo(@TypeOf(p)) == .@"enum") @intFromEnum(p) else p.value))) catch |e| { _ = &e; _ = &e;
                 ctx.result = .zero;
                 return; }); });
             }
@@ -1027,8 +1043,8 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JSV
         _ = &_stringifier_guard;
         var ___stringifier_guard_moved = false; _ = &___stringifier_guard_moved;
         defer if (!___stringifier_guard_moved) { ___stringifier_guard_moved = true; const __T = @TypeOf(_stringifier_guard); if (@typeInfo(__T) == .optional) { if (_stringifier_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _stringifier_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _stringifier_guard; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_4: { break :blk_catch_4 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
-        _ = (blk_catch_5: { break :blk_catch_5 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
+        _ = (blk_catch_3: { break :blk_catch_3 ((stringifier.findAnchorsAndAliases(global, value, .root)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
+        _ = (blk_catch_4: { break :blk_catch_4 ((stringifier.stringifyValue(global, value)) catch |e| { _ = &e; return stringifyErrorToJSError(e, global); }); });
         return stringifier.builder.toString(global);
 }
 
@@ -1253,7 +1269,7 @@ pub fn parse(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError
         var ___log_guard_moved = false; _ = &___log_guard_moved;
         defer if (!___log_guard_moved) { ___log_guard_moved = true; const __T = @TypeOf(_log_guard); if (@typeInfo(__T) == .optional) { if (_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _log_guard; _drop_val.__cp_deinit(); } };
         const source = (&logger.Source.initPathString("input.yaml", input_bytes));
-        const root = (blk_catch_6: { break :blk_catch_6 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const root = (blk_catch_5: { break :blk_catch_5 ((bun.interchange.yaml.YAML.parse(source, (&log), arena_allocator.allocator())) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         if ((e == error.StackOverflow)) {

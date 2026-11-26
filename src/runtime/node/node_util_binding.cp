@@ -49,6 +49,13 @@ pub fn internalErrorName(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
     }
 
     const err_value = arguments[0];
+    if (!err_value.isInt32() && err_value.isNumber()) {
+        const num = err_value.asNumber();
+        if (num < @as(f64, @floatFromInt(std.math.minInt(i32))) || num > @as(f64, @floatFromInt(std.math.maxInt(i32)))) {
+            let fmtstring = bun.handleOom(bun.String.createFormat("Unknown system error {d}", .{ @as(i64, @intFromFloat(num)) }));
+            return fmtstring.transferToJS(globalThis);
+        }
+    }
     const err_int = err_value.toInt32();
 
     if (err_int == -4095) return bun.String.static("EOF").toJS(globalThis);
@@ -252,7 +259,7 @@ pub fn normalizeEncoding(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
 
 pub fn parseEnv(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const content = callframe.argument(0);
-    validators.validateString(globalThis, content, "content", .{})?;
+    if (!content.isString()) return globalThis.throwInvalidArgumentTypeValue("content", "string", content);
 
     let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
     const allocator = arena_guard.val.allocator();

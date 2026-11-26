@@ -325,6 +325,7 @@ pub const NativeBrotli = @This();
 
 ref_count: RefCount = .init(),
 globalThis: *jsc.JSGlobalObject,
+estimated_size: usize = @sizeOf(NativeBrotli),
 stream: Context = .{},
 write_result: ?[*]u32 = null,
 poll_ref: CountedKeepAlive = .{},
@@ -350,19 +351,19 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         if (((mode_int < 8) or (mode_int > 9))) {
             return globalThis.throwRangeError(mode_int, .{ .field_name = "mode", .min = 8, .max = 9 });
         }
-        const ptr = bun.new(NativeBrotli, .{ .ref_count = RefCount.init(), .globalThis = globalThis });
-        ptr.stream.mode = @enumFromInt(mode_int);
+        const mode_enum: bun.zlib.NodeMode = @enumFromInt(mode_int);
+        const extra: usize = (switch (mode_enum) {
+.BROTLI_ENCODE => 5143,
+.BROTLI_DECODE => 855,
+else => 0,
+});
+        const ptr = bun.new(NativeBrotli, .{ .ref_count = RefCount.init(), .globalThis = globalThis, .estimated_size = (@sizeOf(NativeBrotli) + extra) });
+        ptr.stream.mode = mode_enum;
         return ptr;
 }
 
 pub fn estimatedSize(self: *NativeBrotli) usize {
-        const encoder_state_size: usize = 5143;
-        const decoder_state_size: usize = 855;
-        return (@sizeOf(NativeBrotli) + (switch (self.stream.mode) {
-.BROTLI_ENCODE => encoder_state_size,
-.BROTLI_DECODE => decoder_state_size,
-else => 0,
-}));
+        return self.estimated_size;
 }
 
 pub fn init(self: *NativeBrotli, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {

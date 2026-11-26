@@ -391,6 +391,19 @@ pub fn isKeepAlivePossible(self: HTTPClient) bool {
         return false;
 }
 
+pub fn hasConnectionToken(self: HTTPClient, value: []const u8, token: []const u8) bool {
+    _ = self;
+        var it = std.mem.tokenizeScalar(u8, value, 44);
+        _ = &it;
+        while (it.next()) |raw| {
+            const part = std.mem.trim(u8, raw, " \t");
+            if (std.ascii.eqlIgnoreCase(part, token)) {
+                return true;
+            }
+        }
+        return false;
+}
+
 pub fn proxyAuthHash(self: HTTPClient) u64 {
         var combined: u64 = 0;
         _ = &combined;
@@ -808,7 +821,7 @@ pub fn buildRequest(self: *HTTPClient, body_len: usize) picohttp.Request {
                         if (will_append) {
                             override_connection_header = true;
                             const connection_value = self.headerStr(header_values[@as(usize, @intCast(i))]);
-                            if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
+                            if (self.hasConnectionToken(connection_value, "close")) {
                                 self.flags.disable_keepalive = true;
                             }
                         }
@@ -2148,10 +2161,10 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
                                 location = (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value);
                             } else {
                                 if ((header_hash == connection_header_hash)) {
-                                    if (std.ascii.eqlIgnoreCase((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "close")) {
+                                    if (self.hasConnectionToken((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "close")) {
                                         self.state.flags.allow_keepalive = false;
                                     } else {
-                                        if ((((response.status_code >= 200) and (response.status_code <= 299)) and std.ascii.eqlIgnoreCase((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "keep-alive"))) {
+                                        if ((((response.status_code >= 200) and (response.status_code <= 299)) and self.hasConnectionToken((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "keep-alive"))) {
                                             self.state.flags.allow_keepalive = true;
                                             has_keep_alive_token = true;
                                         }

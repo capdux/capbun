@@ -709,8 +709,10 @@ export class S3DownloadStreamWrapper {
         if (readable := wrapper.readable_stream_ref.get(wrapper.global)) {
             if (readable.ptr == .Bytes) {
                 if (s3_err := request_err) {
+                    const js_err = s3_err.toJS(wrapper.global, wrapper.path);
+                    js_err.protect();
                     readable.ptr.Bytes.onData(
-                        .{ .err = .{ .JSValue = s3_err.toJS(wrapper.global, wrapper.path) } },
+                        .{ .err = .{ .JSValue = js_err } },
                         default_allocator,
                     )?;
                     return;

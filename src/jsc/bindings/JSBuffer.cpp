@@ -818,19 +818,11 @@ static JSC::EncodedJSValue jsBufferConstructorFunction_compareBody(JSC::JSGlobal
     if (!castedThis) [[unlikely]] {
         return Bun::ERR::INVALID_ARG_TYPE(throwScope, lexicalGlobalObject, "buf1"_s, "Buffer or Uint8Array"_s, castedThisValue);
     }
-    if (castedThis->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, throwScope, "Uint8Array (first argument) is detached"_s);
-        return {};
-    }
 
     auto buffer = callFrame->argument(1);
     JSC::JSArrayBufferView* view = dynamicDowncast<JSC::JSArrayBufferView>(buffer);
     if (!view) [[unlikely]] {
         return Bun::ERR::INVALID_ARG_TYPE(throwScope, lexicalGlobalObject, "buf2"_s, "Buffer or Uint8Array"_s, buffer);
-    }
-    if (view->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, throwScope, "Uint8Array (second argument) is detached"_s);
-        return {};
     }
 
     size_t targetStart = 0;
@@ -1081,11 +1073,6 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_compareBody(JSC::JSGlobalOb
         return Bun::ERR::INVALID_ARG_TYPE(throwScope, lexicalGlobalObject, "target"_s, "Buffer or Uint8Array"_s, arg0);
     }
 
-    if (view->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, throwScope, "Uint8Array is detached"_s);
-        return {};
-    }
-
     size_t targetStart = 0;
     size_t targetEndInit = view->byteLength();
     size_t targetEnd = targetEndInit;
@@ -1309,11 +1296,6 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_equalsBody(JSC::JSGlobalObj
         return Bun::ERR::INVALID_ARG_TYPE(throwScope, lexicalGlobalObject, "otherBuffer"_s, "Buffer or Uint8Array"_s, buffer);
     }
 
-    if (view->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, throwScope, "Uint8Array is detached"_s);
-        return {};
-    }
-
     size_t a_length = castedThis->byteLength();
     size_t b_length = view->byteLength();
     auto sourceStartPtr = castedThis->typedVector();
@@ -1334,13 +1316,9 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_fillBody(JSC::JSGlobalObjec
     auto& vm = JSC::getVM(lexicalGlobalObject);
     auto scope = DECLARE_THROW_SCOPE(vm);
 
-    if (callFrame->argumentCount() < 1) {
-        return JSValue::encode(castedThis);
-    }
-
-    auto value = callFrame->uncheckedArgument(0);
+    auto value = callFrame->argument(0);
     // Capture byteLength up front for two orthogonal purposes:
-    //  1. The upper-bound argument to validateNumber(end) so `end >
+    //  1. The upper-bound argument to validateOffset(end) so `end >
     //     buf.length` throws ERR_OUT_OF_RANGE with Node's wording and
     //     against the length the caller saw (matches Node: parseEncoding
     //     may run a user toString before this check, but the Node-
@@ -1360,7 +1338,7 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_fillBody(JSC::JSGlobalObjec
     JSValue offsetValue = jsUndefined();
     JSValue endValue = jsUndefined();
 
-    switch (callFrame->argumentCount()) {
+    switch (std::min<size_t>(callFrame->argumentCount(), 4)) {
     case 4:
         encodingValue = callFrame->uncheckedArgument(3);
         [[fallthrough]];
@@ -1374,30 +1352,37 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_fillBody(JSC::JSGlobalObjec
         break;
     }
 
-    if (offsetValue.isUndefined() || offsetValue.isString()) {
-        encodingValue = offsetValue;
-        offsetValue = jsUndefined();
-    } else if (endValue.isString()) {
-        encodingValue = endValue;
+    if (value.isString()) {
+        if (offsetValue.isUndefined() || offsetValue.isString()) {
+            encodingValue = offsetValue;
+            offsetValue = jsUndefined();
+            endValue = jsUndefined();
+        } else if (endValue.isString()) {
+            encodingValue = endValue;
+            endValue = jsUndefined();
+        }
+    } else if (offsetValue.isUndefined()) {
         endValue = jsUndefined();
     }
 
     // ── 1. Encoding parse (FIRST validation) ────────────────────────────
-    // Node validates encoding before either `validateNumber` call, so
+    // Node validates encoding before either `validateOffset` call, so
     // `fill("a", 0, buf.length + 1, "bogus")` and `fill("a", -1, 0,
     // "bogus")` throw ERR_UNKNOWN_ENCODING (not ERR_OUT_OF_RANGE) — the
     // encoding error wins. parseEncoding is also the first
     // user-JS-visible call: `toString` on an object encoding can detach
     // or resize castedThis; the post-coercion clamp further down reads
     // byteLength() once more to catch any such effect.
-    if (!encodingValue.isUndefined() && value.isString()) {
-        encoding = parseEncoding(scope, lexicalGlobalObject, encodingValue, true);
-        RETURN_IF_EXCEPTION(scope, {});
+    if (!encodingValue.isUndefined() && !encodingValue.isNull() && value.isString()) {
+        if (!(encodingValue.isString() && JSC::asString(encodingValue)->length() == 0)) {
+            encoding = parseEncoding(scope, lexicalGlobalObject, encodingValue, true);
+            RETURN_IF_EXCEPTION(scope, {});
+        }
     }
 
     // ── 2. Pure offset / end coercion (no user JS) ──────────────────────
-    // validateNumber rejects non-numbers without coercion, and toLength
-    // on a number is a C++ conversion. parseEncoding above may have
+    // validateOffset rejects non-numbers without coercion, and
+    // non-integers with ERR_OUT_OF_RANGE. parseEncoding above may have
     // detached/resized the buffer, but the `limit` captured pre-coercion
     // is still the correct Node-compat upper bound for ERR_OUT_OF_RANGE;
     // the final write range is clamped against a separate post-coercion
@@ -1405,14 +1390,12 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_fillBody(JSC::JSGlobalObjec
     //     https://github.com/nodejs/node/blob/v22.9.0/lib/buffer.js#L1066-L1079
     //     https://github.com/nodejs/node/blob/v22.9.0/lib/buffer.js#L122
     if (!offsetValue.isUndefined()) {
-        Bun::V::validateNumber(scope, lexicalGlobalObject, offsetValue, "offset"_s, jsNumber(0), jsNumber(Bun::Buffer::kMaxLength));
+        offset = validateOffset(scope, lexicalGlobalObject, offsetValue, "offset"_s, 0, Bun::Buffer::kMaxLength);
         RETURN_IF_EXCEPTION(scope, {});
-        offset = offsetValue.toLength(lexicalGlobalObject);
     }
     if (!endValue.isUndefined()) {
-        Bun::V::validateNumber(scope, lexicalGlobalObject, endValue, "end"_s, jsNumber(0), jsNumber(limit));
+        end = validateOffset(scope, lexicalGlobalObject, endValue, "end"_s, 0, limit);
         RETURN_IF_EXCEPTION(scope, {});
-        end = endValue.toLength(lexicalGlobalObject);
     }
 
     // Node short-circuits empty/inverted ranges before coercing `value`,
@@ -1441,12 +1424,9 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_fillBody(JSC::JSGlobalObjec
     } else if (auto* view = dynamicDowncast<JSC::JSArrayBufferView>(value)) {
         branch = ViewBranch;
         viewValue = view;
-        if (viewValue->isDetached()) [[unlikely]] {
-            throwVMTypeError(lexicalGlobalObject, scope, "Uint8Array is detached"_s);
-            return {};
-        }
         // Single read of viewValue->byteLength() — used both for the
-        // empty check here and for the repeat length in the write loop.
+        // empty check (including detached views whose byteLength is 0)
+        // and for the repeat length in the write loop.
         // No further side effects can run before the write, so the value
         // is stable.
         viewValueLength = viewValue->byteLength();
@@ -1959,8 +1939,7 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_swap16Body(JSC::JSGlobalObj
     }
 
     if (castedThis->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, scope, "Buffer is detached"_s);
-        return {};
+        return JSC::JSValue::encode(castedThis);
     }
 
     uint8_t* data = castedThis->typedVector();
@@ -1989,8 +1968,7 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_swap32Body(JSC::JSGlobalObj
     }
 
     if (castedThis->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, scope, "Buffer is detached"_s);
-        return {};
+        return JSC::JSValue::encode(castedThis);
     }
 
     uint8_t* typedVector = castedThis->typedVector();
@@ -2024,8 +2002,7 @@ static JSC::EncodedJSValue jsBufferPrototypeFunction_swap64Body(JSC::JSGlobalObj
     }
 
     if (castedThis->isDetached()) [[unlikely]] {
-        throwVMTypeError(lexicalGlobalObject, scope, "Buffer is detached"_s);
-        return {};
+        return JSC::JSValue::encode(castedThis);
     }
 
     uint8_t* data = castedThis->typedVector();
@@ -2772,7 +2749,7 @@ static size_t validateOffsetBigInt64(JSC::JSGlobalObject* lexicalGlobalObject, J
     if (offsetVal.isInt32()) {
         int32_t offsetI = offsetVal.asInt32();
         if (offsetI < 0) [[unlikely]] {
-            Bun::ERR::BUFFER_OUT_OF_BOUNDS(scope, lexicalGlobalObject, "offset"_s);
+            Bun::ERR::OUT_OF_RANGE(scope, lexicalGlobalObject, "offset"_s, 0, maxOffset, offsetVal);
             return 0;
         }
 
@@ -2792,22 +2769,17 @@ static size_t validateOffsetBigInt64(JSC::JSGlobalObject* lexicalGlobalObject, J
     }
 
     auto offsetD = offsetVal.asNumber();
-    if (offsetD < 0) [[unlikely]] {
-        Bun::ERR::BUFFER_OUT_OF_BOUNDS(scope, lexicalGlobalObject, "offset"_s);
-        return 0;
-    }
-
-    if (std::fmod(offsetD, 1.0) != 0) [[unlikely]] {
+    if (std::isnan(offsetD) || (!std::isinf(offsetD) && std::trunc(offsetD) != offsetD)) [[unlikely]] {
         Bun::ERR::OUT_OF_RANGE(scope, lexicalGlobalObject, "offset"_s, "an integer"_s, offsetVal);
         return 0;
     }
 
-    offset = truncateDoubleToUint64(offsetD);
-
-    if (offset > maxOffset) [[unlikely]] {
+    if (offsetD < 0 || offsetD > static_cast<double>(maxOffset)) [[unlikely]] {
         Bun::ERR::OUT_OF_RANGE(scope, lexicalGlobalObject, "offset"_s, 0, maxOffset, offsetVal);
         return 0;
     }
+
+    offset = static_cast<size_t>(offsetD);
 
     return offset;
 }

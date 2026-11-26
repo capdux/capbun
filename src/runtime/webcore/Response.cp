@@ -733,6 +733,12 @@ pub struct Init {
             url_string = url_string_value.getZigString(globalThis)?;
         }
         url_string_slice = url_string.toSlice(bun.default_allocator);
+        let url_bun_str = if (@intFromEnum(url_string_value) != 0) url_string_value.toBunString(globalThis)? else bun.String.empty;
+        defer url_bun_str.deref();
+        let href = jsc.URL.hrefFromString(url_bun_str);
+        defer href.deref();
+        let href_slice = if (!href.isEmpty()) href.toUTF8(bun.default_allocator) else ZigString.Slice.empty;
+        const href_slice_guard = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &href_slice } };
         let body_guard = OptDeinitWithAllocGuard<Body>{ ptr: unsafe { &response.#body }, alloc: bun.default_allocator };
         let init_guard = OptDeinitWithAllocGuard<Init>{ ptr: unsafe { &response.#init }, alloc: bun.default_allocator };
 
@@ -755,7 +761,8 @@ pub struct Init {
 
         response.#init.headers = response.getOrCreateHeaders(globalThis)?;
         let headers_ref = response.#init.headers.?;
-        headers_ref.put(.Location, url_string_slice.slice(), globalThis)?;
+        const location_str = if (!href.isEmpty()) href_slice.slice() else url_string_slice.slice();
+        headers_ref.put(.Location, location_str, globalThis)?;
         body_guard.ptr = null;
         init_guard.ptr = null;
         return response;

@@ -91,8 +91,11 @@ hideFromStack(validateLinkHeaderValue, validateInternalField);
 hideFromStack(validateString, validateFunction, validateBoolean, validateUndefined);
 
 export default {
-  /** (value, name) */
-  validateObject: $newCppFunction("NodeValidator.cpp", "jsFunction_validateObject", 2),
+  kValidateObjectAllowNullable: 1,
+  kValidateObjectAllowArray: 2,
+  kValidateObjectAllowFunction: 4,
+  /** (value, name, options) */
+  validateObject: $newCppFunction("NodeValidator.cpp", "jsFunction_validateObject", 3),
   validateLinkHeaderValue: validateLinkHeaderValue,
   checkIsHttpToken: checkIsHttpToken,
   /** `(value, name, min, max)` */

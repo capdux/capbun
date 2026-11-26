@@ -157,26 +157,34 @@ pub fn getCredentialsWithOptions(
                 }
             }
 
-            if (pageSize := opts.getOptional(globalObject, "pageSize", i64)?) {
-                if (pageSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE || pageSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
-                    return globalObject.throwRangeError(pageSize, .{
-                        .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE),
-                        .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE),
-                        .field_name = "pageSize",
-                    });
-                } else {
-                    new_credentials.options.partSize = @intCast(pageSize);
+            if (pageSize_val := opts.get(globalObject, "pageSize")?) {
+                if (!pageSize_val.isUndefinedOrNull()) {
+                    const pageSize_f64 = pageSize_val.coerce(f64, globalObject)?;
+                    const pageSize: i64 = if (std.math.isNan(pageSize_f64)) 0 else if (pageSize_f64 >= @as(f64, @floatFromInt(std.math.maxInt(i64)))) std.math.maxInt(i64) else if (pageSize_f64 <= @as(f64, @floatFromInt(std.math.minInt(i64)))) std.math.minInt(i64) else @intFromFloat(@trunc(pageSize_f64));
+                    if (pageSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE || pageSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
+                        return globalObject.throwRangeError(pageSize, .{
+                            .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE),
+                            .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE),
+                            .field_name = "pageSize",
+                        });
+                    } else {
+                        new_credentials.options.partSize = @intCast(pageSize);
+                    }
                 }
             }
-            if (partSize := opts.getOptional(globalObject, "partSize", i64)?) {
-                if (partSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE || partSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
-                    return globalObject.throwRangeError(partSize, .{
-                        .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE),
-                        .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE),
-                        .field_name = "partSize",
-                    });
-                } else {
-                    new_credentials.options.partSize = @intCast(partSize);
+            if (partSize_val := opts.get(globalObject, "partSize")?) {
+                if (!partSize_val.isUndefinedOrNull()) {
+                    const partSize_f64 = partSize_val.coerce(f64, globalObject)?;
+                    const partSize: i64 = if (std.math.isNan(partSize_f64)) 0 else if (partSize_f64 >= @as(f64, @floatFromInt(std.math.maxInt(i64)))) std.math.maxInt(i64) else if (partSize_f64 <= @as(f64, @floatFromInt(std.math.minInt(i64)))) std.math.minInt(i64) else @intFromFloat(@trunc(partSize_f64));
+                    if (partSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE || partSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE) {
+                        return globalObject.throwRangeError(partSize, .{
+                            .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE),
+                            .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE),
+                            .field_name = "partSize",
+                        });
+                    } else {
+                        new_credentials.options.partSize = @intCast(partSize);
+                    }
                 }
             }
 

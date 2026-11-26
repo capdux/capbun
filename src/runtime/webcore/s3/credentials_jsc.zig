@@ -33,6 +33,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -238,20 +239,28 @@ pub fn getCredentialsWithOptions(self: S3Credentials, default_options: MultiPart
                         }
                     }
                 }
-                if (try opts.getOptional(globalObject, "pageSize", i64)) |pageSize| {
-                    _ = &pageSize;
-                    if (((pageSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE) or (pageSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE))) {
-                        return globalObject.throwRangeError(pageSize, .{ .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE), .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE), .field_name = "pageSize" });
-                    } else {
-                        new_credentials.options.partSize = @intCast(pageSize);
+                if (try opts.get(globalObject, "pageSize")) |pageSize_val| {
+                    _ = &pageSize_val;
+                    if ((!pageSize_val.isUndefinedOrNull())) {
+                        const pageSize_f64 = try pageSize_val.coerce(f64, globalObject);
+                        const pageSize: i64 = (if (std.math.isNan(pageSize_f64)) 0 else (if ((pageSize_f64 >= @as(f64, @floatFromInt(std.math.maxInt(i64))))) std.math.maxInt(i64) else (if ((pageSize_f64 <= @as(f64, @floatFromInt(std.math.minInt(i64))))) std.math.minInt(i64) else @intFromFloat(@trunc(pageSize_f64)))));
+                        if (((pageSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE) or (pageSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE))) {
+                            return globalObject.throwRangeError(pageSize, .{ .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE), .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE), .field_name = "pageSize" });
+                        } else {
+                            new_credentials.options.partSize = @intCast(pageSize);
+                        }
                     }
                 }
-                if (try opts.getOptional(globalObject, "partSize", i64)) |partSize| {
-                    _ = &partSize;
-                    if (((partSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE) or (partSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE))) {
-                        return globalObject.throwRangeError(partSize, .{ .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE), .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE), .field_name = "partSize" });
-                    } else {
-                        new_credentials.options.partSize = @intCast(partSize);
+                if (try opts.get(globalObject, "partSize")) |partSize_val| {
+                    _ = &partSize_val;
+                    if ((!partSize_val.isUndefinedOrNull())) {
+                        const partSize_f64 = try partSize_val.coerce(f64, globalObject);
+                        const partSize: i64 = (if (std.math.isNan(partSize_f64)) 0 else (if ((partSize_f64 >= @as(f64, @floatFromInt(std.math.maxInt(i64))))) std.math.maxInt(i64) else (if ((partSize_f64 <= @as(f64, @floatFromInt(std.math.minInt(i64))))) std.math.minInt(i64) else @intFromFloat(@trunc(partSize_f64)))));
+                        if (((partSize < MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE) or (partSize > MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE))) {
+                            return globalObject.throwRangeError(partSize, .{ .min = @intCast(MultiPartUploadOptions.MIN_SINGLE_UPLOAD_SIZE), .max = @intCast(MultiPartUploadOptions.MAX_SINGLE_UPLOAD_SIZE), .field_name = "partSize" });
+                        } else {
+                            new_credentials.options.partSize = @intCast(partSize);
+                        }
                     }
                 }
                 if (try opts.getOptional(globalObject, "queueSize", i32)) |queueSize| {

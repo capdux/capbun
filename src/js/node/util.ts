@@ -196,30 +196,55 @@ var toUSVString = input => {
   return (input + "").toWellFormed();
 };
 
+function getFormatCodes(key) {
+  if (key === "none") return null;
+  const named = inspect.colors[key];
+  if (named != null) return [`\u001b[${named[0]}m`, `\u001b[${named[1]}m`];
+  if (typeof key === "string" && key.length > 0 && key[0] === "#") {
+    let r, g, b;
+    if (key.length === 7 && /^#[0-9a-fA-F]{6}$/.test(key)) {
+      r = Number.parseInt(key.slice(1, 3), 16);
+      g = Number.parseInt(key.slice(3, 5), 16);
+      b = Number.parseInt(key.slice(5, 7), 16);
+      return [`\u001b[38;2;${r};${g};${b}m`, "\u001b[39m"];
+    }
+    if (key.length === 4 && /^#[0-9a-fA-F]{3}$/.test(key)) {
+      r = Number.parseInt(key[1], 16) * 17;
+      g = Number.parseInt(key[2], 16) * 17;
+      b = Number.parseInt(key[3], 16) * 17;
+      return [`\u001b[38;2;${r};${g};${b}m`, "\u001b[39m"];
+    }
+  }
+  validateOneOf(key, "format", ObjectKeys(inspect.colors));
+}
+
 function styleText(format, text) {
   validateString(text, "text");
 
   if ($isJSArray(format)) {
     let left = "";
     let right = "";
+    let out = text;
     for (const key of format) {
-      const formatCodes = inspect.colors[key];
-      if (formatCodes == null) {
-        validateOneOf(key, "format", ObjectKeys(inspect.colors));
+      const codes = getFormatCodes(key);
+      if (codes == null) continue;
+      if (out.includes(codes[1])) {
+        out = out.replaceAll(codes[1], codes[0]);
       }
-      left += `\u001b[${formatCodes[0]}m`;
-      right = `\u001b[${formatCodes[1]}m${right}`;
+      left += codes[0];
+      right = `${codes[1]}${right}`;
     }
 
-    return `${left}${text}${right}`;
+    return `${left}${out}${right}`;
   }
 
-  let formatCodes = inspect.colors[format];
-
-  if (formatCodes == null) {
-    validateOneOf(format, "format", ObjectKeys(inspect.colors));
+  const codes = getFormatCodes(format);
+  if (codes == null) return text;
+  let out = text;
+  if (out.includes(codes[1])) {
+    out = out.replaceAll(codes[1], codes[0]);
   }
-  return `\u001b[${formatCodes[0]}m${text}\u001b[${formatCodes[1]}m`;
+  return `${codes[0]}${out}${codes[1]}`;
 }
 
 function getSystemErrorName(err: any) {

@@ -2339,13 +2339,29 @@ pub fn parseFlowMapping(self: *@This()) ParseError!Expr {
                         _ = try self.scan(.{});
                     }
                     while ((self.token.data != .mapping_end)) {
-                        const key = key: {
+                        const key = (if ((self.token.data == .mapping_key)) blk: {
+                        {
+                            _ = try self.context.set(.flow_key);
+                            defer {
+                            _ = self.context.unset(.flow_key);
+                            }
+                            _ = try self.scan(.{});
+                        }
+                        if ((((self.token.data == .mapping_value) or (self.token.data == .collect_entry)) or (self.token.data == .mapping_end))) {
+                            break :blk Expr.init(E.Null, .{}, self.token.start.loc());
+                        }
+                        _ = try self.context.set(.flow_key);
+                        defer {
+                        _ = self.context.unset(.flow_key);
+                        }
+                        break :blk try self.parseNode(.{});
+} else key: {
                         _ = try self.context.set(.flow_key);
                         defer {
                         _ = self.context.unset(.flow_key);
                         }
                         break :key try self.parseNode(.{});
-};
+});
                         switch (self.token.data) {
 .collect_entry => {
 const value: Expr = .init(E.Null, .{}, self.token.start.loc());
@@ -3446,6 +3462,9 @@ if ((!self.isEof())) {
                     }
                     if ((explicit_indent == null)) {
                         ctx.content_indent = self.line_indent;
+                    }
+                    if ((self.line_indent.cast() > 0)) {
+                        ctx.leading_newlines = (ctx.leading_newlines + 1);
                     }
                     return ctx.done();
 },

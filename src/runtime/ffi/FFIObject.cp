@@ -442,7 +442,7 @@ fn ptr_(
 pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: JSValue?, byteLength: JSValue?): bun.JSError![]u8 {
     let num: usize = 0;
     if (value.isBigInt()) {
-        if (!value.isBigIntInUInt64Range(0, std.math.maxInt(usize))) {
+        if (value.asBigIntCompare(globalThis, JSValue.fromUInt64NoTruncate(globalThis, 0)) == .less_than || value.asBigIntCompare(globalThis, JSValue.fromUInt64NoTruncate(globalThis, std.math.maxInt(usize))) == .greater_than) {
             return globalThis.throwInvalidArguments("ptr is out of range.", {});
         }
         num = @intCast(value.toUInt64NoTruncate());

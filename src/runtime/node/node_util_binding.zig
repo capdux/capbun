@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -133,6 +134,14 @@ pub fn internalErrorName(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             return globalThis.throwNotEnoughArguments("internalErrorName", 1, arguments.len);
         }
         const err_value = arguments[0];
+        if (((!err_value.isInt32()) and err_value.isNumber())) {
+            const num = err_value.asNumber();
+            if (((num < @as(f64, @floatFromInt(std.math.minInt(i32)))) or (num > @as(f64, @floatFromInt(std.math.maxInt(i32)))))) {
+                var fmtstring = bun.handleOom(bun.String.createFormat("Unknown system error {d}", .{ @as(i64, @intFromFloat(num)) }));
+                _ = &fmtstring;
+                return fmtstring.transferToJS(globalThis);
+            }
+        }
         const err_int = err_value.toInt32();
         if ((err_int == -4095)) {
             return bun.String.static("EOF").toJS(globalThis);
@@ -499,7 +508,9 @@ pub fn normalizeEncoding(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
 
 pub fn parseEnv(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const content = callframe.argument(0);
-        _ = try validators.validateString(globalThis, content, "content", .{});
+        if ((!content.isString())) {
+            return globalThis.throwInvalidArgumentTypeValue("content", "string", content);
+        }
         var arena_guard = DeinitGuard(std.heap.ArenaAllocator){ .val = std.heap.ArenaAllocator.init(bun.default_allocator) };
         _ = &arena_guard;
         var __arena_guard_moved = false; _ = &__arena_guard_moved;

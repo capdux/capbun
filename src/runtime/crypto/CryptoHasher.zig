@@ -233,7 +233,7 @@ pub fn clearSSLErr() void {
 pub fn hashJS(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments_old(3);
             const args = arguments.ptr[0..arguments.len];
-            if ((((args.len < 1) or args[0].isEmptyOrUndefinedOrNull()) or (!args[0].isString()))) {
+            if (((((args.len < 1) or args[0].isEmptyOrUndefinedOrNull()) or args[0].isObject()) or (!args[0].isString()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "algorithm must be a string", .{}).throw();
             }
             const algorithm = try args[0].getZigString(globalThis);
@@ -318,11 +318,7 @@ pub fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobO
             if (output) |output_buf| {
                 _ = &output_buf;
                 const size = evp.size();
-                var bytes = output_buf.byteSlice();
-                _ = &bytes;
-                if ((bytes.len < size)) {
-                    return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{ size });
-                }
+                const bytes = try checkOutputBuffer(globalThis, output_buf, size);
                 const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), bytes[0..size]);
                 if ((len_opt == null)) {
                     const e = getSSLErr();
@@ -600,11 +596,7 @@ var sob = string_or_buffer;
 pub fn digestToBytes(self: *CryptoHasher, globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
             if (output) |output_buf| {
                 _ = &output_buf;
-                var bytes = output_buf.byteSlice();
-                _ = &bytes;
-                if ((bytes.len < BoringSSL.EVP_MAX_MD_SIZE)) {
-                    return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ BoringSSL.EVP_MAX_MD_SIZE })), .{});
-                }
+                const bytes = try checkOutputBuffer(globalThis, output_buf, BoringSSL.EVP_MAX_MD_SIZE);
                 _ = (blk_catch_2: { break :blk_catch_2 ((self.final(globalThis, bytes[0..bytes.len])) catch |__ce_2| { _ = &__ce_2; return .zero; }); });
                 if (globalThis.hasException()) {
                     return error.JSError;
@@ -796,16 +788,12 @@ pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: t
             const digest_length_comptime = digestLength(Algorithm);
             if (output) |output_buf| {
                 _ = &output_buf;
-                if ((output_buf.byteSlice().len < digest_length_comptime)) {
-                    return globalThis.throwInvalidArguments("TypedArray must be at least {d} bytes", .{ digest_length_comptime });
-                }
-            }
-            _ = h.update(input.slice());
-            if (output) |output_buf| {
-                _ = &output_buf;
-                _ = h.final(output_buf.slice()[0..digest_length_comptime]);
+                const bytes = try checkOutputBuffer(globalThis, output_buf, digest_length_comptime);
+                _ = h.update(input.slice());
+                _ = h.final(bytes[0..digest_length_comptime]);
                 return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);
             } else {
+                _ = h.update(input.slice());
                 const digest_len = (comptime digestLength(Algorithm));
                 _ = &digest_len;
                 var out: [digest_len]u8 = undefined;
@@ -926,6 +914,15 @@ pub const SHA384 = StaticCryptoHasher(Hashers.SHA384, "SHA384");
 pub const SHA512 = StaticCryptoHasher(Hashers.SHA512, "SHA512");
 pub const SHA512_256 = StaticCryptoHasher(Hashers.SHA512_256, "SHA512_256");
 
+pub fn checkOutputBuffer(globalThis: *JSGlobalObject, output_buf: jsc.ArrayBuffer, min_size: usize) bun.JSError![]u8 {
+        const fresh = (((if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value).asArrayBuffer(globalThis)) orelse (output_buf));
+        const bytes = fresh.byteSlice();
+        if ((bytes.len < min_size)) {
+            return globalThis.ERR(.INVALID_ARG_TYPE, "TypedArray must be at least {d} bytes", .{ min_size }).throw();
+        }
+        return bytes;
+}
+
 pub fn coerceHashInputPre(globalThis: *JSGlobalObject, input_arg: JSValue) bun.JSError!JSValue {
         if (input_arg.isEmptyOrUndefinedOrNull()) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
@@ -1017,10 +1014,7 @@ pub fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringO
 pub fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
             if (output) |output_buf| {
                 _ = &output_buf;
-                const bytes = output_buf.byteSlice();
-                if ((bytes.len < Hasher.digest)) {
-                    return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ Hasher.digest })), .{});
-                }
+                const bytes = try checkOutputBuffer(globalThis, output_buf, Hasher.digest);
                 const slice = bytes[0..Hasher.digest];
                 if (comptime (@typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3)) {
                     _ = Hasher.hash(input.slice(), slice, jsc.VirtualMachine.get().rareData().boringEngine());
@@ -1156,10 +1150,7 @@ var sob = string_or_buffer;
 pub fn digestToBytes(self: *@This(), globalThis: *JSGlobalObject, output: ?jsc.ArrayBuffer) bun.JSError!jsc.JSValue {
             if (output) |output_buf| {
                 _ = &output_buf;
-                const bytes = output_buf.byteSlice();
-                if ((bytes.len < Hasher.digest)) {
-                    return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ Hasher.digest })), .{});
-                }
+                const bytes = try checkOutputBuffer(globalThis, output_buf, Hasher.digest);
                 _ = self.hashing.final(bytes[0..Hasher.digest]);
                 self.digested = true;
                 return (if (@typeInfo(@TypeOf(output_buf)) == .@"enum") @intFromEnum(output_buf) else output_buf.value);

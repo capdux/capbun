@@ -321,18 +321,7 @@ const codes = {}; // exported from errors.js
     return error;
   };
 }
-/**
- * @param {unknown} value
- * @param {string} name
- * @param {{ allowArray?: boolean, allowFunction?: boolean, nullable?: boolean }} [options] */
-const validateObject = (value, name, allowArray = false) => {
-  if (
-    value === null ||
-    (!allowArray && $isJSArray(value)) ||
-    (typeof value !== "object" && typeof value !== "function")
-  )
-    throw new codes.ERR_INVALID_ARG_TYPE(name, "Object", value);
-};
+const { validateObject, kValidateObjectAllowArray } = require("internal/validators");
 
 function isURL(value) {
   return typeof value.href === "string" && value instanceof URL;
@@ -2640,7 +2629,7 @@ function format(...args) {
 }
 
 function formatWithOptions(inspectOptions, ...args) {
-  validateObject(inspectOptions, "inspectOptions", { allowArray: true });
+  validateObject(inspectOptions, "inspectOptions", kValidateObjectAllowArray);
   return formatWithOptionsInternal(inspectOptions, args);
 }
 

@@ -217,7 +217,11 @@ self.err = (if ((e.path.len == 0)) e.withPath(src) else e);
             }
             switch (Syscall.renameat(self.cwd, src, self.cwd, self.target)) {
 .err => |e| {
-if ((e.getErrno() == .NOTDIR)) {
+if ((e.getErrno() == .XDEV)) {
+                _ = self.moveAcrossFilesystems(self.cwd, src, self.cwd, self.target, self.target);
+                return;
+            }
+            if ((e.getErrno() == .NOTDIR)) {
                 self.err = e.withPath(self.target);
             } else {
                 if ((e.path.len == 0)) {
@@ -236,7 +240,20 @@ else => {
 pub fn moveInDir(self: *ShellMvBatchedTask, src: [:0]const u8, buf: *bun.PathBuffer) bool {
             const base = ResolvePath.basename(src);
             if (((base.len + 1) >= buf.len)) {
-                self.err = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
+                var spill: std.ArrayListUnmanaged(u8) = .{};
+                _ = &spill;
+                defer {
+                _ = spill.deinit(bun.default_allocator);
+                }
+                const parts: [2][]const u8 = .{ self.target[0..], base };
+                const tp = (blk_catch_0: { break :blk_catch_0 ((ResolvePath.joinZSpill((&spill), bun.default_allocator, (&parts), .auto)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 ""; }); });
+                const eb = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
+                if ((tp.len > 0)) {
+                    self.err = eb.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, tp[0..])));
+                    self.err_path_owned = true;
+                } else {
+                    self.err = eb;
+                }
                 return false;
             }
             const path_in_dir_ = bun.path.normalizeBuf(base, buf, .auto);
@@ -266,8 +283,16 @@ self.err = (if ((e.path.len == 0)) e.withPath(src) else e);
             }
             switch (Syscall.renameat(self.cwd, src, self.target_fd.?, path_in_dir)) {
 .err => |e| {
-const parts: [2][]const u8 = .{ self.target[0..], ResolvePath.basename(src) };
-            const target_path = ResolvePath.joinZ((&parts), .auto);
+var spill: std.ArrayListUnmanaged(u8) = .{};
+            _ = &spill;
+            defer {
+            _ = spill.deinit(bun.default_allocator);
+            }
+            const parts: [2][]const u8 = .{ self.target[0..], ResolvePath.basename(src) };
+            const target_path = bun.handleOom(ResolvePath.joinZSpill((&spill), bun.default_allocator, (&parts), .auto));
+            if ((e.getErrno() == .XDEV)) {
+                return self.moveAcrossFilesystems(self.cwd, src, self.target_fd.?, path_in_dir, target_path);
+            }
             self.err = e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, target_path[0..])));
             self.err_path_owned = true;
             return false;
@@ -299,10 +324,259 @@ pub fn moveMultipleIntoDir(self: *ShellMvBatchedTask) void {
             }
     }
 
-pub fn moveAcrossFilesystems(self: *ShellMvBatchedTask, src: [:0]const u8, dest: [:0]const u8) void {
-        _ = self;
-            _ = src.len;
-            _ = dest.len;
+pub fn setExdevErr(self: *ShellMvBatchedTask, e: Syscall.Error, err_path: []const u8) bool {
+            self.err = e.withPath(bun.handleOom(bun.default_allocator.dupeZ(u8, err_path)));
+            self.err_path_owned = true;
+            return false;
+    }
+
+pub fn copyEntryExdev(self: *ShellMvBatchedTask, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8) bool {
+            const st = (switch (Syscall.lstatat(src_dir, src)) {
+.result => |s| s,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+            const mode: bun.Mode = @intCast((st.mode & 4095));
+            if (std.posix.S.ISLNK(st.mode)) {
+                var lbuf: bun.PathBuffer = undefined;
+                _ = &lbuf;
+                const link_target = (switch (Syscall.readlinkat(src_dir, src, (&lbuf))) {
+.result => |t| t,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                switch (Syscall.symlinkat(link_target, dest_dir, dest)) {
+.result => {
+return true;
+},
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+}
+            }
+            if (std.posix.S.ISREG(st.mode)) {
+                const sfd = (switch (ShellSyscall.openat(src_dir, src, bun.O.RDONLY, 0)) {
+.result => |f| f,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                defer {
+                _ = sfd.close();
+                }
+                const dfd = (switch (ShellSyscall.openat(dest_dir, dest, ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), mode)) {
+.result => |f| f,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                defer {
+                _ = dfd.close();
+                }
+                var cbuf: [65536]u8 = undefined;
+                _ = &cbuf;
+                while (true) {
+                    const n = (switch (Syscall.read(sfd, (&cbuf))) {
+.result => |r| r,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                    if ((n == 0)) {
+                        break;
+                    }
+                    var off: usize = 0;
+                    _ = &off;
+                    while ((off < n)) {
+                        const w = (switch (Syscall.write(dfd, cbuf[off..n])) {
+.result => |r| r,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                        off = (off + w);
+                    }
+                }
+                _ = (blk_catch_1: { break :blk_catch_1 ((std.posix.fchmod(dfd.cast(), mode)) catch |__ce_1| { _ = &__ce_1;  }); });
+                return true;
+            }
+            if (std.posix.S.ISDIR(st.mode)) {
+                const sfd = (switch (ShellSyscall.openat(src_dir, src, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |f| f,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                defer {
+                _ = sfd.close();
+                }
+                switch (Syscall.mkdiratZ(dest_dir, dest, 448)) {
+.result => {
+
+},
+.err => |e| {
+if ((e.getErrno() != .EXIST)) {
+                    return self.setExdevErr(e, err_path);
+                }
+},
+}
+                const dfd = (switch (ShellSyscall.openat(dest_dir, dest, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |f| f,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                defer {
+                _ = dfd.close();
+                }
+                var dir = std.fs.Dir{ .fd = sfd.cast() };
+                _ = &dir;
+                var it = dir.iterate();
+                _ = &it;
+                while ((blk_catch_2: { break :blk_catch_2 ((it.next()) catch |__ce_2| { _ = &__ce_2; return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.IO, .getdents64), err_path); }); })) |entry| {
+                    var nbuf: bun.PathBuffer = undefined;
+                    _ = &nbuf;
+                    if (((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len >= nbuf.len)) {
+                        return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .open), err_path);
+                    }
+                    _ = @memcpy(nbuf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len], (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
+                    nbuf[cp_cast_int(usize, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len)] = 0;
+                    const cname = nbuf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len :0];
+                    if ((!self.copyEntryExdev(sfd, cname, dfd, cname, err_path))) {
+                        return false;
+                    }
+                }
+                _ = (blk_catch_3: { break :blk_catch_3 ((std.posix.fchmod(dfd.cast(), mode)) catch |__ce_3| { _ = &__ce_3;  }); });
+                return true;
+            }
+            return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.OPNOTSUPP, .rename), err_path);
+    }
+
+pub fn removeEntryExdev(self: ShellMvBatchedTask, dir_fd: bun.FD, name: [:0]const u8) void {
+            const st = (switch (Syscall.lstatat(dir_fd, name)) {
+.result => |s| s,
+.err => {
+return;
+},
+});
+            if ((!std.posix.S.ISDIR(st.mode))) {
+                _ = Syscall.unlinkat(dir_fd, name);
+                return;
+            }
+            const sfd = (switch (ShellSyscall.openat(dir_fd, name, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |f| f,
+.err => {
+return;
+},
+});
+            {
+                var dir = std.fs.Dir{ .fd = sfd.cast() };
+                _ = &dir;
+                var it = dir.iterate();
+                _ = &it;
+                while ((blk_catch_4: { break :blk_catch_4 ((it.next()) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); })) |entry| {
+                    var nbuf: bun.PathBuffer = undefined;
+                    _ = &nbuf;
+                    if (((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len >= nbuf.len)) {
+                        continue;
+                    }
+                    _ = @memcpy(nbuf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len], (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
+                    nbuf[cp_cast_int(usize, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len)] = 0;
+                    _ = self.removeEntryExdev(sfd, nbuf[0..(if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len :0]);
+                }
+            }
+            _ = sfd.close();
+            _ = (blk_catch_5: { break :blk_catch_5 ((std.posix.unlinkat(dir_fd.cast(), name, std.posix.AT.REMOVEDIR)) catch |__ce_5| { _ = &__ce_5;  }); });
+    }
+
+pub fn moveAcrossFilesystems(self: *ShellMvBatchedTask, src_dir: bun.FD, src: [:0]const u8, dest_dir: bun.FD, dest: [:0]const u8, err_path: []const u8) bool {
+            const st = (switch (Syscall.lstatat(src_dir, src)) {
+.result => |s| s,
+.err => |e| {
+return self.setExdevErr(e, src);
+},
+});
+            if (std.posix.S.ISDIR(st.mode)) {
+                var cur_fd = dest_dir;
+                _ = &cur_fd;
+                var owns_cur = false;
+                _ = &owns_cur;
+                defer {
+                if (owns_cur) {
+                    _ = cur_fd.close();
+                }
+                }
+                var prev_dev = st.dev;
+                _ = &prev_dev;
+                var prev_ino = st.ino;
+                _ = &prev_ino;
+                var first = true;
+                _ = &first;
+                while (true) {
+                    const cst = (switch (Syscall.fstat(cur_fd)) {
+.result => |s| s,
+.err => break,
+});
+                    if (((cst.dev == st.dev) and (cst.ino == st.ino))) {
+                        return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.INVAL, .rename), err_path);
+                    }
+                    if ((((!first) and (cst.dev == prev_dev)) and (cst.ino == prev_ino))) {
+                        break;
+                    }
+                    prev_dev = cst.dev;
+                    prev_ino = cst.ino;
+                    first = false;
+                    const parent = (switch (ShellSyscall.openat(cur_fd, "..", (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |fd| fd,
+.err => break,
+});
+                    if (owns_cur) {
+                        _ = cur_fd.close();
+                    }
+                    cur_fd = parent;
+                    owns_cur = true;
+                }
+            }
+            switch (Syscall.lstatat(dest_dir, dest)) {
+.result => |dst| {
+if (std.posix.S.ISDIR(st.mode)) {
+                if ((!std.posix.S.ISDIR(dst.mode))) {
+                    return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.NOTDIR, .rename), err_path);
+                }
+                const dfd = (switch (ShellSyscall.openat(dest_dir, dest, (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |f| f,
+.err => |e| {
+return self.setExdevErr(e, err_path);
+},
+});
+                defer {
+                _ = dfd.close();
+                }
+                var dir = std.fs.Dir{ .fd = dfd.cast() };
+                _ = &dir;
+                var it = dir.iterate();
+                _ = &it;
+                if (((blk_catch_6: { break :blk_catch_6 ((it.next()) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); }) != null)) {
+                    return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.NOTEMPTY, .rename), err_path);
+                }
+            } else {
+                if (std.posix.S.ISDIR(dst.mode)) {
+                    return self.setExdevErr(Syscall.Error.fromCode(Syscall.E.ISDIR, .rename), err_path);
+                }
+                _ = Syscall.unlinkat(dest_dir, dest);
+            }
+},
+.err => {
+
+},
+}
+            if ((!self.copyEntryExdev(src_dir, src, dest_dir, dest, err_path))) {
+                return false;
+            }
+            _ = self.removeEntryExdev(src_dir, src);
+            return true;
     }
 
 pub fn runFromMainThread(self: *ShellMvBatchedTask) void {
@@ -390,11 +664,9 @@ if ((self.state.check_target.state == .running)) {
             _ = &maybe_fd;
             switch (check_target.task.result.?) {
 .err => |e| {
-const errno = e.getErrno();
-            if ((errno == .NOENT)) {
+if ((e.getErrno() == .NOENT)) {
                 if ((self.args.sources.len != 1)) {
-                    const buf = self.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{ self.args.target });
-                    return self.writeFailingError(buf, 1);
+                    return self.writeFailingError(self.bltn().fmtErrorArena(.mv, "{s}: No such file or directory\n", .{ self.args.target }), 1);
                 }
             } else {
                 const sys_err = e.toShellSystemError();
@@ -402,8 +674,7 @@ const errno = e.getErrno();
                 _ = &_sys_err_guard;
                 var ___sys_err_guard_moved = false; _ = &___sys_err_guard_moved;
                 defer if (!___sys_err_guard_moved) { ___sys_err_guard_moved = true; const __T = @TypeOf(_sys_err_guard); if (@typeInfo(__T) == .optional) { if (_sys_err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sys_err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sys_err_guard; _drop_val.__cp_deinit(); } };
-                const buf = self.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() });
-                return self.writeFailingError(buf, 1);
+                return self.writeFailingError(self.bltn().fmtErrorArena(.mv, "{s}: {s}\n", .{ sys_err.path.byteSlice(), sys_err.message.byteSlice() }), 1);
             }
 },
 .result => |open_fd| {
@@ -411,8 +682,7 @@ maybe_fd = open_fd;
 },
 }
             if (((maybe_fd == null) and (self.args.sources.len > 1))) {
-                const buf = self.bltn().fmtErrorArena(.mv, "{s} is not a directory\n", .{ self.args.target });
-                return self.writeFailingError(buf, 1);
+                return self.writeFailingError(self.bltn().fmtErrorArena(.mv, "{s} is not a directory\n", .{ self.args.target }), 1);
             }
             const count_per_task = ShellMvBatchedTask.BATCH_SIZE;
             const sources_len: f64 = @floatFromInt(self.args.sources.len);
@@ -428,8 +698,7 @@ maybe_fd = open_fd;
                 while ((i < tasks.len)) : (i = (i + 1)) {
                     const start_idx = (i * count_per_task);
                     const end_idx = @min((start_idx + count_per_task), self.args.sources.len);
-                    const sources = self.args.sources[start_idx..end_idx];
-                    tasks[cp_cast_int(usize, i)] = ShellMvBatchedTask{ .mv = self, .cwd = cwd_fd, .target = self.args.target, .target_fd = self.args.target_fd, .sources = sources, .error_signal = undefined, .no_overwrite = self.opts.no_overwrite, .task = .{ .event_loop = self.bltn().parentCmd().base.eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(self.bltn().parentCmd().base.eventLoop()) }, .event_loop = self.bltn().parentCmd().base.eventLoop() };
+                    tasks[cp_cast_int(usize, i)] = ShellMvBatchedTask{ .mv = self, .cwd = cwd_fd, .target = self.args.target, .target_fd = self.args.target_fd, .sources = self.args.sources[start_idx..end_idx], .error_signal = undefined, .no_overwrite = self.opts.no_overwrite, .task = .{ .event_loop = self.bltn().parentCmd().base.eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(self.bltn().parentCmd().base.eventLoop()) }, .event_loop = self.bltn().parentCmd().base.eventLoop() };
                 }
             }
             self.state = .{ .executing = .{ .task_count = task_count, .error_signal = std.atomic.Value(bool).init(false), .tasks = tasks } };

@@ -293,36 +293,34 @@ pub struct ShellCpTask {
     }
 
     fn runFromThreadPoolImpl(*_): bun.shell.ShellErr? {
-        let buf2: bun.PathBuffer = undefined;
-        let buf3: bun.PathBuffer = undefined;
+        let src_spill: std.ArrayListUnmanaged(u8) = {};
+        defer src_spill.deinit(bun.default_allocator);
+        let tgt_spill: std.ArrayListUnmanaged(u8) = {};
+        defer tgt_spill.deinit(bun.default_allocator);
+        let tgt_join_spill: std.ArrayListUnmanaged(u8) = {};
+        defer tgt_join_spill.deinit(bun.default_allocator);
 
         let src: [:0]const u8 = _.src;
         if (!ResolvePath.Platform.auto.isAbsolute(_.src)) {
-            if (_.cwd_path.len + 1 + _.src.len >= bun.MAX_PATH_BYTES) {
-                return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat));
-            }
             const parts: [2][]const u8 = [
                 _.cwd_path[0..],
                 _.src[0..],
             ];
-            src = ResolvePath.joinZ(&parts, .auto);
+            src = bun.handleOom(ResolvePath.joinZSpill(&src_spill, bun.default_allocator, &parts, .auto));
         }
 
         let tgt: [:0]const u8 = _.tgt;
         if (!ResolvePath.Platform.auto.isAbsolute(_.tgt)) {
-            if (_.cwd_path.len + 1 + _.tgt.len >= bun.MAX_PATH_BYTES) {
-                return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat));
-            }
             const parts: [2][]const u8 = [
                 _.cwd_path[0..],
                 _.tgt[0..],
             ];
-            tgt = ResolvePath.joinZBuf(buf2[0..bun.MAX_PATH_BYTES], &parts, .auto);
+            tgt = bun.handleOom(ResolvePath.joinZSpill(&tgt_spill, bun.default_allocator, &parts, .auto));
         }
 
         const src_is_dir = switch (_.isDir(src)) {
             .result => |x| x,
-            .err => |e| return bun.shell.ShellErr.newSys(e),
+            .err => |e| return bun.shell.ShellErr.newSys(if (e.path.len == 0) e.withPath(src) else e),
         };
 
         if (src_is_dir && !_.opts.recursive) {
@@ -330,7 +328,7 @@ pub struct ShellCpTask {
             return .{ .custom = errmsg };
         }
 
-        if (!src_is_dir && bun.strings.eql(src, tgt)) {
+        if (!src_is_dir && _.opts.overwrite_existing_file && bun.strings.eql(src, tgt)) {
             const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{s} and {s} are identical (not copied)", .{ _.src, _.src }));
             return .{ .custom = errmsg };
         }
@@ -347,7 +345,7 @@ pub struct ShellCpTask {
                     (tgt_is_dir = hasTrailingSep(tgt));
                     (tgt_exists = false);
                 } else {
-                    return bun.shell.ShellErr.newSys(e);
+                    return bun.shell.ShellErr.newSys(if (e.path.len == 0) e.withPath(tgt) else e);
                 }
             },
         }
@@ -362,11 +360,34 @@ pub struct ShellCpTask {
                     tgt[0..tgt.len],
                     basename,
                 ];
-                tgt = ResolvePath.joinZBuf(buf3[0..bun.MAX_PATH_BYTES], &parts, .auto);
+                tgt = bun.handleOom(ResolvePath.joinZSpill(&tgt_join_spill, bun.default_allocator, &parts, .auto));
             } else if (_.operands == 2) {
             } else {
                 const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "directory {s} does not exist", .{_.tgt}));
                 return .{ .custom = errmsg };
+            }
+            if (src_is_dir) {
+                let src_real_buf: bun.PathBuffer = undefined;
+                let tgt_parent_real_buf: bun.PathBuffer = undefined;
+                if (src_real := std.posix.realpath(src, &src_real_buf) catch null) {
+                    const tgt_parent = std.fs.path.dirname(tgt) ?? tgt;
+                    if (tgt_parent_real := std.posix.realpath(tgt_parent, &tgt_parent_real_buf) catch null) {
+                        const is_self = bun.strings.eql(src_real, tgt_parent_real) ||
+                            (tgt_parent_real.len > src_real.len &&
+                            bun.strings.startsWith(tgt_parent_real, src_real) &&
+                            (bun.strings.eql(src_real, "/") || tgt_parent_real[src_real.len] == '/' || tgt_parent_real[src_real.len] == '\\'));
+                        if (is_self) {
+                            const disp_parts: [2][]const u8 = [ _.tgt, ResolvePath.basename(src[0..src.len]) ];
+                            const tgt_disp = if (tgt_exists)
+                                bun.handleOom(std.fs.path.join(bun.default_allocator, &disp_parts))
+                            else
+                                bun.handleOom(bun.default_allocator.dupe(u8, _.tgt));
+                            defer bun.default_allocator.free(tgt_disp);
+                            const errmsg = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "cannot copy a directory, '{s}', into itself, '{s}'", .{ _.src, tgt_disp }));
+                            return .{ .custom = errmsg };
+                        }
+                    }
+                }
             }
             copying_many = true;
         } else {
@@ -377,10 +398,16 @@ pub struct ShellCpTask {
                 tgt[0..tgt.len],
                 basename,
             ];
-            tgt = ResolvePath.joinZBuf(buf3[0..bun.MAX_PATH_BYTES], &parts, .auto);
+            tgt = bun.handleOom(ResolvePath.joinZSpill(&tgt_join_spill, bun.default_allocator, &parts, .auto));
             copying_many = true;
         }
         * = copying_many;
+
+        if (comptime !bun.Environment.isWindows) {
+            if (tgt.len >= bun.MAX_PATH_BYTES) {
+                return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat).withPath(tgt));
+            }
+        }
 
         _.src_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, src[0..src.len]));
         _.tgt_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, tgt[0..tgt.len]));
