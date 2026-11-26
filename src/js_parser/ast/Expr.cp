@@ -134,9 +134,18 @@ pub fn fromBlob(
 ): Expr! {
     const bytes = blob.sharedView();
 
-    const mime_type = mime_type_ ?? MimeType.init(blob.content_type, null, null);
+    let essence = std.mem.trim(u8, blob.content_type, " \t\r\n");
+    if (semi := std.mem.indexOfScalar(u8, essence, ';')) {
+        essence = std.mem.trim(u8, essence[0..semi], " \t\r\n");
+    }
 
-    if (mime_type.category == .json) {
+    const mime_type = mime_type_ ?? MimeType.init(essence, null, null);
+    const is_json = mime_type.category == .json ||
+        std.ascii.eqlIgnoreCase(essence, "application/json") ||
+        std.ascii.eqlIgnoreCase(essence, "text/json") ||
+        (essence.len >= 5 && std.ascii.eqlIgnoreCase(essence[essence.len - 5 ..], "+json"));
+
+    if (is_json) {
         const source = &logger.Source.initPathString("fetch.json", bytes);
         let out_expr = JSONParser.parseForMacro(source, log, allocator) catch {
             return error.MacroFailed;
@@ -156,7 +165,14 @@ pub fn fromBlob(
         return out_expr;
     }
 
-    if (mime_type.category.isTextLike()) {
+    const is_text_like = mime_type.category.isTextLike() ||
+        (essence.len >= 5 && std.ascii.eqlIgnoreCase(essence[0..5], "text/")) ||
+        std.ascii.eqlIgnoreCase(essence, "application/javascript") ||
+        std.ascii.eqlIgnoreCase(essence, "application/x-javascript") ||
+        std.ascii.eqlIgnoreCase(essence, "application/ecmascript") ||
+        std.ascii.eqlIgnoreCase(essence, "application/xml");
+
+    if (is_text_like) {
         let output = MutableString.initEmpty(allocator);
         JSPrinter.quoteForJSON(bytes, &output, true)?;
         let list = output.toOwnedSlice();
@@ -167,10 +183,19 @@ pub fn fromBlob(
         return Expr.init(E.String, E.String.init(list), loc);
     }
 
+    const b64_len = std.base64.standard.Encoder.calcSize(bytes.len);
+    const prefix_len = "data:".len + essence.len + ";base64,".len;
+    let buf = allocator.alloc(u8, prefix_len + b64_len)?;
+    @memcpy(buf[0.."data:".len], "data:");
+    if (essence.len > 0) {
+        @memcpy(buf["data:".len .. "data:".len + essence.len], essence);
+    }
+    @memcpy(buf["data:".len + essence.len .. prefix_len], ";base64,");
+    const encoded = std.base64.standard.Encoder.encode(buf[prefix_len..], bytes);
     return Expr.init(
         E.String,
         E.String{
-            data: jsc.ZigString.init(bytes).toBase64DataURL(allocator)?,
+            data: buf[0 .. prefix_len + encoded.len],
         },
         loc,
     );
@@ -3193,11 +3218,13 @@ pub union(Tag) Data {
                             equal: l.value == r.value,
                         };
                     },
-                    .e_inlined_enum => |r| if (r.value.data == .e_number) {
-                        return {
-                            ok: true,
-                            equal: l.value == r.value.data.e_number.value,
-                        };
+                    .e_inlined_enum => |r| {
+                        if (r.value.data == .e_number) {
+                            return {
+                                ok: true,
+                                equal: l.value == r.value.data.e_number.value,
+                            };
+                        }
                     },
                     .e_boolean, .e_branch_boolean => |r| {
                         if (comptime kind == .loose) {

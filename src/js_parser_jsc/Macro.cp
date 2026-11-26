@@ -407,6 +407,7 @@ export struct RunnerRun {
                 const IterType = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     include_value: true,
+                    include_symbols: false,
                 });
                 let object_iter = IterType.init(_.global, obj)?;
                 const _g_object_iter = DeinitGuard<IterType>{ ptr: &object_iter };
@@ -646,6 +647,7 @@ export struct Runner {
             _vm.enableMacroMode();
             _vm.eventLoop().ensureWaker();
 
+            _vm.transpiler.options.loaders = resolver.opts.loaders;
             _vm.transpiler.configureDefines()?;
             break :brk _vm;
         };
@@ -653,20 +655,46 @@ export struct Runner {
         vm.enableMacroMode();
         vm.eventLoop().ensureWaker();
 
-        const loaded_result = vm.loadMacroEntryPoint(input_specifier, function_name, specifier, hash)?;
-
-        switch (loaded_result.unwrap(vm.jsc_vm, .leave_unhandled)) {
-            .rejected => |result| {
-                vm.unhandledRejection(vm.global, result, loaded_result.toJS());
-                vm.disableMacroMode();
-                return error.MacroLoadError;
-            },
-            else => {},
+        let load_wrapper = MacroLoadWrapper{
+            vm: vm,
+            input_specifier: input_specifier,
+            function_name: function_name,
+            specifier: specifier,
+            hash: hash,
+            err: null,
+        };
+        vm.runWithAPILock(MacroLoadWrapper, &load_wrapper, MacroLoadWrapper.call);
+        if (e := load_wrapper.err) {
+            return e;
         }
 
         return Macro{
             vm: vm,
             resolver: resolver,
         };
+    }
+}
+
+struct MacroLoadWrapper {
+    vm: *JavaScript.VirtualMachine,
+    input_specifier: []const u8,
+    function_name: string,
+    specifier: string,
+    hash: i32,
+    err: anyerror?,
+
+    pub fn call(*_) {
+        const loaded_result = _.vm.loadMacroEntryPoint(_.input_specifier, _.function_name, _.specifier, _.hash) catch e => {
+            _.err = e;
+            return;
+        };
+        switch (loaded_result.unwrap(_.vm.jsc_vm, .leave_unhandled)) {
+            .rejected => |result| {
+                _.vm.unhandledRejection(_.vm.global, result, loaded_result.toJS());
+                _.vm.disableMacroMode();
+                _.err = error.MacroLoadError;
+            },
+            else => {},
+        }
     }
 }

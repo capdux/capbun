@@ -288,7 +288,7 @@ pub fn Visit(
                         for (property of bound_object.properties) {
                             if (property.flags.contains(.is_spread)) return;
                         }
-                        let output_properties = object.properties.slice();
+                        const new_props = p.allocator.alloc(G.Property, bound_object.properties.len) catch unreachable;
                         let end: u32 = 0;
                         for (property of bound_object.properties) {
                             if (name := property.key.asStringLiteral(p.allocator)) {
@@ -303,13 +303,13 @@ pub fn Visit(
                                             }
                                         },
                                     }
-                                    output_properties[end] = output_properties[query.i];
+                                    new_props[end] = object.properties.slice()[query.i];
                                     end += 1;
                                 }
                             }
                         }
 
-                        object.properties.len = end;
+                        object.properties = G.Property.List.fromOwnedSlice(new_props[0..end]);
                     }
                 },
                 .b_array => |bound_array| {

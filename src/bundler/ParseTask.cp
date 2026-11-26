@@ -1331,6 +1331,7 @@ fn runWithSourceCode(
     opts.features.top_level_await = output_format == .esm || output_format == .internal_bake_dev;
     opts.features.auto_import_jsx = task.jsx.parse && transpiler.options.auto_import_jsx;
     opts.features.trim_unused_imports = loader.isTypeScript() || (transpiler.options.trim_unused_imports ?? false);
+    opts.features.no_macros = transpiler.options.no_macros;
     opts.features.inlining = transpiler.options.minify_syntax;
     opts.output_format = output_format;
     opts.features.minify_syntax = transpiler.options.minify_syntax;

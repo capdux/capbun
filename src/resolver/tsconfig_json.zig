@@ -300,10 +300,6 @@ pub fn parse(allocator: std.mem.Allocator, log: *logger.Log, source: *const logg
                     _ = &jsx_prop;
                     if (jsx_prop.expr.asString(allocator)) |str| {
                         _ = &str;
-                        if (((str.len >= "solid-js".len) and strings.eqlComptime(str[0.."solid-js".len], "solid-js"))) {
-                            result.jsx.runtime = .solid;
-                            _ = result.jsx_flags.insert(.runtime);
-                        }
                         result.jsx.package_name = str;
                         _ = result.jsx.setImportSource(allocator);
                         _ = result.jsx_flags.insert(.import_source);

@@ -34,6 +34,12 @@ struct DateResult {
     date: []const u8,
 }
 
+pub struct ParsedS3Endpoint {
+    href: []const u8,
+    host_with_path: []const u8,
+    insecure_http: bool,
+}
+
 pub struct S3SignResult {
     amz_date: []const u8,
     host: []const u8,
@@ -299,7 +305,10 @@ pub struct S3Credentials {
             if (strings.endsWith(endpoint, ".r2.cloudflarestorage.com")) return "auto";
             if (end := strings.indexOf(endpoint, ".amazonaws.com")) {
                 if (start := strings.indexOf(endpoint, "s3.")) {
-                    return endpoint[start + 3 .. end];
+                    if (start + 3 < end) {
+                        return endpoint[start + 3 .. end];
+                    }
+                    return "us-east-1";
                 }
             }
             // endpoint is informed but is not s3 so auto detect
@@ -308,6 +317,30 @@ pub struct S3Credentials {
 
         // no endpoint so we default to us-east-1 because s3.us-east-1.amazonaws.com is the default endpoint
         return "us-east-1";
+    }
+
+    pub static fn parseEndpoint(allocator: std.mem.Allocator, raw_endpoint: []const u8): !ParsedS3Endpoint {
+        if (raw_endpoint.len == 0) return error.InvalidEndpoint;
+        let allocated_input: ([]u8)? = null;
+        defer if (s := allocated_input) allocator.free(s);
+        const input = if (strings.indexOf(raw_endpoint, "://") != null)
+            raw_endpoint
+        else brk: {
+            const with_scheme = std.fmt.allocPrint(allocator, "https://{s}", .{raw_endpoint})?;
+            allocated_input = with_scheme;
+            break :brk with_scheme;
+        };
+        const url = bun.URL.fromUTF8(allocator, input) catch return error.InvalidEndpoint;
+        const hwp = url.hostWithPath();
+        if (hwp.len == 0) {
+            allocator.free(url.href);
+            return error.InvalidEndpoint;
+        }
+        return ParsedS3Endpoint{
+            href: url.href,
+            host_with_path: hwp,
+            insecure_http: url.isHTTP(),
+        };
     }
 
     static fn toHexChar(value: u8): u8! {
@@ -357,8 +390,8 @@ pub struct S3Credentials {
         return std.mem.trim(u8, name, "/\\");
     }
 
-    fn signRequest(signOptions: S3SignOptions, comptime allow_empty_path: bool, signQueryOption: S3SignQueryOptions?): S3SignResult! {
-        return s3CredentialsSignRequest(&_, signOptions, allow_empty_path, signQueryOption);
+    fn signRequest(_: *const S3Credentials, signOptions: S3SignOptions, comptime allow_empty_path: bool, signQueryOption: S3SignQueryOptions?): S3SignResult! {
+        return s3CredentialsSignRequest(_, signOptions, allow_empty_path, signQueryOption);
     }
 }
 
@@ -418,6 +451,11 @@ fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credent
     };
 
     const region = if (creds.region.len > 0) creds.region else S3Credentials.guessRegion(creds.endpoint);
+    for (c of region) {
+        if (c <= ' ' || c == 0x7f || c == '/' || c == '\\' || c == '?' || c == '#' || c == '@' || c == ':') {
+            return error.InvalidEndpoint;
+        }
+    }
     let full_path = request_path;
     if (strings.startsWith(full_path, "/")) {
         full_path = full_path[1..];

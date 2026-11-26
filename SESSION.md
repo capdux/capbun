@@ -1019,3 +1019,10 @@
 - **`napi`**：`napi.cpp` 移除 `napi_delete_reference` GC 拦截、`ffi.cp` 嵌入 N-API 头文件、`napi-value-ffi.test.ts` 更新路径。
 - **`node/fs`**：`node_fs.cp`, `node_fs_binding.cp`, `types.cp`, `fs.promises.ts` 修复 `write`/`writeSync` offset 校验、`appendFile` `'ax'` `EEXIST`、`rm` `ERR_FS_EISDIR`、`chmodSync` 特殊权限位、`FileHandle.writer()`/`close()`/`autoClose` 与 `Uint8Array` `pinArrayBuffer`。
 - **`web/timers`**：`ZigGlobalObject.lut.txt` 修正 `queueMicrotask` `Function 1`。
+
+### 2026-11-26 Batch 4 测试修复与验证（`bun/util` / `bun/s3` / `bundler/transpiler` / `web/encoding` / `web/fetch`）
+- **`bun-file.test.ts`**：`types.cp` `PathLike.toThreadSafe` 复制 `.buffer` 并立即 `unpinArrayBuffer` -> **10 pass, 1 fail**（`Uint8Array` 拷贝/transfer/GC 全绿）。
+- **`bun/s3`**：`Store.cp`, `credentials.cp`, `credentials_jsc.cp`, `env_loader.cp` 修复 `S3` `endpoint`/`region` WHATWG 规范化与 `guessRegion` 越界 -> 原 10 项全绿。
+- **`bundler/transpiler`**：`options.cp`, `tsconfig_json.cp`, `bunfig.cp`, `Arguments.cp`, `parseJSXElement.cp`, `ParseTask.cp`, `bindings.cpp`, `JSPropertyIterator.cp/.cpp`, `Macro.cp`, `visit.cp`, `visitExpr.cp`, `Expr.cp` 修复 `solid` 移除报错、宏 API Lock、Symbol 键过滤、乱序解构与 MIME essence。
+- **`web/encoding`**：`EncodingLabel.cp`, `TextDecoder.cp` 补全 `windows-1254/1256/1258`/`x-mac-cyrillic`/`unicodefffe` 与 `replacement`/`iso_8859-11` `RangeError` -> 原 15 项全绿。
+- **`web/fetch`**：`http.cp` 支持大小写不敏感与多值逗号分隔的 `Content-Encoding` / `Transfer-Encoding`。

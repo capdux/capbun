@@ -326,15 +326,28 @@ const tag: Expr = tagger: {
                         e_.children.len = last_child;
                     }
                     const children_key = Expr{ .data = jsxChildrenKeyData, .loc = expr.loc };
+                    var spread_cloned = false;
+                    _ = &spread_cloned;
+                    var props_list: G.Property.List = .{};
+                    _ = &props_list;
                     while ((((props.len == 1) and (props.at(0).kind == .spread)) and ((if (@typeInfo(@TypeOf(props.at(0))) == .@"enum") @intFromEnum(props.at(0)) else props.at(0).value).?.data == .e_object))) {
                         props = (&(if (@typeInfo(@TypeOf(props.at(0))) == .@"enum") @intFromEnum(props.at(0)) else props.at(0).value).?.data.e_object.properties);
+                        spread_cloned = true;
                     }
                     const is_static_jsx = ((e_.children.len > 1) or ((e_.children.len == 1) and (e_.children.ptr[0].data == .e_spread)));
+                    if (spread_cloned) {
+                        const extra: usize = (if ((is_static_jsx or (e_.children.len == 1))) 1 else 0);
+                        const buf = (blk_catch_10: { break :blk_catch_10 ((allocator.alloc(G.Property, (props.len + extra))) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                        _ = bun.copy(G.Property, buf[0..props.len], props.slice());
+                        props_list = G.Property.List.fromOwnedSlice(buf[0..props.len]);
+                        props_list.cap = @as(u32, @truncate(buf.len));
+                        props = (&props_list);
+                    }
                     if (is_static_jsx) {
-                        _ = (blk_catch_10: { break :blk_catch_10 ((props.append(allocator, G.Property{ .key = children_key, .value = p.newExpr(E.Array{ .items = e_.children, .is_single_line = (e_.children.len < 2) }, e_.close_tag_loc) })) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                        _ = (blk_catch_11: { break :blk_catch_11 ((props.append(allocator, G.Property{ .key = children_key, .value = p.newExpr(E.Array{ .items = e_.children, .is_single_line = (e_.children.len < 2) }, e_.close_tag_loc) })) catch |e| { _ = &e; break :blk_catch_11 bun.handleOom(e); }); });
                     } else {
                         if ((e_.children.len == 1)) {
-                            _ = (blk_catch_11: { break :blk_catch_11 ((props.append(allocator, G.Property{ .key = children_key, .value = e_.children.ptr[0] })) catch |e| { _ = &e; break :blk_catch_11 bun.handleOom(e); }); });
+                            _ = (blk_catch_12: { break :blk_catch_12 ((props.append(allocator, G.Property{ .key = children_key, .value = e_.children.ptr[0] })) catch |e| { _ = &e; break :blk_catch_12 bun.handleOom(e); }); });
                         }
                     }
                     const args = ((p.allocator.alloc(Expr, (if (p.options.jsx.development) (if (comptime @typeInfo(@TypeOf(6)) == .@"enum") cp_cast_int(usize, @intFromEnum(6)) else cp_cast_int(usize, 6)) else ((if (comptime @typeInfo(@TypeOf(2)) == .@"enum") cp_cast_int(usize, @intFromEnum(2)) else cp_cast_int(usize, 2)) + (if (comptime @typeInfo(@TypeOf(@intFromBool((maybe_key_value != null)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((maybe_key_value != null)))) else cp_cast_int(usize, @intFromBool((maybe_key_value != null)))))))) catch unreachable);
@@ -404,7 +417,7 @@ else => null,
                             p.macro_call_count = (p.macro_call_count + 1);
                             const name = (((if (@typeInfo(@TypeOf(macro_ref_data)) == .@"enum" or @typeInfo(@TypeOf(macro_ref_data)) == .@"union") @tagName(macro_ref_data) else macro_ref_data.name)) orelse ((if (@typeInfo(@TypeOf(tag.data.e_dot)) == .@"enum" or @typeInfo(@TypeOf(tag.data.e_dot)) == .@"union") @tagName(tag.data.e_dot) else tag.data.e_dot.name)));
                             const record = (&p.import_records.items[@as(usize, @intCast(macro_ref_data.import_record_id))]);
-                            const macro_result = (blk_catch_15: { break :blk_catch_15 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, expr, name)) catch |__ce_15| { _ = &__ce_15; return expr; }); });
+                            const macro_result = (blk_catch_16: { break :blk_catch_16 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, expr, name)) catch |__ce_16| { _ = &__ce_16; return expr; }); });
                             if ((macro_result.data != .e_template)) {
                                 return p.visitExpr(macro_result);
                             }
@@ -844,7 +857,7 @@ else => {
 }
             }
             if (((p.options.features.minify_syntax and (spread_item_count > 0)) and (expr_in.assign_target == .none))) {
-                e_.items = (blk_catch_22: { break :blk_catch_22 ((e_.inlineSpreadOfArrayLiterals(p.allocator, spread_item_count)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 e_.items; }); });
+                e_.items = (blk_catch_23: { break :blk_catch_23 ((e_.inlineSpreadOfArrayLiterals(p.allocator, spread_item_count)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 e_.items; }); });
             }
             return expr;
     }
@@ -888,7 +901,7 @@ else => {
                 }
                 if (((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) != null)) {
                     if (((((((expr_in.assign_target == .none) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data == .e_class)) and (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_class.should_lower_standard_decorators) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_class.class_name == null)) and ((property.*).key != null)) and ((property.*).key.?.data == .e_string))) {
-                        p.decorator_class_name = (blk_catch_24: { break :blk_catch_24 (((property.*).key.?.data.e_string.string(p.allocator)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 null; }); });
+                        p.decorator_class_name = (blk_catch_25: { break :blk_catch_25 (((property.*).key.?.data.e_string.string(p.allocator)) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 null; }); });
                     }
                     (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value) = p.visitExprInOut((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?, ExprIn{ .assign_target = expr_in.assign_target });
                     p.decorator_class_name = null;
@@ -1125,7 +1138,7 @@ else => unreachable,
                     const copied = Expr{ .loc = expr.loc, .data = .{ .e_call = e_ } };
                     const start_error_count = p.log.msgs.items.len;
                     p.macro_call_count = (p.macro_call_count + 1);
-                    const macro_result = (blk_catch_28: { break :blk_catch_28 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, copied, name)) catch |e| { _ = &e; if ((e == error.MacroFailed)) {
+                    const macro_result = (blk_catch_29: { break :blk_catch_29 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, copied, name)) catch |e| { _ = &e; if ((e == error.MacroFailed)) {
                         if ((p.log.msgs.items.len == start_error_count)) {
                             _ = ((p.log.addError(p.source, expr.loc, "macro threw exception")) catch unreachable);
                         }
@@ -1164,7 +1177,7 @@ else => break :try_record_hook,
 }) {
                         _ = bun.assert(p.options.features.server_components.isServerSide());
                         if (((!bun.strings.startsWith(p.source.path.pretty, "node_modules")) and bun.strings.eqlComptime(original_name, "useState"))) {
-                            _ = (blk_catch_32: { break :blk_catch_32 ((p.log.addError(p.source, expr.loc, (blk_catch_31: { break :blk_catch_31 ((std.fmt.allocPrint(p.allocator, "\"useState\" is not available in a server component. If you need interactivity, consider converting part of this to a Client Component (by adding `\"use client\";` to the top of the file).", .{})) catch |e| { _ = &e; break :blk_catch_31 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_32 bun.handleOom(e); }); });
+                            _ = (blk_catch_33: { break :blk_catch_33 ((p.log.addError(p.source, expr.loc, (blk_catch_32: { break :blk_catch_32 ((std.fmt.allocPrint(p.allocator, "\"useState\" is not available in a server component. If you need interactivity, consider converting part of this to a Client Component (by adding `\"use client\";` to the top of the file).", .{})) catch |e| { _ = &e; break :blk_catch_32 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_33 bun.handleOom(e); }); });
                         }
                     }
                 }

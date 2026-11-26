@@ -2043,23 +2043,45 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
                 } else {
                     if ((header_hash == content_encoding_header_hash)) {
                         if ((!self.flags.disable_decompression)) {
-                            if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "gzip")) {
-                                self.state.encoding = Encoding.gzip;
-                                self.state.content_encoding_i = @as(u8, @truncate(header_i));
-                            } else {
-                                if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "deflate")) {
-                                    self.state.encoding = Encoding.deflate;
-                                    self.state.content_encoding_i = @as(u8, @truncate(header_i));
+                            var found: ?Encoding = null;
+                            _ = &found;
+                            var valid = true;
+                            _ = &valid;
+                            var it = std.mem.tokenizeScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 44);
+                            _ = &it;
+                            while (it.next()) |raw_tok| {
+                                const tok = std.mem.trim(u8, raw_tok, " \t");
+                                if (((tok.len == 0) or strings.eqlCaseInsensitiveASCII(tok, "identity", true))) {
+                                    continue;
+                                }
+                                var enc: ?Encoding = null;
+                                _ = &enc;
+                                if ((strings.eqlCaseInsensitiveASCII(tok, "gzip", true) or strings.eqlCaseInsensitiveASCII(tok, "x-gzip", true))) {
+                                    enc = Encoding.gzip;
                                 } else {
-                                    if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "br")) {
-                                        self.state.encoding = Encoding.brotli;
-                                        self.state.content_encoding_i = @as(u8, @truncate(header_i));
+                                    if (strings.eqlCaseInsensitiveASCII(tok, "deflate", true)) {
+                                        enc = Encoding.deflate;
                                     } else {
-                                        if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "zstd")) {
-                                            self.state.encoding = Encoding.zstd;
-                                            self.state.content_encoding_i = @as(u8, @truncate(header_i));
+                                        if (strings.eqlCaseInsensitiveASCII(tok, "br", true)) {
+                                            enc = Encoding.brotli;
+                                        } else {
+                                            if (strings.eqlCaseInsensitiveASCII(tok, "zstd", true)) {
+                                                enc = Encoding.zstd;
+                                            }
                                         }
                                     }
+                                }
+                                if (((enc == null) or (found != null))) {
+                                    valid = false;
+                                    break;
+                                }
+                                found = enc;
+                            }
+                            if (valid) {
+                                if (found) |enc| {
+                                    _ = &enc;
+                                    self.state.encoding = enc;
+                                    self.state.content_encoding_i = @as(u8, @truncate(header_i));
                                 }
                             }
                         }
@@ -2068,38 +2090,58 @@ pub fn handleResponseMetadata(self: *HTTPClient, response: *picohttp.Response) !
                             if (((self.flags.proxy_tunneling and (self.proxy_tunnel == null)) and (response.status_code == 200))) {
                                 continue;
                             }
-                            if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "gzip")) {
-                                if ((!self.flags.disable_decompression)) {
-                                    self.state.transfer_encoding = Encoding.gzip;
+                            var saw_chunked = false;
+                            _ = &saw_chunked;
+                            var last_enc: ?Encoding = null;
+                            _ = &last_enc;
+                            var it = std.mem.tokenizeScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 44);
+                            _ = &it;
+                            while (it.next()) |raw_tok| {
+                                const tok = std.mem.trim(u8, raw_tok, " \t");
+                                if ((tok.len == 0)) {
+                                    continue;
                                 }
-                            } else {
-                                if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "deflate")) {
-                                    if ((!self.flags.disable_decompression)) {
-                                        self.state.transfer_encoding = Encoding.deflate;
-                                    }
+                                if (saw_chunked) {
+                                    return error.UnsupportedTransferEncoding;
+                                }
+                                if ((strings.eqlCaseInsensitiveASCII(tok, "gzip", true) or strings.eqlCaseInsensitiveASCII(tok, "x-gzip", true))) {
+                                    last_enc = Encoding.gzip;
                                 } else {
-                                    if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "br")) {
-                                        if ((!self.flags.disable_decompression)) {
-                                            self.state.transfer_encoding = .brotli;
-                                        }
+                                    if (strings.eqlCaseInsensitiveASCII(tok, "deflate", true)) {
+                                        last_enc = Encoding.deflate;
                                     } else {
-                                        if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "zstd")) {
-                                            if ((!self.flags.disable_decompression)) {
-                                                self.state.transfer_encoding = .zstd;
-                                            }
+                                        if (strings.eqlCaseInsensitiveASCII(tok, "br", true)) {
+                                            last_enc = Encoding.brotli;
                                         } else {
-                                            if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "identity")) {
-                                                self.state.transfer_encoding = Encoding.identity;
+                                            if (strings.eqlCaseInsensitiveASCII(tok, "zstd", true)) {
+                                                last_enc = Encoding.zstd;
                                             } else {
-                                                if (strings.eqlComptime((if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), "chunked")) {
-                                                    self.state.transfer_encoding = Encoding.chunked;
+                                                if (strings.eqlCaseInsensitiveASCII(tok, "identity", true)) {
+                                                    last_enc = Encoding.identity;
                                                 } else {
-                                                    return error.UnsupportedTransferEncoding;
+                                                    if (strings.eqlCaseInsensitiveASCII(tok, "chunked", true)) {
+                                                        saw_chunked = true;
+                                                        last_enc = Encoding.chunked;
+                                                    } else {
+                                                        return error.UnsupportedTransferEncoding;
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                            }
+                            if (last_enc) |te| {
+                                _ = &te;
+                                if (((te == Encoding.chunked) or (te == Encoding.identity))) {
+                                    self.state.transfer_encoding = te;
+                                } else {
+                                    if ((!self.flags.disable_decompression)) {
+                                        self.state.transfer_encoding = te;
+                                    }
+                                }
+                            } else {
+                                return error.UnsupportedTransferEncoding;
                             }
                         } else {
                             if ((header_hash == location_header_hash)) {

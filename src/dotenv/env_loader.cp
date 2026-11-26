@@ -172,13 +172,23 @@ pub struct Loader {
             region = region_;
         }
         if (endpoint_ := _.get("S3_ENDPOINT")) {
-            const url = bun.URL.parse(endpoint_);
-            endpoint = url.hostWithPath();
-            insecure_http = url.isHTTP();
+            if (parsed := s3.S3Credentials.parseEndpoint(_.allocator, endpoint_) catch null) {
+                endpoint = parsed.host_with_path;
+                insecure_http = parsed.insecure_http;
+            } else {
+                const url = bun.URL.parse(endpoint_);
+                endpoint = url.hostWithPath();
+                insecure_http = url.isHTTP();
+            }
         } else if (endpoint_ := _.get("AWS_ENDPOINT")) {
-            const url = bun.URL.parse(endpoint_);
-            endpoint = url.hostWithPath();
-            insecure_http = url.isHTTP();
+            if (parsed := s3.S3Credentials.parseEndpoint(_.allocator, endpoint_) catch null) {
+                endpoint = parsed.host_with_path;
+                insecure_http = parsed.insecure_http;
+            } else {
+                const url = bun.URL.parse(endpoint_);
+                endpoint = url.hostWithPath();
+                insecure_http = url.isHTTP();
+            }
         }
         if (bucket_ := _.get("S3_BUCKET")) {
             bucket = bucket_;
@@ -1333,7 +1343,7 @@ pub struct _MapHashTableValue {
 pub struct _StdEnvMapWrapper {
     unsafe_map: std.process.EnvMap,
 
-    fn get(): *const std.process.EnvMap {
+    fn get(*_): *const std.process.EnvMap {
         return &_.unsafe_map;
     }
 

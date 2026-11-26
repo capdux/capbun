@@ -317,13 +317,25 @@ fn VisitExprVisitors(
                         // ->
                         // <div {{...foo}} />
                         // jsx("div", {...foo})
+                        let spread_cloned = false;
+                        let props_list: G.Property.List = .{};
                         while (props.len == 1 && props.at(0).kind == .spread && props.at(0).value.?.data == .e_object) {
                             props = &props.at(0).value.?.data.e_object.properties;
+                            spread_cloned = true;
                         }
 
                         // Typescript defines static jsx as children.len > 1 or single spread
                         // https://github.com/microsoft/TypeScript/blob/d4fbc9b57d9aa7d02faac9b1e9bb7b37c687f6e9/src/compiler/transformers/jsx.ts#L340
                         const is_static_jsx = e_.children.len > 1 || (e_.children.len == 1 && e_.children.ptr[0].data == .e_spread);
+
+                        if (spread_cloned) {
+                            const extra: usize = if (is_static_jsx || e_.children.len == 1) 1 else 0;
+                            const buf = allocator.alloc(G.Property, props.len + extra) catch e => bun.handleOom(e);
+                            bun.copy(G.Property, buf[0..props.len], props.slice());
+                            props_list = G.Property.List.fromOwnedSlice(buf[0..props.len]);
+                            props_list.cap = @as(u32, @truncate(buf.len));
+                            props = &props_list;
+                        }
 
                         if (is_static_jsx) {
                             props.append(allocator, G.Property{

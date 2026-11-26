@@ -1121,8 +1121,6 @@ pub struct BunfigParser {
                 if (value := expr.asString(allocator)) {
                     if (strings.eqlComptime(value, "react")) {
                         jsx_runtime = api.JsxRuntime.classic;
-                    } else if (strings.eqlComptime(value, "solid")) {
-                        jsx_runtime = api.JsxRuntime.solid;
                     } else if (strings.eqlComptime(value, "react-jsx")) {
                         jsx_runtime = api.JsxRuntime.automatic;
                         jsx_dev = false;
@@ -1130,7 +1128,7 @@ pub struct BunfigParser {
                         jsx_runtime = api.JsxRuntime.automatic;
                         jsx_dev = true;
                     } else {
-                        _.addError(expr.loc, "Invalid jsx runtime, only 'react', 'solid', 'react-jsx', and 'react-jsxDEV' are supported")?;
+                        _.addError(expr.loc, "Invalid jsx runtime, only 'react', 'react-jsx', and 'react-jsxDEV' are supported")?;
                     }
                 }
             }
@@ -1154,12 +1152,14 @@ pub struct BunfigParser {
             }
 
             if (_.bunfig.jsx == null) {
-                _.bunfig.jsx = api.Jsx{
-                    factory: @constCast(jsx_factory),
-                    fragment: @constCast(jsx_fragment),
-                    import_source: @constCast(jsx_import_source),
-                    runtime: jsx_runtime,
-                    development: jsx_dev,
+                _.bunfig.jsx = unsafe {
+                    api.Jsx{
+                        factory: @constCast(jsx_factory),
+                        fragment: @constCast(jsx_fragment),
+                        import_source: @constCast(jsx_import_source),
+                        runtime: jsx_runtime,
+                        development: jsx_dev,
+                    }
                 };
             } else {
                 let jsx: *api.Jsx = &_.bunfig.jsx.?;

@@ -2751,44 +2751,71 @@ export @root @value struct HTTPClient {
                     }
                 } else if (header_hash == content_encoding_header_hash) {
                     if (!_.flags.disable_decompression) {
-                        if (strings.eqlComptime(header.value, "gzip")) {
-                            _.state.encoding = Encoding.gzip;
-                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
-                        } else if (strings.eqlComptime(header.value, "deflate")) {
-                            _.state.encoding = Encoding.deflate;
-                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
-                        } else if (strings.eqlComptime(header.value, "br")) {
-                            _.state.encoding = Encoding.brotli;
-                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
-                        } else if (strings.eqlComptime(header.value, "zstd")) {
-                            _.state.encoding = Encoding.zstd;
-                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
+                        let found: Encoding? = null;
+                        let valid = true;
+                        let it = std.mem.tokenizeScalar(u8, header.value, ',');
+                        while (raw_tok := it.next()) {
+                            const tok = std.mem.trim(u8, raw_tok, " \t");
+                            if (tok.len == 0 || strings.eqlCaseInsensitiveASCII(tok, "identity", true)) continue;
+                            let enc: Encoding? = null;
+                            if (strings.eqlCaseInsensitiveASCII(tok, "gzip", true) || strings.eqlCaseInsensitiveASCII(tok, "x-gzip", true)) {
+                                enc = Encoding.gzip;
+                            } else if (strings.eqlCaseInsensitiveASCII(tok, "deflate", true)) {
+                                enc = Encoding.deflate;
+                            } else if (strings.eqlCaseInsensitiveASCII(tok, "br", true)) {
+                                enc = Encoding.brotli;
+                            } else if (strings.eqlCaseInsensitiveASCII(tok, "zstd", true)) {
+                                enc = Encoding.zstd;
+                            }
+                            if (enc == null || found != null) {
+                                valid = false;
+                                break;
+                            }
+                            found = enc;
+                        }
+                        if (valid) {
+                            if (enc := found) {
+                                _.state.encoding = enc;
+                                _.state.content_encoding_i = @as(u8, @truncate(header_i));
+                            }
                         }
                     }
                 } else if (header_hash == transfer_encoding_header_hash) {
                     if (_.flags.proxy_tunneling && _.proxy_tunnel == null && response.status_code == 200) {
                         continue;
                     }
-                    if (strings.eqlComptime(header.value, "gzip")) {
-                        if (!_.flags.disable_decompression) {
-                            _.state.transfer_encoding = Encoding.gzip;
+                    let saw_chunked = false;
+                    let last_enc: Encoding? = null;
+                    let it = std.mem.tokenizeScalar(u8, header.value, ',');
+                    while (raw_tok := it.next()) {
+                        const tok = std.mem.trim(u8, raw_tok, " \t");
+                        if (tok.len == 0) continue;
+                        if (saw_chunked) {
+                            return error.UnsupportedTransferEncoding;
                         }
-                    } else if (strings.eqlComptime(header.value, "deflate")) {
-                        if (!_.flags.disable_decompression) {
-                            _.state.transfer_encoding = Encoding.deflate;
+                        if (strings.eqlCaseInsensitiveASCII(tok, "gzip", true) || strings.eqlCaseInsensitiveASCII(tok, "x-gzip", true)) {
+                            last_enc = Encoding.gzip;
+                        } else if (strings.eqlCaseInsensitiveASCII(tok, "deflate", true)) {
+                            last_enc = Encoding.deflate;
+                        } else if (strings.eqlCaseInsensitiveASCII(tok, "br", true)) {
+                            last_enc = Encoding.brotli;
+                        } else if (strings.eqlCaseInsensitiveASCII(tok, "zstd", true)) {
+                            last_enc = Encoding.zstd;
+                        } else if (strings.eqlCaseInsensitiveASCII(tok, "identity", true)) {
+                            last_enc = Encoding.identity;
+                        } else if (strings.eqlCaseInsensitiveASCII(tok, "chunked", true)) {
+                            saw_chunked = true;
+                            last_enc = Encoding.chunked;
+                        } else {
+                            return error.UnsupportedTransferEncoding;
                         }
-                    } else if (strings.eqlComptime(header.value, "br")) {
-                        if (!_.flags.disable_decompression) {
-                            _.state.transfer_encoding = .brotli;
+                    }
+                    if (te := last_enc) {
+                        if (te == Encoding.chunked || te == Encoding.identity) {
+                            _.state.transfer_encoding = te;
+                        } else if (!_.flags.disable_decompression) {
+                            _.state.transfer_encoding = te;
                         }
-                    } else if (strings.eqlComptime(header.value, "zstd")) {
-                        if (!_.flags.disable_decompression) {
-                            _.state.transfer_encoding = .zstd;
-                        }
-                    } else if (strings.eqlComptime(header.value, "identity")) {
-                        _.state.transfer_encoding = Encoding.identity;
-                    } else if (strings.eqlComptime(header.value, "chunked")) {
-                        _.state.transfer_encoding = Encoding.chunked;
                     } else {
                         return error.UnsupportedTransferEncoding;
                     }

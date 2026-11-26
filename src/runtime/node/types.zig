@@ -874,7 +874,11 @@ _ = self.slice_with_underlying_string.toThreadSafe();
             self.* = .{ .threadsafe_string = slice_with_underlying_string };
 },
 .buffer => {
-_ = (if (@typeInfo(@TypeOf(self.buffer.buffer)) == .@"enum") @intFromEnum(self.buffer.buffer) else self.buffer.buffer.value).protect();
+const duped = bun.handleOom(bun.default_allocator.dupe(u8, self.buffer.slice()));
+            {
+                _ = JSC__JSValue__unpinArrayBuffer((if (@typeInfo(@TypeOf(self.buffer.buffer)) == .@"enum") @intFromEnum(self.buffer.buffer) else self.buffer.buffer.value));
+            }
+            self.* = .{ .encoded_slice = jsc.ZigString.Slice.init(bun.default_allocator, duped) };
 },
 else => {
 

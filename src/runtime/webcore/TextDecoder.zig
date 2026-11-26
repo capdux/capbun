@@ -425,6 +425,9 @@ pub fn constructor(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSErr
             _ = (&str_guard);
             if (EncodingLabel.which(str.slice())) |label| {
                 _ = &label;
+                if ((label == .replacement)) {
+                    return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{ str.slice() }).throw();
+                }
                 decoder.encoding = label;
             } else {
                 return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{ str.slice() }).throw();

@@ -7,10 +7,11 @@ pub struct JSPropertyIteratorOptions {
     own_properties_only: bool = true,
     observable: bool = true,
     only_non_index_properties: bool = false,
+    include_symbols: bool = true,
 }
 
 @c {
-    fn Bun__JSPropertyIterator__create(globalObject: *jsc.JSGlobalObject, encodedValue: jsc.JSValue, count: *usize, own_properties_only: bool, only_non_index_properties: bool): (*JSPropertyIteratorImpl)?;
+    fn Bun__JSPropertyIterator__create(globalObject: *jsc.JSGlobalObject, encodedValue: jsc.JSValue, count: *usize, own_properties_only: bool, only_non_index_properties: bool, include_symbols: bool): (*JSPropertyIteratorImpl)?;
     fn Bun__JSPropertyIterator__getNameAndValue(iter: *JSPropertyIteratorImpl, globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject, propertyName: *bun.String, i: usize): jsc.JSValue;
     fn Bun__JSPropertyIterator__getNameAndValueNonObservable(iter: *JSPropertyIteratorImpl, globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject, propertyName: *bun.String, i: usize): jsc.JSValue;
     fn Bun__JSPropertyIterator__getName(iter: *JSPropertyIteratorImpl, propertyName: *bun.String, i: usize);
@@ -33,8 +34,9 @@ pub struct TopExceptionScopeGuard {
         count: *usize,
         own_properties_only: bool,
         only_non_index_properties: bool,
+        include_symbols: bool,
     ): bun.JSError!(*JSPropertyIteratorImpl)? {
-        return bun.jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__JSPropertyIterator__create, .{ globalObject, object.toJS(), count, own_properties_only, only_non_index_properties });
+        return bun.jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__JSPropertyIterator__create, .{ globalObject, object.toJS(), count, own_properties_only, only_non_index_properties, include_symbols });
     }
 
     pub const deinit = Bun__JSPropertyIterator__deinit;
@@ -93,6 +95,7 @@ pub fn JSPropertyIterator(comptime options: JSPropertyIteratorOptions): type {
                 &len,
                 options.own_properties_only,
                 options.only_non_index_properties,
+                options.include_symbols,
             )?;
             if (comptime bun.Environment.allow_assert) {
                 if (len > 0) {

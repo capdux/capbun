@@ -199,11 +199,10 @@ pub struct StoreS3 {
     }
 
     fn path(): string {
-        let parsed_url = URL.parse(_.pathlike.slice());
-        let path_name_raw = parsed_url.s3Path();
-        let path_name = path_name_raw;
+        const raw = _.pathlike.slice();
+        let path_name = if (strings.hasPrefixComptime(raw, "s3://")) raw["s3://".len..] else raw;
         if (strings.endsWith(path_name, "/")) {
-            path_name = path_name[0..path_name.len];
+            path_name = path_name[0 .. path_name.len - 1];
         } else if (strings.endsWith(path_name, "\\")) {
             path_name = path_name[0 .. path_name.len - 1];
         }

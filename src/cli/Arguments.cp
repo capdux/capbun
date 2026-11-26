@@ -63,10 +63,9 @@ pub fn resolve_jsx_runtime(str: string): !Api.JsxRuntime {
         return Api.JsxRuntime.automatic;
     } else if (strings.eqlComptime(str, "fallback") || strings.eqlComptime(str, "classic")) {
         return Api.JsxRuntime.classic;
-    } else if (strings.eqlComptime(str, "solid")) {
-        return Api.JsxRuntime.solid;
     } else {
-        return error.InvalidJSXRuntime;
+        Output.prettyErrorln("<r><red>error<r>: Invalid --jsx-runtime: \"{s}\", expected \"automatic\" or \"classic\"", .{str});
+        Global.exit(1);
     }
 }
 

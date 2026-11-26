@@ -1098,7 +1098,7 @@ pub const _JSXRuntimeDevelopmentPair = struct {
 
 pub const JSX = struct {
     const RuntimeDevelopmentPair = _JSXRuntimeDevelopmentPair;
-    pub const RuntimeMap = bun.ComptimeStringMap(RuntimeDevelopmentPair, .{ .{ "classic", RuntimeDevelopmentPair{ .runtime = .classic, .development = null } }, .{ "automatic", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } }, .{ "react", RuntimeDevelopmentPair{ .runtime = .classic, .development = null } }, .{ "react-jsx", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } }, .{ "react-jsxdev", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } } });
+    pub const RuntimeMap = bun.ComptimeStringMap(RuntimeDevelopmentPair, .{ .{ "classic", RuntimeDevelopmentPair{ .runtime = .classic, .development = null } }, .{ "automatic", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } }, .{ "react", RuntimeDevelopmentPair{ .runtime = .classic, .development = null } }, .{ "react-jsx", RuntimeDevelopmentPair{ .runtime = .automatic, .development = false } }, .{ "react-jsxdev", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } } });
     pub const Pragma = JSXPragma;
     pub const Runtime = api.JsxRuntime;
 };
@@ -1140,14 +1140,14 @@ pub const ResolveFileExtensions = struct {
     node_modules: Group = .{ .esm = default_nm_esm, .default = default_nm_default },
     default: Group = .{},
 
-pub inline fn group(self: *const ResolveFileExtensions, is_node_modules: bool) *const Group {
+pub inline fn group(self: *ResolveFileExtensions, is_node_modules: bool) *const Group {
             if (is_node_modules) {
                 return (&self.node_modules);
             }
             return (&self.default);
     }
 
-pub fn kind(self: *const ResolveFileExtensions, kind_: bun.ImportKind, is_node_modules: bool) []const []const u8 {
+pub fn kind(self: *ResolveFileExtensions, kind_: bun.ImportKind, is_node_modules: bool) []const []const u8 {
             return (switch (kind_) {
 .stmt, .entry_point_build, .entry_point_run, .dynamic => self.group(is_node_modules).esm,
 else => self.group(is_node_modules).default,

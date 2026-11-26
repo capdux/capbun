@@ -395,8 +395,7 @@ if (((expr.data == .e_object) and expr.data.e_object.was_originally_macro)) {
                         return;
                     }
                 }
-                var output_properties = object.properties.slice();
-                _ = &output_properties;
+                const new_props = ((p.allocator.alloc(G.Property, bound_object.properties.len)) catch unreachable);
                 var end: u32 = 0;
                 _ = &end;
                 for (cp_iter_slice(bound_object.properties)) |property| {
@@ -417,12 +416,12 @@ if (p.options.features.inlining) {
                             }
 },
 }
-                            output_properties[cp_cast_int(usize, end)] = output_properties[@as(usize, @intCast(query.i))];
+                            new_props[cp_cast_int(usize, end)] = object.properties.slice()[@as(usize, @intCast(query.i))];
                             end = (end + 1);
                         }
                     }
                 }
-                object.properties.len = end;
+                object.properties = G.Property.List.fromOwnedSlice(new_props[0..end]);
             }
 },
 .b_array => |bound_array| {
@@ -818,7 +817,7 @@ const arg_symbol = p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))];
                                     _ = ((stmts.insert(insert_idx, Stmt.assign(p.newExpr(E.Dot{ .target = p.newExpr(E.This, arg.binding.loc), .name = name, .name_loc = arg.binding.loc }, arg.binding.loc), arg_ident))) catch unreachable);
                                     class_body.items.len = (class_body.items.len + 1);
                                     _ = bun.copy(G.Property, class_body.items[(j + 1)..], class_body.items[j..(class_body.items.len - 1)]);
-                                    const field_symbol_ref = (blk_catch_34: { break :blk_catch_34 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 id.ref; }); });
+                                    const field_symbol_ref = (blk_catch_35: { break :blk_catch_35 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_35| { _ = &__ce_35; break :blk_catch_35 id.ref; }); });
                                     field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
                                     const field_ident = p.newExpr(E.Identifier{ .@"ref" = field_symbol_ref }, arg.binding.loc);
                                     class_body.items[cp_cast_int(usize, j)] = G.Property{ .key = field_ident };
@@ -989,7 +988,7 @@ const name_ref = (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@Ty
                             if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
                                 _ = &hoisted_ref;
                                 _ = p.recordUsage(name_ref);
-                                _ = (blk_catch_37: { break :blk_catch_37 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_37 bun.handleOom(e); }); });
+                                _ = (blk_catch_38: { break :blk_catch_38 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_38 bun.handleOom(e); }); });
                             }
                         }
                         (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name) = null;
@@ -1198,7 +1197,7 @@ if ((output.items.len > 0)) {
                     var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
                     _ = &prev_stmt;
                     if (((prev_stmt.data == .s_local) and local.canMergeWith(prev_stmt.data.s_local))) {
-                        _ = (blk_catch_42: { break :blk_catch_42 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_42 bun.handleOom(e); }); });
+                        _ = (blk_catch_43: { break :blk_catch_43 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_43 bun.handleOom(e); }); });
                         continue;
                     }
                 }

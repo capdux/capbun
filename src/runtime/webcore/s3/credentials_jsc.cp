@@ -102,16 +102,17 @@ pub fn getCredentialsWithOptions(
                         const str = bun.String.fromJS(js_value, globalObject)?;
                         let _str_guard = DerefGuard<bun.String>{ val: str };
                         if (str.tag != .Empty && str.tag != .Dead) {
-                            new_credentials._endpointSlice = str.toUTF8(bun.default_allocator);
-                            const endpoint = new_credentials._endpointSlice.?.slice();
-                            const url = bun.URL.parse(endpoint);
-                            const normalized_endpoint = url.hostWithPath();
-                            if (normalized_endpoint.len > 0) {
-                                new_credentials.credentials.endpoint = normalized_endpoint;
-                                new_credentials.credentials.insecure_http = url.isHTTP();
+                            let raw_slice = str.toUTF8(bun.default_allocator);
+                            let _raw_guard = DeinitGuard<jsc.ZigString.Slice>{ ptr: unsafe { &raw_slice } };
+                            const raw_endpoint = raw_slice.slice();
+                            if (raw_endpoint.len > 0) {
+                                const parsed = S3Credentials.parseEndpoint(bun.default_allocator, raw_endpoint) catch {
+                                    return globalObject.throwInvalidArgumentTypeValue("endpoint", "string", js_value);
+                                };
+                                new_credentials._endpointSlice = jsc.ZigString.Slice.init(bun.default_allocator, parsed.href);
+                                new_credentials.credentials.endpoint = parsed.host_with_path;
+                                new_credentials.credentials.insecure_http = parsed.insecure_http;
                                 new_credentials.changed_credentials = true;
-                            } else if (endpoint.len > 0) {
-                                return globalObject.throwInvalidArgumentTypeValue("endpoint", "string", js_value);
                             }
                         }
                     } else {

@@ -2383,3 +2383,12 @@
 - `src/runtime/node/node_fs.cp` (.zig), `src/runtime/node/node_fs_binding.cp` (.zig), `src/runtime/node/types.cp` (.zig), `src/js/node/fs.promises.ts`
 - `src/jsc/bindings/ZigGlobalObject.lut.txt`
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 4 测试收敛提交
+- `src/runtime/node/types.cp` (.zig)
+- `src/runtime/webcore/blob/Store.cp` (.zig), `src/s3_signing/credentials.cp` (.zig), `src/runtime/webcore/s3/credentials_jsc.cp` (.zig), `src/dotenv/env_loader.cp` (.zig)
+- `src/bundler/options.cp` (.zig), `src/resolver/tsconfig_json.cp` (.zig), `src/cli/bunfig.cp` (.zig), `src/cli/Arguments.cp` (.zig), `src/js_parser/ast/parseJSXElement.cp` (.zig), `src/bundler/ParseTask.cp` (.zig)
+- `src/jsc/bindings/bindings.cpp`, `src/jsc/bindings/JSPropertyIterator.cpp`, `src/jsc/JSPropertyIterator.cp` (.zig), `src/js_parser_jsc/Macro.cp` (.zig)
+- `src/js_parser/ast/visit.cp` (.zig), `src/js_parser/ast/visitExpr.cp` (.zig), `src/js_parser/ast/Expr.cp` (.zig)
+- `src/runtime/webcore/EncodingLabel.cp` (.zig), `src/runtime/webcore/TextDecoder.cp` (.zig), `src/http/http.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`

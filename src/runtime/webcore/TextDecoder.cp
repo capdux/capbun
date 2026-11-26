@@ -386,6 +386,9 @@ pub struct Buffered {
             * = &str_guard;
 
             if (label := EncodingLabel.which(str.slice())) {
+                if (label == .replacement) {
+                    return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{str.slice()}).throw();
+                }
                 decoder.encoding = label;
             } else {
                 return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{str.slice()}).throw();

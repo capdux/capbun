@@ -232,11 +232,6 @@ pub struct TSConfigJSON {
 
             if (jsx_prop := compiler_opts.expr.asProperty("jsxImportSource")) {
                 if (str := jsx_prop.expr.asString(allocator)) {
-                    if (str.len >= "solid-js".len && strings.eqlComptime(str[0.."solid-js".len], "solid-js")) {
-                        result.jsx.runtime = .solid;
-                        result.jsx_flags.insert(.runtime);
-                    }
-
                     result.jsx.package_name = str;
                     result.jsx.setImportSource(allocator);
                     result.jsx_flags.insert(.import_source);

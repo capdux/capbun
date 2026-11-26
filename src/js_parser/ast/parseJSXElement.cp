@@ -9,6 +9,7 @@ pub fn ParseJSXElement(
         const only_scan_imports_and_do_not_visit = P.only_scan_imports_and_do_not_visit;
 
         static fn parseJSXElement(p: *P, loc: logger.Loc): anyerror!Expr {
+            bun.throwStackOverflow()?;
             if (only_scan_imports_and_do_not_visit) {
                 p.needs_jsx_import = true;
             }

@@ -1504,9 +1504,9 @@ switch (right) {
 return .{ .ok = true, .equal = ((if (@typeInfo(@TypeOf(l)) == .@"enum") @intFromEnum(l) else l.value) == (if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value)) };
 },
 .e_inlined_enum => |r| {
-_ = (if (((if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data == .e_number)) ({
-            return .{ .ok = true, .equal = ((if (@typeInfo(@TypeOf(l)) == .@"enum") @intFromEnum(l) else l.value) == (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data.e_number)) == .@"enum") @intFromEnum((if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data.e_number) else (if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data.e_number.value)) };
-}) else null);
+if (((if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data == .e_number)) {
+                return .{ .ok = true, .equal = ((if (@typeInfo(@TypeOf(l)) == .@"enum") @intFromEnum(l) else l.value) == (if (@typeInfo(@TypeOf((if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data.e_number)) == .@"enum") @intFromEnum((if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data.e_number) else (if (@typeInfo(@TypeOf(r)) == .@"enum") @intFromEnum(r) else r.value).data.e_number.value)) };
+            }
 },
 .e_boolean, .e_branch_boolean => |r| {
 if (comptime (kind == .loose)) {
@@ -1677,8 +1677,15 @@ pub fn unwrapInlined(expr: Expr) Expr {
 
 pub fn fromBlob(blob: *const jsc.WebCore.Blob, allocator: std.mem.Allocator, mime_type_: ?MimeType, log: *logger.Log, loc: logger.Loc) !Expr {
         const bytes = blob.sharedView();
-        const mime_type = ((mime_type_) orelse (MimeType.init(blob.content_type, null, null)));
-        if ((mime_type.category == .json)) {
+        var essence = std.mem.trim(u8, blob.content_type, " \t\r\n");
+        _ = &essence;
+        if (std.mem.indexOfScalar(u8, essence, 59)) |semi| {
+            _ = &semi;
+            essence = std.mem.trim(u8, essence[0..semi], " \t\r\n");
+        }
+        const mime_type = ((mime_type_) orelse (MimeType.init(essence, null, null)));
+        const is_json = ((((mime_type.category == .json) or std.ascii.eqlIgnoreCase(essence, "application/json")) or std.ascii.eqlIgnoreCase(essence, "text/json")) or ((essence.len >= 5) and std.ascii.eqlIgnoreCase(essence[(essence.len - 5)..], "+json")));
+        if (is_json) {
             const source = (&logger.Source.initPathString("fetch.json", bytes));
             var out_expr = (blk_catch_0: { break :blk_catch_0 ((JSONParser.parseForMacro(source, log, allocator)) catch |__ce_0| { _ = &__ce_0; return error.MacroFailed; }); });
             _ = &out_expr;
@@ -1696,7 +1703,8 @@ else => {
 }
             return out_expr;
         }
-        if (mime_type.category.isTextLike()) {
+        const is_text_like = (((((mime_type.category.isTextLike() or ((essence.len >= 5) and std.ascii.eqlIgnoreCase(essence[0..5], "text/"))) or std.ascii.eqlIgnoreCase(essence, "application/javascript")) or std.ascii.eqlIgnoreCase(essence, "application/x-javascript")) or std.ascii.eqlIgnoreCase(essence, "application/ecmascript")) or std.ascii.eqlIgnoreCase(essence, "application/xml"));
+        if (is_text_like) {
             var output = MutableString.initEmpty(allocator);
             _ = &output;
             _ = try JSPrinter.quoteForJSON(bytes, (&output), true);
@@ -1707,7 +1715,17 @@ else => {
             }
             return Expr.init(E.String, E.String.init(list), loc);
         }
-        return Expr.init(E.String, E.String{ .data = try jsc.ZigString.init(bytes).toBase64DataURL(allocator) }, loc);
+        const b64_len = std.base64.standard.Encoder.calcSize(bytes.len);
+        const prefix_len = (("data:".len + essence.len) + ";base64,".len);
+        var buf = try allocator.alloc(u8, (prefix_len + b64_len));
+        _ = &buf;
+        _ = @memcpy(buf[0.."data:".len], "data:");
+        if ((essence.len > 0)) {
+            _ = @memcpy(buf["data:".len..("data:".len + essence.len)], essence);
+        }
+        _ = @memcpy(buf[("data:".len + essence.len)..prefix_len], ";base64,");
+        const encoded = std.base64.standard.Encoder.encode(buf[prefix_len..], bytes);
+        return Expr.init(E.String, E.String{ .data = buf[0..(prefix_len + encoded.len)] }, loc);
 }
 
 pub inline fn initIdentifier(r: Ref, loc: logger.Loc) Expr {

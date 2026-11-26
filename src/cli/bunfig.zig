@@ -1294,19 +1294,15 @@ _ = try self.addError(env.loc, "Invalid env behavior, must be 'inline', 'disable
                     if (strings.eqlComptime(value, "react")) {
                         jsx_runtime = api.JsxRuntime.classic;
                     } else {
-                        if (strings.eqlComptime(value, "solid")) {
-                            jsx_runtime = api.JsxRuntime.solid;
+                        if (strings.eqlComptime(value, "react-jsx")) {
+                            jsx_runtime = api.JsxRuntime.automatic;
+                            jsx_dev = false;
                         } else {
-                            if (strings.eqlComptime(value, "react-jsx")) {
+                            if (strings.eqlComptime(value, "react-jsxDEV")) {
                                 jsx_runtime = api.JsxRuntime.automatic;
-                                jsx_dev = false;
+                                jsx_dev = true;
                             } else {
-                                if (strings.eqlComptime(value, "react-jsxDEV")) {
-                                    jsx_runtime = api.JsxRuntime.automatic;
-                                    jsx_dev = true;
-                                } else {
-                                    _ = try self.addError(expr.loc, "Invalid jsx runtime, only 'react', 'solid', 'react-jsx', and 'react-jsxDEV' are supported");
-                                }
+                                _ = try self.addError(expr.loc, "Invalid jsx runtime, only 'react', 'react-jsx', and 'react-jsxDEV' are supported");
                             }
                         }
                     }
@@ -1334,7 +1330,10 @@ _ = try self.addError(env.loc, "Invalid env behavior, must be 'inline', 'disable
                 }
             }
             if ((self.bunfig.jsx == null)) {
-                self.bunfig.jsx = api.Jsx{ .factory = @constCast(jsx_factory), .fragment = @constCast(jsx_fragment), .import_source = @constCast(jsx_import_source), .runtime = jsx_runtime, .development = jsx_dev };
+                self.bunfig.jsx = (blk: {
+                break :blk api.Jsx{ .factory = @constCast(jsx_factory), .fragment = @constCast(jsx_fragment), .import_source = @constCast(jsx_import_source), .runtime = jsx_runtime, .development = jsx_dev };
+
+});
             } else {
                 var jsx: *api.Jsx = (&self.bunfig.jsx.?);
                 _ = &jsx;

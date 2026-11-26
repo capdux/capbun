@@ -129,6 +129,12 @@ pub const DateResult = struct {
     date: []const u8,
 };
 
+pub const ParsedS3Endpoint = struct {
+    href: []const u8,
+    host_with_path: []const u8,
+    insecure_http: bool,
+};
+
 pub const S3SignResult = struct {
     amz_date: []const u8,
     host: []const u8,
@@ -314,12 +320,41 @@ pub fn guessRegion(endpoint: []const u8) []const u8 {
                     _ = &end;
                     if (strings.indexOf(endpoint, "s3.")) |start| {
                         _ = &start;
-                        return endpoint[(start + 3)..end];
+                        if (((start + 3) < end)) {
+                            return endpoint[(start + 3)..end];
+                        }
+                        return "us-east-1";
                     }
                 }
                 return "auto";
             }
             return "us-east-1";
+    }
+
+pub fn parseEndpoint(allocator: std.mem.Allocator, raw_endpoint: []const u8) !ParsedS3Endpoint {
+            if ((raw_endpoint.len == 0)) {
+                return error.InvalidEndpoint;
+            }
+            var allocated_input: ?[]u8 = null;
+            _ = &allocated_input;
+            defer {
+            if (allocated_input) |s| {
+                _ = &s;
+                _ = allocator.free(s);
+            }
+            }
+            const input = (if ((strings.indexOf(raw_endpoint, "://") != null)) raw_endpoint else brk: {
+            const with_scheme = try std.fmt.allocPrint(allocator, "https://{s}", .{ raw_endpoint });
+            allocated_input = with_scheme;
+            break :brk with_scheme;
+});
+            const url = (blk_catch_1: { break :blk_catch_1 ((bun.URL.fromUTF8(allocator, input)) catch |__ce_1| { _ = &__ce_1; return error.InvalidEndpoint; }); });
+            const hwp = url.hostWithPath();
+            if ((hwp.len == 0)) {
+                _ = allocator.free(url.href);
+                return error.InvalidEndpoint;
+            }
+            return ParsedS3Endpoint{ .href = url.href, .host_with_path = hwp, .insecure_http = url.isHTTP() };
     }
 
 pub fn toHexChar(value: u8) !u8 {
@@ -374,8 +409,8 @@ pub fn normalizeName(name: []const u8) []const u8 {
             return std.mem.trim(u8, name, "/\\");
     }
 
-pub fn signRequest(self: S3Credentials, signOptions: S3SignOptions, comptime allow_empty_path: bool, signQueryOption: ?S3SignQueryOptions) !S3SignResult {
-            return s3CredentialsSignRequest((&self), signOptions, allow_empty_path, signQueryOption);
+pub fn signRequest(self: *const S3Credentials, signOptions: S3SignOptions, comptime allow_empty_path: bool, signQueryOption: ?S3SignQueryOptions) !S3SignResult {
+            return s3CredentialsSignRequest(self, signOptions, allow_empty_path, signQueryOption);
     }
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
@@ -598,6 +633,12 @@ return error.InvalidMethod;
 },
 });
         const region = (if ((creds.region.len > 0)) creds.region else S3Credentials.guessRegion(creds.endpoint));
+        for (cp_iter_slice(region)) |c| {
+            _ = &c;
+            if (((((((((c <= 32) or (c == 127)) or (c == 47)) or (c == 92)) or (c == 63)) or (c == 35)) or (c == 64)) or (c == 58))) {
+                return error.InvalidEndpoint;
+            }
+        }
         var full_path = request_path;
         _ = &full_path;
         if (strings.startsWith(full_path, "/")) {
@@ -646,8 +687,8 @@ return error.InvalidMethod;
         _ = &path_buffer;
         var bucket_buffer: [63]u8 = undefined;
         _ = &bucket_buffer;
-        bucket = (blk_catch_1: { break :blk_catch_1 ((S3Credentials.encodeURIComponent(bucket, (&bucket_buffer), false)) catch |__ce_1| { _ = &__ce_1; return error.InvalidPath; }); });
-        path = (blk_catch_2: { break :blk_catch_2 ((S3Credentials.encodeURIComponent(path, (&path_buffer), false)) catch |__ce_2| { _ = &__ce_2; return error.InvalidPath; }); });
+        bucket = (blk_catch_2: { break :blk_catch_2 ((S3Credentials.encodeURIComponent(bucket, (&bucket_buffer), false)) catch |__ce_2| { _ = &__ce_2; return error.InvalidPath; }); });
+        path = (blk_catch_3: { break :blk_catch_3 ((S3Credentials.encodeURIComponent(path, (&path_buffer), false)) catch |__ce_3| { _ = &__ce_3; return error.InvalidPath; }); });
         const protocol = (if (creds.insecure_http) "http" else "https");
         var endpoint = creds.endpoint;
         _ = &endpoint;
@@ -686,9 +727,9 @@ return error.InvalidMethod;
         var normalizedPath: []const u8 = "";
         _ = &normalizedPath;
         if (creds.virtual_hosted_style) {
-            normalizedPath = (blk_catch_3: { break :blk_catch_3 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}", .{ extra_path, path })) catch |__ce_3| { _ = &__ce_3; return error.InvalidPath; }); });
+            normalizedPath = (blk_catch_4: { break :blk_catch_4 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}", .{ extra_path, path })) catch |__ce_4| { _ = &__ce_4; return error.InvalidPath; }); });
         } else {
-            normalizedPath = (blk_catch_4: { break :blk_catch_4 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}/{s}", .{ extra_path, bucket, path })) catch |__ce_4| { _ = &__ce_4; return error.InvalidPath; }); });
+            normalizedPath = (blk_catch_5: { break :blk_catch_5 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}/{s}", .{ extra_path, bucket, path })) catch |__ce_5| { _ = &__ce_5; return error.InvalidPath; }); });
         }
         const date_result = S3Credentials.getAMZDate(bun.default_allocator);
         const amz_date = date_result.date;
@@ -740,7 +781,7 @@ return error.InvalidMethod;
             _ = &encoded_session_token;
             if (session_token) |token| {
                 _ = &token;
-                encoded_session_token = (blk_catch_5: { break :blk_catch_5 ((S3Credentials.encodeURIComponent(token, (&token_encoded_buffer), true)) catch |__ce_5| { _ = &__ce_5; return error.InvalidSessionToken; }); });
+                encoded_session_token = (blk_catch_6: { break :blk_catch_6 ((S3Credentials.encodeURIComponent(token, (&token_encoded_buffer), true)) catch |__ce_6| { _ = &__ce_6; return error.InvalidSessionToken; }); });
             }
             var content_md5_encoded_buffer: [128]u8 = undefined;
             _ = &content_md5_encoded_buffer;
@@ -748,7 +789,7 @@ return error.InvalidMethod;
             _ = &encoded_content_md5;
             if (content_md5) |content_md5_value| {
                 _ = &content_md5_value;
-                encoded_content_md5 = (blk_catch_6: { break :blk_catch_6 ((S3Credentials.encodeURIComponent(content_md5_value, (&content_md5_encoded_buffer), true)) catch |__ce_6| { _ = &__ce_6; return error.FailedToGenerateSignature; }); });
+                encoded_content_md5 = (blk_catch_7: { break :blk_catch_7 ((S3Credentials.encodeURIComponent(content_md5_value, (&content_md5_encoded_buffer), true)) catch |__ce_7| { _ = &__ce_7; return error.FailedToGenerateSignature; }); });
             }
             var content_disposition_encoded_buffer: [512]u8 = undefined;
             _ = &content_disposition_encoded_buffer;
@@ -756,7 +797,7 @@ return error.InvalidMethod;
             _ = &encoded_content_disposition;
             if (content_disposition) |cd| {
                 _ = &cd;
-                encoded_content_disposition = (blk_catch_7: { break :blk_catch_7 ((S3Credentials.encodeURIComponent(cd, (&content_disposition_encoded_buffer), true)) catch |__ce_7| { _ = &__ce_7; return error.FailedToGenerateSignature; }); });
+                encoded_content_disposition = (blk_catch_8: { break :blk_catch_8 ((S3Credentials.encodeURIComponent(cd, (&content_disposition_encoded_buffer), true)) catch |__ce_8| { _ = &__ce_8; return error.FailedToGenerateSignature; }); });
             }
             var content_type_encoded_buffer: [256]u8 = undefined;
             _ = &content_type_encoded_buffer;
@@ -764,7 +805,7 @@ return error.InvalidMethod;
             _ = &encoded_content_type;
             if (content_type) |ct| {
                 _ = &ct;
-                encoded_content_type = (blk_catch_8: { break :blk_catch_8 ((S3Credentials.encodeURIComponent(ct, (&content_type_encoded_buffer), true)) catch |__ce_8| { _ = &__ce_8; return error.FailedToGenerateSignature; }); });
+                encoded_content_type = (blk_catch_9: { break :blk_catch_9 ((S3Credentials.encodeURIComponent(ct, (&content_type_encoded_buffer), true)) catch |__ce_9| { _ = &__ce_9; return error.FailedToGenerateSignature; }); });
             }
             var canonical: []const u8 = "";
             _ = &canonical;

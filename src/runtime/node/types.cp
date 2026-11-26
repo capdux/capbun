@@ -646,7 +646,9 @@ pub union(enum) PathLike {
                 _.* = .{ threadsafe_string: slice_with_underlying_string };
             },
             .buffer => {
-                _.buffer.buffer.value.protect();
+                const duped = bun.handleOom(bun.default_allocator.dupe(u8, _.buffer.slice()));
+                unsafe { JSC__JSValue__unpinArrayBuffer(_.buffer.buffer.value); }
+                _.* = .{ encoded_slice: jsc.ZigString.Slice.init(bun.default_allocator, duped) };
             },
             else => {},
         }

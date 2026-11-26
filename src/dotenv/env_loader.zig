@@ -255,15 +255,27 @@ pub fn getS3Credentials(self: *Loader) s3.S3Credentials {
             }
             if (self.get("S3_ENDPOINT")) |endpoint_| {
                 _ = &endpoint_;
-                const url = bun.URL.parse(endpoint_);
-                endpoint = url.hostWithPath();
-                insecure_http = url.isHTTP();
-            } else {
-                if (self.get("AWS_ENDPOINT")) |endpoint_| {
-                    _ = &endpoint_;
+                if ((blk_catch_0: { break :blk_catch_0 ((s3.S3Credentials.parseEndpoint(self.allocator, endpoint_)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |parsed| {
+                    _ = &parsed;
+                    endpoint = parsed.host_with_path;
+                    insecure_http = parsed.insecure_http;
+                } else {
                     const url = bun.URL.parse(endpoint_);
                     endpoint = url.hostWithPath();
                     insecure_http = url.isHTTP();
+                }
+            } else {
+                if (self.get("AWS_ENDPOINT")) |endpoint_| {
+                    _ = &endpoint_;
+                    if ((blk_catch_1: { break :blk_catch_1 ((s3.S3Credentials.parseEndpoint(self.allocator, endpoint_)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |parsed| {
+                        _ = &parsed;
+                        endpoint = parsed.host_with_path;
+                        insecure_http = parsed.insecure_http;
+                    } else {
+                        const url = bun.URL.parse(endpoint_);
+                        endpoint = url.hostWithPath();
+                        insecure_http = url.isHTTP();
+                    }
                 }
             }
             if (self.get("S3_BUCKET")) |bucket_| {
@@ -441,7 +453,7 @@ pub fn loadCCachePath(self: *Loader, fs: *Fs.FileSystem) void {
                 return;
             }
             did_load_ccache_path = true;
-            _ = (blk_catch_0: { break :blk_catch_0 ((self.loadCCachePathImpl(fs)) catch |__ce_0| { _ = &__ce_0;  }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((self.loadCCachePathImpl(fs)) catch |__ce_2| { _ = &__ce_2;  }); });
     }
 
 pub fn loadCCachePathImpl(self: *Loader, fs: *Fs.FileSystem) !void {
@@ -856,7 +868,7 @@ pub fn loadEnvFile(self: *Loader, dir: std.fs.Dir, comptime base: []const u8, co
             if ((@field(self, base) != null)) {
                 return;
             }
-            var file = (blk_catch_3: { break :blk_catch_3 ((dir.openFile(base, .{ .mode = .read_only })) catch |e| { _ = &e; if (((e == error.IsDir) or (e == error.FileNotFound))) {
+            var file = (blk_catch_5: { break :blk_catch_5 ((dir.openFile(base, .{ .mode = .read_only })) catch |e| { _ = &e; if (((e == error.IsDir) or (e == error.FileNotFound))) {
                 @field(self, base) = logger.Source.initPathString(base, "");
                 return;
             } else {
@@ -897,7 +909,7 @@ pub fn loadEnvFile(self: *Loader, dir: std.fs.Dir, comptime base: []const u8, co
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
             errdefer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _buf_guard; _drop_val.__cp_errdeinit(); } };
-            const amount_read = (blk_catch_4: { break :blk_catch_4 ((file.readAll(buf[0..end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
+            const amount_read = (blk_catch_6: { break :blk_catch_6 ((file.readAll(buf[0..end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
                 if ((!self.quiet)) {
                     _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), base });
                 }
@@ -917,7 +929,7 @@ pub fn loadEnvFileDynamic(self: *Loader, file_path: []const u8, comptime overrid
             if (self.custom_files_loaded.contains(file_path)) {
                 return;
             }
-            var file = (blk_catch_5: { break :blk_catch_5 ((bun.openFile(file_path, .{ .mode = .read_only })) catch |__ce_5| { _ = &__ce_5; _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
+            var file = (blk_catch_7: { break :blk_catch_7 ((bun.openFile(file_path, .{ .mode = .read_only })) catch |__ce_7| { _ = &__ce_7; _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
             return; }); });
             _ = &file;
             var _file_guard = FileCloseGuard{ .file = file };
@@ -933,12 +945,12 @@ pub fn loadEnvFileDynamic(self: *Loader, file_path: []const u8, comptime overrid
             var regular_end: usize = 0;
             _ = &regular_end;
             if (comptime Environment.isWindows) {
-                regular_end = (blk_catch_6: { break :blk_catch_6 ((file.getEndPos()) catch |e| { _ = &e; if ((e == error.Unseekable)) {
+                regular_end = (blk_catch_8: { break :blk_catch_8 ((file.getEndPos()) catch |e| { _ = &e; if ((e == error.Unseekable)) {
                     is_regular = false;
                 } else {
                     return e;
                 }
-                break :blk_catch_6 0; }); });
+                break :blk_catch_8 0; }); });
             } else {
                 const stat = try file.stat();
                 if ((stat.kind != .file)) {
@@ -957,7 +969,7 @@ pub fn loadEnvFileDynamic(self: *Loader, file_path: []const u8, comptime overrid
                 _ = &_buf_guard;
                 var ___buf_guard_moved = false; _ = &___buf_guard_moved;
                 errdefer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _buf_guard; _drop_val.__cp_errdeinit(); } };
-                amount_read = (blk_catch_7: { break :blk_catch_7 ((file.readAll(buf[0..regular_end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
+                amount_read = (blk_catch_9: { break :blk_catch_9 ((file.readAll(buf[0..regular_end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
                     if ((!self.quiet)) {
                         _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
                     }
@@ -977,7 +989,7 @@ pub fn loadEnvFileDynamic(self: *Loader, file_path: []const u8, comptime overrid
                 var chunk: [4096]u8 = undefined;
                 _ = &chunk;
                 while (true) {
-                    const n = (blk_catch_8: { break :blk_catch_8 ((file.read((&chunk))) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
+                    const n = (blk_catch_10: { break :blk_catch_10 ((file.read((&chunk))) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
                         if ((!self.quiet)) {
                             _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
                         }
@@ -1309,7 +1321,7 @@ pub const _MapHashTableValue = struct {
 pub const _StdEnvMapWrapper = struct {
     unsafe_map: std.process.EnvMap,
 
-pub fn get(self: *const _StdEnvMapWrapper) *const std.process.EnvMap {
+pub fn get(self: *_StdEnvMapWrapper) *const std.process.EnvMap {
             return (&self.unsafe_map);
     }
 

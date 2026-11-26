@@ -1447,7 +1447,7 @@ pub struct JSX {
         [ "classic", RuntimeDevelopmentPair{ runtime: .classic, development: null } ],
         [ "automatic", RuntimeDevelopmentPair{ runtime: .automatic, development: true } ],
         [ "react", RuntimeDevelopmentPair{ runtime: .classic, development: null } ],
-        [ "react-jsx", RuntimeDevelopmentPair{ runtime: .automatic, development: true } ],
+        [ "react-jsx", RuntimeDevelopmentPair{ runtime: .automatic, development: false } ],
         [ "react-jsxdev", RuntimeDevelopmentPair{ runtime: .automatic, development: true } ],
     ]);
 
@@ -1730,12 +1730,12 @@ pub struct ResolveFileExtensions {
     },
     default: Group = {},
 
-    inline fn group(is_node_modules: bool): *const Group {
+    inline fn group(*_, is_node_modules: bool): *const Group {
         if (is_node_modules) return &_.node_modules;
         return &_.default;
     }
 
-    fn kind(kind_: bun.ImportKind, is_node_modules: bool): []const string {
+    fn kind(*_, kind_: bun.ImportKind, is_node_modules: bool): []const string {
         return switch (kind_) {
             .stmt, .entry_point_build, .entry_point_run, .dynamic => _.group(is_node_modules).esm,
             else => _.group(is_node_modules).default,
