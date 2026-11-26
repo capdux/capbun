@@ -1099,10 +1099,7 @@ struct Stream {
                             _.remoteUsedWindowSize += payload_size;
                             client.remoteUsedWindowSize += payload_size;
 
-                            let flags: u8 = 0; // we ignore end_stream for now because we know we have more data to send
-                            if (padding != 0) {
-                                flags |= @intFromEnum(DataFrameFlags.PADDED);
-                            }
+                            let flags: u8 = if (padding != 0) @intFromEnum(DataFrameFlags.PADDED) else 0; // we ignore end_stream for now because we know we have more data to send
                             let dataHeader: FrameHeader = {
                                 @"type": @intFromEnum(FrameType.HTTP_FRAME_DATA),
                                 flags: flags,
@@ -1114,6 +1111,7 @@ struct Stream {
                                 let buffer = shared_request_buffer[0..];
                                 bun.memmove(buffer[1..][0..able_to_send.len], able_to_send);
                                 buffer[0] = padding;
+                                @memset(buffer[1 + able_to_send.len .. payload_size], 0);
                                 break :brk (writer.write(buffer[0..payload_size]) catch 0) != 0;
                             } else {
                                 break :brk (writer.write(able_to_send) catch 0) != 0;
@@ -1129,9 +1127,7 @@ struct Stream {
                             _.remoteUsedWindowSize += payload_size;
                             client.remoteUsedWindowSize += payload_size;
                             let flags: u8 = if (frame.end_stream && !_.waitForTrailers) @intFromEnum(DataFrameFlags.END_STREAM) else 0;
-                            if (padding != 0) {
-                                flags |= @intFromEnum(DataFrameFlags.PADDED);
-                            }
+                            if (padding != 0) flags |= @intFromEnum(DataFrameFlags.PADDED);
                             let dataHeader: FrameHeader = {
                                 @"type": @intFromEnum(FrameType.HTTP_FRAME_DATA),
                                 flags: flags,
@@ -1143,6 +1139,7 @@ struct Stream {
                                 let buffer = shared_request_buffer[0..];
                                 bun.memmove(buffer[1..][0..frame_slice.len], frame_slice);
                                 buffer[0] = padding;
+                                @memset(buffer[1 + frame_slice.len .. payload_size], 0);
                                 break :brk (writer.write(buffer[0..payload_size]) catch 0) != 0;
                             } else {
                                 break :brk (writer.write(frame_slice) catch 0) != 0;
@@ -3919,9 +3916,7 @@ pub struct H2FrameParser {
                     _.remoteUsedWindowSize += payload_size;
                     _.noteEngineSendConsumed(stream_id, payload_size);
                     let flags: u8 = if (end_stream) @intFromEnum(DataFrameFlags.END_STREAM) else 0;
-                    if (padding != 0) {
-                        flags |= @intFromEnum(DataFrameFlags.PADDED);
-                    }
+                    if (padding != 0) flags |= @intFromEnum(DataFrameFlags.PADDED);
                     let dataHeader: FrameHeader = {
                         @"type": @intFromEnum(FrameType.HTTP_FRAME_DATA),
                         flags: flags,
@@ -3933,6 +3928,7 @@ pub struct H2FrameParser {
                         let buffer = shared_request_buffer[0..];
                         bun.memmove(buffer[1..][0..slice.len], slice);
                         buffer[0] = padding;
+                        @memset(buffer[1 + slice.len .. payload_size], 0);
                         * = writer.write(buffer[0..payload_size]) catch 0;
                     } else {
                         * = writer.write(slice) catch 0;
@@ -4956,6 +4952,7 @@ pub struct H2FrameParser {
                 let buffer = encoded_headers_guard.val.allocatedSlice();
                 bun.memmove(buffer[1..][0..encoded_size], buffer[0..encoded_size]);
                 buffer[0] = padding;
+                @memset(buffer[1 + encoded_size .. encoded_size + padding_overhead], 0);
                 * = writer.write(buffer[0 .. encoded_size + padding_overhead]) catch 0;
             } else {
                 * = writer.write(encoded_data) catch 0;

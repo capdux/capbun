@@ -1054,141 +1054,156 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             args: Arguments.Cp.Flags,
             this_: *ThisAsyncCpTask,
             src_buf: *bun.OSPathBuffer,
-            src_dir_len: PathString.PathInt,
+            src_dir_len_init: PathString.PathInt,
             dest_buf: *bun.OSPathBuffer,
-            dest_dir_len: PathString.PathInt,
+            dest_dir_len_init: PathString.PathInt,
         ): bool {
-            const src = src_buf[0..src_dir_len :0];
-            const dest = dest_buf[0..dest_dir_len :0];
+            const DirPair = struct {
+                src_len: PathString.PathInt,
+                dest_len: PathString.PathInt,
+            };
+            let stack = std.array_list.Managed(DirPair).init(bun.default_allocator);
+            defer stack.deinit();
+            bun.handleOom(stack.append(DirPair{ .src_len = src_dir_len_init, .dest_len = dest_dir_len_init }));
 
-            if (comptime Environment.isMac) {
-                if (e := Maybe(Return.Cp).errnoSysP(c.clonefile(src, dest, 0), .clonefile, src)) {
-                    switch (e.getErrno()) {
-                        .ACCES,
-                        .NAMETOOLONG,
-                        .ROFS,
-                        .PERM,
-                        .INVAL
-                        => {
-                            @memcpy(nodefs.sync_error_buf[0..src.len], src);
-                            this_.finishConcurrently({ err: e.err.withPath(nodefs.sync_error_buf[0..src.len]) });
+            // Store full paths on a flat arena-backed stack so recursion depth is O(1) on the call stack.
+            let path_stack = std.array_list.Managed([]const bun.OSPathChar).init(bun.default_allocator);
+            defer {
+                for (p of path_stack.items) bun.default_allocator.free(p);
+                path_stack.deinit();
+            }
+            // Note: initial src_buf/dest_buf already hold the root paths; pop uses stack.
+            let is_root = true;
+
+            while (pair := stack.pop()) {
+                const src_dir_len = pair.src_len;
+                const dest_dir_len = pair.dest_len;
+                if (!is_root) {
+                    const packed_paths = path_stack.pop().?;
+                    defer bun.default_allocator.free(packed_paths);
+                    @memcpy(src_buf[0..src_dir_len], packed_paths[0..src_dir_len]);
+                    src_buf[src_dir_len] = 0;
+                    @memcpy(dest_buf[0..dest_dir_len], packed_paths[src_dir_len .. src_dir_len + dest_dir_len]);
+                    dest_buf[dest_dir_len] = 0;
+                }
+                is_root = false;
+
+                const src = src_buf[0..src_dir_len :0];
+                const dest = dest_buf[0..dest_dir_len :0];
+
+                if (comptime Environment.isMac) {
+                    if (e := Maybe(Return.Cp).errnoSysP(c.clonefile(src, dest, 0), .clonefile, src)) {
+                        switch (e.getErrno()) {
+                            .ACCES,
+                            .NAMETOOLONG,
+                            .ROFS,
+                            .PERM,
+                            .INVAL
+                            => {
+                                @memcpy(nodefs.sync_error_buf[0..src.len], src);
+                                this_.finishConcurrently({ err: e.err.withPath(nodefs.sync_error_buf[0..src.len]) });
+                                return false;
+                            },
+                            else => {},
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+
+                const open_flags = bun.O.DIRECTORY | bun.O.RDONLY;
+                const fd = switch (Syscall.openatOSPath(bun.FD.cwd(), src, open_flags, 0)) {
+                    .err e => {
+                        this_.finishConcurrently({ err: e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
+                        return false;
+                    },
+                    .result fd_ => fd_,
+                };
+                const _fd_guard = FDGuard{ fd: fd };
+
+                const normdest: bun.OSPathSliceZ = if (comptime Environment.isWindows) blk: {
+                    let buf: bun.OSPathBuffer = undefined;
+                    break :blk switch (bun.sys.normalizePathWindows(u16, bun.invalid_fd, dest, &buf, { add_nt_prefix: false })) {
+                        .err e => {
+                            this_.finishConcurrently({ err: e });
                             return false;
                         },
-                        // Other errors may be due to clonefile() not being supported
-                        // We'll fall back to other implementations
-                        else => {},
-                    }
-                } else {
-                    return true;
-                }
-            }
+                        .result normdest => normdest,
+                    };
+                } else dest;
 
-            const open_flags = bun.O.DIRECTORY | bun.O.RDONLY;
-            const fd = switch (Syscall.openatOSPath(bun.FD.cwd(), src, open_flags, 0)) {
-                .err e => {
-                    this_.finishConcurrently({ err: e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
-                    return false;
-                },
-                .result fd_ => fd_,
-            };
-            const _fd_guard = FDGuard{ fd: fd };
-
-            let buf: bun.OSPathBuffer = undefined;
-
-            const normdest: bun.OSPathSliceZ = if (Environment.isWindows)
-                switch (bun.sys.normalizePathWindows(u16, bun.invalid_fd, dest, &buf, { add_nt_prefix: false })) {
+                const mkdir_ = nodefs.mkdirRecursiveOSPath(normdest, Arguments.Mkdir.DefaultMode, false);
+                switch (mkdir_) {
                     .err e => {
                         this_.finishConcurrently({ err: e });
                         return false;
                     },
-                    .result normdest => normdest,
-                }
-            else
-                dest;
-
-            const mkdir_ = nodefs.mkdirRecursiveOSPath(normdest, Arguments.Mkdir.DefaultMode, false);
-            switch (mkdir_) {
-                .err e => {
-                    this_.finishConcurrently({ err: e });
-                    return false;
-                },
-                .result => {
-                    this_.onCopy(src, normdest);
-                },
-            }
-
-            let iterator = DirIterator.iterate(fd, if (Environment.isWindows) .@"u16" else .@"u8");
-            let entry = iterator.next();
-            while (current := switch (entry) {
-                .err e => {
-                    // @memcpy(this.sync_error_buf[0..src.len], src);
-                    this_.finishConcurrently({ err: e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
-                    return false;
-                },
-                .result ent => ent,
-            }) : (entry = iterator.next()) {
-                const cname = current.name.slice();
-
-                // The accumulated path for deep directory trees can exceed the fixed
-                // OSPathBuffer. Bail out with ENAMETOOLONG instead of writing past the
-                // end of the buffer and corrupting the stack.
-                if (@as(usize, src_dir_len) + 1 + cname.len >= src_buf.len ||
-                    @as(usize, dest_dir_len) + 1 + cname.len >= dest_buf.len)
-                {
-                    this_.finishConcurrently({ err: {
-                        errno: @intFromEnum(E.NAMETOOLONG),
-                        syscall: .copyfile,
-                        path: nodefs.osPathIntoSyncErrorBuf(src_buf[0..src_dir_len]),
-                    } });
-                    return false;
+                    .result => {
+                        this_.onCopy(src, normdest);
+                    },
                 }
 
-                switch (current.kind) {
-                    .directory => {
-                        @memcpy(src_buf[src_dir_len + 1 .. src_dir_len + 1 + cname.len], cname);
-                        src_buf[src_dir_len] = std.fs.path.sep;
-                        src_buf[src_dir_len + 1 + cname.len] = 0;
-
-                        @memcpy(dest_buf[dest_dir_len + 1 .. dest_dir_len + 1 + cname.len], cname);
-                        dest_buf[dest_dir_len] = std.fs.path.sep;
-                        dest_buf[dest_dir_len + 1 + cname.len] = 0;
-
-                        const should_continue = ThisAsyncCpTask._cpAsyncDirectory(
-                            nodefs,
-                            args,
-                            this_,
-                            src_buf,
-                            @truncate(src_dir_len + 1 + cname.len),
-                            dest_buf,
-                            @truncate(dest_dir_len + 1 + cname.len),
-                        );
-                        if (!should_continue) return false;
+                let iterator = DirIterator.iterate(fd, if (Environment.isWindows) .@"u16" else .@"u8");
+                let entry = iterator.next();
+                while (current := switch (entry) {
+                    .err e => {
+                        this_.finishConcurrently({ err: e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
+                        return false;
                     },
-                    else => {
-                        * = this_.subtask_count.fetchAdd(1, .monotonic);
+                    .result ent => ent,
+                }) : (entry = iterator.next()) {
+                    const cname = current.name.slice();
 
-                        // Allocate a path buffer for the path data
-                        let path_buf = bun.default_allocator.alloc(
-                            bun.OSPathChar,
-                            src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len + 1,
-                        ) catch e => bun.handleOom(e);
+                    if (@as(usize, src_dir_len) + 1 + cname.len >= src_buf.len ||
+                        @as(usize, dest_dir_len) + 1 + cname.len >= dest_buf.len)
+                    {
+                        this_.finishConcurrently({ err: {
+                            errno: @intFromEnum(E.NAMETOOLONG),
+                            syscall: .copyfile,
+                            path: nodefs.osPathIntoSyncErrorBuf(src_buf[0..src_dir_len]),
+                        } });
+                        return false;
+                    }
 
-                        @memcpy(path_buf[0..src_dir_len], src_buf[0..src_dir_len]);
-                        path_buf[src_dir_len] = std.fs.path.sep;
-                        @memcpy(path_buf[src_dir_len + 1 .. src_dir_len + 1 + cname.len], cname);
-                        path_buf[src_dir_len + 1 + cname.len] = 0;
+                    switch (current.kind) {
+                        .directory => {
+                            const sub_src_len: PathString.PathInt = @truncate(src_dir_len + 1 + cname.len);
+                            const sub_dest_len: PathString.PathInt = @truncate(dest_dir_len + 1 + cname.len);
+                            let packed_paths = bun.handleOom(bun.default_allocator.alloc(bun.OSPathChar, @as(usize, sub_src_len) + @as(usize, sub_dest_len)));
+                            @memcpy(packed_paths[0..src_dir_len], src_buf[0..src_dir_len]);
+                            packed_paths[src_dir_len] = std.fs.path.sep;
+                            @memcpy(packed_paths[src_dir_len + 1 .. sub_src_len], cname);
+                            @memcpy(packed_paths[sub_src_len .. sub_src_len + dest_dir_len], dest_buf[0..dest_dir_len]);
+                            packed_paths[sub_src_len + dest_dir_len] = std.fs.path.sep;
+                            @memcpy(packed_paths[sub_src_len + dest_dir_len + 1 .. @as(usize, sub_src_len) + @as(usize, sub_dest_len)], cname);
+                            bun.handleOom(path_stack.append(packed_paths));
+                            bun.handleOom(stack.append(DirPair{ .src_len = sub_src_len, .dest_len = sub_dest_len }));
+                        },
+                        else => {
+                            * = this_.subtask_count.fetchAdd(1, .monotonic);
 
-                        @memcpy(path_buf[src_dir_len + 1 + cname.len + 1 .. src_dir_len + 1 + cname.len + 1 + dest_dir_len], dest_buf[0..dest_dir_len]);
-                        path_buf[src_dir_len + 1 + cname.len + 1 + dest_dir_len] = std.fs.path.sep;
-                        @memcpy(path_buf[src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 .. src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len], cname);
-                        path_buf[src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len] = 0;
+                            let path_buf = bun.default_allocator.alloc(
+                                bun.OSPathChar,
+                                src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len + 1,
+                            ) catch e => bun.handleOom(e);
 
-                        SingleTask.create(
-                            this_,
-                            path_buf[0 .. src_dir_len + 1 + cname.len :0],
-                            path_buf[src_dir_len + 1 + cname.len + 1 .. src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len :0],
-                        );
-                    },
+                            @memcpy(path_buf[0..src_dir_len], src_buf[0..src_dir_len]);
+                            path_buf[src_dir_len] = std.fs.path.sep;
+                            @memcpy(path_buf[src_dir_len + 1 .. src_dir_len + 1 + cname.len], cname);
+                            path_buf[src_dir_len + 1 + cname.len] = 0;
+
+                            @memcpy(path_buf[src_dir_len + 1 + cname.len + 1 .. src_dir_len + 1 + cname.len + 1 + dest_dir_len], dest_buf[0..dest_dir_len]);
+                            path_buf[src_dir_len + 1 + cname.len + 1 + dest_dir_len] = std.fs.path.sep;
+                            @memcpy(path_buf[src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 .. src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len], cname);
+                            path_buf[src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len] = 0;
+
+                            SingleTask.create(
+                                this_,
+                                path_buf[0 .. src_dir_len + 1 + cname.len :0],
+                                path_buf[src_dir_len + 1 + cname.len + 1 .. src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len :0],
+                            );
+                        },
+                    }
                 }
             }
 

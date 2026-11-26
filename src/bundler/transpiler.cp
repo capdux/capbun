@@ -1080,6 +1080,15 @@ pub struct Transpiler {
             },
             // TODO: use lazy export AST
             inline .toml, .yaml, .json, .jsonc, .json5, .xml => |kind| {
+                const too_large_what: ([]const u8)? = switch (kind) {
+                    .json, .jsonc => "JSON document",
+                    .json5 => "JSON5 document",
+                    .xml => "XML document",
+                    else => null,
+                };
+                if (what := too_large_what) {
+                    source.checkParseableLen(transpiler.log, what) catch return null;
+                }
                 let expr = if (kind == .jsonc)
                     // We allow importing tsconfig.*.json or jsconfig.*.json with comments
                     // These files implicitly become JSONC files, which aligns with the behavior of text editors.

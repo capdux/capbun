@@ -86,6 +86,17 @@ pub const LicensesFlags = struct {
 fn isIsolatedLinker(load_result: Lockfile.LoadResult, configured: install.PackageManager.Options.NodeLinker): bool {
     if (configured == .isolated) return true;
     if (configured == .hoisted) return false;
+    let bun_nm_path: bun.AutoAbsPath = .initTopLevelDir();
+    defer bun_nm_path.deinit();
+    bun_nm_path.appendJoin(nm_dir_str);
+    bun_nm_path.appendJoin(dot_bun_dir_str);
+    switch (bun.sys.openatA(bun.FD.cwd(), bun_nm_path.sliceZ(), bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
+        .result fd => {
+            fd.close();
+            return true;
+        },
+        .err => {},
+    }
     switch (load_result) {
         .ok ok => {
             return ok.lockfile.saved_config_version != null && ok.lockfile.saved_config_version.? == .v1;

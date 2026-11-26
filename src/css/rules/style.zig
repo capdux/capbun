@@ -231,7 +231,7 @@ pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
                     _ = try dest.newline();
                     _ = try dest.writeChar(125);
                 }
-                if ((((!dest.minify) and (supports_nesting or (len > 0))) and (self.rules.v.items.len > 0))) {
+                if ((((!dest.minify) and (supports_nesting or (len > 0))) and self.rulesWillEmit(dest.in_non_final_prefix_pass))) {
                     if ((len > 0)) {
                         _ = try dest.writeChar(10);
                     }
@@ -244,6 +244,19 @@ pub fn toCssFn(ctx: *const This, d: *Printer) PrintErr!void {
     }
 }).toCssFn);
             }
+    }
+
+pub fn rulesWillEmit(self: @This(), in_non_final_prefix_pass: bool) bool {
+            if ((!in_non_final_prefix_pass)) {
+                return (self.rules.v.items.len > 0);
+            }
+            for (self.rules.v.items) |r| {
+                _ = &r;
+                if (((r != .style) or r.style.vendor_prefix.isEmpty())) {
+                    return true;
+                }
+            }
+            return false;
     }
 
 pub fn minify(self: *@This(), context: *css.MinifyContext, parent_is_unused: bool) css.MinifyErr!bool {

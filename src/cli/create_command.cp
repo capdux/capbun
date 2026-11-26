@@ -17,6 +17,7 @@ const skip_files: []const bun.OSPathSlice = &[
     bun.OSPathLiteral("package-lock.json"),
     bun.OSPathLiteral("yarn.lock"),
     bun.OSPathLiteral("pnpm-lock.yaml"),
+    bun.OSPathLiteral(".git"),
 ];
 
 const never_conflict: []const string = &[
@@ -540,7 +541,14 @@ pub struct CreateCommand {
             break :brk positionals[1];
         };
 
-        const destination = filesystem.dirname_store.append(string, resolve_path.joinAbs(filesystem.top_level_dir, .loose, dirname))?;
+        let dest_buf: bun.PathBuffer = undefined;
+        const dest_parts: [1]string = [ dirname ];
+        const dest_joined_opt = resolve_path.joinAbsStringBufChecked(filesystem.top_level_dir, &dest_buf, &dest_parts, .loose);
+        if (dest_joined_opt == null) {
+            Output.errGeneric("destination path too long", .{});
+            Global.exit(1);
+        }
+        const destination = filesystem.dirname_store.append(string, dest_joined_opt.?)?;
 
         let progress = Progress{};
         progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
@@ -744,7 +752,6 @@ pub struct CreateCommand {
                 };
                 errdefer template_dir.close();
 
-                std.fs.deleteTreeAbsolute(destination) catch {};
                 let destination_dir__ = std.fs.cwd().makeOpenPath(destination, .{}) catch e => {
                     node.end();
 
@@ -754,6 +761,61 @@ pub struct CreateCommand {
                     Global.exit(1);
                 };
                 defer destination_dir__.close();
+
+                const destination_dir = destination_dir__;
+
+                if (!create_options.overwrite) {
+                    let check_walker = Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs)?;
+                    const _guard_check_walker = DeinitGuard<Walker>{ ptr: &check_walker };
+                    let conflicts = std.array_list.Managed(string).init(ctx.allocator);
+                    defer conflicts.deinit();
+
+                    while (entry := check_walker.next().unwrap()?) {
+                        if (entry.kind != .file) continue;
+                        let is_conflict = false;
+                        if (stat := destination_dir.statFile(entry.path) catch e => brk_stat: {
+                            if (e == error.NotDir) {
+                                is_conflict = true;
+                            }
+                            break :brk_stat null;
+                        }) {
+                            if (stat.kind == .directory) {
+                                is_conflict = true;
+                            } else {
+                                let in_never_conflict = false;
+                                inline for (nc of never_conflict) {
+                                    if (strings.eql(entry.path, nc)) {
+                                        in_never_conflict = true;
+                                        break;
+                                    }
+                                }
+                                if (!in_never_conflict) {
+                                    is_conflict = true;
+                                }
+                            }
+                        }
+                        if (is_conflict) {
+                            bun.handleOom(conflicts.append(bun.handleOom(ctx.allocator.dupe(u8, entry.path))));
+                        }
+                    }
+
+                    if (conflicts.items.len > 0) {
+                        node.end();
+                        progress.refresh();
+
+                        Output.prettyErrorln(
+                            "<r>\n<red>error<r><d>: <r>The directory <b><blue>{s}<r>/ contains files that could conflict:\n\n",
+                            .{
+                                std.fs.path.basename(destination),
+                            },
+                        );
+                        for (path of conflicts.items) {
+                            Output.prettyErrorln("<r>  {s}", .{ path });
+                        }
+                        Output.prettyErrorln("<r>\n<d>To overwrite them, use --force<r>", .{});
+                        Global.exit(1);
+                    }
+                }
 
                 let destination_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
                 const dst_without_trailing_slash: if (Environment.isWindows) string else void = if (comptime Environment.isWindows) strings.withoutTrailingSlash(destination) else @as(void, undefined);
@@ -769,7 +831,6 @@ pub struct CreateCommand {
                     template_path_buf[src_without_trailing_slash.len] = std.fs.path.sep;
                 }
 
-                const destination_dir = destination_dir__;
                 let walker_ = Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs)?;
                 const _guard_walker = DeinitGuard<Walker>{ ptr: &walker_ };
 
@@ -864,11 +925,23 @@ pub struct CreateCommand {
         {
             let parent_dir = std.fs.openDirAbsolute(destination, .{})?;
             const _guard_parent_dir = CloseGuard<std.fs.Dir>{ ptr: &parent_dir };
+            let rename_err = false;
             if (comptime Environment.isWindows) {
-                parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{}) catch {};
+                parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{}) catch e => {
+                    if (e != error.FileNotFound) {
+                        Output.prettyErrorln("<r><red>{s}<r>: renaming gitignore to .gitignore", .{ @errorName(e) });
+                        rename_err = true;
+                    }
+                };
             } else {
-                std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0) catch {};
+                std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0) catch e => {
+                    if (e != error.FileNotFound) {
+                        Output.prettyErrorln("<r><red>{s}<r>: renaming gitignore to .gitignore", .{ @errorName(e) });
+                        rename_err = true;
+                    }
+                };
             }
+            if (rename_err) Global.exit(1);
 
             std.posix.unlinkat(
                 parent_dir.fd,
@@ -1493,13 +1566,27 @@ pub struct CreateCommand {
         create_options.skip_install = create_options.skip_install || !has_dependencies;
 
         if (!create_options.skip_git) {
+            if (dest_dir := std.fs.openDirAbsolute(destination, .{}) catch null) {
+                let d = dest_dir;
+                defer d.close();
+                let has_git = true;
+                d.access(".git", .{}) catch {
+                    has_git = false;
+                };
+                if (has_git) {
+                    create_options.skip_git = true;
+                }
+            }
+        }
+
+        if (!create_options.skip_git) {
             if (!create_options.skip_install) {
                 GitHandler.spawn(destination, PATH, create_options.verbose);
             } else {
                 if (create_options.verbose) {
-                    create_options.skip_git = GitHandler.run(destination, PATH, true) catch false;
+                    create_options.skip_git = !(GitHandler.run(destination, PATH, true) catch false);
                 } else {
-                    create_options.skip_git = GitHandler.run(destination, PATH, false) catch false;
+                    create_options.skip_git = !(GitHandler.run(destination, PATH, false) catch false);
                 }
             }
         }
@@ -1892,20 +1979,23 @@ pub struct Example {
             }
             if (home_dir := env_loader.map.get("BUN_CREATE_DIR")) {
                 let parts: [1]string = [ home_dir ];
-                const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
-                folders[0] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
+                if (outdir_path := filesystem.absBufChecked(&parts, &home_dir_buf)) {
+                    folders[0] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
+                }
             }
 
             {
                 let parts: [2]string = [ filesystem.top_level_dir, BUN_CREATE_DIR ];
-                const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
-                folders[1] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
+                if (outdir_path := filesystem.absBufChecked(&parts, &home_dir_buf)) {
+                    folders[1] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
+                }
             }
 
             if (home_dir := env_loader.map.get(bun.env_var.HOME.key())) {
                 let parts: [2]string = [ home_dir, BUN_CREATE_DIR ];
-                const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
-                folders[2] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
+                if (outdir_path := filesystem.absBufChecked(&parts, &home_dir_buf)) {
+                    folders[2] = std.fs.cwd().openDir(outdir_path, .{}) catch bun.invalid_fd.stdDir();
+                }
             }
 
             // subfolders with package.json

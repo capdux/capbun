@@ -168,23 +168,23 @@ pub fn StyleRule(comptime R: type): type {
                 _.rules.toCss(dest)?;
                 if (has_declarations) { dest.dedent(); dest.newline()?; dest.writeChar('}')?; }
             } else {
-                if (has_declarations) {
-                    dest.dedent();
-                    dest.newline()?;
-                    dest.writeChar('}')?;
-                }
-                if (!dest.minify && (supports_nesting || len > 0) && _.rules.v.items.len > 0) {
-                    if (len > 0) {
-                        dest.writeChar('\n')?;
-                    }
+                if (has_declarations) { dest.dedent(); dest.newline()?; dest.writeChar('}')?; }
+                if (!dest.minify && (supports_nesting || len > 0) && _.rulesWillEmit(dest.in_non_final_prefix_pass)) {
+                    if (len > 0) dest.writeChar('\n')?;
                     dest.newline()?;
                 }
                 dest.withContext(&_.selectors, _, struct {
-                    pub static fn toCssFn(ctx: *const This, d: *Printer): PrintErr!void {
-                        return ctx.rules.toCss(d);
-                    }
+                    pub static fn toCssFn(ctx: *const This, d: *Printer): PrintErr!void { return ctx.rules.toCss(d); }
                 }.toCssFn)?;
             }
+        }
+
+        fn rulesWillEmit(in_non_final_prefix_pass: bool): bool {
+            if (!in_non_final_prefix_pass) return _.rules.v.items.len > 0;
+            for (r of _.rules.v.items) {
+                if (r != .style || r.style.vendor_prefix.isEmpty()) return true;
+            }
+            return false;
         }
 
         pub fn minify(*_, context: *css.MinifyContext, parent_is_unused: bool): css.MinifyErr!bool {

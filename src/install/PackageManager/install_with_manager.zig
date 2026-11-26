@@ -231,6 +231,11 @@ install_root_dependencies = false;
 
 pub fn installWithManager(manager: *PackageManager, ctx: Command.Context, root_package_json_path: [:0]const u8, original_cwd: []const u8) !void {
         const log_level = manager.options.log_level;
+        if (manager.log.hasErrors()) {
+            _ = try manager.log.print(Output.errorWriter());
+            _ = Output.flush();
+            _ = Global.crash();
+        }
         if ((!manager.env.hasHTTPProxy())) {
             if (((manager.options.scope.url.hostname.len > 0) and (!manager.options.scope.url.isIPAddress()))) {
                 var hostname_stack = std.heap.stackFallback(512, ctx.allocator);
@@ -912,10 +917,26 @@ else => {
         var linker = manager.options.node_linker;
         _ = &linker;
         if ((linker == .auto)) {
-            linker = (switch (config_version) {
+            const has_isolated_store = has_isolated_store: {
+            break :has_isolated_store (switch (bun.sys.openatA(bun.FD.cwd(), "node_modules/.bun", (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |fd| {
+{
+                _ = fd.close();
+                break :has_isolated_store true;
+            }
+},
+.err => break :has_isolated_store false,
+});
+
+};
+            if (has_isolated_store) {
+                linker = .isolated;
+            } else {
+                linker = (switch (config_version) {
 .v0 => .hoisted,
 .v1 => (if (((!load_result.migratedFromNpm()) and (manager.lockfile.workspace_paths.count() > 0))) .isolated else .hoisted),
 });
+            }
         }
         break :install_summary (switch (linker) {
 .hoisted => break :install_summary try installHoistedPackages(manager, ctx, workspace_filters, install_root_dependencies, log_level, null),

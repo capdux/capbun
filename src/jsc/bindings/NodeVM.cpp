@@ -17,6 +17,7 @@
 
 #include "JavaScriptCore/JSObjectInlines.h"
 #include "wtf/text/ExternalStringImpl.h"
+#include <wtf/text/StringBuilder.h>
 
 #include "JavaScriptCore/FunctionPrototype.h"
 #include "JavaScriptCore/FunctionConstructor.h"
@@ -175,6 +176,7 @@ JSC::JSFunction* constructAnonymousFunction(JSC::JSGlobalObject* globalObject, c
             if (actuallyValid) {
                 auto exception = error.toErrorObject(globalObject, sourceCode, -1);
                 RETURN_IF_EXCEPTION(throwScope, nullptr);
+                decorateSyntaxErrorStack(globalObject, vm, throwScope, exception, code, options.filename, options.rawLineOffset, error);
                 throwException(globalObject, throwScope, exception);
                 return nullptr;
             }
@@ -474,7 +476,74 @@ JSC::EncodedJSValue createCachedData(JSGlobalObject* globalObject, const JSC::So
     return JSValue::encode(buffer);
 }
 
-bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Exception> exception, ThrowScope& throwScope)
+static String makeCaretLine(StringView sourceLine, unsigned caretCol)
+{
+    StringBuilder sb;
+    unsigned clamped = std::min<unsigned>(caretCol, sourceLine.length());
+    for (unsigned i = 0; i < clamped; ++i) {
+        sb.append(sourceLine[i] == '\t' ? '\t' : ' ');
+    }
+    sb.append('^');
+    return sb.toString();
+}
+
+void decorateSyntaxErrorStack(JSGlobalObject* globalObject, VM& vm, ThrowScope& throwScope, JSValue errorValue, const String& sourceString, const String& filename, int32_t rawLineOffset, const JSC::ParserError& parserError)
+{
+    if (parserError.type() != JSC::ParserError::ErrorType::SyntaxError)
+        return;
+
+    auto* errorInstance = dynamicDowncast<ErrorInstance>(errorValue);
+    if (!errorInstance)
+        return;
+
+    int offset = parserError.token().m_startPosition.offset;
+    if (offset < 0 || static_cast<unsigned>(offset) > sourceString.length())
+        return;
+
+    unsigned physicalLine = 1;
+    unsigned lineStart = 0;
+    unsigned uoffset = static_cast<unsigned>(offset);
+    for (unsigned i = 0; i < uoffset; ++i) {
+        if (sourceString[i] == '\n') {
+            physicalLine++;
+            lineStart = i + 1;
+        }
+    }
+    unsigned lineEnd = lineStart;
+    while (lineEnd < sourceString.length() && sourceString[lineEnd] != '\n' && sourceString[lineEnd] != '\r') {
+        lineEnd++;
+    }
+    StringView sourceLine = StringView(sourceString).substring(lineStart, lineEnd - lineStart);
+    String caret = makeCaretLine(sourceLine, uoffset - lineStart);
+    int64_t adjustedLine = static_cast<int64_t>(physicalLine) + static_cast<int64_t>(rawLineOffset);
+
+    String stack;
+    errorInstance->materializeErrorInfoIfNeeded(vm, vm.propertyNames->stack);
+    if (throwScope.exception()) [[unlikely]] {
+        (void)throwScope.tryClearException();
+    } else {
+        JSValue stack_jsval = errorInstance->get(globalObject, vm.propertyNames->stack);
+        if (throwScope.exception()) [[unlikely]] {
+            (void)throwScope.tryClearException();
+        } else if (stack_jsval.isString()) {
+            stack = stack_jsval.toWTFString(globalObject);
+            if (throwScope.exception()) [[unlikely]] {
+                (void)throwScope.tryClearException();
+                stack = String();
+            }
+        }
+    }
+    if (stack.isNull()) {
+        stack = tryMakeString("SyntaxError: "_s, parserError.message());
+    }
+
+    String decorated = tryMakeString(filename, ":"_s, adjustedLine, "\n"_s, sourceLine, "\n"_s, caret, "\n\n"_s, stack);
+    if (!decorated.isNull()) [[likely]] {
+        errorInstance->putDirect(vm, vm.propertyNames->stack, jsString(vm, decorated), JSC::PropertyAttribute::DontEnum | 0);
+    }
+}
+
+bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Exception> exception, ThrowScope& throwScope, const JSC::SourceCode* scriptSource)
 {
     if (auto* errorInstance = dynamicDowncast<ErrorInstance>(exception->value())) {
         errorInstance->materializeErrorInfoIfNeeded(vm, vm.propertyNames->stack);
@@ -493,7 +562,12 @@ bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Excepti
             return false;
         }
         auto& stack_frame = e_stack[0];
-        auto source_url = stack_frame.sourceURL(vm);
+        String source_url;
+        if (scriptSource && scriptSource->provider() && !scriptSource->provider()->sourceOrigin().url().string().isEmpty()) {
+            source_url = scriptSource->provider()->sourceOrigin().url().string();
+        } else {
+            source_url = stack_frame.sourceURL(vm);
+        }
         // Treat empty, [unknown], and [source:*] placeholders as missing source URLs
         if (source_url.isEmpty() || source_url == "[unknown]"_s || source_url.startsWith("[source:"_s)) {
             // copy what Node does: https://github.com/nodejs/node/blob/afe3909483a2d5ae6b847055f544da40571fb28d/lib/vm.js#L94
@@ -501,7 +575,36 @@ bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Excepti
         }
         auto line_and_column = stack_frame.computeLineAndColumn();
 
-        String prepend = tryMakeString(source_url, ":"_s, line_and_column.line, "\n"_s, stack);
+        String prepend;
+        if (scriptSource && scriptSource->provider()) {
+            StringView fullSource = scriptSource->provider()->source();
+            int startLineOffset = scriptSource->provider()->startPosition().m_line.zeroBasedInt();
+            int physicalLine = static_cast<int>(line_and_column.line) - startLineOffset;
+            if (physicalLine >= 1) {
+                unsigned curLine = 1;
+                unsigned lineStart = 0;
+                unsigned len = fullSource.length();
+                for (unsigned i = 0; i < len && curLine < static_cast<unsigned>(physicalLine); ++i) {
+                    if (fullSource[i] == '\n') {
+                        curLine++;
+                        lineStart = i + 1;
+                    }
+                }
+                if (curLine == static_cast<unsigned>(physicalLine)) {
+                    unsigned lineEnd = lineStart;
+                    while (lineEnd < len && fullSource[lineEnd] != '\n' && fullSource[lineEnd] != '\r') {
+                        lineEnd++;
+                    }
+                    StringView sourceLine = fullSource.substring(lineStart, lineEnd - lineStart);
+                    unsigned caretCol = line_and_column.column > 0 ? line_and_column.column - 1 : 0;
+                    String caret = makeCaretLine(sourceLine, caretCol);
+                    prepend = tryMakeString(source_url, ":"_s, line_and_column.line, "\n"_s, sourceLine, "\n"_s, caret, "\n\n"_s, stack);
+                }
+            }
+        }
+        if (prepend.isNull()) {
+            prepend = tryMakeString(source_url, ":"_s, line_and_column.line, "\n"_s, stack);
+        }
         if (!prepend.isNull()) [[likely]]
             errorInstance->putDirect(vm, vm.propertyNames->stack, jsString(vm, prepend), JSC::PropertyAttribute::DontEnum | 0);
 
@@ -1179,11 +1282,13 @@ JSC_DEFINE_HOST_FUNCTION(vmModuleCompileFunction, (JSGlobalObject * globalObject
     // Get options argument
     JSValue optionsArg = callFrame->argument(2);
     CompileFunctionOptions options;
+    options.filename = emptyString();
     JSValue importer;
 
     if (!options.fromJS(globalObject, vm, scope, optionsArg, &importer)) {
         RETURN_IF_EXCEPTION(scope, {});
         options = {};
+        options.filename = emptyString();
         options.parsingContext = globalObject;
     }
 
@@ -1557,7 +1662,7 @@ bool BaseVMOptions::fromJS(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::
                 ERR::INVALID_ARG_TYPE(scope, globalObject, "options.filename"_s, "string"_s, filenameOpt);
                 return false;
             }
-        } else {
+        } else if (this->filename.isNull()) {
             this->filename = "evalmachine.<anonymous>"_s;
         }
 
@@ -1569,7 +1674,8 @@ bool BaseVMOptions::fromJS(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::
                     ERR::OUT_OF_RANGE(scope, globalObject, "options.lineOffset"_s, std::numeric_limits<int32_t>().min(), std::numeric_limits<int32_t>().max(), lineOffsetOpt);
                     return false;
                 }
-                this->lineOffset = OrdinalNumber::fromZeroBasedInt(lineOffsetOpt.asInt32());
+                this->rawLineOffset = lineOffsetOpt.asInt32();
+                this->lineOffset = OrdinalNumber::fromZeroBasedInt(this->rawLineOffset);
                 any = true;
             } else if (lineOffsetOpt.isNumber()) {
                 ERR::OUT_OF_RANGE(scope, globalObject, "options.lineOffset"_s, "an integer"_s, lineOffsetOpt);

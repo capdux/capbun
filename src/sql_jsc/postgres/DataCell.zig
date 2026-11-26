@@ -446,6 +446,9 @@ var current_idx: usize = 0;
             if ((current_idx == 0)) {
                 return error.UnsupportedArrayFormat;
             }
+            if ((((current_idx + 1) >= slice.len) or ((slice[@as(usize, @intCast((current_idx + 1)))] != separator) and (slice[@as(usize, @intCast((current_idx + 1)))] != closing_brace)))) {
+                return error.UnsupportedArrayFormat;
+            }
             switch (arrayType) {
 .bytea_array => {
 const bytea_bytes = slice[1..current_idx];
@@ -458,13 +461,24 @@ const bytea_bytes = slice[1..current_idx];
 },
 .timestamptz_array, .timestamp_array, .date_array => {
 const date_str = slice[1..current_idx];
-            var str = bun.String.init(date_str);
-            _ = &str;
-            var _str_guard = DerefGuard(bun.String){ .val = str };
-            _ = &_str_guard;
-            var ___str_guard_moved = false; _ = &___str_guard_moved;
-            defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
-            _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .date, .value = .{ .date = try str.parseDate(globalObject) } });
+            var date_val: f64 = undefined;
+            _ = &date_val;
+            if (bun.strings.eqlCaseInsensitiveASCII(date_str, "infinity", false)) {
+                date_val = std.math.inf(f64);
+            } else {
+                if (bun.strings.eqlCaseInsensitiveASCII(date_str, "-infinity", false)) {
+                    date_val = (0.0 - std.math.inf(f64));
+                } else {
+                    var str = bun.String.init(date_str);
+                    _ = &str;
+                    var _str_guard = DerefGuard(bun.String){ .val = str };
+                    _ = &_str_guard;
+                    var ___str_guard_moved = false; _ = &___str_guard_moved;
+                    defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
+                    date_val = try str.parseDate(globalObject);
+                }
+            }
+            _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .date, .value = .{ .date = date_val } });
             pos = (pos + (current_idx + 1));
             continue;
 },
@@ -520,6 +534,9 @@ var current_idx: usize = 0;
             if ((current_idx == 0)) {
                 return error.UnsupportedArrayFormat;
             }
+            if ((((current_idx + 1) >= slice.len) or ((slice[@as(usize, @intCast((current_idx + 1)))] != separator) and (slice[@as(usize, @intCast((current_idx + 1)))] != closing_brace)))) {
+                return error.UnsupportedArrayFormat;
+            }
             const element = slice[0..current_idx];
             if (bun.strings.eqlComptime(element, "NULL")) {
                 _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"null", .value = .{ .@"null" = 0 } });
@@ -527,13 +544,24 @@ var current_idx: usize = 0;
                 continue;
             }
             if ((arrayType == .date_array)) {
-                var str = bun.String.init(element);
-                _ = &str;
-                var _str_guard = DerefGuard(bun.String){ .val = str };
-                _ = &_str_guard;
-                var ___str_guard_moved = false; _ = &___str_guard_moved;
-                defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
-                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .date, .value = .{ .date = try str.parseDate(globalObject) } });
+                var date_val: f64 = undefined;
+                _ = &date_val;
+                if (bun.strings.eqlCaseInsensitiveASCII(element, "infinity", false)) {
+                    date_val = std.math.inf(f64);
+                } else {
+                    if (bun.strings.eqlCaseInsensitiveASCII(element, "-infinity", false)) {
+                        date_val = (0.0 - std.math.inf(f64));
+                    } else {
+                        var str = bun.String.init(element);
+                        _ = &str;
+                        var _str_guard = DerefGuard(bun.String){ .val = str };
+                        _ = &_str_guard;
+                        var ___str_guard_moved = false; _ = &___str_guard_moved;
+                        defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
+                        date_val = try str.parseDate(globalObject);
+                    }
+                }
+                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .date, .value = .{ .date = date_val } });
             } else {
                 if (bun.strings.eqlComptime(element, "\\b")) {
                     _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if (@typeInfo(@TypeOf(bun.String.cloneUTF8("\x08"))) == .@"enum") @intFromEnum(bun.String.cloneUTF8("\x08")) else bun.String.cloneUTF8("\x08").value).WTFStringImpl }, .free_value = 1 });
@@ -545,22 +573,77 @@ var current_idx: usize = 0;
             continue;
 },
 else => {
-switch (slice[0]) {
-'N' => {
-if ((slice.len < 3)) {
-                return error.UnsupportedArrayFormat;
+if (((((((((arrayType == .int4_array) or (arrayType == .int2_array)) or (arrayType == .int8_array)) or (arrayType == .float4_array)) or (arrayType == .float8_array)) or (arrayType == .oid_array)) or (arrayType == .cid_array)) or (arrayType == .xid_array))) {
+                var current_idx: usize = 0;
+                _ = &current_idx;
+                var index: usize = 0;
+                _ = &index;
+                while ((index < slice.len)) {
+                    const byte = slice[@as(usize, @intCast(index))];
+                    if (((byte == closing_brace) or (byte == separator))) {
+                        current_idx = index;
+                        break;
+                    }
+                    index = (index + 1);
+                }
+                if ((current_idx == 0)) {
+                    return error.UnsupportedArrayFormat;
+                }
+                const element = slice[0..current_idx];
+                if (bun.strings.eqlComptime(element, "NULL")) {
+                    _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"null", .value = .{ .@"null" = 0 } });
+                    pos = (pos + current_idx);
+                    continue;
+                }
+                if (((arrayType == .float4_array) or (arrayType == .float8_array))) {
+                    _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = try parsePostgresFloat(element) } });
+                    pos = (pos + current_idx);
+                    continue;
+                }
+                switch (arrayType) {
+.int8_array => {
+if (bigint) {
+                    _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(i64, element, 0)) catch |__ce_4| { _ = &__ce_4; return error.InvalidCharacter; }); }) } });
+                } else {
+                    _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((element.len > 0)) (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(element))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(element)) else bun.String.cloneUTF8(element).value).WTFStringImpl else null) }, .free_value = 1 });
+                }
+},
+.cid_array, .xid_array, .oid_array => {
+_ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(u32, element, 0)) catch |__ce_5| { _ = &__ce_5; return error.InvalidCharacter; }); }) } });
+},
+.int2_array => {
+const value = (blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(i16, element, 0)) catch |__ce_6| { _ = &__ce_6; return error.InvalidCharacter; }); });
+                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int4, .value = .{ .int4 = @intCast(value) } });
+},
+else => {
+const value = (blk_catch_7: { break :blk_catch_7 ((std.fmt.parseInt(i32, element, 0)) catch |__ce_7| { _ = &__ce_7; return error.InvalidCharacter; }); });
+                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int4, .value = .{ .int4 = @intCast(value) } });
+},
+}
+                pos = (pos + current_idx);
+                continue;
             }
-            if ((slice.len >= 4)) {
+            switch (slice[0]) {
+'n', 'N' => {
+if ((slice.len >= 4)) {
                 if (bun.strings.eqlComptime(slice[0..4], "NULL")) {
                     _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"null", .value = .{ .@"null" = 0 } });
                     pos = (pos + 4);
                     continue;
                 }
             }
-            if (bun.strings.eqlComptime(slice[0..3], "NaN")) {
-                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = std.math.nan(f64) } });
-                pos = (pos + 3);
-                continue;
+            if (((slice.len >= 3) and bun.strings.eqlCaseInsensitiveASCII(slice[0..3], "NaN", false))) {
+                if ((((slice.len == 3) or (slice[3] == closing_brace)) or (slice[3] == separator))) {
+                    if (((((((arrayType == .int4_array) or (arrayType == .int2_array)) or (arrayType == .int8_array)) or (arrayType == .oid_array)) or (arrayType == .cid_array)) or (arrayType == .xid_array))) {
+                        return error.InvalidCharacter;
+                    }
+                    _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = std.math.nan(f64) } });
+                    pos = (pos + 3);
+                    continue;
+                }
+            }
+            if (((((((((arrayType == .int4_array) or (arrayType == .int2_array)) or (arrayType == .int8_array)) or (arrayType == .float4_array)) or (arrayType == .float8_array)) or (arrayType == .oid_array)) or (arrayType == .cid_array)) or (arrayType == .xid_array))) {
+                return error.InvalidCharacter;
             }
             return error.UnsupportedArrayFormat;
 },
@@ -693,6 +776,9 @@ return error.UnsupportedArrayFormat;
             if ((current_idx == 0)) {
                 return error.UnsupportedArrayFormat;
             }
+            if ((((current_idx + 1) >= slice.len) or ((slice[@as(usize, @intCast((current_idx + 1)))] != separator) and (slice[@as(usize, @intCast((current_idx + 1)))] != closing_brace)))) {
+                return error.UnsupportedArrayFormat;
+            }
             const element = slice[0..current_idx];
             if ((is_float or (arrayType == .float8_array))) {
                 _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = try parsePostgresFloat(element) } });
@@ -702,7 +788,7 @@ return error.UnsupportedArrayFormat;
             switch (arrayType) {
 .int8_array => {
 if (bigint) {
-                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(i64, element, 0)) catch |__ce_4| { _ = &__ce_4; return error.InvalidCharacter; }); }) } });
+                _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_8: { break :blk_catch_8 ((std.fmt.parseInt(i64, element, 0)) catch |__ce_8| { _ = &__ce_8; return error.InvalidCharacter; }); }) } });
             } else {
                 _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((element.len > 0)) (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(element))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(element)) else bun.String.cloneUTF8(element).value).WTFStringImpl else null) }, .free_value = 1 });
             }
@@ -710,12 +796,12 @@ if (bigint) {
             continue;
 },
 .cid_array, .xid_array, .oid_array => {
-_ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_5: { break :blk_catch_5 ((std.fmt.parseInt(u32, element, 0)) catch |__ce_5| { _ = &__ce_5; return error.InvalidCharacter; }); }) } });
+_ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_9: { break :blk_catch_9 ((std.fmt.parseInt(u32, element, 0)) catch |__ce_9| { _ = &__ce_9; return error.InvalidCharacter; }); }) } });
             pos = (pos + current_idx);
             continue;
 },
 else => {
-const value = (blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(i32, element, 0)) catch |__ce_6| { _ = &__ce_6; return error.InvalidCharacter; }); });
+const value = (blk_catch_10: { break :blk_catch_10 ((std.fmt.parseInt(i32, element, 0)) catch |__ce_10| { _ = &__ce_10; return error.InvalidCharacter; }); });
             _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int4, .value = .{ .int4 = @intCast(value) } });
             pos = (pos + current_idx);
             continue;
@@ -723,7 +809,10 @@ const value = (blk_catch_6: { break :blk_catch_6 ((std.fmt.parseInt(i32, element
 }
 },
 else => {
-if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
+if ((arrayType == .bytea_array)) {
+                return error.UnsupportedByteaFormat;
+            }
+            if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
                 if ((slice[0] == 91)) {
                     var sub_array_offset: usize = 0;
                     _ = &sub_array_offset;
@@ -741,6 +830,9 @@ if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
                     pos = (pos + sub_array_offset);
                     continue;
                 }
+            }
+            if (((((((((arrayType == .int4_array) or (arrayType == .int2_array)) or (arrayType == .int8_array)) or (arrayType == .float4_array)) or (arrayType == .float8_array)) or (arrayType == .oid_array)) or (arrayType == .cid_array)) or (arrayType == .xid_array))) {
+                return error.InvalidCharacter;
             }
             return error.UnsupportedArrayFormat;
 },
@@ -768,57 +860,164 @@ if (((arrayType == .json_array) or (arrayType == .jsonb_array))) {
         return SQLDataCell{ .tag = .array, .value = .{ .array = .{ .ptr = array.items.ptr, .len = @intCast(array.items.len), .cap = @intCast(array.capacity) } }, .free_value = 1 };
 }
 
+pub fn buildBinaryArrayCell(comptime tag: PgTag, bytes: []const u8, dims: []const usize, pos: *usize) AnyPostgresError!SQLDataCell {
+        const dim_len = dims[0];
+        var array = CellList{  };
+        _ = &array;
+        var array_guard = CellListGuard{ .ptr = (blk: {
+        break :blk (&array);
+
+}) };
+        _ = &array_guard;
+        var __array_guard_moved = false; _ = &__array_guard_moved;
+        defer if (!__array_guard_moved) { __array_guard_moved = true; const __T = @TypeOf(array_guard); if (@typeInfo(__T) == .optional) { if (array_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { array_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = array_guard; _drop_val.__cp_deinit(); } };
+        _ = try array.ensureTotalCapacity(bun.default_allocator, dim_len);
+        if ((dims.len == 1)) {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < dim_len)) : (i = (i + 1)) {
+                const cur = (blk: {
+                break :blk pos.*;
+
+});
+                const elen = std.mem.readInt(i32, bytes[cur..(cur + 4)][0..4], .big);
+                {
+                    pos.* = (cur + 4);
+                }
+                if ((elen == -1)) {
+                    _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .@"null", .value = .{ .@"null" = 0 } });
+                } else {
+                    const elem_cur = (blk: {
+                    break :blk pos.*;
+
+});
+                    const raw_bits = std.mem.readInt(u32, bytes[elem_cur..(elem_cur + 4)][0..4], .big);
+                    {
+                        pos.* = (elem_cur + 4);
+                    }
+                    if ((tag == .int4_array)) {
+                        const val: i32 = @bitCast(raw_bits);
+                        _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .int4, .value = .{ .int4 = val } });
+                    } else {
+                        const val: f32 = @bitCast(raw_bits);
+                        _ = try array.append(bun.default_allocator, SQLDataCell{ .tag = .float8, .value = .{ .float8 = @floatCast(val) } });
+                    }
+                }
+            }
+        } else {
+            var i: usize = 0;
+            _ = &i;
+            while ((i < dim_len)) : (i = (i + 1)) {
+                var sub_array = try buildBinaryArrayCell(tag, bytes, dims[1..], pos);
+                _ = &sub_array;
+                var sub_guard = DeinitGuard(SQLDataCell){ .ptr = (blk: {
+                break :blk (&sub_array);
+
+}) };
+                _ = &sub_guard;
+                var __sub_guard_moved = false; _ = &__sub_guard_moved;
+                defer if (!__sub_guard_moved) { __sub_guard_moved = true; const __T = @TypeOf(sub_guard); if (@typeInfo(__T) == .optional) { if (sub_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sub_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sub_guard; _drop_val.__cp_deinit(); } };
+                _ = try array.append(bun.default_allocator, sub_array);
+                sub_guard.ptr = null;
+            }
+        }
+        array_guard.ptr = null;
+        return SQLDataCell{ .tag = .array, .value = .{ .array = .{ .ptr = array.items.ptr, .len = @intCast(array.items.len), .cap = @intCast(array.capacity) } }, .free_value = 1 };
+}
+
 pub fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject) AnyPostgresError!SQLDataCell {
         if (binary) {
             if ((bytes.len < 12)) {
                 return error.InvalidBinaryData;
             }
-            const dimensions_raw: int4 = @bitCast((blk: {
-            break :blk (bytes[0..4]).*;
-
-}));
-            const contains_nulls: int4 = @bitCast((blk: {
-            break :blk (bytes[4..8]).*;
-
-}));
-            const dimensions = @byteSwap(dimensions_raw);
-            if ((dimensions > 1)) {
-                return error.MultidimensionalArrayNotSupportedYet;
-            }
-            if ((contains_nulls != 0)) {
-                return error.NullsInArrayNotSupportedYet;
-            }
-            if ((dimensions == 0)) {
-                return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .ptr = null, .len = 0, .byte_len = 0, .type = (blk_catch_7: { break :blk_catch_7 ((tag.toJSTypedArrayType()) catch |e| { _ = &e; return @errorCast(e); }); }) } } };
-            }
-            if ((bytes.len < 20)) {
+            const dimensions = std.mem.readInt(i32, bytes[0..4], .big);
+            const element_type = std.mem.readInt(i32, bytes[8..12], .big);
+            if (((dimensions < 0) or (dimensions > 6))) {
                 return error.InvalidBinaryData;
             }
-            const array_len: i32 = @byteSwap(@as(i32, @bitCast((blk: {
-            break :blk (bytes[12..16]).*;
-
-}))));
-            if ((array_len < 0)) {
+            const expected_oid: i32 = (if ((tag == .int4_array)) @intFromEnum(PgTag.int4) else @intFromEnum(PgTag.float4));
+            if ((element_type != expected_oid)) {
+                return error.InvalidBinaryData;
+            }
+            if ((dimensions == 0)) {
+                if ((bytes.len != 12)) {
+                    return error.InvalidBinaryData;
+                }
+                return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .ptr = null, .len = 0, .byte_len = 0, .type = (blk_catch_11: { break :blk_catch_11 ((tag.toJSTypedArrayType()) catch |e| { _ = &e; return @errorCast(e); }); }) } } };
+            }
+            const dim_count: usize = @intCast(dimensions);
+            const header_len: usize = ((if (comptime @typeInfo(@TypeOf(12)) == .@"enum") cp_cast_int(usize, @intFromEnum(12)) else cp_cast_int(usize, 12)) + (dim_count * (if (comptime @typeInfo(@TypeOf(8)) == .@"enum") cp_cast_int(usize, @intFromEnum(8)) else cp_cast_int(usize, 8))));
+            if ((bytes.len < header_len)) {
+                return error.InvalidBinaryData;
+            }
+            var dims: [6]usize = undefined;
+            _ = &dims;
+            var total_elements: usize = 1;
+            _ = &total_elements;
+            var d: usize = 0;
+            _ = &d;
+            while ((d < dim_count)) : (d = (d + 1)) {
+                const dim_off = ((if (comptime @typeInfo(@TypeOf(12)) == .@"enum") cp_cast_int(usize, @intFromEnum(12)) else cp_cast_int(usize, 12)) + (d * (if (comptime @typeInfo(@TypeOf(8)) == .@"enum") cp_cast_int(usize, @intFromEnum(8)) else cp_cast_int(usize, 8))));
+                const dim_len_raw = std.mem.readInt(i32, bytes[dim_off..(dim_off + 4)][0..4], .big);
+                if ((dim_len_raw <= 0)) {
+                    return error.InvalidBinaryData;
+                }
+                const dim_len: usize = @intCast(dim_len_raw);
+                dims[cp_cast_int(usize, d)] = dim_len;
+                total_elements = (blk_catch_12: { break :blk_catch_12 ((std.math.mul(usize, total_elements, dim_len)) catch |__ce_12| { _ = &__ce_12; return error.InvalidBinaryData; }); });
+            }
+            const max_possible_elements = ((bytes.len - header_len) / 4);
+            if ((total_elements > max_possible_elements)) {
                 return error.InvalidBinaryData;
             }
             const ElemType = try tag.byteArrayType();
-            const element_stride: usize = (@sizeOf(ElemType) * 2);
-            const max_elements = ((bytes.len - 20) / element_stride);
-            if ((@as(usize, @intCast(array_len)) > max_elements)) {
+            const elem_size: i32 = @intCast(@sizeOf(ElemType));
+            const elem_size_usize: usize = @sizeOf(ElemType);
+            var scan_pos: usize = header_len;
+            _ = &scan_pos;
+            var has_nulls = false;
+            _ = &has_nulls;
+            var elem_i: usize = 0;
+            _ = &elem_i;
+            while ((elem_i < total_elements)) : (elem_i = (elem_i + 1)) {
+                if (((scan_pos + 4) > bytes.len)) {
+                    return error.InvalidBinaryData;
+                }
+                const elen = std.mem.readInt(i32, bytes[scan_pos..(scan_pos + 4)][0..4], .big);
+                scan_pos = (scan_pos + 4);
+                if ((elen == -1)) {
+                    has_nulls = true;
+                } else {
+                    if ((elen == elem_size)) {
+                        if (((scan_pos + elem_size_usize) > bytes.len)) {
+                            return error.InvalidBinaryData;
+                        }
+                        scan_pos = (scan_pos + elem_size_usize);
+                    } else {
+                        return error.InvalidBinaryData;
+                    }
+                }
+            }
+            if ((scan_pos != bytes.len)) {
                 return error.InvalidBinaryData;
             }
-            const PgArrType = try tag.pgArrayType();
-            const elements = PgArrType.init(bytes).slice();
-            if (((elements.len > std.math.maxInt(u32)) or (bytes.len > std.math.maxInt(u32)))) {
-                return error.InvalidBinaryData;
-            }
-            return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .head_ptr = (if ((bytes.len > 0)) (blk: {
-            break :blk @constCast(bytes.ptr);
+            if (((dimensions == 1) and (!has_nulls))) {
+                const PgArrType = try tag.pgArrayType();
+                const elements = PgArrType.init(bytes).slice();
+                if (((elements.len > std.math.maxInt(u32)) or (bytes.len > std.math.maxInt(u32)))) {
+                    return error.InvalidBinaryData;
+                }
+                return SQLDataCell{ .tag = .typed_array, .value = .{ .typed_array = .{ .head_ptr = (if ((bytes.len > 0)) (blk: {
+                break :blk @constCast(bytes.ptr);
 
 }) else null), .ptr = (if ((elements.len > 0)) (blk: {
-            break :blk @ptrCast(elements.ptr);
+                break :blk @ptrCast(elements.ptr);
 
-}) else null), .len = @intCast(elements.len), .byte_len = @intCast(bytes.len), .type = (blk_catch_8: { break :blk_catch_8 ((tag.toJSTypedArrayType()) catch |e| { _ = &e; return @errorCast(e); }); }) } } };
+}) else null), .len = @intCast(elements.len), .byte_len = @intCast(bytes.len), .type = (blk_catch_13: { break :blk_catch_13 ((tag.toJSTypedArrayType()) catch |e| { _ = &e; return @errorCast(e); }); }) } } };
+            }
+            var decode_pos: usize = header_len;
+            _ = &decode_pos;
+            return buildBinaryArrayCell(tag, bytes, dims[0..dim_count], (&decode_pos));
         } else {
             return parseArray(bytes, bigint, tag, globalObject, null, false, 0);
         }
@@ -836,26 +1035,26 @@ return fromTypedArrayBytes(.float4_array, binary, bigint, bytes, globalObject);
 if (binary) {
             return SQLDataCell{ .tag = .int4, .value = .{ .int4 = try parseBinary(.int2, i16, bytes) } };
         } else {
-            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_9: { break :blk_catch_9 ((std.fmt.parseInt(i16, bytes, 0)) catch |__ce_9| { _ = &__ce_9; return error.InvalidCharacter; }); }) } };
+            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_14: { break :blk_catch_14 ((std.fmt.parseInt(i16, bytes, 0)) catch |__ce_14| { _ = &__ce_14; return error.InvalidCharacter; }); }) } };
         }
 },
 .cid, .xid, .oid => {
 if (binary) {
             return SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = try parseBinary(.oid, u32, bytes) } };
         } else {
-            return SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_10: { break :blk_catch_10 ((std.fmt.parseInt(u32, bytes, 0)) catch |__ce_10| { _ = &__ce_10; return error.InvalidCharacter; }); }) } };
+            return SQLDataCell{ .tag = .uint4, .value = .{ .uint4 = (blk_catch_15: { break :blk_catch_15 ((std.fmt.parseInt(u32, bytes, 0)) catch |__ce_15| { _ = &__ce_15; return error.InvalidCharacter; }); }) } };
         }
 },
 .int4 => {
 if (binary) {
             return SQLDataCell{ .tag = .int4, .value = .{ .int4 = try parseBinary(.int4, i32, bytes) } };
         } else {
-            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_11: { break :blk_catch_11 ((std.fmt.parseInt(i32, bytes, 0)) catch |__ce_11| { _ = &__ce_11; return error.InvalidCharacter; }); }) } };
+            return SQLDataCell{ .tag = .int4, .value = .{ .int4 = (blk_catch_16: { break :blk_catch_16 ((std.fmt.parseInt(i32, bytes, 0)) catch |__ce_16| { _ = &__ce_16; return error.InvalidCharacter; }); }) } };
         }
 },
 .int8 => {
 if (bigint) {
-            return SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_12: { break :blk_catch_12 ((std.fmt.parseInt(i64, bytes, 0)) catch |__ce_12| { _ = &__ce_12; return error.InvalidCharacter; }); }) } };
+            return SQLDataCell{ .tag = .int8, .value = .{ .int8 = (blk_catch_17: { break :blk_catch_17 ((std.fmt.parseInt(i64, bytes, 0)) catch |__ce_17| { _ = &__ce_17; return error.InvalidCharacter; }); }) } };
         } else {
             return SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((bytes.len > 0)) (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(bytes))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(bytes)) else bun.String.cloneUTF8(bytes).value).WTFStringImpl else null) }, .free_value = 1 };
         }
@@ -895,7 +1094,7 @@ if (binary) {
             _ = &_numeric_guard;
             var ___numeric_guard_moved = false; _ = &___numeric_guard_moved;
             defer if (!___numeric_guard_moved) { ___numeric_guard_moved = true; const __T = @TypeOf(_numeric_guard); if (@typeInfo(__T) == .optional) { if (_numeric_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _numeric_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _numeric_guard; _drop_val.__cp_deinit(); } };
-            const result = (blk_catch_13: { break :blk_catch_13 ((parseBinaryNumeric(bytes, (&numeric_buffer))) catch |__ce_13| { _ = &__ce_13; return error.UnsupportedNumericFormat; }); });
+            const result = (blk_catch_18: { break :blk_catch_18 ((parseBinaryNumeric(bytes, (&numeric_buffer))) catch |__ce_18| { _ = &__ce_18; return error.UnsupportedNumericFormat; }); });
             return SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if (@typeInfo(@TypeOf(bun.String.cloneUTF8(result.slice()))) == .@"enum") @intFromEnum(bun.String.cloneUTF8(result.slice())) else bun.String.cloneUTF8(result.slice()).value).WTFStringImpl }, .free_value = 1 };
         } else {
             return SQLDataCell{ .tag = .@"string", .value = .{ .@"string" = (if ((bytes.len > 0)) (if (@typeInfo(@TypeOf(String.cloneUTF8(bytes))) == .@"enum") @intFromEnum(String.cloneUTF8(bytes)) else String.cloneUTF8(bytes).value).WTFStringImpl else null) }, .free_value = 1 };
@@ -1113,7 +1312,7 @@ return error.InvalidSign;
             const end: usize = (result.items.len + @as(usize, @intCast(dscale)));
             while ((idx < dscale)) {
                 if (((idx >= 0) and (idx < dscale))) {
-                    const digit = (blk_catch_14: { break :blk_catch_14 ((reader.readInt(u16, .big)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 0; }); });
+                    const digit = (blk_catch_19: { break :blk_catch_19 ((reader.readInt(u16, .big)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 0; }); });
                     _ = log("dscale digit: {d}", .{ digit });
                     if ((digit >= 10000)) {
                         return error.InvalidBuffer;

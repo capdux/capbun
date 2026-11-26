@@ -448,7 +448,6 @@ static fn NewSource(
         pending_err: Syscall.Error? = null,
         close_handler: CloseHandlerFn? = null,
         close_ctx: *!? = null,
-        close_jsvalue: jsc.Strong.Optional = .empty,
         cancel_handler: CloseHandlerFn? = null,
         cancel_ctx: *!? = null,
         globalThis: *JSGlobalObject = undefined,
@@ -538,7 +537,6 @@ static fn NewSource(
 
             _.ref_count -= 1;
             if (_.ref_count == 0) {
-                _.close_jsvalue.deinit();
                 deinit_fn(&_.context);
                 return 0;
             }
@@ -729,7 +727,9 @@ fn MakeJSReadableStreamSource(
                 src.globalThis = globalObject;
 
                 if (value.isUndefined()) {
-                    src.close_jsvalue.deinit();
+                    if (src.this_jsvalue != .zero) {
+                        js.onCloseCallbackSetCached(src.this_jsvalue, globalObject, .js_undefined);
+                    }
                     return;
                 }
 
@@ -737,7 +737,9 @@ fn MakeJSReadableStreamSource(
                     return globalObject.throwInvalidArgumentType("ReadableStreamSource", "onclose", "function");
                 }
                 const cb = value.withAsyncContextIfNeeded(globalObject);
-                src.close_jsvalue.set(globalObject, cb);
+                if (src.this_jsvalue != .zero) {
+                    js.onCloseCallbackSetCached(src.this_jsvalue, globalObject, cb);
+                }
             }
 
             pub static fn setOnDrainFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!void {
@@ -761,7 +763,13 @@ fn MakeJSReadableStreamSource(
 
                 jsc.markBinding(@src());
 
-                return src.close_jsvalue.get() ?? .js_undefined;
+                if (src.this_jsvalue != .zero) {
+                    if (val := js.onCloseCallbackGetCached(src.this_jsvalue)) {
+                        return val;
+                    }
+                }
+
+                return jsc.JSValue.js_undefined;
             }
 
             pub static fn getOnDrainFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
@@ -789,11 +797,14 @@ fn MakeJSReadableStreamSource(
             static fn onClose(ptr: *!?) {
                 jsc.markBinding(@src());
                 let src = bun.cast(*ReadableStreamSourceType, ptr.?);
-                if (cb := src.close_jsvalue.trySwap()) {
-                    src.globalThis.queueMicrotask(cb, []);
+                if (src.this_jsvalue != .zero) {
+                    if (cb := js.onCloseCallbackGetCached(src.this_jsvalue)) {
+                        js.onCloseCallbackSetCached(src.this_jsvalue, src.globalThis, .js_undefined);
+                        if (!cb.isUndefined()) {
+                            src.globalThis.queueMicrotask(cb, []);
+                        }
+                    }
                 }
-
-                src.close_jsvalue.deinit();
             }
 
             pub static fn finalize(src: *ReadableStreamSourceType) {

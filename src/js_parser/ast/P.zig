@@ -2213,7 +2213,7 @@ pub inline fn nextScopeInOrderForVisitPass(p: *P) ScopeOrder {
 
 pub fn pushScopeForVisitPass(p: *P, kind: js_ast.Scope.Kind, loc: logger.Loc) !void {
             const order = p.nextScopeInOrderForVisitPass();
-            if (((bun.Environment.allow_assert and (order.loc.start != loc.start)) or (order.scope.kind != kind))) {
+            if ((bun.Environment.allow_assert and ((order.loc.start != loc.start) or (order.scope.kind != kind)))) {
                 p.log.level = .verbose;
                 _ = bun.handleOom(p.log.addDebugFmt(p.source, loc, p.allocator, "Expected this scope (.{s})", .{ @tagName(kind) }));
                 _ = bun.handleOom(p.log.addDebugFmt(p.source, order.loc, p.allocator, "Found this scope (.{s})", .{ @tagName(order.scope.kind) }));
@@ -3402,7 +3402,7 @@ pub fn valueForThis(p: *P, loc: logger.Loc) ?Expr {
                     return p.newExpr(E.Identifier{ .ref = sym_ref.* }, loc);
                 }
             }
-            if ((!p.fn_only_data_visit.is_this_nested)) {
+            if (((!p.fn_only_data_visit.is_this_nested) and (!p.options.repl_mode))) {
                 if ((p.has_es_module_syntax and (p.commonjs_named_exports.count() == 0))) {
                     return Expr{ .loc = loc, .data = nullValueExpr };
                 } else {

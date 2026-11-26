@@ -65,22 +65,13 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 
     const value: u32 = blk: {
         const value: jsc.JSValue = arguments[1];
-        if (value == .zero) {
-            break :blk 0;
-        }
-        if (!value.isNumber()) {
-            return globalThis.throwInvalidArgumentTypeValue("value", "number", value);
-        }
+        if (value == .zero) break :blk 0;
+        if (!value.isNumber()) return globalThis.throwInvalidArgumentTypeValue("value", "number", value);
         const valuef = value.asNumber();
         const min = 0;
         const max = std.math.maxInt(u32);
-
-        if (@floor(valuef) != valuef) {
-            return globalThis.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be an integer. Received {}", { "value", valuef }).throw();
-        }
-        if (valuef < min || valuef > max) {
-            return globalThis.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= {d} and <= {d}. Received {d}", { "value", min, max, valuef }).throw();
-        }
+        if (@floor(valuef) != valuef) return globalThis.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be an integer. Received {}", { "value", valuef }).throw();
+        if (valuef < min || valuef > max) return globalThis.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= {d} and <= {d}. Received {d}", { "value", min, max, valuef }).throw();
         break :blk @intFromFloat(valuef);
     };
 
@@ -92,15 +83,9 @@ pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 pub fn CompressionStream(comptime T: type): type {
     return struct {
         pub static fn throwUnlessIdle(stream: *T, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
-            if (stream.write_in_progress) {
-                return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
-            }
-            if (stream.pending_close) {
-                return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
-            }
-            if (stream.closed) {
-                return globalThis.ERR(.INVALID_STATE, "zlib binding closed", {}).throw();
-            }
+            if (stream.write_in_progress) return globalThis.ERR(.INVALID_STATE, "Write already in progress", {}).throw();
+            if (stream.pending_close) return globalThis.ERR(.INVALID_STATE, "Pending close", {}).throw();
+            if (stream.closed) return globalThis.ERR(.INVALID_STATE, "zlib binding closed", {}).throw();
         }
 
         static fn checkNotResizable(buf: jsc.ArrayBuffer, globalThis: *jsc.JSGlobalObject, comptime is_out: bool): bun.JSError!void {
@@ -110,13 +95,33 @@ pub fn CompressionStream(comptime T: type): type {
             }
         }
 
+        static fn validateFlush(flush: u32, globalThis: *jsc.JSGlobalObject): bun.JSError!void {
+            const StreamType = @TypeOf(@as(T, undefined).stream);
+            if (comptime @hasField(StreamType, "pledged_src_size")) {
+                if (flush > 2) return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", {}).throw();
+            } else if (comptime @hasField(StreamType, "error_")) {
+                if (flush > 3) return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", {}).throw();
+            } else {
+                * = std.@"meta".intToEnum(bun.zlib.FlushValue, flush) catch {
+                    return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", {}).throw();
+                };
+            }
+        }
+
+        static fn updateWriteState(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue) {
+            if (ws_val := (this_value.getOwn(globalThis, "_writeState") catch null)) {
+                if (ws_ab := ws_val.asArrayBuffer(globalThis)) {
+                    const ws_slice = ws_ab.asU32();
+                    if (ws_slice.len >= 2) stream.stream.updateWriteResult(&ws_slice.ptr[1], &ws_slice.ptr[0]);
+                }
+                return;
+            }
+            if (wr := stream.write_result) stream.stream.updateWriteResult(&wr[1], &wr[0]);
+        }
+
         pub static fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
-
-            if (arguments.len != 7) {
-                return globalThis.ERR(.MISSING_ARGS, "write(flush, in, in_off, in_len, out, out_off, out_len)", {}).throw();
-            }
-
+            if (arguments.len != 7) return globalThis.ERR(.MISSING_ARGS, "write(flush, in, in_off, in_len, out, out_off, out_len)", {}).throw();
             let in_off: u32 = 0;
             let in_len: u32 = 0;
             let out_off: u32 = 0;
@@ -124,16 +129,10 @@ pub fn CompressionStream(comptime T: type): type {
             let flush: u32 = 0;
             let in_slice: ([]const u8)? = null;
             let out: ([]u8)? = null;
-
             const this_value = callframe.this();
-
-            if (arguments[0].isUndefined()) {
-                return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", {}).throw();
-            }
+            if (arguments[0].isUndefined()) return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", {}).throw();
             flush = arguments[0].toU32();
-            * = std.@"meta".intToEnum(bun.zlib.FlushValue, flush) catch {
-                return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", {}).throw();
-            };
+            validateFlush(flush, globalThis)?;
 
             if (arguments[1].isNull()) {
                 // just a flush
@@ -240,7 +239,7 @@ pub fn CompressionStream(comptime T: type): type {
                 return;
             }
 
-            stream.stream.updateWriteResult(&stream.write_result.?[1], &stream.write_result.?[0]);
+            updateWriteState(stream, global, this_value);
             this_value.ensureStillAlive();
 
             // `init()` caches the JS write callback; a handle whose `init()` was
@@ -255,11 +254,7 @@ pub fn CompressionStream(comptime T: type): type {
 
         pub static fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
-
-            if (arguments.len != 7) {
-                return globalThis.ERR(.MISSING_ARGS, "writeSync(flush, in, in_off, in_len, out, out_off, out_len)", {}).throw();
-            }
-
+            if (arguments.len != 7) return globalThis.ERR(.MISSING_ARGS, "writeSync(flush, in, in_off, in_len, out, out_off, out_len)", {}).throw();
             let in_off: u32 = 0;
             let in_len: u32 = 0;
             let out_off: u32 = 0;
@@ -267,14 +262,9 @@ pub fn CompressionStream(comptime T: type): type {
             let flush: u32 = 0;
             let in_slice: ([]const u8)? = null;
             let out: ([]u8)? = null;
-
-            if (arguments[0].isUndefined()) {
-                return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", {}).throw();
-            }
+            if (arguments[0].isUndefined()) return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", {}).throw();
             flush = arguments[0].toU32();
-            * = std.@"meta".intToEnum(bun.zlib.FlushValue, flush) catch {
-                return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", {}).throw();
-            };
+            validateFlush(flush, globalThis)?;
 
             if (arguments[1].isNull()) {
                 // just a flush
@@ -315,7 +305,7 @@ pub fn CompressionStream(comptime T: type): type {
 
             stream.stream.doWork();
             if (checkError(stream, globalThis, this_value)) {
-                stream.stream.updateWriteResult(&stream.write_result.?[1], &stream.write_result.?[0]);
+                updateWriteState(stream, globalThis, this_value);
                 stream.write_in_progress = false;
             }
             stream.deref();
@@ -426,17 +416,13 @@ pub struct CountedKeepAlive {
     ref_count: u32 = 0,
 
     fn @"ref"(*_, vm: *jsc.VirtualMachine) {
-        if (_.ref_count == 0) {
-            _.keep_alive.ref(vm);
-        }
+        if (_.ref_count == 0) _.keep_alive.ref(vm);
         _.ref_count += 1;
     }
 
     fn unref(*_, vm: *jsc.VirtualMachine) {
         _.ref_count -= 1;
-        if (_.ref_count == 0) {
-            _.keep_alive.unref(vm);
-        }
+        if (_.ref_count == 0) _.keep_alive.unref(vm);
     }
 
     fn deinit(*_) {

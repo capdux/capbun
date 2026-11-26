@@ -38,7 +38,24 @@ export function initializeCompressionStream(this, format) {
   const flushFlag = isBrotli ? BROTLI_OPERATION_PROCESS : isZstd ? ZSTD_e_continue : Z_NO_FLUSH;
   const finishFlushFlag = isBrotli ? BROTLI_OPERATION_FINISH : isZstd ? ZSTD_e_end : Z_FINISH;
 
-  const nodeStream = builders[format]({ chunkSize: outChunkSize });
+  const level = options !== undefined ? options.level : undefined;
+  const streamOpts = { chunkSize: outChunkSize };
+  if (level !== undefined) {
+    const minLevel = isZstd ? 1 : 0;
+    const maxLevel = isBrotli ? 11 : isZstd ? 22 : 9;
+    if (typeof level !== "number" || !Number.isInteger(level) || level < minLevel || level > maxLevel) {
+      throw new RangeError(`The compression level must be an integer between ${minLevel} and ${maxLevel} for ${format}`);
+    }
+    if (isBrotli) {
+      streamOpts.params = { [zlib.constants.BROTLI_PARAM_QUALITY]: level };
+    } else if (isZstd) {
+      streamOpts.params = { [zlib.constants.ZSTD_c_compressionLevel]: level };
+    } else {
+      streamOpts.level = level;
+    }
+  }
+
+  const nodeStream = builders[format](streamOpts);
   const handle = nodeStream._handle;
   let handleClosed = false;
   function closeHandle() {

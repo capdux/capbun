@@ -234,7 +234,7 @@ static inline JSC::EncodedJSValue constructJSWebSocket3(JSGlobalObject* lexicalG
 
     if (JSC::JSObject* options = optionsObjectValue.getObject()) {
         const auto& builtinnames = WebCore::builtinNames(vm);
-        auto headersValue = Bun::getOwnPropertyIfExists(globalObject, options, builtinnames.headersPublicName());
+        auto headersValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, options, builtinnames.headersPublicName());
         RETURN_IF_EXCEPTION(throwScope, {});
         if (headersValue) {
             if (!headersValue.isUndefinedOrNull()) {
@@ -243,31 +243,27 @@ static inline JSC::EncodedJSValue constructJSWebSocket3(JSGlobalObject* lexicalG
             }
         }
 
-        auto protocolsValue = Bun::getOwnPropertyIfExists(globalObject, options, PropertyName(Identifier::fromString(vm, "protocols"_s)));
+        auto protocolsValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, options, PropertyName(Identifier::fromString(vm, "protocols"_s)));
         RETURN_IF_EXCEPTION(throwScope, {});
-        if (protocolsValue) {
-            if (!protocolsValue.isUndefinedOrNull()) {
-                protocols = convert<IDLSequence<IDLDOMString>>(*lexicalGlobalObject, protocolsValue);
-                RETURN_IF_EXCEPTION(throwScope, {});
-            }
-        } else {
-            auto protocolValue = Bun::getOwnPropertyIfExists(globalObject, options, PropertyName(Identifier::fromString(vm, "protocol"_s)));
+        if (protocolsValue && !protocolsValue.isUndefinedOrNull()) {
+            protocols = convert<IDLSequence<IDLDOMString>>(*lexicalGlobalObject, protocolsValue);
             RETURN_IF_EXCEPTION(throwScope, {});
-            if (protocolValue) {
-                if (!protocolValue.isUndefinedOrNull()) {
-                    protocols = Vector<String> { convert<IDLDOMString>(*lexicalGlobalObject, protocolValue) };
-                    RETURN_IF_EXCEPTION(throwScope, {});
-                }
+        } else {
+            auto protocolValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, options, PropertyName(Identifier::fromString(vm, "protocol"_s)));
+            RETURN_IF_EXCEPTION(throwScope, {});
+            if (protocolValue && !protocolValue.isUndefinedOrNull()) {
+                protocols = Vector<String> { convert<IDLDOMString>(*lexicalGlobalObject, protocolValue) };
+                RETURN_IF_EXCEPTION(throwScope, {});
             }
         }
 
         // Parse TLS options using Zig's SSLConfig.fromJS for full TLS option support
-        JSValue tlsOptionsValue = Bun::getOwnPropertyIfExists(globalObject, options, PropertyName(Identifier::fromString(vm, "tls"_s)));
+        JSValue tlsOptionsValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, options, PropertyName(Identifier::fromString(vm, "tls"_s)));
         RETURN_IF_EXCEPTION(throwScope, {});
         if (tlsOptionsValue && !tlsOptionsValue.isUndefinedOrNull() && tlsOptionsValue.isObject()) {
             // Also extract rejectUnauthorized for backwards compatibility
             if (JSC::JSObject* tlsOptions = tlsOptionsValue.getObject()) {
-                auto rejectUnauthorizedValue = Bun::getOwnPropertyIfExists(globalObject, tlsOptions, PropertyName(Identifier::fromString(vm, "rejectUnauthorized"_s)));
+                auto rejectUnauthorizedValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, tlsOptions, PropertyName(Identifier::fromString(vm, "rejectUnauthorized"_s)));
                 RETURN_IF_EXCEPTION(throwScope, {});
                 if (rejectUnauthorizedValue && !rejectUnauthorizedValue.isUndefinedOrNull() && rejectUnauthorizedValue.isBoolean()) {
                     rejectUnauthorized = rejectUnauthorizedValue.asBoolean() ? 1 : 0;
@@ -283,14 +279,14 @@ static inline JSC::EncodedJSValue constructJSWebSocket3(JSGlobalObject* lexicalG
         // `const opts = { perMessageDeflate: true, ...options }; if (opts.perMessageDeflate)`
         // — any falsy value (`false`, `null`, `0`, `''`, explicit `undefined`)
         // suppresses the extension offer; omitted / truthy keeps the default.
-        JSValue perMessageDeflateValue = options->getIfPropertyExists(globalObject, Identifier::fromString(vm, "perMessageDeflate"_s));
+        JSValue perMessageDeflateValue = Bun::getIfPropertyExistsPrototypePollutionMitigationUnsafe(vm, globalObject, options, PropertyName(Identifier::fromString(vm, "perMessageDeflate"_s)));
         RETURN_IF_EXCEPTION(throwScope, {});
-        if (perMessageDeflateValue && !perMessageDeflateValue.toBoolean(lexicalGlobalObject)) {
+        if (perMessageDeflateValue != JSValue::decode(JSC::JSValue::ValueDeleted) && !perMessageDeflateValue.toBoolean(lexicalGlobalObject)) {
             offerPerMessageDeflate = false;
         }
 
         // Parse proxy option - can be string or { url, headers }
-        auto proxyValue = Bun::getOwnPropertyIfExists(globalObject, options, PropertyName(Identifier::fromString(vm, "proxy"_s)));
+        auto proxyValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, options, PropertyName(Identifier::fromString(vm, "proxy"_s)));
         RETURN_IF_EXCEPTION(throwScope, {});
         if (proxyValue) {
             if (!proxyValue.isUndefinedOrNull()) {
@@ -301,14 +297,14 @@ static inline JSC::EncodedJSValue constructJSWebSocket3(JSGlobalObject* lexicalG
                 } else if (proxyValue.isObject()) {
                     // proxy: { url: "http://proxy:8080", headers: {...} }
                     if (JSC::JSObject* proxyOptions = proxyValue.getObject()) {
-                        auto proxyUrlValue = Bun::getOwnPropertyIfExists(globalObject, proxyOptions, PropertyName(Identifier::fromString(vm, "url"_s)));
+                        auto proxyUrlValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, proxyOptions, PropertyName(Identifier::fromString(vm, "url"_s)));
                         RETURN_IF_EXCEPTION(throwScope, {});
                         if (proxyUrlValue && !proxyUrlValue.isUndefinedOrNull()) {
                             proxyUrl = convert<IDLUSVString>(*lexicalGlobalObject, proxyUrlValue);
                             RETURN_IF_EXCEPTION(throwScope, {});
                         }
 
-                        auto proxyHeadersValue = Bun::getOwnPropertyIfExists(globalObject, proxyOptions, builtinnames.headersPublicName());
+                        auto proxyHeadersValue = Bun::getIfPropertyExistsPrototypePollutionMitigation(vm, globalObject, proxyOptions, builtinnames.headersPublicName());
                         RETURN_IF_EXCEPTION(throwScope, {});
                         if (proxyHeadersValue && !proxyHeadersValue.isUndefinedOrNull()) {
                             // Check if it's already a Headers instance (like fetch does)

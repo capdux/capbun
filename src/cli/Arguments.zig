@@ -121,7 +121,7 @@ const empty_params: [0]ParamType = @as([0]ParamType, undefined);
 pub const base_params_ = ((((if (Environment.show_crash_trace) debug_params else empty_params) ++ .{ ((clap.parseParam("--env-file <STR>...               Load environment variables from the specified file(s)")) catch unreachable), ((clap.parseParam("--no-env-file                     Disable automatic loading of .env files")) catch unreachable), ((clap.parseParam("--cwd <STR>                       Absolute path to resolve files & entry points from. This just changes the process' cwd.")) catch unreachable), ((clap.parseParam("-c, --config <PATH>?              Specify path to Bun config file. Default <d>$cwd<r>/bunfig.toml")) catch unreachable), ((clap.parseParam("-h, --help                        Display this menu and exit")) catch unreachable) }) ++ (if (builtin.have_error_return_tracing) .{ ((clap.parseParam("--verbose-error-trace             Dump error return traces")) catch unreachable) } else empty_params)) ++ .{ ((clap.parseParam("<POS>...")) catch unreachable) });
 const debug_params = .{ ((clap.parseParam("--breakpoint-resolve <STR>...     DEBUG MODE: breakpoint when resolving something that includes this string")) catch unreachable), ((clap.parseParam("--breakpoint-print <STR>...       DEBUG MODE: breakpoint when printing something that includes this string")) catch unreachable) };
 pub const transpiler_params_ = .{ ((clap.parseParam("--main-fields <STR>...             Main fields to lookup in package.json. Defaults to --target dependent")) catch unreachable), ((clap.parseParam("--preserve-symlinks               Preserve symlinks when resolving files")) catch unreachable), ((clap.parseParam("--preserve-symlinks-main          Preserve symlinks when resolving the main entry point")) catch unreachable), ((clap.parseParam("--extension-order <STR>...        Defaults to: .tsx,.ts,.jsx,.js,.json ")) catch unreachable), ((clap.parseParam("--tsconfig-override <STR>          Specify custom tsconfig.json. Default <d>$cwd<r>/tsconfig.json")) catch unreachable), ((clap.parseParam("-d, --define <STR>...              Substitute K:V while parsing, e.g. --define process.env.NODE_ENV:\"development\". Values are parsed as JSON.")) catch unreachable), ((clap.parseParam("--drop <STR>...                   Remove function calls, e.g. --drop=console removes all console.* calls.")) catch unreachable), ((clap.parseParam("--feature <STR>...               Enable a feature flag for dead-code elimination, e.g. --feature=SUPER_SECRET")) catch unreachable), ((clap.parseParam("-l, --loader <STR>...             Parse files with .ext:loader, e.g. --loader .js:jsx. Valid loaders: js, jsx, ts, tsx, json, toml, text, file, wasm, napi")) catch unreachable), ((clap.parseParam("--no-macros                       Disable macros from being executed in the bundler, transpiler and runtime")) catch unreachable), ((clap.parseParam("--jsx-factory <STR>               Changes the function called when compiling JSX elements using the classic JSX runtime")) catch unreachable), ((clap.parseParam("--jsx-fragment <STR>              Changes the function called when compiling JSX fragments")) catch unreachable), ((clap.parseParam("--jsx-import-source <STR>         Declares the module specifier to be used for importing the jsx and jsxs factory functions. Default: \"react\"")) catch unreachable), ((clap.parseParam("--jsx-runtime <STR>               \"automatic\" (default) or \"classic\"")) catch unreachable), ((clap.parseParam("--jsx-side-effects                Treat JSX elements as having side effects (disable pure annotations)")) catch unreachable), ((clap.parseParam("--ignore-dce-annotations          Ignore tree-shaking annotations such as @__PURE__")) catch unreachable) };
-pub const runtime_params_ = .{ ((clap.parseParam("--watch                           Automatically restart the process on file change")) catch unreachable), ((clap.parseParam("--hot                             Enable auto reload in the Bun runtime, test runner, or bundler")) catch unreachable), ((clap.parseParam("--no-clear-screen                 Disable clearing the terminal screen on reload when --hot or --watch is enabled")) catch unreachable), ((clap.parseParam("--smol                            Use less memory, but run garbage collection more often")) catch unreachable), ((clap.parseParam("-r, --preload <STR>...            Import a module before other modules are loaded")) catch unreachable), ((clap.parseParam("--require <STR>...                Alias of --preload, for Node.js compatibility")) catch unreachable), ((clap.parseParam("--import <STR>...                 Alias of --preload, for Node.js compatibility")) catch unreachable), ((clap.parseParam("--inspect <STR>?                  Activate Bun's debugger")) catch unreachable), ((clap.parseParam("--inspect-wait <STR>?             Activate Bun's debugger, wait for a connection before executing")) catch unreachable), ((clap.parseParam("--inspect-brk <STR>?              Activate Bun's debugger, set breakpoint on first line of code and wait")) catch unreachable), ((clap.parseParam("--cpu-prof                        Start CPU profiler and write profile to disk on exit")) catch unreachable), ((clap.parseParam("--cpu-prof-name <STR>             Specify the name of the CPU profile file")) catch unreachable), ((clap.parseParam("--cpu-prof-dir <STR>              Specify the directory where the CPU profile will be saved")) catch unreachable), ((clap.parseParam("--cpu-prof-md                     Output CPU profile in markdown format (grep-friendly, designed for LLM analysis)")) catch unreachable), ((clap.parseParam("--cpu-prof-interval <STR>         Specify the sampling interval in microseconds for CPU profiling (default: 1000)")) catch unreachable), ((clap.parseParam("--heap-prof                       Generate V8 heap snapshot on exit (.heapsnapshot)")) catch unreachable), ((clap.parseParam("--heap-prof-name <STR>            Specify the name of the heap profile file")) catch unreachable), ((clap.parseParam("--heap-prof-dir <STR>             Specify the directory where the heap profile will be saved")) catch unreachable), ((clap.parseParam("--heap-prof-md                    Generate markdown heap profile on exit (for CLI analysis)")) catch unreachable), ((clap.parseParam("--if-present                      Exit without an error if the entrypoint does not exist")) catch unreachable), ((clap.parseParam("--no-install                      Disable auto install in the Bun runtime")) catch unreachable), ((clap.parseParam("--install <STR>                   Configure auto-install behavior. One of \"auto\" (default, auto-installs when no node_modules), \"fallback\" (missing packages only), \"force\" (always).")) catch unreachable), ((clap.parseParam("-i                                Auto-install dependencies during execution. Equivalent to --install=fallback.")) catch unreachable), ((clap.parseParam("-e, --eval <STR>                  Evaluate argument as a script")) catch unreachable), ((clap.parseParam("-p, --print <STR>                 Evaluate argument as a script and print the result")) catch unreachable), ((clap.parseParam("--prefer-offline                  Skip staleness checks for packages in the Bun runtime and resolve from disk")) catch unreachable), ((clap.parseParam("--prefer-latest                   Use the latest matching versions of packages in the Bun runtime, always checking npm")) catch unreachable), ((clap.parseParam("--port <STR>                      Set the default port for Bun.serve")) catch unreachable), ((clap.parseParam("-u, --origin <STR>")) catch unreachable), ((clap.parseParam("--conditions <STR>...             Pass custom conditions to resolve")) catch unreachable), ((clap.parseParam("--fetch-preconnect <STR>...       Preconnect to a URL while code is loading")) catch unreachable), ((clap.parseParam("--experimental-http2-fetch        Offer h2 in fetch() TLS ALPN. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP2_CLIENT=1")) catch unreachable), ((clap.parseParam("--experimental-http3-fetch        Honor Alt-Svc: h3 in fetch() and upgrade to HTTP/3. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP3_CLIENT=1")) catch unreachable), ((clap.parseParam("--max-http-header-size <INT>      Set the maximum size of HTTP headers in bytes. Default is 16KiB")) catch unreachable), ((clap.parseParam("--dns-result-order <STR>          Set the default order of DNS lookup results. Valid orders: verbatim (default), ipv4first, ipv6first")) catch unreachable), ((clap.parseParam("--expose-gc                       Expose gc() on the global object. Has no effect on Bun.gc().")) catch unreachable), ((clap.parseParam("--no-deprecation                  Suppress all reporting of the custom deprecation.")) catch unreachable), ((clap.parseParam("--throw-deprecation               Determine whether or not deprecation warnings result in errors.")) catch unreachable), ((clap.parseParam("--title <STR>                     Set the process title")) catch unreachable), ((clap.parseParam("--zero-fill-buffers                Boolean to force Buffer.allocUnsafe(size) to be zero-filled.")) catch unreachable), ((clap.parseParam("--use-system-ca                   Use the system's trusted certificate authorities")) catch unreachable), ((clap.parseParam("--use-openssl-ca                  Use OpenSSL's default CA store")) catch unreachable), ((clap.parseParam("--use-bundled-ca                  Use bundled CA store")) catch unreachable), ((clap.parseParam("--redis-preconnect                Preconnect to $REDIS_URL at startup")) catch unreachable), ((clap.parseParam("--sql-preconnect                  Preconnect to PostgreSQL at startup")) catch unreachable), ((clap.parseParam("--no-addons                       Throw an error if process.dlopen is called, and disable export condition \"node-addons\"")) catch unreachable), ((clap.parseParam("--unhandled-rejections <STR>      One of \"strict\", \"throw\", \"warn\", \"none\", or \"warn-with-error-code\"")) catch unreachable), ((clap.parseParam("--console-depth <NUMBER>          Set the default depth for console.log object inspection (default: 2)")) catch unreachable), ((clap.parseParam("--user-agent <STR>               Set the default User-Agent header for HTTP requests")) catch unreachable), ((clap.parseParam("--cron-title <STR>               Title for cron execution mode")) catch unreachable), ((clap.parseParam("--cron-period <STR>              Cron period for cron execution mode")) catch unreachable) };
+pub const runtime_params_ = .{ ((clap.parseParam("--watch                           Automatically restart the process on file change")) catch unreachable), ((clap.parseParam("--hot                             Enable auto reload in the Bun runtime, test runner, or bundler")) catch unreachable), ((clap.parseParam("--no-clear-screen                 Disable clearing the terminal screen on reload when --hot or --watch is enabled")) catch unreachable), ((clap.parseParam("--smol                            Use less memory, but run garbage collection more often")) catch unreachable), ((clap.parseParam("-r, --preload <STR>...            Import a module before other modules are loaded")) catch unreachable), ((clap.parseParam("--require <STR>...                Alias of --preload, for Node.js compatibility")) catch unreachable), ((clap.parseParam("--import <STR>...                 Alias of --preload, for Node.js compatibility")) catch unreachable), ((clap.parseParam("--inspect <STR>?                  Activate Bun's debugger")) catch unreachable), ((clap.parseParam("--inspect-wait <STR>?             Activate Bun's debugger, wait for a connection before executing")) catch unreachable), ((clap.parseParam("--inspect-brk <STR>?              Activate Bun's debugger, set breakpoint on first line of code and wait")) catch unreachable), ((clap.parseParam("--cpu-prof                        Start CPU profiler and write profile to disk on exit")) catch unreachable), ((clap.parseParam("--cpu-prof-name <STR>             Specify the name of the CPU profile file")) catch unreachable), ((clap.parseParam("--cpu-prof-dir <STR>              Specify the directory where the CPU profile will be saved")) catch unreachable), ((clap.parseParam("--cpu-prof-md                     Output CPU profile in markdown format (grep-friendly, designed for LLM analysis)")) catch unreachable), ((clap.parseParam("--cpu-prof-interval <STR>         Specify the sampling interval in microseconds for CPU profiling (default: 1000)")) catch unreachable), ((clap.parseParam("--heap-prof                       Generate V8 heap snapshot on exit (.heapsnapshot)")) catch unreachable), ((clap.parseParam("--heap-prof-name <STR>            Specify the name of the heap profile file")) catch unreachable), ((clap.parseParam("--heap-prof-dir <STR>             Specify the directory where the heap profile will be saved")) catch unreachable), ((clap.parseParam("--heap-prof-md                    Generate markdown heap profile on exit (for CLI analysis)")) catch unreachable), ((clap.parseParam("--heap-prof-interval <STR>        Specify the sampling interval in bytes for heap profiling (default: 524288)")) catch unreachable), ((clap.parseParam("--if-present                      Exit without an error if the entrypoint does not exist")) catch unreachable), ((clap.parseParam("--no-install                      Disable auto install in the Bun runtime")) catch unreachable), ((clap.parseParam("--install <STR>                   Configure auto-install behavior. One of \"auto\" (default, auto-installs when no node_modules), \"fallback\" (missing packages only), \"force\" (always).")) catch unreachable), ((clap.parseParam("-i                                Auto-install dependencies during execution. Equivalent to --install=fallback.")) catch unreachable), ((clap.parseParam("-e, --eval <STR>                  Evaluate argument as a script")) catch unreachable), ((clap.parseParam("-p, --print <STR>                 Evaluate argument as a script and print the result")) catch unreachable), ((clap.parseParam("--prefer-offline                  Skip staleness checks for packages in the Bun runtime and resolve from disk")) catch unreachable), ((clap.parseParam("--prefer-latest                   Use the latest matching versions of packages in the Bun runtime, always checking npm")) catch unreachable), ((clap.parseParam("--port <STR>                      Set the default port for Bun.serve")) catch unreachable), ((clap.parseParam("-u, --origin <STR>")) catch unreachable), ((clap.parseParam("--conditions <STR>...             Pass custom conditions to resolve")) catch unreachable), ((clap.parseParam("--fetch-preconnect <STR>...       Preconnect to a URL while code is loading")) catch unreachable), ((clap.parseParam("--experimental-http2-fetch        Offer h2 in fetch() TLS ALPN. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP2_CLIENT=1")) catch unreachable), ((clap.parseParam("--experimental-http3-fetch        Honor Alt-Svc: h3 in fetch() and upgrade to HTTP/3. Same as BUN_FEATURE_FLAG_EXPERIMENTAL_HTTP3_CLIENT=1")) catch unreachable), ((clap.parseParam("--max-http-header-size <INT>      Set the maximum size of HTTP headers in bytes. Default is 16KiB")) catch unreachable), ((clap.parseParam("--dns-result-order <STR>          Set the default order of DNS lookup results. Valid orders: verbatim (default), ipv4first, ipv6first")) catch unreachable), ((clap.parseParam("--expose-gc                       Expose gc() on the global object. Has no effect on Bun.gc().")) catch unreachable), ((clap.parseParam("--no-deprecation                  Suppress all reporting of the custom deprecation.")) catch unreachable), ((clap.parseParam("--throw-deprecation               Determine whether or not deprecation warnings result in errors.")) catch unreachable), ((clap.parseParam("--title <STR>                     Set the process title")) catch unreachable), ((clap.parseParam("--zero-fill-buffers                Boolean to force Buffer.allocUnsafe(size) to be zero-filled.")) catch unreachable), ((clap.parseParam("--use-system-ca                   Use the system's trusted certificate authorities")) catch unreachable), ((clap.parseParam("--use-openssl-ca                  Use OpenSSL's default CA store")) catch unreachable), ((clap.parseParam("--use-bundled-ca                  Use bundled CA store")) catch unreachable), ((clap.parseParam("--redis-preconnect                Preconnect to $REDIS_URL at startup")) catch unreachable), ((clap.parseParam("--sql-preconnect                  Preconnect to PostgreSQL at startup")) catch unreachable), ((clap.parseParam("--no-addons                       Throw an error if process.dlopen is called, and disable export condition \"node-addons\"")) catch unreachable), ((clap.parseParam("--unhandled-rejections <STR>      One of \"strict\", \"throw\", \"warn\", \"none\", or \"warn-with-error-code\"")) catch unreachable), ((clap.parseParam("--console-depth <NUMBER>          Set the default depth for console.log object inspection (default: 2)")) catch unreachable), ((clap.parseParam("--user-agent <STR>               Set the default User-Agent header for HTTP requests")) catch unreachable), ((clap.parseParam("--cron-title <STR>               Title for cron execution mode")) catch unreachable), ((clap.parseParam("--cron-period <STR>              Cron period for cron execution mode")) catch unreachable) };
 pub const auto_or_run_params = .{ ((clap.parseParam("-F, --filter <STR>...             Run a script in all workspace packages matching the pattern")) catch unreachable), ((clap.parseParam("-b, --bun                         Force a script or package to use Bun's runtime instead of Node.js (via symlinking node)")) catch unreachable), ((clap.parseParam("--no-orphans                      Exit when the parent process dies, and on exit SIGKILL every descendant. Linux/macOS only.")) catch unreachable), ((clap.parseParam("--shell <STR>                     Control the shell used for package.json scripts. Supports either 'bun' or 'system'")) catch unreachable), ((clap.parseParam("--workspaces                      Run a script in all workspace packages (from the \"workspaces\" field in package.json)")) catch unreachable), ((clap.parseParam("--parallel                        Run multiple scripts concurrently with Foreman-style output")) catch unreachable), ((clap.parseParam("--sequential                      Run multiple scripts sequentially with Foreman-style output")) catch unreachable), ((clap.parseParam("--no-exit-on-error                Continue running other scripts when one fails (with --parallel/--sequential)")) catch unreachable) };
 pub const auto_only_params = (.{ ((clap.parseParam("--silent                          Don't print the script command")) catch unreachable), ((clap.parseParam("--elide-lines <NUMBER>            Number of lines of script output shown when using --filter (default: 0, show all lines)")) catch unreachable), ((clap.parseParam("-v, --version                     Print version and exit")) catch unreachable), ((clap.parseParam("--revision                        Print version with revision and exit")) catch unreachable) } ++ auto_or_run_params);
 pub const auto_params = (((auto_only_params ++ runtime_params_) ++ transpiler_params_) ++ base_params_);
@@ -172,7 +172,7 @@ pub fn noop_resolver(input: []const u8) ![]const u8 {
 }
 
 pub fn fileReadError(e: anyerror, stderr: anytype, filename: []const u8, kind: []const u8) noreturn {
-        _ = (blk_catch_179: { break :blk_catch_179 ((stderr.writer().print("Error reading file \"{s}\" for {s}: {s}", .{ filename, kind, @errorName(e) })) catch |__ce_179| { _ = &__ce_179;  }); });
+        _ = (blk_catch_180: { break :blk_catch_180 ((stderr.writer().print("Error reading file \"{s}\" for {s}: {s}", .{ filename, kind, @errorName(e) })) catch |__ce_180| { _ = &__ce_180;  }); });
         _ = std.process.exit(1);
 }
 
@@ -220,11 +220,11 @@ pub fn loadGlobalBunfig(allocator: std.mem.Allocator, ctx: Command.Context, comp
 
 pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
         if (comptime cmd.readGlobalConfig()) {
-            _ = (blk_catch_180: { break :blk_catch_180 ((loadGlobalBunfig(allocator, ctx, cmd)) catch |e| { _ = &e; if (auto_loaded) {
+            _ = (blk_catch_181: { break :blk_catch_181 ((loadGlobalBunfig(allocator, ctx, cmd)) catch |e| { _ = &e; if (auto_loaded) {
                 return;
             }
             _ = Output.prettyErrorln("{}\nreading global config \"{s}\"", .{ e, config_path });
-            break :blk_catch_180 @as(void, Global.exit(1)); }); });
+            break :blk_catch_181 @as(void, Global.exit(1)); }); });
         }
         _ = try loadBunfig(allocator, auto_loaded, config_path, ctx, cmd);
 }
@@ -301,14 +301,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
                 ctx.has_loaded_global_config = true;
                 if (getHomeConfigPath((&config_buf))) |path| {
                     _ = &path;
-                    _ = (blk_catch_181: { break :blk_catch_181 ((loadConfigPath(allocator, true, path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
-                        _ = (blk_catch_182: { break :blk_catch_182 ((ctx.log.print(Output.errorWriter())) catch |__ce_182| { _ = &__ce_182;  }); });
+                    _ = (blk_catch_182: { break :blk_catch_182 ((loadConfigPath(allocator, true, path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
+                        _ = (blk_catch_183: { break :blk_catch_183 ((ctx.log.print(Output.errorWriter())) catch |__ce_183| { _ = &__ce_183;  }); });
                     }
                     if (ctx.log.hasAny()) {
                         _ = Output.printError("\n", .{});
                     }
                     _ = Output.err(e, "failed to load bunfig", .{});
-                    break :blk_catch_181 @as(void, Global.crash()); }); });
+                    break :blk_catch_182 @as(void, Global.crash()); }); });
                 }
             }
         }
@@ -335,7 +335,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
             if ((ctx.args.absolute_working_dir == null)) {
                 var secondbuf: bun.PathBuffer = undefined;
                 _ = &secondbuf;
-                const cwd = (blk_catch_183: { break :blk_catch_183 ((bun.getcwd((&secondbuf))) catch |__ce_183| { _ = &__ce_183; return; }); });
+                const cwd = (blk_catch_184: { break :blk_catch_184 ((bun.getcwd((&secondbuf))) catch |__ce_184| { _ = &__ce_184; return; }); });
                 ctx.args.absolute_working_dir = try allocator.dupeZ(u8, cwd);
             }
             config_path_opt = joinConfigPath(ctx.args.absolute_working_dir.?, config_path_, (&config_buf));
@@ -344,14 +344,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
             return unreadableConfig(auto_loaded, bun.sys.Error.fromCode(.NAMETOOLONG, .open).withPath(config_path_), config_path_);
         }
         const config_path = config_path_opt.?;
-        _ = (blk_catch_184: { break :blk_catch_184 ((loadConfigPath(allocator, auto_loaded, config_path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
-            _ = (blk_catch_185: { break :blk_catch_185 ((ctx.log.print(Output.errorWriter())) catch |__ce_185| { _ = &__ce_185;  }); });
+        _ = (blk_catch_185: { break :blk_catch_185 ((loadConfigPath(allocator, auto_loaded, config_path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
+            _ = (blk_catch_186: { break :blk_catch_186 ((ctx.log.print(Output.errorWriter())) catch |__ce_186| { _ = &__ce_186;  }); });
         }
         if (ctx.log.hasAny()) {
             _ = Output.printError("\n", .{});
         }
         _ = Output.err(e, "failed to load bunfig", .{});
-        break :blk_catch_184 @as(void, Global.crash()); }); });
+        break :blk_catch_185 @as(void, Global.crash()); }); });
 }
 
 pub fn loadConfigWithCmdArgs(comptime cmd: Command.Tag, allocator: std.mem.Allocator, args: clap.Args(clap.Help, cmd.params()), ctx: Command.Context) !void {
@@ -362,13 +362,13 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         var diag = clap.Diagnostic{  };
         _ = &diag;
         const params_to_parse = (comptime cmd.params());
-        var args = (blk_catch_186: { break :blk_catch_186 ((clap.parse(clap.Help, params_to_parse, .{ .diagnostic = (&diag), .allocator = allocator, .stop_after_positional_at = (switch (cmd) {
+        var args = (blk_catch_187: { break :blk_catch_187 ((clap.parse(clap.Help, params_to_parse, .{ .diagnostic = (&diag), .allocator = allocator, .stop_after_positional_at = (switch (cmd) {
 .RunCommand => 2,
 .AutoCommand, .RunAsNodeCommand => 1,
 else => 0,
-}) })) catch |e| { _ = &e; _ = (blk_catch_187: { break :blk_catch_187 ((diag.report(Output.errorWriter(), e)) catch |__ce_187| { _ = &__ce_187;  }); });
+}) })) catch |e| { _ = &e; _ = (blk_catch_188: { break :blk_catch_188 ((diag.report(Output.errorWriter(), e)) catch |__ce_188| { _ = &__ce_188;  }); });
         _ = cmd.printHelp(false);
-        break :blk_catch_186 Global.exit(1); }); });
+        break :blk_catch_187 Global.exit(1); }); });
         _ = &args;
         const print_help = args.flag("--help");
         if (print_help) {
@@ -397,8 +397,8 @@ else => 0,
             var outbuf: bun.PathBuffer = undefined;
             _ = &outbuf;
             const out = bun.path.joinAbs(try bun.getcwd((&outbuf)), .loose, cwd_arg);
-            _ = (blk_catch_188: { break :blk_catch_188 ((bun.sys.chdir("", out).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "Could not change directory to \"{s}\"\n", .{ cwd_arg });
-            break :blk_catch_188 Global.exit(1); }); });
+            _ = (blk_catch_189: { break :blk_catch_189 ((bun.sys.chdir("", out).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "Could not change directory to \"{s}\"\n", .{ cwd_arg });
+            break :blk_catch_189 Global.exit(1); }); });
             break :brk try allocator.dupeZ(u8, out);
 };
         } else {
@@ -419,8 +419,8 @@ else => 0,
             if (args.option("--elide-lines")) |elide_lines| {
                 _ = &elide_lines;
                 if ((elide_lines.len > 0)) {
-                    ctx.bundler_options.elide_lines = (blk_catch_189: { break :blk_catch_189 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_189| { _ = &__ce_189; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
-                    break :blk_catch_189 Global.exit(1); }); });
+                    ctx.bundler_options.elide_lines = (blk_catch_190: { break :blk_catch_190 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_190| { _ = &__ce_190; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
+                    break :blk_catch_190 Global.exit(1); }); });
                 }
             }
         }
@@ -428,16 +428,16 @@ else => 0,
             if (args.option("--timeout")) |timeout_ms| {
                 _ = &timeout_ms;
                 if ((timeout_ms.len > 0)) {
-                    ctx.test_options.default_timeout_ms = (blk_catch_190: { break :blk_catch_190 ((std.fmt.parseInt(u32, timeout_ms, 10)) catch |__ce_190| { _ = &__ce_190; _ = Output.prettyErrorln("<r><red>error<r>: Invalid timeout: \"{s}\"", .{ timeout_ms });
+                    ctx.test_options.default_timeout_ms = (blk_catch_191: { break :blk_catch_191 ((std.fmt.parseInt(u32, timeout_ms, 10)) catch |__ce_191| { _ = &__ce_191; _ = Output.prettyErrorln("<r><red>error<r>: Invalid timeout: \"{s}\"", .{ timeout_ms });
                     _ = Output.flush();
-                    break :blk_catch_190 Global.exit(1); }); });
+                    break :blk_catch_191 Global.exit(1); }); });
                 }
             }
             if (args.option("--max-concurrency")) |max_concurrency| {
                 _ = &max_concurrency;
                 if ((max_concurrency.len > 0)) {
-                    ctx.test_options.max_concurrency = (blk_catch_191: { break :blk_catch_191 ((std.fmt.parseInt(u32, max_concurrency, 10)) catch |__ce_191| { _ = &__ce_191; _ = Output.prettyErrorln("<r><red>error<r>: Invalid max-concurrency: \"{s}\"", .{ max_concurrency });
-                    break :blk_catch_191 Global.exit(1); }); });
+                    ctx.test_options.max_concurrency = (blk_catch_192: { break :blk_catch_192 ((std.fmt.parseInt(u32, max_concurrency, 10)) catch |__ce_192| { _ = &__ce_192; _ = Output.prettyErrorln("<r><red>error<r>: Invalid max-concurrency: \"{s}\"", .{ max_concurrency });
+                    break :blk_catch_192 Global.exit(1); }); });
                 }
             }
             if ((!ctx.test_options.coverage.enabled)) {
@@ -498,9 +498,9 @@ else => 0,
             if (args.option("--bail")) |bail| {
                 _ = &bail;
                 if ((bail.len > 0)) {
-                    ctx.test_options.bail = (blk_catch_192: { break :blk_catch_192 ((std.fmt.parseInt(u32, bail, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{ @errorName(e) });
+                    ctx.test_options.bail = (blk_catch_193: { break :blk_catch_193 ((std.fmt.parseInt(u32, bail, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{ @errorName(e) });
                     _ = Output.flush();
-                    break :blk_catch_192 Global.exit(1); }); });
+                    break :blk_catch_193 Global.exit(1); }); });
                     if ((ctx.test_options.bail == 0)) {
                         _ = Output.prettyErrorln("<r><red>error<r>: --bail expects a number greater than 0", .{});
                         _ = Output.flush();
@@ -513,15 +513,15 @@ else => 0,
             if (args.option("--rerun-each")) |repeat_count| {
                 _ = &repeat_count;
                 if ((repeat_count.len > 0)) {
-                    ctx.test_options.repeat_count = (blk_catch_193: { break :blk_catch_193 ((std.fmt.parseInt(u32, repeat_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{ @errorName(e) });
-                    break :blk_catch_193 Global.exit(1); }); });
+                    ctx.test_options.repeat_count = (blk_catch_194: { break :blk_catch_194 ((std.fmt.parseInt(u32, repeat_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{ @errorName(e) });
+                    break :blk_catch_194 Global.exit(1); }); });
                 }
             }
             if (args.option("--retry")) |retry_count| {
                 _ = &retry_count;
                 if ((retry_count.len > 0)) {
-                    ctx.test_options.retry = (blk_catch_194: { break :blk_catch_194 ((std.fmt.parseInt(u32, retry_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{ @errorName(e) });
-                    break :blk_catch_194 Global.exit(1); }); });
+                    ctx.test_options.retry = (blk_catch_195: { break :blk_catch_195 ((std.fmt.parseInt(u32, retry_count, 10)) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{ @errorName(e) });
+                    break :blk_catch_195 Global.exit(1); }); });
                 }
             }
             if (((ctx.test_options.retry != 0) and (ctx.test_options.repeat_count != 0))) {
@@ -531,8 +531,8 @@ else => 0,
             if (args.option("--test-name-pattern")) |namePattern| {
                 _ = &namePattern;
                 ctx.test_options.test_filter_pattern = namePattern;
-                const regex = (blk_catch_195: { break :blk_catch_195 ((RegularExpression.init(bun.String.fromBytes(namePattern), RegularExpression.Flags.none)) catch |__ce_195| { _ = &__ce_195; _ = Output.prettyErrorln("<r><red>error<r>: --test-name-pattern expects a valid regular expression but received {f}", .{ bun.fmt.QuotedFormatter{ .text = namePattern } });
-                break :blk_catch_195 Global.exit(1); }); });
+                const regex = (blk_catch_196: { break :blk_catch_196 ((RegularExpression.init(bun.String.fromBytes(namePattern), RegularExpression.Flags.none)) catch |__ce_196| { _ = &__ce_196; _ = Output.prettyErrorln("<r><red>error<r>: --test-name-pattern expects a valid regular expression but received {f}", .{ bun.fmt.QuotedFormatter{ .text = namePattern } });
+                break :blk_catch_196 Global.exit(1); }); });
                 {
                     ctx.test_options.test_filter_regex = @ptrCast(regex);
                 }
@@ -551,10 +551,10 @@ else => 0,
                 const sep = sep_opt.?;
                 const index_str = shard[0..sep];
                 const count_str = shard[(sep + 1)..];
-                const index = (blk_catch_196: { break :blk_catch_196 ((std.fmt.parseInt(u32, index_str, 10)) catch |__ce_196| { _ = &__ce_196; _ = Output.prettyErrorln("<r><red>error<r>: --shard index must be a positive integer, got \"{s}\"", .{ index_str });
-                break :blk_catch_196 Global.exit(1); }); });
-                const count = (blk_catch_197: { break :blk_catch_197 ((std.fmt.parseInt(u32, count_str, 10)) catch |__ce_197| { _ = &__ce_197; _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be a positive integer, got \"{s}\"", .{ count_str });
+                const index = (blk_catch_197: { break :blk_catch_197 ((std.fmt.parseInt(u32, index_str, 10)) catch |__ce_197| { _ = &__ce_197; _ = Output.prettyErrorln("<r><red>error<r>: --shard index must be a positive integer, got \"{s}\"", .{ index_str });
                 break :blk_catch_197 Global.exit(1); }); });
+                const count = (blk_catch_198: { break :blk_catch_198 ((std.fmt.parseInt(u32, count_str, 10)) catch |__ce_198| { _ = &__ce_198; _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be a positive integer, got \"{s}\"", .{ count_str });
+                break :blk_catch_198 Global.exit(1); }); });
                 if ((count == 0)) {
                     _ = Output.prettyErrorln("<r><red>error<r>: --shard count must be greater than 0", .{});
                     _ = Global.exit(1);
@@ -585,7 +585,7 @@ else => 0,
                         }
                     }
                     if ((!dup)) {
-                        _ = (blk_catch_198: { break :blk_catch_198 ((list.append(p)) catch |__ce_198| { _ = &__ce_198; break :blk_catch_198 bun.outOfMemory(); }); });
+                        _ = (blk_catch_199: { break :blk_catch_199 ((list.append(p)) catch |__ce_199| { _ = &__ce_199; break :blk_catch_199 bun.outOfMemory(); }); });
                     }
                 }
                 ctx.test_options.timings_files = list.items;
@@ -606,8 +606,8 @@ else => 0,
             ctx.test_options.test_worker = args.flag("--test-worker");
             if (args.option("--parallel")) |parallel_str| {
                 _ = &parallel_str;
-                const parsed: u32 = (if ((parallel_str.len > 0)) (blk_catch_199: { break :blk_catch_199 ((std.fmt.parseInt(u32, parallel_str, 10)) catch |__ce_199| { _ = &__ce_199; _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"{s}\"", .{ parallel_str });
-                break :blk_catch_199 Global.exit(1); }); }) else @max(bun.getThreadCount(), 1));
+                const parsed: u32 = (if ((parallel_str.len > 0)) (blk_catch_200: { break :blk_catch_200 ((std.fmt.parseInt(u32, parallel_str, 10)) catch |__ce_200| { _ = &__ce_200; _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"{s}\"", .{ parallel_str });
+                break :blk_catch_200 Global.exit(1); }); }) else @max(bun.getThreadCount(), 1));
                 if ((parsed == 0)) {
                     _ = Output.prettyErrorln("<red>error<r>: --parallel expects a positive integer, received \"0\"", .{});
                     _ = Global.exit(1);
@@ -617,14 +617,14 @@ else => 0,
             }
             if (args.option("--parallel-delay")) |delay_str| {
                 _ = &delay_str;
-                ctx.test_options.parallel_delay_ms = (blk_catch_200: { break :blk_catch_200 ((std.fmt.parseInt(u32, delay_str, 10)) catch |__ce_200| { _ = &__ce_200; _ = Output.prettyErrorln("<red>error<r>: --parallel-delay expects a non-negative integer (milliseconds), received \"{s}\"", .{ delay_str });
-                break :blk_catch_200 Global.exit(1); }); });
+                ctx.test_options.parallel_delay_ms = (blk_catch_201: { break :blk_catch_201 ((std.fmt.parseInt(u32, delay_str, 10)) catch |__ce_201| { _ = &__ce_201; _ = Output.prettyErrorln("<red>error<r>: --parallel-delay expects a non-negative integer (milliseconds), received \"{s}\"", .{ delay_str });
+                break :blk_catch_201 Global.exit(1); }); });
             }
             if (args.option("--seed")) |seed_str| {
                 _ = &seed_str;
                 ctx.test_options.randomize = true;
-                ctx.test_options.seed = (blk_catch_201: { break :blk_catch_201 ((std.fmt.parseInt(u32, seed_str, 10)) catch |__ce_201| { _ = &__ce_201; _ = Output.prettyErrorln("<red>error<r>: Invalid seed value: {s}", .{ seed_str });
-                break :blk_catch_201 std.process.exit(1); }); });
+                ctx.test_options.seed = (blk_catch_202: { break :blk_catch_202 ((std.fmt.parseInt(u32, seed_str, 10)) catch |__ce_202| { _ = &__ce_202; _ = Output.prettyErrorln("<red>error<r>: Invalid seed value: {s}", .{ seed_str });
+                break :blk_catch_202 std.process.exit(1); }); });
             }
         }
         ctx.args.absolute_working_dir = cwd;
@@ -746,15 +746,15 @@ else => 0,
                     ctx.runtime_options.eval.script = port_str;
                     ctx.runtime_options.eval.eval_and_print = true;
                 } else {
-                    opts.port = (blk_catch_203: { break :blk_catch_203 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_203| { _ = &__ce_203; _ = Output.errFmt(bun.fmt.outOfRange(port_str, .{ .field_name = "--port", .min = 0, .max = std.math.maxInt(u16) }));
+                    opts.port = (blk_catch_204: { break :blk_catch_204 ((std.fmt.parseInt(u16, port_str, 10)) catch |__ce_204| { _ = &__ce_204; _ = Output.errFmt(bun.fmt.outOfRange(port_str, .{ .field_name = "--port", .min = 0, .max = std.math.maxInt(u16) }));
                     _ = Output.note("To evaluate TypeScript here, use 'bun --print'", .{});
-                    break :blk_catch_203 Global.exit(1); }); });
+                    break :blk_catch_204 Global.exit(1); }); });
                 }
             }
             if (args.option("--max-http-header-size")) |size_str| {
                 _ = &size_str;
-                const size = (blk_catch_204: { break :blk_catch_204 ((std.fmt.parseInt(usize, size_str, 10)) catch |__ce_204| { _ = &__ce_204; _ = Output.errGeneric("Invalid value for --max-http-header-size: \"{s}\". Must be a positive integer\n", .{ size_str });
-                break :blk_catch_204 Global.exit(1); }); });
+                const size = (blk_catch_205: { break :blk_catch_205 ((std.fmt.parseInt(usize, size_str, 10)) catch |__ce_205| { _ = &__ce_205; _ = Output.errGeneric("Invalid value for --max-http-header-size: \"{s}\". Must be a positive integer\n", .{ size_str });
+                break :blk_catch_205 Global.exit(1); }); });
                 if ((size == 0)) {
                     bun.http.max_http_header_size = ((1024 * 1024) * 1024);
                 } else {
@@ -810,8 +810,8 @@ else => 0,
             ctx.runtime_options.expose_gc = args.flag("--expose-gc");
             if (args.option("--console-depth")) |depth_str| {
                 _ = &depth_str;
-                const depth = (blk_catch_205: { break :blk_catch_205 ((std.fmt.parseInt(u16, depth_str, 10)) catch |__ce_205| { _ = &__ce_205; _ = Output.errGeneric("Invalid value for --console-depth: \"{s}\". Must be a positive integer\n", .{ depth_str });
-                break :blk_catch_205 Global.exit(1); }); });
+                const depth = (blk_catch_206: { break :blk_catch_206 ((std.fmt.parseInt(u16, depth_str, 10)) catch |__ce_206| { _ = &__ce_206; _ = Output.errGeneric("Invalid value for --console-depth: \"{s}\". Must be a positive integer\n", .{ depth_str });
+                break :blk_catch_206 Global.exit(1); }); });
                 ctx.runtime_options.console_depth = (if ((depth == 0)) std.math.maxInt(u16) else depth);
             }
             if (args.option("--dns-result-order")) |order| {
@@ -866,7 +866,7 @@ else => 0,
                 ctx.runtime_options.cpu_prof.json_format = cpu_prof_flag;
                 if (args.option("--cpu-prof-interval")) |interval_str| {
                     _ = &interval_str;
-                    ctx.runtime_options.cpu_prof.interval = (blk_catch_206: { break :blk_catch_206 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_206| { _ = &__ce_206; break :blk_catch_206 1000; }); });
+                    ctx.runtime_options.cpu_prof.interval = (blk_catch_207: { break :blk_catch_207 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_207| { _ = &__ce_207; break :blk_catch_207 1000; }); });
                 }
             } else {
                 if (args.option("--cpu-prof-name")) |_| {
@@ -893,6 +893,10 @@ else => 0,
                     _ = &dir;
                     ctx.runtime_options.heap_prof.dir = dir;
                 }
+                if (args.option("--heap-prof-interval")) |interval_str| {
+                    _ = &interval_str;
+                    ctx.runtime_options.heap_prof.interval = (blk_catch_208: { break :blk_catch_208 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_208| { _ = &__ce_208; break :blk_catch_208 524288; }); });
+                }
             } else {
                 if ((heap_prof_v8 or heap_prof_md)) {
                     ctx.runtime_options.heap_prof.enabled = true;
@@ -905,12 +909,29 @@ else => 0,
                         _ = &dir;
                         ctx.runtime_options.heap_prof.dir = dir;
                     }
+                    if (args.option("--heap-prof-interval")) |interval_str| {
+                        _ = &interval_str;
+                        ctx.runtime_options.heap_prof.interval = (blk_catch_209: { break :blk_catch_209 ((std.fmt.parseInt(u32, interval_str, 10)) catch |__ce_209| { _ = &__ce_209; break :blk_catch_209 524288; }); });
+                    }
                 } else {
+                    const exe = (if ((bun.argv.len > 0)) bun.argv[0] else "bun");
                     if (args.option("--heap-prof-name")) |_| {
-                        _ = Output.warn("--heap-prof-name requires --heap-prof or --heap-prof-md to be enabled", .{});
+                        _ = Output.prettyErrorln("{s}: --heap-prof-name must be used with --heap-prof", .{ exe });
+                        _ = Output.flush();
+                        _ = Global.exit(9);
                     }
                     if (args.option("--heap-prof-dir")) |_| {
-                        _ = Output.warn("--heap-prof-dir requires --heap-prof or --heap-prof-md to be enabled", .{});
+                        _ = Output.prettyErrorln("{s}: --heap-prof-dir must be used with --heap-prof", .{ exe });
+                        _ = Output.flush();
+                        _ = Global.exit(9);
+                    }
+                    if (args.option("--heap-prof-interval")) |interval_str| {
+                        _ = &interval_str;
+                        if ((!strings.eqlComptime(interval_str, "524288"))) {
+                            _ = Output.prettyErrorln("{s}: --heap-prof-interval must be used with --heap-prof", .{ exe });
+                            _ = Output.flush();
+                            _ = Global.exit(9);
+                        }
                     }
                 }
             }
@@ -1482,8 +1503,8 @@ else => {
             if (args.option("--elide-lines")) |elide_lines| {
                 _ = &elide_lines;
                 if ((elide_lines.len > 0)) {
-                    ctx.bundler_options.elide_lines = (blk_catch_207: { break :blk_catch_207 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_207| { _ = &__ce_207; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
-                    break :blk_catch_207 Global.exit(1); }); });
+                    ctx.bundler_options.elide_lines = (blk_catch_210: { break :blk_catch_210 ((std.fmt.parseInt(usize, elide_lines, 10)) catch |__ce_210| { _ = &__ce_210; _ = Output.prettyErrorln("<r><red>error<r>: Invalid elide-lines: \"{s}\"", .{ elide_lines });
+                    break :blk_catch_210 Global.exit(1); }); });
                 }
             }
             if (opts.define) |define| {

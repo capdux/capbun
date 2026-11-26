@@ -83,11 +83,9 @@ pub struct Visitor {
         }
 
         // Iterate over the top-level "@import" rules
-        let import_record_idx: usize = 0;
         for (*rule of top_level_rules.v.items) {
             if (rule == .@"import") {
-                defer import_record_idx += 1;
-                const record = _.all_import_records[source_index.get()].at(import_record_idx);
+                const record = _.all_import_records[source_index.get()].at(rule.@"import".import_record_idx);
 
                 // Follow internal dependencies
                 if (record.source_index.isValid()) {

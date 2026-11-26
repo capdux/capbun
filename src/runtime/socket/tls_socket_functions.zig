@@ -283,24 +283,33 @@ pub fn setMaxSendFragment(self: *This, globalObject: *jsc.JSGlobalObject, callfr
         return JSValue.jsBoolean((BoringSSL.SSL_set_max_send_fragment(ssl_ptr, @as(usize, @intCast(size))) == 1));
 }
 
+pub fn isSelfIssuedX509(cert: *const BoringSSL.X509) bool {
+        const subj = BoringSSL.X509_get_subject_name(cert);
+        const iss = BoringSSL.X509_get_issuer_name(cert);
+        if (((subj == null) or (iss == null))) {
+            return false;
+        }
+        return (BoringSSL.X509_NAME_cmp(subj, iss) == 0);
+}
+
 pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
         _ = jsc.markBinding(@src());
         const args = callframe.arguments_old(1);
-        var abbreviated = true;
-        _ = &abbreviated;
+        var detailed = false;
+        _ = &detailed;
         if ((args.len > 0)) {
             const arg = args.ptr[0];
             if ((!arg.isBoolean())) {
-                return globalObject.throw("Expected abbreviated to be a boolean", .{});
+                return globalObject.throw("Expected detailed to be a boolean", .{});
             }
-            abbreviated = arg.toBoolean();
+            detailed = arg.toBoolean();
         }
         const ssl_ptr_opt = self.socket.ssl();
         if ((ssl_ptr_opt == null)) {
             return JSValue.js_undefined;
         }
         const ssl_ptr = ssl_ptr_opt.?;
-        if (abbreviated) {
+        if ((!detailed)) {
             if (self.isServer()) {
                 const cert = BoringSSL.SSL_get_peer_certificate(ssl_ptr);
                 if (cert) |x509| {
@@ -331,12 +340,91 @@ pub fn getPeerCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callfr
         var ___cert_guard_moved = false; _ = &___cert_guard_moved;
         defer if (!___cert_guard_moved) { ___cert_guard_moved = true; const __T = @TypeOf(_cert_guard); if (@typeInfo(__T) == .optional) { if (_cert_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _cert_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _cert_guard; _drop_val.__cp_deinit(); } };
         const cert_chain = BoringSSL.SSL_get_peer_cert_chain(ssl_ptr);
-        var first_cert = (if ((cert != null)) (cert.?) else (if ((cert_chain != null)) BoringSSL.sk_X509_value(cert_chain.?, 0) else null));
-        _ = &first_cert;
-        if ((first_cert == null)) {
-            return JSValue.js_undefined;
+        const first_cert_opt = (if ((cert != null)) (cert.?) else (if ((cert_chain != null)) BoringSSL.sk_X509_value(cert_chain.?, 0) else null));
+        const first_cert = ((first_cert_opt) orelse { return JSValue.js_undefined; });
+        const first_js = try X509.toJS(first_cert, globalObject);
+        var current_js = first_js;
+        _ = &current_js;
+        var last_x509: *BoringSSL.X509 = first_cert;
+        _ = &last_x509;
+        if (cert_chain) |cc| {
+            _ = &cc;
+            const chain_len = BoringSSL.sk_X509_num(cc);
+            var i: usize = (if ((cert != null)) 0 else 1);
+            _ = &i;
+            while ((i < chain_len)) : (i = (i + 1)) {
+                if (BoringSSL.sk_X509_value(cc, i)) |c| {
+                    _ = &c;
+                    if (((i == 0) and (BoringSSL.X509_cmp(c, first_cert) == 0))) {
+                        continue;
+                    }
+                    const next_js = try X509.toJS(c, globalObject);
+                    _ = current_js.put(globalObject, ZigString.static("issuerCertificate"), next_js);
+                    current_js = next_js;
+                    last_x509 = c;
+                }
+            }
         }
-        return JSValue.js_undefined;
+        if (isSelfIssuedX509(last_x509)) {
+            _ = current_js.put(globalObject, ZigString.static("issuerCertificate"), current_js);
+            return first_js;
+        }
+        if (BoringSSL.SSL_get_SSL_CTX(ssl_ptr)) |ssl_ctx| {
+            _ = &ssl_ctx;
+            if (BoringSSL.SSL_CTX_get_cert_store(ssl_ctx)) |store| {
+                _ = &store;
+                const new_ctx_fn = BoringSSL.X509_STORE_CTX_new;
+                const store_ctx_opt = new_ctx_fn();
+                if (store_ctx_opt) |store_ctx| {
+                    _ = &store_ctx;
+                    defer {
+                    _ = BoringSSL.X509_STORE_CTX_free(store_ctx);
+                    }
+                    if ((BoringSSL.X509_STORE_CTX_init(store_ctx, store, first_cert, cert_chain) == 1)) {
+                        var owned_guard = FreeObjGuard(BoringSSL.X509){ .ptr = null };
+                        _ = &owned_guard;
+                        var __owned_guard_moved = false; _ = &__owned_guard_moved;
+                        defer if (!__owned_guard_moved) { __owned_guard_moved = true; const __T = @TypeOf(owned_guard); if (@typeInfo(__T) == .optional) { if (owned_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { owned_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = owned_guard; _drop_val.__cp_deinit(); } };
+                        var cur_x509: *BoringSSL.X509 = last_x509;
+                        _ = &cur_x509;
+                        var depth: usize = 0;
+                        _ = &depth;
+                        while (((depth < 32) and (!isSelfIssuedX509(cur_x509)))) : (depth = (depth + 1)) {
+                            var issuer_opt: ?*BoringSSL.X509 = null;
+                            _ = &issuer_opt;
+                            const rc = (blk: {
+                            break :blk BoringSSL.X509_STORE_CTX_get1_issuer((&issuer_opt), store_ctx, cur_x509);
+
+});
+                            if ((rc != 1)) {
+                                break;
+                            }
+                            const issuer = ((issuer_opt) orelse break);
+                            var next_guard = FreeObjGuard(BoringSSL.X509){ .ptr = issuer };
+                            _ = &next_guard;
+                            var __next_guard_moved = false; _ = &__next_guard_moved;
+                            defer if (!__next_guard_moved) { __next_guard_moved = true; const __T = @TypeOf(next_guard); if (@typeInfo(__T) == .optional) { if (next_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { next_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = next_guard; _drop_val.__cp_deinit(); } };
+                            const next_js = try X509.toJS(issuer, globalObject);
+                            _ = current_js.put(globalObject, ZigString.static("issuerCertificate"), next_js);
+                            current_js = next_js;
+                            if (owned_guard.ptr) |prev| {
+                                _ = &prev;
+                                {
+                                    _ = prev.free();
+                                }
+                            }
+                            owned_guard.ptr = issuer;
+                            next_guard.ptr = null;
+                            cur_x509 = issuer;
+                        }
+                        if (isSelfIssuedX509(cur_x509)) {
+                            _ = current_js.put(globalObject, ZigString.static("issuerCertificate"), current_js);
+                        }
+                    }
+                }
+            }
+        }
+        return first_js;
 }
 
 pub fn getCertificate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {

@@ -2,13 +2,13 @@ import * as std from "std";
 import * as matcher from "./matcher.zig";
 import * as walk_mod from "./GlobWalker.zig";
 
-export const match = matcher.match;
-export const walk = walk_mod;
-export const GlobWalker = walk_mod.GlobWalker_;
-export const BunGlobWalker = GlobWalker(null, walk_mod.SyscallAccessor, false);
-export const BunGlobWalkerZ = GlobWalker(null, walk_mod.SyscallAccessor, true);
+pub const match = matcher.match;
+pub const walk = walk_mod;
+pub const GlobWalker = walk_mod.GlobWalker_;
+pub const BunGlobWalker = GlobWalker(null, walk_mod.SyscallAccessor, false);
+pub const BunGlobWalkerZ = GlobWalker(null, walk_mod.SyscallAccessor, true);
 
-export fn detectGlobSyntax(potential_pattern: string): bool {
+pub fn detectGlobSyntax(potential_pattern: string): bool {
     if (potential_pattern.len > 0 && potential_pattern[0] == '!') return true;
 
     const SPECIAL_SYNTAX = "*{[?";

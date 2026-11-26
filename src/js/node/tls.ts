@@ -525,7 +525,7 @@ function TLSSocket(socket?, options?) {
 
   const isNetSocketOrDuplex = socket instanceof Duplex;
 
-  options = isNetSocketOrDuplex ? { ...options, allowHalfOpen: false } : options || socket || {};
+  options = isNetSocketOrDuplex ? { ...options, allowHalfOpen: Boolean(socket.allowHalfOpen) } : options || socket || {};
 
   NetSocket.$call(this, options);
 

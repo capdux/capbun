@@ -2885,11 +2885,27 @@ _ = self.addForNewLine("<Revoked Proxy>".len);
             _ = writer.print((comptime Output.prettyFmt("<r><cyan>\\<Revoked Proxy\\><r>", enable_ansi_colors)), .{});
 },
 .Proxy => {
-const target = value.getProxyInternalField(.target);
-            if (Environment.allow_assert) {
-                _ = bun.assert(target.isCell());
+var current = value;
+            _ = &current;
+            var proxy_depth: usize = 0;
+            _ = &proxy_depth;
+            while (true) {
+                if ((proxy_depth >= 200000)) {
+                    _ = writer.writeAll("[Proxy]");
+                    return;
+                }
+                proxy_depth = (proxy_depth + 1);
+                const target = current.getProxyInternalField(.target);
+                if (Environment.allow_assert) {
+                    _ = bun.assert(target.isCell());
+                }
+                const next_tag = try ConsoleObject.Formatter.Tag.get(target, self.globalThis);
+                if ((next_tag.tag.tag() != .Proxy)) {
+                    _ = try self.format(next_tag, Writer, writer_, target, self.globalThis, enable_ansi_colors);
+                    break;
+                }
+                current = target;
             }
-            _ = try self.format(try ConsoleObject.Formatter.Tag.get(target, self.globalThis), Writer, writer_, target, self.globalThis, enable_ansi_colors);
 },
 }
     }

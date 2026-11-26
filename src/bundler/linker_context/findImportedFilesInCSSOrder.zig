@@ -135,15 +135,10 @@ pub fn visit(self: *Visitor, source_index: Index, wrapping_conditions: *BabyList
                 _ = self.visited.pop();
             }
             }
-            var import_record_idx: usize = 0;
-            _ = &import_record_idx;
             for (top_level_rules.v.items) |*rule| {
                 _ = &rule;
                 if (((rule.*) == .@"import")) {
-                    defer {
-                    import_record_idx = (import_record_idx + 1);
-                    }
-                    const record = self.all_import_records[@as(usize, @intCast(source_index.get()))].at(import_record_idx);
+                    const record = self.all_import_records[@as(usize, @intCast(source_index.get()))].at((rule.*).@"import".import_record_idx);
                     if (record.source_index.isValid()) {
                         if ((rule.*).@"import".hasConditions()) {
                             var nested_conditions = wrapping_conditions.deepCloneInfallible(self.allocator);

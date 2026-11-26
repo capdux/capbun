@@ -184,6 +184,9 @@ fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *js
     if (arguments.len < 1) {
         return jsc.JSValue.js_undefined;
     }
+    if (!arguments.ptr[0].isString()) {
+        return jsc.JSValue.js_undefined;
+    }
     let str = arguments.ptr[0].toBunString(globalObject)?;
     const _str_g = DerefGuard<@TypeOf(str)>{ ptr: &str };
 

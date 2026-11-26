@@ -75,6 +75,7 @@
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
+#include <wtf/text/StringHash.h>
 
 #include "JSBuffer.h"
 #include "JSWebSocket.h"
@@ -151,8 +152,13 @@ static bool isValidProtocolString(StringView protocol)
 
 static String encodeProtocolString(const String& protocol)
 {
+    constexpr size_t maxEncodedLength = 1024;
     StringBuilder builder;
     for (size_t i = 0; i < protocol.length(); i++) {
+        if (builder.length() >= maxEncodedLength) {
+            builder.append("..."_s);
+            break;
+        }
         if (protocol[i] < 0x20 || protocol[i] > 0x7E)
             builder.append("\\u"_s, hex(protocol[i], 4));
         else if (protocol[i] == 0x5c)
@@ -161,6 +167,33 @@ static String encodeProtocolString(const String& protocol)
             builder.append(protocol[i]);
     }
     return builder.toString();
+}
+
+static void appendPercentDecodedBytes(Vector<uint8_t, 128>& out, StringView view)
+{
+    auto utf8 = view.utf8();
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(utf8.data());
+    size_t len = utf8.length();
+    for (size_t i = 0; i < len; ++i) {
+        if (data[i] == '%' && i + 2 < len && isASCIIHexDigit(data[i + 1]) && isASCIIHexDigit(data[i + 2])) {
+            out.append((toASCIIHexValue(data[i + 1]) << 4) | toASCIIHexValue(data[i + 2]));
+            i += 2;
+        } else {
+            out.append(data[i]);
+        }
+    }
+}
+
+static String buildBasicAuthorization(StringView encodedUser, StringView encodedPassword)
+{
+    if (encodedUser.isEmpty() && encodedPassword.isEmpty())
+        return String();
+    Vector<uint8_t, 128> credentials;
+    appendPercentDecodedBytes(credentials, encodedUser);
+    credentials.append(':');
+    appendPercentDecodedBytes(credentials, encodedPassword);
+    auto encoded = base64EncodeToString(std::span<const uint8_t>(credentials.span()));
+    return makeString("Basic "_s, encoded);
 }
 
 static String joinStrings(const Vector<String>& strings, ASCIILiteral separator)
@@ -222,8 +255,11 @@ void WebSocket::dispatchEvent(Event& event)
     EventTargetWithInlineData::dispatchEvent(event);
 }
 
+static thread_local HashSet<WebSocket*> s_terminatedPendingClose;
+
 WebSocket::~WebSocket()
 {
+    s_terminatedPendingClose.remove(this);
     if (m_upgradeClient != nullptr) {
         void* upgradeClient = m_upgradeClient;
         // Use TLS cancel if connection type is TLS or ProxyTLS (either is a TLS socket to the remote)
@@ -282,12 +318,7 @@ static ExceptionOr<std::optional<ProxyConfig>> setupProxy(const String& proxyUrl
     config.port = url.port().value_or(config.isHTTPS ? 443 : 80);
 
     // Compute Basic auth from proxy URL credentials
-    if (!url.user().isEmpty()) {
-        auto credentials = makeString(url.user(), ':', url.password());
-        auto utf8 = credentials.utf8();
-        auto encoded = base64EncodeToString(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(utf8.data()), utf8.length()));
-        config.authorization = makeString("Basic "_s, encoded);
-    }
+    config.authorization = buildBasicAuthorization(url.encodedUser(), url.encodedPassword());
 
     // Store proxy headers
     if (proxyHeaders) {
@@ -552,13 +583,13 @@ ExceptionOr<void> WebSocket::connect(const String& url, const Vector<String>& pr
             return Exception { SyntaxError, makeString("Wrong protocol for WebSocket '"_s, encodeProtocolString(protocol), "'"_s) };
         }
     }
-    HashSet<String> visited;
+    HashSet<String, ASCIICaseInsensitiveHash> visited;
     for (auto& protocol : protocols) {
         if (!visited.add(protocol).isNewEntry) {
             // context.addConsoleMessage(MessageSource::JS, MessageLevel::Error, );
             m_state = CLOSED;
             updateHasPendingActivity();
-            return Exception { SyntaxError, makeString("WebSocket protocols contain duplicates:"_s, encodeProtocolString(protocol), "'"_s) };
+            return Exception { SyntaxError, makeString("WebSocket protocols contain duplicates: '"_s, encodeProtocolString(protocol), "'"_s) };
         }
     }
 
@@ -718,13 +749,7 @@ ExceptionOr<void> WebSocket::connect(const String& url, const Vector<String>& pr
     }
 
     // Compute Basic auth from target URL credentials (for WebSocket upgrade request)
-    String targetAuthorization;
-    if (!m_url.user().isEmpty()) {
-        auto credentials = makeString(m_url.user(), ':', m_url.password());
-        auto utf8 = credentials.utf8();
-        auto encoded = base64EncodeToString(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(utf8.data()), utf8.length()));
-        targetAuthorization = makeString("Basic "_s, encoded);
-    }
+    String targetAuthorization = buildBasicAuthorization(m_url.encodedUser(), m_url.encodedPassword());
     BunString targetAuth = Bun::toString(targetAuthorization);
 
     // Pass SSLConfig pointer to Zig (ownership transferred - Zig will deinit when connection closes)
@@ -989,7 +1014,7 @@ void WebSocket::failConnectingWebSocket()
                 auto reason = "WebSocket is closed before the connection is established"_s;
                 auto eventInit = createErrorEventInit(protectedThis, reason, context.jsGlobalObject());
                 protectedThis->dispatchEvent(ErrorEvent::create(eventNames().errorEvent, WTF::move(eventInit), EventIsTrusted::Yes));
-                protectedThis->dispatchEvent(CloseEvent::create(false, 1006, reason));
+                protectedThis->dispatchEvent(CloseEvent::create(false, 1006, emptyString()));
             }
             protectedThis->disablePendingActivity();
         });
@@ -1060,10 +1085,16 @@ ExceptionOr<void> WebSocket::terminate()
 {
     // LOG(Network, "WebSocket %p terminate()", this);
 
-    if (m_state == CLOSING || m_state == CLOSED)
+    if (m_state == CLOSED)
         return {};
     if (m_state == CONNECTING) {
         failConnectingWebSocket();
+        return {};
+    }
+    if (m_state == CLOSING && m_connectedWebSocketKind == ConnectedWebSocketKind::None) {
+        // close() already ran and queued a didClose task; mark it so the queued
+        // task emits an unclean 1006 close instead of the clean close code.
+        s_terminatedPendingClose.add(this);
         return {};
     }
     m_state = CLOSING;
@@ -1142,10 +1173,6 @@ ExceptionOr<void> WebSocket::ping(const String& message)
 
     // No exception is raised if the connection was once established but has subsequently been closed.
     if (m_state == CLOSING || m_state == CLOSED) {
-        auto utf8 = message.utf8(StrictConversionReplacingUnpairedSurrogatesWithFFFD);
-        size_t payloadSize = utf8.length();
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, payloadSize);
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, getFramingOverhead(payloadSize));
         return {};
     }
 
@@ -1161,9 +1188,6 @@ ExceptionOr<void> WebSocket::ping(ArrayBuffer& binaryData)
         return Exception { InvalidStateError };
 
     if (m_state == CLOSING || m_state == CLOSED) {
-        unsigned payloadSize = binaryData.byteLength();
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, payloadSize);
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, getFramingOverhead(payloadSize));
         return {};
     }
 
@@ -1182,9 +1206,6 @@ ExceptionOr<void> WebSocket::ping(ArrayBufferView& arrayBufferView)
         return Exception { InvalidStateError };
 
     if (m_state == CLOSING || m_state == CLOSED) {
-        unsigned payloadSize = arrayBufferView.byteLength();
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, payloadSize);
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, getFramingOverhead(payloadSize));
         return {};
     }
 
@@ -1261,9 +1282,6 @@ ExceptionOr<void> WebSocket::pong(ArrayBufferView& arrayBufferView)
         return Exception { InvalidStateError };
 
     if (m_state == CLOSING || m_state == CLOSED) {
-        unsigned payloadSize = arrayBufferView.byteLength();
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, payloadSize);
-        m_bufferedAmountAfterClose = saturateAdd(m_bufferedAmountAfterClose, getFramingOverhead(payloadSize));
         return {};
     }
 
@@ -1599,11 +1617,9 @@ void WebSocket::didReceiveBinaryData(const AtomString& eventName, const std::spa
 void WebSocket::didReceiveClose(CleanStatus wasClean, unsigned short code, WTF::String reason, bool isConnectionError)
 {
     // LOG(Network, "WebSocket %p didReceiveErrorMessage()", this);
-    // queueTaskKeepingObjectAlive(*this, TaskSource::WebSocket, [this, reason = WTF::move(reason)] {
     if (m_state == CLOSED)
         return;
     const bool wasConnecting = m_state == CONNECTING;
-    m_state = CLOSED;
 
     // Native callback: state transitioned, hand off the close code.
     // Covers both connect-failure (didFailWithErrorCode →
@@ -1612,19 +1628,29 @@ void WebSocket::didReceiveClose(CleanStatus wasClean, unsigned short code, WTF::
     // (disablePendingActivity) is the caller's job — didFailWithErrorCode
     // posts it after the switch.
     if (m_native.onClose) {
+        m_state = CLOSED;
         m_native.onClose(m_native.ctx, code);
         return;
     }
 
+    m_state = CLOSING;
     if (auto* context = scriptExecutionContext()) {
         this->incPendingActivityCount();
-        if (wasConnecting && isConnectionError) {
-            auto eventInit = createErrorEventInit(*this, reason, context->jsGlobalObject());
-            dispatchEvent(ErrorEvent::create(eventNames().errorEvent, WTF::move(eventInit), EventIsTrusted::Yes));
-        }
-        // https://html.spec.whatwg.org/multipage/web-sockets.html#feedback-from-the-protocol:concept-websocket-closed, we should synchronously fire a close event.
-        dispatchEvent(CloseEvent::create(wasClean == CleanStatus::Clean, code, reason));
-        this->decPendingActivityCount();
+        context->postTask([protectedThis = Ref { *this }, wasConnecting, isConnectionError, wasClean, code, reason = WTF::move(reason)](ScriptExecutionContext& context) {
+            if (protectedThis->m_state == CLOSED) {
+                protectedThis->decPendingActivityCount();
+                return;
+            }
+            protectedThis->m_state = CLOSED;
+            if (wasConnecting && isConnectionError) {
+                auto eventInit = createErrorEventInit(protectedThis, reason, context.jsGlobalObject());
+                protectedThis->dispatchEvent(ErrorEvent::create(eventNames().errorEvent, WTF::move(eventInit), EventIsTrusted::Yes));
+            }
+            protectedThis->dispatchEvent(CloseEvent::create(wasClean == CleanStatus::Clean, code, reason));
+            protectedThis->decPendingActivityCount();
+        });
+    } else {
+        m_state = CLOSED;
     }
 }
 
@@ -1666,8 +1692,6 @@ void WebSocket::didClose(unsigned unhandledBufferedAmount, unsigned short code, 
     // }
 
     bool wasClean = m_state == CLOSING && !unhandledBufferedAmount && code != 0; // WebSocketChannel::CloseEventCodeAbnormalClosure;
-    m_state = CLOSED;
-    m_bufferedAmount = unhandledBufferedAmount;
     ASSERT(scriptExecutionContext());
     this->m_connectedWebSocketKind = ConnectedWebSocketKind::None;
     this->m_upgradeClient = nullptr;
@@ -1678,6 +1702,8 @@ void WebSocket::didClose(unsigned unhandledBufferedAmount, unsigned short code, 
     // but the count should balance for the ASSERT below and any future
     // consumer of hasPendingActivity().
     if (m_native.onClose) {
+        m_state = CLOSED;
+        m_bufferedAmount = unhandledBufferedAmount;
         m_native.onClose(m_native.ctx, code);
         disablePendingActivity();
         return;
@@ -1686,27 +1712,31 @@ void WebSocket::didClose(unsigned unhandledBufferedAmount, unsigned short code, 
     // since we are open and closing now we know that we have at least one pending activity
     // so we just call decPendingActivityCount() after dispatching the event
     ASSERT(m_pendingActivityCount > 0);
+    m_state = CLOSING;
 
-    if (this->hasEventListeners("close"_s)) {
-        this->dispatchEvent(CloseEvent::create(wasClean, code, reason));
-
-        // we deinit if possible in the next tick
-        if (auto* context = scriptExecutionContext()) {
-            context->postTask([this, protectedThis = Ref { *this }](ScriptExecutionContext& context) {
-                ASSERT(scriptExecutionContext());
-                protectedThis->disablePendingActivity();
-            });
-            return;
-        }
-    } else if (auto* context = scriptExecutionContext()) {
-        context->postTask([this, code, wasClean, reason, protectedThis = Ref { *this }](ScriptExecutionContext& context) {
-            ASSERT(scriptExecutionContext());
-            protectedThis->dispatchEvent(CloseEvent::create(wasClean, code, reason));
+    if (auto* context = scriptExecutionContext()) {
+        context->postTask([code, wasClean, reason, unhandledBufferedAmount, protectedThis = Ref { *this }](ScriptExecutionContext& context) {
+            ASSERT(protectedThis->scriptExecutionContext());
+            if (protectedThis->m_state == CLOSED) {
+                s_terminatedPendingClose.remove(protectedThis.ptr());
+                return;
+            }
+            protectedThis->m_state = CLOSED;
+            protectedThis->m_bufferedAmount = unhandledBufferedAmount;
+            const bool terminated = s_terminatedPendingClose.remove(protectedThis.ptr());
+            if (terminated) {
+                protectedThis->dispatchEvent(CloseEvent::create(false, 1006, emptyString()));
+            } else {
+                protectedThis->dispatchEvent(CloseEvent::create(wasClean, code, reason));
+            }
             protectedThis->disablePendingActivity();
         });
         return;
     }
 
+    m_state = CLOSED;
+    m_bufferedAmount = unhandledBufferedAmount;
+    s_terminatedPendingClose.remove(this);
     this->disablePendingActivity();
 }
 
@@ -1977,6 +2007,61 @@ extern "C" void WebSocket__didAbruptCloseWithReason(WebCore::WebSocket* webSocke
 {
     webSocket->didFailWithErrorCode(errorCode, WTF::String::fromUTF8({ reasonPtr, reasonLen }));
 }
+struct WebSocketHandshakeHeader {
+    const uint8_t* name_ptr;
+    size_t name_len;
+    const uint8_t* value_ptr;
+    size_t value_len;
+};
+
+extern "C" void WebSocket__didReceiveHandshake(
+    WebCore::WebSocket* webSocket,
+    uint16_t statusCode,
+    const uint8_t* statusMsgPtr, size_t statusMsgLen,
+    const WebSocketHandshakeHeader* headersPtr, size_t headerCount,
+    const uint8_t* bodyPtr, size_t bodyLen)
+{
+    if (!webSocket->hasEventListeners("handshake"_s))
+        return;
+    auto* context = webSocket->scriptExecutionContext();
+    if (!context)
+        return;
+    auto* globalObject = context->jsGlobalObject();
+    if (!globalObject)
+        return;
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_TOP_EXCEPTION_SCOPE(vm);
+
+    JSC::JSObject* obj = JSC::constructEmptyObject(globalObject, globalObject->objectPrototype(), 4);
+    obj->putDirect(vm, JSC::Identifier::fromString(vm, "statusCode"_s), JSC::jsNumber(statusCode));
+    obj->putDirect(vm, JSC::Identifier::fromString(vm, "statusMessage"_s), JSC::jsString(vm, WTF::String::fromUTF8({ statusMsgPtr, statusMsgLen })));
+
+    JSC::JSArray* rawHeaders = JSC::constructEmptyArray(globalObject, nullptr, headerCount * 2);
+    if (scope.exception()) [[unlikely]] {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+    for (size_t i = 0; i < headerCount; ++i) {
+        rawHeaders->putDirectIndex(globalObject, i * 2, JSC::jsString(vm, WTF::String::fromUTF8({ headersPtr[i].name_ptr, headersPtr[i].name_len })));
+        rawHeaders->putDirectIndex(globalObject, i * 2 + 1, JSC::jsString(vm, WTF::String::fromUTF8({ headersPtr[i].value_ptr, headersPtr[i].value_len })));
+    }
+    obj->putDirect(vm, JSC::Identifier::fromString(vm, "rawHeaders"_s), rawHeaders);
+
+    auto buffer = JSC::ArrayBuffer::create(std::span<const uint8_t>(bodyPtr, bodyLen));
+    auto* uint8Array = JSC::JSUint8Array::create(globalObject, globalObject->typedArrayStructureWithTypedArrayType<JSC::TypeUint8>(), WTF::move(buffer), 0, bodyLen);
+    if (scope.exception()) [[unlikely]] {
+        scope.clearExceptionExceptTermination();
+        return;
+    }
+    obj->putDirect(vm, JSC::Identifier::fromString(vm, "body"_s), uint8Array);
+
+    JSC::EnsureStillAliveScope ensureStillAlive(obj);
+    WebCore::MessageEvent::Init init;
+    init.data = obj;
+    init.origin = webSocket->url().string();
+    static_cast<WebCore::EventTarget*>(webSocket)->dispatchEvent(WebCore::MessageEvent::create(AtomString("handshake"_s), WTF::move(init), WebCore::EventIsTrusted::Yes));
+}
+
 extern "C" void WebSocket__didClose(WebCore::WebSocket* webSocket, uint16_t errorCode, BunString* reason)
 {
     WTF::String wtf_reason = reason->transferToWTFString();

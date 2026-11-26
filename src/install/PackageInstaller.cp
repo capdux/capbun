@@ -1197,32 +1197,34 @@ pub struct PackageInstaller {
                         .root, .workspace => {
                             // these will never be blocked
                         },
-                        else => if (!is_trusted && _.metas[package_id].hasInstallScript()) {
-                            // Check if the package actually has scripts. `hasInstallScript` can be false positive if a package is published with
-                            // an auto binding.gyp rebuild script but binding.gyp is excluded from the published files.
-                            let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
-                            const _guard_fp = DeinitGuard<AutoAbsPath>{ ptr: &folder_path };
-                            * = &_guard_fp;
-                            folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
+                        else => {
+                            if (!is_trusted && _.metas[package_id].hasInstallScript()) {
+                                // Check if the package actually has scripts. `hasInstallScript` can be false positive if a package is published with
+                                // an auto binding.gyp rebuild script but binding.gyp is excluded from the published files.
+                                let folder_path = AutoAbsPath.@"from"(_.node_modules.path.items);
+                                const _guard_fp = DeinitGuard<AutoAbsPath>{ ptr: &folder_path };
+                                * = &_guard_fp;
+                                folder_path.append(alias.slice(_.lockfile.buffers.string_bytes.items));
 
-                            const count = _.getInstalledPackageScriptsCount(
-                                alias.slice(_.lockfile.buffers.string_bytes.items),
-                                package_id,
-                                resolution.tag,
-                                &folder_path,
-                                log_level,
-                            );
-                            if (count > 0) {
-                                if (log_level.isVerbose()) {
-                                    Output.prettyError("Blocked {d} scripts for: {s}@{f}\n", .{
-                                        count,
-                                        alias.slice(_.lockfile.buffers.string_bytes.items),
-                                        resolution.fmt(_.lockfile.buffers.string_bytes.items, .posix),
-                                    });
+                                const count = _.getInstalledPackageScriptsCount(
+                                    alias.slice(_.lockfile.buffers.string_bytes.items),
+                                    package_id,
+                                    resolution.tag,
+                                    &folder_path,
+                                    log_level,
+                                );
+                                if (count > 0) {
+                                    if (log_level.isVerbose()) {
+                                        Output.prettyError("Blocked {d} scripts for: {s}@{f}\n", .{
+                                            count,
+                                            alias.slice(_.lockfile.buffers.string_bytes.items),
+                                            resolution.fmt(_.lockfile.buffers.string_bytes.items, .posix),
+                                        });
+                                    }
+                                    const entry = bun.handleOom(_.summary.packages_with_blocked_scripts.getOrPut(_.manager.allocator, truncated_dep_name_hash));
+                                    if (!entry.found_existing) entry.value_ptr.* = 0;
+                                    entry.value_ptr.* += count;
                                 }
-                                const entry = bun.handleOom(_.summary.packages_with_blocked_scripts.getOrPut(_.manager.allocator, truncated_dep_name_hash));
-                                if (!entry.found_existing) entry.value_ptr.* = 0;
-                                entry.value_ptr.* += count;
                             }
                         },
                     }

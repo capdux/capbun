@@ -414,6 +414,7 @@ pub fn init(context: *LOLHTMLContext, global: *JSGlobalObject, original: *Respon
             defer {
             {
                 _ = sink_error.ensureStillAlive();
+                sink.tmp_sync_error = null;
                 vm.unhandled_pending_rejection_to_capture = prev_unhandled_pending_rejection_to_capture;
                 _ = scope.apply(vm);
             }
@@ -508,10 +509,15 @@ pub fn onFinishedBuffering(sink: *BufferOutputSinkImpl, bytes: []const u8, js_er
             }
             if (BufferOutputSinkImpl.runOutputSink(sink, bytes, is_async)) |ret_err| {
                 _ = &ret_err;
-                if (((sink.tmp_sync_error.?).* == .zero)) {
-                    _ = ret_err.ensureStillAlive();
-                    _ = ret_err.protect();
-                    (sink.tmp_sync_error.?).* = ret_err;
+                if ((!is_async)) {
+                    if (sink.tmp_sync_error) |err_ptr| {
+                        _ = &err_ptr;
+                        if ((err_ptr.* == .zero)) {
+                            _ = ret_err.ensureStillAlive();
+                            _ = ret_err.protect();
+                            err_ptr.* = ret_err;
+                        }
+                    }
                 }
             } else {
             }
@@ -1745,7 +1751,14 @@ pub fn callback(handler: *HandlerType, value: *LOLHTMLType) bool {
                     _ = handler.global.bunVM().waitForPromise(promise);
                     const fail = (promise.status() == .rejected);
                     if (fail) {
-                        _ = handler.global.bunVM().unhandledRejection(handler.global, promise.result(handler.global.vm()), promise.asValue());
+                        const reason = promise.result(handler.global.vm());
+                        if (handler.global.bunVM().unhandled_pending_rejection_to_capture) |err_ptr| {
+                            _ = &err_ptr;
+                            err_ptr.* = reason;
+                            _ = reason.protect();
+                        } else {
+                            _ = handler.global.bunVM().unhandledRejection(handler.global, reason, promise.asValue());
+                        }
                     }
                     return fail;
                 }

@@ -333,6 +333,7 @@ pub const Flags = packed struct(u16) {
 pub const DuplexUpgradeContext = struct {
     upgrade: uws.UpgradedDuplex,
     tls: ?*TLSSocket,
+    tls_for_slots: ?*TLSSocket = null,
     vm: *jsc.VirtualMachine,
     task: jsc.AnyTask,
     task_event: DuplexUpgradeEventState = .StartTLS,
@@ -344,9 +345,9 @@ pub const DuplexUpgradeContext = struct {
     released: bool = false,
     task_queued: bool = false,
     
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.task_event = .StartTLS; self_ptr.owned_ctx = null; self_ptr.is_open = false; self_ptr.mode = .client; self_ptr.in_callback = 0; self_ptr.released = false; self_ptr.task_queued = false; return self_ptr; }
+pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.tls_for_slots = null; self_ptr.task_event = .StartTLS; self_ptr.owned_ctx = null; self_ptr.is_open = false; self_ptr.mode = .client; self_ptr.in_callback = 0; self_ptr.released = false; self_ptr.task_queued = false; return self_ptr; }
 
-pub fn init(self: *DuplexUpgradeContext, upgrade: uws.UpgradedDuplex, tls: ?*TLSSocket, vm: *jsc.VirtualMachine, task: jsc.AnyTask, task_event: DuplexUpgradeEventState, ssl_config: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX, is_open: bool, mode: SocketMode, in_callback: u32, released: bool, task_queued: bool) void {
+pub fn init(self: *DuplexUpgradeContext, upgrade: uws.UpgradedDuplex, tls: ?*TLSSocket, tls_for_slots: ?*TLSSocket, vm: *jsc.VirtualMachine, task: jsc.AnyTask, task_event: DuplexUpgradeEventState, ssl_config: ?jsc.API.ServerConfig.SSLConfig, owned_ctx: ?*BoringSSL.SSL_CTX, is_open: bool, mode: SocketMode, in_callback: u32, released: bool, task_queued: bool) void {
         var __upgrade_moved = false; _ = &__upgrade_moved;
         defer if (!__upgrade_moved) { __upgrade_moved = true; const __T = @TypeOf(upgrade); if (@typeInfo(__T) == .optional) { if (upgrade) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { upgrade.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = upgrade; _drop_val.__cp_deinit(); } };
         var __task_moved = false; _ = &__task_moved;
@@ -357,6 +358,7 @@ pub fn init(self: *DuplexUpgradeContext, upgrade: uws.UpgradedDuplex, tls: ?*TLS
         defer if (!__mode_moved) { __mode_moved = true; const __T = @TypeOf(mode); if (@typeInfo(__T) == .optional) { if (mode) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { mode.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = mode; _drop_val.__cp_deinit(); } };
             self.upgrade = upgrade;
             self.tls = tls;
+            self.tls_for_slots = tls_for_slots;
             self.vm = vm;
             self.task = task;
             self.task_event = task_event;
@@ -558,8 +560,47 @@ pub fn startTLS(self: *DuplexUpgradeContext) void {
             }
     }
 
+pub fn getOrigin(ctx_ptr: *anyopaque) ?jsc.JSValue {
+            const ctx = bun.cast(*DuplexUpgradeContext, ctx_ptr);
+            if (ctx.tls_for_slots) |tls| {
+                _ = &tls;
+                if (tls.this_value.tryGet()) |js_val| {
+                    _ = &js_val;
+                    const val = ((TLSSocket.js.originGetCached(js_val)) orelse { return null; });
+                    if (((val == .js_undefined) or (val == .zero))) {
+                        return null;
+                    }
+                    return val;
+                }
+            }
+            return null;
+    }
+
 pub fn release(self: *DuplexUpgradeContext) void {
             self.released = true;
+            if (self.tls_for_slots) |tls_slots| {
+                _ = &tls_slots;
+                self.tls_for_slots = null;
+                if (tls_slots.this_value.tryGet()) |js_val| {
+                    _ = &js_val;
+                    if (TLSSocket.js.onDataCallbackGetCached(js_val)) |cb| {
+                        _ = &cb;
+                        _ = jsc.host_fn.setFunctionData(cb, null);
+                    }
+                    if (TLSSocket.js.onEndCallbackGetCached(js_val)) |cb| {
+                        _ = &cb;
+                        _ = jsc.host_fn.setFunctionData(cb, null);
+                    }
+                    if (TLSSocket.js.onWritableCallbackGetCached(js_val)) |cb| {
+                        _ = &cb;
+                        _ = jsc.host_fn.setFunctionData(cb, null);
+                    }
+                    if (TLSSocket.js.onCloseCallbackGetCached(js_val)) |cb| {
+                        _ = &cb;
+                        _ = jsc.host_fn.setFunctionData(cb, null);
+                    }
+                }
+            }
             if (self.tls) |tls| {
                 _ = &tls;
                 self.tls = null;
@@ -2644,7 +2685,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         if (((_ctx_guard.ctx == null) and (socket_config != null))) {
             final_ssl_config = (socket_config.?).*;
         }
-        var duplexContext = DuplexUpgradeContext.new(.{ .upgrade = undefined, .tls = tls, .vm = globalObject.bunVM(), .task = undefined, .ssl_config = final_ssl_config, .owned_ctx = _ctx_guard.ctx, .mode = (if (is_server) .duplex_server else .client) });
+        var duplexContext = DuplexUpgradeContext.new(.{ .upgrade = undefined, .tls = tls, .tls_for_slots = tls, .vm = globalObject.bunVM(), .task = undefined, .ssl_config = final_ssl_config, .owned_ctx = _ctx_guard.ctx, .mode = (if (is_server) .duplex_server else .client) });
         _ = &duplexContext;
         _ctx_guard.ctx = null;
         if ((duplexContext.ssl_config == null)) {
@@ -2657,16 +2698,34 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
         _ = tls.ref();
         duplexContext.task = jsc.AnyTask.New(DuplexUpgradeContext, DuplexUpgradeContext.runEvent).init(duplexContext);
         duplexContext.upgrade = (blk: {
-        break :blk uws.UpgradedDuplex.from(globalObject, duplex, .{ .onOpen = @ptrCast((&DuplexUpgradeContext.onOpen)), .onData = @ptrCast((&DuplexUpgradeContext.onData)), .onHandshake = @ptrCast((&DuplexUpgradeContext.onHandshake)), .onClose = @ptrCast((&DuplexUpgradeContext.onClose)), .onEnd = @ptrCast((&DuplexUpgradeContext.onEnd)), .onWritable = @ptrCast((&DuplexUpgradeContext.onWritable)), .onError = @ptrCast((&DuplexUpgradeContext.onError)), .onTimeout = @ptrCast((&DuplexUpgradeContext.onTimeout)), .ctx = @ptrCast(duplexContext) });
+        break :blk uws.UpgradedDuplex.from(globalObject, .{ .onOpen = @ptrCast((&DuplexUpgradeContext.onOpen)), .onData = @ptrCast((&DuplexUpgradeContext.onData)), .onHandshake = @ptrCast((&DuplexUpgradeContext.onHandshake)), .onClose = @ptrCast((&DuplexUpgradeContext.onClose)), .onEnd = @ptrCast((&DuplexUpgradeContext.onEnd)), .onWritable = @ptrCast((&DuplexUpgradeContext.onWritable)), .onError = @ptrCast((&DuplexUpgradeContext.onError)), .onTimeout = @ptrCast((&DuplexUpgradeContext.onTimeout)), .getOrigin = @ptrCast((&DuplexUpgradeContext.getOrigin)), .ctx = @ptrCast(duplexContext) });
 
 });
         tls.socket = TLSSocket.Socket.fromDuplex((&duplexContext.upgrade));
         _ = tls.markActive();
         _ = tls.poll_ref.ref(globalObject.bunVM());
         _ = duplexContext.startTLS();
+        const js_handlers = try duplexContext.upgrade.getJSHandlers(globalObject);
+        _ = TLSSocket.js.originSetCached(tls_js_value, globalObject, duplex);
+        if ((blk_catch_6: { break :blk_catch_6 ((js_handlers.getIndex(globalObject, 0)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) |cb| {
+            _ = &cb;
+            _ = TLSSocket.js.onDataCallbackSetCached(tls_js_value, globalObject, cb);
+        }
+        if ((blk_catch_7: { break :blk_catch_7 ((js_handlers.getIndex(globalObject, 1)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); })) |cb| {
+            _ = &cb;
+            _ = TLSSocket.js.onEndCallbackSetCached(tls_js_value, globalObject, cb);
+        }
+        if ((blk_catch_8: { break :blk_catch_8 ((js_handlers.getIndex(globalObject, 2)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); })) |cb| {
+            _ = &cb;
+            _ = TLSSocket.js.onWritableCallbackSetCached(tls_js_value, globalObject, cb);
+        }
+        if ((blk_catch_9: { break :blk_catch_9 ((js_handlers.getIndex(globalObject, 3)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 null; }); })) |cb| {
+            _ = &cb;
+            _ = TLSSocket.js.onCloseCallbackSetCached(tls_js_value, globalObject, cb);
+        }
         const array = try jsc.JSValue.createEmptyArray(globalObject, 2);
         _ = try array.putIndex(globalObject, 0, tls_js_value);
-        _ = try array.putIndex(globalObject, 1, try duplexContext.upgrade.getJSHandlers(globalObject));
+        _ = try array.putIndex(globalObject, 1, js_handlers);
         return array;
 }
 

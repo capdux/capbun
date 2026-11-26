@@ -170,24 +170,31 @@ pub fn setMaxSendFragment(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
     return JSValue.jsBoolean(BoringSSL.SSL_set_max_send_fragment(ssl_ptr, @as(usize, @intCast(size))) == 1);
 }
 
+fn isSelfIssuedX509(cert: *const BoringSSL.X509): bool {
+    const subj = BoringSSL.X509_get_subject_name(cert);
+    const iss = BoringSSL.X509_get_issuer_name(cert);
+    if (subj == null || iss == null) return false;
+    return BoringSSL.X509_NAME_cmp(subj, iss) == 0;
+}
+
 pub fn getPeerCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
     jsc.markBinding(@src());
 
     const args = callframe.arguments_old(1);
-    let abbreviated = true;
+    let detailed = false;
     if (args.len > 0) {
         const arg = args.ptr[0];
         if (!arg.isBoolean()) {
-            return globalObject.throw("Expected abbreviated to be a boolean", .{});
+            return globalObject.throw("Expected detailed to be a boolean", .{});
         }
-        abbreviated = arg.toBoolean();
+        detailed = arg.toBoolean();
     }
 
     const ssl_ptr_opt = _.socket.ssl();
     if (ssl_ptr_opt == null) return JSValue.js_undefined;
     const ssl_ptr = ssl_ptr_opt.?;
 
-    if (abbreviated) {
+    if (!detailed) {
         if (_.isServer()) {
             const cert = BoringSSL.SSL_get_peer_certificate(ssl_ptr);
             if (x509 := cert) {
@@ -204,17 +211,72 @@ pub fn getPeerCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callfram
         const cert = cert_opt.?;
         return X509.toJS(cert, globalObject);
     }
+
     let cert = if (_.isServer()) BoringSSL.SSL_get_peer_certificate(ssl_ptr) else null;
     let _cert_guard = FreeObjGuard<BoringSSL.X509>{ ptr: cert };
 
     const cert_chain = BoringSSL.SSL_get_peer_cert_chain(ssl_ptr);
-    let first_cert = if (cert != null) cert else if (cert_chain != null) BoringSSL.sk_X509_value(cert_chain.?, 0) else null;
+    const first_cert_opt = if (cert != null) cert else if (cert_chain != null) BoringSSL.sk_X509_value(cert_chain.?, 0) else null;
+    const first_cert = first_cert_opt ?? return JSValue.js_undefined;
 
-    if (first_cert == null) {
-        return JSValue.js_undefined;
+    const first_js = X509.toJS(first_cert, globalObject)?;
+    let current_js = first_js;
+    let last_x509: *BoringSSL.X509 = first_cert;
+
+    if (cc := cert_chain) {
+        const chain_len = BoringSSL.sk_X509_num(cc);
+        let i: usize = if (cert != null) 0 else 1;
+        while (i < chain_len) : (i += 1) {
+            if (c := BoringSSL.sk_X509_value(cc, i)) {
+                if (i == 0 && BoringSSL.X509_cmp(c, first_cert) == 0) continue;
+                const next_js = X509.toJS(c, globalObject)?;
+                current_js.put(globalObject, ZigString.static("issuerCertificate"), next_js);
+                current_js = next_js;
+                last_x509 = c;
+            }
+        }
     }
 
-    return JSValue.js_undefined;
+    if (isSelfIssuedX509(last_x509)) {
+        current_js.put(globalObject, ZigString.static("issuerCertificate"), current_js);
+        return first_js;
+    }
+
+    if (ssl_ctx := BoringSSL.SSL_get_SSL_CTX(ssl_ptr)) {
+        if (store := BoringSSL.SSL_CTX_get_cert_store(ssl_ctx)) {
+            const new_ctx_fn = BoringSSL.X509_STORE_CTX_new;
+            const store_ctx_opt = new_ctx_fn();
+            if (store_ctx := store_ctx_opt) {
+                defer BoringSSL.X509_STORE_CTX_free(store_ctx);
+                if (BoringSSL.X509_STORE_CTX_init(store_ctx, store, first_cert, cert_chain) == 1) {
+                    let owned_guard = FreeObjGuard<BoringSSL.X509>{ ptr: null };
+                    let cur_x509: *BoringSSL.X509 = last_x509;
+                    let depth: usize = 0;
+                    while (depth < 32 && !isSelfIssuedX509(cur_x509)) : (depth += 1) {
+                        let issuer_opt: (*BoringSSL.X509)? = null;
+                        const rc = unsafe { BoringSSL.X509_STORE_CTX_get1_issuer(&issuer_opt, store_ctx, cur_x509) };
+                        if (rc != 1) break;
+                        const issuer = issuer_opt ?? break;
+                        let next_guard = FreeObjGuard<BoringSSL.X509>{ ptr: issuer };
+                        const next_js = X509.toJS(issuer, globalObject)?;
+                        current_js.put(globalObject, ZigString.static("issuerCertificate"), next_js);
+                        current_js = next_js;
+                        if (prev := owned_guard.ptr) {
+                            unsafe { prev.free(); }
+                        }
+                        owned_guard.ptr = issuer;
+                        next_guard.ptr = null;
+                        cur_x509 = issuer;
+                    }
+                    if (isSelfIssuedX509(cur_x509)) {
+                        current_js.put(globalObject, ZigString.static("issuerCertificate"), current_js);
+                    }
+                }
+            }
+        }
+    }
+
+    return first_js;
 }
 
 pub fn getCertificate(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {

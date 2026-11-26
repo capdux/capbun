@@ -90,7 +90,7 @@ pub fn start(self: *ArrayBufferSink, stream_start: streams.Start) sys.Maybe(void
         switch (stream_start) {
 .ArrayBufferSink => |config| {
 if ((config.chunk_size > 0)) {
-            _ = (blk_catch_0: { break :blk_catch_0 ((self.bytes.ensureTotalCapacityPrecise(self.allocator, config.chunk_size)) catch |__ce_0| { _ = &__ce_0; return .{ .err = Syscall.Error.oom }; }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.bytes.ensureTotalCapacityPrecise(self.allocator, config.chunk_size)) catch |__ce_0| { _ = &__ce_0;  }); });
         }
         self.as_uint8array = config.as_uint8array;
         self.streaming = config.stream;
@@ -138,6 +138,7 @@ pub fn write(self: *ArrayBufferSink, data: streams.Result) streams.Result.Writab
             return (next.*).writeBytes(data);
         }
         const len = (blk_catch_3: { break :blk_catch_3 ((self.bytes.write(self.allocator, data.slice())) catch |__ce_3| { _ = &__ce_3; return .{ .err = Syscall.Error.oom }; }); });
+        _ = self.signal.ready(null, null);
         return .{ .owned = len };
 }
 
@@ -147,6 +148,7 @@ pub fn writeLatin1(self: *ArrayBufferSink, data: streams.Result) streams.Result.
             return (next.*).writeLatin1(data);
         }
         const len = (blk_catch_4: { break :blk_catch_4 ((self.bytes.writeLatin1(self.allocator, data.slice())) catch |__ce_4| { _ = &__ce_4; return .{ .err = Syscall.Error.oom }; }); });
+        _ = self.signal.ready(null, null);
         return .{ .owned = len };
 }
 
@@ -160,6 +162,7 @@ pub fn writeUTF16(self: *ArrayBufferSink, data: streams.Result) streams.Result.W
 
 });
         const len = (blk_catch_5: { break :blk_catch_5 ((self.bytes.writeUTF16(self.allocator, u16_slice)) catch |__ce_5| { _ = &__ce_5; return .{ .err = Syscall.Error.oom }; }); });
+        _ = self.signal.ready(null, null);
         return .{ .owned = len };
 }
 

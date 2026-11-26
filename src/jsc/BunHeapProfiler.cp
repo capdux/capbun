@@ -1,30 +1,23 @@
-pub struct HeapProfilerConfig {
-    name: []const u8,
-    dir: []const u8,
-    text_format: bool,
-}
-
-// C++ function declarations
+pub struct HeapProfilerConfig { name: []const u8, dir: []const u8, text_format: bool }
 @c {
     fn Bun__generateHeapProfile(vm: *jsc.VM): bun.String;
     fn Bun__generateHeapSnapshotV8(vm: *jsc.VM): bun.String;
+    fn Bun__ensureSignalHandler();
+    fn Bun__onPosixSignal(number: i32);
 }
 
-struct DerefGuard<T> {
-    val: T,
+let seq_counter = std.atomic.Value(u32).init(0);
 
-    ~init() {
-        _.val.deref();
+pub fn installSigintHandler() {
+    if (comptime bun.Environment.isPosix) {
+        Bun__ensureSignalHandler();
+        let sa = bun.sys.Sigaction{ handler: { handler: Bun__onPosixSignal }, mask: bun.sys.sigemptyset(), flags: std.posix.SA.RESTART };
+        bun.sys.sigaction(std.posix.SIG.INT, &sa, null);
     }
 }
 
-struct DeinitGuard<T> {
-    val: T,
-
-    ~init() {
-        _.val.deinit();
-    }
-}
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+struct DeinitGuard<T> { val: T, ~init() { _.val.deinit(); } }
 
 pub fn generateAndWriteProfile(vm: *jsc.VM, config: HeapProfilerConfig)! {
     const profile_guard = DerefGuard<bun.String>{
@@ -93,31 +86,39 @@ fn buildOutputPath(path: *bun.AutoAbsPath, config: HeapProfilerConfig)! {
 
     // Append directory if specified
     if (config.dir.len > 0) {
+        if (path.len() + config.dir.len + 1 >= bun.MAX_PATH_BYTES) {
+            return error.MaxPathExceeded;
+        }
         path.append(config.dir);
     }
 
     // Append filename
+    if (path.len() + filename.len + 1 >= bun.MAX_PATH_BYTES) {
+        return error.MaxPathExceeded;
+    }
     path.append(filename);
 }
 
 fn generateDefaultFilename(buf: *bun.PathBuffer, text_format: bool): []const u8! {
-    // Generate filename like:
-    // - Markdown format: Heap.{timestamp}.{pid}.md
-    // - V8 format: Heap.{timestamp}.{pid}.heapsnapshot
     const timespec = bun.timespec.now(.force_real_time);
     const pid = if (bun.Environment.isWindows)
         std.os.windows.GetCurrentProcessId()
     else
         std.c.getpid();
 
-    const epoch_microseconds: u64 = @as(u64, @intCast(timespec.sec *% 1_000_000 +% @divTrunc(timespec.nsec, 1000)));
+    if (text_format) {
+        const epoch_microseconds: u64 = @as(u64, @intCast(timespec.sec *% 1_000_000 +% @divTrunc(timespec.nsec, 1000)));
+        return std.fmt.bufPrint(buf, "Heap.{d}.{d}.md", .{ epoch_microseconds, pid }) catch return error.FilenameTooLong;
+    }
 
-    const extension = if (text_format) "md" else "heapsnapshot";
-
-    return std.fmt.bufPrint(buf, "Heap.{d}.{d}.{s}", .{
-        epoch_microseconds,
-        pid,
-        extension,
+    const epoch_secs = std.time.epoch.EpochSeconds{ .secs = @intCast(@max(0, timespec.sec)) };
+    const year_day = epoch_secs.getEpochDay().calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+    const day_secs = epoch_secs.getDaySeconds();
+    const seq = seq_counter.fetchAdd(1, .monotonic) + 1;
+    return std.fmt.bufPrint(buf, "Heap.{d:0>4}{d:0>2}{d:0>2}.{d:0>2}{d:0>2}{d:0>2}.{d}.0.{d:0>3}.heapprofile", .{
+        year_day.year, month_day.month.numeric(), @as(u32, month_day.day_index) + 1,
+        day_secs.getHoursIntoDay(), day_secs.getMinutesIntoHour(), day_secs.getSecondsIntoMinute(), pid, seq,
     }) catch return error.FilenameTooLong;
 }
 

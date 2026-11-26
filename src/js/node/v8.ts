@@ -48,7 +48,7 @@ const SetPrototypeForEach = SetCtor.prototype.forEach;
 const getSetSize = Object.getOwnPropertyDescriptor(SetCtor.prototype, "size")!.get!;
 const MapPrototypeForEach = Map.prototype.forEach;
 const getMapSize = Object.getOwnPropertyDescriptor(Map.prototype, "size")!.get!;
-const ReflectApply = Reflect.apply;
+const ReflectApply = Reflect["apply"];
 
 function isMapObject(val: unknown): boolean {
   try {

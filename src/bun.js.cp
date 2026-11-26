@@ -339,6 +339,9 @@ pub struct Run {
                 text_format: heap_prof_opts.text_format,
             };
             bun.analytics.Features.heap_snapshot += 1;
+            if (comptime bun.Environment.isPosix) {
+                HeapProfiler.installSigintHandler();
+            }
         }
 
         _.addConditionalGlobals();

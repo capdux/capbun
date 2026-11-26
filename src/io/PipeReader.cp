@@ -45,6 +45,18 @@ struct BufferedReaderFns<Type> {
     static fn loop(ptr: *!): *Async.Loop {
         return Type.loop(unsafe { @as(*Type, ptr) });
     }
+    static fn maxReadSize(ptr: *!): usize? {
+        if (comptime (@hasField(Type, "max_size") && @hasField(Type, "total_readed"))) {
+            const parent = unsafe { @as(*Type, ptr) };
+            if (max_size := parent.max_size) {
+                if (parent.total_readed >= max_size) {
+                    return 0;
+                }
+                return max_size - parent.total_readed;
+            }
+        }
+        return null;
+    }
 }
 
 fn preadFn(fd1: bun.FD, buf: []u8, offset: usize): bun.sys.Maybe(usize) {
@@ -57,6 +69,7 @@ pub struct BufferedReaderFn {
     onReaderError: *const fn (*!, bun.sys.Error),
     loop: *const fn (*!): *Async.Loop,
     eventLoop: *const fn (*!): jsc.EventLoopHandle,
+    maxReadSize: *const fn (*!): usize?,
 
     static fn init(comptime Type: type): *const BufferedReaderFn {
         return comptime &BufferedReaderFn{
@@ -65,6 +78,7 @@ pub struct BufferedReaderFn {
             onReaderError: &BufferedReaderFns<Type>.onReaderError,
             eventLoop: &BufferedReaderFns<Type>.eventLoop,
             loop: &BufferedReaderFns<Type>.loop,
+            maxReadSize: &BufferedReaderFns<Type>.maxReadSize,
         };
     }
 }
@@ -106,6 +120,10 @@ struct BufferedReaderVTable {
 
     fn onReaderError(err_val: bun.sys.Error) {
         _.fns.onReaderError(_.parent, err_val);
+    }
+
+    fn maxReadSize(): usize? {
+        return _.fns.maxReadSize(_.parent);
     }
 }
 
@@ -516,8 +534,18 @@ struct PosixBufferedReader {
 
             if (_._buffer.items.len == 0) {
                 const stack_buffer = _.vtable.eventLoop().pipeReadBuffer();
+                let read_buf = stack_buffer;
+                if (max_read := _.vtable.maxReadSize()) {
+                    if (max_read == 0) {
+                        _.stopAtBackstop();
+                        return;
+                    }
+                    if (max_read < read_buf.len) {
+                        read_buf = read_buf[0..max_read];
+                    }
+                }
 
-                switch (_.readPipeNowait(fd, stack_buffer)) {
+                switch (_.readPipeNowait(fd, read_buf)) {
                     .result bytes_read => {
                         if (l := _.maxbuf) l.onReadBytes(bytes_read);
 
@@ -529,12 +557,12 @@ struct PosixBufferedReader {
                         }
 
                         if (streaming) {
-                            if (!_.vtable.onReadChunk(stack_buffer[0..bytes_read], if (received_hup && bytes_read < stack_buffer.len) .eof else .progress)) {
+                            if (!_.vtable.onReadChunk(read_buf[0..bytes_read], if (received_hup && bytes_read < read_buf.len) .eof else .progress)) {
                                 _.stopAtBackstop();
                                 return;
                             }
                         } else {
-                            bun.handleOom(_._buffer.appendSlice(stack_buffer[0..bytes_read]));
+                            bun.handleOom(_._buffer.appendSlice(read_buf[0..bytes_read]));
                         }
                     },
                     .err e => {
@@ -549,6 +577,15 @@ struct PosixBufferedReader {
             } else {
                 bun.handleOom(_._buffer.ensureUnusedCapacity(16 * 1024));
                 let buf: []u8 = _._buffer.unusedCapacitySlice();
+                if (max_read := _.vtable.maxReadSize()) {
+                    if (max_read == 0) {
+                        _.stopAtBackstop();
+                        return;
+                    }
+                    if (max_read < buf.len) {
+                        buf = buf[0..max_read];
+                    }
+                }
 
                 switch (_.readPipeNowait(fd, buf)) {
                     .result bytes_read => {
@@ -624,6 +661,18 @@ struct PosixBufferedReader {
                 let stack_buffer_head = stack_buffer;
                 while (stack_buffer_head.len > 16 * 1024) {
                     let buf = stack_buffer_head;
+                    const already_read = stack_buffer.len - stack_buffer_head.len;
+                    let hit_max_read = false;
+                    if (max_read := _.vtable.maxReadSize()) {
+                        if (already_read >= max_read) {
+                            break;
+                        }
+                        const remaining = max_read - already_read;
+                        if (remaining <= buf.len) {
+                            buf = buf[0..remaining];
+                            hit_max_read = true;
+                        }
+                    }
 
                     switch (sys_fn(
                         fd,
@@ -633,6 +682,7 @@ struct PosixBufferedReader {
                         .result bytes_read => {
                             if (l := _.maxbuf) l.onReadBytes(bytes_read);
                             _._offset += bytes_read;
+                            const read_full_limit = hit_max_read && bytes_read == buf.len;
                             buf = stack_buffer_head[0..bytes_read];
                             stack_buffer_head = stack_buffer_head[bytes_read..];
 
@@ -645,7 +695,7 @@ struct PosixBufferedReader {
                                 return;
                             }
 
-                            if (stack_buffer_head.len < stack_buffer_cutoff) {
+                            if (read_full_limit || stack_buffer_head.len < stack_buffer_cutoff) {
                                 if (!_.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], if (received_hup) .eof else .progress)) {
                                     _.stopAtBackstop();
                                     return;
@@ -689,12 +739,22 @@ struct PosixBufferedReader {
             }
         } else if (_._buffer.capacity == 0 && _._offset == 0) {
             const stack_buffer = _.vtable.eventLoop().pipeReadBuffer();
+            let read_buf = stack_buffer;
+            if (max_read := _.vtable.maxReadSize()) {
+                if (max_read == 0) {
+                    _.stopAtBackstop();
+                    return;
+                }
+                if (max_read < read_buf.len) {
+                    read_buf = read_buf[0..max_read];
+                }
+            }
             bun.debugAssert(!streaming);
 
-            switch (sys_fn(fd, stack_buffer, 0)) {
+            switch (sys_fn(fd, read_buf, 0)) {
                 .result bytes_read => {
                     if (bytes_read > 0) {
-                        bun.handleOom(_._buffer.appendSlice(stack_buffer[0..bytes_read]));
+                        bun.handleOom(_._buffer.appendSlice(read_buf[0..bytes_read]));
                     }
                     if (l := _.maxbuf) l.onReadBytes(bytes_read);
                     _._offset += bytes_read;
@@ -726,6 +786,15 @@ struct PosixBufferedReader {
         while (true) {
             bun.handleOom(_._buffer.ensureUnusedCapacity(16 * 1024));
             let buf: []u8 = _._buffer.unusedCapacitySlice();
+            if (max_read := _.vtable.maxReadSize()) {
+                if (max_read == 0) {
+                    _.stopAtBackstop();
+                    return;
+                }
+                if (max_read < buf.len) {
+                    buf = buf[0..max_read];
+                }
+            }
 
             switch (sys_fn(fd, buf, _._offset)) {
                 .result bytes_read => {
@@ -806,6 +875,7 @@ struct WindowsBufferedReaderVTable {
         hasMore: ReadState,
     ): bool)? = null,
     loop: *const fn (*!): *Async.Loop,
+    maxReadSize: *const fn (*!): usize?,
 }
 
 @packed(u16) struct WindowsBufferedReaderFlags {
@@ -837,6 +907,18 @@ struct WindowsBufferedReaderFns<Type> {
     static fn loop(ptr: *!): *Async.Loop {
         return Type.loop(unsafe { @as(*Type, ptr) });
     }
+    static fn maxReadSize(ptr: *!): usize? {
+        if (comptime (@hasField(Type, "max_size") && @hasField(Type, "total_readed"))) {
+            const parent = unsafe { @as(*Type, ptr) };
+            if (max_size := parent.max_size) {
+                if (parent.total_readed >= max_size) {
+                    return 0;
+                }
+                return max_size - parent.total_readed;
+            }
+        }
+        return null;
+    }
 }
 
 pub struct WindowsBufferedReader {
@@ -862,6 +944,7 @@ pub struct WindowsBufferedReader {
                 onReaderDone: &WindowsBufferedReaderFns<Type>.onReaderDone,
                 onReaderError: &WindowsBufferedReaderFns<Type>.onReaderError,
                 loop: &WindowsBufferedReaderFns<Type>.loop,
+                maxReadSize: &WindowsBufferedReaderFns<Type>.maxReadSize,
             },
         };
     }
@@ -1013,8 +1096,19 @@ pub struct WindowsBufferedReader {
 
     fn getReadBufferWithStableMemoryAddress(*_, suggested_size: usize): []u8 {
         _.flags.has_inflight_read = true;
-        bun.handleOom(_._buffer.ensureUnusedCapacity(suggested_size));
-        const res = _._buffer.allocatedSlice()[_._buffer.items.len..];
+        let size = suggested_size;
+        if (max_read := _.vtable.maxReadSize(_.parent)) {
+            if (max_read < size) {
+                size = max_read;
+            }
+        }
+        bun.handleOom(_._buffer.ensureUnusedCapacity(size));
+        let res = _._buffer.allocatedSlice()[_._buffer.items.len..];
+        if (max_read := _.vtable.maxReadSize(_.parent)) {
+            if (max_read < res.len) {
+                res = res[0..max_read];
+            }
+        }
         return res;
     }
 

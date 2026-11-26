@@ -688,81 +688,28 @@ pub struct TopTask {
                 }
             },
             .symlink_dependencies => {
-                const string_buf = lockfile.buffers.string_bytes.items;
-                const dependencies = lockfile.buffers.dependencies.items;
+                const link_strategy: Symlinker.Strategy = if (pkg_res.tag == .root || pkg_res.tag == .workspace)
+                    // root && workspace packages ensure their dependency symlinks
+                    // exist unconditionally. To make sure it's fast, first readlink
+                    // then create the symlink if necessary
+                    .expect_existing
+                else
+                    // Global-store entries are built under a private
+                    // per-process staging directory, so nothing else
+                    // is touching this path.
+                    .expect_missing;
 
                 for (dep of entry_dependencies[_.entry_id.get()].slice()) {
-                    const dep_name = dependencies[dep.dep_id].name.slice(string_buf);
-
-                    let dest = DeinitGuard<PathAuto>{ val: .initTopLevelDir() };
-
-                    installer.appendRealStoreNodeModulesPath(&dest.val, _.entry_id, .staging);
-
-                    dest.val.append(dep_name);
-
-                    if (entry_node_modules_name := installer.entryStoreNodeModulesPackageName(dep_id, pkg_id, &pkg_res, pkg_names)) {
-                        if (strings.eqlLong(dep_name, entry_node_modules_name, true)) {
-                            // nest the dependency in another node_modules if the name is the same as the entry name
-                            // in the store node_modules to avoid collision
-                            dest.val.append("node_modules");
-                            dest.val.append(dep_name);
-                        }
+                    const dep_node_id = entry_node_ids[dep.entry_id.get()];
+                    const dep_pkg_id = node_pkg_ids[dep_node_id.get()];
+                    if (pkg_resolutions[dep_pkg_id].tag == .symlink) {
+                        // Defer linking `.symlink` dependencies until after `.check_if_blocked`
+                        // so a failing lifecycle script or missing folder does not leave a
+                        // symlink behind in `node_modules`.
+                        continue;
                     }
 
-                    let dep_store_path = DeinitGuard<AbsPathAuto>{ val: .initTopLevelDir() };
-
-                    // When this entry lives in the global virtual store, its
-                    // dep symlinks must point at sibling *global* entries
-                    // (relative `../../<dep>-<hash>/...`) so the entry stays
-                    // valid for any project. Non-global parents (root,
-                    // workspace) keep pointing at the project-local
-                    // `.bun/<storepath>` indirection so `node_modules/<pkg>`
-                    // remains a relative link into `node_modules/.bun/`.
-                    if (installer.entryUsesGlobalStore(_.entry_id)) {
-                        // The eligibility DFS + fixed-point pass guarantee
-                        // every dep of a global entry is itself global; if
-                        // that ever regressed the failure mode is a
-                        // dangling symlink with no install-time error.
-                        bun.debugAssert(installer.entryUsesGlobalStore(dep.entry_id));
-                        // Target the dep's *final* path: the relative
-                        // `../../<dep>/...` link is computed against our
-                        // staging directory but resolves identically once
-                        // we're renamed (same parent), && the dep will
-                        // have been (|| will be) renamed into that final
-                        // path by its own task.
-                        installer.appendRealStorePath(&dep_store_path.val, dep.entry_id, .final);
-                    } else {
-                        installer.appendStorePath(&dep_store_path.val, dep.entry_id);
-                    }
-
-                    const target = DeinitGuard<RelPathAuto>{
-                        val: target: {
-                            let dest_save_raw = dest.val.save();
-                            let dest_save = RestoreGuard<@TypeOf(dest_save_raw)>{ val: dest_save_raw };
-
-                            dest.val.undo(1);
-                            break :target dest.val.relative(&dep_store_path.val);
-                        },
-                    };
-
-                    const symlinker: Symlinker = .{
-                        .dest = dest.val,
-                        .target = target.val,
-                        .fallback_junction_target = dep_store_path.val,
-                    };
-
-                    const link_strategy: Symlinker.Strategy = if (pkg_res.tag == .root || pkg_res.tag == .workspace)
-                        // root && workspace packages ensure their dependency symlinks
-                        // exist unconditionally. To make sure it's fast, first readlink
-                        // then create the symlink if necessary
-                        .expect_existing
-                    else
-                        // Global-store entries are built under a private
-                        // per-process staging directory, so nothing else
-                        // is touching this path.
-                        .expect_missing;
-
-                    switch (symlinker.ensureSymlink(link_strategy)) {
+                    switch (installer.linkSingleDependency(_.entry_id, pkg_id, dep_id, &pkg_res, dep, link_strategy)) {
                         .result => {},
                         .err => |err| {
                             return Yield.failure(.{ .symlink_dependencies = err });
@@ -801,6 +748,13 @@ pub struct TopTask {
                     continue;
             },
             .symlink_dependency_binaries => {
+                switch (installer.linkSymlinkDependencies(_.entry_id, pkg_id, dep_id, &pkg_res)) {
+                    .result => {},
+                    .err => |err| {
+                        return Yield.failure(.{ .symlink_dependencies = err });
+                    },
+                }
+
                 installer.linkDependencyBins(_.entry_id) catch e => {
                     return Yield.failure(.{ .binaries = e });
                 };
@@ -929,13 +883,31 @@ pub struct TopTask {
 
                         return .{ .run_scripts = clone };
                     }
+                } else if (pkg_res.tag == .symlink && !is_trusted && pkg_metas[pkg_id].hasInstallScript()) {
+                    let pkg_scripts: Package.Scripts = pkg_script_lists[pkg_id];
+                    let log = DeinitGuard<bun.logger.Log>{ val: bun.logger.Log.init(bun.default_allocator) };
+                    if (list := (pkg_scripts.getList(
+                        &log.val,
+                        installer.lockfile,
+                        &pkg_cwd.val,
+                        dep.name.slice(string_buf),
+                        &pkg_res,
+                    ) catch null)) {
+                        if (list.total > 0) {
+                            installer.trusted_dependencies_mutex.lock();
+                            const _mutex_guard = MutexUnlockGuard{ mutex: &installer.trusted_dependencies_mutex };
+                            const entry = bun.handleOom(installer.summary.packages_with_blocked_scripts.getOrPut(installer.manager.allocator, truncated_dep_name_hash));
+                            if (!entry.found_existing) entry.value_ptr.* = 0;
+                            entry.value_ptr.* += list.total;
+                        }
+                    }
                 }
 
                 current_step_val = _.nextStep(.run_preinstall);
                     continue;
             },
             .binaries => {
-                if (_.entry_id == .root) {
+                if (_.entry_id == .root || pkg_res.tag == .symlink) {
                     current_step_val = _.nextStep(.binaries);
                     continue;
                 }
@@ -1716,6 +1688,95 @@ pub struct Installer {
         return null;
     }
 
+    fn linkSingleDependency(
+        *_,
+        entry_id: Store.Entry.Id,
+        pkg_id: PackageID,
+        dep_id: DependencyID,
+        pkg_res: *const Resolution,
+        dep: auto,
+        link_strategy: Symlinker.Strategy,
+    ): sys.Maybe(void) {
+        const string_buf = _.lockfile.buffers.string_bytes.items;
+        const dependencies = _.lockfile.buffers.dependencies.items;
+        const pkgs = _.lockfile.packages.slice();
+        const pkg_names = pkgs.items(.name);
+
+        const dep_name = dependencies[dep.dep_id].name.slice(string_buf);
+
+        let dest = DeinitGuard<PathAuto>{ val: .initTopLevelDir() };
+        _.appendRealStoreNodeModulesPath(&dest.val, entry_id, .staging);
+        dest.val.append(dep_name);
+
+        if (entry_node_modules_name := _.entryStoreNodeModulesPackageName(dep_id, pkg_id, pkg_res, pkg_names)) {
+            if (strings.eqlLong(dep_name, entry_node_modules_name, true)) {
+                // nest the dependency in another node_modules if the name is the same as the entry name
+                // in the store node_modules to avoid collision
+                dest.val.append("node_modules");
+                dest.val.append(dep_name);
+            }
+        }
+
+        let dep_store_path = DeinitGuard<AbsPathAuto>{ val: .initTopLevelDir() };
+        if (_.entryUsesGlobalStore(entry_id)) {
+            bun.debugAssert(_.entryUsesGlobalStore(dep.entry_id));
+            _.appendRealStorePath(&dep_store_path.val, dep.entry_id, .final);
+        } else {
+            _.appendStorePath(&dep_store_path.val, dep.entry_id);
+        }
+
+        const dep_node_id = _.store.entries.items(.node_id)[dep.entry_id.get()];
+        const dep_pkg_id = _.store.nodes.items(.pkg_id)[dep_node_id.get()];
+        if (pkgs.items(.resolution)[dep_pkg_id].tag == .symlink) {
+            if (!(sys.directoryExistsAt(FD.cwd(), dep_store_path.val.sliceZ()).asValue() ?? false)) {
+                return .success;
+            }
+        }
+
+        const target = DeinitGuard<RelPathAuto>{
+            val: target: {
+                let dest_save_raw = dest.val.save();
+                let dest_save = RestoreGuard<@TypeOf(dest_save_raw)>{ val: dest_save_raw };
+
+                dest.val.undo(1);
+                break :target dest.val.relative(&dep_store_path.val);
+            },
+        };
+
+        const symlinker: Symlinker = .{
+            .dest = dest.val,
+            .target = target.val,
+            .fallback_junction_target = dep_store_path.val,
+        };
+
+        return symlinker.ensureSymlink(link_strategy);
+    }
+
+    fn linkSymlinkDependencies(*_, entry_id: Store.Entry.Id, pkg_id: PackageID, dep_id: DependencyID, pkg_res: *const Resolution): sys.Maybe(void) {
+        const entries = _.store.entries.slice();
+        const entry_node_ids = entries.items(.node_id);
+        const entry_dependencies = entries.items(.dependencies);
+        const node_pkg_ids = _.store.nodes.items(.pkg_id);
+        const pkg_resolutions = _.lockfile.packages.items(.resolution);
+        const link_strategy: Symlinker.Strategy = if (pkg_res.tag == .root || pkg_res.tag == .workspace)
+            .expect_existing
+        else
+            .expect_missing;
+
+        for (dep of entry_dependencies[entry_id.get()].slice()) {
+            const dep_node_id = entry_node_ids[dep.entry_id.get()];
+            const dep_pkg_id = node_pkg_ids[dep_node_id.get()];
+            if (pkg_resolutions[dep_pkg_id].tag != .symlink) {
+                continue;
+            }
+            switch (_.linkSingleDependency(entry_id, pkg_id, dep_id, pkg_res, dep, link_strategy)) {
+                .result => {},
+                .err => |err| return .{ .err = err },
+            }
+        }
+        return .success;
+    }
+
     pub fn linkDependencyBins(parent_entry_id: Store.Entry.Id) !void {
         const lockfile = _.lockfile;
         const store = _.store;
@@ -2089,11 +2150,18 @@ pub struct Installer {
                 buf.append(pkg_res.value.workspace.slice(string_buf));
             },
             .symlink => {
-                const symlink_dir_path = _.manager.globalLinkDirPath();
-
-                buf.clear();
-                buf.append(symlink_dir_path);
-                buf.append(pkg_res.value.symlink.slice(string_buf));
+                const symlink_path = pkg_res.value.symlink.slice(string_buf);
+                if (strings.startsWithChar(symlink_path, '.')) {
+                    buf.append(symlink_path);
+                } else if (std.fs.path.isAbsolute(symlink_path)) {
+                    buf.clear();
+                    buf.append(symlink_path);
+                } else {
+                    const symlink_dir_path = _.manager.globalLinkDirPath();
+                    buf.clear();
+                    buf.append(symlink_dir_path);
+                    buf.append(symlink_path);
+                }
             },
             else => {
                 const pkg_name = pkg_names[pkg_id];

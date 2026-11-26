@@ -453,6 +453,9 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             }
 
             const str = arg_guard.val.toJSString(globalThis)?;
+            // Converting `arg` to a string (e.g., via `Symbol.toPrimitive`) can run
+            // user JS that closes the sink, so re-resolve `this` afterwards.
+            const active_inst = getThis(globalThis, callframe)?;
             const view = str.view(globalThis);
 
             if (view.isEmpty()) {
@@ -461,13 +464,13 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
             const str_guard = EnsureStillAliveGuard<@TypeOf(str)>{ val: str };
             if (view.is16Bit()) {
-                let res = inst.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(
+                let res = active_inst.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(
                     std.mem.sliceAsBytes(view.utf16SliceAligned()),
                 ) });
                 return res.toJS(globalThis);
             }
 
-            let res = inst.sink.writeLatin1(
+            let res = active_inst.sink.writeLatin1(
                 .{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) },
             );
             return res.toJS(globalThis);
@@ -499,6 +502,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             if (globalThis.hasException()) {
                 return JSValue.zero;
             }
+            const active_inst = getThis(globalThis, callframe)?;
 
             const view = str.view(globalThis);
             if (view.isEmpty()) {
@@ -507,10 +511,10 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
             const str_guard = EnsureStillAliveGuard<@TypeOf(str)>{ val: str };
             if (str_guard.val.is16Bit()) {
-                return inst.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
+                return active_inst.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
             }
 
-            return inst.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
+            return active_inst.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
         }
 
         @callconv(.c)

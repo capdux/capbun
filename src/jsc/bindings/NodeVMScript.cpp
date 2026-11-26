@@ -136,6 +136,7 @@ constructScript(JSGlobalObject* globalObject, CallFrame* callFrame, JSValue newT
 
     const bool produceCachedData = options.produceCachedData;
     auto filename = options.filename;
+    const int32_t rawLineOffset = options.rawLineOffset;
 
     NodeVMScript* script = NodeVMScript::create(vm, globalObject, structure, WTF::move(source), WTF::move(options));
     RETURN_IF_EXCEPTION(scope, {});
@@ -183,7 +184,10 @@ constructScript(JSGlobalObject* globalObject, CallFrame* callFrame, JSValue newT
         JSC::ParserError parserError;
         if (!JSC::checkSyntax(vm, script->source(), parserError)) {
             ASSERT(parserError.isValid());
-            throwException(globalObject, scope, parserError.toErrorObject(globalObject, script->source()));
+            JSObject* errorObject = parserError.toErrorObject(globalObject, script->source());
+            RETURN_IF_EXCEPTION(scope, {});
+            decorateSyntaxErrorStack(globalObject, vm, scope, errorObject, sourceString, filename, rawLineOffset, parserError);
+            throwException(globalObject, scope, errorObject);
             return {};
         }
     }
@@ -387,7 +391,7 @@ static JSC::EncodedJSValue runInContext(NodeVMGlobalObject* globalObject, NodeVM
     script->setSigintReceived(false);
 
     if (exception) [[unlikely]] {
-        if (handleException(globalObject, vm, exception, scope)) {
+        if (options.displayErrors && handleException(globalObject, vm, exception, scope, &script->source())) {
             return {};
         }
         JSC::throwException(globalObject, scope, exception.get());
@@ -450,7 +454,7 @@ JSC_DEFINE_HOST_FUNCTION(scriptRunInThisContext, (JSGlobalObject * globalObject,
     script->setSigintReceived(false);
 
     if (exception) [[unlikely]] {
-        if (handleException(globalObject, vm, exception, scope)) {
+        if (options.displayErrors && handleException(globalObject, vm, exception, scope, &script->source())) {
             return {};
         }
         JSC::throwException(globalObject, scope, exception.get());

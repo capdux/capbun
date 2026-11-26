@@ -297,6 +297,91 @@ pub struct RunCommand {
 
     const log = Output.scoped(.RUN, .visible);
 
+    static fn escapeScriptForDisplay(allocator: std.mem.Allocator, input: []const u8): ![]const u8 {
+        let needs_escape = false;
+        let idx: usize = 0;
+        while (idx < input.len) {
+            const b = input[idx];
+            if (b < 0x20 || b == 0x7f) {
+                if (b != '\n') {
+                    needs_escape = true;
+                    break;
+                }
+                idx += 1;
+            } else if (b >= 0x80) {
+                const cp_len = std.unicode.utf8ByteSequenceLength(b) catch {
+                    idx += 1;
+                    continue;
+                };
+                if (idx + cp_len > input.len) break;
+                const cp = std.unicode.utf8Decode(input[idx .. idx + cp_len]) catch {
+                    idx += 1;
+                    continue;
+                };
+                if ((cp >= 0x0080 && cp <= 0x009f) ||
+                    cp == 0x2028 ||
+                    cp == 0x2029 ||
+                    (cp >= 0x202a && cp <= 0x202e) ||
+                    (cp >= 0x2066 && cp <= 0x2069))
+                {
+                    needs_escape = true;
+                    break;
+                }
+                idx += cp_len;
+            } else {
+                idx += 1;
+            }
+        }
+        if (!needs_escape) return input;
+
+        let out = std.array_list.Managed(u8).initCapacity(allocator, input.len + 16)?;
+        const w = out.writer();
+        let i: usize = 0;
+        while (i < input.len) {
+            const b = input[i];
+            if (b == '\r') {
+                w.writeAll("\\r")?;
+                i += 1;
+            } else if (b == '\t') {
+                w.writeAll("\\t")?;
+                i += 1;
+            } else if ((b < 0x20 && b != '\n') || b == 0x7f) {
+                w.print("\\x{x:0>2}", .{b})?;
+                i += 1;
+            } else if (b >= 0x80) {
+                const cp_len = std.unicode.utf8ByteSequenceLength(b) catch {
+                    out.append(b)?;
+                    i += 1;
+                    continue;
+                };
+                if (i + cp_len > input.len) {
+                    out.appendSlice(input[i..])?;
+                    break;
+                }
+                const cp = std.unicode.utf8Decode(input[i .. i + cp_len]) catch {
+                    out.append(b)?;
+                    i += 1;
+                    continue;
+                };
+                if ((cp >= 0x0080 && cp <= 0x009f) ||
+                    cp == 0x2028 ||
+                    cp == 0x2029 ||
+                    (cp >= 0x202a && cp <= 0x202e) ||
+                    (cp >= 0x2066 && cp <= 0x2069))
+                {
+                    w.print("\\u{x:0>4}", .{cp})?;
+                } else {
+                    out.appendSlice(input[i .. i + cp_len])?;
+                }
+                i += cp_len;
+            } else {
+                out.append(b)?;
+                i += 1;
+            }
+        }
+        return out.items;
+    }
+
     static fn runPackageScriptForeground(
         ctx: Command.Context,
         allocator: std.mem.Allocator,
@@ -335,7 +420,8 @@ pub struct RunCommand {
         log("Script: \"{s}\"", .{copy_script.items});
 
         if (!silent) {
-            Output.command(copy_script.items);
+            const escaped_cmd = escapeScriptForDisplay(allocator, copy_script.items) catch copy_script.items;
+            Output.command(escaped_cmd);
             Output.flush();
         }
 
@@ -1198,6 +1284,7 @@ pub struct RunCommand {
                             const value = entry.value_ptr.*;
                             if (value.kind(&this_transpiler.fs.fs, true) == .file) {
                                 if (!has_copied) {
+                                    if (value.dir.len + 1 >= path_buf.len) continue;
                                     bun.copy(u8, &path_buf, value.dir);
                                     dir_slice = @as(string, path_buf[0..value.dir.len]);
                                     if (!strings.endsWithCharOrIsZeroLength(value.dir, std.fs.path.sep)) {
@@ -1207,6 +1294,7 @@ pub struct RunCommand {
                                 }
 
                                 const base = value.base();
+                                if (dir_slice.len + base.len >= path_buf.len) continue;
                                 bun.copy(u8, path_buf[dir_slice.len..], base);
                                 path_buf[dir_slice.len + base.len] = 0;
                                 const slice = path_buf[0 .. dir_slice.len + base.len :0];
@@ -1379,9 +1467,11 @@ pub struct RunCommand {
                     Output.pretty("\n<b>package.json scripts ({d} found):<r>", .{scripts.count()});
                     // Output.prettyln("<r><blue><b>{s}<r> scripts:<r>\n", .{display_name});
                     while (entry := iterator.next()) {
+                        const escaped_key = escapeScriptForDisplay(bun.default_allocator, entry.key_ptr.*) catch entry.key_ptr.*;
+                        const escaped_val = escapeScriptForDisplay(bun.default_allocator, entry.value_ptr.*) catch entry.value_ptr.*;
                         Output.prettyln("\n", {});
-                        Output.prettyln("  <d>$</r> bun run<r> <blue>{s}<r>\n", .{entry.key_ptr.*});
-                        Output.prettyln("  <d>  {s}<r>\n", .{entry.value_ptr.*});
+                        Output.prettyln("  <d>$</r> bun run<r> <blue>{s}<r>\n", .{escaped_key});
+                        Output.prettyln("  <d>  {s}<r>\n", .{escaped_val});
                     }
 
                     // Output.prettyln("\n<d>{d} scripts<r>", .{scripts.count()});
@@ -1621,7 +1711,8 @@ pub struct RunCommand {
                 .result => |c| c,
                 .err => break :blk path,
             };
-            break :blk bun.path.joinAbsStringBuf(cwd, &base_buf, &.{path}, .auto);
+            const md_parts: [1]string = [path];
+            break :blk bun.path.joinAbsStringBufChecked(cwd, &base_buf, &md_parts, .auto) ?? path;
         };
         const dir = bun.path.dirname(abs_md_path, .auto);
         // When dirname returns empty (bare filename + getcwd failed), fall
@@ -1713,6 +1804,7 @@ pub struct RunCommand {
                         { mode: .read_only },
                     );
                 } else if (!strings.hasPrefix(script_name_to_search, "..") && script_name_to_search[0] != '~') {
+                    if (file_path.len >= script_name_buf.len) return false;
                     const file_pathZ = brk2: {
                         @memcpy(script_name_buf[0..file_path.len], file_path);
                         script_name_buf[file_path.len] = 0;
@@ -1723,15 +1815,16 @@ pub struct RunCommand {
                 } else {
                     let path_buf_2: bun.PathBuffer = undefined;
                     const cwd = bun.getcwd(&path_buf_2) catch return false;
+                    if (cwd.len >= path_buf_2.len) return false;
                     path_buf_2[cwd.len] = std.fs.path.sep;
                     let parts = [script_name_to_search];
-                    file_path = resolve_path.joinAbsStringBuf(
+                    file_path = resolve_path.joinAbsStringBufChecked(
                         path_buf_2[0 .. cwd.len + 1],
                         &script_name_buf,
                         &parts,
                         .auto,
-                    );
-                    if (file_path.len == 0) return false;
+                    ) ?? return false;
+                    if (file_path.len == 0 || file_path.len >= script_name_buf.len) return false;
                     script_name_buf[file_path.len] = 0;
                     const file_pathZ = script_name_buf[0..file_path.len :0];
                     break :brk bun.openFileZ(file_pathZ, { mode: .read_only });
@@ -2094,6 +2187,7 @@ pub struct RunCommand {
             filename
         else brk: {
             const cwd = bun.getcwd(&path_buf)?;
+            if (cwd.len >= path_buf.len) return error.NameTooLong;
             path_buf[cwd.len] = std.fs.path.sep_posix;
             let parts = [filename];
             if (cwd.len + 1 + filename.len < path_buf2.len) {

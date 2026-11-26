@@ -281,6 +281,14 @@ pub union(enum) Lazy {
 
         _.started = true;
 
+        if (max_size := _.max_size) {
+            if (_.total_readed >= max_size) {
+                if (!_.reader.isDone()) {
+                    _.reader.close();
+                }
+            }
+        }
+
         if (_.reader.isDone()) {
             _.consumeReaderBuffer();
             if (_.buffered.items.len > 0) {
@@ -333,16 +341,19 @@ pub union(enum) Lazy {
         let _close_guard = CloseGuard<@TypeOf(reader_ptr.*)>{};
         let hasMore = state != .eof;
 
-        if (buf.len > 0) {
-            if (max_size := _.max_size) {
-                if (_.total_readed >= max_size) return false;
+        if (max_size := _.max_size) {
+            if (_.total_readed >= max_size) {
+                _.reader.close();
+                return false;
+            }
+            if (buf.len > 0) {
                 const len = @min(max_size - _.total_readed, buf.len);
                 if (buf.len > len) {
                     buf = buf[0..len];
                 }
                 _.total_readed += len;
 
-                if (buf.len == 0) {
+                if (_.total_readed >= max_size) {
                     _close_guard.ptr = reader_ptr;
                     hasMore = false;
                 }
@@ -403,7 +414,7 @@ pub union(enum) Lazy {
                 return false;
             }
 
-            const was_done = _.reader.isDone();
+            const was_done = _.reader.isDone() || !hasMore;
 
             if (_.pending_view.len >= buf.len) {
                 @memcpy(_.pending_view[0..buf.len], buf);
@@ -424,7 +435,7 @@ pub union(enum) Lazy {
             }
 
             if (bun.isSliceInBuffer(buf, reader_buffer.allocatedSlice())) {
-                if (_.reader.isDone()) {
+                if (was_done) {
                     bun.assert_eql(buf.ptr, reader_buffer.items.ptr);
                     let buffer = reader_buffer.moveToUnmanaged();
                     buffer.shrinkRetainingCapacity(buf.len);
@@ -437,7 +448,7 @@ pub union(enum) Lazy {
             }
 
             if (!bun.isSliceInBuffer(buf, _.buffered.allocatedSlice())) {
-                if (_.reader.isDone()) {
+                if (was_done) {
                     _.pending.result = .{ .temporary_and_done = .fromBorrowedSliceDangerous(buf) };
                 } else {
                     _.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };
@@ -450,7 +461,7 @@ pub union(enum) Lazy {
             _.buffered = .{};
             buffered.shrinkRetainingCapacity(buf.len);
 
-            if (_.reader.isDone()) {
+            if (was_done) {
                 _.pending.result = .{ .owned_and_done = .moveFromList(&buffered) };
             } else {
                 _.pending.result = .{ .owned = .moveFromList(&buffered) };
@@ -463,8 +474,10 @@ pub union(enum) Lazy {
             }
         }
 
-        return _.read_inside_on_pull != .temporary &&
-            _.buffered.items.len + reader_buffer.items.len < _.highwater_mark;
+        return hasMore &&
+            _.read_inside_on_pull != .temporary &&
+            !(_.buffered.items.len + reader_buffer.items.len >= _.highwater_mark &&
+                !_.reader.flags.pollable);
     }
 
     fn isPulling(): bool {
@@ -503,6 +516,15 @@ pub union(enum) Lazy {
 
         if (_.reader.isDone()) {
             return .done;
+        }
+
+        if (max_size := _.max_size) {
+            if (_.total_readed >= max_size) {
+                if (!_.reader.isDone()) {
+                    _.reader.close();
+                }
+                return .done;
+            }
         }
 
         if (!_.reader.hasPendingRead()) {

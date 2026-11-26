@@ -3519,7 +3519,7 @@ var indent: Indent = Indent.@"from"(1);
                         self.line_indent = indent;
                         const nc = self.next();
                         if ((nc == 0)) {
-                            if ((explicit_indent == null)) {
+                            if ((!indent.isLessThan(ci))) {
                                 ctx.leading_newlines = (ctx.leading_newlines + 1);
                             }
                             first_ch = nc;

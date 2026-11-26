@@ -202,17 +202,28 @@ export function readableStreamDefaultControllerStart(controller) {
   const startMethod = underlyingSource.start;
   $putByIdDirectPrivate(controller, "started", 0);
 
-  $promiseInvokeOrNoopMethodNoCatch(underlyingSource, startMethod, [controller]).$then(
-    () => {
-      $putByIdDirectPrivate(controller, "started", 1);
-      $assert(!$getByIdDirectPrivate(controller, "pulling"));
-      $assert(!$getByIdDirectPrivate(controller, "pullAgain"));
-      $readableStreamDefaultControllerCallPullIfNeeded(controller);
-    },
-    error => {
-      $readableStreamDefaultControllerError(controller, error);
-    },
-  );
+  const onFulfilled = () => {
+    $putByIdDirectPrivate(controller, "started", 1);
+    $assert(!$getByIdDirectPrivate(controller, "pulling"));
+    $assert(!$getByIdDirectPrivate(controller, "pullAgain"));
+    $readableStreamDefaultControllerCallPullIfNeeded(controller);
+  };
+  const onRejected = error => {
+    $readableStreamDefaultControllerError(controller, error);
+  };
+
+  if (startMethod === undefined) {
+    Promise.$resolve().$then(onFulfilled, onRejected);
+    return;
+  }
+
+  const startResult = startMethod.$apply(underlyingSource, [controller]);
+  if ($isPromise(startResult)) {
+    startResult.then(onFulfilled, onRejected);
+    return;
+  }
+
+  $shieldingPromiseResolve(startResult).$then(onFulfilled, onRejected);
 }
 
 // FIXME: Replace readableStreamPipeTo by below function.
@@ -691,11 +702,13 @@ export function readDirectStream(stream, sink, underlyingSource) {
           $markPromiseAsHandled(prom);
         }
       } catch {}
-
-      underlyingSource = undefined;
     }
+    underlyingSource = undefined;
 
     if (stream) {
+      $putByIdDirectPrivate(stream, "asyncContext", undefined);
+      $putByIdDirectPrivate(stream, "underlyingSource", undefined);
+      $putByIdDirectPrivate(stream, "start", undefined);
       $putByIdDirectPrivate(stream, "readableStreamController", null);
       stream.$bunNativePtr = -1;
       $putByIdDirectPrivate(stream, "disturbed", true);
@@ -1017,13 +1030,15 @@ export function handleDirectStreamError(e) {
     } catch {}
   }
 
-  this.error = this.flush = this.write = this.close = this.end = $onReadableStreamDirectControllerClosed;
+  this.error = this.flush = this.close = this.end = $onReadableStreamDirectControllerClosed;
+  this.write = $onReadableStreamDirectControllerClosedWrite;
 
-  if (typeof this.$underlyingSource.close === "function") {
+  if (typeof this.$underlyingSource?.close === "function") {
     try {
       this.$underlyingSource.close.$call(this.$underlyingSource, e);
     } catch {}
   }
+  $putByIdDirectPrivate(controller, "underlyingSource", undefined);
 
   try {
     var pend = controller._pendingRead;
@@ -1138,7 +1153,11 @@ export function noopDoneFunction() {
 }
 
 export function onReadableStreamDirectControllerClosed(_reason) {
-  $throwTypeError("ReadableStreamDirectController is now closed");
+  return undefined;
+}
+
+export function onReadableStreamDirectControllerClosedWrite(_chunk) {
+  return 0;
 }
 
 export function tryUseReadableStreamBufferedFastPath(stream, method) {
@@ -1193,11 +1212,12 @@ export function onCloseDirectStream(reason) {
   if (!sink) return;
 
   $putByIdDirectPrivate(stream, "state", $streamClosing);
-  if (typeof this.$underlyingSource.close === "function") {
+  if (typeof this.$underlyingSource?.close === "function") {
     try {
       this.$underlyingSource.close.$call(this.$underlyingSource, reason);
     } catch {}
   }
+  $putByIdDirectPrivate(this, "underlyingSource", undefined);
 
   var flushed;
   try {
@@ -1215,7 +1235,8 @@ export function onCloseDirectStream(reason) {
     return;
   }
 
-  this.error = this.flush = this.write = this.close = this.end = $onReadableStreamDirectControllerClosed;
+  this.error = this.flush = this.close = this.end = $onReadableStreamDirectControllerClosed;
+  this.write = $onReadableStreamDirectControllerClosedWrite;
 
   var reader = $getByIdDirectPrivate(stream, "reader");
 
@@ -1534,6 +1555,14 @@ export function readableStreamError(stream, error) {
   $assert($isReadableStream(stream));
   $putByIdDirectPrivate(stream, "state", $streamErrored);
   $putByIdDirectPrivate(stream, "storedError", error);
+  $putByIdDirectPrivate(stream, "asyncContext", undefined);
+  $putByIdDirectPrivate(stream, "underlyingSource", undefined);
+  $putByIdDirectPrivate(stream, "start", undefined);
+  const controller = $getByIdDirectPrivate(stream, "readableStreamController");
+  if (controller) {
+    $putByIdDirectPrivate(controller, "pullAlgorithm", undefined);
+    $putByIdDirectPrivate(controller, "cancelAlgorithm", undefined);
+  }
   const isClosedPromise = stream[Symbol.for("nodejs.webstream.isClosedPromise")];
   if (isClosedPromise) {
     isClosedPromise.reject.$call(undefined, error);
@@ -1650,7 +1679,7 @@ export function readableStreamCancel(stream: ReadableStream, reason: any) {
   const state = $getByIdDirectPrivate(stream, "state");
   if (state === $streamClosed) return Promise.$resolve();
   if (state === $streamErrored) return Promise.$reject($getByIdDirectPrivate(stream, "storedError"));
-  $readableStreamClose(stream);
+  $readableStreamClose(stream, false);
 
   const controller = $getByIdDirectPrivate(stream, "readableStreamController");
   if (controller === null) return Promise.$resolve();
@@ -1667,7 +1696,10 @@ export function readableStreamCancel(stream: ReadableStream, reason: any) {
 $alwaysInline = true;
 export function readableStreamDefaultControllerCancel(controller, reason) {
   $putByIdDirectPrivate(controller, "queue", $newQueue());
-  return $getByIdDirectPrivate(controller, "cancelAlgorithm").$call(undefined, reason);
+  const cancelAlgorithm = $getByIdDirectPrivate(controller, "cancelAlgorithm");
+  $putByIdDirectPrivate(controller, "cancelAlgorithm", undefined);
+  $putByIdDirectPrivate(controller, "pullAlgorithm", undefined);
+  return cancelAlgorithm ? cancelAlgorithm.$call(undefined, reason) : Promise.$resolve();
 }
 
 export function readableStreamDefaultControllerPull(controller) {
@@ -1703,12 +1735,22 @@ export function readableStreamCloseIfPossible(stream) {
   }
 }
 
-export function readableStreamClose(stream) {
+export function readableStreamClose(stream, clearCancelAlgorithm) {
   $assert(
     $getByIdDirectPrivate(stream, "state") === $streamReadable ||
       $getByIdDirectPrivate(stream, "state") === $streamClosing,
   );
   $putByIdDirectPrivate(stream, "state", $streamClosed);
+  $putByIdDirectPrivate(stream, "asyncContext", undefined);
+  $putByIdDirectPrivate(stream, "underlyingSource", undefined);
+  $putByIdDirectPrivate(stream, "start", undefined);
+  const controller = $getByIdDirectPrivate(stream, "readableStreamController");
+  if (controller) {
+    $putByIdDirectPrivate(controller, "pullAlgorithm", undefined);
+    if (clearCancelAlgorithm !== false) {
+      $putByIdDirectPrivate(controller, "cancelAlgorithm", undefined);
+    }
+  }
   const isClosedPromise = stream[Symbol.for("nodejs.webstream.isClosedPromise")];
   if (isClosedPromise) {
     isClosedPromise.resolve.$call();
@@ -1968,7 +2010,11 @@ export function readableStreamFromAsyncIterator(target, fn) {
           // "controller is now closed" error instead of letting it surface as
           // an unhandled rejection. Builtin async functions used to return
           // JSInternalPromise so this never reached the global tracker.
-          if (controller.write === $onReadableStreamDirectControllerClosed) return;
+          if (
+            controller.write === $onReadableStreamDirectControllerClosedWrite ||
+            controller.write === $onReadableStreamDirectControllerClosed
+          )
+            return;
           throw e;
         } finally {
           if (runningAsyncIteratorPromise === asyncIteratorPromise) {

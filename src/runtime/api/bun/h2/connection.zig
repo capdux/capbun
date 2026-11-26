@@ -1282,7 +1282,12 @@ pub fn sendData(self: *Connection, sink: anytype, stream_id: u32, data: []const 
             _ = &stream_avail;
             if (self.streams.getPtr(stream_id)) |s| {
                 _ = &s;
+                if ((!stream.canSendData(s.state))) {
+                    return 0;
+                }
                 stream_avail = s.send_window.available();
+            } else {
+                return 0;
             }
             const max_frame = (if (comptime @typeInfo(@TypeOf(self.remote_settings.max_frame_size)) == .@"enum") cp_cast_int(i64, @intFromEnum(self.remote_settings.max_frame_size)) else cp_cast_int(i64, self.remote_settings.max_frame_size));
             const allowed_raw = @min(@min(conn_avail, stream_avail), max_frame);
@@ -1294,10 +1299,14 @@ pub fn sendData(self: *Connection, sink: anytype, stream_id: u32, data: []const 
             }
             const f: u8 = (if ((end_stream and send_all)) wire.flags.END_STREAM else 0);
             _ = self.writeFrame(sink, .Data, f, stream_id, data[0..to_send]);
-            _ = self.send_window.consume(@as(i64, @intCast(to_send)));
+            if ((to_send > 0)) {
+                _ = self.send_window.consume(@as(i64, @intCast(to_send)));
+            }
             if (self.streams.getPtr(stream_id)) |s| {
                 _ = &s;
-                _ = s.send_window.consume(@as(i64, @intCast(to_send)));
+                if ((to_send > 0)) {
+                    _ = s.send_window.consume(@as(i64, @intCast(to_send)));
+                }
                 if ((end_stream and send_all)) {
                     if ((blk_catch_21: { break :blk_catch_21 ((stream.transition(s.state, .SendEndStream)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); })) |next| {
                         _ = &next;

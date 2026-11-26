@@ -554,64 +554,54 @@ pub fn getEnvValue(globalObject: *jsc.JSGlobalObject, name: ZigString) ?ZigStrin
 
 pub const JSZlib = struct {
 
-pub inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!ZlibOptionsTuple {
+pub fn validateDataArg(globalThis: *JSGlobalObject, buffer_value: JSValue) bun.JSError!void {
+            if (((!buffer_value.isString()) and (buffer_value.asArrayBuffer(globalThis) == null))) {
+                return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
+            }
+    }
+
+pub fn coerceInt32Checked(globalThis: *JSGlobalObject, val: JSValue) bun.JSError!i32 {
+            const num = try val.toNumber(globalThis);
+            if (globalThis.hasException()) {
+                return error.JSError;
+            }
+            if ((((!std.math.isFinite(num)) or (num < @as(f64, @floatFromInt(std.math.minInt(i32))))) or (num > @as(f64, @floatFromInt(std.math.maxInt(i32)))))) {
+                return globalThis.ERR(.OUT_OF_RANGE, "Value is out of range for 32-bit signed integer", .{}).throw();
+            }
+            return @as(i32, @intFromFloat(@trunc(num)));
+    }
+
+pub inline fn getOptionArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!struct { JSValue, ?JSValue } {
             const arguments = callframe.arguments_old(2).slice();
             const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+            _ = try validateDataArg(globalThis, buffer_value);
             const options_val: ?JSValue = (if (((arguments.len > 1) and arguments[1].isObject())) arguments[1] else (if (((arguments.len > 1) and (!arguments[1].isUndefined()))) ({
             return globalThis.throwInvalidArguments("Expected options to be an object", .{});
 }) else null));
-            if (try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)) |buffer| {
-                _ = &buffer;
-                return .{ buffer, options_val };
-            }
-            return globalThis.throwInvalidArguments("Expected buffer to be a string or buffer", .{});
+            return .{ buffer_value, options_val };
     }
 
 pub fn gzipSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptions(globalThis, callframe);
-            const buffer = opts[0];
-            const options_val = opts[1];
-            var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
-            _ = &_buf_g;
-            var ___buf_g_moved = false; _ = &___buf_g_moved;
-            defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
-            return gzipOrDeflateSync(globalThis, buffer, options_val, true);
+            const opts = try getOptionArgs(globalThis, callframe);
+            return gzipOrDeflateSync(globalThis, opts[0], opts[1], true);
     }
 
 pub fn inflateSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptions(globalThis, callframe);
-            const buffer = opts[0];
-            const options_val = opts[1];
-            var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
-            _ = &_buf_g;
-            var ___buf_g_moved = false; _ = &___buf_g_moved;
-            defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
-            return gunzipOrInflateSync(globalThis, buffer, options_val, false);
+            const opts = try getOptionArgs(globalThis, callframe);
+            return gunzipOrInflateSync(globalThis, opts[0], opts[1], false);
     }
 
 pub fn deflateSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptions(globalThis, callframe);
-            const buffer = opts[0];
-            const options_val = opts[1];
-            var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
-            _ = &_buf_g;
-            var ___buf_g_moved = false; _ = &___buf_g_moved;
-            defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
-            return gzipOrDeflateSync(globalThis, buffer, options_val, false);
+            const opts = try getOptionArgs(globalThis, callframe);
+            return gzipOrDeflateSync(globalThis, opts[0], opts[1], false);
     }
 
 pub fn gunzipSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptions(globalThis, callframe);
-            const buffer = opts[0];
-            const options_val = opts[1];
-            var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
-            _ = &_buf_g;
-            var ___buf_g_moved = false; _ = &___buf_g_moved;
-            defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
-            return gunzipOrInflateSync(globalThis, buffer, options_val, true);
+            const opts = try getOptionArgs(globalThis, callframe);
+            return gunzipOrInflateSync(globalThis, opts[0], opts[1], true);
     }
 
-pub fn gunzipOrInflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrBuffer, options_val_: ?JSValue, is_gzip: bool) bun.JSError!JSValue {
+pub fn gunzipOrInflateSync(globalThis: *JSGlobalObject, buffer_value: JSValue, options_val_: ?JSValue, is_gzip: bool) bun.JSError!JSValue {
             var opts = zlib.Options{ .gzip = is_gzip, .windowBits = (if (is_gzip) 31 else -15) };
             _ = &opts;
             var library: Library = .zlib;
@@ -620,21 +610,21 @@ pub fn gunzipOrInflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringO
                 _ = &options_val;
                 if (try options_val.get(globalThis, "windowBits")) |window| {
                     _ = &window;
-                    opts.windowBits = try window.coerce(i32, globalThis);
+                    opts.windowBits = try coerceInt32Checked(globalThis, window);
                     library = .zlib;
                 }
                 if (try options_val.get(globalThis, "level")) |level| {
                     _ = &level;
-                    opts.level = try level.coerce(i32, globalThis);
+                    opts.level = try coerceInt32Checked(globalThis, level);
                 }
                 if (try options_val.get(globalThis, "memLevel")) |memLevel| {
                     _ = &memLevel;
-                    opts.memLevel = try memLevel.coerce(i32, globalThis);
+                    opts.memLevel = try coerceInt32Checked(globalThis, memLevel);
                     library = .zlib;
                 }
                 if (try options_val.get(globalThis, "strategy")) |strategy| {
                     _ = &strategy;
-                    opts.strategy = try strategy.coerce(i32, globalThis);
+                    opts.strategy = try coerceInt32Checked(globalThis, strategy);
                     library = .zlib;
                 }
                 if (try options_val.getTruthy(globalThis, "library")) |library_value| {
@@ -653,6 +643,11 @@ pub fn gunzipOrInflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringO
             if (globalThis.hasException()) {
                 return JSValue.zero;
             }
+            const buffer = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)) orelse { return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw(); });
+            var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
+            _ = &_buf_g;
+            var ___buf_g_moved = false; _ = &___buf_g_moved;
+            defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
             const compressed = buffer.slice();
             const allocator = jsc.VirtualMachine.get().allocator;
             var list = brk: {
@@ -729,7 +724,7 @@ const decompressor_opt = bun.libdeflate.Decompressor.alloc();
 }
     }
 
-pub fn gzipOrDeflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrBuffer, options_val_: ?JSValue, is_gzip: bool) bun.JSError!JSValue {
+pub fn gzipOrDeflateSync(globalThis: *JSGlobalObject, buffer_value: JSValue, options_val_: ?JSValue, is_gzip: bool) bun.JSError!JSValue {
             var level: ?i32 = null;
             _ = &level;
             var library: Library = .zlib;
@@ -740,7 +735,7 @@ pub fn gzipOrDeflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrB
                 _ = &options_val;
                 if (try options_val.get(globalThis, "windowBits")) |window| {
                     _ = &window;
-                    windowBits = try window.coerce(i32, globalThis);
+                    windowBits = try coerceInt32Checked(globalThis, window);
                     library = .zlib;
                 }
                 if (try options_val.getTruthy(globalThis, "library")) |library_value| {
@@ -757,7 +752,7 @@ pub fn gzipOrDeflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrB
                 }
                 if (try options_val.get(globalThis, "level")) |level_value| {
                     _ = &level_value;
-                    level = try level_value.coerce(i32, globalThis);
+                    level = try coerceInt32Checked(globalThis, level_value);
                     if (globalThis.hasException()) {
                         return JSValue.zero;
                     }
@@ -766,6 +761,11 @@ pub fn gzipOrDeflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrB
             if (globalThis.hasException()) {
                 return JSValue.zero;
             }
+            const buffer = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)) orelse { return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw(); });
+            var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
+            _ = &_buf_g;
+            var ___buf_g_moved = false; _ = &___buf_g_moved;
+            defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
             const compressed = buffer.slice();
             const allocator = bun.default_allocator;
             switch (library) {
@@ -920,17 +920,10 @@ pub export fn deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) void {
             _ = bun.allocators.freeWithoutSize(ctx);
     }
 
-pub inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!ZstdOptionsTuple {
-            const arguments = callframe.arguments();
-            const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
-            const options_val: ?JSValue = (if (((arguments.len > 1) and arguments[1].isObject())) arguments[1] else (if (((arguments.len > 1) and (!arguments[1].isUndefined()))) ({
-            return globalThis.throwInvalidArguments("Expected options to be an object", .{});
-}) else null));
-            if (try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)) |buffer| {
-                _ = &buffer;
-                return .{ buffer, options_val };
+pub fn validateDataArg(globalThis: *JSGlobalObject, buffer_value: JSValue) bun.JSError!void {
+            if (((!buffer_value.isString()) and (buffer_value.asArrayBuffer(globalThis) == null))) {
+                return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
             }
-            return globalThis.throwInvalidArguments("Expected buffer to be a string or buffer", .{});
     }
 
 pub fn getLevel(globalThis: *JSGlobalObject, options_val: ?JSValue) bun.JSError!i32 {
@@ -938,14 +931,14 @@ pub fn getLevel(globalThis: *JSGlobalObject, options_val: ?JSValue) bun.JSError!
                 _ = &option_obj;
                 if (try option_obj.get(globalThis, "level")) |level_val| {
                     _ = &level_val;
-                    const value = try level_val.coerce(i32, globalThis);
+                    const num = try level_val.toNumber(globalThis);
                     if (globalThis.hasException()) {
                         return error.JSError;
                     }
-                    if (((value < 1) or (value > 22))) {
+                    if ((((!std.math.isFinite(num)) or (num < 1.0)) or (num > 22.0))) {
                         return globalThis.throwInvalidArguments("Compression level must be between 1 and 22", .{});
                     }
-                    return value;
+                    return @as(i32, @intFromFloat(@trunc(num)));
                 }
             }
             return 3;
@@ -954,6 +947,7 @@ pub fn getLevel(globalThis: *JSGlobalObject, options_val: ?JSValue) bun.JSError!
 pub inline fn getOptionsAsync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!ZstdOptionsAsyncTuple {
             const arguments = callframe.arguments();
             const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+            _ = try validateDataArg(globalThis, buffer_value);
             const options_val: ?JSValue = (if (((arguments.len > 1) and arguments[1].isObject())) arguments[1] else (if (((arguments.len > 1) and (!arguments[1].isUndefined()))) ({
             return globalThis.throwInvalidArguments("Expected options to be an object", .{});
 }) else null));
@@ -963,18 +957,22 @@ pub inline fn getOptionsAsync(globalThis: *JSGlobalObject, callframe: *jsc.CallF
                 _ = &buffer;
                 return .{ buffer, options_val, level };
             }
-            return globalThis.throwInvalidArguments("Expected buffer to be a string or buffer", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
     }
 
 pub fn compressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptions(globalThis, callframe);
-            const buffer = opts[0];
-            const options_val = opts[1];
+            const arguments = callframe.arguments();
+            const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+            _ = try validateDataArg(globalThis, buffer_value);
+            const options_val: ?JSValue = (if (((arguments.len > 1) and arguments[1].isObject())) arguments[1] else (if (((arguments.len > 1) and (!arguments[1].isUndefined()))) ({
+            return globalThis.throwInvalidArguments("Expected options to be an object", .{});
+}) else null));
+            const level = try getLevel(globalThis, options_val);
+            const buffer = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)) orelse { return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw(); });
             var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
             _ = &_buf_g;
             var ___buf_g_moved = false; _ = &___buf_g_moved;
             defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
-            const level = try getLevel(globalThis, options_val);
             const input = buffer.slice();
             const allocator = bun.default_allocator;
             const max_size = bun.zstd.compressBound(input.len);
@@ -996,8 +994,10 @@ pub fn compressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.
     }
 
 pub fn decompressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptions(globalThis, callframe);
-            const buffer = opts[0];
+            const arguments = callframe.arguments();
+            const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+            _ = try validateDataArg(globalThis, buffer_value);
+            const buffer = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)) orelse { return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw(); });
             var _buf_g = DeinitGuard(jsc.Node.StringOrBuffer){ .val = buffer };
             _ = &_buf_g;
             var ___buf_g_moved = false; _ = &___buf_g_moved;
@@ -1477,36 +1477,42 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
         if (arguments_g.val.nextEat()) |opts| {
             _ = &opts;
             if (opts.isObject()) {
-                if (try opts.getTruthy(globalThis, "editor")) |editor_val| {
+                if (try opts.get(globalThis, "editor")) |editor_val| {
                     _ = &editor_val;
-                    var sliced = try editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator());
-                    _ = &sliced;
-                    const prev_name = (if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name);
-                    if ((!strings.eqlLong(prev_name, sliced.slice(), true))) {
-                        const prev = edit.*;
-                        (if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name) = sliced.slice();
-                        _ = edit.detectEditor(VirtualMachine.get().transpiler.env);
-                        editor_choice = edit.found();
-                        if ((editor_choice == null)) {
-                            edit.* = prev;
-                            return globalThis.throw("Could not find editor \"{s}\"", .{ sliced.slice() });
-                        } else {
-                            if (((if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name).ptr == edit.path.ptr)) {
-                                (if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name) = ((arguments_g.val.@"arena".allocator().dupe(u8, edit.path)) catch unreachable);
-                                edit.path = edit.path;
+                    if ((!editor_val.isUndefinedOrNull())) {
+                        var sliced = try editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator());
+                        _ = &sliced;
+                        const prev_name = (if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name);
+                        if ((!strings.eqlLong(prev_name, sliced.slice(), true))) {
+                            const prev = edit.*;
+                            (if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name) = sliced.slice();
+                            _ = edit.detectEditor(VirtualMachine.get().transpiler.env);
+                            editor_choice = edit.found();
+                            if ((editor_choice == null)) {
+                                edit.* = prev;
+                                return globalThis.throw("Could not find editor \"{s}\"", .{ sliced.slice() });
+                            } else {
+                                if (((if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name).ptr == edit.path.ptr)) {
+                                    (if (@typeInfo(@TypeOf(edit)) == .@"enum" or @typeInfo(@TypeOf(edit)) == .@"union") @tagName(edit) else edit.name) = ((arguments_g.val.@"arena".allocator().dupe(u8, edit.path)) catch unreachable);
+                                    edit.path = edit.path;
+                                }
                             }
                         }
                     }
                 }
-                if (try opts.getTruthy(globalThis, "line")) |line_| {
+                if (try opts.get(globalThis, "line")) |line_| {
                     _ = &line_;
-                    const line_slice = try line_.toSlice(globalThis, arguments_g.val.@"arena".allocator());
-                    line = line_slice.slice();
+                    if ((!line_.isUndefinedOrNull())) {
+                        const line_slice = try line_.toSlice(globalThis, arguments_g.val.@"arena".allocator());
+                        line = line_slice.slice();
+                    }
                 }
-                if (try opts.getTruthy(globalThis, "column")) |column_| {
+                if (try opts.get(globalThis, "column")) |column_| {
                     _ = &column_;
-                    const col_slice = try column_.toSlice(globalThis, arguments_g.val.@"arena".allocator());
-                    column = col_slice.slice();
+                    if ((!column_.isUndefinedOrNull())) {
+                        const col_slice = try column_.toSlice(globalThis, arguments_g.val.@"arena".allocator());
+                        column = col_slice.slice();
+                    }
                 }
             }
         }
@@ -1553,16 +1559,17 @@ pub fn getPublicPathWithAssetPrefix(to: []const u8, dir: []const u8, origin: URL
 pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(1);
         if ((arguments.len < 1)) {
-            return globalObject.throwNotEnoughArguments("sleepSync", 1, 0);
+            return globalObject.ERR(.INVALID_ARG_TYPE, "milliseconds must be a number", .{}).throw();
         }
         const arg = arguments.slice()[0];
         if ((!arg.isNumber())) {
-            return globalObject.throwInvalidArgumentType("sleepSync", "milliseconds", "number");
+            return globalObject.ERR(.INVALID_ARG_TYPE, "milliseconds must be a number", .{}).throw();
         }
         const milliseconds = try arg.coerce(i32, globalObject);
         if ((milliseconds < 0)) {
-            return globalObject.throwInvalidArguments("argument to sleepSync must not be negative, got {d}", .{ milliseconds });
+            return globalObject.ERR(.INVALID_ARG_TYPE, "argument to sleepSync must not be negative, got {d}", .{ milliseconds }).throw();
         }
+        _ = bun.mimalloc.mi_collect(false);
         _ = std.Thread.sleep(((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(milliseconds)) == .@"enum") cp_cast_int(i32, @intFromEnum(milliseconds)) else cp_cast_int(i32, milliseconds)))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(milliseconds)) == .@"enum") cp_cast_int(i32, @intFromEnum(milliseconds)) else cp_cast_int(i32, milliseconds)))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(milliseconds)) == .@"enum") cp_cast_int(i32, @intFromEnum(milliseconds)) else cp_cast_int(i32, milliseconds)))) * std.time.ns_per_ms));
         return JSValue.js_undefined;
 }

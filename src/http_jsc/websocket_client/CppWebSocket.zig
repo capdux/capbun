@@ -148,6 +148,18 @@ pub fn setProtocol(self: *CppWebSocket, protocol: *bun.String) void {
                 _ = WebSocket__setProtocol(self, protocol);
             }
     }
+
+pub fn didReceiveHandshake(self: *CppWebSocket, status_code: u16, status_msg: []const u8, headers_ptr: *anyopaque, header_count: usize, body: []const u8) void {
+            const loop = jsc.VirtualMachine.get().eventLoop();
+            _ = loop.enter();
+            var _loop_guard = LoopExitGuard(@TypeOf(loop)){ .ptr = loop };
+            _ = &_loop_guard;
+            var ___loop_guard_moved = false; _ = &___loop_guard_moved;
+            defer if (!___loop_guard_moved) { ___loop_guard_moved = true; const __T = @TypeOf(_loop_guard); if (@typeInfo(__T) == .optional) { if (_loop_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _loop_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _loop_guard; _drop_val.__cp_deinit(); } };
+            {
+                _ = WebSocket__didReceiveHandshake(self, status_code, status_msg.ptr, status_msg.len, headers_ptr, header_count, body.ptr, body.len);
+            }
+    }
 };
 
 const ErrorCode = WsClientPkg.ErrorCode;
@@ -175,3 +187,5 @@ extern "c" fn WebSocket__incrementPendingActivity(websocket_context: *CppWebSock
 extern "c" fn WebSocket__decrementPendingActivity(websocket_context: *CppWebSocket) callconv(.c) void;
 
 extern "c" fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bun.String) callconv(.c) void;
+
+extern "c" fn WebSocket__didReceiveHandshake(websocket_context: *CppWebSocket, status_code: u16, status_msg_ptr: [*]const u8, status_msg_len: usize, headers_ptr: *anyopaque, header_count: usize, body_ptr: [*]const u8, body_len: usize) callconv(.c) void;

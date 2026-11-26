@@ -340,6 +340,7 @@ export function readableStreamToJSON(stream: ReadableStream): unknown {
 $linkTimeConstant;
 export function readableStreamToBlob(stream: ReadableStream): Promise<Blob> {
   if (!$isReadableStream(stream)) throw $ERR_INVALID_ARG_TYPE("stream", "ReadableStream", typeof stream);
+  if ($isReadableStreamDisturbed(stream)) return Promise.$reject($ERR_INVALID_STATE_TypeError("ReadableStream has already been used"));
   if ($isReadableStreamLocked(stream)) return Promise.$reject($ERR_INVALID_STATE_TypeError("ReadableStream is locked"));
 
   return (

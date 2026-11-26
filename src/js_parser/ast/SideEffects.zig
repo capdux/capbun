@@ -600,7 +600,10 @@ return Result{ .ok = true, .value = (if (@typeInfo(@TypeOf(e)) == .@"enum") @int
 return Result{ .ok = true, .value = (((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value) != 0.0) and (!std.math.isNan((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value)))), .side_effects = .no_side_effects };
 },
 .e_big_int => |e| {
-return Result{ .ok = true, .value = (!strings.eqlComptime((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), "0")), .side_effects = .no_side_effects };
+if (e.hasRadixPrefix()) {
+                return Result{ .ok = false, .value = undefined, .side_effects = .no_side_effects };
+            }
+            return Result{ .ok = true, .value = (!strings.eqlComptime((if (@typeInfo(@TypeOf(e)) == .@"enum") @intFromEnum(e) else e.value), "0")), .side_effects = .no_side_effects };
 },
 .e_string => |e| {
 return Result{ .ok = true, .value = e.isPresent(), .side_effects = .no_side_effects };

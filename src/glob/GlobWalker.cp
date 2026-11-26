@@ -53,6 +53,20 @@ struct DirId {
     ino: u64,
 }
 
+struct AncestorNode {
+    id: DirId,
+    parent: (*const AncestorNode)? = null,
+
+    fn contains(id: DirId): bool {
+        let cur: (*const AncestorNode)? = &_;
+        while (node := cur) {
+            if (node.id.dev == id.dev && node.id.ino == id.ino) return true;
+            cur = node.parent;
+        }
+        return false;
+    }
+}
+
 struct CursorState {
     cursor: CodepointIterator.Cursor = .{},
 
@@ -370,6 +384,7 @@ fn GlobWalkerDirectory_(comptime Accessor: type): type {
         path: bun.PathBuffer,
         dir_path: [:0]const u8,
         active: ComponentSet,
+        ancestors: (*const AncestorNode)? = null,
         iter_closed: bool = false,
         at_cwd: bool = false,
     };
@@ -396,6 +411,7 @@ fn GlobWalkerWorkItem_(comptime Accessor: type): type {
         kind: GlobWalkerWorkItemKind,
         entry_start: u32 = 0,
         fd: (Accessor.Handle)? = null,
+        ancestors: (*const AncestorNode)? = null,
 
         const Kind = GlobWalkerWorkItemKind;
 
@@ -403,12 +419,16 @@ fn GlobWalkerWorkItem_(comptime Accessor: type): type {
             return .{ .path = path, .active = active, .kind = kind };
         }
 
-        static fn newWithFd(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind, fd: Accessor.Handle): @This() {
-            return .{ .path = path, .active = active, .kind = kind, .fd = fd };
+        static fn newWithAncestors(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind, ancestors: (*const AncestorNode)?): @This() {
+            return .{ .path = path, .active = active, .kind = kind, .ancestors = ancestors };
         }
 
-        static fn newSymlink(path: []const u8, active: ComponentSet, entry_start: u32): @This() {
-            return .{ .path = path, .active = active, .kind = .symlink, .entry_start = entry_start };
+        static fn newWithFd(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind, fd: Accessor.Handle, ancestors: (*const AncestorNode)?): @This() {
+            return .{ .path = path, .active = active, .kind = kind, .fd = fd, .ancestors = ancestors };
+        }
+
+        static fn newSymlink(path: []const u8, active: ComponentSet, entry_start: u32, ancestors: (*const AncestorNode)?): @This() {
+            return .{ .path = path, .active = active, .kind = .symlink, .entry_start = entry_start, .ancestors = ancestors };
         }
     };
 }
@@ -708,6 +728,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
 
             _.iter_state.directory.dir_path = dir_path;
             _.iter_state.directory.active = active;
+            _.iter_state.directory.ancestors = work_item.ancestors;
             _.iter_state.directory.at_cwd = false;
             _.iter_state.directory.fd = .empty;
 
@@ -823,13 +844,20 @@ if (matched := maybe_matched) {
                                 const dir_fd = maybe_dir_fd.?;
 
                                 let already_visited = false;
+                                let next_ancestors = work_item.ancestors;
                                 if (comptime bun.Environment.isPosix) {
                                     switch (Accessor.statat(_.cwd_fd, symlink_full_path_z)) {
                                         .result => |st| {
                                             const dir_id = DirId{ dev: @intCast(st.dev), ino: @intCast(st.ino) };
-                                            const gop = _.walker.visited_dirs.getOrPut(_.walker.arena.allocator(), dir_id)?;
-                                            if (gop.found_existing) {
-                                                already_visited = true;
+                                            if (anc := work_item.ancestors) {
+                                                if (anc.contains(dir_id)) {
+                                                    already_visited = true;
+                                                }
+                                            }
+                                            if (!already_visited) {
+                                                const node = _.walker.arena.allocator().create(AncestorNode)?;
+                                                node.* = .{ .id = dir_id, .parent = work_item.ancestors };
+                                                next_ancestors = node;
                                             }
                                         },
                                         .err => {},
@@ -841,7 +869,7 @@ if (matched := maybe_matched) {
                                 if (!already_visited && child.count() != 0) {
                                     _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
-                                        WorkItem.newWithFd(work_item.path, child, .directory, dir_fd),
+                                        WorkItem.newWithFd(work_item.path, child, .directory, dir_fd, next_ancestors),
                                     )?;
                                 } else {
                                     _.closeDisallowingCwd(dir_fd);
@@ -900,7 +928,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                     const subdir_entry_name = _.walker.join(subdir_parts)?;
                                     _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
-                                        WorkItem.new(subdir_entry_name, child, .directory),
+                                        WorkItem.newWithAncestors(subdir_entry_name, child, .directory, dir.ancestors),
                                     )?;
                                 }
                                 if (add_dir && !_.walker.only_files) {
@@ -925,7 +953,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
 
                                     _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
-                                        WorkItem.newSymlink(subdir_entry_name, active, entry_start),
+                                        WorkItem.newSymlink(subdir_entry_name, active, entry_start, dir.ancestors),
                                     )?;
                                     continue;
                                 }
@@ -973,7 +1001,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                             const subdir_entry_name = _.walker.join(subdir_parts)?;
                                             _.walker.workbuf.append(
                                                 _.walker.arena.allocator(),
-                                                WorkItem.new(subdir_entry_name, child, .directory),
+                                                WorkItem.newWithAncestors(subdir_entry_name, child, .directory, dir.ancestors),
                                             )?;
                                         }
                                         if (add_dir && !_.walker.only_files) {
@@ -994,7 +1022,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                                             const subdir_entry_name = _.walker.join(subdir_parts)?;
                                             _.walker.workbuf.append(
                                                 _.walker.arena.allocator(),
-                                                WorkItem.newSymlink(subdir_entry_name, active, entry_start),
+                                                WorkItem.newSymlink(subdir_entry_name, active, entry_start, dir.ancestors),
                                             )?;
                                         } else if (!_.walker.only_files) {
                                             if (_.walker.evalFile(active, entry_name)) {
@@ -1235,7 +1263,7 @@ pub fn GlobWalker_(
             return .{ .result = component_idx };
         }
 
-        fn collapseSuccessiveDoubleWildcards(idx: u32): u32 {
+        fn collapseSuccessiveDoubleWildcards(*_, idx: u32): u32 {
             let component_idx = idx;
             const pattern = _.patternComponents.items[idx];
             * = pattern;
@@ -1415,7 +1443,7 @@ pub fn GlobWalker_(
             return false;
         }
 
-        inline fn normalizeIdx(idx: u32): u32 {
+        inline fn normalizeIdx(*_, idx: u32): u32 {
             if (idx < _.patternComponents.items.len &&
                 _.patternComponents.items[idx].syntax_hint == .Double)
             {
@@ -1599,14 +1627,14 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
             end_byte_of_basename_excluding_special_syntax: (*u32)?,
             basename_excluding_special_syntax_component_idx: (*u32)?,
         ) !void {
-            const scratchpad: [3]u32 = .{0} ** 3;
+            let scratchpad: [3]u32 = [0, 0, 0];
             return buildPatternComponents(
                 arena,
                 patternComponents,
                 pattern,
                 has_relative_patterns,
-                end_byte_of_basename_excluding_special_syntax ?? scratchpad[1],
-                basename_excluding_special_syntax_component_idx ?? scratchpad[2],
+                end_byte_of_basename_excluding_special_syntax ?? &scratchpad[1],
+                basename_excluding_special_syntax_component_idx ?? &scratchpad[2],
             );
         }
 

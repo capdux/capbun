@@ -129,6 +129,7 @@ pub const runtime_params_ = [
     clap.parseParam("--heap-prof-name <STR>            Specify the name of the heap profile file") catch unreachable,
     clap.parseParam("--heap-prof-dir <STR>             Specify the directory where the heap profile will be saved") catch unreachable,
     clap.parseParam("--heap-prof-md                    Generate markdown heap profile on exit (for CLI analysis)") catch unreachable,
+    clap.parseParam("--heap-prof-interval <STR>        Specify the sampling interval in bytes for heap profiling (default: 524288)") catch unreachable,
     clap.parseParam("--if-present                      Exit without an error if the entrypoint does not exist") catch unreachable,
     clap.parseParam("--no-install                      Disable auto install in the Bun runtime") catch unreachable,
     clap.parseParam("--install <STR>                   Configure auto-install behavior. One of \"auto\" (default, auto-installs when no node_modules), \"fallback\" (missing packages only), \"force\" (always).") catch unreachable,
@@ -1090,6 +1091,9 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
             if (dir := args.option("--heap-prof-dir")) {
                 ctx.runtime_options.heap_prof.dir = dir;
             }
+            if (interval_str := args.option("--heap-prof-interval")) {
+                ctx.runtime_options.heap_prof.interval = std.fmt.parseInt(u32, interval_str, 10) catch 524288;
+            }
         } else if (heap_prof_v8 || heap_prof_md) {
             ctx.runtime_options.heap_prof.enabled = true;
             ctx.runtime_options.heap_prof.text_format = heap_prof_md;
@@ -1099,13 +1103,27 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
             if (dir := args.option("--heap-prof-dir")) {
                 ctx.runtime_options.heap_prof.dir = dir;
             }
+            if (interval_str := args.option("--heap-prof-interval")) {
+                ctx.runtime_options.heap_prof.interval = std.fmt.parseInt(u32, interval_str, 10) catch 524288;
+            }
         } else {
-            // Warn if --heap-prof-name or --heap-prof-dir is used without --heap-prof or --heap-prof-md
+            const exe = if (bun.argv.len > 0) bun.argv[0] else "bun";
             if (_ := args.option("--heap-prof-name")) {
-                Output.warn("--heap-prof-name requires --heap-prof or --heap-prof-md to be enabled", {});
+                Output.prettyErrorln("{s}: --heap-prof-name must be used with --heap-prof", .{exe});
+                Output.flush();
+                Global.exit(9);
             }
             if (_ := args.option("--heap-prof-dir")) {
-                Output.warn("--heap-prof-dir requires --heap-prof or --heap-prof-md to be enabled", {});
+                Output.prettyErrorln("{s}: --heap-prof-dir must be used with --heap-prof", .{exe});
+                Output.flush();
+                Global.exit(9);
+            }
+            if (interval_str := args.option("--heap-prof-interval")) {
+                if (!strings.eqlComptime(interval_str, "524288")) {
+                    Output.prettyErrorln("{s}: --heap-prof-interval must be used with --heap-prof", .{exe});
+                    Output.flush();
+                    Global.exit(9);
+                }
             }
         }
 

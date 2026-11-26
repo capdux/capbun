@@ -65,7 +65,7 @@ pub struct Url {
         // https://url.spec.whatwg.org/#scheme-state
         for (c of url) {
             switch (c) {
-                'a'...'z', 'A'...'Z', '0'...'9', '+', '-', '.' => {},
+                'a'..='z', 'A'..='Z', '0'..='9', '+', '-', '.' => {},
                 ':' => return true,
                 else => break,
             }

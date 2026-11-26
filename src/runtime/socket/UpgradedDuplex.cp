@@ -60,21 +60,17 @@ pub struct Handlers {
     onWritable: *const fn (*!) void,
     onError: *const fn (*!, jsc.JSValue) void,
     onTimeout: *const fn (*!) void,
+    getOrigin: *const fn (*!) jsc.JSValue?,
 }
 
 pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
 @root struct UpgradedDuplex {
     wrapper: SSLWrapper(*UpgradedDuplex)? = null,
-    origin: jsc.Strong.Optional = .empty,
     global: *jsc.JSGlobalObject? = null,
     ssl_error: CertError = .{},
     vm: *jsc.VirtualMachine,
     handlers: Handlers,
-    onDataCallback: jsc.Strong.Optional = .empty,
-    onEndCallback: jsc.Strong.Optional = .empty,
-    onWritableCallback: jsc.Strong.Optional = .empty,
-    onCloseCallback: jsc.Strong.Optional = .empty,
     transport_eof: bool = false,
     closed: bool = false,
     event_loop_timer: EventLoopTimer = .{
@@ -120,7 +116,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         if (data != null && _.transport_eof && _.isShutdown()) {
             return;
         }
-        if (duplex := _.origin.get()) {
+        if (duplex := _.handlers.getOrigin(_.handlers.ctx)) {
             if (g := _.global) {
                 const global_obj: *jsc.JSGlobalObject = g;
                 const writeOrEnd_opt = if (msg_more) (duplex.getFunction(global_obj, "write") catch return) else (duplex.getFunction(global_obj, "end") catch return);
@@ -128,17 +124,17 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 const writeOrEnd = writeOrEnd_opt.?;
                 if (data_ := data) {
                     const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj) catch e => {
-                        _.handlers.onError(_.handlers.ctx, global_obj.takeError(e));
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                         return;
                     };
                     buffer.ensureStillAlive();
 
                     * = writeOrEnd.call(global_obj, duplex, &[buffer]) catch e => {
-                        _.handlers.onError(_.handlers.ctx, global_obj.takeError(e));
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                     };
                 } else {
                     * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.@"null"]) catch e => {
-                        _.handlers.onError(_.handlers.ctx, global_obj.takeError(e));
+                        _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                     };
                 }
             }
@@ -176,7 +172,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             const req = bun.cast(*UpgradedDuplex, ctx);
             if (args.len >= 1) {
                 const data_arg = args.ptr[0];
-                if (req.origin.has()) {
+                if (req.handlers.getOrigin(req.handlers.ctx) != null) {
                     if (data_arg.isEmptyOrUndefinedOrNull()) {
                         return jsc.JSValue.js_undefined;
                     }
@@ -263,12 +259,10 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
     pub static fn from(
         globalThis: *jsc.JSGlobalObject,
-        origin: jsc.JSValue,
         handlers: Handlers,
     ): UpgradedDuplex {
         return UpgradedDuplex{
             .vm = globalThis.bunVM(),
-            .origin = .create(origin, globalThis),
             .global = globalThis,
             .wrapper = null,
             .handlers = handlers,
@@ -279,85 +273,49 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         let array = jsc.JSValue.createEmptyArray(globalThis, 4)?;
         array.ensureStillAlive();
 
-        {
-            let callback: jsc.JSValue = undefined;
-            if (existing := _.onDataCallback.get()) {
-                callback = existing;
-            } else {
-                let dataCallback = jsc.host_fn.NewFunctionWithData(
-                    globalThis,
-                    null,
-                    0,
-                    onReceivedData,
-                    _,
-                );
-                dataCallback.ensureStillAlive();
-                jsc.host_fn.setFunctionData(dataCallback, _);
-                _.onDataCallback = .create(dataCallback, globalThis);
-                callback = dataCallback;
-            }
-            array.putIndex(globalThis, 0, callback)?;
-        }
+        let dataCallback = jsc.host_fn.NewFunctionWithData(
+            globalThis,
+            null,
+            0,
+            onReceivedData,
+            _,
+        );
+        dataCallback.ensureStillAlive();
+        jsc.host_fn.setFunctionData(dataCallback, _);
+        array.putIndex(globalThis, 0, dataCallback)?;
 
-        {
-            let callback: jsc.JSValue = undefined;
-            if (existing := _.onEndCallback.get()) {
-                callback = existing;
-            } else {
-                let endCallback = jsc.host_fn.NewFunctionWithData(
-                    globalThis,
-                    null,
-                    0,
-                    onEnd,
-                    _,
-                );
-                endCallback.ensureStillAlive();
-                jsc.host_fn.setFunctionData(endCallback, _);
-                _.onEndCallback = .create(endCallback, globalThis);
-                callback = endCallback;
-            }
-            array.putIndex(globalThis, 1, callback)?;
-        }
+        let endCallback = jsc.host_fn.NewFunctionWithData(
+            globalThis,
+            null,
+            0,
+            onEnd,
+            _,
+        );
+        endCallback.ensureStillAlive();
+        jsc.host_fn.setFunctionData(endCallback, _);
+        array.putIndex(globalThis, 1, endCallback)?;
 
-        {
-            let callback: jsc.JSValue = undefined;
-            if (existing := _.onWritableCallback.get()) {
-                callback = existing;
-            } else {
-                let writableCallback = jsc.host_fn.NewFunctionWithData(
-                    globalThis,
-                    null,
-                    0,
-                    onWritable,
-                    _,
-                );
-                writableCallback.ensureStillAlive();
-                jsc.host_fn.setFunctionData(writableCallback, _);
-                _.onWritableCallback = .create(writableCallback, globalThis);
-                callback = writableCallback;
-            }
-            array.putIndex(globalThis, 2, callback)?;
-        }
+        let writableCallback = jsc.host_fn.NewFunctionWithData(
+            globalThis,
+            null,
+            0,
+            onWritable,
+            _,
+        );
+        writableCallback.ensureStillAlive();
+        jsc.host_fn.setFunctionData(writableCallback, _);
+        array.putIndex(globalThis, 2, writableCallback)?;
 
-        {
-            let callback: jsc.JSValue = undefined;
-            if (existing := _.onCloseCallback.get()) {
-                callback = existing;
-            } else {
-                let closeCallback = jsc.host_fn.NewFunctionWithData(
-                    globalThis,
-                    null,
-                    0,
-                    onCloseJS,
-                    _,
-                );
-                closeCallback.ensureStillAlive();
-                jsc.host_fn.setFunctionData(closeCallback, _);
-                _.onCloseCallback = .create(closeCallback, globalThis);
-                callback = closeCallback;
-            }
-            array.putIndex(globalThis, 3, callback)?;
-        }
+        let closeCallback = jsc.host_fn.NewFunctionWithData(
+            globalThis,
+            null,
+            0,
+            onCloseJS,
+            _,
+        );
+        closeCallback.ensureStillAlive();
+        jsc.host_fn.setFunctionData(closeCallback, _);
+        array.putIndex(globalThis, 3, closeCallback)?;
 
         return array;
     }
@@ -490,23 +448,6 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             _.wrapper = null;
         }
 
-        _.origin.deinit();
-        if (callback := _.onDataCallback.get()) {
-            jsc.host_fn.setFunctionData(callback, null);
-            _.onDataCallback.deinit();
-        }
-        if (callback := _.onEndCallback.get()) {
-            jsc.host_fn.setFunctionData(callback, null);
-            _.onEndCallback.deinit();
-        }
-        if (callback := _.onWritableCallback.get()) {
-            jsc.host_fn.setFunctionData(callback, null);
-            _.onWritableCallback.deinit();
-        }
-        if (callback := _.onCloseCallback.get()) {
-            jsc.host_fn.setFunctionData(callback, null);
-            _.onCloseCallback.deinit();
-        }
         let ssl_error = _.ssl_error;
         ssl_error.release();
         _.ssl_error = .{};

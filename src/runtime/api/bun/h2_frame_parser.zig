@@ -883,11 +883,8 @@ pub fn flushQueue(self: *Stream, client: *H2FrameParser, written: *usize) FlushS
                             _ = h2_log("padding: {d} size: {d} max_size: {d} payload_size: {d}", .{ padding, able_to_send.len, max_size, payload_size });
                             self.remoteUsedWindowSize = (self.remoteUsedWindowSize + payload_size);
                             client.remoteUsedWindowSize = (client.remoteUsedWindowSize + payload_size);
-                            var flags: u8 = 0;
+                            var flags: u8 = (if ((padding != 0)) @intFromEnum(DataFrameFlags.PADDED) else 0);
                             _ = &flags;
-                            if ((padding != 0)) {
-                                flags = (flags | @intFromEnum(DataFrameFlags.PADDED));
-                            }
                             var dataHeader: FrameHeader = .{ .@"type" = @intFromEnum(FrameType.HTTP_FRAME_DATA), .flags = flags, .streamIdentifier = @intCast(self.id), .length = @intCast(payload_size) };
                             _ = &dataHeader;
                             _ = dataHeader.write(@TypeOf(writer), writer);
@@ -896,6 +893,7 @@ pub fn flushQueue(self: *Stream, client: *H2FrameParser, written: *usize) FlushS
                                 _ = &buffer;
                                 _ = bun.memmove(buffer[1..][0..able_to_send.len], able_to_send);
                                 buffer[cp_cast_int(usize, 0)] = padding;
+                                _ = @memset(buffer[(1 + able_to_send.len)..payload_size], 0);
                                 break :brk ((blk_catch_4: { break :blk_catch_4 ((writer.write(buffer[0..payload_size])) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 @as(usize, 0); }); }) != 0);
                             } else {
                                 break :brk ((blk_catch_5: { break :blk_catch_5 ((writer.write(able_to_send)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 @as(usize, 0); }); }) != 0);
@@ -921,6 +919,7 @@ pub fn flushQueue(self: *Stream, client: *H2FrameParser, written: *usize) FlushS
                                 _ = &buffer;
                                 _ = bun.memmove(buffer[1..][0..frame_slice.len], frame_slice);
                                 buffer[cp_cast_int(usize, 0)] = padding;
+                                _ = @memset(buffer[(1 + frame_slice.len)..payload_size], 0);
                                 break :brk ((blk_catch_6: { break :blk_catch_6 ((writer.write(buffer[0..payload_size])) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 @as(usize, 0); }); }) != 0);
                             } else {
                                 break :brk ((blk_catch_7: { break :blk_catch_7 ((writer.write(frame_slice)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 @as(usize, 0); }); }) != 0);
@@ -3546,6 +3545,7 @@ pub fn sendData(self: *H2FrameParser, stream: *Stream, payload: []const u8, clos
                             _ = &buffer;
                             _ = bun.memmove(buffer[1..][0..slice.len], slice);
                             buffer[cp_cast_int(usize, 0)] = padding;
+                            _ = @memset(buffer[(1 + slice.len)..payload_size], 0);
                             _ = (blk_catch_33: { break :blk_catch_33 ((writer.write(buffer[0..payload_size])) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 @as(usize, 0); }); });
                         } else {
                             _ = (blk_catch_34: { break :blk_catch_34 ((writer.write(slice)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 @as(usize, 0); }); });
@@ -4438,6 +4438,7 @@ else => .none,
                     _ = &buffer;
                     _ = bun.memmove(buffer[1..][0..encoded_size], buffer[0..encoded_size]);
                     buffer[cp_cast_int(usize, 0)] = padding;
+                    _ = @memset(buffer[(1 + encoded_size)..(encoded_size + padding_overhead)], 0);
                     _ = (blk_catch_51: { break :blk_catch_51 ((writer.write(buffer[0..(encoded_size + padding_overhead)])) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 @as(usize, 0); }); });
                 } else {
                     _ = (blk_catch_52: { break :blk_catch_52 ((writer.write(encoded_data)) catch |__ce_52| { _ = &__ce_52; break :blk_catch_52 @as(usize, 0); }); });

@@ -231,11 +231,12 @@ pub fn randomData(globalThis: *JSGlobalObject, ptr: [*]u8, len: usize) void {
 }
 
 pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
+        const argc = callframe.argumentsCount();
         const arguments = callframe.argumentsUndef(2).slice();
         var encoding_value: JSValue = .js_undefined;
         _ = &encoding_value;
         const encoding: jsc.Node.Encoding = brk: {
-        if ((arguments.len > 0)) {
+        if ((argc > 0)) {
             if ((!arguments[0].isUndefined())) {
                 if (arguments[0].isString()) {
                     encoding_value = arguments[0];
@@ -250,7 +251,7 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         break :brk jsc.Node.Encoding.hex;
 };
         const ts_res = brk: {
-        const timestamp_value: JSValue = (if (((!encoding_value.isUndefined()) and (arguments.len > 1))) arguments[1] else (if (((arguments.len == 1) and encoding_value.isUndefined())) arguments[0] else .js_undefined));
+        const timestamp_value: JSValue = (if (((!encoding_value.isUndefined()) and (argc > 1))) arguments[1] else (if ((encoding_value.isUndefined() and (argc >= 1))) (if ((!arguments[0].isUndefined())) arguments[0] else (if ((argc > 1)) arguments[1] else .js_undefined)) else .js_undefined));
         if ((!timestamp_value.isUndefined())) {
             if (timestamp_value.isDate()) {
                 const date = timestamp_value.getUnixTimestamp();
@@ -258,6 +259,12 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
                     return globalThis.ERR(.OUT_OF_RANGE, "The value of \"timestamp\" is out of range. It must be >= 0 and <= 281474976710655.", .{}).throw();
                 }
                 break :brk .{ @as(u64, @intFromFloat(date)), true };
+            }
+            if (timestamp_value.isNumber()) {
+                const num = timestamp_value.asNumber();
+                if ((!std.math.isFinite(num))) {
+                    return globalThis.ERR(.OUT_OF_RANGE, "The value of \"timestamp\" is out of range. It must be an integer.", .{}).throw();
+                }
             }
             const validated = try globalThis.validateIntegerRange(timestamp_value, i64, 0, .{ .min = 0, .max = 281474976710655, .field_name = "timestamp" });
             break :brk .{ @as(u64, @intCast(validated)), true };

@@ -94,6 +94,12 @@ pub fn installWithManager(
 )! {
     const log_level = manager.options.log_level;
 
+    if (manager.log.hasErrors()) {
+        manager.log.print(Output.errorWriter())?;
+        Output.flush();
+        Global.crash();
+    }
+
     // Start resolving DNS for the default registry immediately.
     // Unless you're behind a proxy.
     if (!manager.env.hasHTTPProxy()) {
@@ -913,13 +919,26 @@ pub fn installWithManager(
 
         let linker = manager.options.node_linker;
         if (linker == .auto) {
-            linker = switch (config_version) {
-                .v0 => .hoisted,
-                .v1 => if (!load_result.migratedFromNpm() && manager.lockfile.workspace_paths.count() > 0)
-                    .isolated
-                else
-                    .hoisted,
+            const has_isolated_store = has_isolated_store: {
+                switch (bun.sys.openatA(bun.FD.cwd(), "node_modules/.bun", bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
+                    .result fd => {
+                        fd.close();
+                        break :has_isolated_store true;
+                    },
+                    .err => break :has_isolated_store false,
+                }
             };
+            if (has_isolated_store) {
+                linker = .isolated;
+            } else {
+                linker = switch (config_version) {
+                    .v0 => .hoisted,
+                    .v1 => if (!load_result.migratedFromNpm() && manager.lockfile.workspace_paths.count() > 0)
+                        .isolated
+                    else
+                        .hoisted,
+                };
+            }
         }
 
         switch (linker) {

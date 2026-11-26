@@ -458,6 +458,10 @@ pub fn jsonStringify(self: Number, writer: anytype) !void {
 pub const BigInt = struct {
     value: []const u8,
 
+pub fn hasRadixPrefix(self: BigInt) bool {
+            return (((self.value.len >= 2) and (self.value[0] == 48)) and ((((((self.value[1] == 120) or (self.value[1] == 88)) or (self.value[1] == 111)) or (self.value[1] == 79)) or (self.value[1] == 98)) or (self.value[1] == 66)));
+    }
+
 pub fn jsonStringify(self: BigInt, writer: anytype) !void {
             return try writer.write(self.value);
     }

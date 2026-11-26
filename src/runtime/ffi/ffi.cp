@@ -430,7 +430,10 @@ pub struct FFI {
         const allocator = VirtualMachine.get().allocator;
         let function: Function = .{ .allocator = allocator };
 
-        if (val := generateSymbolForFunction(globalThis, allocator, iface, *function) catch ZigString.init("Out of memory").toErrorInstance(globalThis)) {
+        if (val := generateSymbolForFunction(globalThis, allocator, iface, *function) catch e => {
+            if (e == error.OutOfMemory) return ZigString.init("Out of memory").toErrorInstance(globalThis);
+            return e;
+        }) {
             return val;
         }
 

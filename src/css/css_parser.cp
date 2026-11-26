@@ -4774,7 +4774,7 @@ pub struct ParserState {
     fn sourceLocation(): SourceLocation {
         return {
             line: _.current_line_number,
-            column: @intCast((_.position -% _.current_line_start_position) + 1),
+            column: if (_.position >= _.current_line_start_position) @intCast((_.position - _.current_line_start_position) + 1) else 1,
         };
     }
 }
@@ -5049,7 +5049,7 @@ struct Tokenizer {
     fn currentSourceLocation(): SourceLocation {
         return SourceLocation{
             line: _.current_line_number,
-            column: @intCast((_.position -% _.current_line_start_position) + 1),
+            column: if (_.position >= _.current_line_start_position) @intCast((_.position - _.current_line_start_position) + 1) else 1,
         };
     }
 
@@ -5090,7 +5090,7 @@ struct Tokenizer {
                 if (_.isIdentStart()) break :brk { idhash: _.consumeName() };
                 if (!_.isEof() && switch (_.nextByteUnchecked()) {
                     // Any other valid case here already resulted in IDHash.
-                    '0'...'9', '-' => true,
+                    '0'..='9', '-' => true,
                     else => false,
                 }) break :brk { unrestrictedhash: _.consumeName() };
                 break :brk { delim: '#' };
@@ -5122,11 +5122,11 @@ struct Tokenizer {
             },
             '+' => brk: {
                 if ((_.hasAtLeast(1) && switch (_.byteAt(1)) {
-                    '0'...'9' => true,
+                    '0'..='9' => true,
                     else => false,
                 }) || (_.hasAtLeast(2) &&
                     _.byteAt(1) == '.' && switch (_.byteAt(2)) {
-                    '0'...'9' => true,
+                    '0'..='9' => true,
                     else => false,
                 })) {
                     break :brk _.consumeNumeric();
@@ -5141,10 +5141,10 @@ struct Tokenizer {
             },
             '-' => brk: {
                 if ((_.hasAtLeast(1) && switch (_.byteAt(1)) {
-                    '0'...'9' => true,
+                    '0'..='9' => true,
                     else => false,
                 }) || (_.hasAtLeast(2) && _.byteAt(1) == '.' && switch (_.byteAt(2)) {
-                    '0'...'9' => true,
+                    '0'..='9' => true,
                     else => false,
                 })) break :brk _.consumeNumeric();
 
@@ -5160,7 +5160,7 @@ struct Tokenizer {
             },
             '.' => brk: {
                 if (_.hasAtLeast(1) && switch (_.byteAt(1)) {
-                    '0'...'9' => true,
+                    '0'..='9' => true,
                     else => false,
                 }) {
                     break :brk _.consumeNumeric();
@@ -5173,7 +5173,7 @@ struct Tokenizer {
                 _.advance(1);
                 break :brk { delim: '/' };
             },
-            '0'...'9' => _.consumeNumeric(),
+            '0'..='9' => _.consumeNumeric(),
             ':' => brk: {
                 _.advance(1);
                 break :brk .colon;
@@ -5195,7 +5195,7 @@ struct Tokenizer {
                 if (_.isIdentStart()) break :brk { at_keyword: _.consumeName() };
                 break :brk { delim: '@' };
             },
-            'a'...'z', 'A'...'Z', '_', 0 => _.consumeIdentLike(),
+            'a'..='z', 'A'..='Z', '_', 0 => _.consumeIdentLike(),
             '[' => brk: {
                 _.advance(1);
                 break :brk .open_square;
@@ -5320,7 +5320,7 @@ struct Tokenizer {
 
         let fractional_part: f64 = 0.0;
         if (_.hasAtLeast(1) && _.nextByteUnchecked() == '.' && switch (_.byteAt(1)) {
-            '0'...'9' => true,
+            '0'..='9' => true,
             else => false,
         }) {
             is_integer = false;
@@ -5341,13 +5341,13 @@ struct Tokenizer {
             else => false,
         }) {
             if (switch (_.byteAt(1)) {
-                '0'...'9' => true,
+                '0'..='9' => true,
                 else => false,
             } || (_.hasAtLeast(2) && switch (_.byteAt(1)) {
                 '+', '-' => true,
                 else => false,
             } && switch (_.byteAt(2)) {
-                '0'...'9' => true,
+                '0'..='9' => true,
                 else => false,
             })) {
                 is_integer = false;
@@ -5447,7 +5447,7 @@ struct Tokenizer {
 
             // todo_stuff.match_byte
             switch (_.nextByteUnchecked()) {
-                'a'...'z', 'A'...'Z', '0'...'9', '_', '-' => _.advance(1),
+                'a'..='z', 'A'..='Z', '0'..='9', '_', '-' => _.advance(1),
                 '\\', 0 => {
                     // * The tokenizer’s input is UTF-8 since it’s `&str`.
                     // * start_pos is at a code point boundary
@@ -5457,11 +5457,11 @@ struct Tokenizer {
                     value_bytes = .{ .borrowed = _.sliceFrom(start_pos) };
                     break;
                 },
-                0x80...0xBF => _.consumeContinuationByte(),
+                0x80..=0xBF => _.consumeContinuationByte(),
                 // This is the range of the leading byte of a 2-3 byte character
                 // encoding
-                0xC0...0xEF => _.advance(1),
-                0xF0...0xFF => _.consume4byteIntro(),
+                0xC0..=0xEF => _.advance(1),
+                0xF0..=0xFF => _.consume4byteIntro(),
                 else => { return _.sliceFrom(start_pos); },
             }
         }
@@ -5470,7 +5470,7 @@ struct Tokenizer {
             const b = _.nextByteUnchecked();
             // todo_stuff.match_byte
             switch (b) {
-                'a'...'z', 'A'...'Z', '0'...'9', '_', '-' => {
+                'a'..='z', 'A'..='Z', '0'..='9', '_', '-' => {
                     _.advance(1);
                     value_bytes.appendByte(_.allocator, b);
                 },
@@ -5485,19 +5485,19 @@ struct Tokenizer {
                     _.advance(1);
                     value_bytes.append(_.allocator, REPLACEMENT_CHAR_UNICODE[0..]);
                 },
-                0x80...0xBF => {
+                0x80..=0xBF => {
                     // This byte *is* part of a multi-byte code point,
                     // we’ll end up copying the whole code point before this loop does something else.
                     _.consumeContinuationByte();
                     value_bytes.appendByte(_.allocator, b);
                 },
-                0xC0...0xEF => {
+                0xC0..=0xEF => {
                     // This byte *is* part of a multi-byte code point,
                     // we’ll end up copying the whole code point before this loop does something else.
                     _.advance(1);
                     value_bytes.appendByte(_.allocator, b);
                 },
-                0xF0...0xFF => {
+                0xF0..=0xFF => {
                     _.consume4byteIntro();
                     value_bytes.appendByte(_.allocator, b);
                 },
@@ -5548,8 +5548,8 @@ struct Tokenizer {
                     break;
                 },
                 '\n', '\r', FORM_FEED_BYTE => { return { str: _.sliceFrom(start_pos), bad: true }; },
-                0x80...0xBF => _.consumeContinuationByte(),
-                0xF0...0xFF => _.consume4byteIntro(),
+                0x80..=0xBF => _.consumeContinuationByte(),
+                0xF0..=0xFF => _.consume4byteIntro(),
                 else => {
                     _.advance(1);
                 },
@@ -5591,8 +5591,8 @@ struct Tokenizer {
                     string_bytes.append(_.allocator, REPLACEMENT_CHAR_UNICODE[0..]);
                     continue;
                 },
-                0x80...0xBF => _.consumeContinuationByte(),
-                0xF0...0xFF => _.consume4byteIntro(),
+                0x80..=0xBF => _.consumeContinuationByte(),
+                0xF0..=0xFF => _.consume4byteIntro(),
                 else => {
                     _.advance(1);
                 },
@@ -5689,9 +5689,9 @@ struct Tokenizer {
                     return { unquoted_url: value };
                 },
                 // non-printable
-                0x01...0x08,
+                0x01..=0x08,
                 0x0B,
-                0x0E...0x1F,
+                0x0E..=0x1F,
                 0x7F,
 
                 // not valid in this context
@@ -5710,8 +5710,8 @@ struct Tokenizer {
                     string_bytes = .{ .borrowed = _.sliceFrom(start_pos) };
                     break;
                 },
-                0x80...0xBF => _.consumeContinuationByte(),
-                0xF0...0xFF => _.consume4byteIntro(),
+                0x80..=0xBF => _.consumeContinuationByte(),
+                0xF0..=0xFF => _.consume4byteIntro(),
                 else => {
                     // ASCII or other leading byte.
                     _.advance(1);
@@ -5734,9 +5734,9 @@ struct Tokenizer {
                     break;
                 },
                 // non-printable
-                0x01...0x08,
+                0x01..=0x08,
                 0x0B,
-                0x0E...0x1F,
+                0x0E..=0x1F,
                 0x7F,
 
                 // invalid in this context
@@ -5759,13 +5759,13 @@ struct Tokenizer {
                     _.advance(1);
                     string_bytes.append(_.allocator, REPLACEMENT_CHAR_UNICODE[0..]);
                 },
-                0x80...0xBF => {
+                0x80..=0xBF => {
                     // We’ll end up copying the whole code point
                     // before this loop does something else.
                     _.consumeContinuationByte();
                     string_bytes.appendByte(_.allocator, b);
                 },
-                0xF0...0xFF => {
+                0xF0..=0xFF => {
                     // We’ll end up copying the whole code point
                     // before this loop does something else.
                     _.consume4byteIntro();
@@ -5838,7 +5838,7 @@ struct Tokenizer {
 
         // todo_stuff.match_byte
         switch (_.nextByteUnchecked()) {
-            '0'...'9', 'A'...'F', 'a'...'f' => {
+            '0'..='9', 'A'..='F', 'a'..='f' => {
                 const c = _.consumeHexDigits().value;
                 if (!_.isEof()) {
                     // todo_stuff.match_byte
@@ -5908,9 +5908,9 @@ struct Tokenizer {
 
         // todo_stuff.match_byte
         return switch (b) {
-            '0'...'9' => b - '0',
-            'a'...'f' => b - 'a' + 10,
-            'A'...'F' => b - 'A' + 10,
+            '0'..='9' => b - '0',
+            'a'..='f' => b - 'a' + 10,
+            'A'..='F' => b - 'A' + 10,
             else => null,
         };
     }
@@ -5942,8 +5942,8 @@ struct Tokenizer {
                 '\n', FORM_FEED_BYTE, '\r' => {
                     _.consumeNewline();
                 },
-                0x80...0xBF => _.consumeContinuationByte(),
-                0xF0...0xFF => _.consume4byteIntro(),
+                0x80..=0xBF => _.consumeContinuationByte(),
+                0xF0..=0xFF => _.consume4byteIntro(),
                 else => {
                     // ASCII or other leading byte
                     _.advance(1);
@@ -6046,11 +6046,11 @@ struct Tokenizer {
 
         // todo_stuff.match_byte
         return !_.isEof() && switch (_.nextByteUnchecked()) {
-            'a'...'z', 'A'...'Z', '_', 0 => true,
+            'a'..='z', 'A'..='Z', '_', 0 => true,
 
             // todo_stuff.match_byte
             '-' => _.hasAtLeast(1) && switch (_.byteAt(1)) {
-                'a'...'z', 'A'...'Z', '-', '_', 0 => true,
+                'a'..='z', 'A'..='Z', '-', '_', 0 => true,
                 '\\' => !_.hasNewlineAt(1),
                 else => |b| !std.ascii.isAscii(b),
             },
@@ -6971,9 +6971,9 @@ pub struct color {
 
     static fn fromHex(c: u8): ColorError!u8 {
         return switch (c) {
-            '0'...'9' => c - '0',
-            'a'...'f' => c - 'a' + 10,
-            'A'...'F' => c - 'A' + 10,
+            '0'..='9' => c - '0',
+            'a'..='f' => c - 'a' + 10,
+            'A'..='F' => c - 'A' + 10,
             else => ColorError.parse,
         };
     }
@@ -7008,7 +7008,7 @@ pub struct serializer {
         while (i < value.len) : (i += 1) {
             const b = value[i];
             const escaped: ([]const u8)? = switch (b) {
-                '0'...'9', 'A'...'Z', 'a'...'z', '_', '-' => continue,
+                '0'..='9', 'A'..='Z', 'a'..='z', '_', '-' => continue,
                 // the unicode replacement character
                 0 => bun.strings.encodeUTF8Comptime(0xFFD),
                 else => if (!std.ascii.isAscii(b)) continue else null,
@@ -7097,7 +7097,7 @@ pub struct serializer {
         while (i < value.len) : (i += 1) {
             const b = value[i];
             const hex = switch (b) {
-                0...' ', 0x7F => true,
+                0..=' ', 0x7F => true,
                 '(', ')', '"', '\'', '\\' => false,
                 else => continue,
             };
@@ -7207,7 +7207,7 @@ pub struct serializer {
                         '\\' => "\\\\",
                         // replacement character
                         0 => bun.strings.encodeUTF8Comptime(0xFFD),
-                        0x01...0x1F, 0x7F => null,
+                        0x01..=0x1F, 0x7F => null,
                         else => continue,
                     };
                     _.inner.writeAll(str[chunk_start..i])?;

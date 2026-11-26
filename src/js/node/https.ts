@@ -1,7 +1,7 @@
 // Hardcoded module "node:https"
 const http = require("node:http");
 const { urlToHttpOptions } = require("internal/url");
-const { isTlsSymbol } = require("internal/http");
+const { isTlsSymbol, filterEnvForProxies } = require("internal/http");
 const { convertALPNProtocols } = require("node:tls");
 
 const ArrayPrototypeShift = Array.prototype.shift;
@@ -74,7 +74,12 @@ function createServer(opts, requestListener) {
 
 var https = {
   Agent,
-  globalAgent: new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000 }),
+  globalAgent: new Agent({
+    keepAlive: true,
+    scheduling: "lifo",
+    timeout: 5000,
+    proxyEnv: process.env.NODE_USE_ENV_PROXY === "1" ? filterEnvForProxies(process.env) : undefined,
+  }),
   Server,
   createServer,
   get,

@@ -801,6 +801,9 @@ pub enum SideEffects: u1 {
                 return Result{ ok: true, value: e.value != 0.0 && !std.math.isNan(e.value), side_effects: .no_side_effects };
             },
             .e_big_int => |e| {
+                if (e.hasRadixPrefix()) {
+                    return Result{ ok: false, value: undefined, side_effects: .no_side_effects };
+                }
                 return Result{ ok: true, value: !strings.eqlComptime(e.value, "0"), side_effects: .no_side_effects };
             },
             .e_string => |e| {

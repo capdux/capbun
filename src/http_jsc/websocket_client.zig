@@ -1040,48 +1040,50 @@ const to_consume = @min(receive_body_remain, data.len);
                 }
 },
 .close => {
-if (((receive_body_remain == 1) or (receive_body_remain > 125))) {
-                    _ = self.terminate(ErrorCode.invalid_control_frame);
-                    terminated = true;
-                    break;
-                }
-                if ((receive_body_remain > 0)) {
-                    if ((!self.close_frame_buffering)) {
-                        self.ping_len = @truncate(receive_body_remain);
-                        receive_body_remain = 0;
-                        self.close_frame_buffering = true;
+if ((!self.close_frame_buffering)) {
+                    if (((receive_body_remain == 1) or (receive_body_remain > 125))) {
+                        _ = self.terminate(ErrorCode.invalid_control_frame);
+                        terminated = true;
+                        break;
                     }
-                    const to_copy = @min(data.len, (self.ping_len - receive_body_remain));
+                    if ((receive_body_remain == 0)) {
+                        self.close_received = true;
+                        _ = self.sendClose();
+                        terminated = true;
+                        break;
+                    }
+                    self.ping_len = @truncate(receive_body_remain);
+                    receive_body_remain = 0;
+                    self.close_frame_buffering = true;
+                }
+                const to_copy = @min(data.len, (self.ping_len - receive_body_remain));
+                if ((to_copy > 0)) {
                     _ = @memcpy(self.ping_frame_bytes[(6 + receive_body_remain)..][0..to_copy], data[0..to_copy]);
                     receive_body_remain = (receive_body_remain + to_copy);
                     data = data[to_copy..];
-                    if ((receive_body_remain < self.ping_len)) {
-                        break;
-                    }
-                    self.close_received = true;
-                    const close_data = self.ping_frame_bytes[6..][0..self.ping_len];
-                    if ((self.ping_len >= 2)) {
-                        var code = std.mem.readInt(u16, close_data[0..2], .big);
-                        _ = &code;
-                        if ((code == 1001)) {
-                            code = 1000;
-                        }
-                        if ((((code < 1000) or ((code >= 1004) and (code < 1007))) or ((code >= 1016) and (code <= 2999)))) {
-                            code = 1002;
-                        }
-                        var buf: [125]u8 = undefined;
-                        _ = &buf;
-                        _ = @memcpy(buf[0..(self.ping_len - 2)], close_data[2..self.ping_len]);
-                        _ = self.sendCloseWithBody(socket, code, (&buf), (self.ping_len - 2));
-                    } else {
-                        _ = self.sendClose();
-                    }
-                    self.close_frame_buffering = false;
-                    terminated = true;
+                }
+                if ((receive_body_remain < self.ping_len)) {
                     break;
                 }
                 self.close_received = true;
-                _ = self.sendClose();
+                const close_data = self.ping_frame_bytes[6..][0..self.ping_len];
+                if ((self.ping_len >= 2)) {
+                    var code = std.mem.readInt(u16, close_data[0..2], .big);
+                    _ = &code;
+                    if ((code == 1001)) {
+                        code = 1000;
+                    }
+                    if ((((code < 1000) or ((code >= 1004) and (code < 1007))) or ((code >= 1016) and (code <= 2999)))) {
+                        code = 1002;
+                    }
+                    var buf: [125]u8 = undefined;
+                    _ = &buf;
+                    _ = @memcpy(buf[0..(self.ping_len - 2)], close_data[2..self.ping_len]);
+                    _ = self.sendCloseWithBody(socket, code, (&buf), (self.ping_len - 2));
+                } else {
+                    _ = self.sendClose();
+                }
+                self.close_frame_buffering = false;
                 terminated = true;
                 break;
 },

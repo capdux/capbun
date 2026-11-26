@@ -850,7 +850,7 @@ _ = Install.PackageManager.CommandLineArguments.printHelp((switch (cmd) {
 }));
 },
 .InfoCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> <blue>[property path]<r>\n  Display package metadata from the registry.\n\n<b>Examples:<r>\n  <d>View basic information about a package<r>\n  <b><green>bun info<r> <blue>react<r>\n\n  <d>View specific version<r>\n  <b><green>bun info<r> <blue>react@18.0.0<r>\n\n  <d>View specific property<r>\n  <b><green>bun info<r> <blue>react<r> version\n  <b><green>bun info<r> <blue>react<r> dependencies\n  <b><green>bun info<r> <blue>react<r> versions\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/info<r>\n";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>[@\\<version\\>]<r> <blue>[\\<property\\>...]<r>\n  Display package metadata from the registry.\n\n<b>Examples:<r>\n  <d>View basic information about a package<r>\n  <b><green>bun info<r> <blue>react<r>\n\n  <d>View specific version<r>\n  <b><green>bun info<r> <blue>react@18.0.0<r>\n\n  <d>View specific property<r>\n  <b><green>bun info<r> <blue>react<r> version\n  <b><green>bun info<r> <blue>react<r> dependencies\n  <b><green>bun info<r> <blue>react<r> versions\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/info<r>\n";
             _ = Output.pretty(intro_text, .{});
             _ = Output.flush();
 },

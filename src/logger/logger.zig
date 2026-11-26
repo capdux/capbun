@@ -286,8 +286,20 @@ pub fn initOrNullImpl(_source: ?*const Source, r: Range, tracker: ?*LineColumnTr
 }) else source.initErrorPosition(r.loc));
                 var full_line = source.contents[data.line_start..data.line_end];
                 _ = &full_line;
-                if ((full_line.len > (80 + data.column_count))) {
-                    full_line = full_line[(@max(data.column_count, 40) - 40)..(@min((data.column_count + 40), (full_line.len - 40)) + 40)];
+                const offset = clampErrorOffset(source.contents, r.loc);
+                const col_byte = @min((offset -| data.line_start), full_line.len);
+                if ((full_line.len > (80 + col_byte))) {
+                    var win_start = (@max(col_byte, 40) - 40);
+                    _ = &win_start;
+                    var win_end = (@min((col_byte + 40), (full_line.len - 40)) + 40);
+                    _ = &win_end;
+                    while (((win_start > 0) and ((full_line[@as(usize, @intCast(win_start))] & 192) == 128))) {
+                        win_start = (win_start - 1);
+                    }
+                    while (((win_end < full_line.len) and ((full_line[@as(usize, @intCast(win_end))] & 192) == 128))) {
+                        win_end = (win_end + 1);
+                    }
+                    full_line = full_line[win_start..win_end];
                 }
                 return Location{ .file = source.path.text, .namespace = source.path.namespace, .line = usize2Loc(data.line_count).start, .column = usize2Loc(data.column_count).start, .length = (if ((r.len > -1)) (if (comptime @typeInfo(@TypeOf(r.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(r.len)) else cp_cast_int(u32, r.len)) else 1), .line_text = std.mem.trimLeft(u8, full_line, "\n\r"), .offset = (if (comptime @typeInfo(@TypeOf(@max(r.loc.start, 0))) == .@"enum") cp_cast_int(usize, @intFromEnum(@max(r.loc.start, 0))) else cp_cast_int(usize, @max(r.loc.start, 0))) };
             }
@@ -370,8 +382,26 @@ else => (comptime (Output.color_map.get("d")).?),
                     const line_text_right_trimmed = std.mem.trimRight(u8, line_text_, " \r\n\t");
                     const line_text = std.mem.trimLeft(u8, line_text_right_trimmed, "\n\r");
                     if (((location.column > 0) and (line_text.len > 0))) {
-                        var line_offset_for_second_line: usize = (if (comptime @typeInfo(@TypeOf((location.column - 1))) == .@"enum") cp_cast_int(usize, @intFromEnum((location.column - 1))) else cp_cast_int(usize, (location.column - 1)));
+                        var line_offset_for_second_line: usize = 0;
                         _ = &line_offset_for_second_line;
+                        var utf16_col: usize = (if (comptime @typeInfo(@TypeOf((location.column - 1))) == .@"enum") cp_cast_int(usize, @intFromEnum((location.column - 1))) else cp_cast_int(usize, (location.column - 1)));
+                        _ = &utf16_col;
+                        var iter_ = strings.CodepointIterator{ .bytes = line_text, .i = 0 };
+                        _ = &iter_;
+                        var iter = strings.CodepointIterator.Cursor{  };
+                        _ = &iter;
+                        while (((utf16_col > 0) and iter_.next((&iter)))) {
+                            const units: usize = (if ((iter.c > 65535)) 2 else 1);
+                            utf16_col = (utf16_col -| units);
+                            if ((iter.c == 9)) {
+                                line_offset_for_second_line = (line_offset_for_second_line + 1);
+                            } else {
+                                if ((iter.c >= 0)) {
+                                    line_offset_for_second_line = (line_offset_for_second_line + (if (comptime @typeInfo(@TypeOf(strings.visibleCodepointWidth(@intCast(iter.c), false))) == .@"enum") cp_cast_int(usize, @intFromEnum(strings.visibleCodepointWidth(@intCast(iter.c), false))) else cp_cast_int(usize, strings.visibleCodepointWidth(@intCast(iter.c), false))));
+                                }
+                            }
+                        }
+                        line_offset_for_second_line = (line_offset_for_second_line + utf16_col);
                         if ((location.line > -1)) {
                             if (((kind == .err) or (kind == .warn))) {
                                 _ = try to.print((comptime Output.prettyFmt("<b>{d} | <r>", enable_ansi_colors)), .{ location.line });
@@ -1170,7 +1200,7 @@ self.line_start = ((start_offset + iter.width) + iter.i);
                 crossed_line_break = true;
 },
 else => {
-self.column_number = (self.column_number + 1);
+self.column_number = (self.column_number + (if ((iter.c > 65535)) (if (comptime @typeInfo(@TypeOf(2)) == .@"enum") cp_cast_int(usize, @intFromEnum(2)) else cp_cast_int(usize, 2)) else (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(usize, @intFromEnum(1)) else cp_cast_int(usize, 1))));
 },
 }
                 self.prev_code_point = iter.c;
@@ -1275,8 +1305,8 @@ pub fn identifierName(self: *Source, allocator: std.mem.Allocator) ![]const u8 {
             return name;
     }
 
-pub fn rangeOfIdentifier(self: Source, loc: Loc) Range {
-            return js_lexer.rangeOfIdentifier((&self), loc);
+pub fn rangeOfIdentifier(self: *const Source, loc: Loc) Range {
+            return js_lexer.rangeOfIdentifier(self, loc);
     }
 
 pub fn isWebAssembly(self: Source) bool {

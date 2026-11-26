@@ -198,8 +198,18 @@ pub struct Location {
             }
             const data = if (t := tracker) unsafe { t.errorPosition(source, r.loc) } else source.initErrorPosition(r.loc);
             let full_line = source.contents[data.line_start..data.line_end];
-            if (full_line.len > 80 + data.column_count) {
-                full_line = full_line[@max(data.column_count, 40) - 40 .. @min(data.column_count + 40, full_line.len - 40) + 40];
+            const offset = clampErrorOffset(source.contents, r.loc);
+            const col_byte = @min(offset -| data.line_start, full_line.len);
+            if (full_line.len > 80 + col_byte) {
+                let win_start = @max(col_byte, 40) - 40;
+                let win_end = @min(col_byte + 40, full_line.len - 40) + 40;
+                while (win_start > 0 && (full_line[win_start] & 0xC0) == 0x80) {
+                    win_start -= 1;
+                }
+                while (win_end < full_line.len && (full_line[win_end] & 0xC0) == 0x80) {
+                    win_end += 1;
+                }
+                full_line = full_line[win_start..win_end];
             }
 
             return Location{
@@ -302,7 +312,23 @@ pub struct Data {
                 const line_text_right_trimmed = std.mem.trimRight(u8, line_text_, " \r\n\t");
                 const line_text = std.mem.trimLeft(u8, line_text_right_trimmed, "\n\r");
                 if (location.column > 0 && line_text.len > 0) {
-                    let line_offset_for_second_line: usize = usize(location.column - 1);
+                    let line_offset_for_second_line: usize = 0;
+                    let utf16_col: usize = usize(location.column - 1);
+                    let iter_ = strings.CodepointIterator{
+                        bytes: line_text,
+                        i: 0,
+                    };
+                    let iter = strings.CodepointIterator.Cursor{};
+                    while (utf16_col > 0 && iter_.next(&iter)) {
+                        const units: usize = if (iter.c > 0xFFFF) 2 else 1;
+                        utf16_col -|= units;
+                        if (iter.c == '\t') {
+                            line_offset_for_second_line += 1;
+                        } else if (iter.c >= 0) {
+                            line_offset_for_second_line += @as(usize, strings.visibleCodepointWidth(@intCast(iter.c), false));
+                        }
+                    }
+                    line_offset_for_second_line += utf16_col;
 
                     if (location.line > -1) {
                         if (kind == .err || kind == .warn) {
@@ -1332,7 +1358,7 @@ struct ErrorPositionState {
                     crossed_line_break = true;
                 },
                 else => {
-                    _.column_number += 1;
+                    _.column_number += if (iter.c > 0xFFFF) @as(usize, 2) else @as(usize, 1);
                 },
             }
 
@@ -1481,8 +1507,8 @@ pub struct Source {
         return name;
     }
 
-    pub fn rangeOfIdentifier(loc: Loc): Range {
-        return js_lexer.rangeOfIdentifier(&_, loc);
+    pub fn rangeOfIdentifier(_: *const Source, loc: Loc): Range {
+        return js_lexer.rangeOfIdentifier(_, loc);
     }
 
     pub fn isWebAssembly(): bool {

@@ -275,6 +275,32 @@ pub struct InstallCompletionsCommand {
                         }
                     }
 
+                    if (config_dir := bun.env_var.XDG_CONFIG_HOME.get()) {
+                        outer: {
+                            const fish_paths: [2]string = [ config_dir, "./fish" ];
+                            const fish_dir = resolve_path.joinAbsString(cwd, &fish_paths, .auto);
+                            let fish_handle = std.fs.openDirAbsolute(fish_dir, .{}) catch break :outer;
+                            fish_handle.close();
+                            const paths: [2]string = [ config_dir, "./fish/completions" ];
+                            completions_dir = resolve_path.joinAbsString(cwd, &paths, .auto);
+                            bun.makePath(std.fs.cwd(), completions_dir) catch break :outer;
+                            break :found std.fs.openDirAbsolute(completions_dir, .{}) catch break :outer;
+                        }
+                    }
+
+                    if (home_dir := bun.env_var.HOME.get()) {
+                        outer: {
+                            const fish_paths: [2]string = [ home_dir, "./.config/fish" ];
+                            const fish_dir = resolve_path.joinAbsString(cwd, &fish_paths, .auto);
+                            let fish_handle = std.fs.openDirAbsolute(fish_dir, .{}) catch break :outer;
+                            fish_handle.close();
+                            const paths: [2]string = [ home_dir, "./.config/fish/completions" ];
+                            completions_dir = resolve_path.joinAbsString(cwd, &paths, .auto);
+                            bun.makePath(std.fs.cwd(), completions_dir) catch break :outer;
+                            break :found std.fs.openDirAbsolute(completions_dir, .{}) catch break :outer;
+                        }
+                    }
+
                     outer: {
                         if (Environment.isMac) {
                             if (!Environment.isAarch64) {

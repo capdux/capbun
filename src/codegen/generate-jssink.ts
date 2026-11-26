@@ -174,6 +174,7 @@ function header() {
                 mutable JSC::Weak<JSObject> m_weakReadableStream;
 
                 uintptr_t m_onDestroy { 0 };
+                bool m_closed { false };
                                                                                                                                                                                         
                 ${controller}(JSC::VM& vm, JSC::Structure* structure, void* sinkPtr, uintptr_t onDestroy)                                                                                                    
                     : Base(vm, structure)                                                                                                                                               
@@ -328,7 +329,7 @@ JSC_DEFINE_HOST_FUNCTION(functionStartDirectStream, (JSC::JSGlobalObject * lexic
     templ += `
 
     ${isFirst ? "" : "else"} if (WebCore::${controller}* ${name}Controller = dynamicDowncast<WebCore::${controller}>(callFrame->thisValue())) {
-        if (${name}Controller->wrapped() == nullptr) {
+        if (${name}Controller->wrapped() == nullptr || ${name}Controller->m_closed) {
             scope.throwException(globalObject, JSC::createTypeError(globalObject, "Cannot start stream with closed controller"_s));
             return JSC::JSValue::encode(JSC::jsUndefined());
         }
@@ -657,6 +658,10 @@ JSObject* JS${controllerName}::createPrototype(VM& vm, JSDOMGlobalObject& global
 }
 
 void JS${controllerName}::detach() {
+    if (m_closed)
+        return;
+    m_closed = true;
+
     if (m_onDestroy) {
         auto destroy = m_onDestroy;
         m_onDestroy = 0;
@@ -672,7 +677,9 @@ void JS${controllerName}::detach() {
 
     auto readableStream = m_weakReadableStream.get();
     auto onClose = m_onClose.get();
-    
+    m_onClose.clear();
+    m_weakReadableStream.clear();
+
     if (readableStream && onClose) {
         auto callData = JSC::getCallData(onClose);
         if(callData.type != JSC::CallData::Type::None) {
@@ -683,9 +690,6 @@ void JS${controllerName}::detach() {
             call(globalObject, onClose, callData, JSC::jsUndefined(), arguments);
         }
     }
-
-    m_onClose.clear();
-    m_weakReadableStream.clear();
 }
 `;
 
@@ -984,6 +988,8 @@ extern "C" JSC::EncodedJSValue ${name}__assignToStream(JSC::JSGlobalObject* arg0
 extern "C" void ${name}__onReady(JSC::EncodedJSValue controllerValue, JSC::EncodedJSValue amt, JSC::EncodedJSValue offset)
 {
     WebCore::${controller}* controller = uncheckedDowncast<WebCore::${controller}>(JSC::JSValue::decode(controllerValue).getObject());
+    if (controller->m_closed)
+        return;
 
     JSC::JSValue function = controller->m_onPull.get();
     if (!function)
@@ -1007,17 +1013,21 @@ extern "C" void ${name}__onStart(JSC::EncodedJSValue controllerValue)
 extern "C" void ${name}__onClose(JSC::EncodedJSValue controllerValue, JSC::EncodedJSValue reason)
 {
     WebCore::${controller}* controller = uncheckedDowncast<WebCore::${controller}>(JSC::JSValue::decode(controllerValue).getObject());
+    if (controller->m_closed)
+        return;
+    controller->m_closed = true;
 
+    controller->m_onPull.clear();
     JSC::JSValue function = controller->m_onClose.get();
+    controller->m_onClose.clear();
+    auto readableStream = controller->m_weakReadableStream.get();
+    controller->m_weakReadableStream.clear();
     if (!function)
         return;
-    // only call close once
-    controller->m_onClose.clear();
     JSC::JSGlobalObject* globalObject = controller->globalObject();
     auto scope = DECLARE_THROW_SCOPE(globalObject->vm());
 
     JSC::MarkedArgumentBuffer arguments;
-    auto readableStream = controller->m_weakReadableStream.get();
     arguments.append(readableStream ? readableStream : JSC::jsUndefined());
     arguments.append(JSC::JSValue::decode(reason));
     AsyncContextFrame::call(globalObject, function, JSC::jsUndefined(), arguments);

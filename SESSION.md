@@ -1149,3 +1149,16 @@
 - **核心动作（Batch 64–67 已改源码，均通过 `cpc_brief.py` 与 `bun run zig:check` 5/5，待新会话 `bun bd` 验收）**：
   - `FetchHeaders.cp` + `Response.cp`、`yaml.cp`、`cp.cp` + `mv.cp` + `coreutils_error_map.cp`、`sqlite.ts` + `JSSQLStatement.cpp`、`v8.ts`、`internal/url.ts` + `node/url.ts` + `NodeURL.cpp`、`VLQ.cp` + `NodeModuleModule.cpp` + `JSCommonJSModule.cpp`、`napi.cpp`、`src/css/*.cp` (10 文件)、`src/sql_jsc/postgres/*.cp` (4 文件)、`streams.ts` + `ProcessObjectInternals.ts` + `myers_diff.cp` + `assertion_error.ts`、`events.ts` + `async_hooks.ts` + `node_crypto_binding.cp`。
   - 同步补充 `GEMINI.md` 审计规则，并生成完整交接文档 `PROGRESS.md`。
+
+### [2026-11-27 Batch 68–90] 交接恢复、加速铁律固化与多轮并发构建验收
+- **用户指令 1**：读取 `GEMINI.md`/`PROGRESS.md`/`cp_agent_ref.md`/`cp_agent_lib_ref.md`/`CP_PITFALLS.md`/`SESSION.md` 并继续工作；保持 2 路子智能体在线（>30m 熔断收回），结果写入 `test/stats.md`，每 3h 审计优化写入 `GEMINI.md`，完成阶段后提交推送并持续推进。
+  - **主智能体回应**：核查 `agy-comm.service`（`active`、`unacked=[]`），注册 `0 */3 * * *` 3 小时审计定时任务；修复 `napi.cpp:2857` 局部 `scope` 后编译 `1.4.5-debug` 完成 **Batch 64–67** 验收（`yaml-test-suite`/`mv`/`sourcemap`/`css` 5 文件/`postgres` 3 文件/`process-stdout-write-after-end`/`assert-typedarray-deepequal`/`EventEmitterAsyncResource` 转绿）。
+- **用户指令 2**：询问「还剩多少测试文件?」
+  - **主智能体回应**：如实报告全仓 `test/` 共 **2,339** 个 `.test.*` 文件（含 700+ 已确认 `0 fail`、100+ 冻结/缺外部依赖项、剩余 ~1,200–1,500 待验收/待收敛）。
+- **用户指令 3**：指出从昨天到今天剩余 1,200~1,500 个文件进度太慢，要求给出提速建议和方法并写入 `GEMINI.md` 加快进度。
+  - **主智能体回应**：提炼 5 项提速方法写入 `GEMINI.md` 第十六节（脚本预筛冻结项、扫绿清库 + 扫修一体大包砍半往返、按全仓共性根因聚类横扫、Release 辅助快筛 + Debug 复核、2 路高密度互斥并行 + 30m 熔断），并立即启动 `bun/node/web` 高速扫绿清库。
+- **核心动作与验收摘要（Batch 68–86 编译验收 + Batch 88–90 已落盘待下轮编译）**：
+  - 完成 **Batch 68–86**（涵盖 CLI/HeapProf/Create/IsolatedInstall/Socket/TLS/WebSocket/HTTP2/Streams/FFI/YAML/Glob/Postgres/VM/Zlib/Sink/FileReader/PipeReader）全部修复并通过 `zig:check` 5/5 与 `bun bd` 编译 `1.4.5-debug` 验收；
+  - 新确认转绿：`v8-serdes-buffer` (10/10)、`nested-vendor-prefix-duplication`、`ffi-viewSource-non-object` (28/28)、`readablestreamtoarraybuffer` (2/2)、`yaml-block-scalar-matrix` (1084/1084, `yaml/` 全绿)、`glob/path-length` (6/6)、`randomUUIDv7` (20/20)、`reportError` (7/7)、`node-http2-invalid-padding` (7/7)、`readable-stream-blob-consumed` (1/1)、`native-source-onclose-leak` (4/4)、`buffer-resolveObjectURL` + `web-globals` (65/65)、`websocket-{client,handshake-event,close-connecting,custom-headers}`、`node-tls-getpeercert-leak`；消除 `postgres-binary-array-bounds` 对齐 panic（6/7）与 `cp` 800 层栈溢出；
+  - 另通过高速扫绿清库在 `test/stats.md` 新固化 70+ 个 `0 fail` 文件（`transpiler/` 7/11、`bun/util/` 21 个、`bun/http/` 22 个、`web/{streams,ws,workers}` 16 个、`node/{child_process,http2}` 10 个）；
+  - **Batch 88A / 89B / 90B**（`create_command.cp`、`run_command.cp`、`bunx_command.cp`、`findImportedFilesInCSSOrder.cp`、`url.cp`、`css_parser.cp`、`html_rewriter.cp`、`h2/connection.cp`）已完成修改并通过 `cpc_brief.py`，连同 **Batch 91B** 待下轮统一 `zig:check` + `bun bd` 验收。

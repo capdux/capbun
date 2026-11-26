@@ -800,33 +800,39 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
 
     if (opts := arguments_g.val.nextEat()) {
         if (opts.isObject()) {
-            if (editor_val := opts.getTruthy(globalThis, "editor")?) {
-                let sliced = editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
-                const prev_name = edit.name;
+            if (editor_val := opts.get(globalThis, "editor")?) {
+                if (!editor_val.isUndefinedOrNull()) {
+                    let sliced = editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
+                    const prev_name = edit.name;
 
-                if (!strings.eqlLong(prev_name, sliced.slice(), true)) {
-                    const prev = edit.*;
-                    edit.name = sliced.slice();
-                    edit.detectEditor(VirtualMachine.get().transpiler.env);
-                    editor_choice = edit.found();
-                    if (editor_choice == null) {
-                        edit.* = prev;
-                        return globalThis.throw("Could not find editor \"{s}\"", .{ sliced.slice() });
-                    } else if (edit.name.ptr == edit.path.ptr) {
-                        edit.name = arguments_g.val.@"arena".allocator().dupe(u8, edit.path) catch unreachable;
-                        edit.path = edit.path;
+                    if (!strings.eqlLong(prev_name, sliced.slice(), true)) {
+                        const prev = edit.*;
+                        edit.name = sliced.slice();
+                        edit.detectEditor(VirtualMachine.get().transpiler.env);
+                        editor_choice = edit.found();
+                        if (editor_choice == null) {
+                            edit.* = prev;
+                            return globalThis.throw("Could not find editor \"{s}\"", .{ sliced.slice() });
+                        } else if (edit.name.ptr == edit.path.ptr) {
+                            edit.name = arguments_g.val.@"arena".allocator().dupe(u8, edit.path) catch unreachable;
+                            edit.path = edit.path;
+                        }
                     }
                 }
             }
 
-            if (line_ := opts.getTruthy(globalThis, "line")?) {
-                const line_slice = line_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
-                line = line_slice.slice();
+            if (line_ := opts.get(globalThis, "line")?) {
+                if (!line_.isUndefinedOrNull()) {
+                    const line_slice = line_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
+                    line = line_slice.slice();
+                }
             }
 
-            if (column_ := opts.getTruthy(globalThis, "column")?) {
-                const col_slice = column_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
-                column = col_slice.slice();
+            if (column_ := opts.get(globalThis, "column")?) {
+                if (!column_.isUndefinedOrNull()) {
+                    const col_slice = column_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
+                    column = col_slice.slice();
+                }
             }
         }
     }
@@ -907,21 +913,22 @@ pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     // Expect at least one argument.  We allow more than one but ignore them; this
     //  is useful for supporting things like `[1, 2].map(sleepSync)`
     if (arguments.len < 1) {
-        return globalObject.throwNotEnoughArguments("sleepSync", 1, 0);
+        return globalObject.ERR(.INVALID_ARG_TYPE, "milliseconds must be a number", .{}).throw();
     }
     const arg = arguments.slice()[0];
 
     // The argument must be a number
     if (!arg.isNumber()) {
-        return globalObject.throwInvalidArgumentType("sleepSync", "milliseconds", "number");
+        return globalObject.ERR(.INVALID_ARG_TYPE, "milliseconds must be a number", .{}).throw();
     }
 
     //NOTE: if argument is > max(i32) then it will be truncated
     const milliseconds = arg.coerce(i32, globalObject)?;
     if (milliseconds < 0) {
-        return globalObject.throwInvalidArguments("argument to sleepSync must not be negative, got {d}", .{ milliseconds });
+        return globalObject.ERR(.INVALID_ARG_TYPE, "argument to sleepSync must not be negative, got {d}", .{ milliseconds }).throw();
     }
 
+    bun.mimalloc.mi_collect(false);
     std.Thread.sleep(@as(u64, i32(milliseconds)) * std.time.ns_per_ms);
     return JSValue.js_undefined;
 }
@@ -1718,10 +1725,26 @@ pub enum JSZlibLibrary {
 pub struct JSZlib {
     pub const Library = JSZlibLibrary;
 
+    static fn validateDataArg(globalThis: *JSGlobalObject, buffer_value: JSValue): bun.JSError!void {
+        if (!buffer_value.isString() && buffer_value.asArrayBuffer(globalThis) == null) {
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
+        }
+    }
+
+    static fn coerceInt32Checked(globalThis: *JSGlobalObject, val: JSValue): bun.JSError!i32 {
+        const num = val.toNumber(globalThis)?;
+        if (globalThis.hasException()) return error.JSError;
+        if (!std.math.isFinite(num) || num < @as(f64, @floatFromInt(std.math.minInt(i32))) || num > @as(f64, @floatFromInt(std.math.maxInt(i32)))) {
+            return globalThis.ERR(.OUT_OF_RANGE, "Value is out of range for 32-bit signed integer", .{}).throw();
+        }
+        return @as(i32, @intFromFloat(@trunc(num)));
+    }
+
     // This has to be `inline` due to the callframe.
-    static inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZlibOptionsTuple {
+    static inline fn getOptionArgs(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError![JSValue, JSValue?] {
         const arguments = callframe.arguments_old(2).slice();
         const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
+        validateDataArg(globalThis, buffer_value)?;
         const options_val: JSValue? =
             if (arguments.len > 1 && arguments[1].isObject())
                 arguments[1]
@@ -1729,46 +1752,30 @@ pub struct JSZlib {
                 return globalThis.throwInvalidArguments("Expected options to be an object", .{});
             } else null;
 
-        if (buffer := jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)?) {
-            return .{ buffer, options_val };
-        }
-
-        return globalThis.throwInvalidArguments("Expected buffer to be a string or buffer", .{});
+        return .{ buffer_value, options_val };
     }
 
     static fn gzipSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptions(globalThis, callframe))?;
-        const buffer = opts[0];
-        const options_val = opts[1];
-        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
-        return gzipOrDeflateSync(globalThis, buffer, options_val, true);
+        const opts = (getOptionArgs(globalThis, callframe))?;
+        return gzipOrDeflateSync(globalThis, opts[0], opts[1], true);
     }
 
     static fn inflateSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptions(globalThis, callframe))?;
-        const buffer = opts[0];
-        const options_val = opts[1];
-        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
-        return gunzipOrInflateSync(globalThis, buffer, options_val, false);
+        const opts = (getOptionArgs(globalThis, callframe))?;
+        return gunzipOrInflateSync(globalThis, opts[0], opts[1], false);
     }
 
     static fn deflateSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptions(globalThis, callframe))?;
-        const buffer = opts[0];
-        const options_val = opts[1];
-        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
-        return gzipOrDeflateSync(globalThis, buffer, options_val, false);
+        const opts = (getOptionArgs(globalThis, callframe))?;
+        return gzipOrDeflateSync(globalThis, opts[0], opts[1], false);
     }
 
     static fn gunzipSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptions(globalThis, callframe))?;
-        const buffer = opts[0];
-        const options_val = opts[1];
-        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
-        return gunzipOrInflateSync(globalThis, buffer, options_val, true);
+        const opts = (getOptionArgs(globalThis, callframe))?;
+        return gunzipOrInflateSync(globalThis, opts[0], opts[1], true);
     }
 
-    static fn gunzipOrInflateSync(globalThis: *JSGlobalObject, buffer: jsc.Node.StringOrBuffer, options_val_: JSValue?, is_gzip: bool): bun.JSError!JSValue {
+    static fn gunzipOrInflateSync(globalThis: *JSGlobalObject, buffer_value: JSValue, options_val_: JSValue?, is_gzip: bool): bun.JSError!JSValue {
         let opts = zlib.Options{
             gzip: is_gzip,
             windowBits: if (is_gzip) 31 else -15,
@@ -1777,21 +1784,21 @@ pub struct JSZlib {
         let library: Library = .zlib;
         if (options_val := options_val_) {
             if (window := options_val.get(globalThis, "windowBits")?) {
-                opts.windowBits = window.coerce(i32, globalThis)?;
+                opts.windowBits = coerceInt32Checked(globalThis, window)?;
                 library = .zlib;
             }
 
             if (level := options_val.get(globalThis, "level")?) {
-                opts.level = level.coerce(i32, globalThis)?;
+                opts.level = coerceInt32Checked(globalThis, level)?;
             }
 
             if (memLevel := options_val.get(globalThis, "memLevel")?) {
-                opts.memLevel = memLevel.coerce(i32, globalThis)?;
+                opts.memLevel = coerceInt32Checked(globalThis, memLevel)?;
                 library = .zlib;
             }
 
             if (strategy := options_val.get(globalThis, "strategy")?) {
-                opts.strategy = strategy.coerce(i32, globalThis)?;
+                opts.strategy = coerceInt32Checked(globalThis, strategy)?;
                 library = .zlib;
             }
 
@@ -1809,6 +1816,10 @@ pub struct JSZlib {
         }
 
         if (globalThis.hasException()) return JSValue.zero;
+
+        const buffer = (jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)?) ??
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
 
         const compressed = buffer.slice();
         const allocator = jsc.VirtualMachine.get().allocator;
@@ -1903,7 +1914,7 @@ pub struct JSZlib {
 
     static fn gzipOrDeflateSync(
         globalThis: *JSGlobalObject,
-        buffer: jsc.Node.StringOrBuffer,
+        buffer_value: JSValue,
         options_val_: JSValue?,
         is_gzip: bool,
     ): bun.JSError!JSValue {
@@ -1913,7 +1924,7 @@ pub struct JSZlib {
 
         if (options_val := options_val_) {
             if (window := options_val.get(globalThis, "windowBits")?) {
-                windowBits = window.coerce(i32, globalThis)?;
+                windowBits = coerceInt32Checked(globalThis, window)?;
                 library = .zlib;
             }
 
@@ -1930,12 +1941,16 @@ pub struct JSZlib {
             }
 
             if (level_value := options_val.get(globalThis, "level")?) {
-                level = level_value.coerce(i32, globalThis)?;
+                level = coerceInt32Checked(globalThis, level_value)?;
                 if (globalThis.hasException()) return JSValue.zero;
             }
         }
 
         if (globalThis.hasException()) return JSValue.zero;
+
+        const buffer = (jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)?) ??
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
 
         const compressed = buffer.slice();
         const allocator = bun.default_allocator;
@@ -2118,34 +2133,23 @@ pub struct JSZstd {
         bun.allocators.freeWithoutSize(ctx);
     }
 
-    static inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZstdOptionsTuple {
-        const arguments = callframe.arguments();
-        const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
-        const options_val: JSValue? =
-            if (arguments.len > 1 && arguments[1].isObject())
-                arguments[1]
-            else if (arguments.len > 1 && !arguments[1].isUndefined()) {
-                return globalThis.throwInvalidArguments("Expected options to be an object", .{});
-            } else null;
-
-        if (buffer := jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)?) {
-            return .{ buffer, options_val };
+    static fn validateDataArg(globalThis: *JSGlobalObject, buffer_value: JSValue): bun.JSError!void {
+        if (!buffer_value.isString() && buffer_value.asArrayBuffer(globalThis) == null) {
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
         }
-
-        return globalThis.throwInvalidArguments("Expected buffer to be a string or buffer", .{});
     }
 
     static fn getLevel(globalThis: *JSGlobalObject, options_val: JSValue?): bun.JSError!i32 {
         if (option_obj := options_val) {
             if (level_val := option_obj.get(globalThis, "level")?) {
-                const value = level_val.coerce(i32, globalThis)?;
+                const num = level_val.toNumber(globalThis)?;
                 if (globalThis.hasException()) return error.JSError;
 
-                if (value < 1 || value > 22) {
+                if (!std.math.isFinite(num) || num < 1.0 || num > 22.0) {
                     return globalThis.throwInvalidArguments("Compression level must be between 1 and 22", .{});
                 }
 
-                return value;
+                return @as(i32, @intFromFloat(@trunc(num)));
             }
         }
 
@@ -2155,6 +2159,7 @@ pub struct JSZstd {
     static inline fn getOptionsAsync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZstdOptionsAsyncTuple {
         const arguments = callframe.arguments();
         const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
+        validateDataArg(globalThis, buffer_value)?;
         const options_val: JSValue? =
             if (arguments.len > 1 && arguments[1].isObject())
                 arguments[1]
@@ -2169,16 +2174,25 @@ pub struct JSZstd {
             return .{ buffer, options_val, level };
         }
 
-        return globalThis.throwInvalidArguments("Expected buffer to be a string or buffer", .{});
+        return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
     }
 
     static fn compressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptions(globalThis, callframe))?;
-        const buffer = opts[0];
-        const options_val = opts[1];
-        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
+        const arguments = callframe.arguments();
+        const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
+        validateDataArg(globalThis, buffer_value)?;
+        const options_val: JSValue? =
+            if (arguments.len > 1 && arguments[1].isObject())
+                arguments[1]
+            else if (arguments.len > 1 && !arguments[1].isUndefined()) {
+                return globalThis.throwInvalidArguments("Expected options to be an object", .{});
+            } else null;
 
         const level = getLevel(globalThis, options_val)?;
+
+        const buffer = (jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)?) ??
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
+        const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
 
         const input = buffer.slice();
         const allocator = bun.default_allocator;
@@ -2205,8 +2219,12 @@ pub struct JSZstd {
     }
 
     static fn decompressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptions(globalThis, callframe))?;
-        const buffer = opts[0];
+        const arguments = callframe.arguments();
+        const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
+        validateDataArg(globalThis, buffer_value)?;
+
+        const buffer = (jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, buffer_value)?) ??
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
         const _buf_g = DeinitGuard<jsc.Node.StringOrBuffer>{ val: buffer };
 
         const input = buffer.slice();

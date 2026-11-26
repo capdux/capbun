@@ -239,6 +239,7 @@ pub struct HeapProfOptions_ {
     text_format: bool = false,
     name: []const u8 = "",
     dir: []const u8 = "",
+    interval: u32 = 524288,
 }
 
 export struct RuntimeOptions {

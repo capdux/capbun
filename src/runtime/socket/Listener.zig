@@ -978,7 +978,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: ?*TCPSock
         const port = socket_config.port;
         if ((port != null)) {
             const hn = hostname_or_unix.slice();
-            const valid_hn = (if ((((hn.len >= 2) and (hn[0] == 91)) and (hn[@as(usize, @intCast((hn.len - 1)))] == 93))) ((blk_catch_8: { break :blk_catch_8 ((std.net.Address.parseIp(hn[1..(hn.len - 1)], 0)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); }) != null) else bun.dns.isValidHostname(hn));
+            const valid_hn = (if ((((hn.len >= 2) and (hn[0] == 91)) and (hn[@as(usize, @intCast((hn.len - 1)))] == 93))) ((blk_catch_8: { break :blk_catch_8 ((std.net.Ip6Address.parse(hn[1..(hn.len - 1)], 0)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); }) != null) else bun.dns.isValidHostname(hn));
             if ((!valid_hn)) {
                 var promise = jsc.JSPromise.create(globalObject);
                 _ = &promise;

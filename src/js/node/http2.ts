@@ -2007,16 +2007,14 @@ function sessionErrorFromCode(code: number) {
   return $ERR_HTTP2_SESSION_ERROR(code);
 }
 hideFromStack(sessionErrorFromCode);
-// For violations OUR engine detects (bad frame sizes, etc.): the message carries the
-// NGHTTP2_* constant name. Node surfaces these as a generic ERR_HTTP2_ERROR from
-// nghttp2; bun deliberately keeps its richer named session error (covered by the
-// "bun aligned" suite in node-http2.test.js). GOAWAY-received errors stay numeric
-// (sessionErrorFromCode) to match node's message exactly.
+// For violations OUR engine detects (bad frame sizes, etc.): Node's nghttp2
+// surfaces these as a generic ERR_HTTP2_ERROR("Protocol error"). GOAWAY-received
+// errors stay numeric (sessionErrorFromCode) to match node's message exactly.
 function sessionErrorFromCodeNamed(code: number) {
   if (code === 0xe) {
     return $ERR_HTTP2_MAX_PENDING_SETTINGS_ACK();
   }
-  return $ERR_HTTP2_SESSION_ERROR(nameForErrorCode[code] || code);
+  return $ERR_HTTP2_ERROR("Protocol error");
 }
 hideFromStack(sessionErrorFromCodeNamed);
 

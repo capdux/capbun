@@ -310,6 +310,9 @@ pub fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe:
         if ((arguments.len < 1)) {
             return jsc.JSValue.js_undefined;
         }
+        if ((!arguments.ptr[0].isString())) {
+            return jsc.JSValue.js_undefined;
+        }
         var str = try arguments.ptr[0].toBunString(globalObject);
         _ = &str;
         var _str_g = DerefGuard(@TypeOf(str)){ .ptr = (&str) };

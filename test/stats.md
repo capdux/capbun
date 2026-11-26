@@ -165,9 +165,45 @@
 
 ---
 
-## 五、Batch 64–67 已修待编与新扫描清单（2026-11-27）
+## 五、Batch 64–67 验收与新扫描清单（2026-11-27）
 
-1. **新扫描 0 fail（已确认，不再重跑）**：
+1. **Batch 64–67 实测 `1.4.5-debug` 全绿转正（0 fail，不再重跑）**：
+   - `test/js/bun/yaml/yaml-test-suite.test.ts` (0 fail; `yaml-block-scalar-matrix` 仅余 2 fail, 合计 1484 pass / 2 fail)
+   - `test/js/bun/shell/commands/mv.test.ts` (0 fail; `cp.test.ts` 仅余 2 fail, 合计 24 pass / 31 skip / 2 fail)
+   - `test/js/node/module/sourcemap.test.js` (0 fail)
+   - `test/js/bun/css/{supports-condition-newline,custom-pseudo-ident-escape,nth-anplusb-ident,selector-list-error-recovery,token-list-backtracking}.test.ts` (5 文件 0 fail; `nested-vendor-prefix-duplication` 1 fail, 合计 68/69)
+   - `test/js/sql/{postgres-binary-float-nan-box,postgres-float-infinity,postgres-invalid-message-length}.test.ts` (3 文件 0 fail: 4/4, 4/4, 11/11)
+   - `test/js/node/process/process-stdout-write-after-end.test.ts` & `test/js/node/assert/assert-typedarray-deepequal.test.ts` (49/49, 0 fail)
+   - `test/js/node/async_hooks/EventEmitterAsyncResource.test.ts` (0 fail; `AsyncLocalStorage-tracking` 仅余 `ws-send`, 合计 80/81)
+   - `test/js/node/v8/v8-serdes-buffer.test.ts` (10/10, 0 fail)
+   - `test/js/bun/css/nested-vendor-prefix-duplication.test.ts` (0 fail)
+   - **扫绿清库新确认 0 fail（Batch 79+ 扫测，不再重跑）**：
+     - `test/js/bun/transpiler/`: `repl-transform`, `transpiler-comma-chain-oom`, `transpiler-enum-concat-chain-oom`, `transpiler-error-gc-uaf`, `transpiler-truncated-utf8`, `transpiler-tsconfig-uaf`, `transpiler-utf16-loader`（7/11 全绿）
+     - `test/js/bun/glob/`: `leak.test.ts`, `stress.test.ts`
+     - `test/js/node/vm/`: `script-leak.test.ts`
+     - `test/js/bun/util/`: `base64-url-safe-encode`, `bun-file-fd-read`, `bun-file-read`, `bun-file-windows`, `bun-isMainThread`, `bun-main`, `concat`, `error-gc-test`, `escapeRegExp`, `exotic-global-mutable-prototype`, `file-type`, `fileUrl`, `fuzzy-wuzzy`, `inspect-error-leak`, `pathToFileURL-invalid`, `peek`, `sleep`, `sliceAnsi-fuzz`, `text-loader`, `toUTF16Alloc`, `wrapAnsi.npm`（21 文件 0 fail）
+     - `test/js/web/streams/`: `pipeTo-signal-leak`, `transform-stream-leak`
+     - `test/js/web/websocket/`: `autobahn`, `test-ws-bidir-proxy`, `websocket-accept-header-validation`, `websocket-new-target`, `websocket-permessage-deflate-simple`, `websocket-permessage-deflate`, `websocket-pong-fragmented`, `websocket-proxy-tunnel-client-leak`, `websocket-proxy-tunnel-upgrade-leak`, `websocket-server-send-from-drain`（10 文件 0 fail）
+     - `test/js/web/workers/`: `message-channel`, `message-event`, `worker_blob`, `worker-postmessage-transfer`（4 文件 0 fail）
+     - `test/js/node/child_process/`: `child_process_ipc_large_disconnect`, `child_process_ipc`, `child_process-node`, `child-process-rlimit-nofile`, `child_process_send_cb`, `child-process-socket-inherit`（6 文件 0 fail）
+     - `test/js/node/http2/`: `h2-late-rst-staged`, `h2-push-refusal-staged`, `node-http2-continuation`, `node-http2-settings-ack-ordering`, `node-http2-invalid-padding`（5 文件 0 fail）
+     - `test/js/bun/http/`: `bun-connect-x509`, `bun-listen-connect-args`, `bun-serve-body-json-async`, `bun-serve-cookies`, `bun-serve-date`, `bun-serve-html-405`, `bun-serve-html-build-holds-server`, `bun-serve-html-entry`, `bun-serve-propagate-errors`, `bun-serve-static`, `fetch-header-count-limit`, `form-data-set-append`, `getIfPropertyExists`, `hspec`, `leaks-test`, `node-http-halfclose-midupload`, `proxy.test.js`, `serve-close-delimited-framing`, `serve-request-extra-memory`, `server-url-invalid`, `serve-stream-reject-flush-leak`, `tls-bunfile-leak`（22 文件 0 fail）
+     - `test/js/bun/net/`: `localhost-loopback-contract`, `named-pipe-listen-error`
+     - `test/js/bun/ffi/`: `ffi-viewSource-non-object.test.ts` (28/28, 0 fail)
+     - `test/js/bun/yaml/`: `yaml-block-scalar-matrix.test.ts` (1084/1084, 0 fail — `test/js/bun/yaml/` 全绿)
+     - `test/js/bun/glob/`: `leak`, `stress`, `path-length` (6/6, 0 fail)
+     - `test/js/bun/util/`: `randomUUIDv7` (20/20), `reportError` (7/7), `readablestreamtoarraybuffer` (2/2), `sleepSync` (仅余 mimalloc 1 fail), `open-in-editor-gc` (仅余 1 fail)
+     - `test/js/node/buffer-resolveObjectURL.test.ts` + `test/js/web/web-globals.test.js` (65/65, 0 fail)
+     - `test/js/web/streams/`: `readable-stream-blob-consumed` (1/1), `native-source-onclose-leak` (4/4), `readable-stream-terminal-barrier-release` (仅余 1 fail)
+     - `test/js/web/websocket/`: `websocket-client`, `websocket-handshake-event`, `websocket-close-connecting`, `websocket-custom-headers` (0 fail; `close-async-dispatch`/`fragmented` 收敛至 23/32)
+     - `test/js/sql/postgres-binary-array-bounds.test.ts`: 消除 `incorrect alignment` panic (6/7, 仅余 1 fail)
+   - **显著收敛**：`response.test.ts` (22/23, 1 fail)、`node/url/` 8 文件 (189 pass / 6 fail)、`postgres-infinity-date.test.ts` (13/14, 1 fail)、`cp.test.ts` (10 pass / 30 skip / 1 fail, 消除 `deep tree` SIGSEGV)、`socket-dns-error` + `socket-retention` (35 pass / 1 fail)
+   - **待续修**：`postgres-binary-array-bounds.test.ts`（`Tag.cp` `init` `@alignCast` 对齐 panic）、`napi_instanceof`（仍 1 fail）、`Progress.zig:145` SEGV（`bun-create.test.ts`）
+2. **明确冻结补充（Batch 75B / 77A 核查）**：
+   - `test/integration/` 22 个文件依赖在线 `bun install` 或缺外部 npm 包（仅 `bun-lambda/bun-lambda.test.ts` 为纯离线用例）
+   - `test/v8/v8.test.ts` 缺 `node-gyp` 与 `26.12.1` 头文件
+   - `test/js/bun/util/error-code-mirror.test.ts`（`src/jsc/ErrorCode.rs` 仓库不存在）
+2. **新扫描 0 fail（已确认，不再重跑）**：
    - `test/js/bun/sqlite/`：`column-types.test.js`、`sql-timezone.test.js`
    - `test/js/node/v8/` & `events/`：`event-emitter.test.ts` (91/91)、`v8-date-parser.test.js` (5/5)
    - `test/js/node/timers/` & `url/`：`pathToFileURL`, `url-fileurltopath`, `url-format-invalid-input`, `url-format`, `url-is-url`, `url-null-char`, `url-pathtofileurl`, `url-relative`, `url-revokeobjecturl`

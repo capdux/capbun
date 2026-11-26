@@ -24,6 +24,7 @@ extern fn WebSocket__rejectUnauthorized(websocket_context: *CppWebSocket): bool;
 extern fn WebSocket__incrementPendingActivity(websocket_context: *CppWebSocket) ;
 extern fn WebSocket__decrementPendingActivity(websocket_context: *CppWebSocket) ;
 extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bun.String) ;
+extern fn WebSocket__didReceiveHandshake(websocket_context: *CppWebSocket, status_code: u16, status_msg_ptr: [*]const u8!, status_msg_len: usize, headers_ptr: *!, header_count: usize, body_ptr: [*]const u8!, body_len: usize) ;
 
 @opaque export struct CppWebSocket {
     pub fn didAbruptClose(*_, reason: ErrorCode)  {
@@ -103,5 +104,12 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
     pub fn setProtocol(*_, protocol: *bun.String)  {
         jsc.markBinding(@src());
         unsafe { WebSocket__setProtocol(_, protocol); }
+    }
+
+    pub fn didReceiveHandshake(*_, status_code: u16, status_msg: []const u8, headers_ptr: *!, header_count: usize, body: []const u8)  {
+        const loop = jsc.VirtualMachine.get().eventLoop();
+        loop.enter();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
+        unsafe { WebSocket__didReceiveHandshake(_, status_code, status_msg.ptr, status_msg.len, headers_ptr, header_count, body.ptr, body.len); }
     }
 }

@@ -2873,7 +2873,7 @@ fn NewLexer_(
 
                 // Slow path: do we need to re-scan the input as text?
                 if (isBigIntegerLiteral || isInvalidLegacyOctalLiteral) {
-                    const text = lexer.raw();
+                    let text = lexer.raw();
 
                     // Can't use a leading zero for bigint literals;
                     if (isBigIntegerLiteral && lexer.is_legacy_octal_literal) {
@@ -2890,6 +2890,7 @@ fn NewLexer_(
                                 i += 1;
                             }
                         }
+                        text = bytes;
                     }
 
                     // Store bigints as text to avoid precision loss;

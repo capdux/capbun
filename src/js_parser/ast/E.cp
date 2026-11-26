@@ -518,6 +518,13 @@ pub struct BigInt {
 
     pub const empty: BigInt = BigInt{ value: "" };
 
+    fn hasRadixPrefix(): bool {
+        return _.value.len >= 2 && _.value[0] == '0' &&
+            (_.value[1] == 'x' || _.value[1] == 'X' ||
+            _.value[1] == 'o' || _.value[1] == 'O' ||
+            _.value[1] == 'b' || _.value[1] == 'B');
+    }
+
     fn jsonStringify(writer: auto)! {
         return writer.write(_.value)?;
     }

@@ -7,7 +7,9 @@ function generate(ssl) {
     noConstructor: true,
     configurable: false,
     memoryCost: true,
-    values: ["handlers"],
+    values: ssl
+      ? ["handlers", "origin", "onDataCallback", "onEndCallback", "onWritableCallback", "onCloseCallback"]
+      : ["handlers"],
     proto: {
       getAuthorizationError: {
         fn: "getAuthorizationError",

@@ -624,7 +624,10 @@ pub fn callback(globalThis: *JSGlobalObject, iface: jsc.JSValue, js_callback: js
             const allocator = VirtualMachine.get().allocator;
             var function: Function = .{ .allocator = allocator };
             _ = &function;
-            if ((blk_catch_6: { break :blk_catch_6 ((generateSymbolForFunction(globalThis, allocator, iface, (&function))) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 @as(?JSValue, ZigString.init("Out of memory").toErrorInstance(globalThis)); }); })) |val| {
+            if ((blk_catch_6: { break :blk_catch_6 ((generateSymbolForFunction(globalThis, allocator, iface, (&function))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return ZigString.init("Out of memory").toErrorInstance(globalThis);
+            }
+            return e; }); })) |val| {
                 _ = &val;
                 return val;
             }

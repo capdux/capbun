@@ -4,47 +4,52 @@ import tag_jsc from "../../../sql_jsc/postgres/types/tag_jsc.zig";
 
 const short = int_types.short;
 
+struct PostgresBinaryArraySlice {
+    ptr: [*]u8!;
+    len: usize;
+}
+
+struct PostgresBinarySingleDimensionArrayImpl<T> {
+    data: [*]u8!;
+    elem_len: i32;
+
+    pub fn slice(): PostgresBinaryArraySlice {
+        const data_ptr: [*]u8! = unsafe { @ptrCast(&_.data[20]) };
+        if (_.elem_len <= 0) {
+            return PostgresBinaryArraySlice{ ptr: data_ptr, len: 0 };
+        }
+
+        const elem_count: usize = @intCast(_.elem_len);
+        const elem_size: usize = @sizeOf(T);
+        const Int = std.meta.Int(.unsigned, @bitSizeOf(T));
+        for (i of 0..elem_count) {
+            const idx: usize = @intCast(i);
+            const src_off = idx * (4 + elem_size) + 4;
+            const dst_off = idx * elem_size;
+            const val_bytes = unsafe { data_ptr[src_off..][0..elem_size] };
+            const val = std.mem.readInt(Int, val_bytes, .big);
+            const raw_val: [elem_size]u8 = @bitCast(val);
+            const dst_bytes = unsafe { data_ptr[dst_off..][0..elem_size] };
+            unsafe { dst_bytes.* = raw_val; }
+        }
+
+        return PostgresBinaryArraySlice{ ptr: data_ptr, len: elem_count };
+    }
+
+    pub static fn init(bytes: []const u8): @This() {
+        const elem_len = std.mem.readInt(i32, bytes[12..16], .big);
+        return @This(){
+            data: unsafe { @constCast(bytes.ptr) },
+            elem_len: elem_len,
+        };
+    }
+}
+
+type PostgresBinarySingleDimensionArrayI32 = PostgresBinarySingleDimensionArrayImpl<i32>;
+type PostgresBinarySingleDimensionArrayF32 = PostgresBinarySingleDimensionArrayImpl<f32>;
+
 fn PostgresBinarySingleDimensionArray(comptime T: type): type {
-    return struct {
-        ndim: i32,
-        offset_for_data: i32,
-        element_type: i32,
-
-        len: i32,
-        index: i32,
-        first_value: T,
-
-        pub fn slice(*_): []T {
-            let head = unsafe { @as([*]T!, &_.first_value) };
-            if (_.len <= 0) return unsafe { head[0..0] };
-
-            let current = head;
-            const len: usize = @intCast(_.len);
-            for (i of 0..len) {
-                current = unsafe { current[1..] };
-
-                const val = unsafe { current[0] };
-                const Int = std.meta.Int(.unsigned, @bitSizeOf(T));
-                const swapped = @byteSwap(@as(Int, @bitCast(val)));
-
-                unsafe { head[i] = @bitCast(swapped); }
-
-                current = unsafe { current[1..] };
-            }
-
-            return unsafe { head[0..len] };
-        }
-
-        pub static fn init(bytes: []const u8): *@This() {
-            const res: *@This() = unsafe { @ptrCast(@alignCast(@constCast(bytes.ptr))) };
-            res.ndim = @byteSwap(res.ndim);
-            res.offset_for_data = @byteSwap(res.offset_for_data);
-            res.element_type = @byteSwap(res.element_type);
-            res.len = @byteSwap(res.len);
-            res.index = @byteSwap(res.index);
-            return res;
-        }
-    };
+    return if (T == i32) PostgresBinarySingleDimensionArrayI32 else PostgresBinarySingleDimensionArrayF32;
 }
 
 pub enum Tag: short {

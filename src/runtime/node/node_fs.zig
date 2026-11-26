@@ -6808,107 +6808,150 @@ pub fn cpAsync(nodefs: *NodeFS, this_: *ThisAsyncCpTask) void {
             _ = ThisAsyncCpTask._cpAsyncDirectory(nodefs, args.flags, this_, (&src_buf), @intCast(src.len), (&dest_buf), @intCast(dest.len));
     }
 
-pub fn _cpAsyncDirectory(nodefs: *NodeFS, args: Arguments.Cp.Flags, this_: *ThisAsyncCpTask, src_buf: *bun.OSPathBuffer, src_dir_len: PathString.PathInt, dest_buf: *bun.OSPathBuffer, dest_dir_len: PathString.PathInt) bool {
-            const src = src_buf[0..src_dir_len :0];
-            const dest = dest_buf[0..dest_dir_len :0];
-            if (comptime Environment.isMac) {
-                if (Maybe(Return.Cp).errnoSysP(c.clonefile(src, dest, 0), .clonefile, src)) |e| {
-                    _ = &e;
-                    switch (e.getErrno()) {
+pub fn _cpAsyncDirectory(nodefs: *NodeFS, args: Arguments.Cp.Flags, this_: *ThisAsyncCpTask, src_buf: *bun.OSPathBuffer, src_dir_len_init: PathString.PathInt, dest_buf: *bun.OSPathBuffer, dest_dir_len_init: PathString.PathInt) bool {
+        _ = args;
+            const DirPair = struct {
+    src_len: PathString.PathInt,
+    dest_len: PathString.PathInt,
+};
+            var stack = std.array_list.Managed(DirPair).init(bun.default_allocator);
+            _ = &stack;
+            defer {
+            _ = stack.deinit();
+            }
+            _ = bun.handleOom(stack.append(DirPair{ .src_len = src_dir_len_init, .dest_len = dest_dir_len_init }));
+            var path_stack = std.array_list.Managed([]const bun.OSPathChar).init(bun.default_allocator);
+            _ = &path_stack;
+            defer {
+            {
+                for (path_stack.items) |p| {
+                    _ = &p;
+                    _ = bun.default_allocator.free(p);
+                }
+                _ = path_stack.deinit();
+            }
+            }
+            var is_root = true;
+            _ = &is_root;
+            while (stack.pop()) |pair| {
+                const src_dir_len = pair.src_len;
+                const dest_dir_len = pair.dest_len;
+                if ((!is_root)) {
+                    const packed_paths = (path_stack.pop()).?;
+                    defer {
+                    _ = bun.default_allocator.free(packed_paths);
+                    }
+                    _ = @memcpy(src_buf[0..src_dir_len], packed_paths[0..src_dir_len]);
+                    src_buf[cp_cast_int(usize, src_dir_len)] = 0;
+                    _ = @memcpy(dest_buf[0..dest_dir_len], packed_paths[src_dir_len..(src_dir_len + dest_dir_len)]);
+                    dest_buf[cp_cast_int(usize, dest_dir_len)] = 0;
+                }
+                is_root = false;
+                const src = src_buf[0..src_dir_len :0];
+                const dest = dest_buf[0..dest_dir_len :0];
+                if (comptime Environment.isMac) {
+                    if (Maybe(Return.Cp).errnoSysP(c.clonefile(src, dest, 0), .clonefile, src)) |e| {
+                        _ = &e;
+                        switch (e.getErrno()) {
 .ACCES, .NAMETOOLONG, .ROFS, .PERM, .INVAL => {
 _ = @memcpy(nodefs.sync_error_buf[0..src.len], src);
-                    _ = this_.finishConcurrently(.{ .err = e.err.withPath(nodefs.sync_error_buf[0..src.len]) });
-                    return false;
+                        _ = this_.finishConcurrently(.{ .err = e.err.withPath(nodefs.sync_error_buf[0..src.len]) });
+                        return false;
 },
 else => {
 
 },
 }
-                } else {
-                    return true;
+                    } else {
+                        continue;
+                    }
                 }
-            }
-            const open_flags = (bun.O.DIRECTORY | bun.O.RDONLY);
-            const fd = (switch (Syscall.openatOSPath(bun.FD.cwd(), src, open_flags, 0)) {
+                const open_flags = (bun.O.DIRECTORY | bun.O.RDONLY);
+                const fd = (switch (Syscall.openatOSPath(bun.FD.cwd(), src, open_flags, 0)) {
 .err => |e| {
 {
-                _ = this_.finishConcurrently(.{ .err = e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
-                return false;
-            }
+                    _ = this_.finishConcurrently(.{ .err = e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
+                    return false;
+                }
 },
 .result => |fd_| fd_,
 });
-            var _fd_guard = FDGuard{ .fd = fd };
-            _ = &_fd_guard;
-            var ___fd_guard_moved = false; _ = &___fd_guard_moved;
-            defer if (!___fd_guard_moved) { ___fd_guard_moved = true; const __T = @TypeOf(_fd_guard); if (@typeInfo(__T) == .optional) { if (_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fd_guard; _drop_val.__cp_deinit(); } };
-            var buf: bun.OSPathBuffer = undefined;
-            _ = &buf;
-            const normdest: bun.OSPathSliceZ = (if (Environment.isWindows) (switch (bun.sys.normalizePathWindows(u16, bun.invalid_fd, dest, (&buf), .{ .add_nt_prefix = false })) {
+                var _fd_guard = FDGuard{ .fd = fd };
+                _ = &_fd_guard;
+                var ___fd_guard_moved = false; _ = &___fd_guard_moved;
+                defer if (!___fd_guard_moved) { ___fd_guard_moved = true; const __T = @TypeOf(_fd_guard); if (@typeInfo(__T) == .optional) { if (_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fd_guard; _drop_val.__cp_deinit(); } };
+                const normdest: bun.OSPathSliceZ = (if (comptime Environment.isWindows) blk: {
+                var buf: bun.OSPathBuffer = undefined;
+                _ = &buf;
+                break :blk (switch (bun.sys.normalizePathWindows(u16, bun.invalid_fd, dest, (&buf), .{ .add_nt_prefix = false })) {
 .err => |e| {
 {
-                _ = this_.finishConcurrently(.{ .err = e });
-                return false;
-            }
+                    _ = this_.finishConcurrently(.{ .err = e });
+                    return false;
+                }
 },
 .result => |normdest| normdest,
-}) else dest);
-            const mkdir_ = nodefs.mkdirRecursiveOSPath(normdest, Arguments.Mkdir.DefaultMode, false);
-            switch (mkdir_) {
+});
+} else dest);
+                const mkdir_ = nodefs.mkdirRecursiveOSPath(normdest, Arguments.Mkdir.DefaultMode, false);
+                switch (mkdir_) {
 .err => |e| {
 _ = this_.finishConcurrently(.{ .err = e });
-            return false;
+                return false;
 },
 .result => {
 _ = this_.onCopy(src, normdest);
 },
 }
-            var iterator = DirIterator.iterate(fd, (if (Environment.isWindows) .@"u16" else .@"u8"));
-            _ = &iterator;
-            var entry = iterator.next();
-            _ = &entry;
-            while ((switch (entry) {
+                var iterator = DirIterator.iterate(fd, (if (Environment.isWindows) .@"u16" else .@"u8"));
+                _ = &iterator;
+                var entry = iterator.next();
+                _ = &entry;
+                while ((switch (entry) {
 .err => |e| {
 {
-                _ = this_.finishConcurrently(.{ .err = e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
-                return false;
-            }
+                    _ = this_.finishConcurrently(.{ .err = e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
+                    return false;
+                }
 },
 .result => |ent| ent,
 })) |current| : (entry = iterator.next()) {
-                const cname = (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).slice();
-                if ((((((if (comptime @typeInfo(@TypeOf(src_dir_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(src_dir_len)) else cp_cast_int(usize, src_dir_len)) + 1) + cname.len) >= src_buf.len) or ((((if (comptime @typeInfo(@TypeOf(dest_dir_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(dest_dir_len)) else cp_cast_int(usize, dest_dir_len)) + 1) + cname.len) >= dest_buf.len))) {
-                    _ = this_.finishConcurrently(.{ .err = .{ .errno = @intFromEnum(E.NAMETOOLONG), .syscall = .copyfile, .path = nodefs.osPathIntoSyncErrorBuf(src_buf[0..src_dir_len]) } });
-                    return false;
-                }
-                switch (current.kind) {
+                    const cname = (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).slice();
+                    if ((((((if (comptime @typeInfo(@TypeOf(src_dir_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(src_dir_len)) else cp_cast_int(usize, src_dir_len)) + 1) + cname.len) >= src_buf.len) or ((((if (comptime @typeInfo(@TypeOf(dest_dir_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(dest_dir_len)) else cp_cast_int(usize, dest_dir_len)) + 1) + cname.len) >= dest_buf.len))) {
+                        _ = this_.finishConcurrently(.{ .err = .{ .errno = @intFromEnum(E.NAMETOOLONG), .syscall = .copyfile, .path = nodefs.osPathIntoSyncErrorBuf(src_buf[0..src_dir_len]) } });
+                        return false;
+                    }
+                    switch (current.kind) {
 .directory => {
-_ = @memcpy(src_buf[(src_dir_len + 1)..((src_dir_len + 1) + cname.len)], cname);
-                src_buf[cp_cast_int(usize, src_dir_len)] = std.fs.path.sep;
-                src_buf[cp_cast_int(usize, ((src_dir_len + 1) + cname.len))] = 0;
-                _ = @memcpy(dest_buf[(dest_dir_len + 1)..((dest_dir_len + 1) + cname.len)], cname);
-                dest_buf[cp_cast_int(usize, dest_dir_len)] = std.fs.path.sep;
-                dest_buf[cp_cast_int(usize, ((dest_dir_len + 1) + cname.len))] = 0;
-                const should_continue = ThisAsyncCpTask._cpAsyncDirectory(nodefs, args, this_, src_buf, @truncate(((src_dir_len + 1) + cname.len)), dest_buf, @truncate(((dest_dir_len + 1) + cname.len)));
-                if ((!should_continue)) {
-                    return false;
-                }
+const sub_src_len: PathString.PathInt = @truncate(((src_dir_len + 1) + cname.len));
+                    const sub_dest_len: PathString.PathInt = @truncate(((dest_dir_len + 1) + cname.len));
+                    var packed_paths = bun.handleOom(bun.default_allocator.alloc(bun.OSPathChar, ((if (comptime @typeInfo(@TypeOf(sub_src_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(sub_src_len)) else cp_cast_int(usize, sub_src_len)) + (if (comptime @typeInfo(@TypeOf(sub_dest_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(sub_dest_len)) else cp_cast_int(usize, sub_dest_len)))));
+                    _ = &packed_paths;
+                    _ = @memcpy(packed_paths[0..src_dir_len], src_buf[0..src_dir_len]);
+                    packed_paths[cp_cast_int(usize, src_dir_len)] = std.fs.path.sep;
+                    _ = @memcpy(packed_paths[(src_dir_len + 1)..sub_src_len], cname);
+                    _ = @memcpy(packed_paths[sub_src_len..(sub_src_len + dest_dir_len)], dest_buf[0..dest_dir_len]);
+                    packed_paths[cp_cast_int(usize, (sub_src_len + dest_dir_len))] = std.fs.path.sep;
+                    _ = @memcpy(packed_paths[((sub_src_len + dest_dir_len) + 1)..((if (comptime @typeInfo(@TypeOf(sub_src_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(sub_src_len)) else cp_cast_int(usize, sub_src_len)) + (if (comptime @typeInfo(@TypeOf(sub_dest_len)) == .@"enum") cp_cast_int(usize, @intFromEnum(sub_dest_len)) else cp_cast_int(usize, sub_dest_len)))], cname);
+                    _ = bun.handleOom(path_stack.append(packed_paths));
+                    _ = bun.handleOom(stack.append(DirPair{ .src_len = sub_src_len, .dest_len = sub_dest_len }));
 },
 else => {
 _ = this_.subtask_count.fetchAdd(1, .monotonic);
-                var path_buf = (blk_catch_3: { break :blk_catch_3 ((bun.default_allocator.alloc(bun.OSPathChar, (((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len) + 1))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
-                _ = &path_buf;
-                _ = @memcpy(path_buf[0..src_dir_len], src_buf[0..src_dir_len]);
-                path_buf[cp_cast_int(usize, src_dir_len)] = std.fs.path.sep;
-                _ = @memcpy(path_buf[(src_dir_len + 1)..((src_dir_len + 1) + cname.len)], cname);
-                path_buf[cp_cast_int(usize, ((src_dir_len + 1) + cname.len))] = 0;
-                _ = @memcpy(path_buf[(((src_dir_len + 1) + cname.len) + 1)..((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len)], dest_buf[0..dest_dir_len]);
-                path_buf[cp_cast_int(usize, ((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len))] = std.fs.path.sep;
-                _ = @memcpy(path_buf[(((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1)..((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len)], cname);
-                path_buf[cp_cast_int(usize, ((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len))] = 0;
-                _ = SingleTask.create(this_, path_buf[0..((src_dir_len + 1) + cname.len) :0], path_buf[(((src_dir_len + 1) + cname.len) + 1)..((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len) :0]);
+                    var path_buf = (blk_catch_3: { break :blk_catch_3 ((bun.default_allocator.alloc(bun.OSPathChar, (((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len) + 1))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+                    _ = &path_buf;
+                    _ = @memcpy(path_buf[0..src_dir_len], src_buf[0..src_dir_len]);
+                    path_buf[cp_cast_int(usize, src_dir_len)] = std.fs.path.sep;
+                    _ = @memcpy(path_buf[(src_dir_len + 1)..((src_dir_len + 1) + cname.len)], cname);
+                    path_buf[cp_cast_int(usize, ((src_dir_len + 1) + cname.len))] = 0;
+                    _ = @memcpy(path_buf[(((src_dir_len + 1) + cname.len) + 1)..((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len)], dest_buf[0..dest_dir_len]);
+                    path_buf[cp_cast_int(usize, ((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len))] = std.fs.path.sep;
+                    _ = @memcpy(path_buf[(((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1)..((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len)], cname);
+                    path_buf[cp_cast_int(usize, ((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len))] = 0;
+                    _ = SingleTask.create(this_, path_buf[0..((src_dir_len + 1) + cname.len) :0], path_buf[(((src_dir_len + 1) + cname.len) + 1)..((((((src_dir_len + 1) + cname.len) + 1) + dest_dir_len) + 1) + cname.len) :0]);
 },
 }
+                }
             }
             return true;
     }

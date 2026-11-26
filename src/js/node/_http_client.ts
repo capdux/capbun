@@ -12,9 +12,10 @@ const {
 const nodeHttpClient = $newZigFunction("fetch.zig", "nodeHttpClient", 2);
 const { urlToHttpOptions } = require("internal/url");
 const { throwOnInvalidTLSArray } = require("internal/tls");
-const { validateHeaderName } = require("node:_http_common");
+const { validateHeaderName, checkInvalidHeaderChar } = require("node:_http_common");
 const { getTimerDuration } = require("internal/timers");
-const { ConnResetException } = require("internal/shared");
+const { ConnResetException, getLazy } = require("internal/shared");
+const tlsModule = getLazy(() => require("node:tls"));
 const {
   kBodyChunks,
   abortedSymbol,
@@ -51,6 +52,8 @@ const {
   reqSymbol,
   callCloseCallback,
   emitCloseNTAndComplete,
+  kProxyConfig,
+  checkShouldUseProxy,
 } = require("internal/http");
 
 const { globalAgent } = require("node:_http_agent");
@@ -322,13 +325,25 @@ function ClientRequest(input, options, cb) {
           // this should work for URL like objects and strings
           proxy = agentProxy?.href || agentProxy;
         } catch {}
+        if (!proxy) {
+          const proxyConfig = this[kAgent]?.[kProxyConfig];
+          if (proxyConfig && checkShouldUseProxy(proxyConfig, { host, port: this[kPort], socketPath: this[kSocketPath] })) {
+            proxy = proxyConfig.href;
+          }
+        }
         return [url, proxy];
       }
     };
 
     const go = (url, proxy, softFail = false) => {
       const tls =
-        protocol === "https:" && this[kTls] ? { ...this[kTls], serverName: this[kTls].servername } : undefined;
+        protocol === "https:"
+          ? {
+              ...this[kTls],
+              serverName: this[kTls]?.servername,
+              checkServerIdentity: this[kTls]?.checkServerIdentity ?? tlsModule().checkServerIdentity,
+            }
+          : undefined;
 
       const fetchOptions: any = {
         method,
@@ -432,6 +447,9 @@ function ClientRequest(input, options, cb) {
           setIsNextIncomingMessageHTTPS(prevIsHTTPS);
           if (isHTTPS && res.socket) {
             res.socket.authorized = this[kTls]?.rejectUnauthorized !== false;
+            if (typeof res.socket.isSessionReused !== "function") {
+              res.socket.isSessionReused = () => false;
+            }
           }
           res.req = this;
           res.setTimeout = clientResponseSetTimeout;
@@ -1068,6 +1086,9 @@ $setPrototypeDirect.$call(ClientRequest, OutgoingMessage);
 function validateHost(host, name) {
   if (host !== null && host !== undefined && typeof host !== "string") {
     throw $ERR_INVALID_ARG_TYPE(`options.${name}`, ["string", "undefined", "null"], host);
+  }
+  if (typeof host === "string" && checkInvalidHeaderChar(host)) {
+    throw $ERR_INVALID_CHAR("host", name);
   }
   return host;
 }

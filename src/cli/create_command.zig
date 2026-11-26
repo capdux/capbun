@@ -343,7 +343,15 @@ pub fn exec(ctx: Command.Context, example_tag: Example.Tag, template: []const u8
             }
             break :brk positionals[1];
 };
-            const destination = try filesystem.dirname_store.append(string, resolve_path.joinAbs(filesystem.top_level_dir, .loose, dirname));
+            var dest_buf: bun.PathBuffer = undefined;
+            _ = &dest_buf;
+            const dest_parts: [1][]const u8 = .{ dirname };
+            const dest_joined_opt = resolve_path.joinAbsStringBufChecked(filesystem.top_level_dir, (&dest_buf), (&dest_parts), .loose);
+            if ((dest_joined_opt == null)) {
+                _ = Output.errGeneric("destination path too long", .{});
+                _ = Global.exit(1);
+            }
+            const destination = try filesystem.dirname_store.append(string, dest_joined_opt.?);
             var progress = Progress{  };
             _ = &progress;
             progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
@@ -487,14 +495,71 @@ var template_parts: [1][]const u8 = .{ template };
             errdefer {
             _ = template_dir.close();
             }
-            _ = (blk_catch_11: { break :blk_catch_11 ((std.fs.deleteTreeAbsolute(destination)) catch |__ce_11| { _ = &__ce_11;  }); });
-            var destination_dir__ = (blk_catch_12: { break :blk_catch_12 ((std.fs.cwd().makeOpenPath(destination, .{})) catch |e| { _ = &e; _ = node.end();
+            var destination_dir__ = (blk_catch_11: { break :blk_catch_11 ((std.fs.cwd().makeOpenPath(destination, .{})) catch |e| { _ = &e; _ = node.end();
             _ = progress.refresh();
             _ = Output.prettyErrorln("<r><red>{s}<r>: creating dir {s}", .{ @errorName(e), destination });
-            break :blk_catch_12 Global.exit(1); }); });
+            break :blk_catch_11 Global.exit(1); }); });
             _ = &destination_dir__;
             defer {
             _ = destination_dir__.close();
+            }
+            const destination_dir = destination_dir__;
+            if ((!create_options.overwrite)) {
+                var check_walker = try Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs);
+                _ = &check_walker;
+                var _guard_check_walker = DeinitGuard(Walker){ .ptr = (&check_walker) };
+                _ = &_guard_check_walker;
+                var ___guard_check_walker_moved = false; _ = &___guard_check_walker_moved;
+                defer if (!___guard_check_walker_moved) { ___guard_check_walker_moved = true; const __T = @TypeOf(_guard_check_walker); if (@typeInfo(__T) == .optional) { if (_guard_check_walker) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_check_walker.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_check_walker; _drop_val.__cp_deinit(); } };
+                var conflicts = std.array_list.Managed(string).init(ctx.allocator);
+                _ = &conflicts;
+                defer {
+                _ = conflicts.deinit();
+                }
+                while (try check_walker.next().unwrap()) |entry| {
+                    if ((entry.kind != .file)) {
+                        continue;
+                    }
+                    var is_conflict = false;
+                    _ = &is_conflict;
+                    if ((blk_catch_12: { break :blk_catch_12 ((destination_dir.statFile(entry.path)) catch |e| { _ = &e; break :blk_catch_12 brk_stat: {
+                    if ((e == error.NotDir)) {
+                        is_conflict = true;
+                    }
+                    break :brk_stat null;
+}; }); })) |stat| {
+                        _ = &stat;
+                        if ((stat.kind == .directory)) {
+                            is_conflict = true;
+                        } else {
+                            var in_never_conflict = false;
+                            _ = &in_never_conflict;
+                            inline for (never_conflict) |nc| {
+                                if (strings.eql(entry.path, nc)) {
+                                    in_never_conflict = true;
+                                    break;
+                                }
+                            }
+                            if ((!in_never_conflict)) {
+                                is_conflict = true;
+                            }
+                        }
+                    }
+                    if (is_conflict) {
+                        _ = bun.handleOom(conflicts.append(bun.handleOom(ctx.allocator.dupe(u8, entry.path))));
+                    }
+                }
+                if ((conflicts.items.len > 0)) {
+                    _ = node.end();
+                    _ = progress.refresh();
+                    _ = Output.prettyErrorln("<r>\n<red>error<r><d>: <r>The directory <b><blue>{s}<r>/ contains files that could conflict:\n\n", .{ std.fs.path.basename(destination) });
+                    for (conflicts.items) |path| {
+                        _ = &path;
+                        _ = Output.prettyErrorln("<r>  {s}", .{ path });
+                    }
+                    _ = Output.prettyErrorln("<r>\n<d>To overwrite them, use --force<r>", .{});
+                    _ = Global.exit(1);
+                }
             }
             var destination_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
             _ = &destination_buf;
@@ -510,7 +575,6 @@ var template_parts: [1][]const u8 = .{ template };
                 _ = strings.copyU8IntoU16((&template_path_buf), src_without_trailing_slash);
                 template_path_buf[cp_cast_int(usize, src_without_trailing_slash.len)] = std.fs.path.sep;
             }
-            const destination_dir = destination_dir__;
             var walker_ = try Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs);
             _ = &walker_;
             var _guard_walker = DeinitGuard(Walker){ .ptr = (&walker_) };
@@ -594,10 +658,21 @@ _ = unreachable;
                 _ = &_guard_parent_dir;
                 var ___guard_parent_dir_moved = false; _ = &___guard_parent_dir_moved;
                 defer if (!___guard_parent_dir_moved) { ___guard_parent_dir_moved = true; const __T = @TypeOf(_guard_parent_dir); if (@typeInfo(__T) == .optional) { if (_guard_parent_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_parent_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_parent_dir; _drop_val.__cp_deinit(); } };
+                var rename_err = false;
+                _ = &rename_err;
                 if (comptime Environment.isWindows) {
-                    _ = (blk_catch_17: { break :blk_catch_17 ((parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{})) catch |__ce_17| { _ = &__ce_17;  }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{})) catch |e| { _ = &e; if ((e != error.FileNotFound)) {
+                        _ = Output.prettyErrorln("<r><red>{s}<r>: renaming gitignore to .gitignore", .{ @errorName(e) });
+                        rename_err = true;
+                    } }); });
                 } else {
-                    _ = (blk_catch_18: { break :blk_catch_18 ((std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0)) catch |__ce_18| { _ = &__ce_18;  }); });
+                    _ = (blk_catch_18: { break :blk_catch_18 ((std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0)) catch |e| { _ = &e; if ((e != error.FileNotFound)) {
+                        _ = Output.prettyErrorln("<r><red>{s}<r>: renaming gitignore to .gitignore", .{ @errorName(e) });
+                        rename_err = true;
+                    } }); });
+                }
+                if (rename_err) {
+                    _ = Global.exit(1);
                 }
                 _ = (blk_catch_19: { break :blk_catch_19 ((std.posix.unlinkat(parent_dir.fd, "gitignore", 0)) catch |__ce_19| { _ = &__ce_19;  }); });
                 _ = (blk_catch_20: { break :blk_catch_20 ((std.posix.unlinkat(parent_dir.fd, ".npmignore", 0)) catch |__ce_20| { _ = &__ce_20;  }); });
@@ -815,13 +890,30 @@ else => {
             _ = &npm_client_;
             create_options.skip_install = (create_options.skip_install or (!has_dependencies));
             if ((!create_options.skip_git)) {
+                if ((blk_catch_25: { break :blk_catch_25 ((std.fs.openDirAbsolute(destination, .{})) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 null; }); })) |dest_dir| {
+                    _ = &dest_dir;
+                    var d = dest_dir;
+                    _ = &d;
+                    defer {
+                    _ = d.close();
+                    }
+                    var has_git = true;
+                    _ = &has_git;
+                    _ = (blk_catch_26: { break :blk_catch_26 ((d.access(".git", .{})) catch |__ce_26| { _ = &__ce_26; has_git = false;
+                    break :blk_catch_26 {}; }); });
+                    if (has_git) {
+                        create_options.skip_git = true;
+                    }
+                }
+            }
+            if ((!create_options.skip_git)) {
                 if ((!create_options.skip_install)) {
                     _ = GitHandler.spawn(destination, PATH, create_options.verbose);
                 } else {
                     if (create_options.verbose) {
-                        create_options.skip_git = (blk_catch_25: { break :blk_catch_25 ((GitHandler.run(destination, PATH, true)) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 @as(bool, false); }); });
+                        create_options.skip_git = (!(blk_catch_27: { break :blk_catch_27 ((GitHandler.run(destination, PATH, true)) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 @as(bool, false); }); }));
                     } else {
-                        create_options.skip_git = (blk_catch_26: { break :blk_catch_26 ((GitHandler.run(destination, PATH, false)) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 @as(bool, false); }); });
+                        create_options.skip_git = (!(blk_catch_28: { break :blk_catch_28 ((GitHandler.run(destination, PATH, false)) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 @as(bool, false); }); }));
                     }
                 }
             }
@@ -932,7 +1024,7 @@ else => {
                     child.stderr_behavior = .Inherit;
                     _ = open.openURL("http://localhost:3000/");
                     _ = try child.spawn();
-                    _ = (blk_catch_27: { break :blk_catch_27 ((child.wait()) catch |__ce_27| { _ = &__ce_27;  }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((child.wait()) catch |__ce_29| { _ = &__ce_29;  }); });
                 }
             }
     }
@@ -1156,28 +1248,34 @@ pub fn fetchAllLocalAndRemote(ctx: Command.Context, node: ?*Progress.Node, env_l
                     _ = &home_dir;
                     var parts: [1][]const u8 = .{ home_dir };
                     _ = &parts;
-                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 0)] = (blk_catch_29: { break :blk_catch_29 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 bun.invalid_fd.stdDir(); }); });
+                    if (filesystem.absBufChecked((&parts), (&home_dir_buf))) |outdir_path| {
+                        _ = &outdir_path;
+                        folders[cp_cast_int(usize, 0)] = (blk_catch_31: { break :blk_catch_31 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 bun.invalid_fd.stdDir(); }); });
+                    }
                 }
                 {
                     var parts: [2][]const u8 = .{ filesystem.top_level_dir, BUN_CREATE_DIR };
                     _ = &parts;
-                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 1)] = (blk_catch_30: { break :blk_catch_30 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 bun.invalid_fd.stdDir(); }); });
+                    if (filesystem.absBufChecked((&parts), (&home_dir_buf))) |outdir_path| {
+                        _ = &outdir_path;
+                        folders[cp_cast_int(usize, 1)] = (blk_catch_32: { break :blk_catch_32 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 bun.invalid_fd.stdDir(); }); });
+                    }
                 }
                 if (env_loader.map.get(bun.env_var.HOME.key())) |home_dir| {
                     _ = &home_dir;
                     var parts: [2][]const u8 = .{ home_dir, BUN_CREATE_DIR };
                     _ = &parts;
-                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 2)] = (blk_catch_31: { break :blk_catch_31 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 bun.invalid_fd.stdDir(); }); });
+                    if (filesystem.absBufChecked((&parts), (&home_dir_buf))) |outdir_path| {
+                        _ = &outdir_path;
+                        folders[cp_cast_int(usize, 2)] = (blk_catch_33: { break :blk_catch_33 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 bun.invalid_fd.stdDir(); }); });
+                    }
                 }
                 for (cp_iter_slice(folders)) |folder| {
                     _ = &folder;
                     if ((folder.fd != bun.invalid_fd.cast())) {
                         var iter = folder.iterate();
                         _ = &iter;
-                        loop: while ((blk_catch_32: { break :blk_catch_32 ((iter.next()) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 null; }); })) |entry_| {
+                        loop: while ((blk_catch_34: { break :blk_catch_34 ((iter.next()) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 null; }); })) |entry_| {
                             const entry: std.fs.Dir.Entry = entry_;
                             switch (entry.kind) {
 .directory => {
@@ -1191,7 +1289,7 @@ inline for (skip_dirs) |skip_dir| {
                             _ = bun.copy(u8, home_dir_buf[((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1)..], "package.json");
                             home_dir_buf[cp_cast_int(usize, (((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1) + "package.json".len))] = 0;
                             const path: [:0]u8 = home_dir_buf[0..(((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1) + "package.json".len) :0];
-                            _ = (blk_catch_33: { break :blk_catch_33 ((folder.accessZ(path, .{ .mode = .read_only })) catch |__ce_33| { _ = &__ce_33; continue; }); });
+                            _ = (blk_catch_35: { break :blk_catch_35 ((folder.accessZ(path, .{ .mode = .read_only })) catch |__ce_35| { _ = &__ce_35; continue; }); });
                             _ = try examples.append(Example{ .name = try filesystem.filename_store.append(@TypeOf((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)), (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)), .version = "", .local = true, .description = "" });
                             continue :loop;
 },
@@ -1342,7 +1440,7 @@ return error.HTTPError;
             _ = refresher.refresh();
             _ = initializeStore();
             const source = (&logger.Source.initPathString("package.json", mutable.list.items));
-            var expr = (blk_catch_36: { break :blk_catch_36 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; _ = progress.end();
+            var expr = (blk_catch_38: { break :blk_catch_38 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; _ = progress.end();
             _ = refresher.refresh();
             if ((ctx.log.errors > 0)) {
                 _ = try ctx.log.print(Output.errorWriter());
@@ -1410,16 +1508,16 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
             if (Output.enable_ansi_colors_stdout) {
                 async_http.client.progress_node = progress_node;
             }
-            const response = (blk_catch_39: { break :blk_catch_39 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_39 (__sw_blk_12: { const __disc_12 = e; _ = &__disc_12; if ((!cp_has_ok_val(__disc_12) and !cp_is_null_val(__disc_12))) { const __err_v_12 = cp_unwrap_err_val(__disc_12); _ = &__err_v_12; if (cp_match_tag(__err_v_12, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
-            break :__sw_blk_12 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
-            break :__sw_blk_12 cp_val(Global.exit(1)); }  unreachable; }); }); });
+            const response = (blk_catch_41: { break :blk_catch_41 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_41 (__sw_blk_13: { const __disc_13 = e; _ = &__disc_13; if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
+            break :__sw_blk_13 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
+            break :__sw_blk_13 cp_val(Global.exit(1)); }  unreachable; }); }); });
             if ((response.status_code != 200)) {
                 _ = Output.prettyErrorln("<r><red>{d}<r> fetching examples :( .{s}", .{ response.status_code, mutable.list.items });
                 _ = Global.exit(1);
             }
             _ = initializeStore();
             const source = (&logger.Source.initPathString("examples.json", mutable.list.items));
-            const examples_object = (blk_catch_40: { break :blk_catch_40 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; if ((ctx.log.errors > 0)) {
+            const examples_object = (blk_catch_42: { break :blk_catch_42 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; if ((ctx.log.errors > 0)) {
                 _ = try ctx.log.print(Output.errorWriter());
                 _ = Global.exit(1);
             } else {
@@ -1440,8 +1538,8 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_13 = props.len;
-                        while (i < __end_13) : (i += 1) {
+                        const __end_14 = props.len;
+                        while (i < __end_14) : (i += 1) {
                             const property = props[@as(usize, @intCast(i))];
                             const name = property.key.?.data.e_string.data;
                             var final_name = name;
@@ -1498,8 +1596,8 @@ pub const GitHandler = struct {
 
 pub fn spawn(destination: []const u8, PATH: []const u8, verbose: bool) void {
             git_success = std.atomic.Value(u32).init(0);
-            git_thread = (blk_catch_41: { break :blk_catch_41 ((std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e) });
-            break :blk_catch_41 Global.exit(1); }); });
+            git_thread = (blk_catch_43: { break :blk_catch_43 ((std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e) });
+            break :blk_catch_43 Global.exit(1); }); });
     }
 
 pub fn spawnThread(destination: []const u8, PATH: []const u8, verbose: bool) void {
@@ -1507,14 +1605,14 @@ pub fn spawnThread(destination: []const u8, PATH: []const u8, verbose: bool) voi
             defer {
             _ = Output.flush();
             }
-            const outcome = (if (verbose) (blk_catch_42: { break :blk_catch_42 ((run(destination, PATH, true)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 @as(bool, false); }); }) else (blk_catch_43: { break :blk_catch_43 ((run(destination, PATH, false)) catch |__ce_43| { _ = &__ce_43; break :blk_catch_43 @as(bool, false); }); }));
+            const outcome = (if (verbose) (blk_catch_44: { break :blk_catch_44 ((run(destination, PATH, true)) catch |__ce_44| { _ = &__ce_44; break :blk_catch_44 @as(bool, false); }); }) else (blk_catch_45: { break :blk_catch_45 ((run(destination, PATH, false)) catch |__ce_45| { _ = &__ce_45; break :blk_catch_45 @as(bool, false); }); }));
             _ = git_success.store((if (outcome) 1 else 2), .release);
             _ = Futex.wake((&git_success), 1);
     }
 
 pub fn wait() bool {
             while ((git_success.load(.acquire) == 0)) {
-                _ = (blk_catch_44: { break :blk_catch_44 ((Futex.wait((&git_success), 0, 1000)) catch |__ce_44| { _ = &__ce_44; continue; }); });
+                _ = (blk_catch_46: { break :blk_catch_46 ((Futex.wait((&git_success), 0, 1000)) catch |__ce_46| { _ = &__ce_46; continue; }); });
             }
             const outcome = (git_success.load(.acquire) == 1);
             _ = git_thread.join();
@@ -1541,7 +1639,7 @@ pub fn run(destination: []const u8, PATH: []const u8, comptime verbose: bool) !b
                     process.stdout_behavior = .Inherit;
                     process.stderr_behavior = .Inherit;
                     _ = try process.spawnAndWait();
-                    _ = (blk_catch_45: { break :blk_catch_45 ((process.kill()) catch |__ce_45| { _ = &__ce_45;  }); });
+                    _ = (blk_catch_47: { break :blk_catch_47 ((process.kill()) catch |__ce_47| { _ = &__ce_47;  }); });
                 }
                 _ = Output.prettyError("\n", .{});
                 _ = Output.printStartEnd(git_start, std.time.nanoTimestamp());
@@ -1557,7 +1655,7 @@ var bun_path_buf: bun.PathBuffer = undefined;
 const target_nextjs_version = "12.2.3";
 pub var initialized_store = false;
 const skip_dirs: []const bun.OSPathSlice = (&.{ bun.OSPathLiteral("node_modules"), bun.OSPathLiteral(".git") });
-const skip_files: []const bun.OSPathSlice = (&.{ bun.OSPathLiteral("package-lock.json"), bun.OSPathLiteral("yarn.lock"), bun.OSPathLiteral("pnpm-lock.yaml") });
+const skip_files: []const bun.OSPathSlice = (&.{ bun.OSPathLiteral("package-lock.json"), bun.OSPathLiteral("yarn.lock"), bun.OSPathLiteral("pnpm-lock.yaml"), bun.OSPathLiteral(".git") });
 const never_conflict: []const []const u8 = (&.{ "README.md", "gitignore", ".gitignore", ".git/" });
 const npm_task_args: []const []const u8 = (&.{ "run" });
 var bun_path: ?[:0]const u8 = null;
@@ -1652,7 +1750,7 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         }
         const npm_args: usize = (if ((npm_client != null)) 2 else 0);
         const total = (count + npm_args);
-        var argv = (blk_catch_46: { break :blk_catch_46 ((allocator.alloc(string, total)) catch |__ce_46| { _ = &__ce_46; return; }); });
+        var argv = (blk_catch_48: { break :blk_catch_48 ((allocator.alloc(string, total)) catch |__ce_48| { _ = &__ce_48; return; }); });
         _ = &argv;
         if (npm_client) |client| {
             _ = &client;
@@ -1675,8 +1773,8 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_15 = argv.len;
-            while (i < __end_15) : (i += 1) {
+            const __end_16 = argv.len;
+            while (i < __end_16) : (i += 1) {
                 const arg = argv[@as(usize, @intCast(i))];
                 if ((i > (argv.len - 1))) {
                     _ = Output.print(" {s} ", .{ arg });
@@ -1692,5 +1790,5 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         defer {
         _ = Output.enableBuffering();
         }
-        _ = (blk_catch_47: { break :blk_catch_47 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = cwd, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |__ce_47| { _ = &__ce_47; return; }); });
+        _ = (blk_catch_49: { break :blk_catch_49 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = cwd, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |__ce_49| { _ = &__ce_49; return; }); });
 }

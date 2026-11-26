@@ -925,43 +925,46 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                         if (data.len == 0) break;
                     },
                     .close => {
-                        if (receive_body_remain == 1 || receive_body_remain > 125) {
-                            _.terminate(ErrorCode.invalid_control_frame);
-                            terminated = true;
-                            break;
+                        if (!_.close_frame_buffering) {
+                            if (receive_body_remain == 1 || receive_body_remain > 125) {
+                                _.terminate(ErrorCode.invalid_control_frame);
+                                terminated = true;
+                                break;
+                            }
+
+                            if (receive_body_remain == 0) {
+                                _.close_received = true;
+                                _.sendClose();
+                                terminated = true;
+                                break;
+                            }
+
+                            _.ping_len = @truncate(receive_body_remain);
+                            receive_body_remain = 0;
+                            _.close_frame_buffering = true;
                         }
 
-                        if (receive_body_remain > 0) {
-                            if (!_.close_frame_buffering) {
-                                _.ping_len = @truncate(receive_body_remain);
-                                receive_body_remain = 0;
-                                _.close_frame_buffering = true;
-                            }
-                            const to_copy = @min(data.len, _.ping_len - receive_body_remain);
+                        const to_copy = @min(data.len, _.ping_len - receive_body_remain);
+                        if (to_copy > 0) {
                             @memcpy(_.ping_frame_bytes[6 + receive_body_remain ..][0..to_copy], data[0..to_copy]);
                             receive_body_remain += to_copy;
                             data = data[to_copy..];
-                            if (receive_body_remain < _.ping_len) break;
-
-                            _.close_received = true;
-                            const close_data = _.ping_frame_bytes[6..][0.._.ping_len];
-                            if (_.ping_len >= 2) {
-                                let code = std.mem.readInt(u16, close_data[0..2], .big);
-                                if (code == 1001) code = 1000;
-                                if ((code < 1000) || (code >= 1004 && code < 1007) || (code >= 1016 && code <= 2999)) code = 1002;
-                                let buf: [125]u8 = undefined;
-                                @memcpy(buf[0 .. _.ping_len - 2], close_data[2.._.ping_len]);
-                                _.sendCloseWithBody(socket, code, &buf, _.ping_len - 2);
-                            } else {
-                                _.sendClose();
-                            }
-                            _.close_frame_buffering = false;
-                            terminated = true;
-                            break;
                         }
+                        if (receive_body_remain < _.ping_len) break;
 
                         _.close_received = true;
-                        _.sendClose();
+                        const close_data = _.ping_frame_bytes[6..][0.._.ping_len];
+                        if (_.ping_len >= 2) {
+                            let code = std.mem.readInt(u16, close_data[0..2], .big);
+                            if (code == 1001) code = 1000;
+                            if ((code < 1000) || (code >= 1004 && code < 1007) || (code >= 1016 && code <= 2999)) code = 1002;
+                            let buf: [125]u8 = undefined;
+                            @memcpy(buf[0 .. _.ping_len - 2], close_data[2.._.ping_len]);
+                            _.sendCloseWithBody(socket, code, &buf, _.ping_len - 2);
+                        } else {
+                            _.sendClose();
+                        }
+                        _.close_frame_buffering = false;
                         terminated = true;
                         break;
                     },

@@ -234,6 +234,41 @@ pub fn checkNotResizable(buf: jsc.ArrayBuffer, globalThis: *jsc.JSGlobalObject, 
             }
     }
 
+pub fn validateFlush(flush: u32, globalThis: *jsc.JSGlobalObject) bun.JSError!void {
+            const StreamType = @TypeOf((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(undefined)) == .int or @typeInfo(@TypeOf(undefined)) == .comptime_int)) @as(T, @enumFromInt(undefined)) else @as(T, undefined)).stream);
+            if (comptime @hasField(StreamType, "pledged_src_size")) {
+                if ((flush > 2)) {
+                    return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw();
+                }
+            } else {
+                if (comptime @hasField(StreamType, "error_")) {
+                    if ((flush > 3)) {
+                        return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw();
+                    }
+                } else {
+                    _ = (blk_catch_0: { break :blk_catch_0 ((std.@"meta".intToEnum(bun.zlib.FlushValue, flush)) catch |__ce_0| { _ = &__ce_0; return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw(); }); });
+                }
+            }
+    }
+
+pub fn updateWriteState(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JSValue) void {
+            if ((blk_catch_1: { break :blk_catch_1 ((this_value.getOwn(globalThis, "_writeState")) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |ws_val| {
+                _ = &ws_val;
+                if (ws_val.asArrayBuffer(globalThis)) |ws_ab| {
+                    _ = &ws_ab;
+                    const ws_slice = ws_ab.asU32();
+                    if ((ws_slice.len >= 2)) {
+                        _ = stream.stream.updateWriteResult((&ws_slice.ptr[1]), (&ws_slice.ptr[0]));
+                    }
+                }
+                return;
+            }
+            if (stream.write_result) |wr| {
+                _ = &wr;
+                _ = stream.stream.updateWriteResult((&wr[1]), (&wr[0]));
+            }
+    }
+
 pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.argumentsUndef(7).slice();
             if ((arguments.len != 7)) {
@@ -258,7 +293,7 @@ pub fn write(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
                 return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", .{}).throw();
             }
             flush = arguments[0].toU32();
-            _ = (blk_catch_0: { break :blk_catch_0 ((std.@"meta".intToEnum(bun.zlib.FlushValue, flush)) catch |__ce_0| { _ = &__ce_0; return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw(); }); });
+            _ = try validateFlush(flush, globalThis);
             if (arguments[1].isNull()) {
                 in_len = 0;
                 in_off = 0;
@@ -367,7 +402,7 @@ pub fn runFromJSThread(stream: *T) void {
             if ((!checkError(stream, global, this_value))) {
                 return;
             }
-            _ = stream.stream.updateWriteResult((&stream.write_result.?[1]), (&stream.write_result.?[0]));
+            _ = updateWriteState(stream, global, this_value);
             _ = this_value.ensureStillAlive();
             if (T.js.writeCallbackGetCached(this_value)) |write_callback| {
                 _ = &write_callback;
@@ -404,7 +439,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
                 return globalThis.ERR(.INVALID_ARG_VALUE, "flush value is required", .{}).throw();
             }
             flush = arguments[0].toU32();
-            _ = (blk_catch_1: { break :blk_catch_1 ((std.@"meta".intToEnum(bun.zlib.FlushValue, flush)) catch |__ce_1| { _ = &__ce_1; return globalThis.ERR(.INVALID_ARG_VALUE, "Invalid flush value", .{}).throw(); }); });
+            _ = try validateFlush(flush, globalThis);
             if (arguments[1].isNull()) {
                 in_slice = null;
                 in_len = 0;
@@ -439,7 +474,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             const this_value = callframe.this();
             _ = stream.stream.doWork();
             if (checkError(stream, globalThis, this_value)) {
-                _ = stream.stream.updateWriteResult((&stream.write_result.?[1]), (&stream.write_result.?[0]));
+                _ = updateWriteState(stream, globalThis, this_value);
                 stream.write_in_progress = false;
             }
             _ = stream.deref();

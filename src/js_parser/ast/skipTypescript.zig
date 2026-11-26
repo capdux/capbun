@@ -138,7 +138,7 @@ pub fn lexerBacktrackerWithArgs(p: *P, func: anytype, args: anytype, comptime Re
                     if (comptime (Payload == bool)) {
                         return true;
                     }
-                    return backtrack;
+                    return (!backtrack);
                 } else {
                     const result = (blk_catch_3: { break :blk_catch_3 ((@call(.auto, func, args)) catch |e| { _ = &e; break :blk_catch_3 brk: {
                     if ((e == error.Backtrack)) {
@@ -150,7 +150,7 @@ pub fn lexerBacktrackerWithArgs(p: *P, func: anytype, args: anytype, comptime Re
                         _ = p.lexer.restore((&old_lexer));
                     }
                     if (comptime ((ReturnType == void) or (ReturnType == bool))) {
-                        return backtrack;
+                        return (!backtrack);
                     }
                     return result;
                 }

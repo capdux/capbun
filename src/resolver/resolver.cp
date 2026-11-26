@@ -3005,10 +3005,10 @@ pub struct Resolver {
 
         if (input_path.len == 0) return null;
 
-        // A path longer than MAX_PATH_BYTES cannot name a real directory.
+        // A path of MAX_PATH_BYTES or longer cannot name a real directory with NUL terminator.
         // Bailing here also prevents overflowing `dir_info_uncached_path`
         // below when called with user-controlled absolute import paths.
-        if (input_path.len > bun.MAX_PATH_BYTES) return null;
+        if (input_path.len >= bun.MAX_PATH_BYTES) return null;
 
         if (comptime Environment.isWindows) {
             let win32_normalized_dir_info_cache_buf = bufs(.win32_normalized_dir_info_cache);

@@ -32,7 +32,6 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
-fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -196,73 +195,67 @@ pub fn pgArrayType(comptime T: Tag) !type {
     pub const fromJS = tag_jsc.fromJS;
 };
 
+pub const PostgresBinaryArraySlice = struct {
+    ptr: [*]u8,
+    len: usize,
+};
+
+pub fn PostgresBinarySingleDimensionArrayImpl(comptime T: type) type {
+    return struct {
+        data: [*]u8,
+        elem_len: i32,
+
+pub fn slice(self: @This()) PostgresBinaryArraySlice {
+                const data_ptr: [*]u8 = (blk: {
+                break :blk @ptrCast((&self.data[20]));
+
+});
+                if ((self.elem_len <= 0)) {
+                    return PostgresBinaryArraySlice{ .ptr = data_ptr, .len = 0 };
+                }
+                const elem_count: usize = @intCast(self.elem_len);
+                const elem_size: usize = @sizeOf(T);
+                const Int = std.meta.Int(.unsigned, @bitSizeOf(T));
+                {
+                    var i: i32 = 0;
+                    _ = &i;
+                    const __end_0 = elem_count;
+                    while (i < __end_0) : (i += 1) {
+                        const idx: usize = @intCast(i);
+                        const src_off = ((idx * (4 + elem_size)) + 4);
+                        const dst_off = (idx * elem_size);
+                        const val_bytes = (blk: {
+                        break :blk data_ptr[src_off..][0..elem_size];
+
+});
+                        const val = std.mem.readInt(Int, val_bytes, .big);
+                        const raw_val: [elem_size]u8 = @bitCast(val);
+                        const dst_bytes = (blk: {
+                        break :blk data_ptr[dst_off..][0..elem_size];
+
+});
+                        {
+                            dst_bytes.* = raw_val;
+                        }
+                    }
+                }
+                return PostgresBinaryArraySlice{ .ptr = data_ptr, .len = elem_count };
+        }
+
+pub fn init(bytes: []const u8) @This() {
+                const elem_len = std.mem.readInt(i32, bytes[12..16], .big);
+                return @This(){ .data = (blk: {
+                break :blk @constCast(bytes.ptr);
+
+}), .elem_len = elem_len };
+        }
+    };
+}
+
+const PostgresBinarySingleDimensionArrayI32 = PostgresBinarySingleDimensionArrayImpl(i32);
+const PostgresBinarySingleDimensionArrayF32 = PostgresBinarySingleDimensionArrayImpl(f32);
 const short = int_types.short;
 
 pub fn PostgresBinarySingleDimensionArray(comptime T: type) type {
-        return struct {
-    ndim: i32,
-    offset_for_data: i32,
-    element_type: i32,
-    len: i32,
-    index: i32,
-    first_value: T,
-
-pub fn slice(self: *@This()) []T {
-            var head = (blk: {
-            break :blk @as([*]T, @ptrCast(@alignCast(&(self.first_value))));
-
-});
-            _ = &head;
-            if ((self.len <= 0)) {
-                return (blk: {
-                break :blk head[0..0];
-
-});
-            }
-            var current = head;
-            _ = &current;
-            const len: usize = @intCast(self.len);
-            {
-                var i: i32 = 0;
-                _ = &i;
-                const __end_0 = len;
-                while (i < __end_0) : (i += 1) {
-                    current = (blk: {
-                    break :blk current[1..];
-
-});
-                    const val = (blk: {
-                    break :blk current[0];
-
-});
-                    const Int = std.meta.Int(.unsigned, @bitSizeOf(T));
-                    const swapped = @byteSwap(@as(Int, @bitCast(val)));
-                    {
-                        head[cp_cast_int(usize, i)] = @bitCast(swapped);
-                    }
-                    current = (blk: {
-                    break :blk current[1..];
-
-});
-                }
-            }
-            return (blk: {
-            break :blk head[0..len];
-
-});
-    }
-
-pub fn init(bytes: []const u8) *@This() {
-            const res: *@This() = (blk: {
-            break :blk @ptrCast(@alignCast(@constCast(bytes.ptr)));
-
-});
-            res.ndim = @byteSwap(res.ndim);
-            res.offset_for_data = @byteSwap(res.offset_for_data);
-            res.element_type = @byteSwap(res.element_type);
-            res.len = @byteSwap(res.len);
-            res.index = @byteSwap(res.index);
-            return res;
-    }
-};
+        return (if ((T == i32)) PostgresBinarySingleDimensionArrayI32 else PostgresBinarySingleDimensionArrayF32);
 }

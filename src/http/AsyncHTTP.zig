@@ -403,13 +403,18 @@ pub fn sendSync(self: *AsyncHTTP) !bun.picohttp.Response {
         _ = &batch;
         _ = self.schedule(bun.default_allocator, (&batch));
         _ = bun.http.http_thread.schedule(batch);
-        const result = (blk_catch_15: { break :blk_catch_15 ((ctx.channel.readItem()) catch |__ce_15| { _ = &__ce_15; @panic("unreachable"); }); });
-        if (result.fail) |err| {
-            _ = &err;
-            return err;
+        while (true) {
+            const result = (blk_catch_15: { break :blk_catch_15 ((ctx.channel.readItem()) catch |__ce_15| { _ = &__ce_15; @panic("unreachable"); }); });
+            if (result.has_more) {
+                continue;
+            }
+            if (result.fail) |err| {
+                _ = &err;
+                return err;
+            }
+            _ = bun.assert((result.metadata != null));
+            return result.metadata.?.response;
         }
-        _ = bun.assert((result.metadata != null));
-        return result.metadata.?.response;
 }
 
 pub fn onAsyncHTTPCallback(self: *AsyncHTTP, async_http: *AsyncHTTP, result: HTTPClientResult) void {
@@ -500,6 +505,9 @@ pub var active_requests_count: std.atomic.Value(usize) = std.atomic.Value(usize)
 pub var max_simultaneous_requests: std.atomic.Value(usize) = std.atomic.Value(usize).init(256);
 
 pub fn sendSyncCallback(channel_holder: *SingleHTTPChannel, async_http: *AsyncHTTP, result: HTTPClientResult) void {
+        if (result.has_more) {
+            return;
+        }
         if ((async_http.real != null)) {
             const real_ptr: *AsyncHTTP = async_http.real.?;
             real_ptr.* = async_http.*;

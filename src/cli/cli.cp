@@ -1100,7 +1100,7 @@ pub struct Command {
             },
             .InfoCommand => {
                 const intro_text =
-                    \\<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\<package\><r><d>\<@version\><r> <blue>[property path]<r>
+                    \\<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\<package\><r><d>[@\<version\>]<r> <blue>[\<property\>...]<r>
                     \\  Display package metadata from the registry.
                     \\
                     \\<b>Examples:<r>

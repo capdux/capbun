@@ -320,6 +320,9 @@ pub fn start(self: *Run) void {
                 const heap_prof_opts = self.ctx.runtime_options.heap_prof;
                 vm.heap_profiler_config = HeapProfiler.HeapProfilerConfig{ .name = (if (@typeInfo(@TypeOf(heap_prof_opts)) == .@"enum" or @typeInfo(@TypeOf(heap_prof_opts)) == .@"union") @tagName(heap_prof_opts) else heap_prof_opts.name), .dir = heap_prof_opts.dir, .text_format = heap_prof_opts.text_format };
                 bun.analytics.Features.heap_snapshot = (bun.analytics.Features.heap_snapshot + 1);
+                if (comptime bun.Environment.isPosix) {
+                    _ = HeapProfiler.installSigintHandler();
+                }
             }
             _ = self.addConditionalGlobals();
             {

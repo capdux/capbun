@@ -241,8 +241,15 @@ pub fn ParseStmt(
                     const expr = p.parseExpr(.comma)?;
 
                     // Handle the default export of an abstract class in TypeScript
-                    if (opts.ts_decorators != null && (!is_identifier || !strings.eqlComptime(name, "abstract") || expr.data != .e_identifier || p.lexer.token != .t_class || p.lexer.has_newline_before)) {
-                        p.lexer.expected(.t_class)?;
+                    if (opts.ts_decorators != null) {
+                        if (is_identifier && strings.eqlComptime(name, "abstract") && expr.data == .e_identifier && p.lexer.has_newline_before) {
+                            const r = js_lexer.rangeOfIdentifier(p.source, expr.loc);
+                            p.log.addRangeError(p.source, r, "Unexpected \"abstract\"") catch unreachable;
+                            return error.SyntaxError;
+                        }
+                        if (!is_identifier || !strings.eqlComptime(name, "abstract") || expr.data != .e_identifier || p.lexer.token != .t_class || p.lexer.has_newline_before) {
+                            p.lexer.expected(.t_class)?;
+                        }
                     }
                     if (is_typescript_enabled && is_identifier && p.lexer.token == .t_class && !p.lexer.has_newline_before && strings.eqlComptime(name, "abstract") && expr.data == .e_identifier) {
                         let stmtOpts = ParseStatementOptions{
@@ -1269,10 +1276,20 @@ pub fn ParseStmt(
                                             p.skipTypeScriptInterfaceStmt(&stmtOpts)?;
                                             return p.s(S.TypeScript{}, loc);
                                         }
+                                        if (opts.is_export) {
+                                            const r = js_lexer.rangeOfIdentifier(p.source, loc);
+                                            p.log.addRangeError(p.source, r, "Unexpected \"interface\"") catch unreachable;
+                                            return error.SyntaxError;
+                                        }
                                     },
                                     .ts_stmt_abstract => {
                                         if (!p.lexer.has_newline_before && (p.lexer.token == .t_class || opts.ts_decorators != null)) {
                                             return p.parseClassStmt(p.lexer.loc(), opts)?;
+                                        }
+                                        if (opts.is_export) {
+                                            const r = js_lexer.rangeOfIdentifier(p.source, loc);
+                                            p.log.addRangeError(p.source, r, "Unexpected \"abstract\"") catch unreachable;
+                                            return error.SyntaxError;
                                         }
                                     },
                                     .ts_stmt_global => {

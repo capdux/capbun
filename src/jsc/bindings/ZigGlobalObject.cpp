@@ -2290,15 +2290,15 @@ void GlobalObject::finishCreation(VM& vm)
             JSC::JSObject* obj = JSC::constructEmptyObject(init.owner, init.owner->objectPrototype(), 4);
             obj->putDirectAccessor(init.owner, userAgentIdentifier,
                 JSC::GetterSetter::create(init.vm, init.owner, JSC::JSFunction::create(init.vm, init.owner, 0, "get userAgent"_s, navigatorUserAgentGetter, ImplementationVisibility::Public), nullptr),
-                JSC::PropertyAttribute::Accessor | 0);
+                JSC::PropertyAttribute::Accessor | JSC::PropertyAttribute::ReadOnly);
             obj->putDirect(init.vm, init.vm.propertyNames->toStringTagSymbol,
                 jsNontrivialString(init.vm, "Navigator"_s), PropertyAttribute::DontEnum | PropertyAttribute::ReadOnly);
             obj->putDirectAccessor(init.owner, platformIdentifier,
                 JSC::GetterSetter::create(init.vm, init.owner, JSC::JSFunction::create(init.vm, init.owner, 0, "get platform"_s, navigatorPlatformGetter, ImplementationVisibility::Public), nullptr),
-                JSC::PropertyAttribute::Accessor | 0);
+                JSC::PropertyAttribute::Accessor | JSC::PropertyAttribute::ReadOnly);
             obj->putDirectAccessor(init.owner, hardwareConcurrencyIdentifier,
                 JSC::GetterSetter::create(init.vm, init.owner, JSC::JSFunction::create(init.vm, init.owner, 0, "get hardwareConcurrency"_s, navigatorHardwareConcurrencyGetter, ImplementationVisibility::Public), nullptr),
-                JSC::PropertyAttribute::Accessor | 0);
+                JSC::PropertyAttribute::Accessor | JSC::PropertyAttribute::ReadOnly);
             init.set(obj);
         });
 

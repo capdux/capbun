@@ -4173,9 +4173,11 @@ pub struct BlobExternalSharedDescriptor {
         const offset = _.offset +| @as(SizeType, @intCast(relativeStart));
         const len = @as(SizeType, @intCast(@max(relativeEnd -| relativeStart, 0)));
 
-        let blob = _.dupe();
-        blob.offset = offset;
-        blob.size = len;
+        let blob = if (len == 0) Blob.initEmpty(globalThis) else _.dupe();
+        if (len > 0) {
+            blob.offset = offset;
+            blob.size = len;
+        }
 
         if (blob.content_type_allocated) {
             bun.default_allocator.free(blob.content_type);

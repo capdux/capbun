@@ -3859,7 +3859,7 @@ pub struct Parser<const enc: Encoding> {
                     _.line_indent = indent;
                     const nc = _.next();
                     if (nc == 0) {
-                        if (explicit_indent == null) {
+                        if (!indent.isLessThan(ci)) {
                             ctx.leading_newlines += 1;
                         }
                         first_ch = nc; continue :first_sw;

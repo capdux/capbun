@@ -110,20 +110,16 @@ pub const Handlers = struct {
     onWritable: *const fn (*anyopaque) void,
     onError: *const fn (*anyopaque, jsc.JSValue) void,
     onTimeout: *const fn (*anyopaque) void,
+    getOrigin: *const fn (*anyopaque) ?jsc.JSValue,
 };
 
 pub const UpgradedDuplex = @This();
 
 wrapper: ?SSLWrapper(*UpgradedDuplex) = null,
-origin: jsc.Strong.Optional = .empty,
 global: ?*jsc.JSGlobalObject = null,
 ssl_error: CertError = .{},
 vm: *jsc.VirtualMachine,
 handlers: Handlers,
-onDataCallback: jsc.Strong.Optional = .empty,
-onEndCallback: jsc.Strong.Optional = .empty,
-onWritableCallback: jsc.Strong.Optional = .empty,
-onCloseCallback: jsc.Strong.Optional = .empty,
 transport_eof: bool = false,
 closed: bool = false,
 event_loop_timer: EventLoopTimer = .{ .next = .epoch, .tag = .UpgradedDuplex },
@@ -166,7 +162,7 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
         if ((((data != null) and self.transport_eof) and self.isShutdown())) {
             return;
         }
-        if (self.origin.get()) |duplex| {
+        if (self.handlers.getOrigin(self.handlers.ctx)) |duplex| {
             _ = &duplex;
             if (self.global) |g| {
                 _ = &g;
@@ -178,12 +174,12 @@ pub fn callWriteOrEnd(self: *UpgradedDuplex, data: ?[]const u8, msg_more: bool) 
                 const writeOrEnd = writeOrEnd_opt.?;
                 if (data) |data_| {
                     _ = &data_;
-                    const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, global_obj.takeError(e));
+                    const buffer = (blk_catch_2: { break :blk_catch_2 ((jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj)) catch |e| { _ = &e; _ = self.handlers.onError(self.handlers.ctx, global_obj.takeException(e));
                     return; }); });
                     _ = buffer.ensureStillAlive();
-                    _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(global_obj, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, global_obj.takeError(e)); }); });
+                    _ = (blk_catch_3: { break :blk_catch_3 ((writeOrEnd.call(global_obj, duplex, (&.{ buffer }))) catch |e| { _ = &e; break :blk_catch_3 self.handlers.onError(self.handlers.ctx, global_obj.takeException(e)); }); });
                 } else {
-                    _ = (blk_catch_4: { break :blk_catch_4 ((writeOrEnd.call(global_obj, duplex, (&.{ jsc.JSValue.@"null" }))) catch |e| { _ = &e; break :blk_catch_4 self.handlers.onError(self.handlers.ctx, global_obj.takeError(e)); }); });
+                    _ = (blk_catch_4: { break :blk_catch_4 ((writeOrEnd.call(global_obj, duplex, (&.{ jsc.JSValue.@"null" }))) catch |e| { _ = &e; break :blk_catch_4 self.handlers.onError(self.handlers.ctx, global_obj.takeException(e)); }); });
                 }
             }
         }
@@ -218,7 +214,7 @@ pub fn onReceivedData(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
             const req = bun.cast(*UpgradedDuplex, ctx);
             if ((args.len >= 1)) {
                 const data_arg = args.ptr[0];
-                if (req.origin.has()) {
+                if ((req.handlers.getOrigin(req.handlers.ctx) != null)) {
                     if (data_arg.isEmptyOrUndefinedOrNull()) {
                         return jsc.JSValue.js_undefined;
                     }
@@ -294,78 +290,34 @@ pub fn onTimeout(self: *UpgradedDuplex) void {
         _ = self.handlers.onTimeout(self.handlers.ctx);
 }
 
-pub fn from(globalThis: *jsc.JSGlobalObject, origin: jsc.JSValue, handlers: Handlers) UpgradedDuplex {
-        return UpgradedDuplex{ .vm = globalThis.bunVM(), .origin = .create(origin, globalThis), .global = globalThis, .wrapper = null, .handlers = handlers };
+pub fn from(globalThis: *jsc.JSGlobalObject, handlers: Handlers) UpgradedDuplex {
+        return UpgradedDuplex{ .vm = globalThis.bunVM(), .global = globalThis, .wrapper = null, .handlers = handlers };
 }
 
 pub fn getJSHandlers(self: *UpgradedDuplex, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
         var array = try jsc.JSValue.createEmptyArray(globalThis, 4);
         _ = &array;
         _ = array.ensureStillAlive();
-        {
-            var callback: jsc.JSValue = undefined;
-            _ = &callback;
-            if (self.onDataCallback.get()) |existing| {
-                _ = &existing;
-                callback = existing;
-            } else {
-                var dataCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onReceivedData, self);
-                _ = &dataCallback;
-                _ = dataCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(dataCallback, self);
-                self.onDataCallback = .create(dataCallback, globalThis);
-                callback = dataCallback;
-            }
-            _ = try array.putIndex(globalThis, 0, callback);
-        }
-        {
-            var callback: jsc.JSValue = undefined;
-            _ = &callback;
-            if (self.onEndCallback.get()) |existing| {
-                _ = &existing;
-                callback = existing;
-            } else {
-                var endCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onEnd, self);
-                _ = &endCallback;
-                _ = endCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(endCallback, self);
-                self.onEndCallback = .create(endCallback, globalThis);
-                callback = endCallback;
-            }
-            _ = try array.putIndex(globalThis, 1, callback);
-        }
-        {
-            var callback: jsc.JSValue = undefined;
-            _ = &callback;
-            if (self.onWritableCallback.get()) |existing| {
-                _ = &existing;
-                callback = existing;
-            } else {
-                var writableCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onWritable, self);
-                _ = &writableCallback;
-                _ = writableCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(writableCallback, self);
-                self.onWritableCallback = .create(writableCallback, globalThis);
-                callback = writableCallback;
-            }
-            _ = try array.putIndex(globalThis, 2, callback);
-        }
-        {
-            var callback: jsc.JSValue = undefined;
-            _ = &callback;
-            if (self.onCloseCallback.get()) |existing| {
-                _ = &existing;
-                callback = existing;
-            } else {
-                var closeCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onCloseJS, self);
-                _ = &closeCallback;
-                _ = closeCallback.ensureStillAlive();
-                _ = jsc.host_fn.setFunctionData(closeCallback, self);
-                self.onCloseCallback = .create(closeCallback, globalThis);
-                callback = closeCallback;
-            }
-            _ = try array.putIndex(globalThis, 3, callback);
-        }
+        var dataCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onReceivedData, self);
+        _ = &dataCallback;
+        _ = dataCallback.ensureStillAlive();
+        _ = jsc.host_fn.setFunctionData(dataCallback, self);
+        _ = try array.putIndex(globalThis, 0, dataCallback);
+        var endCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onEnd, self);
+        _ = &endCallback;
+        _ = endCallback.ensureStillAlive();
+        _ = jsc.host_fn.setFunctionData(endCallback, self);
+        _ = try array.putIndex(globalThis, 1, endCallback);
+        var writableCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onWritable, self);
+        _ = &writableCallback;
+        _ = writableCallback.ensureStillAlive();
+        _ = jsc.host_fn.setFunctionData(writableCallback, self);
+        _ = try array.putIndex(globalThis, 2, writableCallback);
+        var closeCallback = jsc.host_fn.NewFunctionWithData(globalThis, null, 0, onCloseJS, self);
+        _ = &closeCallback;
+        _ = closeCallback.ensureStillAlive();
+        _ = jsc.host_fn.setFunctionData(closeCallback, self);
+        _ = try array.putIndex(globalThis, 3, closeCallback);
         return array;
 }
 
@@ -489,27 +441,6 @@ pub fn release(self: *UpgradedDuplex) void {
             _ = &wrapper;
             _ = (wrapper.*).deinit();
             self.wrapper = null;
-        }
-        _ = self.origin.deinit();
-        if (self.onDataCallback.get()) |callback| {
-            _ = &callback;
-            _ = jsc.host_fn.setFunctionData(callback, null);
-            _ = self.onDataCallback.deinit();
-        }
-        if (self.onEndCallback.get()) |callback| {
-            _ = &callback;
-            _ = jsc.host_fn.setFunctionData(callback, null);
-            _ = self.onEndCallback.deinit();
-        }
-        if (self.onWritableCallback.get()) |callback| {
-            _ = &callback;
-            _ = jsc.host_fn.setFunctionData(callback, null);
-            _ = self.onWritableCallback.deinit();
-        }
-        if (self.onCloseCallback.get()) |callback| {
-            _ = &callback;
-            _ = jsc.host_fn.setFunctionData(callback, null);
-            _ = self.onCloseCallback.deinit();
         }
         var ssl_error = self.ssl_error;
         _ = &ssl_error;

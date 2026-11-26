@@ -1,5 +1,11 @@
 const EventEmitter = require("node:events");
-const { parseProxyConfigFromEnv, kProxyConfig, checkShouldUseProxy, kWaitForProxyTunnel } = require("internal/http");
+const {
+  parseProxyConfigFromEnv,
+  kProxyConfig,
+  checkShouldUseProxy,
+  kWaitForProxyTunnel,
+  filterEnvForProxies,
+} = require("internal/http");
 const { getLazy, kEmptyObject, once } = require("internal/shared");
 const { validateNumber, validateOneOf, validateString } = require("internal/validators");
 const { isIP } = require("internal/net/isIP");
@@ -428,7 +434,6 @@ export default {
     scheduling: "lifo",
     timeout: 5000,
     // This normalized from both --use-env-proxy and NODE_USE_ENV_PROXY settings.
-    // proxyEnv: getOptionValue("--use-env-proxy") ? filterEnvForProxies(process.env) : undefined,
-    proxyEnv: undefined, // TODO:
+    proxyEnv: process.env.NODE_USE_ENV_PROXY === "1" ? filterEnvForProxies(process.env) : undefined,
   }),
 };

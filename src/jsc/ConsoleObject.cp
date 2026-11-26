@@ -3730,14 +3730,28 @@ pub struct Formatter {
                 writer.print(comptime Output.prettyFmt("<r><cyan>\\<Revoked Proxy\\><r>", enable_ansi_colors), .{});
             },
             .Proxy => {
-                const target = value.getProxyInternalField(.target);
-                if (Environment.allow_assert) {
-                    // Proxy does not allow non-objects here.
-                    bun.assert(target.isCell());
+                let current = value;
+                let proxy_depth: usize = 0;
+                while (true) {
+                    if (proxy_depth >= 200_000) {
+                        writer.writeAll("[Proxy]");
+                        return;
+                    }
+                    proxy_depth += 1;
+                    const target = current.getProxyInternalField(.target);
+                    if (Environment.allow_assert) {
+                        // Proxy does not allow non-objects here.
+                        bun.assert(target.isCell());
+                    }
+                    const next_tag = ConsoleObject.Formatter.Tag.get(target, _.globalThis)?;
+                    if (next_tag.tag.tag() != .Proxy) {
+                        // TODO: if (options.showProxy), print like `Proxy { target: ..., handlers: ... }`
+                        // this is default off so it is not used.
+                        _.format(next_tag, Writer, writer_, target, _.globalThis, enable_ansi_colors)?;
+                        break;
+                    }
+                    current = target;
                 }
-                // TODO: if (options.showProxy), print like `Proxy { target: ..., handlers: ... }`
-                // this is default off so it is not used.
-                _.format(ConsoleObject.Formatter.Tag.get(target, _.globalThis)?, Writer, writer_, target, _.globalThis, enable_ansi_colors)?;
             },
         }
     }

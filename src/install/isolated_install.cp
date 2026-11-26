@@ -1469,6 +1469,8 @@ pub fn installIsolatedPackages(
         // TODO: delete
         let seen_workspace_ids: std.AutoHashMapUnmanaged(PackageID, void) = .empty;
         const _seen_ws_ids_guard = SeenWorkspaceIdsGuard_{ map: &seen_workspace_ids, allocator: lockfile.allocator };
+        let seen_symlink_ids: std.AutoHashMapUnmanaged(PackageID, void) = .empty;
+        const _seen_symlink_ids_guard = SeenWorkspaceIdsGuard_{ map: &seen_symlink_ids, allocator: lockfile.allocator };
 
         let tasks = manager.allocator.alloc(Store.Installer.Task, store.entries.len)?;
         const _tasks_guard = TaskSliceGuard_{ slice: tasks, allocator: manager.allocator };
@@ -1554,11 +1556,68 @@ pub fn installIsolatedPackages(
                     continue;
                 },
                 .symlink => {
-                    // no installation required, will only need to be linked to packages that depend on it.
                     bun.debugAssert(entry_dependencies[entry_id.get()].list.items.len == 0);
-                    // .monotonic is okay because the task isn't running on another thread.
-                    entry_steps[entry_id.get()].store(.done, .monotonic);
-                    installer.onTaskComplete(entry_id, .skipped);
+                    const sym_gop = seen_symlink_ids.getOrPut(lockfile.allocator, pkg_id)?;
+                    if (sym_gop.found_existing) {
+                        entry_steps[entry_id.get()].store(.done, .monotonic);
+                        installer.onTaskComplete(entry_id, .skipped);
+                        continue;
+                    }
+
+                    let symlink_target = AutoAbsPath_.initTopLevelDir();
+                    const _symlink_target_guard = AutoAbsPathGuard_{ path: &symlink_target };
+                    installer.appendStorePath(&symlink_target, entry_id);
+                    if (!(sys.directoryExistsAt(FD.cwd(), symlink_target.sliceZ()).asValue() ?? false)) {
+                        entry_steps[entry_id.get()].store(.done, .monotonic);
+                        installer.onTaskFail(entry_id, { link_package: sys.Error.fromCode(.NOENT, .lstat) });
+                        continue;
+                    }
+
+                    const dep = lockfile.buffers.dependencies.items[dep_id];
+                    const truncated_dep_name_hash: install.TruncatedPackageNameHash = @truncate(dep.name_hash);
+                    const is_newly_trusted =
+                        installer.trusted_dependencies_from_update_requests.contains(truncated_dep_name_hash) ||
+                        manager.summary.added_trusted_dependencies.contains(truncated_dep_name_hash);
+
+                    let already_linked = false;
+                    if (!manager.options.enable.force_install && !is_newly_trusted) {
+                        already_linked_loop: for (parent_idx of 0..store.entries.len) {
+                            const parent_entry_id = Store.Entry.Id.@"from"(@as(u32, @intCast(parent_idx)));
+                            const parent_node_id = entry_node_ids[parent_idx];
+                            const parent_pkg_id = node_pkg_ids[parent_node_id.get()];
+                            const parent_dep_id = node_dep_ids[parent_idx];
+                            const parent_pkg_res = pkg_resolutions[parent_pkg_id];
+                            for (pdep of entry_dependencies[parent_idx].slice()) {
+                                if (node_pkg_ids[entry_node_ids[pdep.entry_id.get()].get()] != pkg_id) {
+                                    continue;
+                                }
+                                const pdep_name = lockfile.buffers.dependencies.items[pdep.dep_id].name.slice(string_buf);
+                                let dest: AutoPath = .initTopLevelDir();
+                                const _dest_guard = AutoPathGuard_{ path: &dest };
+                                installer.appendRealStoreNodeModulesPath(&dest, parent_entry_id, .final);
+                                dest.append(pdep_name);
+                                if (entry_node_modules_name := installer.entryStoreNodeModulesPackageName(parent_dep_id, parent_pkg_id, &parent_pkg_res, pkg_names)) {
+                                    if (bun.strings.eqlLong(pdep_name, entry_node_modules_name, true)) {
+                                        dest.append("node_modules");
+                                        dest.append(pdep_name);
+                                    }
+                                }
+                                if (sys.lstat(dest.sliceZ()) == .result) {
+                                    already_linked = true;
+                                    break :already_linked_loop;
+                                }
+                            }
+                        }
+                    }
+
+                    if (already_linked) {
+                        entry_steps[entry_id.get()].store(.done, .monotonic);
+                        installer.onTaskComplete(entry_id, .skipped);
+                        continue;
+                    }
+
+                    entry_steps[entry_id.get()].store(.symlink_dependencies, .monotonic);
+                    installer.startTask(entry_id);
                     continue;
                 },
                 .folder => {

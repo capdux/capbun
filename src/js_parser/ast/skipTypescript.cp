@@ -67,7 +67,7 @@ pub struct BacktrackingImpl<P> {
             if (comptime Payload == bool) {
                 return true;
             }
-            return backtrack;
+            return !backtrack;
         } else {
             const result = @call(.auto, func, args) catch e => brk: {
                 if (e == error.Backtrack) {
@@ -80,7 +80,7 @@ pub struct BacktrackingImpl<P> {
                 p.lexer.restore(&old_lexer);
             }
 
-            if (comptime ReturnType == void || ReturnType == bool) return backtrack;
+            if (comptime ReturnType == void || ReturnType == bool) return !backtrack;
             return result;
         }
     }

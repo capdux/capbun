@@ -2672,7 +2672,10 @@ return expr.at(E.Boolean, E.Boolean{ .value = (!(if (@typeInfo(@TypeOf(b)) == .@
 return expr.at(E.Boolean, E.Boolean{ .value = (((if (@typeInfo(@TypeOf(n)) == .@"enum") @intFromEnum(n) else n.value) == 0) or std.math.isNan((if (@typeInfo(@TypeOf(n)) == .@"enum") @intFromEnum(n) else n.value))) }, allocator);
 },
 .e_big_int => |b| {
-return expr.at(E.Boolean, E.Boolean{ .value = strings.eqlComptime((if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value), "0") }, allocator);
+if (b.hasRadixPrefix()) {
+            return null;
+        }
+        return expr.at(E.Boolean, E.Boolean{ .value = strings.eqlComptime((if (@typeInfo(@TypeOf(b)) == .@"enum") @intFromEnum(b) else b.value), "0") }, allocator);
 },
 .e_function, .e_arrow, .e_reg_exp => {
 return expr.at(E.Boolean, E.Boolean{ .value = false }, allocator);
@@ -2728,7 +2731,7 @@ return expr.*;
 },
 .e_undefined => "undefined",
 .e_boolean, .e_branch_boolean => |data| (if ((if (@typeInfo(@TypeOf(data)) == .@"enum") @intFromEnum(data) else data.value)) "true" else "false"),
-.e_big_int => |bigint| (if (@typeInfo(@TypeOf(bigint)) == .@"enum") @intFromEnum(bigint) else bigint.value),
+.e_big_int => |bigint| (if (bigint.hasRadixPrefix()) null else (if (@typeInfo(@TypeOf(bigint)) == .@"enum") @intFromEnum(bigint) else bigint.value)),
 .e_number => |num| num.toString(allocator),
 .e_reg_exp => |regexp| (if (@typeInfo(@TypeOf(regexp)) == .@"enum") @intFromEnum(regexp) else regexp.value),
 .e_dot => |dot| @as(?[]const u8, brk: {

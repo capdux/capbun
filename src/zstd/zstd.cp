@@ -212,14 +212,9 @@ export struct ZstdReaderArrayList {
         while (_.state == .Uninitialized || _.state == .Inflating) {
             const next_in = _.input[_.total_in..];
 
-            // If we have no input to process
-            if (next_in.len == 0) {
+            // If we have no input to process and we are not mid-frame (no buffered output to flush)
+            if (next_in.len == 0 && _.state == .Uninitialized) {
                 if (is_done) {
-                    // If we're in the middle of inflating and stream is done, it's truncated
-                    if (_.state == .Inflating) {
-                        _.state = .Error;
-                        return err.ZstdDecompressionError;
-                    }
                     // No more input and stream is done, we can end
                     _.end();
                 }

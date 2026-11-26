@@ -400,9 +400,11 @@ pub fn updateHandshakeState(self: *@This()) bool {
             if ((BoringSSL.SSL_is_init_finished(ssl) != 0)) {
                 if (((BoringSSL.SSL_get_shutdown(ssl) & BoringSSL.SSL_RECEIVED_SHUTDOWN) != 0)) {
                     self.flags.received_ssl_shutdown = true;
-                    _ = self.shutdown(false);
-                    _ = self.triggerCloseCallback();
-                    return false;
+                    if (self.flags.sent_ssl_shutdown) {
+                        _ = self.shutdown(false);
+                        _ = self.triggerCloseCallback();
+                        return false;
+                    }
                 }
                 return true;
             }
@@ -415,9 +417,13 @@ pub fn updateHandshakeState(self: *@This()) bool {
                 _ = BoringSSL.ERR_clear_error;
                 if ((ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
                     self.flags.received_ssl_shutdown = true;
-                    _ = self.shutdown(false);
                     _ = self.handleEndOfRenegotiation();
-                    return false;
+                    if ((self.flags.sent_ssl_shutdown or (self.flags.handshake_state != HandshakeState.HANDSHAKE_COMPLETED))) {
+                        _ = self.shutdown(false);
+                        _ = self.triggerCloseCallback();
+                        return false;
+                    }
+                    return true;
                 }
                 if (((ssl_err != BoringSSL.SSL_ERROR_WANT_READ) and (ssl_err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
                     self.flags.fatal_error = ((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL));
@@ -482,8 +488,21 @@ pub fn handleReading(self: *@This(), buffer: *[BUFFER_SIZE]u8) bool {
                         } else {
                             if ((ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
                                 self.flags.received_ssl_shutdown = true;
-                                _ = self.shutdown(false);
                                 _ = self.handleEndOfRenegotiation();
+                                if ((read > 0)) {
+                                    _ = log("triggering data callback (read {d})", .{ read });
+                                    _ = self.triggerDataCallback(buffer[0..read]);
+                                    if (((self.ssl == null) or self.flags.closed_notified)) {
+                                        return false;
+                                    }
+                                }
+                                if (((!self.flags.sent_ssl_shutdown) and (self.flags.handshake_state == HandshakeState.HANDSHAKE_COMPLETED))) {
+                                    _ = self.handleWriting(buffer);
+                                    return false;
+                                }
+                                _ = self.shutdown(false);
+                                _ = self.triggerCloseCallback();
+                                return false;
                             }
                         }
                         self.flags.fatal_error = ((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL));

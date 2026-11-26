@@ -1603,6 +1603,16 @@ pub fn onExit(client: *VirtualMachine) void {
             _ = &config;
             client.heap_profiler_config = null;
             _ = (blk_catch_24: { break :blk_catch_24 ((HeapProfiler.generateAndWriteProfile(client.jsc_vm, config)) catch |e| { _ = &e; break :blk_catch_24 Output.err(e, "Failed to write heap profile", .{}); }); });
+            if (comptime Environment.isPosix) {
+                if (client.eventLoop().signal_handler) |sh| {
+                    _ = &sh;
+                    while (sh.dequeue()) |sig| {
+                        if ((sig == @intFromEnum(bun.SignalCode.SIGINT))) {
+                            _ = bun.Global.raiseIgnoringPanicHandler(.SIGINT);
+                        }
+                    }
+                }
+            }
         }
         _ = client.exit_handler.dispatchOnExit();
         client.is_shutting_down = true;
@@ -1628,6 +1638,18 @@ pub fn onExit(client: *VirtualMachine) void {
                 _ = hook.execute();
             }
         }
+}
+
+pub export fn Bun__flushHeapProfilerOnSigint(globalObject: *JSGlobalObject) callconv(.c) bool {
+        var vm = globalObject.bunVM();
+        _ = &vm;
+        if (vm.heap_profiler_config) |config| {
+            _ = &config;
+            vm.heap_profiler_config = null;
+            _ = (blk_catch_25: { break :blk_catch_25 ((HeapProfiler.generateAndWriteProfile(vm.jsc_vm, config)) catch |e| { _ = &e; break :blk_catch_25 Output.err(e, "Failed to write heap profile", .{}); }); });
+            _ = bun.Global.raiseIgnoringPanicHandler(.SIGINT);
+        }
+        return false;
 }
 
 extern "c" fn Zig__GlobalObject__destructOnExit(global: *JSGlobalObject) callconv(.c) void;
@@ -1763,7 +1785,7 @@ pub fn initWithModuleGraph(opts: Options) !*VirtualMachine {
         const log = opts.log.?;
         const transpiler = try Transpiler.init(allocator, log, opts.args, null);
         const vm: *VirtualMachine = VMHolder.vm.?;
-        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_26: { break :blk_catch_26 ((std.time.Timer.start()) catch |__ce_26| { _ = &__ce_26; @panic("Timers are not supported on this system."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = opts.graph.?, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
+        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_27: { break :blk_catch_27 ((std.time.Timer.start()) catch |__ce_27| { _ = &__ce_27; @panic("Timers are not supported on this system."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = opts.graph.?, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.regular_event_loop.virtual_machine = VMHolder.vm.?;
@@ -1817,7 +1839,7 @@ pub fn init(opts: Options) !*VirtualMachine {
         if (opts.is_main_thread) {
             VMHolder.main_thread_vm = VMHolder.vm.?;
         }
-        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_28: { break :blk_catch_28 ((std.time.Timer.start()) catch |__ce_28| { _ = &__ce_28; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
+        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_29: { break :blk_catch_29 ((std.time.Timer.start()) catch |__ce_29| { _ = &__ce_29; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.regular_event_loop.virtual_machine = VMHolder.vm.?;
@@ -1913,7 +1935,7 @@ pub fn initWorker(worker: *webcore.WebWorker, opts: Options) anyerror!*VirtualMa
         _ = console.init(Output.rawErrorWriter(), Output.rawWriter());
         const transpiler = try Transpiler.init(allocator, log, try Config.configureTransformOptionsForBunVM(allocator, opts.args), opts.env_loader);
         const vm: *VirtualMachine = VMHolder.vm.?;
-        vm.* = VirtualMachine{ .global = undefined, .allocator = allocator, .transpiler_store = RuntimeTranspilerStore.init(), .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_30: { break :blk_catch_30 ((std.time.Timer.start()) catch |__ce_30| { _ = &__ce_30; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = worker.parent.standalone_module_graph, .worker = worker, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = @as(i32, @intCast(worker.execution_context_id)) };
+        vm.* = VirtualMachine{ .global = undefined, .allocator = allocator, .transpiler_store = RuntimeTranspilerStore.init(), .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_31: { break :blk_catch_31 ((std.time.Timer.start()) catch |__ce_31| { _ = &__ce_31; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .standalone_module_graph = worker.parent.standalone_module_graph, .worker = worker, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = @as(i32, @intCast(worker.execution_context_id)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.transpiler.options.emit_dce_annotations = false;
@@ -1963,7 +1985,7 @@ pub fn initBake(opts: Options) anyerror!*VirtualMachine {
         _ = console.init(Output.rawErrorWriter(), Output.rawWriter());
         const transpiler = try Transpiler.init(allocator, log, try Config.configureTransformOptionsForBunVM(allocator, opts.args), opts.env_loader);
         const vm: *VirtualMachine = VMHolder.vm.?;
-        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_32: { break :blk_catch_32 ((std.time.Timer.start()) catch |__ce_32| { _ = &__ce_32; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
+        vm.* = VirtualMachine{ .global = undefined, .transpiler_store = RuntimeTranspilerStore.init(), .allocator = allocator, .entry_point = ServerEntryPoint{  }, .transpiler = transpiler, .console = console, .log = log, .timer = bun.api.Timer.All{ .thread_id = std.Thread.getCurrentId() }, .origin = transpiler.options.origin, .saved_source_map_table = SavedSourceMap.HashTable.init(bun.default_allocator), .source_mappings = undefined, .macros = MacroMap.init(allocator), .macro_entry_points = @TypeOf(vm.macro_entry_points).init(allocator), .origin_timer = (blk_catch_33: { break :blk_catch_33 ((std.time.Timer.start()) catch |__ce_33| { _ = &__ce_33; @panic("Please don't mess with timers."); }); }), .origin_timestamp = getOriginTimestamp(), .ref_strings = jsc.RefString.Map.init(allocator), .ref_strings_mutex = .{}, .debug_thread_id = (if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined)), .initial_script_execution_context_identifier = (if (opts.is_main_thread) 1 else std.math.maxInt(i32)) };
         _ = vm.source_mappings.init((&vm.saved_source_map_table));
         vm.regular_event_loop.tasks = EventLoop.Queue.init(default_allocator);
         vm.regular_event_loop.virtual_machine = VMHolder.vm.?;
@@ -2070,7 +2092,7 @@ pub fn fetchWithoutOnLoadPlugins(jsc_vm: *VirtualMachine, globalObject: *JSGloba
         _ = &_blob_guard;
         var ___blob_guard_moved = false; _ = &___blob_guard_moved;
         defer if (!___blob_guard_moved) { ___blob_guard_moved = true; const __T = @TypeOf(_blob_guard); if (@typeInfo(__T) == .optional) { if (_blob_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _blob_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _blob_guard; _drop_val.__cp_deinit(); } };
-        const lr = (blk_catch_37: { break :blk_catch_37 ((options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, (&virtual_source_to_use), (&blob_to_deinit), null)) catch |__ce_37| { _ = &__ce_37; return error.ModuleNotFound; }); });
+        const lr = (blk_catch_38: { break :blk_catch_38 ((options.getLoaderAndVirtualSource(specifier_clone.slice(), jsc_vm, (&virtual_source_to_use), (&blob_to_deinit), null)) catch |__ce_38| { _ = &__ce_38; return error.ModuleNotFound; }); });
         var module_type: options.ModuleType = .unknown;
         _ = &module_type;
         if (lr.package_json) |pkg| {
@@ -2233,7 +2255,7 @@ pub fn resolveMaybeNeedsTrailingSlash(res: *ErrorableString, global: *JSGlobalOb
             _ = &_src_utf8_guard;
             var ___src_utf8_guard_moved = false; _ = &___src_utf8_guard_moved;
             defer if (!___src_utf8_guard_moved) { ___src_utf8_guard_moved = true; const __T = @TypeOf(_src_utf8_guard); if (@typeInfo(__T) == .optional) { if (_src_utf8_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_utf8_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_utf8_guard; _drop_val.__cp_deinit(); } };
-            const printed = (blk_catch_38: { break :blk_catch_38 ((bun.api.ResolveMessage.fmt(bun.default_allocator, specifier_utf8.slice(), source_utf8.slice(), error.NameTooLong, (if (is_esm) .stmt else (if (is_user_require_resolve) .require_resolve else .require)))) catch |e| { _ = &e; break :blk_catch_38 bun.handleOom(e); }); });
+            const printed = (blk_catch_39: { break :blk_catch_39 ((bun.api.ResolveMessage.fmt(bun.default_allocator, specifier_utf8.slice(), source_utf8.slice(), error.NameTooLong, (if (is_esm) .stmt else (if (is_user_require_resolve) .require_resolve else .require)))) catch |e| { _ = &e; break :blk_catch_39 bun.handleOom(e); }); });
             const msg = logger.Msg{ .data = logger.rangeData(null, logger.Range.None, printed) };
             res.* = ErrorableString.err(error.NameTooLong, try bun.api.ResolveMessage.create(global, VirtualMachine.get().allocator, msg, source_utf8.slice()));
             return;
@@ -2286,7 +2308,7 @@ pub fn resolveMaybeNeedsTrailingSlash(res: *ErrorableString, global: *JSGlobalOb
         _ = &_restore_log_guard;
         var ___restore_log_guard_moved = false; _ = &___restore_log_guard_moved;
         defer if (!___restore_log_guard_moved) { ___restore_log_guard_moved = true; const __T = @TypeOf(_restore_log_guard); if (@typeInfo(__T) == .optional) { if (_restore_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _restore_log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _restore_log_guard; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_39: { break :blk_catch_39 ((jsc_vm._resolve((&result), specifier_utf8.slice(), normalizeSource(source_utf8.slice()), is_esm, is_a_file_path)) catch |err_| { _ = &err_; var e = err_;
+        _ = (blk_catch_40: { break :blk_catch_40 ((jsc_vm._resolve((&result), specifier_utf8.slice(), normalizeSource(source_utf8.slice()), is_esm, is_a_file_path)) catch |err_| { _ = &err_; var e = err_;
         _ = &e;
         const msg: logger.Msg = brk: {
         const msgs: []logger.Msg = log.msgs.items;
@@ -2319,7 +2341,7 @@ pub export fn Bun__drainMicrotasksFromJS(globalObject: *JSGlobalObject, callfram
 }
 
 pub fn drainMicrotasks(client: *VirtualMachine) void {
-        _ = (blk_catch_40: { break :blk_catch_40 ((client.eventLoop().drainMicrotasks()) catch |__ce_40| { _ = &__ce_40;  }); });
+        _ = (blk_catch_41: { break :blk_catch_41 ((client.eventLoop().drainMicrotasks()) catch |__ce_41| { _ = &__ce_41;  }); });
 }
 
 pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, referrer: bun.String, log: *logger.Log, ret: *ErrorableResolvedSource, e: anyerror) void {
@@ -2332,7 +2354,7 @@ const msg: logger.Msg = brk: {
         break :brk logger.Msg{ .data = logger.rangeData(null, logger.Range.None, ((std.fmt.allocPrint(globalThis.allocator(), "{s} while building {f}", .{ @errorName(e), specifier })) catch unreachable)) };
 };
         {
-            ret.* = ErrorableResolvedSource.err(e, (blk_catch_43: { break :blk_catch_43 ((bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg)) catch |ex| { _ = &ex; break :blk_catch_43 globalThis.takeException(ex); }); }));
+            ret.* = ErrorableResolvedSource.err(e, (blk_catch_44: { break :blk_catch_44 ((bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg)) catch |ex| { _ = &ex; break :blk_catch_44 globalThis.takeException(ex); }); }));
         }
         return;
 },
@@ -2344,8 +2366,8 @@ const msg = log.msgs.items[0];
         var ___ref_utf8_guard_moved = false; _ = &___ref_utf8_guard_moved;
         defer if (!___ref_utf8_guard_moved) { ___ref_utf8_guard_moved = true; const __T = @TypeOf(_ref_utf8_guard); if (@typeInfo(__T) == .optional) { if (_ref_utf8_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _ref_utf8_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _ref_utf8_guard; _drop_val.__cp_deinit(); } };
         ret.* = ErrorableResolvedSource.err(e, (switch (msg.metadata) {
-.build => (blk_catch_44: { break :blk_catch_44 ((bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg)) catch |ex| { _ = &ex; break :blk_catch_44 globalThis.takeException(ex); }); }),
-.resolve => (blk_catch_45: { break :blk_catch_45 ((bun.api.ResolveMessage.create(globalThis, globalThis.allocator(), msg, referrer_utf8.slice())) catch |ex| { _ = &ex; break :blk_catch_45 globalThis.takeException(ex); }); }),
+.build => (blk_catch_45: { break :blk_catch_45 ((bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg)) catch |ex| { _ = &ex; break :blk_catch_45 globalThis.takeException(ex); }); }),
+.resolve => (blk_catch_46: { break :blk_catch_46 ((bun.api.ResolveMessage.create(globalThis, globalThis.allocator(), msg, referrer_utf8.slice())) catch |ex| { _ = &ex; break :blk_catch_46 globalThis.takeException(ex); }); }),
 }));
         return;
 },
@@ -2366,11 +2388,11 @@ var errors_stack: [256]JSValue = undefined;
             const msg = logs[@as(usize, @intCast(idx))];
             const current = (&errors[@as(usize, @intCast(idx))]);
             current.* = (switch (msg.metadata) {
-.build => (blk_catch_46: { break :blk_catch_46 ((bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg)) catch |ex| { _ = &ex; break :blk_catch_46 globalThis.takeException(ex); }); }),
-.resolve => (blk_catch_47: { break :blk_catch_47 ((bun.api.ResolveMessage.create(globalThis, globalThis.allocator(), msg, referrer_utf8.slice())) catch |ex| { _ = &ex; break :blk_catch_47 globalThis.takeException(ex); }); }),
+.build => (blk_catch_47: { break :blk_catch_47 ((bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg)) catch |ex| { _ = &ex; break :blk_catch_47 globalThis.takeException(ex); }); }),
+.resolve => (blk_catch_48: { break :blk_catch_48 ((bun.api.ResolveMessage.create(globalThis, globalThis.allocator(), msg, referrer_utf8.slice())) catch |ex| { _ = &ex; break :blk_catch_48 globalThis.takeException(ex); }); }),
 });
         }
-        ret.* = ErrorableResolvedSource.err(e, (blk_catch_49: { break :blk_catch_49 ((globalThis.createAggregateError(errors, (&ZigString.init(((std.fmt.allocPrint(globalThis.allocator(), "{d} errors building \"{f}\"", .{ errors.len, specifier })) catch unreachable))))) catch |ex| { _ = &ex; break :blk_catch_49 globalThis.takeException(ex); }); }));
+        ret.* = ErrorableResolvedSource.err(e, (blk_catch_50: { break :blk_catch_50 ((globalThis.createAggregateError(errors, (&ZigString.init(((std.fmt.allocPrint(globalThis.allocator(), "{d} errors building \"{f}\"", .{ errors.len, specifier })) catch unreachable))))) catch |ex| { _ = &ex; break :blk_catch_50 globalThis.takeException(ex); }); }));
 },
 }
 }
@@ -2556,7 +2578,7 @@ pub fn reloadEntryPoint(client: *VirtualMachine, entry_path: []const u8) !*JSInt
                     const argv1 = try bun.String.createUTF8ForJS(client.global, main_file_name);
                     var caught_err: ?JSValue = null;
                     _ = &caught_err;
-                    const ret_opt: ?JSValue = (blk_catch_52: { break :blk_catch_52 ((jsc.fromJSHostCall(client.global, @src(), NodeModuleModule__callOverriddenRunMain, .{ client.global, argv1 })) catch |e| { _ = &e; break :blk_catch_52 brk: {
+                    const ret_opt: ?JSValue = (blk_catch_53: { break :blk_catch_53 ((jsc.fromJSHostCall(client.global, @src(), NodeModuleModule__callOverriddenRunMain, .{ client.global, argv1 })) catch |e| { _ = &e; break :blk_catch_53 brk: {
                     caught_err = client.global.takeException(e);
                     break :brk null;
 }; }); });
@@ -2735,7 +2757,7 @@ pub fn removeListeningSocketForWatchMode(client: *VirtualMachine, socket: bun.FD
 
 pub fn swapGlobalForTestIsolation(client: *VirtualMachine) void {
         _ = bun.debugAssert(client.test_isolation_enabled);
-        _ = (blk_catch_53: { break :blk_catch_53 ((client.eventLoop().drainMicrotasks()) catch |__ce_53| { _ = &__ce_53;  }); });
+        _ = (blk_catch_54: { break :blk_catch_54 ((client.eventLoop().drainMicrotasks()) catch |__ce_54| { _ = &__ce_54;  }); });
         if (client.rare_data) |rare| {
             _ = &rare;
             _ = rare.closeAllWatchersForIsolation();
@@ -2782,7 +2804,7 @@ skip_process_ipc = inst.group;
             _ = rare.listening_sockets_for_watch_mode.clearRetainingCapacity();
             _ = rare.listening_sockets_for_watch_mode_lock.unlock();
         }
-        _ = (blk_catch_54: { break :blk_catch_54 ((client.eventLoop().drainMicrotasks()) catch |__ce_54| { _ = &__ce_54;  }); });
+        _ = (blk_catch_55: { break :blk_catch_55 ((client.eventLoop().drainMicrotasks()) catch |__ce_55| { _ = &__ce_55;  }); });
         _ = client.auto_killer.kill();
         _ = client.auto_killer.clear();
         _ = client.timer.event_loop_delay.disable();
@@ -2879,8 +2901,8 @@ pub fn printErrorlikeObject(self: *VirtualMachine, value: JSValue, exception: ?*
         _ = &_trace_guard;
         var ___trace_guard_moved = false; _ = &___trace_guard_moved;
         defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
-        const agg_errors = (if (value.isAggregateError(self.global)) (blk_catch_56: { break :blk_catch_56 ((value.fastGet(self.global, .errors)) catch |__ce_56| { _ = &__ce_56; _ = self.global.clearException();
-        break :blk_catch_56 null; }); }) else null);
+        const agg_errors = (if (value.isAggregateError(self.global)) (blk_catch_57: { break :blk_catch_57 ((value.fastGet(self.global, .errors)) catch |__ce_57| { _ = &__ce_57; _ = self.global.clearException();
+        break :blk_catch_57 null; }); }) else null);
         if (agg_errors) |errors| {
             _ = &errors;
             var iter = AggregateErrorIterator(Writer){ .writer = writer, .current_exception_list = exception_list, .formatter = formatter };
@@ -2889,19 +2911,19 @@ pub fn printErrorlikeObject(self: *VirtualMachine, value: JSValue, exception: ?*
             _ = &ok;
             if (comptime allow_ansi_color) {
                 if (comptime allow_side_effects) {
-                    _ = (blk_catch_57: { break :blk_catch_57 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorAndSideEffects)) catch |__ce_57| { _ = &__ce_57; ok = false;
-                    break :blk_catch_57 {}; }); });
-                } else {
-                    _ = (blk_catch_58: { break :blk_catch_58 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorNoSideEffects)) catch |__ce_58| { _ = &__ce_58; ok = false;
+                    _ = (blk_catch_58: { break :blk_catch_58 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorAndSideEffects)) catch |__ce_58| { _ = &__ce_58; ok = false;
                     break :blk_catch_58 {}; }); });
+                } else {
+                    _ = (blk_catch_59: { break :blk_catch_59 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorNoSideEffects)) catch |__ce_59| { _ = &__ce_59; ok = false;
+                    break :blk_catch_59 {}; }); });
                 }
             } else {
                 if (comptime allow_side_effects) {
-                    _ = (blk_catch_59: { break :blk_catch_59 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorAndSideEffects)) catch |__ce_59| { _ = &__ce_59; ok = false;
-                    break :blk_catch_59 {}; }); });
-                } else {
-                    _ = (blk_catch_60: { break :blk_catch_60 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorNoSideEffects)) catch |__ce_60| { _ = &__ce_60; ok = false;
+                    _ = (blk_catch_60: { break :blk_catch_60 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorAndSideEffects)) catch |__ce_60| { _ = &__ce_60; ok = false;
                     break :blk_catch_60 {}; }); });
+                } else {
+                    _ = (blk_catch_61: { break :blk_catch_61 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorNoSideEffects)) catch |__ce_61| { _ = &__ce_61; ok = false;
+                    break :blk_catch_61 {}; }); });
                 }
             }
             if ((!ok)) {
@@ -2924,15 +2946,15 @@ pub fn printErrorFromMaybePrivateData(self: *VirtualMachine, value: JSValue, exc
                 defer if (!___out_guard_moved) { ___out_guard_moved = true; const __T = @TypeOf(_out_guard); if (@typeInfo(__T) == .optional) { if (_out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _out_guard; _drop_val.__cp_deinit(); } };
                 if ((!build_error.logged)) {
                     if (self.had_errors) {
-                        _ = (blk_catch_61: { break :blk_catch_61 ((writer.writeAll("\n")) catch |__ce_61| { _ = &__ce_61;  }); });
+                        _ = (blk_catch_62: { break :blk_catch_62 ((writer.writeAll("\n")) catch |__ce_62| { _ = &__ce_62;  }); });
                     }
-                    _ = (blk_catch_62: { break :blk_catch_62 ((build_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_62| { _ = &__ce_62;  }); });
+                    _ = (blk_catch_63: { break :blk_catch_63 ((build_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_63| { _ = &__ce_63;  }); });
                     build_error.logged = true;
-                    _ = (blk_catch_63: { break :blk_catch_63 ((writer.writeAll("\n")) catch |__ce_63| { _ = &__ce_63;  }); });
+                    _ = (blk_catch_64: { break :blk_catch_64 ((writer.writeAll("\n")) catch |__ce_64| { _ = &__ce_64;  }); });
                 }
                 self.had_errors = (self.had_errors or (build_error.msg.kind == .err));
                 if ((exception_list != null)) {
-                    _ = (blk_catch_64: { break :blk_catch_64 ((self.log.addMsg(build_error.msg)) catch |__ce_64| { _ = &__ce_64;  }); });
+                    _ = (blk_catch_65: { break :blk_catch_65 ((self.log.addMsg(build_error.msg)) catch |__ce_65| { _ = &__ce_65;  }); });
                 }
                 return true;
             } else {
@@ -2944,21 +2966,21 @@ pub fn printErrorFromMaybePrivateData(self: *VirtualMachine, value: JSValue, exc
                     defer if (!___out_guard_moved) { ___out_guard_moved = true; const __T = @TypeOf(_out_guard); if (@typeInfo(__T) == .optional) { if (_out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _out_guard; _drop_val.__cp_deinit(); } };
                     if ((!resolve_error.logged)) {
                         if (self.had_errors) {
-                            _ = (blk_catch_65: { break :blk_catch_65 ((writer.writeAll("\n")) catch |__ce_65| { _ = &__ce_65;  }); });
+                            _ = (blk_catch_66: { break :blk_catch_66 ((writer.writeAll("\n")) catch |__ce_66| { _ = &__ce_66;  }); });
                         }
-                        _ = (blk_catch_66: { break :blk_catch_66 ((resolve_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_66| { _ = &__ce_66;  }); });
+                        _ = (blk_catch_67: { break :blk_catch_67 ((resolve_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_67| { _ = &__ce_67;  }); });
                         resolve_error.logged = true;
-                        _ = (blk_catch_67: { break :blk_catch_67 ((writer.writeAll("\n")) catch |__ce_67| { _ = &__ce_67;  }); });
+                        _ = (blk_catch_68: { break :blk_catch_68 ((writer.writeAll("\n")) catch |__ce_68| { _ = &__ce_68;  }); });
                     }
                     self.had_errors = (self.had_errors or (resolve_error.msg.kind == .err));
                     if ((exception_list != null)) {
-                        _ = (blk_catch_68: { break :blk_catch_68 ((self.log.addMsg(resolve_error.msg)) catch |__ce_68| { _ = &__ce_68;  }); });
+                        _ = (blk_catch_69: { break :blk_catch_69 ((self.log.addMsg(resolve_error.msg)) catch |__ce_69| { _ = &__ce_69;  }); });
                     }
                     return true;
                 }
             }
         }
-        _ = (blk_catch_69: { break :blk_catch_69 ((self.printErrorInstance(.js, value, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects)) catch |e| { _ = &e; if ((e == error.JSError)) {
+        _ = (blk_catch_70: { break :blk_catch_70 ((self.printErrorInstance(.js, value, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects)) catch |e| { _ = &e; if ((e == error.JSError)) {
             _ = self.global.clearException();
         } else {
             if (comptime Environment.isDebug) {
@@ -3287,7 +3309,7 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
             _ = &_log_guard;
             var ___log_guard_moved = false; _ = &___log_guard_moved;
             defer if (!___log_guard_moved) { ___log_guard_moved = true; const __T = @TypeOf(_log_guard); if (@typeInfo(__T) == .optional) { if (_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _log_guard; _drop_val.__cp_deinit(); } };
-            var original_source = (blk_catch_70: { break :blk_catch_70 ((fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, (&log), .print_source)) catch |__ce_70| { _ = &__ce_70; return; }); });
+            var original_source = (blk_catch_71: { break :blk_catch_71 ((fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, (&log), .print_source)) catch |__ce_71| { _ = &__ce_71; return; }); });
             _ = &original_source;
             must_reset_parser_arena_later.* = true;
             break :code original_source.source_code.toUTF8(bun.default_allocator);
@@ -3468,7 +3490,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         if (error_instance.uncheckedPtrCast(jsc.JSObject).getCodePropertyVMInquiry(client.global)) |code_value| {
             _ = &code_value;
             if (code_value.isStringLiteral()) {
-                const code_string = (blk_catch_71: { break :blk_catch_71 ((code_value.toBunString(client.global)) catch |__ce_71| { _ = &__ce_71; break :blk_catch_71 bun.outOfMemory(); }); });
+                const code_string = (blk_catch_72: { break :blk_catch_72 ((code_value.toBunString(client.global)) catch |__ce_72| { _ = &__ce_72; break :blk_catch_72 bun.outOfMemory(); }); });
                 var _code_str_guard = DerefGuard(@TypeOf(code_string)){ .val = code_string };
                 _ = &_code_str_guard;
                 var ___code_str_guard_moved = false; _ = &___code_str_guard_moved;
@@ -3636,7 +3658,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                                 _ = client.global.clearException();
                             }
                         }
-                        _ = (blk_catch_72: { break :blk_catch_72 ((formatter.format(try jsc.Formatter.Tag.getAdvanced(value, client.global, .{ .disable_inspect_custom = true, .hide_global = true }), Writer, writer, value, client.global, allow_ansi_color)) catch |__ce_72| { _ = &__ce_72;  }); });
+                        _ = (blk_catch_73: { break :blk_catch_73 ((formatter.format(try jsc.Formatter.Tag.getAdvanced(value, client.global, .{ .disable_inspect_custom = true, .hide_global = true }), Writer, writer, value, client.global, allow_ansi_color)) catch |__ce_73| { _ = &__ce_73;  }); });
                         if (allow_side_effects) {
                             if (client.global.hasException()) {
                                 _ = client.global.clearException();
@@ -3787,17 +3809,17 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
                 var ___src_url_guard_moved = false; _ = &___src_url_guard_moved;
                 defer if (!___src_url_guard_moved) { ___src_url_guard_moved = true; const __T = @TypeOf(_src_url_guard); if (@typeInfo(__T) == .optional) { if (_src_url_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_url_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_url_guard; _drop_val.__cp_deinit(); } };
                 const file = bun.path.relative(dir, source_url.slice());
-                _ = (blk_catch_74: { break :blk_catch_74 ((writer.print("\n::error file={s},line={d},col={d},title=", .{ file, frame.position.line.oneBased(), frame.position.column.oneBased() })) catch |__ce_74| { _ = &__ce_74;  }); });
+                _ = (blk_catch_75: { break :blk_catch_75 ((writer.print("\n::error file={s},line={d},col={d},title=", .{ file, frame.position.line.oneBased(), frame.position.column.oneBased() })) catch |__ce_75| { _ = &__ce_75;  }); });
                 has_location = true;
             }
         }
         if ((!has_location)) {
-            _ = (blk_catch_75: { break :blk_catch_75 ((writer.print("\n::error title=", .{})) catch |__ce_75| { _ = &__ce_75;  }); });
+            _ = (blk_catch_76: { break :blk_catch_76 ((writer.print("\n::error title=", .{})) catch |__ce_76| { _ = &__ce_76;  }); });
         }
         if ((name.isEmpty() or name.eqlComptime("Error"))) {
-            _ = (blk_catch_76: { break :blk_catch_76 ((writer.print("error", .{})) catch |__ce_76| { _ = &__ce_76;  }); });
+            _ = (blk_catch_77: { break :blk_catch_77 ((writer.print("error", .{})) catch |__ce_77| { _ = &__ce_77;  }); });
         } else {
-            _ = (blk_catch_77: { break :blk_catch_77 ((writer.print("{f}", .{ name.githubAction() })) catch |__ce_77| { _ = &__ce_77;  }); });
+            _ = (blk_catch_78: { break :blk_catch_78 ((writer.print("{f}", .{ name.githubAction() })) catch |__ce_78| { _ = &__ce_78;  }); });
         }
         if ((!message.isEmpty())) {
             const message_slice = message.toUTF8(allocator);
@@ -3814,13 +3836,13 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
                 cursor = (i + 1);
                 if ((msg[@as(usize, @intCast(i))] == 10)) {
                     const first_line = bun.String.borrowUTF8(msg[0..i]);
-                    _ = (blk_catch_78: { break :blk_catch_78 ((writer.print(": {f}::", .{ first_line.githubAction() })) catch |__ce_78| { _ = &__ce_78;  }); });
+                    _ = (blk_catch_79: { break :blk_catch_79 ((writer.print(": {f}::", .{ first_line.githubAction() })) catch |__ce_79| { _ = &__ce_79;  }); });
                     found_newline = true;
                     break;
                 }
             }
             if ((!found_newline)) {
-                _ = (blk_catch_79: { break :blk_catch_79 ((writer.print(": {f}::", .{ message.githubAction() })) catch |__ce_79| { _ = &__ce_79;  }); });
+                _ = (blk_catch_80: { break :blk_catch_80 ((writer.print(": {f}::", .{ message.githubAction() })) catch |__ce_80| { _ = &__ce_80;  }); });
             }
             while (strings.indexOfNewlineOrNonASCIIOrANSI(msg, cursor)) |i| {
                 cursor = (i + 1);
@@ -3830,10 +3852,10 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
             }
             if ((cursor > 0)) {
                 const body = ZigString.initUTF8(msg[cursor..]);
-                _ = (blk_catch_80: { break :blk_catch_80 ((writer.print("{f}", .{ body.githubAction() })) catch |__ce_80| { _ = &__ce_80;  }); });
+                _ = (blk_catch_81: { break :blk_catch_81 ((writer.print("{f}", .{ body.githubAction() })) catch |__ce_81| { _ = &__ce_81;  }); });
             }
         } else {
-            _ = (blk_catch_81: { break :blk_catch_81 ((writer.print("::", .{})) catch |__ce_81| { _ = &__ce_81;  }); });
+            _ = (blk_catch_82: { break :blk_catch_82 ((writer.print("::", .{})) catch |__ce_82| { _ = &__ce_82;  }); });
         }
         if (top_frame) |_| {
             const vm = VirtualMachine.get();
@@ -3854,13 +3876,13 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
                 }
                 const has_name = (std.fmt.count("{f}", .{ frame.nameFormatter(false) }) > 0);
                 if (has_name) {
-                    _ = (blk_catch_82: { break :blk_catch_82 ((writer.print("%0A      at {f} ({f})", .{ frame.nameFormatter(false), frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_82| { _ = &__ce_82;  }); });
+                    _ = (blk_catch_83: { break :blk_catch_83 ((writer.print("%0A      at {f} ({f})", .{ frame.nameFormatter(false), frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_83| { _ = &__ce_83;  }); });
                 } else {
-                    _ = (blk_catch_83: { break :blk_catch_83 ((writer.print("%0A      at {f}", .{ frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_83| { _ = &__ce_83;  }); });
+                    _ = (blk_catch_84: { break :blk_catch_84 ((writer.print("%0A      at {f}", .{ frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_84| { _ = &__ce_84;  }); });
                 }
             }
         }
-        _ = (blk_catch_84: { break :blk_catch_84 ((writer.print("\n", .{})) catch |__ce_84| { _ = &__ce_84;  }); });
+        _ = (blk_catch_85: { break :blk_catch_85 ((writer.print("\n", .{})) catch |__ce_85| { _ = &__ce_85;  }); });
 }
 
 pub fn resolveSourceMapping(client: *VirtualMachine, path: []const u8, line: Ordinal, column: Ordinal, source_handling: SourceMap.SourceContentHandling) ?SourceMap.Mapping.Lookup {
@@ -3881,7 +3903,7 @@ pub fn resolveSourceMapping(client: *VirtualMachine, path: []const u8, line: Ord
             }
             const map = map_opt.?;
             _ = map.ref();
-            _ = (blk_catch_85: { break :blk_catch_85 ((client.source_mappings.putValue(path, SavedSourceMap.Value.init(map))) catch |__ce_85| { _ = &__ce_85; break :blk_catch_85 bun.outOfMemory(); }); });
+            _ = (blk_catch_86: { break :blk_catch_86 ((client.source_mappings.putValue(path, SavedSourceMap.Value.init(map))) catch |__ce_86| { _ = &__ce_86; break :blk_catch_86 bun.outOfMemory(); }); });
             const mapping_opt = map.findMapping(line, column);
             if ((mapping_opt == null)) {
                 return null;
@@ -3937,7 +3959,7 @@ else => instance: {
         _ = &instance;
         instance.data = .init(opts.mode, .{ .virtual_machine = instance }, .uninitialized);
         client.ipc = .{ .initialized = instance };
-        _ = (blk_catch_86: { break :blk_catch_86 ((instance.data.windowsConfigureClient(opts.fd)) catch |__ce_86| { _ = &__ce_86; _ = instance.deinit();
+        _ = (blk_catch_87: { break :blk_catch_87 ((instance.data.windowsConfigureClient(opts.fd)) catch |__ce_87| { _ = &__ce_87; _ = instance.deinit();
         client.ipc = null;
         _ = Output.warn("Unable to start IPC pipe '{f}'", .{ opts.fd });
         return null; }); });

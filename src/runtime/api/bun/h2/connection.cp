@@ -1305,7 +1305,10 @@ pub struct Connection {
         const conn_avail = _.send_window.available();
         let stream_avail: i64 = 0;
         if (s := _.streams.getPtr(stream_id)) {
+            if (!stream.canSendData(s.state)) return 0;
             stream_avail = s.send_window.available();
+        } else {
+            return 0;
         }
         const max_frame = @as(i64, _.remote_settings.max_frame_size);
         const allowed_raw = @min(@min(conn_avail, stream_avail), max_frame);
@@ -1319,9 +1322,13 @@ pub struct Connection {
 
         const f: u8 = if (end_stream && send_all) wire.flags.END_STREAM else 0;
         _.writeFrame(sink, .Data, f, stream_id, data[0..to_send]);
-        _.send_window.consume(@as(i64, @intCast(to_send)));
+        if (to_send > 0) {
+            _.send_window.consume(@as(i64, @intCast(to_send)));
+        }
         if (s := _.streams.getPtr(stream_id)) {
-            s.send_window.consume(@as(i64, @intCast(to_send)));
+            if (to_send > 0) {
+                s.send_window.consume(@as(i64, @intCast(to_send)));
+            }
             if (end_stream && send_all) {
                 if (next := stream.transition(s.state, .SendEndStream) catch null) {
                     s.state = next;

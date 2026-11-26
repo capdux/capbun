@@ -64,6 +64,7 @@ const BlockList = $zig("node_net_binding.zig", "BlockList");
 const kServerResponse = Symbol("ServerResponse");
 const kRejectNonStandardBodyWrites = Symbol("kRejectNonStandardBodyWrites");
 const kNeedDrain = Symbol("kNeedDrain");
+const kPipelineQueue = Symbol("kPipelineQueue");
 const GlobalPromise = globalThis.Promise;
 const kEmptyBuffer = Buffer.alloc(0);
 const ObjectKeys = Object.keys;
@@ -599,103 +600,38 @@ Server.prototype[kRealListen] = function (tls, port, host, socketPath, reusePort
           }
           return;
         }
-        socket[kEnableStreaming](false);
-
         const http_res = new ResponseClass(http_req, {
           [kHandle]: handle,
           [kRejectNonStandardBodyWrites]: server.rejectNonStandardBodyWrites,
         });
 
         setIsNextIncomingMessageHTTPS(prevIsNextIncomingMessageHTTPS);
-        handle.onabort = onServerRequestEvent.bind(socket);
-        // start buffering data if any, the user will need to resume() or .on("data") to read it
         if (hasBody) {
           handle.pause();
         }
-        drainMicrotasks();
-
-        let resolveFunction;
-        let didFinish = false;
-
-        const isRequestsLimitSet = typeof server.maxRequestsPerSocket === "number" && server.maxRequestsPerSocket > 0;
-        let reachedRequestsLimit = false;
-        if (isRequestsLimitSet) {
-          const requestCount = (socket._requestCount || 0) + 1;
-          socket._requestCount = requestCount;
-          if (server.maxRequestsPerSocket < requestCount) {
-            reachedRequestsLimit = true;
-          }
+        if (socket._httpMessage || socket[kPipelineQueue]?.length > 0) {
+          const { resolve, promise } = $newPromiseCapability(Promise);
+          (socket[kPipelineQueue] ??= []).push({
+            server,
+            http_req,
+            http_res,
+            handle,
+            isSocketNew,
+            canUseInternalAssignSocket,
+            resolve,
+          });
+          return promise;
         }
 
-        if (isSocketNew && !reachedRequestsLimit) {
-          server.emit("connection", socket);
-        }
-
-        socket[kRequest] = http_req;
-        const is_upgrade = http_req.headers.upgrade;
-        if (!is_upgrade) {
-          if (canUseInternalAssignSocket) {
-            // ~10% performance improvement in JavaScriptCore due to avoiding .once("close", ...) and removing a listener
-            assignSocketInternal(http_res, socket);
-          } else {
-            http_res.assignSocket(socket);
-          }
-        }
-        function onClose() {
-          didFinish = true;
-          if (resolveFunction) resolveFunction();
-        }
-
-        setCloseCallback(http_res, onClose);
-        if (reachedRequestsLimit) {
-          server.emit("dropRequest", http_req, socket);
-          http_res.writeHead(503);
-          http_res.end();
-          socket.destroy();
-        } else if (is_upgrade) {
-          server.emit("upgrade", http_req, socket, kEmptyBuffer);
-          if (!socket._httpMessage) {
-            if (canUseInternalAssignSocket) {
-              // ~10% performance improvement in JavaScriptCore due to avoiding .once("close", ...) and removing a listener
-              assignSocketInternal(http_res, socket);
-            } else {
-              http_res.assignSocket(socket);
-            }
-          }
-        } else if (http_req.headers.expect !== undefined) {
-          if (http_req.headers.expect === "100-continue") {
-            if (server.listenerCount("checkContinue") > 0) {
-              server.emit("checkContinue", http_req, http_res);
-            } else {
-              http_res.writeContinue();
-              server.emit("request", http_req, http_res);
-            }
-          } else if (server.listenerCount("checkExpectation") > 0) {
-            server.emit("checkExpectation", http_req, http_res);
-          } else {
-            http_res.writeHead(417);
-            http_res.end();
-          }
-        } else {
-          server.emit("request", http_req, http_res);
-        }
-
-        socket.cork();
-
-        if (handle.finished || didFinish) {
-          handle = undefined;
-          http_res[kCloseCallback] = undefined;
-          http_res.detachSocket(socket);
-          return;
-        }
-        if (http_res.socket) {
-          http_res.on("finish", http_res.detachSocket.bind(http_res, socket));
-        }
-
-        const { resolve, promise } = $newPromiseCapability(Promise);
-        resolveFunction = resolve;
-
-        return promise;
+        return dispatchNodeHTTPRequest(
+          server,
+          socket,
+          http_req,
+          http_res,
+          handle,
+          isSocketNew,
+          canUseInternalAssignSocket,
+        );
       },
 
       // Be very careful not to access (web) Request object
@@ -960,6 +896,14 @@ const NodeHTTPServerSocket = class Socket extends Duplex {
         req.destroy(new ConnResetException("aborted"));
       } else {
         req.destroy();
+      }
+    }
+
+    const queue = this[kPipelineQueue];
+    if (queue) {
+      this[kPipelineQueue] = undefined;
+      for (let i = 0; i < queue.length; i++) {
+        queue[i].resolve();
       }
     }
   }
@@ -1602,10 +1546,127 @@ ServerResponse.prototype.detachSocket = function (socket) {
     if (socket[kCloseCallback]) socket[kCloseCallback] = undefined;
     socket.removeListener("close", onServerResponseClose);
     socket._httpMessage = null;
+    if (socket[kPipelineQueue]?.length > 0) {
+      process.nextTick(drainNodeHTTPPipeline, socket);
+    }
   }
 
   this.socket = null;
 };
+
+function dispatchNodeHTTPRequest(server, socket, http_req, http_res, handle, isSocketNew, canUseInternalAssignSocket) {
+  socket[kEnableStreaming](false);
+  handle.onabort = onServerRequestEvent.bind(socket);
+  drainMicrotasks();
+
+  let resolveFunction;
+  let didFinish = false;
+
+  const isRequestsLimitSet = typeof server.maxRequestsPerSocket === "number" && server.maxRequestsPerSocket > 0;
+  let reachedRequestsLimit = false;
+  if (isRequestsLimitSet) {
+    const requestCount = (socket._requestCount || 0) + 1;
+    socket._requestCount = requestCount;
+    if (server.maxRequestsPerSocket < requestCount) {
+      reachedRequestsLimit = true;
+    }
+  }
+
+  if (isSocketNew && !reachedRequestsLimit) {
+    server.emit("connection", socket);
+  }
+
+  socket[kRequest] = http_req;
+  const is_upgrade = http_req.headers.upgrade;
+  if (!is_upgrade) {
+    if (canUseInternalAssignSocket) {
+      // ~10% performance improvement in JavaScriptCore due to avoiding .once("close", ...) and removing a listener
+      assignSocketInternal(http_res, socket);
+    } else {
+      http_res.assignSocket(socket);
+    }
+  }
+  function onClose() {
+    didFinish = true;
+    if (resolveFunction) resolveFunction();
+  }
+
+  setCloseCallback(http_res, onClose);
+  if (reachedRequestsLimit) {
+    server.emit("dropRequest", http_req, socket);
+    http_res.writeHead(503);
+    http_res.end();
+    socket.destroy();
+  } else if (is_upgrade) {
+    server.emit("upgrade", http_req, socket, kEmptyBuffer);
+    if (!socket._httpMessage) {
+      if (canUseInternalAssignSocket) {
+        // ~10% performance improvement in JavaScriptCore due to avoiding .once("close", ...) and removing a listener
+        assignSocketInternal(http_res, socket);
+      } else {
+        http_res.assignSocket(socket);
+      }
+    }
+  } else if (http_req.headers.expect !== undefined) {
+    if (http_req.headers.expect === "100-continue") {
+      if (server.listenerCount("checkContinue") > 0) {
+        server.emit("checkContinue", http_req, http_res);
+      } else {
+        http_res.writeContinue();
+        server.emit("request", http_req, http_res);
+      }
+    } else if (server.listenerCount("checkExpectation") > 0) {
+      server.emit("checkExpectation", http_req, http_res);
+    } else {
+      http_res.writeHead(417);
+      http_res.end();
+    }
+  } else {
+    server.emit("request", http_req, http_res);
+  }
+
+  socket.cork();
+
+  if (handle.finished || didFinish) {
+    handle = undefined;
+    http_res[kCloseCallback] = undefined;
+    http_res.detachSocket(socket);
+    return;
+  }
+  if (http_res.socket) {
+    http_res.on("finish", http_res.detachSocket.bind(http_res, socket));
+  }
+
+  const { resolve, promise } = $newPromiseCapability(Promise);
+  resolveFunction = resolve;
+
+  return promise;
+}
+
+function drainNodeHTTPPipeline(socket) {
+  while (socket[kPipelineQueue]?.length > 0 && !socket._httpMessage) {
+    const entry = socket[kPipelineQueue].shift();
+    const { server, http_req, http_res, handle, isSocketNew, canUseInternalAssignSocket, resolve } = entry;
+    if (socket.destroyed || !socket[kHandle] || (handle.flags & NodeHTTPResponseFlags.closed_or_completed)) {
+      resolve();
+      continue;
+    }
+    const promise = dispatchNodeHTTPRequest(
+      server,
+      socket,
+      http_req,
+      http_res,
+      handle,
+      isSocketNew,
+      canUseInternalAssignSocket,
+    );
+    if (promise) {
+      promise.then(resolve, resolve);
+      return;
+    }
+    resolve();
+  }
+}
 
 ServerResponse.prototype._implicitHeader = function () {
   if (this.headersSent) return;

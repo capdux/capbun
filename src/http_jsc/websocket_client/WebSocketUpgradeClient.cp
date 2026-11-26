@@ -261,6 +261,13 @@ fn buildConnectRequest(
     return buf.toOwnedSlice();
 }
 
+@c struct HandshakeHeader {
+    name_ptr: [*]const u8!,
+    name_len: usize,
+    value_ptr: [*]const u8!,
+    value_len: usize,
+}
+
 fn computeAcceptValue(key: []const u8): [28]u8 {
     const websocket_guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     let hasher = bun.sha.Hashers.SHA1.init();
@@ -323,7 +330,9 @@ fn buildRequestBody(
                 }
             }
         }
-        break :blk std.base64.standard.Encoder.encode(&encoded_buf, &vm.rareData().nextUUID().bytes);
+        let random_bytes: [16]u8 = undefined;
+        bun.csprng(&random_bytes);
+        break :blk std.base64.standard.Encoder.encode(&encoded_buf, &random_bytes);
     };
 
     const expected_accept = computeAcceptValue(key);
@@ -762,6 +771,8 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
         pub fn fail(*_, code: ErrorCode) {
             log("onFail: {s}", .{@tagName(code)});
             jsc.markBinding(@src());
+            _.ref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
             _.dispatchAbruptClose(code);
 
             if (comptime ssl) {
@@ -774,6 +785,8 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
         pub fn failWithReason(*_, code: ErrorCode, msg: []const u8) {
             log("onFail: {s}: {s}", .{ @tagName(code), msg });
             jsc.markBinding(@src());
+            _.ref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
             if (ws := _.outgoing_websocket) {
                 _.outgoing_websocket = null;
                 ws.didAbruptCloseWithReason(code, msg);
@@ -1154,13 +1167,42 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
         pub fn processResponse(*_, response: PicoHTTP.Response, remain_buf: []const u8) {
             let upgrade_header = PicoHTTP.Header{ name: "", value: "" };
-            let connection_header = PicoHTTP.Header{ name: "", value: "" };
+            let has_connection_header = false;
+            let has_connection_upgrade = false;
             let websocket_accept_header = PicoHTTP.Header{ name: "", value: "" };
             let protocol_header_seen = false;
             let extension_header_seen = false;
             let deflate_result = DeflateNegotiationResult{};
 
             if (response.status_code != 101) {
+                if (ws := _.outgoing_websocket) {
+                    const status_u16: u16 = if (response.status_code >= 0 && response.status_code <= 65535) @intCast(response.status_code) else 0;
+                    const hdrs_slice = response.headers.list;
+                    let stack_hdrs: [64]HandshakeHeader = undefined;
+                    let heap_hdrs: ([]HandshakeHeader)? = null;
+                    defer {
+                        if (hh := heap_hdrs) {
+                            bun.default_allocator.free(hh);
+                        }
+                    }
+                    let out_hdrs: []HandshakeHeader = stack_hdrs[0..0];
+                    if (hdrs_slice.len <= 64) {
+                        out_hdrs = stack_hdrs[0..hdrs_slice.len];
+                    } else if (alloc_hdrs := bun.default_allocator.alloc(HandshakeHeader, hdrs_slice.len) catch null) {
+                        heap_hdrs = alloc_hdrs;
+                        out_hdrs = alloc_hdrs;
+                    }
+                    for (idx of 0..out_hdrs.len) {
+                        const i = @as(usize, @intCast(idx));
+                        out_hdrs[i] = HandshakeHeader{
+                            name_ptr: hdrs_slice[i].name.ptr,
+                            name_len: hdrs_slice[i].name.len,
+                            value_ptr: hdrs_slice[i].value.ptr,
+                            value_len: hdrs_slice[i].value.len,
+                        };
+                    }
+                    ws.didReceiveHandshake(status_u16, response.status, unsafe { @as(*!, out_hdrs.ptr) }, out_hdrs.len, remain_buf);
+                }
                 _.terminate(ErrorCode.expected_101_status_code);
                 return;
             }
@@ -1169,8 +1211,16 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             for (header of hdr_list) {
                 switch (header.name.len) {
                     10 => {
-                        if (connection_header.name.len == 0 && strings.eqlCaseInsensitiveASCII(header.name, "Connection", false)) {
-                            connection_header = header;
+                        if (strings.eqlCaseInsensitiveASCII(header.name, "Connection", false)) {
+                            has_connection_header = true;
+                            let tok_it = std.mem.splitScalar(u8, header.value, ',');
+                            while (tok := tok_it.next()) {
+                                const trimmed_tok = std.mem.trim(u8, tok, " \t");
+                                if (strings.eqlCaseInsensitiveASCII(trimmed_tok, "Upgrade", true)) {
+                                    has_connection_upgrade = true;
+                                    break;
+                                }
+                            }
                         }
                     },
                     7 => {
@@ -1221,20 +1271,20 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                     24 => {
                         if (strings.eqlCaseInsensitiveASCII(header.name, "Sec-WebSocket-Extensions", false)) {
                             if (!_.offered_permessage_deflate || extension_header_seen) {
-                                _.terminate(ErrorCode.invalid_response);
+                                _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                 return;
                             }
                             extension_header_seen = true;
 
                             if (std.mem.indexOfScalar(u8, header.value, ',') != null) {
-                                _.terminate(ErrorCode.invalid_response);
+                                _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                 return;
                             }
 
                             let ext_it = std.mem.splitScalar(u8, header.value, ';');
                             const ext_name = std.mem.trim(u8, ext_it.next() ?? "", " \t");
                             if (!strings.eqlComptime(ext_name, "permessage-deflate")) {
-                                _.terminate(ErrorCode.invalid_response);
+                                _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                 return;
                             }
 
@@ -1247,7 +1297,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                             while (param_str := ext_it.next()) {
                                 const trimmed_param = std.mem.trim(u8, param_str, " \t");
                                 if (trimmed_param.len == 0) {
-                                    _.terminate(ErrorCode.invalid_response);
+                                    _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                     return;
                                 }
                                 if (eq_idx := std.mem.indexOfScalar(u8, trimmed_param, '=')) {
@@ -1255,49 +1305,49 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                                     const value = std.mem.trim(u8, trimmed_param[eq_idx + 1 ..], " \t");
                                     if (strings.eqlComptime(key, "server_max_window_bits")) {
                                         if (seen_server_max_window_bits) {
-                                            _.terminate(ErrorCode.invalid_response);
+                                            _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                             return;
                                         }
                                         seen_server_max_window_bits = true;
                                         if (bits := parseWindowBits(value)) {
                                             deflate_result.params.server_max_window_bits = bits;
                                         } else {
-                                            _.terminate(ErrorCode.invalid_response);
+                                            _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                             return;
                                         }
                                     } else if (strings.eqlComptime(key, "client_max_window_bits")) {
                                         if (seen_client_max_window_bits) {
-                                            _.terminate(ErrorCode.invalid_response);
+                                            _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                             return;
                                         }
                                         seen_client_max_window_bits = true;
                                         if (bits := parseWindowBits(value)) {
                                             deflate_result.params.client_max_window_bits = bits;
                                         } else {
-                                            _.terminate(ErrorCode.invalid_response);
+                                            _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                             return;
                                         }
                                     } else {
-                                        _.terminate(ErrorCode.invalid_response);
+                                        _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                         return;
                                     }
                                 } else {
                                     if (strings.eqlComptime(trimmed_param, "server_no_context_takeover")) {
                                         if (seen_server_no_context_takeover) {
-                                            _.terminate(ErrorCode.invalid_response);
+                                            _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                             return;
                                         }
                                         seen_server_no_context_takeover = true;
                                         deflate_result.params.server_no_context_takeover = 1;
                                     } else if (strings.eqlComptime(trimmed_param, "client_no_context_takeover")) {
                                         if (seen_client_no_context_takeover) {
-                                            _.terminate(ErrorCode.invalid_response);
+                                            _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                             return;
                                         }
                                         seen_client_no_context_takeover = true;
                                         deflate_result.params.client_no_context_takeover = 1;
                                     } else {
-                                        _.terminate(ErrorCode.invalid_response);
+                                        _.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                         return;
                                     }
                                 }
@@ -1313,7 +1363,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 return;
             }
 
-            if (@min(connection_header.name.len, connection_header.value.len) == 0) {
+            if (!has_connection_header) {
                 _.terminate(ErrorCode.missing_connection_header);
                 return;
             }
@@ -1323,7 +1373,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 return;
             }
 
-            if (!strings.eqlCaseInsensitiveASCII(connection_header.value, "Upgrade", true)) {
+            if (!has_connection_upgrade) {
                 _.terminate(ErrorCode.invalid_connection_header);
                 return;
             }
@@ -1335,6 +1385,11 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
             if (!std.mem.eql(u8, websocket_accept_header.value, &_.expected_accept)) {
                 _.terminate(ErrorCode.mismatch_websocket_accept_header);
+                return;
+            }
+
+            if (!protocol_header_seen && _.subprotocols.count() > 0) {
+                _.terminate(ErrorCode.missing_client_protocol);
                 return;
             }
 

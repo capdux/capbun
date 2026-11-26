@@ -206,6 +206,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                     index += 1;
                 }
                 if (current_idx == 0) return error.UnsupportedArrayFormat;
+                if (current_idx + 1 >= slice.len || (slice[current_idx + 1] != separator && slice[current_idx + 1] != closing_brace)) {
+                    return error.UnsupportedArrayFormat;
+                }
                 switch (arrayType) {
                     .bytea_array => {
                         const bytea_bytes = slice[1..current_idx];
@@ -220,9 +223,17 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                     .timestamp_array,
                     .date_array => {
                         const date_str = slice[1..current_idx];
-                        let str = bun.String.init(date_str);
-                        let _str_guard = DerefGuard<bun.String>{ val: str };
-                        array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: str.parseDate(globalObject)? } })?;
+                        let date_val: f64 = undefined;
+                        if (bun.strings.eqlCaseInsensitiveASCII(date_str, "infinity", false)) {
+                            date_val = std.math.inf(f64);
+                        } else if (bun.strings.eqlCaseInsensitiveASCII(date_str, "-infinity", false)) {
+                            date_val = 0.0 - std.math.inf(f64);
+                        } else {
+                            let str = bun.String.init(date_str);
+                            let _str_guard = DerefGuard<bun.String>{ val: str };
+                            date_val = str.parseDate(globalObject)?;
+                        }
+                        array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: date_val } })?;
                         pos += current_idx + 1;
                         continue;
                     },
@@ -296,6 +307,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                             index += 1;
                         }
                         if (current_idx == 0) return error.UnsupportedArrayFormat;
+                if (current_idx + 1 >= slice.len || (slice[current_idx + 1] != separator && slice[current_idx + 1] != closing_brace)) {
+                    return error.UnsupportedArrayFormat;
+                }
                         const element = slice[0..current_idx];
                         if (bun.strings.eqlComptime(element, "NULL")) {
                             array.append(bun.default_allocator, SQLDataCell{ tag: .@"null", value: { @"null": 0 } })?;
@@ -303,9 +317,17 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                             continue;
                         }
                         if (arrayType == .date_array) {
-                            let str = bun.String.init(element);
-                            let _str_guard = DerefGuard<bun.String>{ val: str };
-                            array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: str.parseDate(globalObject)? } })?;
+                            let date_val: f64 = undefined;
+                            if (bun.strings.eqlCaseInsensitiveASCII(element, "infinity", false)) {
+                                date_val = std.math.inf(f64);
+                            } else if (bun.strings.eqlCaseInsensitiveASCII(element, "-infinity", false)) {
+                                date_val = 0.0 - std.math.inf(f64);
+                            } else {
+                                let str = bun.String.init(element);
+                                let _str_guard = DerefGuard<bun.String>{ val: str };
+                                date_val = str.parseDate(globalObject)?;
+                            }
+                            array.append(bun.default_allocator, SQLDataCell{ tag: .date, value: { date: date_val } })?;
                         } else {
                             if (bun.strings.eqlComptime(element, "\\b")) {
                                 array.append(bun.default_allocator, SQLDataCell{ tag: .@"string", value: { @"string": bun.String.cloneUTF8("\x08").value.WTFStringImpl }, free_value: 1 })?;
@@ -317,9 +339,54 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                         continue;
                     },
                     else => {
+                        if (arrayType == .int4_array || arrayType == .int2_array || arrayType == .int8_array || arrayType == .float4_array || arrayType == .float8_array || arrayType == .oid_array || arrayType == .cid_array || arrayType == .xid_array) {
+                            let current_idx: usize = 0;
+                            let index: usize = 0;
+                            while (index < slice.len) {
+                                const byte = slice[index];
+                                if (byte == closing_brace || byte == separator) {
+                                    current_idx = index;
+                                    break;
+                                }
+                                index += 1;
+                            }
+                            if (current_idx == 0) return error.UnsupportedArrayFormat;
+                            const element = slice[0..current_idx];
+                            if (bun.strings.eqlComptime(element, "NULL")) {
+                                array.append(bun.default_allocator, SQLDataCell{ tag: .@"null", value: { @"null": 0 } })?;
+                                pos += current_idx;
+                                continue;
+                            }
+                            if (arrayType == .float4_array || arrayType == .float8_array) {
+                                array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: parsePostgresFloat(element)? } })?;
+                                pos += current_idx;
+                                continue;
+                            }
+                            switch (arrayType) {
+                                .int8_array => {
+                                    if (bigint) {
+                                        array.append(bun.default_allocator, SQLDataCell{ tag: .int8, value: { int8: std.fmt.parseInt(i64, element, 0) catch return error.InvalidCharacter } })?;
+                                    } else {
+                                        array.append(bun.default_allocator, SQLDataCell{ tag: .@"string", value: { @"string": if (element.len > 0) bun.String.cloneUTF8(element).value.WTFStringImpl else null }, free_value: 1 })?;
+                                    }
+                                },
+                                .cid_array, .xid_array, .oid_array => {
+                                    array.append(bun.default_allocator, SQLDataCell{ tag: .uint4, value: { uint4: std.fmt.parseInt(u32, element, 0) catch return error.InvalidCharacter } })?;
+                                },
+                                .int2_array => {
+                                    const value = std.fmt.parseInt(i16, element, 0) catch return error.InvalidCharacter;
+                                    array.append(bun.default_allocator, SQLDataCell{ tag: .int4, value: { int4: @intCast(value) } })?;
+                                },
+                                else => {
+                                    const value = std.fmt.parseInt(i32, element, 0) catch return error.InvalidCharacter;
+                                    array.append(bun.default_allocator, SQLDataCell{ tag: .int4, value: { int4: @intCast(value) } })?;
+                                },
+                            }
+                            pos += current_idx;
+                            continue;
+                        }
                         switch (slice[0]) {
-                            'N' => {
-                                if (slice.len < 3) return error.UnsupportedArrayFormat;
+                            'n', 'N' => {
                                 if (slice.len >= 4) {
                                     if (bun.strings.eqlComptime(slice[0..4], "NULL")) {
                                         array.append(bun.default_allocator, SQLDataCell{ tag: .@"null", value: { @"null": 0 } })?;
@@ -327,10 +394,18 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                         continue;
                                     }
                                 }
-                                if (bun.strings.eqlComptime(slice[0..3], "NaN")) {
-                                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: std.math.nan(f64) } })?;
-                                    pos += 3;
-                                    continue;
+                                if (slice.len >= 3 && bun.strings.eqlCaseInsensitiveASCII(slice[0..3], "NaN", false)) {
+                                    if (slice.len == 3 || slice[3] == closing_brace || slice[3] == separator) {
+                                        if (arrayType == .int4_array || arrayType == .int2_array || arrayType == .int8_array || arrayType == .oid_array || arrayType == .cid_array || arrayType == .xid_array) {
+                                            return error.InvalidCharacter;
+                                        }
+                                        array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: std.math.nan(f64) } })?;
+                                        pos += 3;
+                                        continue;
+                                    }
+                                }
+                                if (arrayType == .int4_array || arrayType == .int2_array || arrayType == .int8_array || arrayType == .float4_array || arrayType == .float8_array || arrayType == .oid_array || arrayType == .cid_array || arrayType == .xid_array) {
+                                    return error.InvalidCharacter;
                                 }
                                 return error.UnsupportedArrayFormat;
                             },
@@ -377,7 +452,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                 pos += 1;
                                 continue;
                             },
-                            '-', '0'...'9' => {
+                            '-', '0'..='9' => {
                                 let is_negative = false;
                                 let is_float = false;
                                 let current_idx: usize = 0;
@@ -393,7 +468,7 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                         break;
                                     }
                                     switch (byte) {
-                                        '0'...'9' => {},
+                                        '0'..='9' => {},
                                         'e' => {
                                             if (!is_float || has_exponent) return error.UnsupportedArrayFormat;
                                             has_exponent = true;
@@ -433,6 +508,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                     continue;
                                 }
                                 if (current_idx == 0) return error.UnsupportedArrayFormat;
+                if (current_idx + 1 >= slice.len || (slice[current_idx + 1] != separator && slice[current_idx + 1] != closing_brace)) {
+                    return error.UnsupportedArrayFormat;
+                }
                                 const element = slice[0..current_idx];
                                 if (is_float || arrayType == .float8_array) {
                                     array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: parsePostgresFloat(element)? } })?;
@@ -463,6 +541,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                 }
                             },
                             else => {
+                                if (arrayType == .bytea_array) {
+                                    return error.UnsupportedByteaFormat;
+                                }
                                 if (arrayType == .json_array || arrayType == .jsonb_array) {
                                     if (slice[0] == '[') {
                                         let sub_array_offset: usize = 0;
@@ -473,6 +554,9 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
                                         pos += sub_array_offset;
                                         continue;
                                     }
+                                }
+                                if (arrayType == .int4_array || arrayType == .int2_array || arrayType == .int8_array || arrayType == .float4_array || arrayType == .float8_array || arrayType == .oid_array || arrayType == .cid_array || arrayType == .xid_array) {
+                                    return error.InvalidCharacter;
                                 }
                                 return error.UnsupportedArrayFormat;
                             },
@@ -499,24 +583,66 @@ fn parseArray(bytes: []const u8, bigint: bool, arrayType: PgTag, globalObject: *
     return SQLDataCell{ tag: .array, value: { array: { ptr: array.items.ptr, len: @intCast(array.items.len), cap: @intCast(array.capacity) } }, free_value: 1 };
 }
 
+fn buildBinaryArrayCell(comptime tag: PgTag, bytes: []const u8, dims: []const usize, pos: *usize): AnyPostgresError!SQLDataCell {
+    const dim_len = dims[0];
+    let array = CellList{};
+    let array_guard = CellListGuard{ ptr: unsafe { &array } };
+    array.ensureTotalCapacity(bun.default_allocator, dim_len)?;
+
+    if (dims.len == 1) {
+        let i: usize = 0;
+        while (i < dim_len) : (i += 1) {
+            const cur = unsafe { pos.* };
+            const elen = std.mem.readInt(i32, bytes[cur .. cur + 4][0..4], .big);
+            unsafe { pos.* = cur + 4; }
+            if (elen == -1) {
+                array.append(bun.default_allocator, SQLDataCell{ tag: .@"null", value: { @"null": 0 } })?;
+            } else {
+                const elem_cur = unsafe { pos.* };
+                const raw_bits = std.mem.readInt(u32, bytes[elem_cur .. elem_cur + 4][0..4], .big);
+                unsafe { pos.* = elem_cur + 4; }
+                if (tag == .int4_array) {
+                    const val: i32 = @bitCast(raw_bits);
+                    array.append(bun.default_allocator, SQLDataCell{ tag: .int4, value: { int4: val } })?;
+                } else {
+                    const val: f32 = @bitCast(raw_bits);
+                    array.append(bun.default_allocator, SQLDataCell{ tag: .float8, value: { float8: @floatCast(val) } })?;
+                }
+            }
+        }
+    } else {
+        let i: usize = 0;
+        while (i < dim_len) : (i += 1) {
+            let sub_array = buildBinaryArrayCell(tag, bytes, dims[1..], pos)?;
+            let sub_guard = DeinitGuard<SQLDataCell>{ ptr: unsafe { &sub_array } };
+            array.append(bun.default_allocator, sub_array)?;
+            sub_guard.ptr = null;
+        }
+    }
+
+    array_guard.ptr = null;
+    return SQLDataCell{ tag: .array, value: { array: { ptr: array.items.ptr, len: @intCast(array.items.len), cap: @intCast(array.capacity) } }, free_value: 1 };
+}
+
 fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: []const u8, globalObject: *jsc.JSGlobalObject): AnyPostgresError!SQLDataCell {
     if (binary) {
         if (bytes.len < 12) {
             return error.InvalidBinaryData;
         }
-        const dimensions_raw: int4 = @bitCast(unsafe { bytes[0..4].* });
-        const contains_nulls: int4 = @bitCast(unsafe { bytes[4..8].* });
-
-        const dimensions = @byteSwap(dimensions_raw);
-        if (dimensions > 1) {
-            return error.MultidimensionalArrayNotSupportedYet;
+        const dimensions = std.mem.readInt(i32, bytes[0..4], .big);
+        const element_type = std.mem.readInt(i32, bytes[8..12], .big);
+        if (dimensions < 0 || dimensions > 6) {
+            return error.InvalidBinaryData;
         }
-
-        if (contains_nulls != 0) {
-            return error.NullsInArrayNotSupportedYet;
+        const expected_oid: i32 = if (tag == .int4_array) @intFromEnum(PgTag.int4) else @intFromEnum(PgTag.float4);
+        if (element_type != expected_oid) {
+            return error.InvalidBinaryData;
         }
 
         if (dimensions == 0) {
+            if (bytes.len != 12) {
+                return error.InvalidBinaryData;
+            }
             return SQLDataCell{
                 tag: .typed_array,
                 value: {
@@ -530,38 +656,81 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
             };
         }
 
-        if (bytes.len < 20) {
+        const dim_count: usize = @intCast(dimensions);
+        const header_len: usize = @as(usize, 12) + dim_count * @as(usize, 8);
+        if (bytes.len < header_len) {
             return error.InvalidBinaryData;
         }
-        const array_len: i32 = @byteSwap(@as(i32, @bitCast(unsafe { bytes[12..16].* })));
-        if (array_len < 0) {
+
+        let dims: [6]usize = undefined;
+        let total_elements: usize = 1;
+        let d: usize = 0;
+        while (d < dim_count) : (d += 1) {
+            const dim_off = @as(usize, 12) + d * @as(usize, 8);
+            const dim_len_raw = std.mem.readInt(i32, bytes[dim_off .. dim_off + 4][0..4], .big);
+            if (dim_len_raw <= 0) {
+                return error.InvalidBinaryData;
+            }
+            const dim_len: usize = @intCast(dim_len_raw);
+            dims[d] = dim_len;
+            total_elements = std.math.mul(usize, total_elements, dim_len) catch return error.InvalidBinaryData;
+        }
+
+        const max_possible_elements = (bytes.len - header_len) / 4;
+        if (total_elements > max_possible_elements) {
             return error.InvalidBinaryData;
         }
+
         const ElemType = tag.byteArrayType()?;
-        const element_stride: usize = @sizeOf(ElemType) * 2;
-        const max_elements = (bytes.len - 20) / element_stride;
-        if (@as(usize, @intCast(array_len)) > max_elements) {
+        const elem_size: i32 = @intCast(@sizeOf(ElemType));
+        const elem_size_usize: usize = @sizeOf(ElemType);
+        let scan_pos: usize = header_len;
+        let has_nulls = false;
+        let elem_i: usize = 0;
+        while (elem_i < total_elements) : (elem_i += 1) {
+            if (scan_pos + 4 > bytes.len) {
+                return error.InvalidBinaryData;
+            }
+            const elen = std.mem.readInt(i32, bytes[scan_pos .. scan_pos + 4][0..4], .big);
+            scan_pos += 4;
+            if (elen == -1) {
+                has_nulls = true;
+            } else if (elen == elem_size) {
+                if (scan_pos + elem_size_usize > bytes.len) {
+                    return error.InvalidBinaryData;
+                }
+                scan_pos += elem_size_usize;
+            } else {
+                return error.InvalidBinaryData;
+            }
+        }
+        if (scan_pos != bytes.len) {
             return error.InvalidBinaryData;
         }
 
-        const PgArrType = tag.pgArrayType()?;
-        const elements = PgArrType.init(bytes).slice();
+        if (dimensions == 1 && !has_nulls) {
+            const PgArrType = tag.pgArrayType()?;
+            const elements = PgArrType.init(bytes).slice();
 
-        if (elements.len > std.math.maxInt(u32) || bytes.len > std.math.maxInt(u32)) {
-            return error.InvalidBinaryData;
-        }
-        return SQLDataCell{
-            tag: .typed_array,
-            value: {
-                typed_array: {
-                    head_ptr: if (bytes.len > 0) unsafe { @constCast(bytes.ptr) } else null,
-                    ptr: if (elements.len > 0) unsafe { @ptrCast(elements.ptr) } else null,
-                    len: @intCast(elements.len),
-                    byte_len: @intCast(bytes.len),
-                    type: tag.toJSTypedArrayType() catch e => return @errorCast(e),
+            if (elements.len > std.math.maxInt(u32) || bytes.len > std.math.maxInt(u32)) {
+                return error.InvalidBinaryData;
+            }
+            return SQLDataCell{
+                tag: .typed_array,
+                value: {
+                    typed_array: {
+                        head_ptr: if (bytes.len > 0) unsafe { @constCast(bytes.ptr) } else null,
+                        ptr: if (elements.len > 0) unsafe { @ptrCast(elements.ptr) } else null,
+                        len: @intCast(elements.len),
+                        byte_len: @intCast(bytes.len),
+                        type: tag.toJSTypedArrayType() catch e => return @errorCast(e),
+                    },
                 },
-            },
-        };
+            };
+        }
+
+        let decode_pos: usize = header_len;
+        return buildBinaryArrayCell(tag, bytes, dims[0..dim_count], &decode_pos);
     } else {
         return parseArray(bytes, bigint, tag, globalObject, null, false, 0);
     }

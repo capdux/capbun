@@ -140,6 +140,23 @@ pub const DirId = struct {
     ino: u64,
 };
 
+pub const AncestorNode = struct {
+    id: DirId,
+    parent: ?*const AncestorNode = null,
+
+pub fn contains(self: AncestorNode, id: DirId) bool {
+            var cur: ?*const AncestorNode = (&self);
+            _ = &cur;
+            while (cur) |node| {
+                if (((node.id.dev == id.dev) and (node.id.ino == id.ino))) {
+                    return true;
+                }
+                cur = node.parent;
+            }
+            return false;
+    }
+};
+
 pub const CursorState = struct {
     cursor: CodepointIterator.Cursor = .{},
 
@@ -487,6 +504,7 @@ pub fn GlobWalkerDirectory_(comptime Accessor: type) type {
     path: bun.PathBuffer,
     dir_path: [:0]const u8,
     active: ComponentSet,
+    ancestors: ?*const AncestorNode = null,
     iter_closed: bool = false,
     at_cwd: bool = false,
 };
@@ -508,17 +526,22 @@ pub fn GlobWalkerWorkItem_(comptime Accessor: type) type {
     kind: GlobWalkerWorkItemKind,
     entry_start: u32 = 0,
     fd: ?Accessor.Handle = null,
+    ancestors: ?*const AncestorNode = null,
 
 pub fn new(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind) @This() {
             return .{ .path = path, .active = active, .kind = kind };
     }
 
-pub fn newWithFd(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind, fd: Accessor.Handle) @This() {
-            return .{ .path = path, .active = active, .kind = kind, .fd = fd };
+pub fn newWithAncestors(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind, ancestors: ?*const AncestorNode) @This() {
+            return .{ .path = path, .active = active, .kind = kind, .ancestors = ancestors };
     }
 
-pub fn newSymlink(path: []const u8, active: ComponentSet, entry_start: u32) @This() {
-            return .{ .path = path, .active = active, .kind = .symlink, .entry_start = entry_start };
+pub fn newWithFd(path: []const u8, active: ComponentSet, kind: GlobWalkerWorkItemKind, fd: Accessor.Handle, ancestors: ?*const AncestorNode) @This() {
+            return .{ .path = path, .active = active, .kind = kind, .fd = fd, .ancestors = ancestors };
+    }
+
+pub fn newSymlink(path: []const u8, active: ComponentSet, entry_start: u32, ancestors: ?*const AncestorNode) @This() {
+            return .{ .path = path, .active = active, .kind = .symlink, .entry_start = entry_start, .ancestors = ancestors };
     }
     const Kind = GlobWalkerWorkItemKind;
 };
@@ -795,6 +818,7 @@ return .{ .err = self.walker.handleSysErrWithPath(err, dir_path) };
             }
             self.iter_state.directory.dir_path = dir_path;
             self.iter_state.directory.active = active;
+            self.iter_state.directory.ancestors = work_item.ancestors;
             self.iter_state.directory.at_cwd = false;
             self.iter_state.directory.fd = .empty;
             _ = log("Transition(dirpath={s}, active_count={d})", .{ dir_path, active.count() });
@@ -923,13 +947,22 @@ return .{ .err = e };
                 const dir_fd = maybe_dir_fd.?;
                 var already_visited = false;
                 _ = &already_visited;
+                var next_ancestors = work_item.ancestors;
+                _ = &next_ancestors;
                 if (comptime bun.Environment.isPosix) {
                     switch (Accessor.statat(self.cwd_fd, symlink_full_path_z)) {
 .result => |st| {
 const dir_id = DirId{ .dev = @intCast(st.dev), .ino = @intCast(st.ino) };
-                    const gop = try self.walker.visited_dirs.getOrPut(self.walker.arena.allocator(), dir_id);
-                    if (gop.found_existing) {
-                        already_visited = true;
+                    if (work_item.ancestors) |anc| {
+                        _ = &anc;
+                        if (anc.contains(dir_id)) {
+                            already_visited = true;
+                        }
+                    }
+                    if ((!already_visited)) {
+                        const node = try self.walker.arena.allocator().create(AncestorNode);
+                        node.* = .{ .id = dir_id, .parent = work_item.ancestors };
+                        next_ancestors = node;
                     }
 },
 .err => {
@@ -941,7 +974,7 @@ const dir_id = DirId{ .dev = @intCast(st.dev), .ino = @intCast(st.ino) };
                 _ = &add_dir;
                 const child = self.walker.evalDir(active, entry_name, (&add_dir));
                 if (((!already_visited) and (child.count() != 0))) {
-                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newWithFd(work_item.path, child, .directory, dir_fd));
+                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newWithFd(work_item.path, child, .directory, dir_fd, next_ancestors));
                 } else {
                     _ = self.closeDisallowingCwd(dir_fd);
                 }
@@ -1000,7 +1033,7 @@ var add_dir: bool = false;
                     const _subdir_parts_arr: [2][]const u8 = .{ dir.dir_path[0..dir.dir_path.len], entry_name };
                     const subdir_parts: []const []const u8 = (&_subdir_parts_arr);
                     const subdir_entry_name = try self.walker.join(subdir_parts);
-                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.new(subdir_entry_name, child, .directory));
+                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newWithAncestors(subdir_entry_name, child, .directory, dir.ancestors));
                 }
                 if ((add_dir and (!self.walker.only_files))) {
                     const maybe_prepared_path = try self.walker.prepareMatchedPath(entry_name, dir.dir_path);
@@ -1020,7 +1053,7 @@ if (self.walker.follow_symlinks) {
                     const subdir_parts: []const []const u8 = (&_subdir_parts_arr);
                     const entry_start: u32 = @intCast((if ((dir.dir_path.len == 0)) 0 else (dir.dir_path.len + 1)));
                     const subdir_entry_name = try self.walker.join(subdir_parts);
-                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newSymlink(subdir_entry_name, active, entry_start));
+                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newSymlink(subdir_entry_name, active, entry_start, dir.ancestors));
                     continue;
                 }
                 if (self.walker.only_files) {
@@ -1066,7 +1099,7 @@ var add_dir: bool = false;
                     const _subdir_parts_arr: [2][]const u8 = .{ dir.dir_path[0..dir.dir_path.len], entry_name };
                     const subdir_parts: []const []const u8 = (&_subdir_parts_arr);
                     const subdir_entry_name = try self.walker.join(subdir_parts);
-                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.new(subdir_entry_name, child, .directory));
+                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newWithAncestors(subdir_entry_name, child, .directory, dir.ancestors));
                 }
                 if ((add_dir and (!self.walker.only_files))) {
                     const maybe_prepared_path = try self.walker.prepareMatchedPath(entry_name, dir.dir_path);
@@ -1082,7 +1115,7 @@ if (self.walker.follow_symlinks) {
                     const subdir_parts: []const []const u8 = (&_subdir_parts_arr);
                     const entry_start: u32 = @intCast((if ((dir.dir_path.len == 0)) 0 else (dir.dir_path.len + 1)));
                     const subdir_entry_name = try self.walker.join(subdir_parts);
-                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newSymlink(subdir_entry_name, active, entry_start));
+                    _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newSymlink(subdir_entry_name, active, entry_start, dir.ancestors));
                 } else {
                     if ((!self.walker.only_files)) {
                         if (self.walker.evalFile(active, entry_name)) {
@@ -1289,7 +1322,7 @@ break;
             return .{ .result = component_idx };
     }
 
-pub fn collapseSuccessiveDoubleWildcards(self: @This(), idx: u32) u32 {
+pub fn collapseSuccessiveDoubleWildcards(self: *@This(), idx: u32) u32 {
             var component_idx = idx;
             _ = &component_idx;
             const pattern = self.patternComponents.items[@as(usize, @intCast(idx))];
@@ -1450,7 +1483,7 @@ pub fn evalImpl(self: *@This(), active: ComponentSet, entry_name: []const u8) bo
             return false;
     }
 
-pub inline fn normalizeIdx(self: @This(), idx: u32) u32 {
+pub inline fn normalizeIdx(self: *@This(), idx: u32) u32 {
             if (((idx < self.patternComponents.items.len) and (self.patternComponents.items[@as(usize, @intCast(idx))].syntax_hint == .Double))) {
                 return self.collapseSuccessiveDoubleWildcards(idx);
             }
@@ -1612,8 +1645,9 @@ else => {
     }
 
 pub fn buildPattern(arena: *Arena, patternComponents: *ArrayList(Component), pattern: []const u8, has_relative_patterns: *bool, end_byte_of_basename_excluding_special_syntax: ?*u32, basename_excluding_special_syntax_component_idx: ?*u32) !void {
-            const scratchpad: [3]u32 = (.{ 0 } * (&3));
-            return buildPatternComponents(arena, patternComponents, pattern, has_relative_patterns, ((end_byte_of_basename_excluding_special_syntax) orelse (scratchpad[1])), ((basename_excluding_special_syntax_component_idx) orelse (scratchpad[2])));
+            var scratchpad: [3]u32 = .{ 0, 0, 0 };
+            _ = &scratchpad;
+            return buildPatternComponents(arena, patternComponents, pattern, has_relative_patterns, ((end_byte_of_basename_excluding_special_syntax) orelse ((&scratchpad[1]))), ((basename_excluding_special_syntax_component_idx) orelse ((&scratchpad[2]))));
     }
 
 pub fn buildPatternComponents(arena: *Arena, patternComponents: *ArrayList(Component), pattern: []const u8, has_relative_patterns: *bool, end_byte_of_basename_excluding_special_syntax: *u32, basename_excluding_special_syntax_component_idx: *u32) !void {

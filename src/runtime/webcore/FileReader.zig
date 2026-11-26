@@ -173,6 +173,14 @@ pub fn onStart(self: *FileReader) streams.Start {
             }
         }
         self.started = true;
+        if (self.max_size) |max_size| {
+            _ = &max_size;
+            if ((self.total_readed >= max_size)) {
+                if ((!self.reader.isDone())) {
+                    _ = self.reader.close();
+                }
+            }
+        }
         if (self.reader.isDone()) {
             _ = self.consumeReaderBuffer();
             if ((self.buffered.items.len > 0)) {
@@ -233,18 +241,19 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
         defer if (!___close_guard_moved) { ___close_guard_moved = true; const __T = @TypeOf(_close_guard); if (@typeInfo(__T) == .optional) { if (_close_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _close_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _close_guard; _drop_val.__cp_deinit(); } };
         var hasMore = (state != .eof);
         _ = &hasMore;
-        if ((buf.len > 0)) {
-            if (self.max_size) |max_size| {
-                _ = &max_size;
-                if ((self.total_readed >= max_size)) {
-                    return false;
-                }
+        if (self.max_size) |max_size| {
+            _ = &max_size;
+            if ((self.total_readed >= max_size)) {
+                _ = self.reader.close();
+                return false;
+            }
+            if ((buf.len > 0)) {
                 const len = @min((max_size - self.total_readed), buf.len);
                 if ((buf.len > len)) {
                     buf = buf[0..len];
                 }
                 self.total_readed = (self.total_readed + len);
-                if ((buf.len == 0)) {
+                if ((self.total_readed >= max_size)) {
                     _close_guard.ptr = reader_ptr;
                     hasMore = false;
                 }
@@ -314,7 +323,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                     }
                     return false;
                 }
-                const was_done = self.reader.isDone();
+                const was_done = (self.reader.isDone() or (!hasMore));
                 if ((self.pending_view.len >= buf.len)) {
                     _ = @memcpy(self.pending_view[0..buf.len], buf);
                     _ = reader_buffer.clearRetainingCapacity();
@@ -328,7 +337,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                     return (!was_done);
                 }
                 if (bun.isSliceInBuffer(buf, reader_buffer.allocatedSlice())) {
-                    if (self.reader.isDone()) {
+                    if (was_done) {
                         _ = bun.assert_eql(buf.ptr, reader_buffer.items.ptr);
                         var buffer = reader_buffer.moveToUnmanaged();
                         _ = &buffer;
@@ -344,7 +353,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                     return (!was_done);
                 }
                 if ((!bun.isSliceInBuffer(buf, self.buffered.allocatedSlice()))) {
-                    if (self.reader.isDone()) {
+                    if (was_done) {
                         self.pending.result = .{ .temporary_and_done = .fromBorrowedSliceDangerous(buf) };
                     } else {
                         self.pending.result = .{ .temporary = .fromBorrowedSliceDangerous(buf) };
@@ -356,7 +365,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                 _ = &buffered;
                 self.buffered = .{};
                 _ = buffered.shrinkRetainingCapacity(buf.len);
-                if (self.reader.isDone()) {
+                if (was_done) {
                     self.pending.result = .{ .owned_and_done = .moveFromList((&buffered)) };
                 } else {
                     self.pending.result = .{ .owned = .moveFromList((&buffered)) };
@@ -371,7 +380,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                 }
             }
         }
-        return ((self.read_inside_on_pull != .temporary) and ((self.buffered.items.len + reader_buffer.items.len) < self.highwater_mark));
+        return ((hasMore and (self.read_inside_on_pull != .temporary)) and (!(((self.buffered.items.len + reader_buffer.items.len) >= self.highwater_mark) and (!self.reader.flags.pollable))));
 }
 
 pub fn isPulling(self: FileReader) bool {
@@ -407,6 +416,15 @@ pub fn onPull(self: *FileReader, buffer: []u8, array: jsc.JSValue) streams.Resul
         }
         if (self.reader.isDone()) {
             return .done;
+        }
+        if (self.max_size) |max_size| {
+            _ = &max_size;
+            if ((self.total_readed >= max_size)) {
+                if ((!self.reader.isDone())) {
+                    _ = self.reader.close();
+                }
+                return .done;
+            }
         }
         if ((!self.reader.hasPendingRead())) {
             if ((!self.flowing)) {

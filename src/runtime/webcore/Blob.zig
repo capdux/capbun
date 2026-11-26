@@ -3055,10 +3055,12 @@ var sliced = try current.toSlice(global, bun.default_allocator);
 pub fn getSliceFrom(self: *Blob, globalThis: *JSGlobalObject, relativeStart: i64, relativeEnd: i64, content_type: []const u8, content_type_was_allocated: bool) JSValue {
         const offset = (self.offset +| @as(SizeType, @intCast(relativeStart)));
         const len = @as(SizeType, @intCast(@max((relativeEnd -| relativeStart), 0)));
-        var blob = self.dupe();
+        var blob = (if ((len == 0)) Blob.initEmpty(globalThis) else self.dupe());
         _ = &blob;
-        blob.offset = offset;
-        blob.size = len;
+        if ((len > 0)) {
+            blob.offset = offset;
+            blob.size = len;
+        }
         if (blob.content_type_allocated) {
             _ = bun.default_allocator.free(blob.content_type);
         }

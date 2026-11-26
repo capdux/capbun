@@ -285,7 +285,7 @@ fn bunxGetBinNameFromSubpath(transpiler: *bun.Transpiler, dir_fd: bun.FD, subpat
 
 fn bunxGetBinNameFromProjectDirectory(transpiler: *bun.Transpiler, dir_fd: bun.FD, package_name: []const u8)![]const u8 {
     let subpath: bun.PathBuffer = undefined;
-    const subpath_z = std.fmt.bufPrintZ(&subpath, bun.pathLiteral("node_modules/{s}/package.json"), .{ package_name }) catch unreachable;
+    const subpath_z = std.fmt.bufPrintZ(&subpath, bun.pathLiteral("node_modules/{s}/package.json"), .{ package_name }) catch return error.NoBinFound;
     return bunxGetBinNameFromSubpath(transpiler, dir_fd, subpath_z);
 }
 
@@ -296,7 +296,7 @@ fn bunxGetBinNameFromTempDirectory(transpiler: *bun.Transpiler, tempdir_name: []
             &subpath,
             bun.pathLiteral("{s}/package.json"),
             .{ tempdir_name },
-        ) catch unreachable;
+        ) catch return error.NeedToInstall;
         const target_package_json_fd = bun.sys.openat(bun.FD.cwd(), subpath_z, bun.O.RDONLY, 0).unwrap() catch return error.NeedToInstall;
         const target_package_json = bun.sys.File{ .handle = target_package_json_fd };
 
@@ -331,7 +331,7 @@ fn bunxGetBinNameFromTempDirectory(transpiler: *bun.Transpiler, tempdir_name: []
         &subpath,
         bun.pathLiteral("{s}/node_modules/{s}/package.json"),
         .{ tempdir_name, package_name },
-    ) catch unreachable;
+    ) catch return error.NoBinFound;
 
     return bunxGetBinNameFromSubpath(transpiler, bun.FD.cwd(), subpath_z);
 }
@@ -642,7 +642,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
             };
             if (package_name_for_bin := pkg_bin_opt) {
                 if (!strings.eqlLong(package_name_for_bin, initial_bin_name, true)) {
-                    absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, bun.pathLiteral("{s}/node_modules/.bin/{s}{s}"), .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix }) catch unreachable;
+                    absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, bun.pathLiteral("{s}/node_modules/.bin/{s}{s}"), .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix }) catch return error.PathTooLong;
 
                     if (update_request.version.literal.isEmpty()) {
                         destination_ = bun.which(
@@ -770,7 +770,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
         else => {},
     }
 
-    absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, bun.pathLiteral("{s}/node_modules/.bin/{s}{s}"), .{ bunx_cache_dir, initial_bin_name, bun.exe_suffix }) catch unreachable;
+    absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, bun.pathLiteral("{s}/node_modules/.bin/{s}{s}"), .{ bunx_cache_dir, initial_bin_name, bun.exe_suffix }) catch return error.PathTooLong;
 
     if (dest := bun.which(
         &path_buf,
@@ -798,7 +798,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
         };
         if (package_name_for_bin := pkg_bin_opt2) {
             if (!strings.eqlLong(package_name_for_bin, initial_bin_name, true)) {
-                absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, "{s}/node_modules/.bin/{s}{s}", .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix }) catch unreachable;
+                absolute_in_cache_dir = std.fmt.bufPrint(&absolute_in_cache_dir_buf, "{s}/node_modules/.bin/{s}{s}", .{ bunx_cache_dir, package_name_for_bin, bun.exe_suffix }) catch return error.PathTooLong;
 
                 if (dest := bun.which(
                     &path_buf,

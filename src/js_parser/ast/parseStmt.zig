@@ -270,8 +270,15 @@ const r = js_lexer.rangeOfIdentifier(p.source, stmt.loc);
             const is_identifier = (p.lexer.token == .t_identifier);
             const name = p.lexer.identifier;
             const expr = try p.parseExpr(.comma);
-            if (((opts.ts_decorators != null) and (((((!is_identifier) or (!strings.eqlComptime(name, "abstract"))) or (expr.data != .e_identifier)) or (p.lexer.token != .t_class)) or p.lexer.has_newline_before))) {
-                _ = try p.lexer.expected(.t_class);
+            if ((opts.ts_decorators != null)) {
+                if ((((is_identifier and strings.eqlComptime(name, "abstract")) and (expr.data == .e_identifier)) and p.lexer.has_newline_before)) {
+                    const r = js_lexer.rangeOfIdentifier(p.source, expr.loc);
+                    _ = ((p.log.addRangeError(p.source, r, "Unexpected \"abstract\"")) catch unreachable);
+                    return error.SyntaxError;
+                }
+                if ((((((!is_identifier) or (!strings.eqlComptime(name, "abstract"))) or (expr.data != .e_identifier)) or (p.lexer.token != .t_class)) or p.lexer.has_newline_before)) {
+                    _ = try p.lexer.expected(.t_class);
+                }
             }
             if ((((((is_typescript_enabled and is_identifier) and (p.lexer.token == .t_class)) and (!p.lexer.has_newline_before)) and strings.eqlComptime(name, "abstract")) and (expr.data == .e_identifier))) {
                 var stmtOpts = ParseStatementOptions{ .ts_decorators = opts.ts_decorators, .is_name_optional = true };
@@ -372,7 +379,7 @@ if (((!opts.is_module_scope) and ((!opts.is_namespace_scope) or (!opts.is_typesc
                 }
                 const import_record_index = p.addImportRecord(.stmt, parsedPath.loc, parsedPath.text);
                 const path_name = fs.PathName.init(parsedPath.text);
-                const namespace_ref = (blk_catch_4: { break :blk_catch_4 ((p.storeNameInRef((blk_catch_3: { break :blk_catch_3 ((std.fmt.allocPrint(p.allocator, "import_{f}", .{ path_name.fmtIdentifier() })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                const namespace_ref = (blk_catch_5: { break :blk_catch_5 ((p.storeNameInRef((blk_catch_4: { break :blk_catch_4 ((std.fmt.allocPrint(p.allocator, "import_{f}", .{ path_name.fmtIdentifier() })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); }))) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                 if (comptime track_symbol_usage_during_parse_pass) {
                     p.import_records.items[@as(usize, @intCast(import_record_index))].flags.calls_runtime_re_export_fn = true;
                 }
@@ -888,8 +895,8 @@ const import_equals_only = (opts.is_export or (opts.is_namespace_scope and (!opt
                         }
                         var next_ok = true;
                         _ = &next_ok;
-                        _ = (blk_catch_5: { break :blk_catch_5 ((p.lexer.next()) catch |__ce_5| { _ = &__ce_5; next_ok = false;
-                        break :blk_catch_5 {}; }); });
+                        _ = (blk_catch_6: { break :blk_catch_6 ((p.lexer.next()) catch |__ce_6| { _ = &__ce_6; next_ok = false;
+                        break :blk_catch_6 {}; }); });
                         if (next_ok) {
                             leave_from = (if (import_equals_only) (p.lexer.token != .t_equals) else ((p.lexer.token == .t_string_literal) or (p.lexer.token == .t_no_substitution_template_literal)));
                         } else {
@@ -1109,10 +1116,20 @@ if ((!p.lexer.has_newline_before)) {
                             _ = try p.skipTypeScriptInterfaceStmt((&stmtOpts));
                             return p.s(S.TypeScript, loc);
                         }
+                        if (opts.is_export) {
+                            const r = js_lexer.rangeOfIdentifier(p.source, loc);
+                            _ = ((p.log.addRangeError(p.source, r, "Unexpected \"interface\"")) catch unreachable);
+                            return error.SyntaxError;
+                        }
 },
 .ts_stmt_abstract => {
 if (((!p.lexer.has_newline_before) and ((p.lexer.token == .t_class) or (opts.ts_decorators != null)))) {
                             return try p.parseClassStmt(p.lexer.loc(), opts);
+                        }
+                        if (opts.is_export) {
+                            const r = js_lexer.rangeOfIdentifier(p.source, loc);
+                            _ = ((p.log.addRangeError(p.source, r, "Unexpected \"abstract\"")) catch unreachable);
+                            return error.SyntaxError;
                         }
 },
 .ts_stmt_global => {

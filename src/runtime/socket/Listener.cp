@@ -728,7 +728,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
     if (port != null) {
         const hn = hostname_or_unix.slice();
         const valid_hn = if (hn.len >= 2 && hn[0] == '[' && hn[hn.len - 1] == ']')
-            (std.net.Address.parseIp(hn[1 .. hn.len - 1], 0) catch null) != null
+            (std.net.Ip6Address.parse(hn[1 .. hn.len - 1], 0) catch null) != null
         else
             bun.dns.isValidHostname(hn);
         if (!valid_hn) {

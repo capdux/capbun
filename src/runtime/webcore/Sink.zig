@@ -496,6 +496,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSV
                 return globalThis.throwValue(globalThis.toTypeError(.INVALID_ARG_TYPE, "write() expects a string, ArrayBufferView, or ArrayBuffer", .{}));
             }
             const str = try arg_guard.val.toJSString(globalThis);
+            const active_inst = try getThis(globalThis, callframe);
             const view = str.view(globalThis);
             if (view.isEmpty()) {
                 return JSValue.jsNumber(0);
@@ -505,11 +506,11 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSV
             var __str_guard_moved = false; _ = &__str_guard_moved;
             defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
             if (view.is16Bit()) {
-                var res = inst.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(std.mem.sliceAsBytes(view.utf16SliceAligned())) });
+                var res = active_inst.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(std.mem.sliceAsBytes(view.utf16SliceAligned())) });
                 _ = &res;
                 return res.toJS(globalThis);
             }
-            var res = inst.sink.writeLatin1(.{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) });
+            var res = active_inst.sink.writeLatin1(.{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) });
             _ = &res;
             return res.toJS(globalThis);
     }
@@ -534,6 +535,7 @@ pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError
             if (globalThis.hasException()) {
                 return JSValue.zero;
             }
+            const active_inst = try getThis(globalThis, callframe);
             const view = str.view(globalThis);
             if (view.isEmpty()) {
                 return JSValue.jsNumber(0);
@@ -543,9 +545,9 @@ pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError
             var __str_guard_moved = false; _ = &__str_guard_moved;
             defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
             if (str_guard.val.is16Bit()) {
-                return inst.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
+                return active_inst.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
             }
-            return inst.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
+            return active_inst.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
     }
 
 pub fn close(globalThis: *JSGlobalObject, sink_ptr: ?*anyopaque) callconv(.c) JSValue {

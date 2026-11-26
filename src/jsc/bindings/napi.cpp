@@ -2853,15 +2853,55 @@ extern "C" napi_status napi_instanceof(napi_env env, napi_value object, napi_val
     JSValue constructorValue = toJS(constructor);
     JSC::JSObject* constructorObject = constructorValue.getObject();
 
+    if (constructorValue.isUndefinedOrNull()) {
+        napi_throw_type_error(env, nullptr, "Constructor must be an object");
+        return napi_set_last_error(env, napi_object_expected);
+    }
+
     if (!constructorObject || !constructorValue.isCallable()) {
-        throwVMError(globalObject, throwScope, JSC::createTypeError(globalObject, "Constructor must be a function"_s));
-        return napi_set_last_error(env, napi_pending_exception);
+        napi_throw_type_error(env, "ERR_NAPI_CONS_FUNCTION", "Constructor must be a function");
+        return napi_set_last_error(env, napi_function_expected);
+    }
+
+    JSC::VM& vm = JSC::getVM(globalObject);
+    JSC::JSValue hasInstanceHandler = constructorObject->get(globalObject, vm.propertyNames->hasInstanceSymbol);
+    if (napi_preamble_throw_scope__.exception() || env->hasPendingException()) [[unlikely]] {
+        *result = false;
+        return napi_set_last_error(env, napi_generic_failure);
+    }
+
+    if (!hasInstanceHandler.isUndefined()) {
+        if (!hasInstanceHandler.isCallable()) {
+            JSC::throwTypeError(globalObject, napi_preamble_throw_scope__, "Symbol.hasInstance must be callable"_s);
+            *result = false;
+            return napi_set_last_error(env, napi_generic_failure);
+        }
+
+        JSC::CallData callData = JSC::getCallData(hasInstanceHandler);
+        JSC::MarkedArgumentBuffer args;
+        args.append(objectValue);
+        JSC::JSValue callResult = JSC::call(globalObject, hasInstanceHandler, callData, constructorObject, args);
+        if (napi_preamble_throw_scope__.exception() || env->hasPendingException()) [[unlikely]] {
+            *result = false;
+            return napi_set_last_error(env, napi_generic_failure);
+        }
+        bool boolResult = callResult.toBoolean(globalObject);
+        if (napi_preamble_throw_scope__.exception() || env->hasPendingException()) [[unlikely]] {
+            *result = false;
+            return napi_set_last_error(env, napi_generic_failure);
+        }
+        *result = boolResult;
+        return napi_set_last_error(env, napi_ok);
     }
 
     if (!constructorObject->structure()->typeInfo().implementsHasInstance()) [[unlikely]] {
         *result = false;
     } else {
         *result = constructorObject->hasInstance(globalObject, objectValue);
+        if (napi_preamble_throw_scope__.exception() || env->hasPendingException()) [[unlikely]] {
+            *result = false;
+            return napi_set_last_error(env, napi_generic_failure);
+        }
     }
 
     NAPI_RETURN_SUCCESS_UNLESS_EXCEPTION(env);

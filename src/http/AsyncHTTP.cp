@@ -87,6 +87,9 @@ struct SingleHTTPChannel {
 }
 
 fn sendSyncCallback(channel_holder: *SingleHTTPChannel, async_http: *AsyncHTTP, result: HTTPClientResult) {
+    if (result.has_more) {
+        return;
+    }
     if (async_http.real != null) {
         const real_ptr: *AsyncHTTP = async_http.real.?;
         real_ptr.* = async_http.*;
@@ -422,12 +425,17 @@ export @root @value struct AsyncHTTP {
         _.schedule(bun.default_allocator, &batch);
         bun.http.http_thread.schedule(batch);
 
-        const result = ctx.channel.readItem() catch @panic("unreachable");
-        if (err := result.fail) {
-            return err;
+        while (true) {
+            const result = ctx.channel.readItem() catch @panic("unreachable");
+            if (result.has_more) {
+                continue;
+            }
+            if (err := result.fail) {
+                return err;
+            }
+            bun.assert(result.metadata != null);
+            return result.metadata.?.response;
         }
-        bun.assert(result.metadata != null);
-        return result.metadata.?.response;
     }
 
     fn onAsyncHTTPCallback(*_, async_http: *AsyncHTTP, result: HTTPClientResult) {

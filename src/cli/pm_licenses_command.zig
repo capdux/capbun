@@ -477,6 +477,22 @@ pub fn isIsolatedLinker(load_result: Lockfile.LoadResult, configured: install.Pa
         if ((configured == .hoisted)) {
             return false;
         }
+        var bun_nm_path: bun.AutoAbsPath = .initTopLevelDir();
+        _ = &bun_nm_path;
+        defer {
+        _ = bun_nm_path.deinit();
+        }
+        _ = bun_nm_path.appendJoin(nm_dir_str);
+        _ = bun_nm_path.appendJoin(dot_bun_dir_str);
+        switch (bun.sys.openatA(bun.FD.cwd(), bun_nm_path.sliceZ(), (bun.O.RDONLY | bun.O.DIRECTORY), 0)) {
+.result => |fd| {
+_ = fd.close();
+        return true;
+},
+.err => {
+
+},
+}
         switch (load_result) {
 .ok => |ok| {
 return ((ok.lockfile.saved_config_version != null) and (ok.lockfile.saved_config_version.? == .v1));

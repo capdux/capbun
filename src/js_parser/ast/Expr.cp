@@ -2104,6 +2104,7 @@ pub fn maybeSimplifyNot(expr: *const Expr, allocator: std.mem.Allocator): Expr? 
             return expr.at(E.Boolean, E.Boolean{ value: (n.value == 0 || std.math.isNan(n.value)) }, allocator);
         },
         .e_big_int => |b| {
+            if (b.hasRadixPrefix()) return null;
             return expr.at(E.Boolean, E.Boolean{ value: strings.eqlComptime(b.value, "0") }, allocator);
         },
         .e_function,
@@ -2169,7 +2170,7 @@ pub fn toStringExprWithoutSideEffects(expr: *const Expr, allocator: std.mem.Allo
         .e_string => return expr.*,
         .e_undefined => "undefined",
         .e_boolean, .e_branch_boolean => |data| if (data.value) "true" else "false",
-        .e_big_int => |bigint| bigint.value,
+        .e_big_int => |bigint| if (bigint.hasRadixPrefix()) null else bigint.value,
         .e_number => |num| num.toString(allocator),
         .e_reg_exp => |regexp| regexp.value,
         .e_dot => |dot| @as(([]const u8)?, brk: {

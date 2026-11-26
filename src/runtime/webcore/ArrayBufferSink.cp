@@ -41,8 +41,7 @@ const Signal = webcore.streams.Signal;
         switch (stream_start) {
             .ArrayBufferSink => |config| {
                 if (config.chunk_size > 0) {
-                    _.bytes.ensureTotalCapacityPrecise(_.allocator, config.chunk_size) catch
-                        return .{ .err = Syscall.Error.oom };
+                    * = _.bytes.ensureTotalCapacityPrecise(_.allocator, config.chunk_size) catch {};
                 }
 
                 _.as_uint8array = config.as_uint8array;
@@ -102,6 +101,7 @@ const Signal = webcore.streams.Signal;
         const len = _.bytes.write(_.allocator, data.slice()) catch {
             return .{ .err = Syscall.Error.oom };
         };
+        _.signal.ready(null, null);
         return .{ .owned = len };
     }
 
@@ -114,6 +114,7 @@ const Signal = webcore.streams.Signal;
         const len = _.bytes.writeLatin1(_.allocator, data.slice()) catch {
             return .{ .err = Syscall.Error.oom };
         };
+        _.signal.ready(null, null);
         return .{ .owned = len };
     }
 
@@ -125,6 +126,7 @@ const Signal = webcore.streams.Signal;
         const len = _.bytes.writeUTF16(_.allocator, u16_slice) catch {
             return .{ .err = Syscall.Error.oom };
         };
+        _.signal.ready(null, null);
         return .{ .owned = len };
     }
 

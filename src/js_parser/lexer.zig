@@ -2695,7 +2695,8 @@ if (isFirst) {
                 lexer.number = integer.toF64();
                 const isBigIntegerLiteral = ((lexer.code_point == 110) and (!hasDotOrExponent));
                 if ((isBigIntegerLiteral or isInvalidLegacyOctalLiteral)) {
-                    const text = lexer.raw();
+                    var text = lexer.raw();
+                    _ = &text;
                     if ((isBigIntegerLiteral and lexer.is_legacy_octal_literal)) {
                         _ = try lexer.syntaxError();
                     }
@@ -2711,6 +2712,7 @@ if (isFirst) {
                                 i = (i + 1);
                             }
                         }
+                        text = bytes;
                     }
                     if (isBigIntegerLiteral) {
                         lexer.identifier = text;

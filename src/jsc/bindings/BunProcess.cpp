@@ -1183,6 +1183,8 @@ bool isSignalName(WTF::String input)
     return signalNameToNumberMap->contains(input);
 }
 
+extern "C" bool Bun__flushHeapProfilerOnSigint(Zig::GlobalObject* globalObject);
+
 extern "C" void Bun__onSignalForJS(int signalNumber, Zig::GlobalObject* globalObject)
 {
     Process* process = globalObject->processObject();
@@ -1196,7 +1198,12 @@ extern "C" void Bun__onSignalForJS(int signalNumber, Zig::GlobalObject* globalOb
     args.append(jsString(vm, signalNameIdentifier.string()));
     args.append(jsNumber(signalNumber));
 
-    process->wrapped().emitForBindings(signalNameIdentifier, args);
+    bool emitted = process->wrapped().emitForBindings(signalNameIdentifier, args);
+#if !OS(WINDOWS)
+    if (!emitted && signalNumber == SIGINT) {
+        Bun__flushHeapProfilerOnSigint(globalObject);
+    }
+#endif
 
 #if defined(SIGIOT) && SIGIOT == SIGABRT
     if (signalNumber == SIGABRT) {

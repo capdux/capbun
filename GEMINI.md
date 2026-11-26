@@ -340,3 +340,21 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
      - (a) 批量验收集前用 `ls`/glob 校验精确后缀（`.test.ts`/`.test.js`），避免 `escapeHTML.test.ts` 类误报重跑；子进程会 `cwd` 的测试必须传绝对路径 `/data/dev/bun/build/debug/bun-debug`；
      - (b) 修改 `lexer.cp` 等基础路径后先对照 `_.zig` 核验无符号减法边界再 `bun bd`，防止 `harness.ts` 级重链返工；C++ 修改优先用 `JSC::asString`、`dynamicDowncast`、`uncheckedDowncast`、`tryClearException()`、`PropertyNameArrayBuilder`；
      - (c) 每次 `bun-debug test` 扫测或验收批结束必须执行 `pkill -9 -x bun-debug || true`（严禁用 `pkill -f`，会误杀当前 shell），彻底清理测试派生的孤儿进程（如 `sleep-4ever.js`、`fixture.js`）。
+
+---
+
+## 十六、 千级测试加速收敛与吞吐倍增铁律（2026-11-27 固化）
+
+针对剩余 1,200+ 测试文件收敛慢的瓶颈，固化以下 5 项强制提速手段：
+
+1. **脚本秒级预筛冻结项，绝不人工逐个排查缺依赖**：
+   - 用单条 `rg`/Python 脚本一次性扫描 `test/` 下的外部未安装 npm 包导入（`ws`、`svelte`、`happy-dom`、`lodash`、`mysql2`、`sharp`、`@grpc/grpc-js`、`filenamify` 等）、在线 `bun install` 测试及 `node-gyp` 缺失头文件用例，直接批量归档为冻结项写入 `test/stats.md`，禁止派发子智能体重复排查。
+2. **「扫绿清库」与「扫修一体大包」双轮驱动（砍半往返轮次）**：
+   - 取消「先派只读分析、再派修改」的二段式派发（仅在 `bun bd` 链接窗口使用只读/静态扫描）；平时子智能体直接领**扫修一体大包**（每路同时认领 5~10 个文件、15~30 处失败，一次改完并全部通过 `cpc_brief.py`）。
+   - **批量清库存**：`bun bd` 构建完成后，用 4~6 路并发短超时扫测（`timeout -k 3 30`，`--timeout=5000`）快速横扫未登记的 `test/cli/`、`test/bundler/`、`test/js/{bun,node,web}/`、`test/regression/issue/`，10 分钟内把事实上已 `0 fail` 的数百个文件一次性划入 `test/stats.md` 已绿清单，只把真正仍 fail 的少量文件留给修复子智能体。
+3. **按「全仓共性根因」聚类横扫，而非按单测文件逐个磨**：
+   - 从扫测报告中按报错签名聚类（如同类 `ERR_INVALID_ARG_TYPE`、`Proxy`/深递归栈溢出、`PathBuffer` 越界、`.slice()`/`toNumber` 校验），1 个子智能体一次修复同一子系统全部同类问题，避免同一模块被反复修改 5~6 轮。
+4. **Release 辅助快筛 + Debug+ASan 精准复核**：
+   - 对含大量子进程启动或重循环的套件（`test/cli/`、`glob/stress`、`s3`、`cp -n`），Debug+ASan（`-O0`）单进程开销大易假超时；可用 `./build/release/bun test`（配 `BUN_FEATURE_FLAG_INTERNAL_FOR_TESTING=1`）先做逻辑层极速筛选，确认逻辑通过后再用 `bun-debug` 做最终 ASan 复核（集中修改 15~25 个文件才重编 1 次 `bun bd`）。
+5. **保持 2 路高密度互斥并行 + 30 分钟强制熔断回收**：
+   - 严格保持 2 路子智能体同时在线、修改目录完全互斥；若任意子智能体运行超过 30 分钟或陷入反复试错，立即 `manage_subagents kill` 收回并拆分更小包重派。

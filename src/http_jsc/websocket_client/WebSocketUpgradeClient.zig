@@ -322,6 +322,13 @@ pub const BuildRequestResult = struct {
     expected_accept: [28]u8,
 };
 
+const HandshakeHeader = extern struct {
+    name_ptr: [*]const u8,
+    name_len: usize,
+    value_ptr: [*]const u8,
+    value_len: usize,
+};
+
 const CppWebSocket = CppWebSocketPkg.CppWebSocket;
 const ErrorCode = websocket_client.ErrorCode;
 const Async = bun.Async;
@@ -425,6 +432,7 @@ pub fn computeAcceptValue(key: []const u8) [28]u8 {
 }
 
 pub fn buildRequestBody(vm: *jsc.VirtualMachine, pathname: []const u8, is_https: bool, host: []const u8, port: u16, client_protocol: []const u8, extra_headers: Headers8Bit, target_authorization: ?[]const u8, offer_permessage_deflate: bool) std.mem.Allocator.Error!BuildRequestResult {
+    _ = vm;
         const allocator = bun.default_allocator;
         var user_host: ?[]const u8 = null;
         _ = &user_host;
@@ -478,7 +486,10 @@ pub fn buildRequestBody(vm: *jsc.VirtualMachine, pathname: []const u8, is_https:
                 }
             }
         }
-        break :blk std.base64.standard.Encoder.encode((&encoded_buf), (&vm.rareData().nextUUID().bytes));
+        var random_bytes: [16]u8 = undefined;
+        _ = &random_bytes;
+        _ = bun.csprng((&random_bytes));
+        break :blk std.base64.standard.Encoder.encode((&encoded_buf), (&random_bytes));
 };
         const expected_accept = computeAcceptValue(key);
         const protocol = (if ((user_protocol != null)) user_protocol.? else client_protocol);
@@ -832,6 +843,11 @@ pub fn cancel(client: *HTTPClient) callconv(.c) void {
 pub fn fail(self: *@This(), code: ErrorCode) void {
             _ = log("onFail: {s}", .{ @tagName(code) });
             _ = jsc.markBinding(@src());
+            _ = self.ref();
+            var _guard_deref = DerefGuard(HTTPClient){ .ptr = self };
+            _ = &_guard_deref;
+            var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+            defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
             _ = self.dispatchAbruptClose(code);
             if (comptime ssl) {
                 _ = self.tcp.close(.normal);
@@ -843,6 +859,11 @@ pub fn fail(self: *@This(), code: ErrorCode) void {
 pub fn failWithReason(self: *@This(), code: ErrorCode, msg: []const u8) void {
             _ = log("onFail: {s}: {s}", .{ @tagName(code), msg });
             _ = jsc.markBinding(@src());
+            _ = self.ref();
+            var _guard_deref = DerefGuard(HTTPClient){ .ptr = self };
+            _ = &_guard_deref;
+            var ___guard_deref_moved = false; _ = &___guard_deref_moved;
+            defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
             if (self.outgoing_websocket) |ws| {
                 _ = &ws;
                 self.outgoing_websocket = null;
@@ -1204,8 +1225,10 @@ pub fn handleEnd(self: *@This(), _: Socket) void {
 pub fn processResponse(self: *@This(), response: PicoHTTP.Response, remain_buf: []const u8) void {
             var upgrade_header = PicoHTTP.Header{ .name = "", .value = "" };
             _ = &upgrade_header;
-            var connection_header = PicoHTTP.Header{ .name = "", .value = "" };
-            _ = &connection_header;
+            var has_connection_header = false;
+            _ = &has_connection_header;
+            var has_connection_upgrade = false;
+            _ = &has_connection_upgrade;
             var websocket_accept_header = PicoHTTP.Header{ .name = "", .value = "" };
             _ = &websocket_accept_header;
             var protocol_header_seen = false;
@@ -1215,6 +1238,47 @@ pub fn processResponse(self: *@This(), response: PicoHTTP.Response, remain_buf: 
             var deflate_result = DeflateNegotiationResult{  };
             _ = &deflate_result;
             if ((response.status_code != 101)) {
+                if (self.outgoing_websocket) |ws| {
+                    _ = &ws;
+                    const status_u16: u16 = (if (((response.status_code >= 0) and (response.status_code <= 65535))) @intCast(response.status_code) else 0);
+                    const hdrs_slice = response.headers.list;
+                    var stack_hdrs: [64]HandshakeHeader = undefined;
+                    _ = &stack_hdrs;
+                    var heap_hdrs: ?[]HandshakeHeader = null;
+                    _ = &heap_hdrs;
+                    defer {
+                    {
+                        if (heap_hdrs) |hh| {
+                            _ = &hh;
+                            _ = bun.default_allocator.free(hh);
+                        }
+                    }
+                    }
+                    var out_hdrs: []HandshakeHeader = stack_hdrs[0..0];
+                    _ = &out_hdrs;
+                    if ((hdrs_slice.len <= 64)) {
+                        out_hdrs = stack_hdrs[0..hdrs_slice.len];
+                    } else {
+                        if ((blk_catch_18: { break :blk_catch_18 ((bun.default_allocator.alloc(HandshakeHeader, hdrs_slice.len)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 null; }); })) |alloc_hdrs| {
+                            _ = &alloc_hdrs;
+                            heap_hdrs = alloc_hdrs;
+                            out_hdrs = alloc_hdrs;
+                        }
+                    }
+                    {
+                        var idx: i32 = 0;
+                        _ = &idx;
+                        const __end_1 = out_hdrs.len;
+                        while (idx < __end_1) : (idx += 1) {
+                            const i = @as(usize, @intCast(idx));
+                            out_hdrs[cp_cast_int(usize, i)] = HandshakeHeader{ .name_ptr = (if (@typeInfo(@TypeOf(hdrs_slice[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(hdrs_slice[@as(usize, @intCast(i))])) == .@"union") @tagName(hdrs_slice[@as(usize, @intCast(i))]) else hdrs_slice[@as(usize, @intCast(i))].name).ptr, .name_len = (if (@typeInfo(@TypeOf(hdrs_slice[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(hdrs_slice[@as(usize, @intCast(i))])) == .@"union") @tagName(hdrs_slice[@as(usize, @intCast(i))]) else hdrs_slice[@as(usize, @intCast(i))].name).len, .value_ptr = (if (@typeInfo(@TypeOf(hdrs_slice[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(hdrs_slice[@as(usize, @intCast(i))]) else hdrs_slice[@as(usize, @intCast(i))].value).ptr, .value_len = (if (@typeInfo(@TypeOf(hdrs_slice[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(hdrs_slice[@as(usize, @intCast(i))]) else hdrs_slice[@as(usize, @intCast(i))].value).len };
+                        }
+                    }
+                    _ = ws.didReceiveHandshake(status_u16, response.status, (blk: {
+                    break :blk @as(*anyopaque, @ptrCast(@alignCast(out_hdrs.ptr)));
+
+}), out_hdrs.len, remain_buf);
+                }
                 _ = self.terminate(ErrorCode.expected_101_status_code);
                 return;
             }
@@ -1223,8 +1287,17 @@ pub fn processResponse(self: *@This(), response: PicoHTTP.Response, remain_buf: 
                 _ = &header;
                 switch ((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name).len) {
 10 => {
-if ((((if (@typeInfo(@TypeOf(connection_header)) == .@"enum" or @typeInfo(@TypeOf(connection_header)) == .@"union") @tagName(connection_header) else connection_header.name).len == 0) and strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name), "Connection", false))) {
-                    connection_header = header;
+if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name), "Connection", false)) {
+                    has_connection_header = true;
+                    var tok_it = std.mem.splitScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 44);
+                    _ = &tok_it;
+                    while (tok_it.next()) |tok| {
+                        const trimmed_tok = std.mem.trim(u8, tok, " \t");
+                        if (strings.eqlCaseInsensitiveASCII(trimmed_tok, "Upgrade", true)) {
+                            has_connection_upgrade = true;
+                            break;
+                        }
+                    }
                 }
 },
 7 => {
@@ -1285,19 +1358,19 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
 24 => {
 if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name), "Sec-WebSocket-Extensions", false)) {
                     if (((!self.offered_permessage_deflate) or extension_header_seen)) {
-                        _ = self.terminate(ErrorCode.invalid_response);
+                        _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                         return;
                     }
                     extension_header_seen = true;
                     if ((std.mem.indexOfScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 44) != null)) {
-                        _ = self.terminate(ErrorCode.invalid_response);
+                        _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                         return;
                     }
                     var ext_it = std.mem.splitScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 59);
                     _ = &ext_it;
                     const ext_name = std.mem.trim(u8, ((ext_it.next()) orelse ("")), " \t");
                     if ((!strings.eqlComptime(ext_name, "permessage-deflate"))) {
-                        _ = self.terminate(ErrorCode.invalid_response);
+                        _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                         return;
                     }
                     deflate_result.enabled = true;
@@ -1312,7 +1385,7 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
                     while (ext_it.next()) |param_str| {
                         const trimmed_param = std.mem.trim(u8, param_str, " \t");
                         if ((trimmed_param.len == 0)) {
-                            _ = self.terminate(ErrorCode.invalid_response);
+                            _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                             return;
                         }
                         if (std.mem.indexOfScalar(u8, trimmed_param, 61)) |eq_idx| {
@@ -1321,7 +1394,7 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
                             const value = std.mem.trim(u8, trimmed_param[(eq_idx + 1)..], " \t");
                             if (strings.eqlComptime(key, "server_max_window_bits")) {
                                 if (seen_server_max_window_bits) {
-                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                     return;
                                 }
                                 seen_server_max_window_bits = true;
@@ -1329,13 +1402,13 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
                                     _ = &bits;
                                     deflate_result.params.server_max_window_bits = bits;
                                 } else {
-                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                     return;
                                 }
                             } else {
                                 if (strings.eqlComptime(key, "client_max_window_bits")) {
                                     if (seen_client_max_window_bits) {
-                                        _ = self.terminate(ErrorCode.invalid_response);
+                                        _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                         return;
                                     }
                                     seen_client_max_window_bits = true;
@@ -1343,18 +1416,18 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
                                         _ = &bits;
                                         deflate_result.params.client_max_window_bits = bits;
                                     } else {
-                                        _ = self.terminate(ErrorCode.invalid_response);
+                                        _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                         return;
                                     }
                                 } else {
-                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                     return;
                                 }
                             }
                         } else {
                             if (strings.eqlComptime(trimmed_param, "server_no_context_takeover")) {
                                 if (seen_server_no_context_takeover) {
-                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                     return;
                                 }
                                 seen_server_no_context_takeover = true;
@@ -1362,13 +1435,13 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
                             } else {
                                 if (strings.eqlComptime(trimmed_param, "client_no_context_takeover")) {
                                     if (seen_client_no_context_takeover) {
-                                        _ = self.terminate(ErrorCode.invalid_response);
+                                        _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                         return;
                                     }
                                     seen_client_no_context_takeover = true;
                                     deflate_result.params.client_no_context_takeover = 1;
                                 } else {
-                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    _ = self.terminateWithReason(ErrorCode.invalid_response, "Unsupported websocket extension");
                                     return;
                                 }
                             }
@@ -1385,7 +1458,7 @@ else => {
                 _ = self.terminate(ErrorCode.missing_upgrade_header);
                 return;
             }
-            if ((@min((if (@typeInfo(@TypeOf(connection_header)) == .@"enum" or @typeInfo(@TypeOf(connection_header)) == .@"union") @tagName(connection_header) else connection_header.name).len, (if (@typeInfo(@TypeOf(connection_header)) == .@"enum") @intFromEnum(connection_header) else connection_header.value).len) == 0)) {
+            if ((!has_connection_header)) {
                 _ = self.terminate(ErrorCode.missing_connection_header);
                 return;
             }
@@ -1393,7 +1466,7 @@ else => {
                 _ = self.terminate(ErrorCode.missing_websocket_accept_header);
                 return;
             }
-            if ((!strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(connection_header)) == .@"enum") @intFromEnum(connection_header) else connection_header.value), "Upgrade", true))) {
+            if ((!has_connection_upgrade)) {
                 _ = self.terminate(ErrorCode.invalid_connection_header);
                 return;
             }
@@ -1405,11 +1478,15 @@ else => {
                 _ = self.terminate(ErrorCode.mismatch_websocket_accept_header);
                 return;
             }
+            if (((!protocol_header_seen) and (self.subprotocols.count() > 0))) {
+                _ = self.terminate(ErrorCode.missing_client_protocol);
+                return;
+            }
             const overflow_len = remain_buf.len;
             var overflow: []u8 = empty_u8[0..0];
             _ = &overflow;
             if ((overflow_len > 0)) {
-                overflow = (blk_catch_18: { break :blk_catch_18 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 bun.outOfMemory(); }); });
+                overflow = (blk_catch_19: { break :blk_catch_19 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 bun.outOfMemory(); }); });
                 _ = @memcpy(overflow, remain_buf);
             }
             var _guard_overflow = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = (if ((overflow_len > 0)) overflow else null) };
@@ -1510,7 +1587,7 @@ pub fn handleWritable(self: *@This(), socket: Socket) void {
                     _ = &_guard_deref;
                     var ___guard_deref_moved = false; _ = &___guard_deref_moved;
                     defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
-                    const wrote = (blk_catch_19: { break :blk_catch_19 ((tunnel.write(self.to_send)) catch |__ce_19| { _ = &__ce_19; _ = self.terminate(ErrorCode.failed_to_write);
+                    const wrote = (blk_catch_20: { break :blk_catch_20 ((tunnel.write(self.to_send)) catch |__ce_20| { _ = &__ce_20; _ = self.terminate(ErrorCode.failed_to_write);
                     return; }); });
                     self.to_send = self.to_send[@min(wrote, self.to_send.len)..];
                     return;

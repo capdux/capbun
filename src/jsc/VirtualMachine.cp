@@ -1247,6 +1247,15 @@ pub fn onExit(client: *VirtualMachine) {
         HeapProfiler.generateAndWriteProfile(client.jsc_vm, config) catch e => {
             Output.err(e, "Failed to write heap profile", {});
         };
+        if (comptime Environment.isPosix) {
+            if (sh := client.eventLoop().signal_handler) {
+                while (sig := sh.dequeue()) {
+                    if (sig == @intFromEnum(bun.SignalCode.SIGINT)) {
+                        bun.Global.raiseIgnoringPanicHandler(.SIGINT);
+                    }
+                }
+            }
+        }
     }
 
     client.exit_handler.dispatchOnExit();
@@ -1265,6 +1274,18 @@ pub fn onExit(client: *VirtualMachine) {
             hook.execute();
         }
     }
+}
+
+@export @c fn Bun__flushHeapProfilerOnSigint(globalObject: *JSGlobalObject): bool {
+    let vm = globalObject.bunVM();
+    if (config := vm.heap_profiler_config) {
+        vm.heap_profiler_config = null;
+        HeapProfiler.generateAndWriteProfile(vm.jsc_vm, config) catch e => {
+            Output.err(e, "Failed to write heap profile", {});
+        };
+        bun.Global.raiseIgnoringPanicHandler(.SIGINT);
+    }
+    return false;
 }
 
 @c {

@@ -306,6 +306,7 @@ pub struct BufferOutputSinkImpl {
         vm.onUnhandledRejection = &jsc.VirtualMachine.onQuietUnhandledRejectionHandlerCaptureValue;
         defer {
             sink_error.ensureStillAlive();
+            sink.tmp_sync_error = null;
             vm.unhandled_pending_rejection_to_capture = prev_unhandled_pending_rejection_to_capture;
             scope.apply(vm);
         }
@@ -421,10 +422,14 @@ pub struct BufferOutputSinkImpl {
         }
 
         if (ret_err := BufferOutputSinkImpl.runOutputSink(sink, bytes, is_async)) {
-            if (sink.tmp_sync_error.?.* == .zero) {
-                ret_err.ensureStillAlive();
-                ret_err.protect();
-                sink.tmp_sync_error.?.* = ret_err;
+            if (!is_async) {
+                if (err_ptr := sink.tmp_sync_error) {
+                    if (err_ptr.* == .zero) {
+                        ret_err.ensureStillAlive();
+                        ret_err.protect();
+                        err_ptr.* = ret_err;
+                    }
+                }
             }
         } else {}
     }
@@ -1064,7 +1069,13 @@ fn HandlerCallback(
                     handler.global.bunVM().waitForPromise(promise);
                     const fail = promise.status() == .rejected;
                     if (fail) {
-                        handler.global.bunVM().unhandledRejection(handler.global, promise.result(handler.global.vm()), promise.asValue());
+                        const reason = promise.result(handler.global.vm());
+                        if (err_ptr := handler.global.bunVM().unhandled_pending_rejection_to_capture) {
+                            err_ptr.* = reason;
+                            reason.protect();
+                        } else {
+                            handler.global.bunVM().unhandledRejection(handler.global, reason, promise.asValue());
+                        }
                     }
                     return fail;
                 }

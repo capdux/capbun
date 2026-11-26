@@ -35,15 +35,15 @@ type OptNode = (*Node)?;
 /// one can use integers with `update`.
 pub struct Node {
     context: *Progress,
-    parent: (*Node)?,
-    name: []const u8,
+    parent: (*Node)? = null,
+    name: []const u8 = "",
     unit: Unit = .none,
     /// Must be handled atomically to be thread-safe.
     recently_updated_child: (*Node)? = null,
     /// Must be handled atomically to be thread-safe. 0 means null.
-    unprotected_estimated_total_items: usize,
+    unprotected_estimated_total_items: usize = 0,
     /// Must be handled atomically to be thread-safe.
-    unprotected_completed_items: usize,
+    unprotected_completed_items: usize = 0,
 
     /// Create a new child progress node. Thread-safe.
     /// Call `Node.end` when done.
@@ -157,7 +157,7 @@ export @root struct Progress {
     /// for example showing the user what tests run.
     dont_print_on_dumb: bool = false,
 
-    root: Node = undefined,
+    root: Node = Node{ context: undefined, parent: null, name: "" },
 
     /// Keeps track of how much time has passed since the beginning.
     /// Used to compare with `initial_delay_ms` and `refresh_rate_ms`.

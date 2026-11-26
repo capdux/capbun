@@ -552,7 +552,9 @@ pub struct LifecycleScriptSubprocess {
         if (dirname := std.fs.path.dirname(_.scripts.cwd)) {
             const basename = std.fs.path.basename(_.scripts.cwd);
             if (dir := bun.openDirAbsolute(dirname) catch null) {
-                dir.deleteTree(basename) catch {};
+                let mut_dir = dir;
+                defer mut_dir.close();
+                mut_dir.deleteTree(basename) catch {};
             }
         }
 

@@ -565,17 +565,23 @@ function Zlib(opts, mode) {
     strategy = checkRangesOrGetDefault(opts.strategy, "options.strategy", Z_DEFAULT_STRATEGY, Z_FIXED, Z_DEFAULT_STRATEGY);
 
     dictionary = opts.dictionary;
-    if (dictionary !== undefined && !isArrayBufferView(dictionary)) {
-      if (isAnyArrayBuffer(dictionary)) {
-        dictionary = Buffer.from(dictionary);
-      } else {
-        throw $ERR_INVALID_ARG_TYPE("options.dictionary", "Buffer, TypedArray, DataView, or ArrayBuffer", dictionary);
+    if (dictionary !== undefined) {
+      if (!isArrayBufferView(dictionary)) {
+        if (isAnyArrayBuffer(dictionary)) {
+          dictionary = Buffer.from(dictionary);
+        } else {
+          throw $ERR_INVALID_ARG_TYPE("options.dictionary", "Buffer, TypedArray, DataView, or ArrayBuffer", dictionary);
+        }
+      }
+      if (dictionary.byteLength > 0xffffffff) {
+        throw $ERR_OUT_OF_RANGE("dictionary.byteLength", "<= 4294967295", dictionary.byteLength);
       }
     }
   }
 
   const handle = new NativeZlib(mode);
   this._writeState = new Uint32Array(2);
+  handle._writeState = this._writeState;
   handle.init(windowBits, level, memLevel, strategy, this._writeState, processCallback, dictionary);
 
   ZlibBase.$apply(this, [opts, mode, handle, zlibDefaultOpts]);
@@ -721,6 +727,7 @@ function Brotli(opts, mode) {
   const handle = new NativeBrotli(mode);
 
   this._writeState = new Uint32Array(2);
+  handle._writeState = this._writeState;
   if (!handle.init(brotliInitParamsArray, this._writeState, processCallback)) {
     throw $ERR_ZLIB_INITIALIZATION_FAILED();
   }
@@ -772,6 +779,7 @@ class Zstd extends ZlibBase {
     const pledgedSrcSize = opts?.pledgedSrcSize ?? undefined;
 
     const writeState = new Uint32Array(2);
+    handle._writeState = writeState;
     handle.init(initParamsArray, pledgedSrcSize, writeState, processCallback);
     super(opts, mode, handle, zstdDefaultOpts);
     this._writeState = writeState;

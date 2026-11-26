@@ -1779,7 +1779,7 @@ pub const ParserState = struct {
     at_start_of: ?BlockType,
 
 pub fn sourceLocation(self: ParserState) SourceLocation {
-            return .{ .line = self.current_line_number, .column = @intCast(((self.position -% self.current_line_start_position) + 1)) };
+            return .{ .line = self.current_line_number, .column = (if ((self.position >= self.current_line_start_position)) @intCast(((self.position - self.current_line_start_position) + 1)) else 1) };
     }
 };
 
@@ -2033,7 +2033,7 @@ return;
     }
 
 pub fn currentSourceLocation(self: Tokenizer) SourceLocation {
-            return SourceLocation{ .line = self.current_line_number, .column = @intCast(((self.position -% self.current_line_start_position) + 1)) };
+            return SourceLocation{ .line = self.current_line_number, .column = (if ((self.position >= self.current_line_start_position)) @intCast(((self.position - self.current_line_start_position) + 1)) else 1) };
     }
 
 pub fn prev(self: *Tokenizer) Token {

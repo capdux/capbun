@@ -11,6 +11,7 @@
 #include "BunClientData.h"
 #include <JavaScriptCore/CallFrame.h>
 #include <JavaScriptCore/Nodes.h>
+#include <JavaScriptCore/ParserError.h>
 
 namespace Bun {
 
@@ -25,7 +26,8 @@ RefPtr<JSC::CachedBytecode> getBytecode(JSGlobalObject* globalObject, JSC::Modul
 bool extractCachedData(JSValue cachedDataValue, WTF::Vector<uint8_t>& outCachedData);
 String stringifyAnonymousFunction(JSGlobalObject* globalObject, const ArgList& args, ThrowScope& scope, int* outOffset);
 JSC::EncodedJSValue createCachedData(JSGlobalObject* globalObject, const JSC::SourceCode& source);
-bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Exception> exception, ThrowScope& throwScope);
+bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Exception> exception, ThrowScope& throwScope, const JSC::SourceCode* scriptSource = nullptr);
+void decorateSyntaxErrorStack(JSGlobalObject* globalObject, VM& vm, ThrowScope& throwScope, JSValue errorValue, const String& sourceString, const String& filename, int32_t rawLineOffset, const JSC::ParserError& parserError);
 // Lowers offset if needed so that offset + 1 + sourceLength fits in an int, JSC's position type.
 OrdinalNumber clampOffsetForSource(OrdinalNumber offset, unsigned sourceLength);
 void getNodeVMContextOptions(JSGlobalObject* globalObject, JSC::VM& vm, JSC::ThrowScope& scope, JSValue optionsArg, NodeVMContextOptions& outOptions, ASCIILiteral codeGenerationKey, JSValue* importer);
@@ -45,6 +47,7 @@ public:
     String filename;
     OrdinalNumber lineOffset = OrdinalNumber::fromZeroBasedInt(0);
     OrdinalNumber columnOffset = OrdinalNumber::fromZeroBasedInt(0);
+    int32_t rawLineOffset = 0;
     bool failed = false;
 
     BaseVMOptions() = default;

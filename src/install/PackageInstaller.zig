@@ -1030,27 +1030,27 @@ const is_duplicate = self.successfully_installed.isSet(package_id);
 
 },
 else => {
-_ = (if (((!is_trusted) and self.metas[@as(usize, @intCast(package_id))].hasInstallScript())) ({
-                var folder_path = AutoAbsPath.@"from"(self.node_modules.path.items);
-                _ = &folder_path;
-                var _guard_fp = DeinitGuard(AutoAbsPath){ .ptr = (&folder_path) };
-                _ = &_guard_fp;
-                var ___guard_fp_moved = false; _ = &___guard_fp_moved;
-                defer if (!___guard_fp_moved) { ___guard_fp_moved = true; const __T = @TypeOf(_guard_fp); if (@typeInfo(__T) == .optional) { if (_guard_fp) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fp.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fp; _drop_val.__cp_deinit(); } };
-                _ = (&_guard_fp);
-                _ = folder_path.append(alias.slice(self.lockfile.buffers.string_bytes.items));
-                const count = self.getInstalledPackageScriptsCount(alias.slice(self.lockfile.buffers.string_bytes.items), package_id, resolution.tag, (&folder_path), log_level);
-                if ((count > 0)) {
-                    if (log_level.isVerbose()) {
-                        _ = Output.prettyError("Blocked {d} scripts for: {s}@{f}\n", .{ count, alias.slice(self.lockfile.buffers.string_bytes.items), resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
+if (((!is_trusted) and self.metas[@as(usize, @intCast(package_id))].hasInstallScript())) {
+                    var folder_path = AutoAbsPath.@"from"(self.node_modules.path.items);
+                    _ = &folder_path;
+                    var _guard_fp = DeinitGuard(AutoAbsPath){ .ptr = (&folder_path) };
+                    _ = &_guard_fp;
+                    var ___guard_fp_moved = false; _ = &___guard_fp_moved;
+                    defer if (!___guard_fp_moved) { ___guard_fp_moved = true; const __T = @TypeOf(_guard_fp); if (@typeInfo(__T) == .optional) { if (_guard_fp) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fp.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fp; _drop_val.__cp_deinit(); } };
+                    _ = (&_guard_fp);
+                    _ = folder_path.append(alias.slice(self.lockfile.buffers.string_bytes.items));
+                    const count = self.getInstalledPackageScriptsCount(alias.slice(self.lockfile.buffers.string_bytes.items), package_id, resolution.tag, (&folder_path), log_level);
+                    if ((count > 0)) {
+                        if (log_level.isVerbose()) {
+                            _ = Output.prettyError("Blocked {d} scripts for: {s}@{f}\n", .{ count, alias.slice(self.lockfile.buffers.string_bytes.items), resolution.fmt(self.lockfile.buffers.string_bytes.items, .posix) });
+                        }
+                        const entry = bun.handleOom(self.summary.packages_with_blocked_scripts.getOrPut(self.manager.allocator, truncated_dep_name_hash));
+                        if ((!entry.found_existing)) {
+                            entry.value_ptr.* = 0;
+                        }
+                        entry.value_ptr.* = (entry.value_ptr.* + count);
                     }
-                    const entry = bun.handleOom(self.summary.packages_with_blocked_scripts.getOrPut(self.manager.allocator, truncated_dep_name_hash));
-                    if ((!entry.found_existing)) {
-                        entry.value_ptr.* = 0;
-                    }
-                    entry.value_ptr.* = (entry.value_ptr.* + count);
                 }
-}) else null);
 },
 }
                 _ = self.incrementTreeInstallCount(self.current_tree_id, (!is_pending_package_install), log_level);

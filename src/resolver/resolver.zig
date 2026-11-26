@@ -2568,7 +2568,7 @@ pub fn dirInfoCachedMaybeLog(r: *ThisResolver, raw_input_path: []const u8, compt
             if ((input_path.len == 0)) {
                 return null;
             }
-            if ((input_path.len > bun.MAX_PATH_BYTES)) {
+            if ((input_path.len >= bun.MAX_PATH_BYTES)) {
                 return null;
             }
             if (comptime Environment.isWindows) {

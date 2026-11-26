@@ -2010,6 +2010,7 @@ pub enum DuplexUpgradeEventState(u8) {
 pub class DuplexUpgradeContext {
     upgrade: uws.UpgradedDuplex,
     tls: (*TLSSocket)?,
+    tls_for_slots: (*TLSSocket)? = null,
     vm: *jsc.VirtualMachine,
     task: jsc.AnyTask,
     task_event: DuplexUpgradeEventState = .StartTLS,
@@ -2184,8 +2185,29 @@ pub class DuplexUpgradeContext {
         }
     }
 
+    static fn getOrigin(ctx_ptr: *!): jsc.JSValue? {
+        const ctx = bun.cast(*DuplexUpgradeContext, ctx_ptr);
+        if (tls := ctx.tls_for_slots) {
+            if (js_val := tls.this_value.tryGet()) {
+                const val = TLSSocket.js.originGetCached(js_val) ?? return null;
+                if (val == .js_undefined || val == .zero) return null;
+                return val;
+            }
+        }
+        return null;
+    }
+
     pub fn release(*_) {
         _.released = true;
+        if (tls_slots := _.tls_for_slots) {
+            _.tls_for_slots = null;
+            if (js_val := tls_slots.this_value.tryGet()) {
+                if (cb := TLSSocket.js.onDataCallbackGetCached(js_val)) jsc.host_fn.setFunctionData(cb, null);
+                if (cb := TLSSocket.js.onEndCallbackGetCached(js_val)) jsc.host_fn.setFunctionData(cb, null);
+                if (cb := TLSSocket.js.onWritableCallbackGetCached(js_val)) jsc.host_fn.setFunctionData(cb, null);
+                if (cb := TLSSocket.js.onCloseCallbackGetCached(js_val)) jsc.host_fn.setFunctionData(cb, null);
+            }
+        }
         if (tls := _.tls) {
             _.tls = null;
             tls.deref();
@@ -2337,6 +2359,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     let duplexContext = DuplexUpgradeContext.new(.{
         .upgrade = undefined,
         .tls = tls,
+        .tls_for_slots = tls,
         .vm = globalObject.bunVM(),
         .task = undefined,
         .ssl_config = final_ssl_config,
@@ -2352,7 +2375,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
 
     duplexContext.task = jsc.AnyTask.New(DuplexUpgradeContext, DuplexUpgradeContext.runEvent).init(duplexContext);
     duplexContext.upgrade = unsafe {
-        uws.UpgradedDuplex.from(globalObject, duplex, .{
+        uws.UpgradedDuplex.from(globalObject, .{
             .onOpen = @ptrCast(&DuplexUpgradeContext.onOpen),
             .onData = @ptrCast(&DuplexUpgradeContext.onData),
             .onHandshake = @ptrCast(&DuplexUpgradeContext.onHandshake),
@@ -2361,6 +2384,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
             .onWritable = @ptrCast(&DuplexUpgradeContext.onWritable),
             .onError = @ptrCast(&DuplexUpgradeContext.onError),
             .onTimeout = @ptrCast(&DuplexUpgradeContext.onTimeout),
+            .getOrigin = @ptrCast(&DuplexUpgradeContext.getOrigin),
             .ctx = @ptrCast(duplexContext),
         })
     };
@@ -2371,9 +2395,16 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
 
     duplexContext.startTLS();
 
+    const js_handlers = duplexContext.upgrade.getJSHandlers(globalObject)?;
+    TLSSocket.js.originSetCached(tls_js_value, globalObject, duplex);
+    if (cb := js_handlers.getIndex(globalObject, 0) catch null) TLSSocket.js.onDataCallbackSetCached(tls_js_value, globalObject, cb);
+    if (cb := js_handlers.getIndex(globalObject, 1) catch null) TLSSocket.js.onEndCallbackSetCached(tls_js_value, globalObject, cb);
+    if (cb := js_handlers.getIndex(globalObject, 2) catch null) TLSSocket.js.onWritableCallbackSetCached(tls_js_value, globalObject, cb);
+    if (cb := js_handlers.getIndex(globalObject, 3) catch null) TLSSocket.js.onCloseCallbackSetCached(tls_js_value, globalObject, cb);
+
     const array = jsc.JSValue.createEmptyArray(globalObject, 2)?;
     array.putIndex(globalObject, 0, tls_js_value)?;
-    array.putIndex(globalObject, 1, duplexContext.upgrade.getJSHandlers(globalObject)?)?;
+    array.putIndex(globalObject, 1, js_handlers)?;
 
     return array;
 }

@@ -328,9 +328,11 @@ pub fn SSLWrapper(comptime T: type): type {
             if (BoringSSL.SSL_is_init_finished(ssl) != 0) {
                 if ((BoringSSL.SSL_get_shutdown(ssl) & BoringSSL.SSL_RECEIVED_SHUTDOWN) != 0) {
                     _.flags.received_ssl_shutdown = true;
-                    * = _.shutdown(false);
-                    _.triggerCloseCallback();
-                    return false;
+                    if (_.flags.sent_ssl_shutdown) {
+                        * = _.shutdown(false);
+                        _.triggerCloseCallback();
+                        return false;
+                    }
                 }
                 return true;
             }
@@ -346,9 +348,13 @@ pub fn SSLWrapper(comptime T: type): type {
                 BoringSSL.ERR_clear_error();
                 if (ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN) {
                     _.flags.received_ssl_shutdown = true;
-                    * = _.shutdown(false);
                     _.handleEndOfRenegotiation();
-                    return false;
+                    if (_.flags.sent_ssl_shutdown || _.flags.handshake_state != HandshakeState.HANDSHAKE_COMPLETED) {
+                        * = _.shutdown(false);
+                        _.triggerCloseCallback();
+                        return false;
+                    }
+                    return true;
                 }
                 if (ssl_err != BoringSSL.SSL_ERROR_WANT_READ && ssl_err != BoringSSL.SSL_ERROR_WANT_WRITE) {
                     _.flags.fatal_error = ssl_err == BoringSSL.SSL_ERROR_SSL || ssl_err == BoringSSL.SSL_ERROR_SYSCALL;
@@ -421,8 +427,19 @@ pub fn SSLWrapper(comptime T: type): type {
                             continue;
                         } else if (ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN) {
                             _.flags.received_ssl_shutdown = true;
-                            * = _.shutdown(false);
                             _.handleEndOfRenegotiation();
+                            if (read > 0) {
+                                log("triggering data callback (read {d})", .{read});
+                                _.triggerDataCallback(buffer[0..read]);
+                                if (_.ssl == null || _.flags.closed_notified) return false;
+                            }
+                            if (!_.flags.sent_ssl_shutdown && _.flags.handshake_state == HandshakeState.HANDSHAKE_COMPLETED) {
+                                _.handleWriting(buffer);
+                                return false;
+                            }
+                            * = _.shutdown(false);
+                            _.triggerCloseCallback();
+                            return false;
                         }
                         _.flags.fatal_error = ssl_err == BoringSSL.SSL_ERROR_SSL || ssl_err == BoringSSL.SSL_ERROR_SYSCALL;
 

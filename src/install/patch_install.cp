@@ -210,6 +210,13 @@ pub struct PatchTask {
                 .extract => {
                     debug("pkg: {s} extract", [pkg.name.slice(manager.lockfile.buffers.string_bytes.items)]);
 
+                    if (pkg.resolution.tag != .npm) {
+                        if (log_level != .silent) {
+                            Output.errGeneric("cannot extract non-npm patched dependency {s} from missing cache", [pkg.name.slice(manager.lockfile.buffers.string_bytes.items)]);
+                        }
+                        Global.crash();
+                    }
+
                     const task_id = Task.Id.forNPMPackage(manager.lockfile.str(&pkg.name), pkg.resolution.value.npm.version);
                     bun.debugAssert(!manager.network_dedupe_map.contains(task_id));
 
