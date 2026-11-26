@@ -143,15 +143,19 @@ pub const BufferReadStream = struct {
     block_size: usize = 16384,
     archive: *Archive,
     reading: bool = false,
+    closed: bool = false,
 
 pub fn init(self: *BufferReadStream, buf: []const u8) void {
             {
-                self.* = BufferReadStream{ .buf = buf, .pos = 0, .archive = Archive.readNew(), .reading = false };
+                self.* = BufferReadStream{ .buf = buf, .pos = 0, .archive = Archive.readNew(), .reading = false, .closed = false };
             }
     }
 
 pub fn deinit(self: *BufferReadStream) void {
-            _ = self.archive.readClose();
+            if ((!self.closed)) {
+                _ = self.archive.readClose();
+                self.closed = true;
+            }
             _ = self.archive.readFree();
     }
 
@@ -452,11 +456,17 @@ var pathname: bun.OSPathSliceZ = (if (comptime Environment.isWindows) entry.path
                     }
                 }
                 const rest = tokenizer.rest();
+                if ((rest.len >= normalized_buf.len)) {
+                    continue :loop;
+                }
                 const pathname_rest = (blk: {
                 break :blk rest.ptr[0..rest.len :0];
 
 });
                 const normalized = bun.path.normalizeBufT(bun.OSPathChar, pathname_rest, (&normalized_buf), .auto);
+                if ((normalized.len >= normalized_buf.len)) {
+                    continue :loop;
+                }
                 normalized_buf[cp_cast_int(usize, normalized.len)] = 0;
                 const path: [:0]bun.OSPathChar = normalized_buf[0..normalized.len :0];
                 if (((path.len == 0) or ((path.len == 1) and (path[0] == 46)))) {
@@ -497,7 +507,7 @@ else => {
                 count = (count + 1);
                 switch (kind) {
 .directory => {
-var mode = @as(i32, @intCast(entry.perm()));
+var mode = @as(i32, @intCast((entry.perm() & 511)));
                 _ = &mode;
                 if (((mode & 256) != 0)) {
                     mode = (mode | 64);
@@ -541,7 +551,7 @@ return e;
                 }
 },
 .file => {
-const mode: bun.Mode = (if (comptime Environment.isWindows) 0 else @intCast((entry.perm() | 438)));
+const mode: bun.Mode = (if (comptime Environment.isWindows) 0 else @intCast(((entry.perm() & 511) | 438)));
                 const flags = ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC);
                 var file_handle_native: bun.FD = undefined;
                 _ = &file_handle_native;
@@ -663,6 +673,11 @@ else => {
 }
 },
 }
+            }
+            const close_res = stream.archive.readClose();
+            stream.closed = true;
+            if (((close_res != .ok) and (close_res != .eof))) {
+                return error.Fail;
             }
             return count;
     }

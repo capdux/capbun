@@ -567,7 +567,15 @@ pub fn spin(self: *WebWorker) void {
                 _ = self.shutdown();
             }
         } else {
-            _ = promise.result(vm.jsc_vm);
+            if ((promise.status() == .pending)) {
+                if ((vm.exit_handler.exit_code == 0)) {
+                    vm.exit_handler.exit_code = 13;
+                }
+                _ = self.flushLogs(vm);
+                _ = self.shutdown();
+            } else {
+                _ = promise.result(vm.jsc_vm);
+            }
         }
         _ = self.flushLogs(vm);
         _ = log("[{d}] event loop start", .{ self.execution_context_id });

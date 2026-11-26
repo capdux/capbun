@@ -404,12 +404,14 @@ fn cpusImplDarwin(globalThis: *jsc.JSGlobalObject): !jsc.JSValue {
     const values = jsc.JSValue.createEmptyArray(globalThis, @as(u32, @intCast(num_cpus)))?;
     let cpu_index: u32 = 0;
     while (cpu_index < num_cpus) : (cpu_index += 1) {
-        const times = CPUTimes{
-            user: info[cpu_index].cpu_ticks[0] * multiplier,
-            nice: info[cpu_index].cpu_ticks[3] * multiplier,
-            sys: info[cpu_index].cpu_ticks[1] * multiplier,
-            idle: info[cpu_index].cpu_ticks[2] * multiplier,
-            irq: 0, // not available
+        const times = unsafe {
+            CPUTimes{
+                user: info[cpu_index].cpu_ticks[0] * multiplier,
+                nice: info[cpu_index].cpu_ticks[3] * multiplier,
+                sys: info[cpu_index].cpu_ticks[1] * multiplier,
+                idle: info[cpu_index].cpu_ticks[2] * multiplier,
+                irq: 0, // not available
+            }
         };
 
         const cpu = jsc.JSValue.createEmptyObject(globalThis, 3);
@@ -1074,7 +1076,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32)! {
                     else => -@as(c_int, @intFromEnum(std.posix.E.SRCH)),
                     .windows => libuv.UV_ESRCH,
                 },
-                syscall: bun.String.static("uv_os_getpriority"),
+                syscall: bun.String.static("uv_os_setpriority"),
             };
             return global.throwValue(e.toErrorInstanceWithInfoObject(global));
         },
@@ -1086,7 +1088,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32)! {
                     else => -@as(c_int, @intFromEnum(std.posix.E.ACCES)),
                     .windows => libuv.UV_EACCES,
                 },
-                syscall: bun.String.static("uv_os_getpriority"),
+                syscall: bun.String.static("uv_os_setpriority"),
             };
             return global.throwValue(e.toErrorInstanceWithInfoObject(global));
         },
@@ -1098,7 +1100,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32)! {
                     else => -@as(c_int, @intFromEnum(std.posix.E.SRCH)),
                     .windows => libuv.UV_ESRCH,
                 },
-                syscall: bun.String.static("uv_os_getpriority"),
+                syscall: bun.String.static("uv_os_setpriority"),
             };
             return global.throwValue(e.toErrorInstanceWithInfoObject(global));
         },

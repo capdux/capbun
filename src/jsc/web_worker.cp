@@ -657,6 +657,12 @@ pub struct LiveWorkers {
                 vm.exit_handler.exit_code = 1;
                 _.shutdown();
             }
+        } else if (promise.status() == .pending) {
+            if (vm.exit_handler.exit_code == 0) {
+                vm.exit_handler.exit_code = 13;
+            }
+            _.flushLogs(vm);
+            _.shutdown();
         } else {
             * = promise.result(vm.jsc_vm);
         }

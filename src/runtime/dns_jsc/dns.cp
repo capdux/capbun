@@ -1867,9 +1867,11 @@ pub struct internal {
         for (item of request.notify.items) {
             defer i += 1;
             switch (item) {
-                .socket => |s| if (s == socket) {
-                    * = request.notify.swapRemove(i);
-                    return 1;
+                .socket => |s| {
+                    if (s == socket) {
+                        * = request.notify.swapRemove(i);
+                        return 1;
+                    }
                 },
                 .prefetch, .quic => {},
             }
@@ -2626,9 +2628,6 @@ pub struct Resolver {
 
     pub fn resolve(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(3);
-        if (arguments.len < 1) {
-            return globalThis.throwNotEnoughArguments("resolve", 3, arguments.len);
-        }
 
         const record_type: RecordType = if (arguments.len <= 1)
             RecordType.default
@@ -2650,7 +2649,7 @@ pub struct Resolver {
             break rt_opt.?;
         });
 
-        const name_value = arguments.ptr[0];
+        const name_value = if (arguments.len < 1) jsc.JSValue.js_undefined else arguments.ptr[0];
         if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolve", "name", "string");
         }
@@ -2685,12 +2684,7 @@ pub struct Resolver {
     }
 
     pub fn reverse(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        const arguments = callframe.arguments_old(2);
-        if (arguments.len < 1) {
-            return globalThis.throwNotEnoughArguments("reverse", 1, arguments.len);
-        }
-
-        const ip_value = arguments.ptr[0];
+        const ip_value = callframe.argument(0);
         if (ip_value.isEmptyOrUndefinedOrNull() || !ip_value.isString()) {
             return globalThis.throwInvalidArgumentType("reverse", "ip", "string");
         }
@@ -3053,12 +3047,7 @@ pub struct Resolver {
     }
 
     pub fn resolveAny(_: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        const arguments = callframe.arguments_old(1);
-        if (arguments.len < 1) {
-            return globalThis.throwNotEnoughArguments("resolveAny", 1, arguments.len);
-        }
-
-        const name_value = arguments.ptr[0];
+        const name_value = callframe.argument(0);
         if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveAny", "hostname", "string");
         }
@@ -3235,11 +3224,9 @@ pub struct Resolver {
 
     static fn setChannelLocalAddresses(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments();
-        if (arguments.len == 0) {
-            return globalThis.throwNotEnoughArguments("setLocalAddress", 1, 0);
-        }
+        const first_arg = if (arguments.len == 0) jsc.JSValue.js_undefined else arguments[0];
 
-        const first_af = setChannelLocalAddress(channel, globalThis, arguments[0])?;
+        const first_af = setChannelLocalAddress(channel, globalThis, first_arg)?;
 
         if (arguments.len < 2 || arguments[1].isUndefined()) {
             return jsc.JSValue.js_undefined;
@@ -3288,11 +3275,7 @@ pub struct Resolver {
         }
 
         const arguments = callframe.arguments();
-        if (arguments.len == 0) {
-            return globalThis.throwNotEnoughArguments("setServers", 1, 0);
-        }
-
-        const argument = arguments[0];
+        const argument = if (arguments.len == 0) jsc.JSValue.js_undefined else arguments[0];
         if (!argument.isArray()) {
             return globalThis.throwInvalidArgumentType("setServers", "servers", "array");
         }

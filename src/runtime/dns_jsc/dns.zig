@@ -1822,10 +1822,10 @@ pub fn us_getaddrinfo_cancel(request: *Request, socket: *bun.uws.ConnectingSocke
                 }
                 switch (item) {
 .socket => |s| {
-_ = (if ((s == socket)) ({
-                _ = request.notify.swapRemove(i);
-                return 1;
-}) else null);
+if ((s == socket)) {
+                    _ = request.notify.swapRemove(i);
+                    return 1;
+                }
 },
 .prefetch, .quic => {
 
@@ -2457,9 +2457,6 @@ pub fn globalResolve(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
 
 pub fn resolve(self: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments_old(3);
-            if ((arguments.len < 1)) {
-                return globalThis.throwNotEnoughArguments("resolve", 3, arguments.len);
-            }
             const record_type: RecordType = (if ((arguments.len <= 1)) RecordType.default else blk: {
             const record_type_value = arguments.ptr[1];
             if ((record_type_value.isEmptyOrUndefinedOrNull() or (!record_type_value.isString()))) {
@@ -2475,7 +2472,7 @@ pub fn resolve(self: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc
             }
             break :blk rt_opt.?;
 });
-            const name_value = arguments.ptr[0];
+            const name_value = (if ((arguments.len < 1)) jsc.JSValue.js_undefined else arguments.ptr[0]);
             if ((name_value.isEmptyOrUndefinedOrNull() or (!name_value.isString()))) {
                 return globalThis.throwInvalidArgumentType("resolve", "name", "string");
             }
@@ -2531,11 +2528,7 @@ pub fn globalReverse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
     }
 
 pub fn reverse(self: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            const arguments = callframe.arguments_old(2);
-            if ((arguments.len < 1)) {
-                return globalThis.throwNotEnoughArguments("reverse", 1, arguments.len);
-            }
-            const ip_value = arguments.ptr[0];
+            const ip_value = callframe.argument(0);
             if ((ip_value.isEmptyOrUndefinedOrNull() or (!ip_value.isString()))) {
                 return globalThis.throwInvalidArgumentType("reverse", "ip", "string");
             }
@@ -2856,11 +2849,7 @@ pub fn globalResolveAny(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     }
 
 pub fn resolveAny(self: *Resolver, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            const arguments = callframe.arguments_old(1);
-            if ((arguments.len < 1)) {
-                return globalThis.throwNotEnoughArguments("resolveAny", 1, arguments.len);
-            }
-            const name_value = arguments.ptr[0];
+            const name_value = callframe.argument(0);
             if ((name_value.isEmptyOrUndefinedOrNull() or (!name_value.isString()))) {
                 return globalThis.throwInvalidArgumentType("resolveAny", "hostname", "string");
             }
@@ -3011,10 +3000,8 @@ pub fn setLocalAddress(self: *Resolver, globalThis: *jsc.JSGlobalObject, callfra
 
 pub fn setChannelLocalAddresses(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             const arguments = callframe.arguments();
-            if ((arguments.len == 0)) {
-                return globalThis.throwNotEnoughArguments("setLocalAddress", 1, 0);
-            }
-            const first_af = try setChannelLocalAddress(channel, globalThis, arguments[0]);
+            const first_arg = (if ((arguments.len == 0)) jsc.JSValue.js_undefined else arguments[0]);
+            const first_af = try setChannelLocalAddress(channel, globalThis, first_arg);
             if (((arguments.len < 2) or arguments[1].isUndefined())) {
                 return jsc.JSValue.js_undefined;
             }
@@ -3064,10 +3051,7 @@ pub fn setChannelServers(channel: *c_ares.Channel, globalThis: *jsc.JSGlobalObje
                 return globalThis.ERR(.DNS_SET_SERVERS_FAILED, "Failed to set servers: there are pending queries", .{}).throw();
             }
             const arguments = callframe.arguments();
-            if ((arguments.len == 0)) {
-                return globalThis.throwNotEnoughArguments("setServers", 1, 0);
-            }
-            const argument = arguments[0];
+            const argument = (if ((arguments.len == 0)) jsc.JSValue.js_undefined else arguments[0]);
             if ((!argument.isArray())) {
                 return globalThis.throwInvalidArgumentType("setServers", "servers", "array");
             }

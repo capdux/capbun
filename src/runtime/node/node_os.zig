@@ -565,7 +565,10 @@ pub fn cpusImplDarwin(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
         var cpu_index: u32 = 0;
         _ = &cpu_index;
         while ((cpu_index < num_cpus)) : (cpu_index = (cpu_index + 1)) {
-            const times = CPUTimes{ .user = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[0] * multiplier), .nice = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[3] * multiplier), .sys = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[1] * multiplier), .idle = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[2] * multiplier), .irq = 0 };
+            const times = (blk: {
+            break :blk CPUTimes{ .user = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[0] * multiplier), .nice = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[3] * multiplier), .sys = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[1] * multiplier), .idle = (info[@as(usize, @intCast(cpu_index))].cpu_ticks[2] * multiplier), .irq = 0 };
+
+});
             const cpu = jsc.JSValue.createEmptyObject(globalThis, 3);
             _ = cpu.put(globalThis, jsc.ZigString.static("speed"), jsc.JSValue.jsNumber((speed / 1000000)));
             _ = cpu.put(globalThis, jsc.ZigString.static("model"), model_name);
@@ -1124,7 +1127,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32) !void 
 var e = jsc.SystemError{ .message = bun.String.static("no such process"), .code = bun.String.static("ESRCH"), .errno = (switch (bun.Environment.os) {
 else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.SRCH))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.SRCH))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.SRCH)))),
 .windows => libuv.UV_ESRCH,
-}), .syscall = bun.String.static("uv_os_getpriority") };
+}), .syscall = bun.String.static("uv_os_setpriority") };
         _ = &e;
         return global.throwValue(e.toErrorInstanceWithInfoObject(global));
 },
@@ -1132,7 +1135,7 @@ else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.SRCH))) == .@
 var e = jsc.SystemError{ .message = bun.String.static("permission denied"), .code = bun.String.static("EACCES"), .errno = (switch (bun.Environment.os) {
 else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.ACCES))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.ACCES))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.ACCES)))),
 .windows => libuv.UV_EACCES,
-}), .syscall = bun.String.static("uv_os_getpriority") };
+}), .syscall = bun.String.static("uv_os_setpriority") };
         _ = &e;
         return global.throwValue(e.toErrorInstanceWithInfoObject(global));
 },
@@ -1140,7 +1143,7 @@ else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.ACCES))) == .
 var e = jsc.SystemError{ .message = bun.String.static("operation not permitted"), .code = bun.String.static("EPERM"), .errno = (switch (bun.Environment.os) {
 else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.SRCH))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.SRCH))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.SRCH)))),
 .windows => libuv.UV_ESRCH,
-}), .syscall = bun.String.static("uv_os_getpriority") };
+}), .syscall = bun.String.static("uv_os_setpriority") };
         _ = &e;
         return global.throwValue(e.toErrorInstanceWithInfoObject(global));
 },

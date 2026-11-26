@@ -2425,3 +2425,9 @@
 - `src/runtime/api/html_rewriter.cp` (.zig)
 - `src/cli/Arguments.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 10 测试收敛提交
+- `src/runtime/dns_jsc/dns.cp` (.zig), `src/runtime/node/node_os.cp` (.zig), `src/js/node/os.ts`, `src/js/node/net.ts`
+- `src/runtime/api/bun/js_bun_spawn_bindings.cp` (.zig), `src/cli/exec_command.cp` (.zig), `src/libarchive/libarchive.cp` (.zig), `src/runtime/api/Archive.cp` (.zig)
+- `src/jsc/web_worker.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`

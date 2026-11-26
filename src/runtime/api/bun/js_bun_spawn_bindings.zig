@@ -386,14 +386,22 @@ pub fn spawnMaybeSync(globalThis: *jsc.JSGlobalObject, args_: JSValue, secondary
                     _ = &argv0_;
                     const argv0_str = try argv0_.getZigString(globalThis);
                     if ((argv0_str.len > 0)) {
-                        argv0 = try argv0_str.toOwnedSliceZ(allocator);
+                        const owned_argv0 = try argv0_str.toOwnedSliceZ(allocator);
+                        if (strings.containsChar(owned_argv0, 0)) {
+                            return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'options.argv0' must be a string without null bytes. Received {f}", .{ bun.fmt.quote(owned_argv0) }).throw();
+                        }
+                        argv0 = owned_argv0;
                     }
                 }
                 if (try args.getTruthy(globalThis, "cwd")) |cwd_| {
                     _ = &cwd_;
                     const cwd_str = try cwd_.getZigString(globalThis);
                     if ((cwd_str.len > 0)) {
-                        cwd = try cwd_str.toOwnedSliceZ(allocator);
+                        const owned_cwd = try cwd_str.toOwnedSliceZ(allocator);
+                        if (strings.containsChar(owned_cwd, 0)) {
+                            return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'options.cwd' must be a string without null bytes. Received {f}", .{ bun.fmt.quote(owned_cwd) }).throw();
+                        }
+                        cwd = owned_cwd;
                     }
                 }
             }

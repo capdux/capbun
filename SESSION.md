@@ -1057,3 +1057,10 @@
 - **`bundler/resolver`**：`types.cp` `FileSystemFlags.w` 补全 `| O.TRUNC` -> **16 pass, 0 fail**（100% 通过）。
 - **`config/bunfig`**：`Arguments.cp` 新增 `joinConfigPath` / `unreadableConfig` 与 `MAX_PATH_BYTES` / `ENAMETOOLONG` 边界校验 -> **33 pass, 15 fail**（从 25 fail 收敛，所有 `ENAMETOOLONG` 通过）。
 - **`js/workerd`**：`html_rewriter.cp` 修复 `createLOLHTMLError` `unprotect` 泄漏、`EndTagHandler` 释放与 `is_async` `unhandledRejectionScope` 捕获。
+
+### 2026-11-26 Batch 10 测试修复与验证（`node/os` / `node/dns` / `bun/spawn` / `bun/archive` / `worker_threads`）
+- **`node/os`**：`node_os.cp` 修正 `uv_os_setpriority` 与 `unsafe`，`os.ts` 包装 Node 签名与校验 -> **58 pass, 1 fail**（59 tests）。
+- **`node/dns`**：`dns.cp` 移除 5 处 `throwNotEnoughArguments` 缺参转 `undefined` -> 原 10 项全绿（15 pass, 8 fail）。
+- **`bun/spawn`**：`js_bun_spawn_bindings.cp` 增加 `argv0`/`cwd` null-byte 校验，`exec_command.cp` 清理 `NODE_CHANNEL_FD` -> **0 fail**（原 6 项全清零）。
+- **`bun/archive`**：`libarchive.cp` 与 `Archive.cp` 修复 `entry.perm() & 0o777`、超长路径跳过、`readNextHeader` `.failed/.fatal` 与 `readClose()` 校验 -> 收敛至 2 fail。
+- **`node/net` & `worker_threads`**：`net.ts` 补 `SocketHandlers2.close` 取消回调，`web_worker.cp` 补 `.pending` 退出码 13 分支。

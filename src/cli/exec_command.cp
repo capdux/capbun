@@ -9,6 +9,8 @@ pub struct ExecCommand {
             null,
         )?;
         bundle.runEnvLoader(bundle.options.env.disable_default_env_files)?;
+        * = bundle.env.map.map.fetchSwapRemove("NODE_CHANNEL_FD");
+        * = bundle.env.map.map.fetchSwapRemove("NODE_CHANNEL_SERIALIZATION_MODE");
         let buf: bun.PathBuffer = undefined;
         const cwd = switch (bun.sys.getcwd(&buf)) {
             .result => |p| p,

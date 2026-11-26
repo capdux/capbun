@@ -250,12 +250,18 @@ fn extractToDiskFiltered(
 
     let count: u32 = 0;
     let entry_buf: [1]*lib.Archive.Entry = [undefined];
-    while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
+    while (true) {
+        switch (archive.readNextHeader(unsafe { &entry_buf })) {
+            .eof => break,
+            .retry => continue,
+            .failed | .fatal => return error.ReadError,
+            .ok | .warn => {},
+        }
         const entry = entry_buf[0];
         const pathname = entry.pathnameUtf8();
 
-        // Validate path safety (reject absolute paths, path traversal)
-        if (!isSafePath(pathname)) continue;
+        // Validate path safety (reject absolute paths, path traversal, overlong paths)
+        if (!isSafePath(pathname) || pathname.len >= bun.MAX_PATH_BYTES) continue;
 
         // Apply glob pattern filtering. Supports negative patterns with "!" prefix.
         // Positive patterns: at least one must match
@@ -303,7 +309,12 @@ fn extractToDiskFiltered(
                     while (remaining > 0) {
                         const to_read = @min(remaining, buf.len);
                         const read = archive.readData(buf[0..to_read]);
-                        if (read <= 0) {
+                        if (read < 0) {
+                            * = file_fd.close();
+                            * = dir_fd.unlinkat(pathname);
+                            return error.ReadError;
+                        }
+                        if (read == 0) {
                             write_success = false;
                             break;
                         }
@@ -357,6 +368,11 @@ fn extractToDiskFiltered(
             },
             else => {},
         }
+    }
+
+    const close_res = archive.readClose();
+    if (close_res != .ok && close_res != .eof) {
+        return error.ReadError;
     }
 
     return count;
@@ -772,7 +788,19 @@ struct FilesContext {
         let entries_guard = FileEntryListGuard{};
 
         let entry_buf: [1]*lib.Archive.Entry = [undefined];
-    while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
+    while (true) {
+        switch (archive.readNextHeader(unsafe { &entry_buf })) {
+            .eof => break,
+            .retry => continue,
+            .failed | .fatal => {
+                if (e := cloneErrorString(archive)) {
+                    return Result{ libarchive_err: e };
+                } else {
+                    return Result{ @"err": error.ReadError };
+                }
+            },
+            .ok | .warn => {},
+        }
         const entry = entry_buf[0];
             if (entry.filetype() != @intFromEnum(lib.FileType.regular)) continue;
 
@@ -809,6 +837,15 @@ struct FilesContext {
             entries_guard.list.append(bun.default_allocator, { path: path_copy.slice, data: data_guard.slice, mtime: mtime })?;
             * = path_copy.take();
             * = data_guard.take();
+        }
+
+        const close_res = archive.readClose();
+        if (close_res != .ok && close_res != .eof) {
+            if (e := cloneErrorString(archive)) {
+                return Result{ libarchive_err: e };
+            } else {
+                return Result{ @"err": error.ReadError };
+            }
         }
 
         return { success: entries_guard.take() };

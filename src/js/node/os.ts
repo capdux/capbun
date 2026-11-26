@@ -1,4 +1,6 @@
 // Hardcoded module "node:os"
+const { validateInt32 } = require("internal/validators");
+
 var tmpdir = function () {
   var env = Bun.env;
 
@@ -102,16 +104,37 @@ function bound(binding) {
         : $bundleError("TODO: endianness");
     },
     freemem: binding.freemem,
-    getPriority: binding.getPriority,
-    homedir: binding.homedir,
-    hostname: binding.hostname,
-    loadavg: binding.loadavg,
-    networkInterfaces: binding.networkInterfaces,
+    getPriority: function getPriority(pid) {
+      if (pid === undefined) pid = 0;
+      else validateInt32(pid, "pid");
+      return binding.getPriority(pid);
+    },
+    homedir: function homedir() {
+      return binding.homedir();
+    },
+    hostname: function hostname() {
+      return binding.hostname();
+    },
+    loadavg: function loadavg() {
+      return binding.loadavg();
+    },
+    networkInterfaces: function networkInterfaces() {
+      return binding.networkInterfaces();
+    },
     platform: function () {
       return process.platform;
     },
     release: binding.release,
-    setPriority: binding.setPriority,
+    setPriority: function setPriority(pid, priority) {
+      if (priority === undefined) {
+        priority = pid;
+        pid = 0;
+      } else {
+        validateInt32(pid, "pid");
+      }
+      validateInt32(priority, "priority", -20, 19);
+      return binding.setPriority(pid, priority);
+    },
     get tmpdir() {
       return tmpdir;
     },
@@ -127,8 +150,15 @@ function bound(binding) {
               ? "FreeBSD"
               : $bundleError("TODO: type");
     },
-    uptime: binding.uptime,
-    userInfo: binding.userInfo,
+    uptime: function uptime() {
+      return binding.uptime();
+    },
+    userInfo: function userInfo(options) {
+      if (typeof options === "object" && options !== null && !Array.isArray(options)) {
+        return binding.userInfo(options);
+      }
+      return binding.userInfo();
+    },
     version: binding.version,
     machine: function () {
       // TODO: linux arm64 should also return "aarch64" (Node/uname compat) —

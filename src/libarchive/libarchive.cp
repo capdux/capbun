@@ -56,6 +56,7 @@ export struct BufferReadStream {
     block_size: usize = 16384,
     archive: *Archive!,
     reading: bool = false,
+    closed: bool = false,
 
     pub fn init(*_, buf: []const u8) {
         unsafe {
@@ -64,12 +65,16 @@ export struct BufferReadStream {
                 pos: 0,
                 archive: Archive.readNew(),
                 reading: false,
+                closed: false,
             };
         }
     }
 
     pub fn deinit(*_) {
-        * = _.archive.readClose();
+        if (!_.closed) {
+            * = _.archive.readClose();
+            _.closed = true;
+        }
         * = _.archive.readFree();
     }
 
@@ -424,9 +429,11 @@ export struct Archiver {
                     }
 
                     const rest = tokenizer.rest();
+                    if (rest.len >= normalized_buf.len) continue :loop;
                     const pathname_rest = unsafe { rest.ptr[0..rest.len :0] };
 
                     const normalized = bun.path.normalizeBufT(bun.OSPathChar, pathname_rest, *normalized_buf, .auto);
+                    if (normalized.len >= normalized_buf.len) continue :loop;
                     normalized_buf[normalized.len] = 0;
                     const path: [:0]bun.OSPathChar = normalized_buf[0..normalized.len :0];
                     if (path.len == 0 || (path.len == 1 && path[0] == '.')) continue;
@@ -461,7 +468,7 @@ export struct Archiver {
 
                     switch (kind) {
                         .directory => {
-                            let mode = i32(@intCast(entry.perm()));
+                            let mode = i32(@intCast(entry.perm() & 0o777));
 
                             if ((mode & 0o400) != 0) mode |= 0o100;
                             if ((mode & 0o40) != 0) mode |= 0o10;
@@ -501,7 +508,7 @@ export struct Archiver {
                             }
                         },
                         .file => {
-                            const mode: bun.Mode = if (comptime Environment.isWindows) 0 else @intCast(entry.perm() | 0o666);
+                            const mode: bun.Mode = if (comptime Environment.isWindows) 0 else @intCast((entry.perm() & 0o777) | 0o666);
 
                             const flags = bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC;
                             let file_handle_native: bun.FD = undefined;
@@ -623,6 +630,12 @@ export struct Archiver {
                     }
                 },
             }
+        }
+
+        const close_res = stream.archive.readClose();
+        stream.closed = true;
+        if (close_res != .ok && close_res != .eof) {
+            return error.Fail;
         }
 
         return count;

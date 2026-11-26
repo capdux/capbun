@@ -255,7 +255,11 @@ pub fn spawnMaybeSync(
             if (argv0_ := args.getTruthy(globalThis, "argv0")?) {
                 const argv0_str = argv0_.getZigString(globalThis)?;
                 if (argv0_str.len > 0) {
-                    argv0 = argv0_str.toOwnedSliceZ(allocator)?;
+                    const owned_argv0 = argv0_str.toOwnedSliceZ(allocator)?;
+                    if (strings.containsChar(owned_argv0, 0)) {
+                        return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'options.argv0' must be a string without null bytes. Received {f}", .{ bun.fmt.quote(owned_argv0) }).throw();
+                    }
+                    argv0 = owned_argv0;
                 }
             }
 
@@ -263,7 +267,11 @@ pub fn spawnMaybeSync(
             if (cwd_ := args.getTruthy(globalThis, "cwd")?) {
                 const cwd_str = cwd_.getZigString(globalThis)?;
                 if (cwd_str.len > 0) {
-                    cwd = cwd_str.toOwnedSliceZ(allocator)?;
+                    const owned_cwd = cwd_str.toOwnedSliceZ(allocator)?;
+                    if (strings.containsChar(owned_cwd, 0)) {
+                        return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'options.cwd' must be a string without null bytes. Received {f}", .{ bun.fmt.quote(owned_cwd) }).throw();
+                    }
+                    cwd = owned_cwd;
                 }
             }
         }

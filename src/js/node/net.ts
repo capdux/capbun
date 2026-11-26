@@ -544,7 +544,13 @@ const SocketHandlers2: SocketHandler<NonNullable<import("node:net").Socket["_han
   },
   close(socket, err) {
     $debug("Bun.Socket close");
-    let { self } = socket.data;
+    let { self, req } = socket.data;
+    if (req) {
+      socket.data.req = undefined;
+      if (typeof req.oncomplete === "function") {
+        req.oncomplete(UV_ECANCELED, socket, req, false, false);
+      }
+    }
     if (err) $debug(err);
     if (self[kclosed]) return;
     self[kclosed] = true;
