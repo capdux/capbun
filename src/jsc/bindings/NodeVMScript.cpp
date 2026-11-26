@@ -167,17 +167,12 @@ constructScript(JSGlobalObject* globalObject, CallFrame* callFrame, JSValue newT
                 codeBlock = JSC::ProgramCodeBlock::create(vm, executable, unlinkedBlock, jsScope);
                 RETURN_IF_EXCEPTION(scope, {});
             }
-            if (JSC::Options::useJIT()) {
-                JSC::CompilationResult compilationResult = JIT::compileSync(vm, codeBlock, JITCompilationEffort::JITCompilationCanFail);
-                if (compilationResult != JSC::CompilationResult::CompilationFailed) {
-                    executable->installCode(codeBlock);
-                    script->cachedDataRejected(TriState::False);
-                } else {
-                    script->cachedDataRejected(TriState::True);
-                }
-            } else {
+            JSC::CompilationResult compilationResult = JIT::compileSync(vm, codeBlock, JITCompilationEffort::JITCompilationCanFail);
+            if (compilationResult != JSC::CompilationResult::CompilationFailed) {
                 executable->installCode(codeBlock);
                 script->cachedDataRejected(TriState::False);
+            } else {
+                script->cachedDataRejected(TriState::True);
             }
         }
     } else if (produceCachedData) {

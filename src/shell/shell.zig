@@ -2203,16 +2203,26 @@ pub fn combineErrors(self: *Parser) []const u8 {
                 _ = &e;
                 i = (i + e.msg.len);
             }
+            if ((errors.len > 1)) {
+                i = (i + (errors.len - 1));
+            }
             break :size i;
 };
             var buf = bun.handleOom(self.alloc.alloc(u8, size));
             _ = &buf;
             var i: usize = 0;
             _ = &i;
+            var idx: usize = 0;
+            _ = &idx;
             for (cp_iter_slice(errors)) |e| {
                 _ = &e;
+                if ((idx > 0)) {
+                    buf[cp_cast_int(usize, i)] = 10;
+                    i = (i + 1);
+                }
                 _ = @memcpy(buf[i..(i + e.msg.len)], e.msg);
                 i = (i + e.msg.len);
+                idx = (idx + 1);
             }
             break :str buf;
 };
@@ -2339,16 +2349,26 @@ pub fn combineErrors(self: *const LexResult, allocator: Allocator) []const u8 {
                 _ = &e;
                 i = (i + e.msg.len());
             }
+            if ((errors.len > 1)) {
+                i = (i + (errors.len - 1));
+            }
             break :size i;
 };
             var buf = bun.handleOom(allocator.alloc(u8, size));
             _ = &buf;
             var i: usize = 0;
             _ = &i;
+            var idx: usize = 0;
+            _ = &idx;
             for (cp_iter_slice(errors)) |e| {
                 _ = &e;
+                if ((idx > 0)) {
+                    buf[cp_cast_int(usize, i)] = 10;
+                    i = (i + 1);
+                }
                 _ = @memcpy(buf[i..(i + e.msg.len())], e.msg.slice(self.strpool));
                 i = (i + e.msg.len());
+                idx = (idx + 1);
             }
             break :str buf;
 };

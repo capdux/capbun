@@ -178,7 +178,20 @@ pub union(enum) CryptoHasher {
     pub const Extern = CryptoHasherExtern;
 
     pub const digest = jsc.host_fn.wrapInstanceMethod(CryptoHasher, "digest_", false);
-    pub const hash = jsc.host_fn.wrapStaticMethod(CryptoHasher, "hash_", false);
+    pub const hash = hashJS;
+
+    static fn hashJS(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        const arguments = callframe.arguments_old(3);
+        const args = arguments.ptr[0..arguments.len];
+        if (args.len < 1 || args[0].isEmptyOrUndefinedOrNull() || !args[0].isString()) {
+            return globalThis.ERR(.INVALID_ARG_TYPE, "algorithm must be a string", .{}).throw();
+        }
+        const algorithm = args[0].getZigString(globalThis)?;
+        const input_arg = if (args.len > 1) args[1] else JSValue.js_undefined;
+        const output_arg = if (args.len > 2) args[2] else JSValue.js_undefined;
+        let parsed = parseHashArgs(globalThis, input_arg, output_arg)?;
+        return hash_(globalThis, algorithm, parsed.input, parsed.output);
+    }
 
     fn throwHmacConsumed(globalThis: *jsc.JSGlobalObject): bun.JSError {
         return globalThis.throw("HMAC has been consumed and is no longer usable", .{});
@@ -214,7 +227,7 @@ pub union(enum) CryptoHasher {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-        if (input == .blob && input.blob.isBunFile()) {
+        if (input == .blob && (input.blob.isBunFile() || input.blob.isS3())) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
@@ -234,7 +247,7 @@ pub union(enum) CryptoHasher {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-        if (input == .blob && input.blob.isBunFile()) {
+        if (input == .blob && (input.blob.isBunFile() || input.blob.isS3())) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
@@ -404,7 +417,7 @@ pub union(enum) CryptoHasher {
         }
         let buf = buffer_opt.?;
         const buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buf } };
-        if (buf == .blob && buf.blob.isBunFile()) {
+        if (buf == .blob && (buf.blob.isBunFile() || buf.blob.isS3())) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
@@ -623,7 +636,7 @@ struct CryptoHasherZig {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-        if (input == .blob && input.blob.isBunFile()) {
+        if (input == .blob && (input.blob.isBunFile() || input.blob.isS3())) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
@@ -642,7 +655,7 @@ struct CryptoHasherZig {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-        if (input == .blob && input.blob.isBunFile()) {
+        if (input == .blob && (input.blob.isBunFile() || input.blob.isS3())) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
         }
 
@@ -749,6 +762,56 @@ struct CryptoHasherZig {
     }
 }
 
+const ParsedHashArgs = struct {
+    input: jsc.Node.BlobOrStringOrBuffer,
+    output: jsc.Node.StringOrBuffer?,
+};
+
+fn coerceHashInputPre(globalThis: *JSGlobalObject, input_arg: JSValue): bun.JSError!JSValue {
+    if (input_arg.isEmptyOrUndefinedOrNull()) {
+        return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+    }
+    if (input_arg.isString()) {
+        return input_arg;
+    }
+    if (input_arg.isStringObjectLike()) {
+        const js_str = input_arg.toJSString(globalThis)?;
+        return js_str.toJS();
+    }
+    if (input_arg.isCell() && (input_arg.jsType().isArrayBufferLike() || input_arg.as(jsc.WebCore.Blob) != null)) {
+        return input_arg;
+    }
+    return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+}
+
+fn parseHashOutput(globalThis: *JSGlobalObject, output_arg: JSValue): bun.JSError!(jsc.Node.StringOrBuffer?) {
+    if (output_arg.isUndefined()) {
+        return null;
+    }
+    if (output_arg.isString() || output_arg.isStringObjectLike() || (output_arg.isCell() && output_arg.jsType().isArrayBufferLike())) {
+        return jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, output_arg);
+    }
+    return globalThis.ERR(.INVALID_ARG_TYPE, "output must be of type string or ArrayBuffer or ArrayBufferView", .{}).throw();
+}
+
+fn parseHashArgs(globalThis: *JSGlobalObject, input_arg: JSValue, output_arg: JSValue): bun.JSError!ParsedHashArgs {
+    const coerced_input = coerceHashInputPre(globalThis, input_arg)?;
+    let output_val = parseHashOutput(globalThis, output_arg)?;
+    const input_opt = jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, coerced_input) catch e => {
+        if (*o := output_val) {
+            o.deinit();
+        }
+        return e;
+    };
+    const input_val = input_opt ?? {
+        if (*o := output_val) {
+            o.deinit();
+        }
+        return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+    };
+    return ParsedHashArgs{ input: input_val, output: output_val };
+}
+
 pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): type {
     return struct {
         hashing: Hasher = .{},
@@ -762,7 +825,16 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         pub const fromJSDirect = js.fromJSDirect;
 
         pub const digest = host_fn.wrapInstanceMethod(ThisHasher, "digest_", false);
-        pub const hash = host_fn.wrapStaticMethod(ThisHasher, "hash_", false);
+        pub const hash = hashJS;
+
+        pub static fn hashJS(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+            const arguments = callframe.arguments_old(2);
+            const args = arguments.ptr[0..arguments.len];
+            const input_arg = if (args.len > 0) args[0] else JSValue.js_undefined;
+            const output_arg = if (args.len > 1) args[1] else JSValue.js_undefined;
+            const parsed = parseHashArgs(globalThis, input_arg, output_arg)?;
+            return hash_(globalThis, parsed.input, parsed.output);
+        }
 
         pub fn getByteLength(
             _: *@This(),
@@ -785,7 +857,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         static fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding): jsc.JSValue ! bun.JSError {
             let output_digest_buf: Hasher.Digest = undefined;
 
-            if (input == .blob && input.blob.isBunFile()) {
+            if (input == .blob && (input.blob.isBunFile() || input.blob.isS3())) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
 
@@ -832,7 +904,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             let input_val = input;
             const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-            if (input == .blob && input.blob.isBunFile()) {
+            if (input == .blob && (input.blob.isBunFile() || input.blob.isS3())) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
 
@@ -872,9 +944,6 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
         }
 
         pub fn update(*_, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
-            if (_.digested) {
-                return globalThis.ERR(.INVALID_STATE, name ++ " hasher already digested, create a new instance to update", .{}).throw();
-            }
             const thisValue = callframe.this();
             const input = callframe.argument(0);
             if (input.isEmptyOrUndefinedOrNull()) {
@@ -887,7 +956,10 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             let buf = buffer;
             const buf_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &buf } };
 
-            if (buffer == .blob && buffer.blob.isBunFile()) {
+            if (_.digested) {
+                return globalThis.ERR(.INVALID_STATE, name ++ " hasher already digested, create a new instance to update", .{}).throw();
+            }
+            if (buffer == .blob && (buffer.blob.isBunFile() || buffer.blob.isS3())) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             _.hashing.update(buffer.slice());

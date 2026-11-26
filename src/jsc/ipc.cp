@@ -131,7 +131,14 @@ pub enum AdvancedIPCMessageType: u8 {
     Version = 1,
     SerializedMessage = 2,
     SerializedInternalMessage = 3,
+    SerializedMessageWithBuffers = 4,
+    SerializedInternalMessageWithBuffers = 5,
     _,
+}
+
+@c {
+    fn Bun__wrapIPCBufferEnvelope(global: *jsc.JSGlobalObject, val: JSValue): JSValue;
+    fn Bun__unwrapIPCBufferEnvelope(global: *jsc.JSGlobalObject, val: JSValue): JSValue;
 }
 
 @c pub struct AdvancedVersionPacket {
@@ -192,6 +199,32 @@ pub struct advanced {
                     message: DecodedIPCMessage{ internal: deserialized },
                 };
             },
+            .SerializedMessageWithBuffers => {
+                if (data.len - header_length < message_len) {
+                    log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
+                    return IPCDecodeError.NotEnoughBytes;
+                }
+                const message = data[header_length..][0..message_len];
+                const deserialized = (JSValue.deserialize(message, global))?;
+                const unwrapped = Bun__unwrapIPCBufferEnvelope(global, deserialized);
+                return DecodeIPCMessageResult{
+                    bytes_consumed: header_length + message_len,
+                    message: DecodedIPCMessage{ data: unwrapped },
+                };
+            },
+            .SerializedInternalMessageWithBuffers => {
+                if (data.len - header_length < message_len) {
+                    log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
+                    return IPCDecodeError.NotEnoughBytes;
+                }
+                const message = data[header_length..][0..message_len];
+                const deserialized = (JSValue.deserialize(message, global))?;
+                const unwrapped = Bun__unwrapIPCBufferEnvelope(global, deserialized);
+                return DecodeIPCMessageResult{
+                    bytes_consumed: header_length + message_len,
+                    message: DecodedIPCMessage{ internal: unwrapped },
+                };
+            },
             _ => {
                 return IPCDecodeError.InvalidFormat;
             },
@@ -209,7 +242,10 @@ pub struct advanced {
     }
 
     pub static fn serialize(writer: *bun.io.StreamBuffer, global: *jsc.JSGlobalObject, value: JSValue, is_internal: IsInternal): !usize {
-        let serialized = (value.serialize(global, .{
+        const envelope = Bun__wrapIPCBufferEnvelope(global, value);
+        const has_buffers = !envelope.isNull();
+        const target_value = if (has_buffers) envelope else value;
+        let serialized = (target_value.serialize(global, .{
             // IPC sends across process.
             .forCrossProcessTransfer = true,
             .forStorage = false,
@@ -221,10 +257,17 @@ pub struct advanced {
 
         (writer.ensureUnusedCapacity(payload_length))?;
 
-        writer.writeTypeAsBytesAssumeCapacity(IPCMessageType, switch (is_internal) {
-            .internal => .SerializedInternalMessage,
-            .external => .SerializedMessage,
-        });
+        const msg_type: IPCMessageType = if (has_buffers)
+            switch (is_internal) {
+                .internal => .SerializedInternalMessageWithBuffers,
+                .external => .SerializedMessageWithBuffers,
+            }
+        else
+            switch (is_internal) {
+                .internal => .SerializedInternalMessage,
+                .external => .SerializedMessage,
+            };
+        writer.writeTypeAsBytesAssumeCapacity(IPCMessageType, msg_type);
         writer.writeTypeAsBytesAssumeCapacity(u32, size);
         writer.writeAssumeCapacity(serialized.data);
 
@@ -1345,6 +1388,18 @@ fn onData2(send_queue: *SendQueue, all_data: []const u8) {
                 handleIPCMessage(send_queue, result.message, globalThis);
                 json_buf.consume(result.bytes_consumed);
             }
+
+            const remaining = json_buf.activeSlice();
+            const max_len: usize = @min(jsc.VirtualMachine.string_allocation_limit, @as(usize, std.math.maxInt(i32)));
+            const too_long = if (bun.strings.isAllASCII(remaining))
+                remaining.len > max_len
+            else
+                remaining.len > max_len *| 3;
+            if (too_long) {
+                Output.printErrorln("IPC message is too long.", .{});
+                send_queue.closeSocket(.failure, .user);
+                return;
+            }
         },
         .advanced => {
             const adv_buf = &send_queue.incoming.advanced;
@@ -1583,6 +1638,18 @@ pub struct IPCWindowsNamedPipeHandler {
 
                     handleIPCMessage(send_queue, result.message, globalThis);
                     json_buf.consume(result.bytes_consumed);
+                }
+
+                const remaining = json_buf.activeSlice();
+                const max_len: usize = @min(jsc.VirtualMachine.string_allocation_limit, @as(usize, std.math.maxInt(i32)));
+                const too_long = if (bun.strings.isAllASCII(remaining))
+                    remaining.len > max_len
+                else
+                    remaining.len > max_len *| 3;
+                if (too_long) {
+                    Output.printErrorln("IPC message is too long.", .{});
+                    send_queue.closeSocket(.failure, .user);
+                    return;
                 }
             },
             .advanced => {

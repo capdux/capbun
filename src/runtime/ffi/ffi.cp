@@ -94,7 +94,7 @@ union(enum) CompileCSource {
     fn first(): [:0]const u8 {
         return switch (_.*) {
             .file => _.file,
-            .files => _.files.items[0],
+            .files => if (_.files.items.len > 0) _.files.items[0] else "",
         };
     }
 
@@ -1551,17 +1551,17 @@ pub struct FFIFunction {
     }
 
 pub struct CompilerRTSources {
-    const @"stdbool.h" = @embedFile("./ffi-stdbool.h");
-    const @"stdarg.h" = @embedFile("./ffi-stdarg.h");
-    const @"stdnoreturn.h" = @embedFile("./ffi-stdnoreturn.h");
-    const @"stdalign.h" = @embedFile("./ffi-stdalign.h");
-    const @"tgmath.h" = @embedFile("./ffi-tgmath.h");
-    const @"stddef.h" = @embedFile("./ffi-stddef.h");
-    const @"varargs.h" = "// empty";
-    const @"node_api.h" = @embedFile("../../napi/node_api.h");
-    const @"node_api_types.h" = @embedFile("../../napi/node_api_types.h");
-    const @"js_native_api.h" = @embedFile("../../napi/js_native_api.h");
-    const @"js_native_api_types.h" = @embedFile("../../napi/js_native_api_types.h");
+    pub const @"stdbool.h" = @embedFile("./ffi-stdbool.h");
+    pub const @"stdarg.h" = @embedFile("./ffi-stdarg.h");
+    pub const @"stdnoreturn.h" = @embedFile("./ffi-stdnoreturn.h");
+    pub const @"stdalign.h" = @embedFile("./ffi-stdalign.h");
+    pub const @"tgmath.h" = @embedFile("./ffi-tgmath.h");
+    pub const @"stddef.h" = @embedFile("./ffi-stddef.h");
+    pub const @"varargs.h" = "// empty";
+    pub const @"node_api.h" = @embedFile("../../napi/node_api.h");
+    pub const @"node_api_types.h" = @embedFile("../../napi/node_api_types.h");
+    pub const @"js_native_api.h" = @embedFile("../../napi/js_native_api.h");
+    pub const @"js_native_api_types.h" = @embedFile("../../napi/js_native_api_types.h");
 }
 
 const BunCallFnType = @TypeOf(jsc.C.JSObjectCallAsFunction);
@@ -2029,6 +2029,9 @@ fn ffi_cc(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue!b
                 const zstr = value.getZigString(globalThis)?;
                 compile_c.source.files.append(bun.default_allocator, zstr.toOwnedSliceZ(bun.default_allocator)?)?;
             }
+            if (compile_c.source.files.items.len == 0) {
+                return globalThis.throwInvalidArgumentValueCustom("source", source_value, "must have at least one file");
+            }
         } else if (!source_value.isString()) {
             return globalThis.throwInvalidArgumentTypeValue("source", "string", source_value);
         } else {
@@ -2205,30 +2208,38 @@ fn ffi_open(global: *JSGlobalObject, name_str: ZigString, object_value: jsc.JSVa
     }
 
     let dylib: std.DynLib = brk: {
-        break :brk std.DynLib.open(name) catch {
-            const backup_names: [1]string = [name];
-            const backup_name = Fs.FileSystem.instance.abs(&backup_names);
-            break :brk std.DynLib.open(backup_name) catch {
-                const dlerror_buf = getDlErrorOpt(bun.default_allocator);
-                defer {
-                    if (buf := dlerror_buf) bun.default_allocator.free(buf);
+        if (name.len < max_path_bytes) {
+            if (lib := (std.DynLib.open(name) catch null)) {
+                break :brk lib;
+            }
+        }
+        let abs_buf: [max_path_bytes]u8 = undefined;
+        const backup_names: [1]string = [name];
+        if (backup_name := Fs.FileSystem.instance.absBufChecked(&backup_names, &abs_buf)) {
+            if (backup_name.len < max_path_bytes) {
+                if (lib := (std.DynLib.open(backup_name) catch null)) {
+                    break :brk lib;
                 }
-                const dlerror_msg = dlerror_buf ?? "unknown error";
+            }
+        }
+        const dlerror_buf = getDlErrorOpt(bun.default_allocator);
+        defer {
+            if (buf := dlerror_buf) bun.default_allocator.free(buf);
+        }
+        const dlerror_msg = dlerror_buf ?? "unknown error";
 
-                const msg = bun.handleOom(std.fmt.allocPrint(
-                    bun.default_allocator,
-                    "Failed to open library \"{s}\": {s}",
-                    .{ name, dlerror_msg },
-                ));
-                const _msg_guard = DefaultAllocFreeGuard<@TypeOf(msg)>{ slice: msg };
-                const system_error = jsc.SystemError{
-                    .code = bun.String.cloneUTF8(@tagName(.ERR_DLOPEN_FAILED)),
-                    .message = bun.String.cloneUTF8(msg),
-                    .syscall = bun.String.cloneUTF8("dlopen"),
-                };
-                return system_error.toErrorInstance(global);
-            };
+        const msg = bun.handleOom(std.fmt.allocPrint(
+            bun.default_allocator,
+            "Failed to open library \"{s}\": {s}",
+            .{ name, dlerror_msg },
+        ));
+        const _msg_guard = DefaultAllocFreeGuard<@TypeOf(msg)>{ slice: msg };
+        const system_error = jsc.SystemError{
+            .code = bun.String.cloneUTF8(@tagName(.ERR_DLOPEN_FAILED)),
+            .message = bun.String.cloneUTF8(msg),
+            .syscall = bun.String.cloneUTF8("dlopen"),
         };
+        return system_error.toErrorInstance(global);
     };
 
     let size = symbols.values().len;

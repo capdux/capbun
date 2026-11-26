@@ -97,60 +97,39 @@ class ReadableFromWeb extends Readable {
       return;
     }
 
-    var deferredError: Error | undefined;
     try {
-      do {
-        var done = false,
-          value;
-        const firstResult = reader.readMany();
-
-        if ($isPromise(firstResult)) {
-          ({ done, value } = await firstResult);
-
-          if (this.#closed) {
-            this.#pendingChunks.push(...value);
-            return;
-          }
-        } else {
-          ({ done, value } = firstResult);
-        }
-
-        if (done) {
-          this.#handleDone(reader);
-          return;
-        }
-
-        if (!this.push(value[0])) {
-          this.#pendingChunks = value.slice(1);
-          return;
-        }
-
-        for (let i = 1, count = value.length; i < count; i++) {
-          if (!this.push(value[i])) {
-            this.#pendingChunks = value.slice(i + 1);
-            return;
-          }
-        }
-      } while (!this.#closed);
+      const { done, value } = await reader.read();
+      if (this.#closed) {
+        return;
+      }
+      if (done) {
+        this.#handleDone(reader);
+        return;
+      }
+      this.push(value);
     } catch (e) {
-      deferredError = e as Error;
+      destroyer(this, e);
     }
-
-    if (deferredError) throw deferredError;
   }
 
   _destroy(error, callback) {
     if (!this.#closed) {
+      const done = () => {
+        this.#closed = true;
+        callback(error);
+      };
       var reader = this.#reader;
       if (reader) {
         this.#reader = undefined;
-        reader.cancel(error).finally(() => {
-          this.#closed = true;
-          callback(error);
-        });
+        PromisePrototypeThen.$call(reader.cancel(error), done, done);
+        return;
       }
-
-      return;
+      var stream = this.#stream;
+      if (stream) {
+        this.#stream = undefined;
+        PromisePrototypeThen.$call(stream.cancel(error), done, done);
+        return;
+      }
     }
     try {
       callback(error);
@@ -219,8 +198,10 @@ function newWritableStreamFromStreamWritable(streamWritable) {
   let controller;
   let backpressurePromise;
   let closed;
+  let drainCount = 0;
 
   function onDrain() {
+    drainCount++;
     if (backpressurePromise !== undefined) backpressurePromise.resolve();
   }
 
@@ -263,7 +244,8 @@ function newWritableStreamFromStreamWritable(streamWritable) {
       },
 
       write(chunk) {
-        if (streamWritable.writableNeedDrain || !streamWritable.write(chunk)) {
+        const drainBefore = drainCount;
+        if ((streamWritable.writableNeedDrain || !streamWritable.write(chunk)) && drainCount === drainBefore) {
           backpressurePromise = PromiseWithResolvers();
           return SafePromisePrototypeFinally.$call(backpressurePromise.promise, () => {
             backpressurePromise = undefined;
@@ -312,9 +294,12 @@ function newStreamWritableFromWritableStream(writableStream, options = kEmptyObj
 
     writev(chunks, callback) {
       function done(error) {
-        error = error.filter(e => e);
+        if (Array.isArray(error)) {
+          error = error.filter(e => e);
+          error = error.length === 0 ? undefined : error[0];
+        }
         try {
-          callback(error.length === 0 ? undefined : error);
+          callback(error);
         } catch (error) {
           // In a next tick because this is happening within
           // a promise context, and if there are any errors
@@ -447,16 +432,34 @@ function newReadableStreamFromStreamReadable(streamReadable, options = kEmptyObj
     throw $ERR_INVALID_ARG_TYPE("streamReadable", "stream.Readable", streamReadable);
   }
 
+  validateObject(options, "options");
+  const { type } = options;
+  if (type !== undefined && type !== "bytes") {
+    throw $ERR_INVALID_ARG_VALUE("options.type", type);
+  }
+
   if (isDestroyed(streamReadable) || !isReadable(streamReadable)) {
-    const readable = new ReadableStream();
-    readable.cancel();
-    return readable;
+    return new ReadableStream({
+      ...(type === "bytes" ? { type: "bytes" } : undefined),
+      start(c) {
+        if (streamReadable.errored) {
+          c.error(streamReadable.errored);
+        } else {
+          c.close();
+        }
+      },
+    });
   }
 
   const objectMode = streamReadable.readableObjectMode;
   const highWaterMark = streamReadable.readableHighWaterMark;
+  const isByteStream = type === "bytes";
 
   const evaluateStrategyOrFallback = strategy => {
+    if (isByteStream) {
+      return highWaterMark !== undefined ? { highWaterMark } : undefined;
+    }
+
     // If there is a strategy available, use it
     if (strategy) return strategy;
 
@@ -475,18 +478,28 @@ function newReadableStreamFromStreamReadable(streamReadable, options = kEmptyObj
   let wasCanceled = false;
 
   function onData(chunk) {
-    // Copy the Buffer to detach it from the pool.
-    if (Buffer.isBuffer(chunk) && !objectMode) chunk = new Uint8Array(chunk);
+    if (isByteStream) {
+      if (typeof chunk === "string") {
+        chunk = encoder.encode(chunk);
+      } else if (Buffer.isBuffer(chunk)) {
+        chunk = new Uint8Array(chunk);
+      }
+    } else {
+      // Copy the Buffer to detach it from the pool.
+      if (Buffer.isBuffer(chunk) && !objectMode) chunk = new Uint8Array(chunk);
+    }
     controller.enqueue(chunk);
     if (controller.desiredSize <= 0) streamReadable.pause();
   }
 
   streamReadable.pause();
 
-  const cleanup = finished(streamReadable, error => {
+  const cleanup = finished(streamReadable, { writable: false }, error => {
     error = handleKnownInternalErrors(error);
 
     cleanup();
+    streamReadable.off("data", onData);
+    streamReadable.pause();
     // This is a protection against non-standard, legacy streams
     // that happen to emit an error event again after finished is called.
     streamReadable.on("error", () => {});
@@ -502,6 +515,7 @@ function newReadableStreamFromStreamReadable(streamReadable, options = kEmptyObj
 
   return new ReadableStream(
     {
+      ...(isByteStream ? { type: "bytes" } : undefined),
       start(c) {
         controller = c;
       },
@@ -547,7 +561,7 @@ function newStreamReadableFromReadableStream(readableStream, options: Record<str
   );
 }
 
-function newReadableWritablePairFromDuplex(duplex) {
+function newReadableWritablePairFromDuplex(duplex, options = kEmptyObject) {
   // Not using the internal/streams/utils isWritableNodeStream and
   // isReadableNodeStream utilities here because they will return false
   // if the duplex was created with writable or readable options set to
@@ -556,6 +570,17 @@ function newReadableWritablePairFromDuplex(duplex) {
   // necessary.
   if (typeof duplex?._writableState !== "object" || typeof duplex?._readableState !== "object") {
     throw $ERR_INVALID_ARG_TYPE("duplex", "stream.Duplex", duplex);
+  }
+
+  validateObject(options, "options");
+  let { readableType } = options;
+  if (options.type !== undefined) {
+    process.emitWarning(
+      "options.type is deprecated. Use options.readableType instead.",
+      "DeprecationWarning",
+      "DEP0201",
+    );
+    readableType ??= options.type;
   }
 
   if (isDestroyed(duplex)) {
@@ -570,7 +595,9 @@ function newReadableWritablePairFromDuplex(duplex) {
 
   if (!isWritable(duplex)) writable.close();
 
-  const readable = isReadable(duplex) ? newReadableStreamFromStreamReadable(duplex) : new ReadableStream();
+  const readable = isReadable(duplex)
+    ? newReadableStreamFromStreamReadable(duplex, readableType !== undefined ? { type: readableType } : undefined)
+    : new ReadableStream();
 
   if (!isReadable(duplex)) readable.cancel();
 
@@ -610,9 +637,12 @@ function newStreamDuplexFromReadableWritablePair(pair = kEmptyObject, options = 
 
     writev(chunks, callback) {
       function done(error) {
-        error = error.filter(e => e);
+        if (Array.isArray(error)) {
+          error = error.filter(e => e);
+          error = error.length === 0 ? undefined : error[0];
+        }
         try {
-          callback(error.length === 0 ? undefined : error);
+          callback(error);
         } catch (error) {
           // In a next tick because this is happening within
           // a promise context, and if there are any errors

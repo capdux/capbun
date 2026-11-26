@@ -288,10 +288,54 @@ pub fn verify(allocator: std.mem.Allocator, password: []const u8, previous_hash:
             return verifyWithAlgorithm(allocator, password, previous_hash, algo);
     }
 
+pub fn parseArgon2CostField(raw: []const u8) std.crypto.pwhash.Error!u64 {
+            const s = (if (((raw.len > 0) and (raw[0] == 43))) raw[1..] else raw);
+            if ((s.len == 0)) {
+                return error.InvalidEncoding;
+            }
+            return (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseInt(u64, s, 10)) catch |__ce_0| { _ = &__ce_0; return error.InvalidEncoding; }); });
+    }
+
+pub fn validateArgon2VerifyParams(encoded: []const u8) std.crypto.pwhash.Error!void {
+            var seg_it = std.mem.splitScalar(u8, encoded, 36);
+            _ = &seg_it;
+            while (seg_it.next()) |seg| {
+                if ((!strings.hasPrefixComptime(seg, "m="))) {
+                    continue;
+                }
+                var kv_it = std.mem.splitScalar(u8, seg, 44);
+                _ = &kv_it;
+                while (kv_it.next()) |kv| {
+                    if (strings.hasPrefixComptime(kv, "m=")) {
+                        const m = try parseArgon2CostField(kv[2..]);
+                        if ((m > ((4 * 1024) * 1024))) {
+                            return error.WeakParameters;
+                        }
+                    } else {
+                        if (strings.hasPrefixComptime(kv, "t=")) {
+                            const t = try parseArgon2CostField(kv[2..]);
+                            if ((t > 4096)) {
+                                return error.WeakParameters;
+                            }
+                        } else {
+                            if (strings.hasPrefixComptime(kv, "p=")) {
+                                const p = try parseArgon2CostField(kv[2..]);
+                                if ((p > 64)) {
+                                    return error.WeakParameters;
+                                }
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+    }
+
 pub fn verifyWithAlgorithm(allocator: std.mem.Allocator, password: []const u8, previous_hash: []const u8, algorithm: AlgorithmEnum) HashError!bool {
             switch (algorithm) {
 .argon2id, .argon2d, .argon2i => {
-_ = (blk_catch_0: { break :blk_catch_0 ((pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator })) catch |e| { _ = &e; if ((e == error.PasswordVerificationFailed)) {
+_ = try validateArgon2VerifyParams(previous_hash);
+            _ = (blk_catch_1: { break :blk_catch_1 ((pwhash.argon2.strVerify(previous_hash, password, .{ .allocator = allocator })) catch |e| { _ = &e; if ((e == error.PasswordVerificationFailed)) {
                 return false;
             }
             return e; }); });
@@ -314,7 +358,7 @@ var password_to_use = password;
                 _ = sha_512.final(outbuf[0..64]);
                 password_to_use = outbuf[0..64];
             }
-            _ = (blk_catch_1: { break :blk_catch_1 ((pwhash.bcrypt.strVerify(previous_hash, password_to_use, .{ .allocator = allocator, .silently_truncate_password = true })) catch |e| { _ = &e; if ((e == error.PasswordVerificationFailed)) {
+            _ = (blk_catch_2: { break :blk_catch_2 ((pwhash.bcrypt.strVerify(previous_hash, password_to_use, .{ .allocator = allocator, .silently_truncate_password = true })) catch |e| { _ = &e; if ((e == error.PasswordVerificationFailed)) {
                 return false;
             }
             return e; }); });
@@ -385,7 +429,7 @@ pub fn deinit(self: *HashJob_) void {
     }
 
 pub fn getValue(password: []const u8, algorithm: Algorithm_Value) HashJobResultValue {
-            const value = (blk_catch_2: { break :blk_catch_2 ((PasswordObject.hash(bun.default_allocator, password, algorithm)) catch |e| { _ = &e; return HashJobResultValue{ .err = e }; }); });
+            const value = (blk_catch_3: { break :blk_catch_3 ((PasswordObject.hash(bun.default_allocator, password, algorithm)) catch |e| { _ = &e; return HashJobResultValue{ .err = e }; }); });
             return HashJobResultValue{ .hash = value };
     }
 
@@ -459,7 +503,7 @@ pub fn deinit(self: *VerifyJob_) void {
     }
 
 pub fn getValue(password: []const u8, prev_hash: []const u8, algorithm: ?AlgorithmEnum) VerifyJobResultValue {
-            const pass = (blk_catch_3: { break :blk_catch_3 ((PasswordObject.verify(bun.default_allocator, password, prev_hash, algorithm)) catch |e| { _ = &e; return VerifyJobResultValue{ .err = e }; }); });
+            const pass = (blk_catch_4: { break :blk_catch_4 ((PasswordObject.verify(bun.default_allocator, password, prev_hash, algorithm)) catch |e| { _ = &e; return VerifyJobResultValue{ .err = e }; }); });
             return VerifyJobResultValue{ .pass = pass };
     }
 
@@ -546,7 +590,7 @@ pub fn JSPasswordObject__hash(globalObject: *jsc.JSGlobalObject, callframe: *jsc
             const arguments_ = callframe.arguments_old(2);
             const arguments = arguments_.ptr[0..arguments_.len];
             if (((arguments.len < 1) or arguments[0].isEmptyOrUndefinedOrNull())) {
-                return globalObject.throwInvalidArgumentType("hash", "password", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "password must be a string or TypedArray", .{}).throw();
             }
             var algorithm = Algorithm_Value{ .argon2id = .{} };
             _ = &algorithm;
@@ -570,7 +614,7 @@ pub fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: 
             const arguments_ = callframe.arguments_old(2);
             const arguments = arguments_.ptr[0..arguments_.len];
             if (((arguments.len < 1) or arguments[0].isEmptyOrUndefinedOrNull())) {
-                return globalObject.throwInvalidArgumentType("hash", "password", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "password must be a string or TypedArray", .{}).throw();
             }
             var algorithm = Algorithm_Value{ .argon2id = .{} };
             _ = &algorithm;
@@ -580,7 +624,7 @@ pub fn JSPasswordObject__hashSync(globalObject: *jsc.JSGlobalObject, callframe: 
             var maybe_sob = try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, arguments[0]);
             _ = &maybe_sob;
             if ((maybe_sob == null)) {
-                return globalObject.throwInvalidArgumentType("hash", "password", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "password must be a string or TypedArray", .{}).throw();
             }
             var string_or_buffer = maybe_sob.?;
             _ = &string_or_buffer;
@@ -598,10 +642,10 @@ pub fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *j
             const arguments_ = callframe.arguments_old(3);
             const arguments = arguments_.ptr[0..arguments_.len];
             if (((arguments.len < 1) or arguments[0].isEmptyOrUndefinedOrNull())) {
-                return globalObject.throwInvalidArgumentType("verify", "password", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "password must be a string or TypedArray", .{}).throw();
             }
             if (((arguments.len < 2) or arguments[1].isEmptyOrUndefinedOrNull())) {
-                return globalObject.throwInvalidArgumentType("verify", "hash", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "hash must be a string or TypedArray", .{}).throw();
             }
             var algorithm: ?AlgorithmEnum = null;
             _ = &algorithm;
@@ -620,7 +664,7 @@ pub fn JSPasswordObject__verify(globalObject: *jsc.JSGlobalObject, callframe: *j
                 algorithm = maybe_alg;
             }
             const owned_password = try jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[0], bun.default_allocator);
-            const owned_hash = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[1], bun.default_allocator)) catch |e| { _ = &e; _ = bun.default_allocator.free(owned_password);
+            const owned_hash = (blk_catch_5: { break :blk_catch_5 ((jsc.Node.StringOrBuffer.fromJSToOwnedSlice(globalObject, arguments[1], bun.default_allocator)) catch |e| { _ = &e; _ = bun.default_allocator.free(owned_password);
             return e; }); });
             if ((owned_hash.len == 0)) {
                 _ = bun.default_allocator.free(owned_password);
@@ -637,10 +681,10 @@ pub fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe
             const arguments_ = callframe.arguments_old(3);
             const arguments = arguments_.ptr[0..arguments_.len];
             if (((arguments.len < 1) or arguments[0].isEmptyOrUndefinedOrNull())) {
-                return globalObject.throwInvalidArgumentType("verify", "password", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "password must be a string or TypedArray", .{}).throw();
             }
             if (((arguments.len < 2) or arguments[1].isEmptyOrUndefinedOrNull())) {
-                return globalObject.throwInvalidArgumentType("verify", "hash", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "hash must be a string or TypedArray", .{}).throw();
             }
             var algorithm: ?AlgorithmEnum = null;
             _ = &algorithm;
@@ -658,29 +702,28 @@ pub fn JSPasswordObject__verifySync(globalObject: *jsc.JSGlobalObject, callframe
                 }
                 algorithm = maybe_alg;
             }
-            var maybe_pw = try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, arguments[0]);
-            _ = &maybe_pw;
-            if ((maybe_pw == null)) {
-                return globalObject.throwInvalidArgumentType("verify", "password", "string or TypedArray");
-            }
-            var password = maybe_pw.?;
-            _ = &password;
             var maybe_hash = try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, arguments[1]);
             _ = &maybe_hash;
             if ((maybe_hash == null)) {
-                _ = password.deinit();
-                return globalObject.throwInvalidArgumentType("verify", "hash", "string or TypedArray");
+                return globalObject.ERR(.INVALID_ARG_TYPE, "hash must be a string or TypedArray", .{}).throw();
             }
             var hash_ = maybe_hash.?;
             _ = &hash_;
-            var _pw_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (&password) };
-            _ = &_pw_guard;
-            var ___pw_guard_moved = false; _ = &___pw_guard_moved;
-            defer if (!___pw_guard_moved) { ___pw_guard_moved = true; const __T = @TypeOf(_pw_guard); if (@typeInfo(__T) == .optional) { if (_pw_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pw_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pw_guard; _drop_val.__cp_deinit(); } };
             var _hash_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (&hash_) };
             _ = &_hash_guard;
             var ___hash_guard_moved = false; _ = &___hash_guard_moved;
             defer if (!___hash_guard_moved) { ___hash_guard_moved = true; const __T = @TypeOf(_hash_guard); if (@typeInfo(__T) == .optional) { if (_hash_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _hash_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _hash_guard; _drop_val.__cp_deinit(); } };
+            var maybe_pw = try jsc.Node.StringOrBuffer.fromJS(globalObject, bun.default_allocator, arguments[0]);
+            _ = &maybe_pw;
+            if ((maybe_pw == null)) {
+                return globalObject.ERR(.INVALID_ARG_TYPE, "password must be a string or TypedArray", .{}).throw();
+            }
+            var password = maybe_pw.?;
+            _ = &password;
+            var _pw_guard = DeinitGuard(jsc.Node.StringOrBuffer){ .ptr = (&password) };
+            _ = &_pw_guard;
+            var ___pw_guard_moved = false; _ = &___pw_guard_moved;
+            defer if (!___pw_guard_moved) { ___pw_guard_moved = true; const __T = @TypeOf(_pw_guard); if (@typeInfo(__T) == .optional) { if (_pw_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pw_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pw_guard; _drop_val.__cp_deinit(); } };
             if ((hash_.slice().len == 0)) {
                 return jsc.JSValue.@"false";
             }
@@ -711,6 +754,40 @@ pub const VerifyJobResult = VerifyJobResult_;
 pub const VerifyJob = VerifyJob_;
 const unknown_password_algorithm_message = "unknown algorithm, expected one of: \"bcrypt\", \"argon2id\", \"argon2d\", \"argon2i\" (default is \"argon2id\")";
 
+pub fn parseArgon2Params(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!Argon2Params_ {
+        var argon = Argon2Params_{  };
+        _ = &argon;
+        if (try value.getTruthy(globalObject, "timeCost")) |time_value| {
+            _ = &time_value;
+            if ((!time_value.isNumber())) {
+                return globalObject.throwInvalidArgumentType("hash", "timeCost", "number");
+            }
+            const num = time_value.asNumber();
+            if ((std.math.isNan(num) or (num < 1))) {
+                return globalObject.throwInvalidArguments("Time cost must be greater than 0", .{});
+            }
+            if ((((!std.math.isFinite(num)) or (@floor(num) != num)) or (num > @as(f64, @floatFromInt(std.math.maxInt(u32)))))) {
+                return globalObject.throwInvalidArguments("Time cost must be an integer between 1 and 4294967295", .{});
+            }
+            argon.time_cost = @as(u32, @intFromFloat(num));
+        }
+        if (try value.getTruthy(globalObject, "memoryCost")) |memory_value| {
+            _ = &memory_value;
+            if ((!memory_value.isNumber())) {
+                return globalObject.throwInvalidArgumentType("hash", "memoryCost", "number");
+            }
+            const num = memory_value.asNumber();
+            if ((std.math.isNan(num) or (num < 8))) {
+                return globalObject.throwInvalidArguments("Memory cost must be at least 8", .{});
+            }
+            if ((((!std.math.isFinite(num)) or (@floor(num) != num)) or (num > @as(f64, @floatFromInt(std.math.maxInt(u32)))))) {
+                return globalObject.throwInvalidArguments("Memory cost must be an integer between 8 and 4294967295", .{});
+            }
+            argon.memory_cost = @as(u32, @intFromFloat(num));
+        }
+        return argon;
+}
+
 pub fn algorithmValueFromJS(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!Algorithm_Value {
         if (value.isObject()) {
             if (try value.getTruthy(globalObject, "algorithm")) |algorithm_value| {
@@ -732,93 +809,24 @@ var algorithm = Algorithm_Value{ .bcrypt = 10 };
                     if ((!rounds_value.isNumber())) {
                         return globalObject.throwInvalidArgumentType("hash", "cost", "number");
                     }
-                    const rounds = try rounds_value.coerce(i32, globalObject);
-                    if (((rounds < 4) or (rounds > 31))) {
-                        return globalObject.throwInvalidArguments("Rounds must be between 4 and 31", .{});
+                    const num = rounds_value.asNumber();
+                    if (((((!std.math.isFinite(num)) or (@floor(num) != num)) or (num < 4)) or (num > 31))) {
+                        return globalObject.throwInvalidArguments("Rounds must be an integer between 4 and 31", .{});
                     }
-                    algorithm.bcrypt = @as(u6, @intCast(rounds));
+                    algorithm.bcrypt = @as(u6, @intFromFloat(num));
                 }
                 return algorithm;
 },
 .argon2id => {
-var argon = Argon2Params_{  };
-                _ = &argon;
-                if (try value.getTruthy(globalObject, "timeCost")) |time_value| {
-                    _ = &time_value;
-                    if ((!time_value.isNumber())) {
-                        return globalObject.throwInvalidArgumentType("hash", "timeCost", "number");
-                    }
-                    const time_cost = try time_value.coerce(i32, globalObject);
-                    if ((time_cost < 1)) {
-                        return globalObject.throwInvalidArguments("Time cost must be greater than 0", .{});
-                    }
-                    argon.time_cost = @as(u32, @intCast(time_cost));
-                }
-                if (try value.getTruthy(globalObject, "memoryCost")) |memory_value| {
-                    _ = &memory_value;
-                    if ((!memory_value.isNumber())) {
-                        return globalObject.throwInvalidArgumentType("hash", "memoryCost", "number");
-                    }
-                    const memory_cost = try memory_value.coerce(i32, globalObject);
-                    if ((memory_cost < 1)) {
-                        return globalObject.throwInvalidArguments("Memory cost must be greater than 0", .{});
-                    }
-                    argon.memory_cost = @as(u32, @intCast(memory_cost));
-                }
+const argon = try parseArgon2Params(globalObject, value);
                 return Algorithm_Value{ .argon2id = argon };
 },
 .argon2d => {
-var argon = Argon2Params_{  };
-                _ = &argon;
-                if (try value.getTruthy(globalObject, "timeCost")) |time_value| {
-                    _ = &time_value;
-                    if ((!time_value.isNumber())) {
-                        return globalObject.throwInvalidArgumentType("hash", "timeCost", "number");
-                    }
-                    const time_cost = try time_value.coerce(i32, globalObject);
-                    if ((time_cost < 1)) {
-                        return globalObject.throwInvalidArguments("Time cost must be greater than 0", .{});
-                    }
-                    argon.time_cost = @as(u32, @intCast(time_cost));
-                }
-                if (try value.getTruthy(globalObject, "memoryCost")) |memory_value| {
-                    _ = &memory_value;
-                    if ((!memory_value.isNumber())) {
-                        return globalObject.throwInvalidArgumentType("hash", "memoryCost", "number");
-                    }
-                    const memory_cost = try memory_value.coerce(i32, globalObject);
-                    if ((memory_cost < 1)) {
-                        return globalObject.throwInvalidArguments("Memory cost must be greater than 0", .{});
-                    }
-                    argon.memory_cost = @as(u32, @intCast(memory_cost));
-                }
+const argon = try parseArgon2Params(globalObject, value);
                 return Algorithm_Value{ .argon2d = argon };
 },
 .argon2i => {
-var argon = Argon2Params_{  };
-                _ = &argon;
-                if (try value.getTruthy(globalObject, "timeCost")) |time_value| {
-                    _ = &time_value;
-                    if ((!time_value.isNumber())) {
-                        return globalObject.throwInvalidArgumentType("hash", "timeCost", "number");
-                    }
-                    const time_cost = try time_value.coerce(i32, globalObject);
-                    if ((time_cost < 1)) {
-                        return globalObject.throwInvalidArguments("Time cost must be greater than 0", .{});
-                    }
-                    argon.time_cost = @as(u32, @intCast(time_cost));
-                }
-                if (try value.getTruthy(globalObject, "memoryCost")) |memory_value| {
-                    _ = &memory_value;
-                    if ((!memory_value.isNumber())) {
-                        return globalObject.throwInvalidArgumentType("hash", "memoryCost", "number");
-                    }
-                    const memory_cost = try memory_value.coerce(i32, globalObject);
-                    if ((memory_cost < 1)) {
-                        return globalObject.throwInvalidArguments("Memory cost must be greater than 0", .{});
-                    }
-                    argon.memory_cost = @as(u32, @intCast(memory_cost));
-                }
+const argon = try parseArgon2Params(globalObject, value);
                 return Algorithm_Value{ .argon2i = argon };
 },
 }
@@ -855,7 +863,7 @@ return Algorithm_Value{ .argon2i = .{} };
 }
 
 pub fn formatPasswordErrorCode(err_name: []const u8) ?[]const u8 {
-        var out = (blk_catch_5: { break :blk_catch_5 ((bun.default_allocator.alloc(u8, ((err_name.len * 2) + 9))) catch |__ce_5| { _ = &__ce_5; return null; }); });
+        var out = (blk_catch_6: { break :blk_catch_6 ((bun.default_allocator.alloc(u8, ((err_name.len * 2) + 9))) catch |__ce_6| { _ = &__ce_6; return null; }); });
         _ = &out;
         _ = @memcpy(out[0..8], "PASSWORD");
         var j: usize = 8;

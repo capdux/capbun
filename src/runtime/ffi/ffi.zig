@@ -292,7 +292,7 @@ pub const CompileCSource = union(enum) {
 pub fn first(self: *const CompileCSource) [:0]const u8 {
             return (switch (self.*) {
 .file => self.file,
-.files => self.files.items[0],
+.files => (if ((self.files.items.len > 0)) self.files.items[0] else ""),
 });
     }
 
@@ -1493,17 +1493,17 @@ _ = try writer.writeAll("0");
 };
 
 pub const CompilerRTSources = struct {
-    const @"stdbool.h" = @embedFile("./ffi-stdbool.h");
-    const @"stdarg.h" = @embedFile("./ffi-stdarg.h");
-    const @"stdnoreturn.h" = @embedFile("./ffi-stdnoreturn.h");
-    const @"stdalign.h" = @embedFile("./ffi-stdalign.h");
-    const @"tgmath.h" = @embedFile("./ffi-tgmath.h");
-    const @"stddef.h" = @embedFile("./ffi-stddef.h");
-    const @"varargs.h" = "// empty";
-    const @"node_api.h" = @embedFile("../../napi/node_api.h");
-    const @"node_api_types.h" = @embedFile("../../napi/node_api_types.h");
-    const @"js_native_api.h" = @embedFile("../../napi/js_native_api.h");
-    const @"js_native_api_types.h" = @embedFile("../../napi/js_native_api_types.h");
+    pub const @"stdbool.h" = @embedFile("./ffi-stdbool.h");
+    pub const @"stdarg.h" = @embedFile("./ffi-stdarg.h");
+    pub const @"stdnoreturn.h" = @embedFile("./ffi-stdnoreturn.h");
+    pub const @"stdalign.h" = @embedFile("./ffi-stdalign.h");
+    pub const @"tgmath.h" = @embedFile("./ffi-tgmath.h");
+    pub const @"stddef.h" = @embedFile("./ffi-stddef.h");
+    pub const @"varargs.h" = "// empty";
+    pub const @"node_api.h" = @embedFile("../../napi/node_api.h");
+    pub const @"node_api_types.h" = @embedFile("../../napi/node_api_types.h");
+    pub const @"js_native_api.h" = @embedFile("../../napi/js_native_api.h");
+    pub const @"js_native_api_types.h" = @embedFile("../../napi/js_native_api_types.h");
 };
 
 pub const MyFunctionSStructWorkAround = struct {
@@ -2019,6 +2019,9 @@ pub fn ffi_cc(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                     const zstr = try value.getZigString(globalThis);
                     _ = try compile_c.source.files.append(bun.default_allocator, try zstr.toOwnedSliceZ(bun.default_allocator));
                 }
+                if ((compile_c.source.files.items.len == 0)) {
+                    return globalThis.throwInvalidArgumentValueCustom("source", source_value, "must have at least one file");
+                }
             } else {
                 if ((!source_value.isString())) {
                     return globalThis.throwInvalidArgumentTypeValue("source", "string", source_value);
@@ -2214,9 +2217,25 @@ pub fn ffi_open(global: *JSGlobalObject, name_str: ZigString, object_value: jsc.
             return global.toInvalidArguments("Expected at least one symbol", .{});
         }
         var dylib: std.DynLib = brk: {
-        break :brk (blk_catch_61: { break :blk_catch_61 ((std.DynLib.open(name)) catch |__ce_61| { _ = &__ce_61; const backup_names: [1][]const u8 = .{ name };
-        const backup_name = Fs.FileSystem.instance.abs((&backup_names));
-        break :brk (blk_catch_62: { break :blk_catch_62 ((std.DynLib.open(backup_name)) catch |__ce_62| { _ = &__ce_62; const dlerror_buf = getDlErrorOpt(bun.default_allocator);
+        if ((name.len < max_path_bytes)) {
+            if ((blk_catch_61: { break :blk_catch_61 ((std.DynLib.open(name)) catch |__ce_61| { _ = &__ce_61; break :blk_catch_61 null; }); })) |lib| {
+                _ = &lib;
+                break :brk lib;
+            }
+        }
+        var abs_buf: [max_path_bytes]u8 = undefined;
+        _ = &abs_buf;
+        const backup_names: [1][]const u8 = .{ name };
+        if (Fs.FileSystem.instance.absBufChecked((&backup_names), (&abs_buf))) |backup_name| {
+            _ = &backup_name;
+            if ((backup_name.len < max_path_bytes)) {
+                if ((blk_catch_62: { break :blk_catch_62 ((std.DynLib.open(backup_name)) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 null; }); })) |lib| {
+                    _ = &lib;
+                    break :brk lib;
+                }
+            }
+        }
+        const dlerror_buf = getDlErrorOpt(bun.default_allocator);
         defer {
         {
             if (dlerror_buf) |buf| {
@@ -2232,7 +2251,7 @@ pub fn ffi_open(global: *JSGlobalObject, name_str: ZigString, object_value: jsc.
         var ___msg_guard_moved = false; _ = &___msg_guard_moved;
         defer if (!___msg_guard_moved) { ___msg_guard_moved = true; const __T = @TypeOf(_msg_guard); if (@typeInfo(__T) == .optional) { if (_msg_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _msg_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _msg_guard; _drop_val.__cp_deinit(); } };
         const system_error = jsc.SystemError{ .code = bun.String.cloneUTF8(@tagName(.ERR_DLOPEN_FAILED)), .message = bun.String.cloneUTF8(msg), .syscall = bun.String.cloneUTF8("dlopen") };
-        return system_error.toErrorInstance(global); }); }); }); });
+        return system_error.toErrorInstance(global);
 };
         _ = &dylib;
         var size = symbols.values().len;

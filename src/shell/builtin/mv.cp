@@ -119,6 +119,7 @@ pub struct ShellMvBatchedTask {
     target_fd: bun.FD?,
     cwd: bun.FD,
     error_signal: *std.atomic.Value(bool),
+    no_overwrite: bool = false,
 
     err: Syscall.Error? = null,
     err_path_owned: bool = false,
@@ -138,10 +139,27 @@ pub struct ShellMvBatchedTask {
             return;
         }
 
+        if (_.no_overwrite) {
+            switch (Syscall.lstatat(_.cwd, _.target)) {
+                .result => {
+                    switch (Syscall.lstatat(_.cwd, src)) {
+                        .result => { return; },
+                        .err e => {
+                            _.err = if (e.path.len == 0) e.withPath(src) else e;
+                            return;
+                        },
+                    }
+                },
+                .err => {},
+            }
+        }
+
         switch (Syscall.renameat(_.cwd, src, _.cwd, _.target)) {
             .err e => {
                 if (e.getErrno() == .NOTDIR) {
                     _.err = e.withPath(_.target);
+                } else if (e.path.len == 0) {
+                    _.err = e.withPath(src);
                 } else _.err = e;
             },
             else => {},
@@ -161,6 +179,21 @@ pub struct ShellMvBatchedTask {
         }
         buf[path_in_dir_.len] = 0;
         const path_in_dir = buf[0..path_in_dir_.len :0];
+
+        if (_.no_overwrite) {
+            switch (Syscall.lstatat(_.target_fd.?, path_in_dir)) {
+                .result => {
+                    switch (Syscall.lstatat(_.cwd, src)) {
+                        .result => { return true; },
+                        .err e => {
+                            _.err = if (e.path.len == 0) e.withPath(src) else e;
+                            return false;
+                        },
+                    }
+                },
+                .err => {},
+            }
+        }
 
         switch (Syscall.renameat(_.cwd, src, _.target_fd.?, path_in_dir)) {
             .err e => {
@@ -342,6 +375,7 @@ pub union(enum) State {
                                 target_fd: _.args.target_fd,
                                 sources: sources,
                                 error_signal: undefined,
+                                no_overwrite: _.opts.no_overwrite,
                                 task: {
                                     event_loop: _.bltn().parentCmd().base.eventLoop(),
                                     concurrent_task: jsc.EventLoopTask.fromEventLoop(_.bltn().parentCmd().base.eventLoop()),

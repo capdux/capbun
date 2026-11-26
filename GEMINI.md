@@ -336,3 +336,4 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - 已全绿套件写入 `test/stats.md` 后**严禁重复运行**，仅重跑新增/修复套件；
    - 明确缺失上游大型特性（如 `Bun.ModuleGraph`、`node:repl`、`bun lint`、`maxHeadersCount`、`alpnCallback`）直接写入冻结清单，禁止反复排查浪费 Token；
    - 严禁在多路子智能体同时运行 `bun-debug` 扫测期间中途触发 `zig:check` 覆盖 `build/debug/js/`，必须集中在 `bun bd` 前统一校验。
+   - **2026-11-27 3h 审计固化**：(a) 批量验收集前用 `ls`/glob 校验精确后缀（`.test.ts`/`.test.js`），避免 `escapeHTML.test.ts` 类误报重跑；(b) 修改 `lexer.cp` 等基础路径后先对照 `_.zig` 核验无符号减法边界再 `bun bd`，防止 `harness.ts` 级重链返工。

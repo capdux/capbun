@@ -60,6 +60,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
         task: jsc.WorkPoolTask,
         any_task: jsc.AnyTask.AnyTask,
         poll: Async.KeepAlive = .{},
+        ticket: jsc.Ticket? = null,
         callback: jsc.Strong.Optional,
 
         ctx: *Ctx,
@@ -100,7 +101,14 @@ fn ExternCryptoJob(comptime name: []const u8): type {
         pub static fn runTask(task: *jsc.WorkPoolTask) {
             const job: *@This() = @fieldParentPtr("task", task);
             let vm = job.vm;
-            defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
+            defer {
+                const ct = jsc.ConcurrentTask.create(job.any_task.task());
+                if (t := job.ticket) {
+                    t.post(ct);
+                } else {
+                    vm.enqueueTaskConcurrent(ct);
+                }
+            }
 
             job.ctx.runTask(vm.global);
         }
@@ -125,11 +133,16 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             job.ctx.deinit();
             job.poll.unref(job.vm);
             job.callback.deinit();
+            if (*t := job.ticket) {
+                t.deinit();
+                job.ticket = null;
+            }
             bun.destroy(job);
         }
 
         pub static fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
+            job.ticket = job.vm.ticket();
             jsc.WorkPool.schedule(&job.task);
         }
 
@@ -174,6 +187,7 @@ fn CryptoJob(comptime Ctx: type): type {
         task: jsc.WorkPoolTask,
         any_task: jsc.AnyTask,
         poll: Async.KeepAlive = .{},
+        ticket: jsc.Ticket? = null,
 
         callback: jsc.Strong.Optional,
 
@@ -208,7 +222,14 @@ fn CryptoJob(comptime Ctx: type): type {
         pub static fn runTask(task: *jsc.WorkPoolTask) {
             const job: *@This() = @fieldParentPtr("task", task);
             let vm = job.vm;
-            defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
+            defer {
+                const ct = jsc.ConcurrentTask.create(job.any_task.task());
+                if (t := job.ticket) {
+                    t.post(ct);
+                } else {
+                    vm.enqueueTaskConcurrent(ct);
+                }
+            }
 
             job.ctx.runTask(job.ctx.result);
         }
@@ -230,11 +251,16 @@ fn CryptoJob(comptime Ctx: type): type {
             job.ctx.deinit();
             job.poll.unref(job.vm);
             job.callback.deinit();
+            if (*t := job.ticket) {
+                t.deinit();
+                job.ticket = null;
+            }
             bun.destroy(job);
         }
 
         pub static fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
+            job.ticket = job.vm.ticket();
             jsc.WorkPool.schedule(&job.task);
         }
     };

@@ -142,7 +142,7 @@ pub union(enum) State {
                 return .continue_parsing;
             },
             'n' => {
-                _.overwrite_existing_file = true;
+                _.overwrite_existing_file = false;
                 _.remove_and_create_new_file_if_not_found = false;
                 return .continue_parsing;
             },
@@ -391,7 +391,7 @@ pub struct ShellCpTask {
             .flags = .{
                 .mode = @enumFromInt(0),
                 .recursive = _.opts.recursive,
-                .force = true,
+                .force = _.opts.overwrite_existing_file,
                 .errorOnExist = false,
                 .deinit_paths = false,
             },

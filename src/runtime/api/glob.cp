@@ -130,8 +130,10 @@ pub struct ScanOpts {
             return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions must be an object", {}).throw();
         }
 
-        if (only_files := optsObj.getTruthy(globalThis, "onlyFiles")?) {
-            out.only_files = only_files.toBoolean();
+        if (only_files := optsObj.get(globalThis, "onlyFiles")?) {
+            if (!only_files.isUndefined()) {
+                out.only_files = only_files.toBoolean();
+            }
         }
 
         if (error_on_broken_symlinks := optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymlink")?) {

@@ -22,6 +22,8 @@
 #include "JSURLSearchParams.h"
 
 #include "ActiveDOMObject.h"
+#include "ErrorCode.h"
+#include <wtf/text/StringBuilder.h>
 #include "ExtendedDOMClientIsoSubspaces.h"
 #include "ExtendedDOMIsoSubspaces.h"
 #include "IDLTypes.h"
@@ -188,11 +190,42 @@ static const HashTableValue JSURLSearchParamsPrototypeTableValues[] = {
 
 const ClassInfo JSURLSearchParamsPrototype::s_info = { "URLSearchParams"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSURLSearchParamsPrototype) };
 
+JSC_DEFINE_HOST_FUNCTION(jsURLSearchParamsPrototype_inspectCustom, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame* callFrame))
+{
+    auto& vm = lexicalGlobalObject->vm();
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto* jsParams = dynamicDowncast<JSURLSearchParams>(callFrame->thisValue());
+    if (!jsParams) {
+        return Bun::ERR::INVALID_THIS(throwScope, lexicalGlobalObject, "URLSearchParams"_s);
+    }
+    auto iter = jsParams->wrapped().createIterator(nullptr);
+    auto first = iter.next();
+    if (!first.has_value()) {
+        return JSValue::encode(jsNontrivialString(vm, "URLSearchParams {}"_s));
+    }
+    WTF::StringBuilder builder;
+    builder.append("URLSearchParams { '"_s);
+    builder.append(first.value().key);
+    builder.append("' => '"_s);
+    builder.append(first.value().value);
+    builder.append('\'');
+    for (auto entry = iter.next(); entry.has_value(); entry = iter.next()) {
+        builder.append(", '"_s);
+        builder.append(entry.value().key);
+        builder.append("' => '"_s);
+        builder.append(entry.value().value);
+        builder.append('\'');
+    }
+    builder.append(" }"_s);
+    return JSValue::encode(jsString(vm, builder.toString()));
+}
+
 void JSURLSearchParamsPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSURLSearchParams::info(), JSURLSearchParamsPrototypeTableValues, *this);
     putDirect(vm, vm.propertyNames->iteratorSymbol, getDirect(vm, vm.propertyNames->builtinNames().entriesPublicName()), static_cast<unsigned>(JSC::PropertyAttribute::DontEnum));
+    putDirectNativeFunction(vm, this->globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsURLSearchParamsPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

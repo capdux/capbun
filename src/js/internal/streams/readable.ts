@@ -1130,6 +1130,9 @@ function nReadingNextTick(self) {
 // If the user uses them, then switch into old mode.
 Readable.prototype.resume = function () {
   const state = this._readableState;
+  if ((state[kState] & kDestroyed) !== 0 && state.length === 0) {
+    return this;
+  }
   if ((state[kState] & kFlowing) === 0) {
     $debug("resume");
     // We flow only if there is no one listening
@@ -1186,7 +1189,7 @@ Readable.prototype.pause = function () {
 function flow(stream) {
   const state = stream._readableState;
   $debug("flow");
-  while ((state[kState] & kFlowing) !== 0 && stream.read() !== null);
+  while ((state[kState] & kFlowing) !== 0 && ((state[kState] & kDestroyed) === 0 || (state[kState] & kEnded) !== 0) && stream.read() !== null);
 }
 
 // Wrap an old-style stream as the async data source.

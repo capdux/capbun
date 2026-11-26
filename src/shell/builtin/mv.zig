@@ -178,6 +178,7 @@ pub const ShellMvBatchedTask = struct {
     target_fd: ?bun.FD,
     cwd: bun.FD,
     error_signal: *std.atomic.Value(bool),
+    no_overwrite: bool = false,
     err: ?Syscall.Error = null,
     err_path_owned: bool = false,
     task: ShellTask(ShellMvBatchedTask, runFromThreadPool, runFromMainThread, debug),
@@ -196,12 +197,34 @@ pub fn runFromThreadPool(self: *ShellMvBatchedTask) void {
                 _ = self.moveInDir(src, (&buf));
                 return;
             }
+            if (self.no_overwrite) {
+                switch (Syscall.lstatat(self.cwd, self.target)) {
+.result => {
+switch (Syscall.lstatat(self.cwd, src)) {
+.result => {
+return;
+},
+.err => |e| {
+self.err = (if ((e.path.len == 0)) e.withPath(src) else e);
+                return;
+},
+}
+},
+.err => {
+
+},
+}
+            }
             switch (Syscall.renameat(self.cwd, src, self.cwd, self.target)) {
 .err => |e| {
 if ((e.getErrno() == .NOTDIR)) {
                 self.err = e.withPath(self.target);
             } else {
-                self.err = e;
+                if ((e.path.len == 0)) {
+                    self.err = e.withPath(src);
+                } else {
+                    self.err = e;
+                }
             }
 },
 else => {
@@ -223,6 +246,24 @@ pub fn moveInDir(self: *ShellMvBatchedTask, src: [:0]const u8, buf: *bun.PathBuf
             }
             buf[cp_cast_int(usize, path_in_dir_.len)] = 0;
             const path_in_dir = buf[0..path_in_dir_.len :0];
+            if (self.no_overwrite) {
+                switch (Syscall.lstatat(self.target_fd.?, path_in_dir)) {
+.result => {
+switch (Syscall.lstatat(self.cwd, src)) {
+.result => {
+return true;
+},
+.err => |e| {
+self.err = (if ((e.path.len == 0)) e.withPath(src) else e);
+                return false;
+},
+}
+},
+.err => {
+
+},
+}
+            }
             switch (Syscall.renameat(self.cwd, src, self.target_fd.?, path_in_dir)) {
 .err => |e| {
 const parts: [2][]const u8 = .{ self.target[0..], ResolvePath.basename(src) };
@@ -388,7 +429,7 @@ maybe_fd = open_fd;
                     const start_idx = (i * count_per_task);
                     const end_idx = @min((start_idx + count_per_task), self.args.sources.len);
                     const sources = self.args.sources[start_idx..end_idx];
-                    tasks[cp_cast_int(usize, i)] = ShellMvBatchedTask{ .mv = self, .cwd = cwd_fd, .target = self.args.target, .target_fd = self.args.target_fd, .sources = sources, .error_signal = undefined, .task = .{ .event_loop = self.bltn().parentCmd().base.eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(self.bltn().parentCmd().base.eventLoop()) }, .event_loop = self.bltn().parentCmd().base.eventLoop() };
+                    tasks[cp_cast_int(usize, i)] = ShellMvBatchedTask{ .mv = self, .cwd = cwd_fd, .target = self.args.target, .target_fd = self.args.target_fd, .sources = sources, .error_signal = undefined, .no_overwrite = self.opts.no_overwrite, .task = .{ .event_loop = self.bltn().parentCmd().base.eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(self.bltn().parentCmd().base.eventLoop()) }, .event_loop = self.bltn().parentCmd().base.eventLoop() };
                 }
             }
             self.state = .{ .executing = .{ .task_count = task_count, .error_signal = std.atomic.Value(bool).init(false), .tasks = tasks } };

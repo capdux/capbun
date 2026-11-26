@@ -7,14 +7,86 @@ const isWindows = process.platform === "win32";
 interface GlobOptions {
   /** @default process.cwd() */
   cwd?: string;
-  exclude?: ((ent: string) => boolean) | string[];
+  exclude?: ((ent: any) => boolean) | string[];
   /**
    * Should glob return paths as {@link Dirent} objects. `false` for strings.
    * @default false */
   withFileTypes?: boolean;
+  followSymlinks?: boolean;
 }
 
-async function* glob(pattern: string | string[], options?: GlobOptions): AsyncGenerator<string> {
+function makeDirentMatcher(patterns: string[], exclude: any, excludeGlobs: any[] | null) {
+  const globs = patterns.map(p => new Bun.Glob(p));
+  return { globs, exclude, excludeGlobs };
+}
+
+function* walkWithFileTypesSync(
+  fs: any,
+  pathMod: any,
+  baseCwd: string,
+  relDir: string,
+  globs: any[],
+  exclude: any,
+  excludeGlobs: any[] | null,
+  followSymlinks: boolean,
+): Generator<any> {
+  const fullDir = relDir ? pathMod.join(baseCwd, relDir) : baseCwd;
+  let entries: any[];
+  try {
+    entries = fs.readdirSync(fullDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const dirent of entries) {
+    const relPath = relDir ? `${relDir}${sep}${dirent.name}` : dirent.name;
+    if (typeof exclude === "function") {
+      if (exclude(dirent)) continue;
+    } else if (excludeGlobs) {
+      if (excludeGlobs.some((g: any) => g.match(relPath))) continue;
+    }
+    if (globs.some(g => g.match(relPath))) {
+      yield dirent;
+    }
+    if (dirent.isDirectory() || (followSymlinks && dirent.isSymbolicLink())) {
+      yield* walkWithFileTypesSync(fs, pathMod, baseCwd, relPath, globs, exclude, excludeGlobs, followSymlinks);
+    }
+  }
+}
+
+async function* walkWithFileTypes(
+  fs: any,
+  pathMod: any,
+  baseCwd: string,
+  relDir: string,
+  globs: any[],
+  exclude: any,
+  excludeGlobs: any[] | null,
+  followSymlinks: boolean,
+): AsyncGenerator<any> {
+  const fullDir = relDir ? pathMod.join(baseCwd, relDir) : baseCwd;
+  let entries: any[];
+  try {
+    entries = await fs.promises.readdir(fullDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const dirent of entries) {
+    const relPath = relDir ? `${relDir}${sep}${dirent.name}` : dirent.name;
+    if (typeof exclude === "function") {
+      if (exclude(dirent)) continue;
+    } else if (excludeGlobs) {
+      if (excludeGlobs.some((g: any) => g.match(relPath))) continue;
+    }
+    if (globs.some(g => g.match(relPath))) {
+      yield dirent;
+    }
+    if (dirent.isDirectory() || (followSymlinks && dirent.isSymbolicLink())) {
+      yield* walkWithFileTypes(fs, pathMod, baseCwd, relPath, globs, exclude, excludeGlobs, followSymlinks);
+    }
+  }
+}
+
+async function* glob(pattern: string | string[], options?: GlobOptions): AsyncGenerator<any> {
   const patterns = validatePattern(pattern);
   const globOptions = mapOptions(options || {});
   const exclude = globOptions.exclude;
@@ -22,22 +94,54 @@ async function* glob(pattern: string | string[], options?: GlobOptions): AsyncGe
     ? exclude.flatMap(pattern => [new Bun.Glob(pattern), new Bun.Glob(pattern.replace(/\/+$/, "") + "/**")])
     : null;
 
-  for (const pat of patterns) {
-    for await (const ent of new Bun.Glob(pat).scan(globOptions)) {
-      if (typeof exclude === "function") {
-        if (exclude(ent)) continue;
-      } else if (excludeGlobs) {
-        if (excludeGlobs.some(glob => glob.match(ent))) {
-          continue;
-        }
-      }
+  if (options?.withFileTypes) {
+    const fs = require("node:fs");
+    const pathMod = require("node:path");
+    const globs = patterns.map(p => new Bun.Glob(p));
+    yield* walkWithFileTypes(
+      fs,
+      pathMod,
+      globOptions.cwd as string,
+      "",
+      globs,
+      exclude,
+      excludeGlobs,
+      Boolean(globOptions.followSymlinks),
+    );
+    return;
+  }
 
+  const seen = new Set<string>();
+  const isExcluded = (ent: string) => {
+    if (typeof exclude === "function") {
+      return exclude(ent);
+    }
+    if (excludeGlobs) {
+      return excludeGlobs.some(glob => glob.match(ent));
+    }
+    return false;
+  };
+
+  for (const pat of patterns) {
+    if (pat.endsWith("/**") || (isWindows && pat.endsWith("\\**"))) {
+      const dirPat = pat.slice(0, -2);
+      for await (const ent of new Bun.Glob(dirPat).scan(globOptions)) {
+        if (seen.has(ent)) continue;
+        seen.add(ent);
+        if (isExcluded(ent)) continue;
+        yield ent;
+      }
+    }
+    for await (const ent of new Bun.Glob(pat).scan(globOptions)) {
+      if (seen.has(ent)) continue;
+      seen.add(ent);
+      if (isExcluded(ent)) continue;
       yield ent;
     }
   }
 }
 
-function* globSync(pattern: string | string[], options?: GlobOptions): Generator<string> {
+function* globSync(pattern: string | string[], options?: GlobOptions): Generator<any> {
   const patterns = validatePattern(pattern);
   const globOptions = mapOptions(options || {});
   const exclude = globOptions.exclude;
@@ -45,16 +149,48 @@ function* globSync(pattern: string | string[], options?: GlobOptions): Generator
     ? exclude.flatMap(pattern => [new Bun.Glob(pattern), new Bun.Glob(pattern.replace(/\/+$/, "") + "/**")])
     : null;
 
-  for (const pat of patterns) {
-    for (const ent of new Bun.Glob(pat).scanSync(globOptions)) {
-      if (typeof exclude === "function") {
-        if (exclude(ent)) continue;
-      } else if (excludeGlobs) {
-        if (excludeGlobs.some(glob => glob.match(ent))) {
-          continue;
-        }
-      }
+  if (options?.withFileTypes) {
+    const fs = require("node:fs");
+    const pathMod = require("node:path");
+    const globs = patterns.map(p => new Bun.Glob(p));
+    yield* walkWithFileTypesSync(
+      fs,
+      pathMod,
+      globOptions.cwd as string,
+      "",
+      globs,
+      exclude,
+      excludeGlobs,
+      Boolean(globOptions.followSymlinks),
+    );
+    return;
+  }
 
+  const seen = new Set<string>();
+  const isExcluded = (ent: string) => {
+    if (typeof exclude === "function") {
+      return exclude(ent);
+    }
+    if (excludeGlobs) {
+      return excludeGlobs.some(glob => glob.match(ent));
+    }
+    return false;
+  };
+
+  for (const pat of patterns) {
+    if (pat.endsWith("/**") || (isWindows && pat.endsWith("\\**"))) {
+      const dirPat = pat.slice(0, -2);
+      for (const ent of new Bun.Glob(dirPat).scanSync(globOptions)) {
+        if (seen.has(ent)) continue;
+        seen.add(ent);
+        if (isExcluded(ent)) continue;
+        yield ent;
+      }
+    }
+    for (const ent of new Bun.Glob(pat).scanSync(globOptions)) {
+      if (seen.has(ent)) continue;
+      seen.add(ent);
+      if (isExcluded(ent)) continue;
       yield ent;
     }
   }
@@ -90,8 +226,8 @@ function mapOptions(options: GlobOptions): GlobScanOptions & { exclude: GlobOpti
     validateBoolean(options.followSymlinks, "options.followSymlinks");
   }
 
-  if (options.withFileTypes) {
-    throw new TypeError("fs.glob does not support options.withFileTypes yet. Please open an issue on GitHub.");
+  if (options.withFileTypes !== undefined) {
+    validateBoolean(options.withFileTypes, "options.withFileTypes");
   }
 
   return {

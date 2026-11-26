@@ -503,19 +503,21 @@ function cc(options) {
   const result = ccFn(options);
   if (Error.isError(result)) throw result;
 
+  const pathStr = Array.isArray(path) ? (path[0] ?? "") : path;
+  const symbolsOptions = options.symbols;
   for (let key in result.symbols) {
     var symbol = result.symbols[key];
-    if (options[key]?.args?.length || FFIType[options[key]?.returns as string] === FFIType.cstring) {
+    if (symbolsOptions?.[key]?.args?.length || FFIType[symbolsOptions?.[key]?.returns as string] === FFIType.cstring) {
       result.symbols[key] = FFIBuilder(
-        options[key].args ?? [],
-        options[key].returns ?? FFIType.void,
+        symbolsOptions[key].args ?? [],
+        symbolsOptions[key].returns ?? FFIType.void,
         symbol,
         // in stacktraces:
         // instead of
         //    "/usr/lib/sqlite3.so"
         // we want
         //    "sqlite3_get_version() - sqlit3.so"
-        path.includes("/") ? `${key} (${path.split("/").pop()})` : `${key} (${path})`,
+        pathStr.includes("/") ? `${key} (${pathStr.split("/").pop()})` : `${key} (${pathStr})`,
       );
     } else {
       // consistentcy

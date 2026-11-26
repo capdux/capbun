@@ -191,7 +191,7 @@ pub struct BunObject {
     pub const resolve = toJSCallback(Bun.resolve);
     pub const resolveSync = toJSCallback(Bun.resolveSync);
     pub const serve = toJSCallback(Bun.serve);
-    pub const sha = toJSCallback(host_fn.wrapStaticMethod(Crypto.SHA512_256, "hash_", true));
+    pub const sha = toJSCallback(Crypto.SHA512_256.hashJS);
     pub const shellEscape = toJSCallback(Bun.shellEscape);
     pub const shrink = toJSCallback(Bun.shrink);
     pub const stringWidth = toJSCallback(Bun.stringWidth);

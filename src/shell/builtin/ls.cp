@@ -209,12 +209,27 @@ pub struct ShellLsTask {
         const fd = switch (ShellSyscall.openat(_.cwd, _.path, bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
             .err => |e| {
                 switch (e.getErrno()) {
-                    .NOENT => {
-                        _.err = _.errorWithPath(e, _.path);
+                    .NOENT, .LOOP => {
+                        switch (Syscall.lstatat(_.cwd, _.path)) {
+                            .err => {
+                                _.err = _.errorWithPath(e, _.path);
+                            },
+                            .result => {
+                                _.result_kind = .file;
+                                _.addEntryOperand(_.path);
+                            },
+                        }
                     },
                     .NOTDIR => {
-                        _.result_kind = .file;
-                        _.addEntry(_.path, _.cwd);
+                        switch (Syscall.lstatat(_.cwd, _.path)) {
+                            .err => |lstat_err| {
+                                _.err = _.errorWithPath(lstat_err, _.path);
+                            },
+                            .result => {
+                                _.result_kind = .file;
+                                _.addEntryOperand(_.path);
+                            },
+                        }
                     },
                     else => {
                         _.err = _.errorWithPath(e, _.path);
@@ -277,6 +292,16 @@ pub struct ShellLsTask {
         }
 
         return false;
+    }
+
+    fn addEntryOperand(*_, name: [:0]const u8) {
+        if (_.opts.long_listing) {
+            _.addEntryLong(name, _.cwd);
+        } else {
+            bun.handleOom(_.output.ensureUnusedCapacity(name.len + 1));
+            bun.handleOom(_.output.appendSlice(name));
+            bun.handleOom(_.output.append('\n'));
+        }
     }
 
     fn addEntry(*_, name: [:0]const u8, dir_fd: bun.FD) {
@@ -693,9 +718,11 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
             switch (char) {
                 'a' => {
                     _.opts.show_all = true;
+                    _.opts.show_almost_all = false;
                 },
                 'A' => {
                     _.opts.show_almost_all = true;
+                    _.opts.show_all = false;
                 },
                 'b' => {
                     _.opts.escape = true;

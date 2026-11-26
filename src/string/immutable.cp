@@ -1478,9 +1478,8 @@ fn _decodeHexToBytes(destination: []u8, comptime Char: type, source: []const Cha
 
     while (remain.len > 0 && input.len > 1) {
         const int = input[0..2].*;
-        if (comptime @sizeOf(Char) > 1) {
+        if (comptime @sizeOf(Char) > 1 && !truncate) {
             if (int[0] > std.math.maxInt(u8) || int[1] > std.math.maxInt(u8)) {
-                if (comptime truncate) break;
                 return error.InvalidByteSequence;
             }
         }

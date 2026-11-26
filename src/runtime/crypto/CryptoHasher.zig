@@ -230,6 +230,20 @@ pub fn clearSSLErr() void {
             _ = f();
     }
 
+pub fn hashJS(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const arguments = callframe.arguments_old(3);
+            const args = arguments.ptr[0..arguments.len];
+            if ((((args.len < 1) or args[0].isEmptyOrUndefinedOrNull()) or (!args[0].isString()))) {
+                return globalThis.ERR(.INVALID_ARG_TYPE, "algorithm must be a string", .{}).throw();
+            }
+            const algorithm = try args[0].getZigString(globalThis);
+            const input_arg = (if ((args.len > 1)) args[1] else JSValue.js_undefined);
+            const output_arg = (if ((args.len > 2)) args[2] else JSValue.js_undefined);
+            var parsed = try parseHashArgs(globalThis, input_arg, output_arg);
+            _ = &parsed;
+            return hash_(globalThis, algorithm, parsed.input, parsed.output);
+    }
+
 pub fn throwHmacConsumed(self: CryptoHasher, globalThis: *jsc.JSGlobalObject) bun.JSError {
         _ = self;
             return globalThis.throw("HMAC has been consumed and is no longer usable", .{});
@@ -272,7 +286,7 @@ pub fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.Bl
             _ = &input_guard;
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-            if (((input == .blob) and input.blob.isBunFile())) {
+            if (((input == .blob) and (input.blob.isBunFile() or input.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             const len_opt = evp.hash(globalThis.bunVM().rareData().boringEngine(), input.slice(), (&output_digest_buf));
@@ -298,7 +312,7 @@ pub fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobO
             _ = &input_guard;
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-            if (((input == .blob) and input.blob.isBunFile())) {
+            if (((input == .blob) and (input.blob.isBunFile() or input.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             if (output) |output_buf| {
@@ -500,7 +514,7 @@ pub fn update(self: *CryptoHasher, globalThis: *jsc.JSGlobalObject, callframe: *
             _ = &buf_guard;
             var __buf_guard_moved = false; _ = &__buf_guard_moved;
             defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
-            if (((buf == .blob) and buf.blob.isBunFile())) {
+            if (((buf == .blob) and (buf.blob.isBunFile() or buf.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             switch (self.*) {
@@ -675,7 +689,7 @@ pub fn deinit(self: *CryptoHasher) void {
     pub const new = bun.TrivialNew(@This());
     pub const Extern = CryptoHasherExtern;
     pub const digest = jsc.host_fn.wrapInstanceMethod(CryptoHasher, "digest_", false);
-    pub const hash = jsc.host_fn.wrapStaticMethod(CryptoHasher, "hash_", false);
+    pub const hash = hashJS;
 };
 
 pub const AlgoEntry = struct {
@@ -749,7 +763,7 @@ pub fn hashByNameInnerToString(globalThis: *JSGlobalObject, comptime Algorithm: 
             _ = &input_guard;
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-            if (((input == .blob) and input.blob.isBunFile())) {
+            if (((input == .blob) and (input.blob.isBunFile() or input.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             var h = Algorithm.init(.{});
@@ -774,7 +788,7 @@ pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: t
             _ = &input_guard;
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-            if (((input == .blob) and input.blob.isBunFile())) {
+            if (((input == .blob) and (input.blob.isBunFile() or input.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             var h = Algorithm.init(.{});
@@ -899,6 +913,10 @@ const Crypto = jsc.API.Bun.Crypto;
 const EVP = Crypto.EVP;
 const HMAC = Crypto.HMAC;
 const createCryptoError = Crypto.createCryptoError;
+const ParsedHashArgs = struct {
+    input: jsc.Node.BlobOrStringOrBuffer,
+    output: ?jsc.Node.StringOrBuffer,
+};
 pub const MD4 = StaticCryptoHasher(Hashers.MD4, "MD4");
 pub const MD5 = StaticCryptoHasher(Hashers.MD5, "MD5");
 pub const SHA1 = StaticCryptoHasher(Hashers.SHA1, "SHA1");
@@ -908,10 +926,65 @@ pub const SHA384 = StaticCryptoHasher(Hashers.SHA384, "SHA384");
 pub const SHA512 = StaticCryptoHasher(Hashers.SHA512, "SHA512");
 pub const SHA512_256 = StaticCryptoHasher(Hashers.SHA512_256, "SHA512_256");
 
+pub fn coerceHashInputPre(globalThis: *JSGlobalObject, input_arg: JSValue) bun.JSError!JSValue {
+        if (input_arg.isEmptyOrUndefinedOrNull()) {
+            return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+        }
+        if (input_arg.isString()) {
+            return input_arg;
+        }
+        if (input_arg.isStringObjectLike()) {
+            const js_str = try input_arg.toJSString(globalThis);
+            return js_str.toJS();
+        }
+        if ((input_arg.isCell() and (input_arg.jsType().isArrayBufferLike() or (input_arg.as(jsc.WebCore.Blob) != null)))) {
+            return input_arg;
+        }
+        return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+}
+
+pub fn parseHashOutput(globalThis: *JSGlobalObject, output_arg: JSValue) bun.JSError!?jsc.Node.StringOrBuffer {
+        if (output_arg.isUndefined()) {
+            return null;
+        }
+        if (((output_arg.isString() or output_arg.isStringObjectLike()) or (output_arg.isCell() and output_arg.jsType().isArrayBufferLike()))) {
+            return jsc.Node.StringOrBuffer.fromJS(globalThis, bun.default_allocator, output_arg);
+        }
+        return globalThis.ERR(.INVALID_ARG_TYPE, "output must be of type string or ArrayBuffer or ArrayBufferView", .{}).throw();
+}
+
+pub fn parseHashArgs(globalThis: *JSGlobalObject, input_arg: JSValue, output_arg: JSValue) bun.JSError!ParsedHashArgs {
+        const coerced_input = try coerceHashInputPre(globalThis, input_arg);
+        var output_val = try parseHashOutput(globalThis, output_arg);
+        _ = &output_val;
+        const input_opt = (blk_catch_5: { break :blk_catch_5 ((jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, coerced_input)) catch |e| { _ = &e; if (output_val) |*o| {
+            _ = &o;
+            _ = (o.*).deinit();
+        }
+        return e; }); });
+        const input_val = ((input_opt) orelse {
+        if (output_val) |*o| {
+            _ = &o;
+            _ = (o.*).deinit();
+        }
+        return globalThis.ERR(.INVALID_ARG_TYPE, "input must be a string, ArrayBuffer, ArrayBufferView or Blob", .{}).throw();
+});
+        return ParsedHashArgs{ .input = input_val, .output = output_val };
+}
+
 pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8) type {
         return struct {
     hashing: Hasher = .{},
     digested: bool = false,
+
+pub fn hashJS(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const arguments = callframe.arguments_old(2);
+            const args = arguments.ptr[0..arguments.len];
+            const input_arg = (if ((args.len > 0)) args[0] else JSValue.js_undefined);
+            const output_arg = (if ((args.len > 1)) args[1] else JSValue.js_undefined);
+            const parsed = try parseHashArgs(globalThis, input_arg, output_arg);
+            return hash_(globalThis, parsed.input, parsed.output);
+    }
 
 pub fn getByteLength(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
         _ = self;
@@ -928,7 +1001,7 @@ pub fn getByteLengthStatic(globalThis: *jsc.JSGlobalObject, thisVal: JSValue, pr
 pub fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
             var output_digest_buf: Hasher.Digest = undefined;
             _ = &output_digest_buf;
-            if (((input == .blob) and input.blob.isBunFile())) {
+            if (((input == .blob) and (input.blob.isBunFile() or input.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             if (comptime (@typeInfo(@TypeOf(Hasher.hash)).@"fn".params.len == 3)) {
@@ -978,7 +1051,7 @@ pub fn hash_(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, 
             _ = &input_guard;
             var __input_guard_moved = false; _ = &__input_guard_moved;
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
-            if (((input == .blob) and input.blob.isBunFile())) {
+            if (((input == .blob) and (input.blob.isBunFile() or input.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             if (output) |string_or_buffer| {
@@ -1021,9 +1094,6 @@ pub fn getter(globalObject: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
     }
 
 pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            if (self.digested) {
-                return globalThis.ERR(.INVALID_STATE, (name ++ " hasher already digested, create a new instance to update"), .{}).throw();
-            }
             const thisValue = callframe.this();
             const input = callframe.argument(0);
             if (input.isEmptyOrUndefinedOrNull()) {
@@ -1042,7 +1112,10 @@ pub fn update(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc.C
             _ = &buf_guard;
             var __buf_guard_moved = false; _ = &__buf_guard_moved;
             defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
-            if (((buffer == .blob) and buffer.blob.isBunFile())) {
+            if (self.digested) {
+                return globalThis.ERR(.INVALID_STATE, (name ++ " hasher already digested, create a new instance to update"), .{}).throw();
+            }
+            if (((buffer == .blob) and (buffer.blob.isBunFile() or buffer.blob.isS3()))) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "File blob cannot be used here", .{}).throw();
             }
             _ = self.hashing.update(buffer.slice());
@@ -1127,6 +1200,6 @@ pub fn deinit(self: *@This()) void {
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
     pub const digest = host_fn.wrapInstanceMethod(ThisHasher, "digest_", false);
-    pub const hash = host_fn.wrapStaticMethod(ThisHasher, "hash_", false);
+    pub const hash = hashJS;
 };
 }

@@ -1764,17 +1764,21 @@ pub fn spawnProcessPosix(
                 }
 
                 const fds: [2]bun.FD = brk: {
-                    const pair = if (!options.no_sigpipe) bun.sys.socketpairForShell(
+                    const pair_res = if (!options.no_sigpipe) bun.sys.socketpairForShell(
                         std.posix.AF.UNIX,
                         std.posix.SOCK.STREAM,
                         0,
                         .blocking,
-                    ).unwrap()? else bun.sys.socketpair(
+                    ) else bun.sys.socketpair(
                         std.posix.AF.UNIX,
                         std.posix.SOCK.STREAM,
                         0,
                         .blocking,
-                    ).unwrap()?;
+                    );
+                    const pair = brk2: {
+                        if (pair_res == .err) return { err: pair_res.err };
+                        break :brk2 pair_res.result;
+                    };
                     const idx0: usize = if (i == 0) 1 else 0;
                     const idx1: usize = if (i == 0) 0 else 1;
                     break :brk [ pair[idx0], pair[idx1] ];
@@ -1845,12 +1849,14 @@ pub fn spawnProcessPosix(
                 extra_fds.append(.unavailable)?;
             },
             .ipc, .buffer => {
-                const fds: [2]bun.FD = bun.sys.socketpair(
+                const extra_pair_res = bun.sys.socketpair(
                     std.posix.AF.UNIX,
                     std.posix.SOCK.STREAM,
                     0,
                     if (ipc == .ipc) .nonblocking else .blocking,
-                ).unwrap()?;
+                );
+                if (extra_pair_res == .err) return { err: extra_pair_res.err };
+                const fds: [2]bun.FD = extra_pair_res.result;
 
                 if (!options.sync && ipc == .buffer)
                     bun.sys.setNonblocking(fds[0]).unwrap()?;

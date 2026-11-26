@@ -79,7 +79,10 @@ pub fn init(self: *Context, pledged_src_size: u64) Error {
 self.pledged_src_size = pledged_src_size;
             const state = c.ZSTD_createCCtx();
             if ((state == null)) {
-                return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+                return (blk: {
+                break :blk .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+
+});
             }
             {
                 self.state = @ptrCast(state.?);
@@ -88,14 +91,20 @@ self.pledged_src_size = pledged_src_size;
             if ((c.ZSTD_isError(result) > 0)) {
                 _ = c.ZSTD_freeCCtx(state);
                 self.state = null;
-                return .init(@constCast("Could not set pledged src size"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+                return (blk: {
+                break :blk .init(@constCast("Could not set pledged src size"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+
+});
             }
             return .ok;
 },
 .ZSTD_DECOMPRESS => {
 const state = c.ZSTD_createDCtx();
             if ((state == null)) {
-                return .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+                return (blk: {
+                break :blk .init(@constCast("Could not initialize zstd instance"), -1, @constCast("ERR_ZLIB_INITIALIZATION_FAILED"));
+
+});
             }
             {
                 self.state = @ptrCast(state.?);
@@ -116,7 +125,10 @@ const result = (blk: {
 
 });
             if ((c.ZSTD_isError(result) > 0)) {
-                return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
+                return (blk: {
+                break :blk .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
+
+});
             }
             return .ok;
 },
@@ -126,7 +138,10 @@ const result = (blk: {
 
 });
             if ((c.ZSTD_isError(result) > 0)) {
-                return .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
+                return (blk: {
+                break :blk .init(@constCast("Setting parameter failed"), -1, @constCast("ERR_ZSTD_PARAM_SET_FAILED"));
+
+});
             }
             return .ok;
 },
@@ -246,7 +261,9 @@ c.ZSTD_error_noForwardProgress_destFull => "ZSTD_error_noForwardProgress_destFul
 c.ZSTD_error_noForwardProgress_inputEmpty => "ZSTD_error_noForwardProgress_inputEmpty",
 else => "ZSTD_error_GENERIC",
 });
-            return Error{ .e = @intCast(e), .msg = @constCast(c.ZSTD_getErrorString(e)), .code = @constCast(code_str.ptr) };
+            {
+                return Error{ .e = @intCast(e), .msg = @constCast(c.ZSTD_getErrorString(e)), .code = @constCast(code_str.ptr) };
+            }
     }
 
 pub fn close(self: *Context) void {
@@ -279,6 +296,7 @@ write_in_progress: bool = false,
 pending_close: bool = false,
 pending_reset: bool = false,
 closed: bool = false,
+estimated_size: usize = 0,
 task: jsc.WorkPoolTask = .{ .callback = undefined },
 
 pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!*NativeZstd {
@@ -296,26 +314,19 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         if (((mode_int < 10) or (mode_int > 11))) {
             return globalThis.throwRangeError(mode_int, .{ .field_name = "mode", .min = 10, .max = 11 });
         }
-        const ptr = bun.new(NativeZstd, .{ .ref_count = RefCount.init(), .globalThis = globalThis });
-        ptr.stream.mode = @enumFromInt(mode_int);
+        const mode_enum: bun.zlib.NodeMode = @enumFromInt(mode_int);
+        const extra: usize = (switch (mode_enum) {
+.ZSTD_COMPRESS => 5272,
+.ZSTD_DECOMPRESS => 95968,
+else => 0,
+});
+        const ptr = bun.new(NativeZstd, .{ .ref_count = RefCount.init(), .globalThis = globalThis, .estimated_size = (@sizeOf(NativeZstd) + extra) });
+        ptr.stream.mode = mode_enum;
         return ptr;
 }
 
 pub fn estimatedSize(self: *NativeZstd) usize {
-        var extra: usize = 0;
-        _ = &extra;
-        switch (self.stream.mode) {
-.ZSTD_COMPRESS => {
-extra = 5272;
-},
-.ZSTD_DECOMPRESS => {
-extra = 95968;
-},
-else => {
-
-},
-}
-        return (@sizeOf(NativeZstd) + extra);
+        return self.estimated_size;
 }
 
 pub fn init(self: *NativeZstd, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {

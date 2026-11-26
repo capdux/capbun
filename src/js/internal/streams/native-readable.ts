@@ -182,7 +182,9 @@ function handleResult(stream: NativeReadable, result: any, chunk: Buffer, isClos
   } else if (typeof result === "boolean") {
     $debug(`[${stream.debugId}] handleResult(${result})`, chunk, isClosed);
     process.nextTick(() => {
-      stream.push(null);
+      if (!stream.destroyed) {
+        stream.push(null);
+      }
     });
     return (chunk?.byteLength ?? 0) > 0 ? chunk : undefined;
   } else if ($isTypedArrayView(result)) {
@@ -206,7 +208,9 @@ function handleNumberResult(stream: NativeReadable, result: number, chunk: any, 
 
   if (isClosed) {
     process.nextTick(() => {
-      stream.push(null);
+      if (!stream.destroyed) {
+        stream.push(null);
+      }
     });
   }
 
@@ -220,7 +224,9 @@ function handleArrayBufferViewResult(stream: NativeReadable, result: any, chunk:
 
   if (isClosed) {
     process.nextTick(() => {
-      stream.push(null);
+      if (!stream.destroyed) {
+        stream.push(null);
+      }
     });
   }
 

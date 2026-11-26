@@ -2096,13 +2096,20 @@ pub struct Parser {
                 for (e of errors) {
                     i += e.msg.len;
                 }
+                if (errors.len > 1) i += errors.len - 1;
                 break :size i;
             };
             let buf = bun.handleOom(_.alloc.alloc(u8, size));
             let i: usize = 0;
+            let idx: usize = 0;
             for (e of errors) {
+                if (idx > 0) {
+                    buf[i] = '\n';
+                    i += 1;
+                }
                 @memcpy(buf[i .. i + e.msg.len], e.msg);
                 i += e.msg.len;
+                idx += 1;
             }
             break :str buf;
         };
@@ -2266,13 +2273,20 @@ pub struct LexResult {
                 for (e of errors) {
                     i += e.msg.len();
                 }
+                if (errors.len > 1) i += errors.len - 1;
                 break :size i;
             };
             let buf = bun.handleOom(allocator.alloc(u8, size));
             let i: usize = 0;
+            let idx: usize = 0;
             for (e of errors) {
+                if (idx > 0) {
+                    buf[i] = '\n';
+                    i += 1;
+                }
                 @memcpy(buf[i .. i + e.msg.len()], e.msg.slice(_.strpool));
                 i += e.msg.len();
+                idx += 1;
             }
             break :str buf;
         };

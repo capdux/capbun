@@ -445,10 +445,23 @@ pub fn ptr_(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue) J
 }
 
 pub fn getPtrSlice(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValue, byteLength: ?JSValue) bun.JSError![]u8 {
-        if ((((!value.isNumber()) or (value.asNumber() < 0)) or (value.asNumber() > @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum" and (@typeInfo(@TypeOf(std.math.maxInt(usize))) == .int or @typeInfo(@TypeOf(std.math.maxInt(usize))) == .comptime_int)) @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize)))))))) {
-            return globalThis.throwInvalidArguments("ptr must be a number.", .{});
+        var num: usize = 0;
+        _ = &num;
+        if (value.isBigInt()) {
+            if ((!value.isBigIntInUInt64Range(0, std.math.maxInt(usize)))) {
+                return globalThis.throwInvalidArguments("ptr is out of range.", .{});
+            }
+            num = @intCast(value.toUInt64NoTruncate());
+        } else {
+            if (value.isNumber()) {
+                if (((value.asNumber() < 0) or (value.asNumber() > @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum" and (@typeInfo(@TypeOf(std.math.maxInt(usize))) == .int or @typeInfo(@TypeOf(std.math.maxInt(usize))) == .comptime_int)) @as(comptime_float, @enumFromInt(std.math.maxInt(usize))) else @as(comptime_float, std.math.maxInt(usize)))))))) {
+                    return globalThis.throwInvalidArguments("ptr must be a number.", .{});
+                }
+                num = value.asPtrAddress();
+            } else {
+                return globalThis.throwInvalidArguments("ptr must be a number.", .{});
+            }
         }
-        const num = value.asPtrAddress();
         if ((num == 0)) {
             return globalThis.throwInvalidArguments("ptr cannot be zero, that would segfault Bun :(", .{});
         }
@@ -551,13 +564,13 @@ pub fn toArrayBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?J
                         ctx = p;
                     } else {
                         if ((!ctx_value.isUndefinedOrNull())) {
-                            return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number || BigInt)", .{});
+                            return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number or BigInt)", .{});
                         }
                     }
                 }
             } else {
                 if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                    return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                    return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number or BigInt)", .{});
                 }
             }
         } else {
@@ -572,7 +585,7 @@ pub fn toArrayBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?J
                     callback = cb;
                 } else {
                     if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                        return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                        return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number or BigInt)", .{});
                     }
                 }
             }
@@ -613,13 +626,13 @@ pub fn toBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValu
                         ctx = p;
                     } else {
                         if ((!ctx_value.isUndefinedOrNull())) {
-                            return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number || BigInt)", .{});
+                            return globalThis.throwInvalidArguments("Expected user data to be a C pointer (number or BigInt)", .{});
                         }
                     }
                 }
             } else {
                 if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                    return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                    return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number or BigInt)", .{});
                 }
             }
         } else {
@@ -634,7 +647,7 @@ pub fn toBuffer(globalThis: *JSGlobalObject, value: JSValue, byteOffset: ?JSValu
                     callback = cb;
                 } else {
                     if ((!callback_value.isEmptyOrUndefinedOrNull())) {
-                        return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number || BigInt)", .{});
+                        return globalThis.throwInvalidArguments("Expected callback to be a C pointer (number or BigInt)", .{});
                     }
                 }
             }

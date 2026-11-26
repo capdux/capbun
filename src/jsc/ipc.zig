@@ -156,6 +156,8 @@ pub const AdvancedIPCMessageType = enum(u8) {
     Version = 1,
     SerializedMessage = 2,
     SerializedInternalMessage = 3,
+    SerializedMessageWithBuffers = 4,
+    SerializedInternalMessageWithBuffers = 5,
     _,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
@@ -417,6 +419,26 @@ if (((data.len - header_length) < message_len)) {
             const deserialized = try JSValue.deserialize(message, global);
             return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .internal = deserialized } };
 },
+.SerializedMessageWithBuffers => {
+if (((data.len - header_length) < message_len)) {
+                _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
+                return error.NotEnoughBytes;
+            }
+            const message = data[header_length..][0..message_len];
+            const deserialized = try JSValue.deserialize(message, global);
+            const unwrapped = Bun__unwrapIPCBufferEnvelope(global, deserialized);
+            return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .data = unwrapped } };
+},
+.SerializedInternalMessageWithBuffers => {
+if (((data.len - header_length) < message_len)) {
+                _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
+                return error.NotEnoughBytes;
+            }
+            const message = data[header_length..][0..message_len];
+            const deserialized = try JSValue.deserialize(message, global);
+            const unwrapped = Bun__unwrapIPCBufferEnvelope(global, deserialized);
+            return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .internal = unwrapped } };
+},
 else => {
 return error.InvalidFormat;
 },
@@ -436,7 +458,10 @@ pub fn getNackPacket() []const u8 {
     }
 
 pub fn serialize(writer: *bun.io.StreamBuffer, global: *jsc.JSGlobalObject, value: JSValue, is_internal: IsInternal) !usize {
-            var serialized = try value.serialize(global, .{ .forCrossProcessTransfer = true, .forStorage = false });
+            const envelope = Bun__wrapIPCBufferEnvelope(global, value);
+            const has_buffers = (!envelope.isNull());
+            const target_value = (if (has_buffers) envelope else value);
+            var serialized = try target_value.serialize(global, .{ .forCrossProcessTransfer = true, .forStorage = false });
             _ = &serialized;
             var _g_ser = DeinitGuard(@TypeOf(serialized)){ .ptr = (blk: {
             break :blk (&serialized);
@@ -448,10 +473,14 @@ pub fn serialize(writer: *bun.io.StreamBuffer, global: *jsc.JSGlobalObject, valu
             const size: u32 = @as(u32, @intCast(serialized.data.len));
             const payload_length: usize = ((@sizeOf(IPCMessageType) + @sizeOf(u32)) + size);
             _ = try writer.ensureUnusedCapacity(payload_length);
-            _ = writer.writeTypeAsBytesAssumeCapacity(IPCMessageType, (switch (is_internal) {
+            const msg_type: IPCMessageType = (if (has_buffers) (switch (is_internal) {
+.internal => .SerializedInternalMessageWithBuffers,
+.external => .SerializedMessageWithBuffers,
+}) else (switch (is_internal) {
 .internal => .SerializedInternalMessage,
 .external => .SerializedMessage,
 }));
+            _ = writer.writeTypeAsBytesAssumeCapacity(IPCMessageType, msg_type);
             _ = writer.writeTypeAsBytesAssumeCapacity(u32, size);
             _ = writer.writeAssumeCapacity(serialized.data);
             return payload_length;
@@ -1313,6 +1342,14 @@ const json_buf = (&send_queue.incoming.json);
                 _ = handleIPCMessage(send_queue, result.message, globalThis);
                 _ = json_buf.consume(result.bytes_consumed);
             }
+            const remaining = json_buf.activeSlice();
+            const max_len: usize = @min(jsc.VirtualMachine.string_allocation_limit, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i32))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i32))) else cp_cast_int(usize, std.math.maxInt(i32))));
+            const too_long = (if (bun.strings.isAllASCII(remaining)) (remaining.len > max_len) else (remaining.len > (max_len *| 3)));
+            if (too_long) {
+                _ = Output.printErrorln("IPC message is too long.", .{});
+                _ = send_queue.closeSocket(.failure, .user);
+                return;
+            }
 },
 .advanced => {
 const adv_buf = (&send_queue.incoming.advanced);
@@ -1382,6 +1419,10 @@ pub const SocketType = IPCSocketType;
 pub const SocketUnion = IPCSocketUnion;
 pub const MAX_HANDLE_RETRANSMISSIONS = 3;
 pub const Target = FromEnum;
+
+extern "c" fn Bun__wrapIPCBufferEnvelope(global: *jsc.JSGlobalObject, val: JSValue) callconv(.c) JSValue;
+
+extern "c" fn Bun__unwrapIPCBufferEnvelope(global: *jsc.JSGlobalObject, val: JSValue) callconv(.c) JSValue;
 
 pub fn decodeIPCMessage(mode: Mode, data: []const u8, global: *jsc.JSGlobalObject, known_newline: ?u32) IPCDecodeError!DecodeIPCMessageResult {
         return (switch (mode) {
@@ -1667,6 +1708,14 @@ const json_buf = (&send_queue.incoming.json);
             } }); });
             _ = handleIPCMessage(send_queue, result.message, globalThis);
             _ = json_buf.consume(result.bytes_consumed);
+        }
+        const remaining = json_buf.activeSlice();
+        const max_len: usize = @min(jsc.VirtualMachine.string_allocation_limit, (if (comptime @typeInfo(@TypeOf(std.math.maxInt(i32))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(i32))) else cp_cast_int(usize, std.math.maxInt(i32))));
+        const too_long = (if (bun.strings.isAllASCII(remaining)) (remaining.len > max_len) else (remaining.len > (max_len *| 3)));
+        if (too_long) {
+            _ = Output.printErrorln("IPC message is too long.", .{});
+            _ = send_queue.closeSocket(.failure, .user);
+            return;
         }
 },
 .advanced => {

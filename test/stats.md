@@ -161,11 +161,20 @@
 
 ## 四、正在运行中的并发修复
 
-- **无（Batch 52–58 已提交推送，即将派发 Batch 59 三路并发）**
+- **无（Batch 59–61 已提交推送，即将派发 Batch 62 并发）**
 
 ---
 
-## 五、Batch 52–58 新增通过与收敛明细（2026-11-27）
+## 五、Batch 59–61 新增通过与收敛明细（2026-11-27）
+
+1. **新验证全绿（0 fail，实测 `1.4.5-debug`）**：
+   - **Batch 59–61 修复转绿（7 个）**：`38087` (2/2)、`node-tls-no-cipher-match-error` (1/1)、`spawn-pidfd-emfile` (2/2)、`node/fs/glob` (34/34)、`bun/shell/lex` (43/43)、`bun/util/escapeHTML.test.js`、`bun/util/bun-file-exists.test.js`
+   - **显著收敛**：`password.test.ts` (76/77，仅余 ASan `ulimit -v`)、`bun-cryptohasher.test.ts` (105/109)、`ls.test.ts` (29/30)、`ffi-error-messages.test.ts` (42/44)、`spawn.ipc.test.ts` (14/20)、`cc.test.ts` (消除 panic)
+   - **新扫描 0 fail**：`bun/shell/` 18 个、`web/workers/` 5 个（`message-event`, `message-port-pipe`, `performance-observer-leak`, `worker_blob`, `message-port-closed-leak`）、`node/vm`+`zlib` 6 个（`sourcetextmodule-leak`, `bytesWritten`, `deflate-streaming`, `zlib-onerror-reentrancy`, `zlib-reset-race`, `zlib.kMaxLength.global`）、`bun/ffi/mh-execute-header` (0 fail/1 skip)
+
+---
+
+## 六、Batch 52–58 新增通过与收敛明细（2026-11-27）
 
 1. **新验证全绿（0 fail，实测 `1.4.5-debug`）**：
    - **Regression Issues (Batch 52–58 修复转绿 11 个)**：`17190` (1/1)、`21680` (2/2)、`26851` (2/2)、`27890` (4/4)、`31652` (1/1)、`32489` (2/2)、`40268` (1/1)、`40606` (1/1)、`44275` (3/3)、`postgres-null-byte-injection` (5/5)、`s3-header-injection` (7/7)

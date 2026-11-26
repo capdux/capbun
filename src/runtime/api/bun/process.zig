@@ -2570,7 +2570,13 @@ else => "spawn_stdio_generic",
 };
                 }
                 const fds: [2]bun.FD = brk: {
-                const pair = (if ((!options.no_sigpipe)) try bun.sys.socketpairForShell(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking).unwrap() else try bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking).unwrap());
+                const pair_res = (if ((!options.no_sigpipe)) bun.sys.socketpairForShell(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking) else bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking));
+                const pair = brk2: {
+                if ((pair_res == .err)) {
+                    return .{ .err = pair_res.err };
+                }
+                break :brk2 pair_res.result;
+};
                 const idx0: usize = (if ((i == 0)) 1 else 0);
                 const idx1: usize = (if ((i == 0)) 0 else 1);
                 break :brk .{ pair[@as(usize, @intCast(idx0))], pair[@as(usize, @intCast(idx1))] };
@@ -2631,7 +2637,11 @@ _ = try actions.open(fileno, path, (bun.O.RDWR | bun.O.CREAT), 436);
                 _ = try extra_fds.append(.unavailable);
 },
 .ipc, .buffer => {
-const fds: [2]bun.FD = try bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, (if ((ipc == .ipc)) .nonblocking else .blocking)).unwrap();
+const extra_pair_res = bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, (if ((ipc == .ipc)) .nonblocking else .blocking));
+                if ((extra_pair_res == .err)) {
+                    return .{ .err = extra_pair_res.err };
+                }
+                const fds: [2]bun.FD = extra_pair_res.result;
                 if (((!options.sync) and (ipc == .buffer))) {
                     _ = try bun.sys.setNonblocking(fds[0]).unwrap();
                 }

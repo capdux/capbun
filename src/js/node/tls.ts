@@ -408,13 +408,20 @@ const NativeSecureContext = $zig("SecureContext.zig", "js.getConstructor");
 // crossing into native so `{ key: false }` etc. doesn't throw
 // ERR_INVALID_ARG_TYPE from the bindgen layer.
 function newNativeSecureContext(options) {
-  if (options && (!options.key || !options.cert || !options.ca || options.ALPNProtocols)) {
+  if (
+    options &&
+    (!options.key || !options.cert || !options.ca || options.ALPNProtocols || typeof options.ciphers === "string")
+  ) {
     options = {
       ...options,
       key: options.key || null,
       cert: options.cert || null,
       ca: options.ca || null,
     };
+    if (typeof options.ciphers === "string") {
+      const filtered = options.ciphers.split(":").filter(tlsCipherFilter).join(":");
+      options.ciphers = filtered || undefined;
+    }
     if (options.ALPNProtocols) {
       convertALPNProtocols(options.ALPNProtocols, options);
     }

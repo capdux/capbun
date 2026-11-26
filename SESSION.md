@@ -1130,3 +1130,8 @@
 - **验收摘要**：
   - 29 个修复套件实测 `1.4.5-debug` 全部 `0 fail`（含 `17190/21680/26851/27890/31652/32489/40268/40606/44275/postgres-null-byte-injection/s3-header-injection`、`node-tls-rootcertificates-immutable/concurrent-init`、`crypto-{lazyhash,oneshot}`/`x509-subclass`/`hkdf-*`/`scrypt`、`node/fs/dir`、`serve-close-delimited-framing`/`bun-serve-static`、`spawn-{kill-signal,signal,path,renamed-cwd}`、`bun-test`/`new-snapshot`/`snapshots/more`）。
   - 另新扫描确认 200+ 文件 0 fail 并记入 `test/stats.md`（不再重复测试）。
+- **3h 审计（`task-36436`）**：已固化验收集后缀校验与 `lexer.cp` 无符号减法对照 `_.zig` 两条优化至 `GEMINI.md`。
+
+### [2026-11-27 Batch 59–61] Shell / Util / Spawn / Glob / VM / Zlib / Workers / Stream / FFI 收敛与验收
+- **核心动作**：重启恢复后重开 2–3 路一次性子智能体并行推进 `Batch 59–61`，修复 `src/shell/builtin/{mv,cp,ls}.cp`、`shell.cp`、`immutable.cp`、`CryptoHasher.cp`、`PasswordObject.cp`、`BunObject.cp`、`process.cp`、`ipc.cp`、`Serialization.cpp`、`glob.ts`、`NativeZstd.cp`、`NodeVM{SourceTextModule,Script}.cpp`、`node_crypto_binding.cp`、`webstreams_adapters.ts`、`FFIObject.cp`、`ffi.cp`、`ffi.ts`、`tls.ts`、`JSURLSearchParams.cpp`，并通过 `bun bd` 重编 `1.4.5-debug` 验收。
+- **验收摘要**：`38087` (2/2)、`node-tls-no-cipher-match-error` (1/1)、`spawn-pidfd-emfile` (2/2)、`node/fs/glob` (34/34)、`bun/shell/lex` (43/43)、`escapeHTML.test.js`、`bun-file-exists.test.js` 全绿；`password` (76/77)、`bun-cryptohasher` (105/109)、`ls` (29/30)、`ffi-error-messages` (42/44) 显著收敛；另新扫描确认 30 个文件 0 fail。

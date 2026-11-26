@@ -198,7 +198,7 @@ self.verbose = true;
             return .continue_parsing;
 },
 'n' => {
-self.overwrite_existing_file = true;
+self.overwrite_existing_file = false;
             self.remove_and_create_new_file_if_not_found = false;
             return .continue_parsing;
 },
@@ -412,7 +412,7 @@ if ((e.getErrno() == .NOENT)) {
             _ = &copying_many;
             self.src_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, src[0..src.len]));
             self.tgt_absolute = bun.handleOom(bun.default_allocator.dupeZ(u8, tgt[0..tgt.len]));
-            const args = jsc.Node.fs.Arguments.Cp{ .src = jsc.Node.PathLike{ .string = bun.PathString.init(self.src_absolute.?) }, .dest = jsc.Node.PathLike{ .string = bun.PathString.init(self.tgt_absolute.?) }, .flags = .{ .mode = @enumFromInt(0), .recursive = self.opts.recursive, .force = true, .errorOnExist = false, .deinit_paths = false } };
+            const args = jsc.Node.fs.Arguments.Cp{ .src = jsc.Node.PathLike{ .string = bun.PathString.init(self.src_absolute.?) }, .dest = jsc.Node.PathLike{ .string = bun.PathString.init(self.tgt_absolute.?) }, .flags = .{ .mode = @enumFromInt(0), .recursive = self.opts.recursive, .force = self.opts.overwrite_existing_file, .errorOnExist = false, .deinit_paths = false } };
             _ = task_debug("Scheduling {s} -> {s}", .{ self.src_absolute.?, self.tgt_absolute.? });
             if ((self.event_loop == .js)) {
                 const vm: *jsc.VirtualMachine = self.event_loop.js.getVmImpl();
