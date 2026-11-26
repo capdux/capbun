@@ -2519,6 +2519,11 @@ pub struct Formatter {
                 // Strings are printed directly, otherwise we recurse. It is possible to end up in an infinite loop.
                 if (result.isString()) {
                     writer.print("{f}", [ result.fmtString(_.globalThis)]);
+                } else if (result == _.custom_formatted_object.@"this") {
+                    const fallback = ConsoleObject.Formatter.Tag.getAdvanced(result, _.globalThis, {
+                        disable_inspect_custom: true,
+                    })?;
+                    _.format(fallback, Writer, writer_, result, _.globalThis, enable_ansi_colors)?;
                 } else {
                     _.format(ConsoleObject.Formatter.Tag.get(result, _.globalThis)?, Writer, writer_, result, _.globalThis, enable_ansi_colors)?;
                 }

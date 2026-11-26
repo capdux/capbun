@@ -56,7 +56,8 @@
   - `test/js/node/{buffer-compare-bounds,buffer-concat,buffer-copy-fill-detach,buffer-from-encoding-leak,buffer-indexOf-detach,buffer-inspectmaxbytes}.test.ts` 等 `root1` 23 个文件
   - **本轮新确认 0 fail 套件**：`test/js/node/buffer/`、`test/js/node/readline/readline.node.test.ts`（`TERM=xterm` 下 81/81）、`test/js/bun/cron/`、`test/js/bun/resolve/`、`test/js/bun/shell/`、`test/js/bun/spawn/`、`test/js/bun/http/`、`test/js/web/streams/`、`test/bundler/transpiler/ts-enum-redecl-panic.test.ts`（6/6）、`test/js/web/console/`（12/12）、`test/js/web/web-globals.test.js`（61/61）、`test/js/web/workers/worker-postmessage-transfer.test.ts`（7/7）、`test/js/node/crypto/crypto.test.ts`（403/403）、`test/js/node/stream/node-stream-uint8array.test.ts`（5/5）、`test/js/node/fs/fs-stats-constructor.test.ts`（7/7）、`test/js/node/dns/`（0 fail）、`test/regression/issue/{28024,11029-crypto-verify-null-algorithm,21274,23183,31002,30963,jsx-template-string-crash,26915}.test.ts`（8 套件全 0 fail）
   - **Batch 40–47 新确认 0 fail 套件（`1.4.5-debug` 已验证，严禁重复测试）**：`test/js/bun/cookie/`、`test/js/bun/udp/`、`test/js/bun/css/`、`test/js/bun/ffi/ffi-viewSource-non-object.test.ts`（28/28）、`test/js/bun/net/socket-dns-error.test.ts`、`test/js/node/path/`、`test/js/web/encoding/`（全部 6 文件 0 fail）、`test/js/web/workers/message-channel.test.ts`、`test/js/web/websocket/websocket-proxy-connect-reply.test.ts`（54/54）、`test/regression/issue/{25589,25589-write-end,31611,36450}.test.ts`、`test/cli/update_interactive_install.test.ts`（7/7 全绿，彻底消除 `dedupe.cp` 死循环）
-  - **Batch 40–47 显著收敛套件（`1.4.5-debug` 已验证）**：`test/js/bun/jsonc/`（仅余 6 fail）、`test/js/bun/archive.test.ts`（仅余 1 fail）、`test/js/bun/terminal/`（仅余 1 fail）、`test/js/bun/s3/`（8/9 文件全绿，仅余 `s3-list-objects`）、`test/js/bun/patch/patch.test.ts`（仅余 4 fail）、`test/js/node/dgram/`（仅余 1 fail）、`test/js/node/v8/capture-stack-trace.test.js`（仅余 1 fail）、`test/js/node/perf_hooks/`（仅余 1 fail）、`test/js/node/process/process-stdin.test.ts`（5 fail -> 仅余 2 fail）、`test/js/node/http2/h2-conformance.test.ts`（仅余 1 fail）、`test/js/node/tls/node-tls-duplex-close-throw-uaf.test.ts`（前 4 项全绿；后 4 项缺 v1.4.4 `Bun.ModuleGraph`）、`test/js/node/stream/web-stream-state.test.ts`（44 fail -> 仅余 3 fail）、`test/js/web/url/`（仅余 1 fail `URLContext`）、`test/js/web/broadcastchannel/`（仅余 1 fail `worker wait`）
+  - **Batch 48–49 新确认 0 fail 套件（`1.4.5-debug` 已验证，严禁重复测试）**：`test/js/bun/archive.test.ts`、`test/js/bun/terminal/`（`terminal-platform-gaps` + `terminal-spawn`）、`test/js/bun/test/jest-extended.test.js`、`test/js/bun/test/test-timers.test.ts`、`test/js/bun/test/test-test.test.ts`、`test/js/bun/test/mock-fn.test.js`、`test/js/node/dgram/`、`test/js/node/http/{node-http-backpressure,node-http-req-complete,node-http-incoming-socket}.test.ts`、`test/js/web/html/`（全 5 文件）、`test/js/web/fetch/{wasm-streaming,stream-fast-path}.test.ts`、`test/js/web/url/`（全 3 文件）、`test/js/web/broadcastchannel/`（全 2 文件）
+  - **显著收敛套件（`1.4.5-debug` 已验证）**：`test/js/bun/image/`（23+ fail -> 仅余 1 fail）、`test/js/bun/patch/patch.test.ts`（全用例通过，仅尾段退出前有 1 处 `drainMicrotasks` 断言）、`test/js/bun/test/expect.test.js`（`resolves`/`rejects` 与 `.not.toThrow` 已修，仅余 2 项 `BUN_JSC_validateExceptionChecks=1` 启动断言）、`test/js/bun/jsonc/`（6 项语法解析通过，仅余 `JSONCObject` 改走 `json.cp` 引发的孤立代理 `\uXXXX`）、`test/js/bun/s3/`（8/9 文件全绿，仅余 `s3-list-objects`）、`test/js/node/v8/capture-stack-trace.test.js`（仅余 1 fail `HTMLRewriter reaction`）、`test/js/node/perf_hooks/`（仅余 1 fail）、`test/js/node/process/process-stdin.test.ts`（仅余 2 fail）、`test/js/node/tls/node-tls-duplex-close-throw-uaf.test.ts`（前 4 项全绿）
 
 ---
 
@@ -157,13 +158,13 @@
 
 ## 四、正在运行中的并发修复
 
-- **无（Batch 40–47 已提交推送，即将派发 Batch 48 三路并发）**
+- **无（Batch 48–49 已提交推送，即将派发 Batch 50 三路并发）**
 
 ---
 
-## 五、下一波待攻克收敛项（Batch 48+）
+## 五、下一波待攻克收敛项（Batch 50+）
 
-1. **`test/js/node/http/`**（Batch 46D `https.createServer` / `Transfer-Encoding` / `writableNeedDrain` 已编入，待验收）与 **`test/js/bun/test/`**（Batch 47A/47C `JSMockFunction` / `countChar` / `FakeTimers` / `expect` 已编入，待验收）
-2. **`test/js/web/html/` & `test/js/web/fetch/`**（此前受 `node:fs/promises` 阻断，现 `1.4.5-debug` 已重编对齐，待扫修）
-3. **高收敛尾项清零**：`web-stream-state.test.ts` 剩余 3 项、`bun/jsonc/` 6 项、`bun/archive.test.ts` 1 项、`bun/patch` 4 项、`bun/s3/s3-list-objects`、`bun/image` JPEG warning、`bun/net` TLS callback `stop(true)` 2 项、`bun/repl` 剩余项、`node/dgram` 1 项、`node/v8` 1 项、`node/perf_hooks` 1 项、`node/http2` 1 项、`web/url` 1 项、`web/broadcastchannel` 1 项
-4. **明确冻结（v1.4.4 缺失新特性，不重复排查）**：`Bun.ModuleGraph`（`node-tls-duplex-close-throw-uaf` 后 4 项）、`bun lint`、`server.maxHeadersCount`、`sqlite` `db.function()`/`SQL.handleNumber`/`SQL.updateHook`、`happy-dom`/`strip-ansi`/`ws` 缺测试依赖项。
+1. **`test/js/bun/s3/s3-list-objects.test.ts`**（仍超时原因）与 **`test/js/bun/image/` 仅余 1 项**（`metadata()` 警告后 colorspace 检查拒绝）
+2. **`test/js/bun/jsonc/`**（保留 `json.cp` 6 项尾部校验同时修复 `\uXXXX` 孤立代理码元保持）与 **`test/js/node/stream/web-stream-state.test.ts`**（为何重编后部分 `Bun.write`/`Bun.spawn`/`HTMLRewriter` 仍失败）
+3. **`test/js/bun/patch/patch.test.ts`** 尾段 `drainMicrotasks` pending exception 断言、**`test/js/node/perf_hooks/`** 1 项、**`test/js/node/process/process-stdin.test.ts`** `paused` 退出 1 项
+4. **明确冻结（v1.4.4 缺失新特性，不重复排查）**：`Bun.ModuleGraph`（`node-tls-duplex-close-throw-uaf` 后 4 项）、`bun lint`、`server.maxHeadersCount`、`node:repl` + `--interactive`（`1960936e231`）、`alpnCallback`/`serverName` TLS selection `stop(true)`、`sqlite` `db.function()`/`SQL.handleNumber`/`SQL.updateHook`、`happy-dom`/`strip-ansi`/`ws` 缺测试依赖项。

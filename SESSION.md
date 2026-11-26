@@ -1107,3 +1107,11 @@
 - **验证摘要**：
   - **新全绿（0 fail）**：`bun/cookie`、`bun/udp`、`bun/css`、`bun/ffi/ffi-viewSource-non-object.test.ts`（28/28）、`bun/net/socket-dns-error.test.ts`、`node/path`、`web/encoding`（全 6 文件 0 fail）、`web/workers/message-channel.test.ts`、`web/websocket/websocket-proxy-connect-reply.test.ts`（54/54）、`regression/issue/{25589,25589-write-end,31611,36450}.test.ts`、`cli/update_interactive_install.test.ts`（7/7）。
   - **显著收敛**：`web-stream-state.test.ts`（44 fail -> 3 fail）、`node-tls-duplex-close-throw-uaf`（前 4 项全绿）、`bun/jsonc`（仅余 6 fail）、`bun/archive`（仅余 1 fail）、`process-stdin`（5 fail -> 2 fail）、`bun/net` `stop(true)` 与 `node:net handle GC` 超时清零。
+
+### [2026-11-27 Batch 48–49] 尾项清零、`bun bd` 编译与验收提交
+- **用户指令**：持续 3 路子智能体 + 主智能体并行推进、每波验收后及时更新 `test/stats.md` 与文档并 `git commit && git push origin main`。
+- **核心动作**：
+  - 完成 **Batch 48–49** 跨模块尾项修复，并通过 `bun bd -p 'Bun.version'` 重新编译 `1.4.5-debug` 完成分路并发验收。
+- **验证摘要**：
+  - **新全绿（0 fail）**：`bun/archive.test.ts`、`bun/terminal/`（`terminal-platform-gaps` + `terminal-spawn`）、`bun/test/{jest-extended,test-timers,test-test,mock-fn}`、`node/dgram`、`node/http/{node-http-backpressure,node-http-req-complete,node-http-incoming-socket}`、`web/html/`（全 5 文件）、`web/fetch/{wasm-streaming,stream-fast-path}`、`web/url/`（全 3 文件）、`web/broadcastchannel/`（全 2 文件）。
+  - **显著收敛**：`bun/image/`（23+ fail -> 仅余 1 fail）；定位并冻结 `node:repl` + `--interactive`（`1960936e231`）及 `alpnCallback`/`serverName` TLS selection `stop(true)` 缺失特性。

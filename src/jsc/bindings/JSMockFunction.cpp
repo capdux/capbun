@@ -294,29 +294,26 @@ public:
 
     void copyNameAndLength(JSC::VM& vm, JSGlobalObject* global, JSC::JSValue value)
     {
-        auto catcher = DECLARE_TOP_EXCEPTION_SCOPE(vm);
+        auto scope = DECLARE_THROW_SCOPE(vm);
         WTF::String nameToUse;
         if (auto* fn = dynamicDowncast<JSFunction>(value)) {
             nameToUse = fn->name(vm);
             JSValue lengthJSValue = fn->get(global, vm.propertyNames->length);
+            RETURN_IF_EXCEPTION(scope, );
             if (lengthJSValue.isNumber()) {
                 this->putDirect(vm, vm.propertyNames->length, (lengthJSValue), JSC::PropertyAttribute::DontEnum | JSC::PropertyAttribute::ReadOnly);
             }
         } else if (auto* fn = dynamicDowncast<JSMockFunction>(value)) {
             JSValue nameValue = fn->get(global, vm.propertyNames->name);
-            if (!catcher.exception()) {
-                nameToUse = nameValue.toWTFString(global);
-            }
+            RETURN_IF_EXCEPTION(scope, );
+            nameToUse = nameValue.toWTFString(global);
+            RETURN_IF_EXCEPTION(scope, );
         } else if (auto* fn = dynamicDowncast<InternalFunction>(value)) {
             nameToUse = fn->name();
         } else {
             nameToUse = "mockConstructor"_s;
         }
         this->setName(nameToUse);
-
-        if (catcher.exception()) {
-            (void)catcher.tryClearException();
-        }
     }
 
     void initMock()
@@ -1237,7 +1234,9 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionMockResolvedValue, (JSC::JSGlobalObject *
     auto scope = DECLARE_THROW_SCOPE(vm);
     CHECK_IS_MOCK_FUNCTION(thisValue);
 
-    pushImpl(thisObject, globalObject, JSMockImplementation::Kind::ReturnValue, JSC::JSPromise::resolvedPromise(globalObject, callframe->argument(0)));
+    JSValue resolved = JSC::JSPromise::resolvedPromise(globalObject, callframe->argument(0));
+    RETURN_IF_EXCEPTION(scope, {});
+    pushImpl(thisObject, globalObject, JSMockImplementation::Kind::ReturnValue, resolved);
 
     RELEASE_AND_RETURN(scope, JSValue::encode(thisObject));
 }
@@ -1250,7 +1249,9 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionMockResolvedValueOnce, (JSC::JSGlobalObje
     auto scope = DECLARE_THROW_SCOPE(vm);
     CHECK_IS_MOCK_FUNCTION(thisValue);
 
-    pushImplOnce(thisObject, globalObject, JSMockImplementation::Kind::ReturnValue, JSC::JSPromise::resolvedPromise(globalObject, callframe->argument(0)));
+    JSValue resolved = JSC::JSPromise::resolvedPromise(globalObject, callframe->argument(0));
+    RETURN_IF_EXCEPTION(scope, {});
+    pushImplOnce(thisObject, globalObject, JSMockImplementation::Kind::ReturnValue, resolved);
 
     RELEASE_AND_RETURN(scope, JSValue::encode(thisObject));
 }
@@ -1428,8 +1429,13 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionWithImplementation, (JSC::JSGlobalObject 
     }
 
     thisObject->implementation.set(vm, thisObject, lastImpl);
-    thisObject->tail.set(vm, thisObject, lastImpl);
+    thisObject->tail.set(vm, thisObject, lastTail);
     thisObject->fallbackImplmentation.set(vm, thisObject, lastFallback);
+
+    if (exception) [[unlikely]] {
+        throwException(globalObject, scope, exception);
+        return {};
+    }
 
     return JSC::JSValue::encode(jsUndefined());
 }
@@ -1550,6 +1556,7 @@ BUN_DEFINE_HOST_FUNCTION(JSMock__jsSpyOn, (JSC::JSGlobalObject * lexicalGlobalOb
                 attributes = slot.attributes();
 
             mock->copyNameAndLength(vm, globalObject, value);
+            RETURN_IF_EXCEPTION(scope, {});
 
             if (JSModuleNamespaceObject* moduleNamespaceObject = tryJSDynamicCast<JSModuleNamespaceObject*>(object)) {
                 moduleNamespaceObject->overrideExportValue(globalObject, propertyKey, mock);

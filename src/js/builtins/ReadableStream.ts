@@ -163,19 +163,21 @@ export function readableStreamToArrayBuffer(stream: ReadableStream<ArrayBuffer>)
       }
       case 1: {
         const view = result[0];
-        if (view instanceof ArrayBuffer || view instanceof SharedArrayBuffer) {
-          return view;
+        if (view instanceof ArrayBuffer) {
+          return view.detached ? new ArrayBuffer(0) : view.slice(0);
+        }
+
+        if (view instanceof SharedArrayBuffer) {
+          return view.slice(0);
         }
 
         if (ArrayBuffer.isView(view)) {
           const buffer = view.buffer;
-          const byteOffset = view.byteOffset;
-          const byteLength = view.byteLength;
-          if (byteOffset === 0 && byteLength === buffer.byteLength) {
-            return buffer;
+          if (buffer.detached) {
+            return new ArrayBuffer(0);
           }
 
-          return buffer.slice(byteOffset, byteOffset + byteLength);
+          return buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
         }
 
         if (typeof view === "string") {
@@ -244,16 +246,20 @@ export function readableStreamToBytes(stream: ReadableStream<ArrayBuffer>): Prom
       }
       case 1: {
         const view = result[0];
-        if (view instanceof Uint8Array) {
-          return view;
-        }
-
         if (ArrayBuffer.isView(view)) {
-          return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+          const buffer = view.buffer;
+          if (buffer.detached) {
+            return new Uint8Array(0);
+          }
+          return new Uint8Array(buffer.slice(view.byteOffset, view.byteOffset + view.byteLength));
         }
 
-        if (view instanceof ArrayBuffer || view instanceof SharedArrayBuffer) {
-          return new Uint8Array(view);
+        if (view instanceof ArrayBuffer) {
+          return view.detached ? new Uint8Array(0) : new Uint8Array(view.slice(0));
+        }
+
+        if (view instanceof SharedArrayBuffer) {
+          return new Uint8Array(view.slice(0));
         }
 
         if (typeof view === "string") {

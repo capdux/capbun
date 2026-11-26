@@ -45,8 +45,6 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
-fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -55,7 +53,6 @@ const ptr = @import("bun").ptr;
 const strings = @import("bun").strings;
 const String = @import("bun").String;
 const JSError = @import("bun").JSError;
-pub const xml_response = @import("./xml_response.zig");
 pub const S3ListObjectsOptions = struct {
     continuation_token: ?[]const u8 = null,
     delimiter: ?[]const u8 = null,
@@ -114,49 +111,11 @@ pub const S3ListObjectsContents = struct {
     storage_class: ?[]const u8 = null,
     owner: ?ObjectOwner = null,
     restore_status: ?ObjectRestoreStatus = null,
-    strings_owned: bool = false,
 
 pub fn deinit(self: *S3ListObjectsContents) void {
             if (self.etag) |*etag| {
                 _ = &etag;
                 _ = (etag.*).deinit();
-            }
-            if (self.strings_owned) {
-                _ = default_allocator.free(self.key);
-                if (self.checksum_type) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.checksum_algorithme) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.last_modified) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.storage_class) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.owner) |o| {
-                    _ = &o;
-                    if (o.id) |s| {
-                        _ = &s;
-                        _ = default_allocator.free(s);
-                    }
-                    if (o.display_name) |s| {
-                        _ = &s;
-                        _ = default_allocator.free(s);
-                    }
-                }
-                if (self.restore_status) |r| {
-                    _ = &r;
-                    if (r.restore_expiry_date) |s| {
-                        _ = &s;
-                        _ = default_allocator.free(s);
-                    }
-                }
             }
     }
 };
@@ -175,40 +134,22 @@ pub const S3ListObjectsV2Result = struct {
     start_after: ?[]const u8 = null,
     common_prefixes: ?Managed(string) = null,
     contents: ?Managed(S3ListObjectsContents) = null,
-    strings_owned: bool = false,
+    owned_strings: ?Managed(string) = null,
 
 pub fn deinit(self: *S3ListObjectsV2Result) void {
-            if ((self.delimiter_owned or self.strings_owned)) {
+            if (self.delimiter_owned) {
                 if (self.delimiter) |d| {
                     _ = &d;
                     _ = default_allocator.free(d);
                 }
             }
-            if (self.strings_owned) {
-                if (self.name) |s| {
+            if (self.owned_strings) |owned| {
+                _ = &owned;
+                for (owned.items) |s| {
                     _ = &s;
                     _ = default_allocator.free(s);
                 }
-                if (self.prefix) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.encoding_type) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.continuation_token) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.next_continuation_token) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
-                if (self.start_after) |s| {
-                    _ = &s;
-                    _ = default_allocator.free(s);
-                }
+                _ = owned.deinit();
             }
             if (self.contents) |contents| {
                 _ = &contents;
@@ -220,12 +161,6 @@ pub fn deinit(self: *S3ListObjectsV2Result) void {
             }
             if (self.common_prefixes) |common_prefixes| {
                 _ = &common_prefixes;
-                if (self.strings_owned) {
-                    for (common_prefixes.items) |cp_prefix| {
-                        _ = &cp_prefix;
-                        _ = default_allocator.free(cp_prefix);
-                    }
-                }
                 _ = common_prefixes.deinit();
             }
     }
@@ -353,6 +288,286 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
     }
 };
 
+pub const DecodedText = struct {
+    text: []const u8,
+    owned: bool,
+};
+
+pub const XmlCursor = struct {
+    xml: []const u8,
+    pos: usize = 0,
+
+pub fn skipWs(self: *XmlCursor) void {
+            while (((self.pos < self.xml.len) and ((((self.xml[@as(usize, @intCast(self.pos))] == 32) or (self.xml[@as(usize, @intCast(self.pos))] == 9)) or (self.xml[@as(usize, @intCast(self.pos))] == 13)) or (self.xml[@as(usize, @intCast(self.pos))] == 10)))) {
+                self.pos = (self.pos + 1);
+            }
+    }
+
+pub fn skipComment(self: *XmlCursor) !void {
+            if (strings.indexOf(self.xml[self.pos..], "-->")) |end_idx| {
+                _ = &end_idx;
+                self.pos = (self.pos + (end_idx + 3));
+            } else {
+                return error.InvalidResponse;
+            }
+    }
+
+pub fn skipProlog(self: *XmlCursor) !void {
+            while (true) {
+                _ = self.skipWs();
+                if ((self.pos >= self.xml.len)) {
+                    break;
+                }
+                if (strings.startsWith(self.xml[self.pos..], "<?")) {
+                    if (strings.indexOf(self.xml[(self.pos + 2)..], "?>")) |end_idx| {
+                        _ = &end_idx;
+                        self.pos = (self.pos + (4 + end_idx));
+                    } else {
+                        return error.InvalidResponse;
+                    }
+                } else {
+                    if (strings.startsWith(self.xml[self.pos..], "<!--")) {
+                        self.pos = (self.pos + 4);
+                        _ = try self.skipComment();
+                    } else {
+                        if (strings.startsWith(self.xml[self.pos..], "<!DOCTYPE")) {
+                            if (strings.indexOfChar(self.xml[(self.pos + 9)..], 62)) |end_idx| {
+                                _ = &end_idx;
+                                self.pos = (self.pos + (10 + end_idx));
+                            } else {
+                                return error.InvalidResponse;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+    }
+
+pub fn readTagName(self: *XmlCursor) ![]const u8 {
+            const start = self.pos;
+            while ((self.pos < self.xml.len)) {
+                const c = self.xml[@as(usize, @intCast(self.pos))];
+                if (((((((c == 32) or (c == 9)) or (c == 13)) or (c == 10)) or (c == 62)) or (c == 47))) {
+                    break;
+                }
+                if ((c == 60)) {
+                    return error.InvalidResponse;
+                }
+                self.pos = (self.pos + 1);
+            }
+            if ((self.pos == start)) {
+                return error.InvalidResponse;
+            }
+            return self.xml[start..self.pos];
+    }
+
+pub fn skipAttributes(self: *XmlCursor) !bool {
+            var quote: u8 = 0;
+            _ = &quote;
+            while ((self.pos < self.xml.len)) {
+                const c = self.xml[@as(usize, @intCast(self.pos))];
+                if ((quote != 0)) {
+                    if ((c == quote)) {
+                        quote = 0;
+                    }
+                    self.pos = (self.pos + 1);
+                } else {
+                    if (((c == 34) or (c == 39))) {
+                        quote = c;
+                        self.pos = (self.pos + 1);
+                    } else {
+                        if ((c == 62)) {
+                            self.pos = (self.pos + 1);
+                            return false;
+                        } else {
+                            if ((((c == 47) and ((self.pos + 1) < self.xml.len)) and (self.xml[@as(usize, @intCast((self.pos + 1)))] == 62))) {
+                                self.pos = (self.pos + 2);
+                                return true;
+                            } else {
+                                if ((c == 60)) {
+                                    return error.InvalidResponse;
+                                } else {
+                                    self.pos = (self.pos + 1);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return error.InvalidResponse;
+    }
+
+pub fn readClosingTag(self: *XmlCursor, expected: []const u8) !void {
+            if ((!strings.eql(try self.readTagName(), expected))) {
+                return error.InvalidResponse;
+            }
+            _ = self.skipWs();
+            if (((self.pos >= self.xml.len) or (self.xml[@as(usize, @intCast(self.pos))] != 62))) {
+                return error.InvalidResponse;
+            }
+            self.pos = (self.pos + 1);
+    }
+
+pub fn readLeafText(self: *XmlCursor, tag_name: []const u8) !DecodedText {
+            const start = self.pos;
+            var has_amp = false;
+            _ = &has_amp;
+            var has_special = false;
+            _ = &has_special;
+            while ((self.pos < self.xml.len)) {
+                const c = self.xml[@as(usize, @intCast(self.pos))];
+                if ((c == 38)) {
+                    has_amp = true;
+                    self.pos = (self.pos + 1);
+                } else {
+                    if ((c == 60)) {
+                        if ((((self.pos + 1) < self.xml.len) and (self.xml[@as(usize, @intCast((self.pos + 1)))] == 47))) {
+                            const end = self.pos;
+                            self.pos = (self.pos + 2);
+                            _ = try self.readClosingTag(tag_name);
+                            if ((!has_special)) {
+                                const raw = self.xml[start..end];
+                                if ((!has_amp)) {
+                                    return DecodedText{ .text = raw, .owned = false };
+                                }
+                                var out = Managed(u8).init(default_allocator);
+                                _ = &out;
+                                _ = appendDecodedEntities((&out), raw);
+                                return DecodedText{ .text = bun.handleOom(out.toOwnedSlice()), .owned = true };
+                            }
+                            break;
+                        } else {
+                            if (strings.startsWith(self.xml[self.pos..], "<![CDATA[")) {
+                                has_special = true;
+                                break;
+                            } else {
+                                if (strings.startsWith(self.xml[self.pos..], "<!--")) {
+                                    has_special = true;
+                                    break;
+                                } else {
+                                    return error.InvalidResponse;
+                                }
+                            }
+                        }
+                    } else {
+                        self.pos = (self.pos + 1);
+                    }
+                }
+            }
+            if ((!has_special)) {
+                return error.InvalidResponse;
+            }
+            self.pos = start;
+            var out = Managed(u8).init(default_allocator);
+            _ = &out;
+            errdefer {
+            _ = out.deinit();
+            }
+            while ((self.pos < self.xml.len)) {
+                if (strings.startsWith(self.xml[self.pos..], "<![CDATA[")) {
+                    self.pos = (self.pos + 9);
+                    if (strings.indexOf(self.xml[self.pos..], "]]>")) |end_idx| {
+                        _ = &end_idx;
+                        _ = bun.handleOom(out.appendSlice(self.xml[self.pos..(self.pos + end_idx)]));
+                        self.pos = (self.pos + (end_idx + 3));
+                    } else {
+                        return error.InvalidResponse;
+                    }
+                } else {
+                    if (strings.startsWith(self.xml[self.pos..], "<!--")) {
+                        self.pos = (self.pos + 4);
+                        _ = try self.skipComment();
+                    } else {
+                        if (strings.startsWith(self.xml[self.pos..], "</")) {
+                            self.pos = (self.pos + 2);
+                            _ = try self.readClosingTag(tag_name);
+                            return DecodedText{ .text = bun.handleOom(out.toOwnedSlice()), .owned = true };
+                        } else {
+                            if ((self.xml[@as(usize, @intCast(self.pos))] == 60)) {
+                                return error.InvalidResponse;
+                            } else {
+                                const seg_start = self.pos;
+                                while (((self.pos < self.xml.len) and (self.xml[@as(usize, @intCast(self.pos))] != 60))) {
+                                    self.pos = (self.pos + 1);
+                                }
+                                _ = appendDecodedEntities((&out), self.xml[seg_start..self.pos]);
+                            }
+                        }
+                    }
+                }
+            }
+            return error.InvalidResponse;
+    }
+
+pub fn skipElement(self: *XmlCursor, tag_name: []const u8) !void {
+            while ((self.pos < self.xml.len)) {
+                if ((self.xml[@as(usize, @intCast(self.pos))] != 60)) {
+                    self.pos = (self.pos + 1);
+                    continue;
+                }
+                if (strings.startsWith(self.xml[self.pos..], "<!--")) {
+                    self.pos = (self.pos + 4);
+                    _ = try self.skipComment();
+                } else {
+                    if (strings.startsWith(self.xml[self.pos..], "<![CDATA[")) {
+                        self.pos = (self.pos + 9);
+                        if (strings.indexOf(self.xml[self.pos..], "]]>")) |end_idx| {
+                            _ = &end_idx;
+                            self.pos = (self.pos + (end_idx + 3));
+                        } else {
+                            return error.InvalidResponse;
+                        }
+                    } else {
+                        if (strings.startsWith(self.xml[self.pos..], "</")) {
+                            self.pos = (self.pos + 2);
+                            _ = try self.readClosingTag(tag_name);
+                            return;
+                        } else {
+                            self.pos = (self.pos + 1);
+                            const child_name = try self.readTagName();
+                            const self_closing = try self.skipAttributes();
+                            if ((!self_closing)) {
+                                _ = try self.skipElement(child_name);
+                            }
+                        }
+                    }
+                }
+            }
+            return error.InvalidResponse;
+    }
+
+pub fn nextTag(self: *XmlCursor, parent_tag: []const u8) !?TagEvent {
+            while ((self.pos < self.xml.len)) {
+                _ = self.skipWs();
+                if (((self.pos >= self.xml.len) or (self.xml[@as(usize, @intCast(self.pos))] != 60))) {
+                    return error.InvalidResponse;
+                }
+                if (strings.startsWith(self.xml[self.pos..], "<!--")) {
+                    self.pos = (self.pos + 4);
+                    _ = try self.skipComment();
+                    continue;
+                }
+                if (strings.startsWith(self.xml[self.pos..], "</")) {
+                    self.pos = (self.pos + 2);
+                    _ = try self.readClosingTag(parent_tag);
+                    return null;
+                }
+                self.pos = (self.pos + 1);
+                const name = try self.readTagName();
+                const self_closing = try self.skipAttributes();
+                return TagEvent{ .name = name, .self_closing = self_closing };
+            }
+            return error.InvalidResponse;
+    }
+};
+
+pub const TagEvent = struct {
+    name: []const u8,
+    self_closing: bool,
+};
+
 const JSStringRef = ?*anyopaque;
 const BunString = bun.String;
 const JSGlobalObject = bun.jsc.JSGlobalObject;
@@ -366,79 +581,421 @@ extern "c" fn JSStringCreateWithUTF8CString(str: [*:0]const u8) callconv(.c) JSS
 
 extern "c" fn JSStringRelease(str: JSStringRef) callconv(.c) void;
 
-pub fn readListBucketResult(_: void, root: xml_response.Node) ?S3ListObjectsV2Result {
-        if ((!strings.eqlComptime((if (@typeInfo(@TypeOf(root)) == .@"enum" or @typeInfo(@TypeOf(root)) == .@"union") @tagName(root) else root.name), "ListBucketResult"))) {
-            return null;
-        }
-        var result = S3ListObjectsV2Result{ .name = root.childNonemptyText("Name", default_allocator), .prefix = root.childNonemptyText("Prefix", default_allocator), .key_count = root.childI64("KeyCount"), .max_keys = root.childI64("MaxKeys"), .delimiter = root.childNonemptyText("Delimiter", default_allocator), .delimiter_owned = false, .encoding_type = root.childNonemptyText("EncodingType", default_allocator), .is_truncated = root.childBool("IsTruncated"), .continuation_token = root.childNonemptyText("ContinuationToken", default_allocator), .next_continuation_token = root.childNonemptyText("NextContinuationToken", default_allocator), .start_after = root.childNonemptyText("StartAfter", default_allocator), .common_prefixes = null, .contents = null, .strings_owned = true };
-        _ = &result;
-        var contents = Managed(S3ListObjectsContents).init(default_allocator);
-        _ = &contents;
-        var common_prefixes = Managed(string).init(default_allocator);
-        _ = &common_prefixes;
-        for (cp_iter_slice(root.children)) |child_expr| {
-            _ = &child_expr;
-            const node = ((xml_response.Node.of(child_expr)) orelse continue);
-            if (strings.eqlComptime((if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name), "Contents")) {
-                const object_key = ((node.childText("Key", default_allocator)) orelse {
-                for (contents.items) |*item| {
-                    _ = &item;
-                    _ = (item.*).deinit();
+pub fn appendDecodedEntities(out: *Managed(u8), raw: []const u8) void {
+        var i: usize = 0;
+        _ = &i;
+        while ((i < raw.len)) {
+            if (strings.indexOfChar(raw[i..], 38)) |amp| {
+                _ = &amp;
+                if ((amp > 0)) {
+                    _ = bun.handleOom(out.appendSlice(raw[i..(i + amp)]));
+                    i = (i + amp);
                 }
-                _ = contents.deinit();
-                for (common_prefixes.items) |cp_prefix| {
-                    _ = &cp_prefix;
-                    _ = default_allocator.free(cp_prefix);
-                }
-                _ = common_prefixes.deinit();
-                _ = result.deinit();
-                return null;
-});
-                var etag_val: ?ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)) = null;
-                _ = &etag_val;
-                if (node.childNonemptyText("ETag", default_allocator)) |etag_str| {
-                    _ = &etag_str;
-                    etag_val = ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag_str, .init());
-                }
-                var owner: ?ObjectOwner = null;
-                _ = &owner;
-                if (node.child("Owner")) |owner_node| {
-                    _ = &owner_node;
-                    const owner_id = owner_node.childNonemptyText("ID", default_allocator);
-                    const owner_display_name = owner_node.childNonemptyText("DisplayName", default_allocator);
-                    if (((owner_id != null) or (owner_display_name != null))) {
-                        owner = ObjectOwner{ .id = owner_id, .display_name = owner_display_name };
-                    }
-                }
-                var restore_status: ?ObjectRestoreStatus = null;
-                _ = &restore_status;
-                if (node.child("RestoreStatus")) |restore_node| {
-                    _ = &restore_node;
-                    const in_progress = restore_node.childBool("IsRestoreInProgress");
-                    const expiry_date = restore_node.childNonemptyText("RestoreExpiryDate", default_allocator);
-                    if (((in_progress != null) or (expiry_date != null))) {
-                        restore_status = ObjectRestoreStatus{ .is_restore_in_progress = in_progress, .restore_expiry_date = expiry_date };
-                    }
-                }
-                _ = bun.handleOom(contents.append(S3ListObjectsContents{ .key = object_key, .etag = etag_val, .checksum_type = node.childNonemptyText("ChecksumType", default_allocator), .checksum_algorithme = node.childNonemptyText("ChecksumAlgorithm", default_allocator), .last_modified = node.childNonemptyText("LastModified", default_allocator), .object_size = node.childI64("Size"), .storage_class = node.childNonemptyText("StorageClass", default_allocator), .owner = owner, .restore_status = restore_status, .strings_owned = true }));
             } else {
-                if (strings.eqlComptime((if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name), "CommonPrefixes")) {
-                    for (cp_iter_slice(node.children)) |cp_expr| {
-                        _ = &cp_expr;
-                        const p = ((xml_response.Node.of(cp_expr)) orelse continue);
-                        if (strings.eqlComptime((if (@typeInfo(@TypeOf(p)) == .@"enum" or @typeInfo(@TypeOf(p)) == .@"union") @tagName(p) else p.name), "Prefix")) {
-                            if (p.text(default_allocator)) |pt| {
-                                _ = &pt;
-                                if ((pt.len > 0)) {
-                                    _ = bun.handleOom(common_prefixes.append(pt));
+                _ = bun.handleOom(out.appendSlice(raw[i..]));
+                return;
+            }
+            if (strings.indexOfChar(raw[(i + 1)..], 59)) |semi| {
+                _ = &semi;
+                const ent = raw[(i + 1)..((i + 1) + semi)];
+                var ch: u8 = 0;
+                _ = &ch;
+                if (strings.eqlComptime(ent, "amp")) {
+                    ch = 38;
+                } else {
+                    if (strings.eqlComptime(ent, "lt")) {
+                        ch = 60;
+                    } else {
+                        if (strings.eqlComptime(ent, "gt")) {
+                            ch = 62;
+                        } else {
+                            if (strings.eqlComptime(ent, "quot")) {
+                                ch = 34;
+                            } else {
+                                if (strings.eqlComptime(ent, "apos")) {
+                                    ch = 39;
+                                }
+                            }
+                        }
+                    }
+                }
+                if ((ch != 0)) {
+                    _ = bun.handleOom(out.append(ch));
+                    i = (i + (semi + 2));
+                    continue;
+                }
+                if (((ent.len >= 2) and (ent[0] == 35))) {
+                    const is_hex = ((ent.len >= 3) and ((ent[1] == 120) or (ent[1] == 88)));
+                    const parsed_cp = (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseInt(u21, (if (is_hex) ent[2..] else ent[1..]), (if (is_hex) 16 else 10))) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
+                    if ((parsed_cp != null)) {
+                        var utf8_buf: [4]u8 = undefined;
+                        _ = &utf8_buf;
+                        const encoded_len = (blk_catch_1: { break :blk_catch_1 ((std.unicode.utf8Encode(parsed_cp.?, (&utf8_buf))) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
+                        if ((encoded_len != null)) {
+                            _ = bun.handleOom(out.appendSlice(utf8_buf[0..encoded_len.?]));
+                            i = (i + (semi + 2));
+                            continue;
+                        }
+                    }
+                }
+            }
+            _ = bun.handleOom(out.append(38));
+            i = (i + 1);
+        }
+}
+
+pub fn keepDecoded(owned_strings: *Managed(string), dt: DecodedText) []const u8 {
+        if (dt.owned) {
+            _ = bun.handleOom(owned_strings.append(dt.text));
+        }
+        return dt.text;
+}
+
+pub fn readOptionalNonempty(cursor: *XmlCursor, tag: []const u8, owned_strings: *Managed(string)) !?[]const u8 {
+        const dt = try cursor.readLeafText(tag);
+        if ((dt.text.len > 0)) {
+            return keepDecoded(owned_strings, dt);
+        }
+        if (dt.owned) {
+            _ = default_allocator.free(dt.text);
+        }
+        return null;
+}
+
+pub fn readBoolText(cursor: *XmlCursor, tag: []const u8) !?bool {
+        const dt = try cursor.readLeafText(tag);
+        defer {
+        if (dt.owned) {
+            _ = default_allocator.free(dt.text);
+        }
+        }
+        const trimmed = strings.trim(dt.text, " \t\r\n");
+        if (strings.eqlComptime(trimmed, "true")) {
+            return true;
+        }
+        if (strings.eqlComptime(trimmed, "false")) {
+            return false;
+        }
+        return null;
+}
+
+pub fn readIntText(cursor: *XmlCursor, tag: []const u8) !?i64 {
+        const dt = try cursor.readLeafText(tag);
+        defer {
+        if (dt.owned) {
+            _ = default_allocator.free(dt.text);
+        }
+        }
+        return (blk_catch_2: { break :blk_catch_2 ((std.fmt.parseInt(i64, strings.trim(dt.text, " \t\r\n"), 10)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
+}
+
+pub fn readOwner(cursor: *XmlCursor, owned_strings: *Managed(string)) !?ObjectOwner {
+        var owner_id: ?[]const u8 = null;
+        _ = &owner_id;
+        var owner_display_name: ?[]const u8 = null;
+        _ = &owner_display_name;
+        while (try cursor.nextTag("Owner")) |ev| {
+            if (ev.self_closing) {
+                continue;
+            }
+            if (strings.eqlComptime(ev.name, "ID")) {
+                if (try readOptionalNonempty(cursor, ev.name, owned_strings)) |v| {
+                    _ = &v;
+                    owner_id = v;
+                }
+            } else {
+                if (strings.eqlComptime(ev.name, "DisplayName")) {
+                    if (try readOptionalNonempty(cursor, ev.name, owned_strings)) |v| {
+                        _ = &v;
+                        owner_display_name = v;
+                    }
+                } else {
+                    _ = try cursor.skipElement(ev.name);
+                }
+            }
+        }
+        if (((owner_id != null) or (owner_display_name != null))) {
+            return ObjectOwner{ .id = owner_id, .display_name = owner_display_name };
+        }
+        return null;
+}
+
+pub fn readRestoreStatus(cursor: *XmlCursor, owned_strings: *Managed(string)) !?ObjectRestoreStatus {
+        var in_progress: ?bool = null;
+        _ = &in_progress;
+        var expiry_date: ?[]const u8 = null;
+        _ = &expiry_date;
+        while (try cursor.nextTag("RestoreStatus")) |ev| {
+            if (ev.self_closing) {
+                continue;
+            }
+            if (strings.eqlComptime(ev.name, "IsRestoreInProgress")) {
+                if (try readBoolText(cursor, ev.name)) |v| {
+                    _ = &v;
+                    in_progress = v;
+                }
+            } else {
+                if (strings.eqlComptime(ev.name, "RestoreExpiryDate")) {
+                    if (try readOptionalNonempty(cursor, ev.name, owned_strings)) |v| {
+                        _ = &v;
+                        expiry_date = v;
+                    }
+                } else {
+                    _ = try cursor.skipElement(ev.name);
+                }
+            }
+        }
+        if (((in_progress != null) or (expiry_date != null))) {
+            return ObjectRestoreStatus{ .is_restore_in_progress = in_progress, .restore_expiry_date = expiry_date };
+        }
+        return null;
+}
+
+pub fn readContentsItem(cursor: *XmlCursor, owned_strings: *Managed(string)) !S3ListObjectsContents {
+        var has_key = false;
+        _ = &has_key;
+        var key: []const u8 = "";
+        _ = &key;
+        var etag: ?ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)) = null;
+        _ = &etag;
+        var checksum_type: ?[]const u8 = null;
+        _ = &checksum_type;
+        var checksum_algorithme: ?[]const u8 = null;
+        _ = &checksum_algorithme;
+        var last_modified: ?[]const u8 = null;
+        _ = &last_modified;
+        var object_size: ?i64 = null;
+        _ = &object_size;
+        var storage_class: ?[]const u8 = null;
+        _ = &storage_class;
+        var owner: ?ObjectOwner = null;
+        _ = &owner;
+        var restore_status: ?ObjectRestoreStatus = null;
+        _ = &restore_status;
+        errdefer {
+        if (etag) |*e_val| {
+            _ = &e_val;
+            _ = (e_val.*).deinit();
+        }
+        }
+        while (try cursor.nextTag("Contents")) |ev| {
+            if (ev.self_closing) {
+                if (strings.eqlComptime(ev.name, "Key")) {
+                    has_key = true;
+                    key = "";
+                } else {
+                    if (strings.eqlComptime(ev.name, "ETag")) {
+                        if (etag) |*prev_e| {
+                            _ = &prev_e;
+                            _ = (prev_e.*).deinit();
+                        }
+                        etag = ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn("", .initBorrowed());
+                    } else {
+                        if (strings.eqlComptime(ev.name, "LastModified")) {
+                            last_modified = "";
+                        } else {
+                            if (strings.eqlComptime(ev.name, "StorageClass")) {
+                                storage_class = "";
+                            } else {
+                                if (strings.eqlComptime(ev.name, "ChecksumType")) {
+                                    checksum_type = "";
                                 } else {
-                                    _ = default_allocator.free(pt);
+                                    if (strings.eqlComptime(ev.name, "ChecksumAlgorithm")) {
+                                        checksum_algorithme = "";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            if (strings.eqlComptime(ev.name, "Key")) {
+                key = keepDecoded(owned_strings, try cursor.readLeafText(ev.name));
+                has_key = true;
+            } else {
+                if (strings.eqlComptime(ev.name, "ETag")) {
+                    const dt = try cursor.readLeafText(ev.name);
+                    if (etag) |*prev_e| {
+                        _ = &prev_e;
+                        _ = (prev_e.*).deinit();
+                    }
+                    etag = (if (dt.owned) ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(dt.text, .init()) else ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(dt.text, .initBorrowed()));
+                } else {
+                    if (strings.eqlComptime(ev.name, "LastModified")) {
+                        last_modified = keepDecoded(owned_strings, try cursor.readLeafText(ev.name));
+                    } else {
+                        if (strings.eqlComptime(ev.name, "StorageClass")) {
+                            storage_class = keepDecoded(owned_strings, try cursor.readLeafText(ev.name));
+                        } else {
+                            if (strings.eqlComptime(ev.name, "ChecksumType")) {
+                                checksum_type = keepDecoded(owned_strings, try cursor.readLeafText(ev.name));
+                            } else {
+                                if (strings.eqlComptime(ev.name, "ChecksumAlgorithm")) {
+                                    checksum_algorithme = keepDecoded(owned_strings, try cursor.readLeafText(ev.name));
+                                } else {
+                                    if (strings.eqlComptime(ev.name, "Size")) {
+                                        object_size = try readIntText(cursor, ev.name);
+                                    } else {
+                                        if (strings.eqlComptime(ev.name, "Owner")) {
+                                            owner = try readOwner(cursor, owned_strings);
+                                        } else {
+                                            if (strings.eqlComptime(ev.name, "RestoreStatus")) {
+                                                restore_status = try readRestoreStatus(cursor, owned_strings);
+                                            } else {
+                                                _ = try cursor.skipElement(ev.name);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+        if ((!has_key)) {
+            return error.InvalidResponse;
+        }
+        return S3ListObjectsContents{ .key = key, .etag = etag, .checksum_type = checksum_type, .checksum_algorithme = checksum_algorithme, .last_modified = last_modified, .object_size = object_size, .storage_class = storage_class, .owner = owner, .restore_status = restore_status };
+}
+
+pub fn parseS3ListObjectsResult(xml_body: []const u8) !S3ListObjectsV2Result {
+        var cursor = XmlCursor{ .xml = xml_body, .pos = 0 };
+        _ = &cursor;
+        _ = try cursor.skipProlog();
+        if (((cursor.pos >= cursor.xml.len) or (cursor.xml[@as(usize, @intCast(cursor.pos))] != 60))) {
+            return error.InvalidResponse;
+        }
+        cursor.pos = (cursor.pos + 1);
+        const root_name = try cursor.readTagName();
+        if ((!strings.eqlComptime(root_name, "ListBucketResult"))) {
+            return error.InvalidResponse;
+        }
+        const root_self_closing = try cursor.skipAttributes();
+        var result = S3ListObjectsV2Result{  };
+        _ = &result;
+        if (root_self_closing) {
+            _ = try cursor.skipProlog();
+            if ((cursor.pos != cursor.xml.len)) {
+                return error.InvalidResponse;
+            }
+            return result;
+        }
+        var contents = Managed(S3ListObjectsContents).init(default_allocator);
+        _ = &contents;
+        var common_prefixes = Managed(string).init(default_allocator);
+        _ = &common_prefixes;
+        var owned_strings = Managed(string).init(default_allocator);
+        _ = &owned_strings;
+        errdefer {
+        {
+            for (contents.items) |*item| {
+                _ = &item;
+                _ = (item.*).deinit();
+            }
+            _ = contents.deinit();
+            _ = common_prefixes.deinit();
+            for (owned_strings.items) |s| {
+                _ = &s;
+                _ = default_allocator.free(s);
+            }
+            _ = owned_strings.deinit();
+        }
+        }
+        while (try cursor.nextTag("ListBucketResult")) |ev| {
+            if (ev.self_closing) {
+                if (strings.eqlComptime(ev.name, "Contents")) {
+                    return error.InvalidResponse;
+                }
+                if (strings.eqlComptime(ev.name, "Name")) {
+                    result.name = "";
+                }
+                if (strings.eqlComptime(ev.name, "Delimiter")) {
+                    result.delimiter = "";
+                }
+                if (strings.eqlComptime(ev.name, "EncodingType")) {
+                    result.encoding_type = "";
+                }
+                if (strings.eqlComptime(ev.name, "ContinuationToken")) {
+                    result.continuation_token = "";
+                }
+                if (strings.eqlComptime(ev.name, "NextContinuationToken")) {
+                    result.next_continuation_token = "";
+                }
+                if (strings.eqlComptime(ev.name, "StartAfter")) {
+                    result.start_after = "";
+                }
+                continue;
+            }
+            if (strings.eqlComptime(ev.name, "Contents")) {
+                _ = bun.handleOom(contents.append(try readContentsItem((&cursor), (&owned_strings))));
+            } else {
+                if (strings.eqlComptime(ev.name, "CommonPrefixes")) {
+                    while (try cursor.nextTag("CommonPrefixes")) |cp_ev| {
+                        if (cp_ev.self_closing) {
+                            continue;
+                        }
+                        if (strings.eqlComptime(cp_ev.name, "Prefix")) {
+                            if (try readOptionalNonempty((&cursor), cp_ev.name, (&owned_strings))) |v| {
+                                _ = &v;
+                                _ = bun.handleOom(common_prefixes.append(v));
+                            }
+                        } else {
+                            _ = try cursor.skipElement(cp_ev.name);
+                        }
+                    }
+                } else {
+                    if (strings.eqlComptime(ev.name, "Name")) {
+                        result.name = keepDecoded((&owned_strings), try cursor.readLeafText(ev.name));
+                    } else {
+                        if (strings.eqlComptime(ev.name, "Prefix")) {
+                            if (try readOptionalNonempty((&cursor), ev.name, (&owned_strings))) |v| {
+                                _ = &v;
+                                result.prefix = v;
+                            }
+                        } else {
+                            if (strings.eqlComptime(ev.name, "Delimiter")) {
+                                result.delimiter = keepDecoded((&owned_strings), try cursor.readLeafText(ev.name));
+                            } else {
+                                if (strings.eqlComptime(ev.name, "EncodingType")) {
+                                    result.encoding_type = keepDecoded((&owned_strings), try cursor.readLeafText(ev.name));
+                                } else {
+                                    if (strings.eqlComptime(ev.name, "ContinuationToken")) {
+                                        result.continuation_token = keepDecoded((&owned_strings), try cursor.readLeafText(ev.name));
+                                    } else {
+                                        if (strings.eqlComptime(ev.name, "NextContinuationToken")) {
+                                            result.next_continuation_token = keepDecoded((&owned_strings), try cursor.readLeafText(ev.name));
+                                        } else {
+                                            if (strings.eqlComptime(ev.name, "StartAfter")) {
+                                                result.start_after = keepDecoded((&owned_strings), try cursor.readLeafText(ev.name));
+                                            } else {
+                                                if (strings.eqlComptime(ev.name, "KeyCount")) {
+                                                    result.key_count = try readIntText((&cursor), ev.name);
+                                                } else {
+                                                    if (strings.eqlComptime(ev.name, "MaxKeys")) {
+                                                        result.max_keys = try readIntText((&cursor), ev.name);
+                                                    } else {
+                                                        if (strings.eqlComptime(ev.name, "IsTruncated")) {
+                                                            result.is_truncated = try readBoolText((&cursor), ev.name);
+                                                        } else {
+                                                            _ = try cursor.skipElement(ev.name);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        _ = try cursor.skipProlog();
+        if ((cursor.pos != cursor.xml.len)) {
+            return error.InvalidResponse;
         }
         if ((contents.items.len != 0)) {
             result.contents = contents;
@@ -450,19 +1007,12 @@ pub fn readListBucketResult(_: void, root: xml_response.Node) ?S3ListObjectsV2Re
         } else {
             _ = common_prefixes.deinit();
         }
-        return result;
-}
-
-pub fn parseS3ListObjectsResult(xml_body: []const u8) !S3ListObjectsV2Result {
-        const empty_ctx: void = undefined;
-        if (xml_response.parseWith(?S3ListObjectsV2Result, xml_body, empty_ctx, readListBucketResult)) |outer| {
-            _ = &outer;
-            if (outer) |res| {
-                _ = &res;
-                return res;
-            }
+        if ((owned_strings.items.len != 0)) {
+            result.owned_strings = owned_strings;
+        } else {
+            _ = owned_strings.deinit();
         }
-        return error.InvalidResponse;
+        return result;
 }
 
 pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSValue) !S3ListObjectsOptions {

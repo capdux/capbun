@@ -1112,6 +1112,7 @@ struct PosixIoctl {
 
     static fn onWriterReady(client: *Terminal) {
         log("onWriterReady", {});
+        if (client.flags.closed || client.flags.finalized) return;
         // Call drain callback
         const this_jsvalue_opt = client.this_value.tryGet();
         if (this_jsvalue_opt == null) return;
@@ -1139,7 +1140,11 @@ struct PosixIoctl {
 
     static fn onWrite(client: *Terminal, amount: usize, status: bun.io.WriteStatus) {
         log("onWrite: {} bytes, status: {any}", .{ amount, status });
-        * = client;
+        if (comptime Environment.isPosix) {
+            if (status == .drained) {
+                onWriterReady(client);
+            }
+        }
     }
 
     // IOReader callbacks

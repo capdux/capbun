@@ -138,7 +138,7 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         }
         const source = (&logger.Source.initPathString("input.jsonc", input_bytes));
         const log_ptr: *logger.Log = (&log_guard.val);
-        const parse_result = (blk_catch_0: { break :blk_catch_0 ((json.parseTSConfig(source, log_ptr, allocator, false)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+        const parse_result = (blk_catch_0: { break :blk_catch_0 ((json.parseJSONC(source, log_ptr, allocator)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return globalThis.throwStackOverflow();
         }
         if ((e == error.OutOfMemory)) {

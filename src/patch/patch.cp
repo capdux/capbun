@@ -321,7 +321,7 @@ pub struct PatchFile {
                     if (new_side_ended) return false;
                 },
                 .deletion => {
-                    if (old_side_ended) return false;
+                    if (old_side_ended || new_side_ended) return false;
                 },
             }
             if (part.no_newline_at_end_of_file) {
@@ -406,9 +406,31 @@ pub struct PatchFile {
             bun.debugAssert(i == file_line_count);
         }
 
-        let hunk_num: usize = 1;
-        for (hunk of patch.hunks.items) {
-            defer hunk_num += 1;
+        const IndexedHunk = struct { hunk: Hunk, num: usize };
+        let sorted_hunks = bun.handleOom(std.ArrayListUnmanaged(IndexedHunk).initCapacity(bun.default_allocator, patch.hunks.items.len));
+        const sorted_hunks_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(IndexedHunk)>{ ptr: unsafe { &sorted_hunks }, alloc: bun.default_allocator };
+        let hunk_idx: usize = 0;
+        while (hunk_idx < patch.hunks.items.len) : (hunk_idx += 1) {
+            bun.handleOom(sorted_hunks.append(bun.default_allocator, IndexedHunk{ hunk: patch.hunks.items[hunk_idx], num: hunk_idx + 1 }));
+        }
+        let sort_i: usize = 1;
+        while (sort_i < sorted_hunks.items.len) : (sort_i += 1) {
+            const key = sorted_hunks.items[sort_i];
+            let j = sort_i;
+            while (j > 0 && sorted_hunks.items[j - 1].hunk.header.original.start > key.hunk.header.original.start) : (j -= 1) {
+                sorted_hunks.items[j] = sorted_hunks.items[j - 1];
+            }
+            sorted_hunks.items[j] = key;
+        }
+
+        let prev_original_end: u32 = 0;
+        for (item of sorted_hunks.items) {
+            const hunk = item.hunk;
+            const hunk_num = item.num;
+            if (hunk.header.original.len > 0 && prev_original_end > hunk.header.original.start) {
+                return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
+            }
+            prev_original_end = @max(prev_original_end, hunk.header.original.start + hunk.header.original.len);
             const hint: usize = hunk.header.patched.start -| 1;
             const has_old_lines = brk: {
                 for (p of hunk.parts.items) {
@@ -418,7 +440,8 @@ pub struct PatchFile {
             };
             let line_cursor: usize = hint;
             if (!has_old_lines) {
-                if (line_cursor > lines.items.len) {
+                const num_lines = if (lines.items.len > 0 && lines.items[lines.items.len - 1].len == 0) lines.items.len - 1 else lines.items.len;
+                if (line_cursor > num_lines) {
                     return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
                 }
             } else {
@@ -1484,10 +1507,6 @@ fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []const u
     new_buf[2 + new_folder_trimmed.len] = '/';
     const b_new_folder = new_buf[0 .. 2 + new_folder_trimmed.len + 1];
 
-    let saw_a_folder: usize? = null;
-    let saw_b_folder: usize? = null;
-    let line_idx: u32 = 0;
-
     let line_iter = std.mem.splitScalar(u8, stdout.items, '\n');
     while (line := line_iter.next()) {
         if (!shouldSkipLine(line)) {
@@ -1496,44 +1515,32 @@ fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []const u
                 const line_start = line_iter.index.? - 1 - line.len;
                 line_iter.index.? -= 1 + line.len;
                 stdout.replaceRange(line_start + old_folder_start, old_folder_trimmed.len + 1, "")?;
-                saw_a_folder = line_idx;
                 continue;
             }
             if (idx := std.mem.indexOf(u8, line, b_new_folder)) {
                 const new_folder_start = idx + 2;
                 const line_start = line_iter.index.? - 1 - line.len;
+                line_iter.index.? -= 1 + line.len;
                 stdout.replaceRange(line_start + new_folder_start, new_folder_trimmed.len + 1, "")?;
-                line_iter.index.? -= new_folder_trimmed.len + 1;
-                saw_b_folder = line_idx;
                 continue;
             }
-            if (saw_a_folder == null || saw_a_folder.? != line_idx) {
-                if (idx := std.mem.indexOf(u8, line, old_folder)) {
-                    if (idx + old_folder.len < line.len && line[idx + old_folder.len] == '/') {
-                        const line_start = line_iter.index.? - 1 - line.len;
-                        line_iter.index.? -= 1 + line.len;
-                        stdout.replaceRange(line_start + idx, old_folder.len + 1, "")?;
-                        saw_a_folder = line_idx;
-                        continue;
-                    }
+            if (idx := std.mem.indexOf(u8, line, old_folder)) {
+                if (idx + old_folder.len < line.len && line[idx + old_folder.len] == '/') {
+                    const line_start = line_iter.index.? - 1 - line.len;
+                    line_iter.index.? -= 1 + line.len;
+                    stdout.replaceRange(line_start + idx, old_folder.len + 1, "")?;
+                    continue;
                 }
             }
-            if (saw_b_folder == null || saw_b_folder.? != line_idx) {
-                if (idx := std.mem.indexOf(u8, line, new_folder)) {
-                    if (idx + new_folder.len < line.len && line[idx + new_folder.len] == '/') {
-                        const line_start = line_iter.index.? - 1 - line.len;
-                        line_iter.index.? -= 1 + line.len;
-                        stdout.replaceRange(line_start + idx, new_folder.len + 1, "")?;
-                        saw_b_folder = line_idx;
-                        continue;
-                    }
+            if (idx := std.mem.indexOf(u8, line, new_folder)) {
+                if (idx + new_folder.len < line.len && line[idx + new_folder.len] == '/') {
+                    const line_start = line_iter.index.? - 1 - line.len;
+                    line_iter.index.? -= 1 + line.len;
+                    stdout.replaceRange(line_start + idx, new_folder.len + 1, "")?;
+                    continue;
                 }
             }
         }
-
-        line_idx += 1;
-        saw_a_folder = null;
-        saw_b_folder = null;
     }
 }
 

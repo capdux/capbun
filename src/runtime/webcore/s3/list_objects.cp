@@ -1,6 +1,5 @@
 import bun from "bun";
 import { default_allocator, ptr, strings, String, JSError } from "bun";
-import * as xml_response from "./xml_response.zig";
 const BunString = bun.String;
 const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
@@ -59,24 +58,9 @@ export struct S3ListObjectsContents {
     storage_class: string? = null;
     owner: ObjectOwner? = null;
     restore_status: ObjectRestoreStatus? = null;
-    strings_owned: bool = false;
 
     pub fn deinit(*_) {
         if (*etag := _.etag) etag.deinit();
-        if (_.strings_owned) {
-            default_allocator.free(_.key);
-            if (s := _.checksum_type) default_allocator.free(s);
-            if (s := _.checksum_algorithme) default_allocator.free(s);
-            if (s := _.last_modified) default_allocator.free(s);
-            if (s := _.storage_class) default_allocator.free(s);
-            if (o := _.owner) {
-                if (s := o.id) default_allocator.free(s);
-                if (s := o.display_name) default_allocator.free(s);
-            }
-            if (r := _.restore_status) {
-                if (s := r.restore_expiry_date) default_allocator.free(s);
-            }
-        }
     }
 }
 
@@ -94,28 +78,21 @@ export struct S3ListObjectsV2Result {
     start_after: string? = null;
     common_prefixes: Managed(string)? = null;
     contents: Managed(S3ListObjectsContents)? = null;
-    strings_owned: bool = false;
+    owned_strings: Managed(string)? = null;
 
     pub fn deinit(*_) {
-        if (_.delimiter_owned || _.strings_owned) {
+        if (_.delimiter_owned) {
             if (d := _.delimiter) default_allocator.free(d);
         }
-        if (_.strings_owned) {
-            if (s := _.name) default_allocator.free(s);
-            if (s := _.prefix) default_allocator.free(s);
-            if (s := _.encoding_type) default_allocator.free(s);
-            if (s := _.continuation_token) default_allocator.free(s);
-            if (s := _.next_continuation_token) default_allocator.free(s);
-            if (s := _.start_after) default_allocator.free(s);
+        if (owned := _.owned_strings) {
+            for (s of owned.items) default_allocator.free(s);
+            owned.deinit();
         }
         if (contents := _.contents) {
             for (*item of contents.items) item.deinit();
             contents.deinit();
         }
         if (common_prefixes := _.common_prefixes) {
-            if (_.strings_owned) {
-                for (cp_prefix of common_prefixes.items) default_allocator.free(cp_prefix);
-            }
             common_prefixes.deinit();
         }
     }
@@ -236,115 +213,417 @@ export struct S3ListObjectsV2Result {
     }
 }
 
-fn readListBucketResult(_: void, root: xml_response.Node): S3ListObjectsV2Result? {
-    if (!strings.eqlComptime(root.name, "ListBucketResult")) return null;
+struct DecodedText {
+    text: string,
+    owned: bool,
+}
 
-    let result = S3ListObjectsV2Result {
-        name: root.childNonemptyText("Name", default_allocator),
-        prefix: root.childNonemptyText("Prefix", default_allocator),
-        key_count: root.childI64("KeyCount"),
-        max_keys: root.childI64("MaxKeys"),
-        delimiter: root.childNonemptyText("Delimiter", default_allocator),
-        delimiter_owned: false,
-        encoding_type: root.childNonemptyText("EncodingType", default_allocator),
-        is_truncated: root.childBool("IsTruncated"),
-        continuation_token: root.childNonemptyText("ContinuationToken", default_allocator),
-        next_continuation_token: root.childNonemptyText("NextContinuationToken", default_allocator),
-        start_after: root.childNonemptyText("StartAfter", default_allocator),
-        common_prefixes: null,
-        contents: null,
-        strings_owned: true,
-    };
-
-    let contents = Managed(S3ListObjectsContents).init(default_allocator);
-    let common_prefixes = Managed(string).init(default_allocator);
-
-    for (child_expr of root.children) {
-        const node = xml_response.Node.of(child_expr) ?? continue;
-        if (strings.eqlComptime(node.name, "Contents")) {
-            const object_key = node.childText("Key", default_allocator) ?? {
-                for (*item of contents.items) item.deinit();
-                contents.deinit();
-                for (cp_prefix of common_prefixes.items) default_allocator.free(cp_prefix);
-                common_prefixes.deinit();
-                result.deinit();
-                return null;
-            };
-
-            let etag_val: (ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)))? = null;
-            if (etag_str := node.childNonemptyText("ETag", default_allocator)) {
-                etag_val = ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag_str, .init());
-            }
-
-            let owner: ObjectOwner? = null;
-            if (owner_node := node.child("Owner")) {
-                const owner_id = owner_node.childNonemptyText("ID", default_allocator);
-                const owner_display_name = owner_node.childNonemptyText("DisplayName", default_allocator);
-                if (owner_id != null || owner_display_name != null) {
-                    owner = ObjectOwner{ id: owner_id, display_name: owner_display_name };
-                }
-            }
-
-            let restore_status: ObjectRestoreStatus? = null;
-            if (restore_node := node.child("RestoreStatus")) {
-                const in_progress = restore_node.childBool("IsRestoreInProgress");
-                const expiry_date = restore_node.childNonemptyText("RestoreExpiryDate", default_allocator);
-                if (in_progress != null || expiry_date != null) {
-                    restore_status = ObjectRestoreStatus{ is_restore_in_progress: in_progress, restore_expiry_date: expiry_date };
-                }
-            }
-
-            bun.handleOom(contents.append(S3ListObjectsContents {
-                key: object_key,
-                etag: etag_val,
-                checksum_type: node.childNonemptyText("ChecksumType", default_allocator),
-                checksum_algorithme: node.childNonemptyText("ChecksumAlgorithm", default_allocator),
-                last_modified: node.childNonemptyText("LastModified", default_allocator),
-                object_size: node.childI64("Size"),
-                storage_class: node.childNonemptyText("StorageClass", default_allocator),
-                owner: owner,
-                restore_status: restore_status,
-                strings_owned: true,
-            }));
-        } else if (strings.eqlComptime(node.name, "CommonPrefixes")) {
-            for (cp_expr of node.children) {
-                const p = xml_response.Node.of(cp_expr) ?? continue;
-                if (strings.eqlComptime(p.name, "Prefix")) {
-                    if (pt := p.text(default_allocator)) {
-                        if (pt.len > 0) {
-                            bun.handleOom(common_prefixes.append(pt));
-                        } else {
-                            default_allocator.free(pt);
-                        }
-                    }
+fn appendDecodedEntities(out: *Managed(u8), raw: string) {
+    let i: usize = 0;
+    while (i < raw.len) {
+        if (amp := strings.indexOfChar(raw[i..], '&')) {
+            if (amp > 0) { bun.handleOom(out.appendSlice(raw[i .. i + amp])); i += amp; }
+        } else { bun.handleOom(out.appendSlice(raw[i..])); return; }
+        if (semi := strings.indexOfChar(raw[i + 1 ..], ';')) {
+            const ent = raw[i + 1 .. i + 1 + semi];
+            let ch: u8 = 0;
+            if (strings.eqlComptime(ent, "amp")) { ch = '&'; }
+            else if (strings.eqlComptime(ent, "lt")) { ch = '<'; }
+            else if (strings.eqlComptime(ent, "gt")) { ch = '>'; }
+            else if (strings.eqlComptime(ent, "quot")) { ch = '"'; }
+            else if (strings.eqlComptime(ent, "apos")) { ch = '\''; }
+            if (ch != 0) { bun.handleOom(out.append(ch)); i += semi + 2; continue; }
+            if (ent.len >= 2 && ent[0] == '#') {
+                const is_hex = ent.len >= 3 && (ent[1] == 'x' || ent[1] == 'X');
+                const parsed_cp = std.fmt.parseInt(u21, if (is_hex) ent[2..] else ent[1..], if (is_hex) 16 else 10) catch null;
+                if (parsed_cp != null) {
+                    let utf8_buf: [4]u8 = undefined;
+                    const encoded_len = std.unicode.utf8Encode(parsed_cp.?, &utf8_buf) catch null;
+                    if (encoded_len != null) { bun.handleOom(out.appendSlice(utf8_buf[0..encoded_len.?])); i += semi + 2; continue; }
                 }
             }
         }
+        bun.handleOom(out.append('&'));
+        i += 1;
+    }
+}
+
+struct XmlCursor {
+    xml: string,
+    pos: usize = 0,
+
+    fn skipWs(*_) {
+        while (_.pos < _.xml.len && (_.xml[_.pos] == ' ' || _.xml[_.pos] == '\t' || _.xml[_.pos] == '\r' || _.xml[_.pos] == '\n')) _.pos += 1;
     }
 
-    if (contents.items.len != 0) {
-        result.contents = contents;
-    } else {
-        contents.deinit();
+    fn skipComment(*_): !void {
+        if (end_idx := strings.indexOf(_.xml[_.pos..], "-->")) { _.pos += end_idx + 3; } else return error.InvalidResponse;
     }
 
-    if (common_prefixes.items.len != 0) {
-        result.common_prefixes = common_prefixes;
-    } else {
-        common_prefixes.deinit();
+    fn skipProlog(*_): !void {
+        while (true) {
+            _.skipWs();
+            if (_.pos >= _.xml.len) break;
+            if (strings.startsWith(_.xml[_.pos..], "<?")) {
+                if (end_idx := strings.indexOf(_.xml[_.pos + 2 ..], "?>")) { _.pos += 4 + end_idx; } else return error.InvalidResponse;
+            } else if (strings.startsWith(_.xml[_.pos..], "<!--")) {
+                _.pos += 4;
+                _.skipComment()?;
+            } else if (strings.startsWith(_.xml[_.pos..], "<!DOCTYPE")) {
+                if (end_idx := strings.indexOfChar(_.xml[_.pos + 9 ..], '>')) { _.pos += 10 + end_idx; } else return error.InvalidResponse;
+            } else break;
+        }
     }
 
-    return result;
+    fn readTagName(*_): !string {
+        const start = _.pos;
+        while (_.pos < _.xml.len) {
+            const c = _.xml[_.pos];
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '>' || c == '/') break;
+            if (c == '<') return error.InvalidResponse;
+            _.pos += 1;
+        }
+        if (_.pos == start) return error.InvalidResponse;
+        return _.xml[start.._.pos];
+    }
+
+    fn skipAttributes(*_): !bool {
+        let quote: u8 = 0;
+        while (_.pos < _.xml.len) {
+            const c = _.xml[_.pos];
+            if (quote != 0) { if (c == quote) quote = 0; _.pos += 1; }
+            else if (c == '"' || c == '\'') { quote = c; _.pos += 1; }
+            else if (c == '>') { _.pos += 1; return false; }
+            else if (c == '/' && _.pos + 1 < _.xml.len && _.xml[_.pos + 1] == '>') { _.pos += 2; return true; }
+            else if (c == '<') return error.InvalidResponse
+            else _.pos += 1;
+        }
+        return error.InvalidResponse;
+    }
+
+    fn readClosingTag(*_, expected: string): !void {
+        if (!strings.eql(_.readTagName()?, expected)) return error.InvalidResponse;
+        _.skipWs();
+        if (_.pos >= _.xml.len || _.xml[_.pos] != '>') return error.InvalidResponse;
+        _.pos += 1;
+    }
+
+    fn readLeafText(*_, tag_name: string): !DecodedText {
+        const start = _.pos;
+        let has_amp = false;
+        let has_special = false;
+        while (_.pos < _.xml.len) {
+            const c = _.xml[_.pos];
+            if (c == '&') {
+                has_amp = true;
+                _.pos += 1;
+            } else if (c == '<') {
+                if (_.pos + 1 < _.xml.len && _.xml[_.pos + 1] == '/') {
+                    const end = _.pos;
+                    _.pos += 2;
+                    _.readClosingTag(tag_name)?;
+                    if (!has_special) {
+                        const raw = _.xml[start..end];
+                        if (!has_amp) return DecodedText{ text: raw, owned: false };
+                        let out = Managed(u8).init(default_allocator);
+                        appendDecodedEntities(&out, raw);
+                        return DecodedText{ text: bun.handleOom(out.toOwnedSlice()), owned: true };
+                    }
+                    break;
+                } else if (strings.startsWith(_.xml[_.pos..], "<![CDATA[")) {
+                    has_special = true;
+                    break;
+                } else if (strings.startsWith(_.xml[_.pos..], "<!--")) {
+                    has_special = true;
+                    break;
+                } else {
+                    return error.InvalidResponse;
+                }
+            } else {
+                _.pos += 1;
+            }
+        }
+        if (!has_special) return error.InvalidResponse;
+
+        _.pos = start;
+        let out = Managed(u8).init(default_allocator);
+        errdefer out.deinit();
+        while (_.pos < _.xml.len) {
+            if (strings.startsWith(_.xml[_.pos..], "<![CDATA[")) {
+                _.pos += 9;
+                if (end_idx := strings.indexOf(_.xml[_.pos..], "]]>")) {
+                    bun.handleOom(out.appendSlice(_.xml[_.pos .. _.pos + end_idx]));
+                    _.pos += end_idx + 3;
+                } else {
+                    return error.InvalidResponse;
+                }
+            } else if (strings.startsWith(_.xml[_.pos..], "<!--")) {
+                _.pos += 4;
+                _.skipComment()?;
+            } else if (strings.startsWith(_.xml[_.pos..], "</")) {
+                _.pos += 2;
+                _.readClosingTag(tag_name)?;
+                return DecodedText{ text: bun.handleOom(out.toOwnedSlice()), owned: true };
+            } else if (_.xml[_.pos] == '<') {
+                return error.InvalidResponse;
+            } else {
+                const seg_start = _.pos;
+                while (_.pos < _.xml.len && _.xml[_.pos] != '<') {
+                    _.pos += 1;
+                }
+                appendDecodedEntities(&out, _.xml[seg_start.._.pos]);
+            }
+        }
+        return error.InvalidResponse;
+    }
+
+    fn skipElement(*_, tag_name: string): !void {
+        while (_.pos < _.xml.len) {
+            if (_.xml[_.pos] != '<') {
+                _.pos += 1;
+                continue;
+            }
+            if (strings.startsWith(_.xml[_.pos..], "<!--")) {
+                _.pos += 4;
+                _.skipComment()?;
+            } else if (strings.startsWith(_.xml[_.pos..], "<![CDATA[")) {
+                _.pos += 9;
+                if (end_idx := strings.indexOf(_.xml[_.pos..], "]]>")) {
+                    _.pos += end_idx + 3;
+                } else {
+                    return error.InvalidResponse;
+                }
+            } else if (strings.startsWith(_.xml[_.pos..], "</")) {
+                _.pos += 2;
+                _.readClosingTag(tag_name)?;
+                return;
+            } else {
+                _.pos += 1;
+                const child_name = _.readTagName()?;
+                const self_closing = _.skipAttributes()?;
+                if (!self_closing) {
+                    _.skipElement(child_name)?;
+                }
+            }
+        }
+        return error.InvalidResponse;
+    }
+    fn nextTag(*_, parent_tag: string): !TagEvent? {
+        while (_.pos < _.xml.len) {
+            _.skipWs();
+            if (_.pos >= _.xml.len || _.xml[_.pos] != '<') return error.InvalidResponse;
+            if (strings.startsWith(_.xml[_.pos..], "<!--")) {
+                _.pos += 4;
+                _.skipComment()?;
+                continue;
+            }
+            if (strings.startsWith(_.xml[_.pos..], "</")) {
+                _.pos += 2;
+                _.readClosingTag(parent_tag)?;
+                return null;
+            }
+            _.pos += 1;
+            const name = _.readTagName()?;
+            const self_closing = _.skipAttributes()?;
+            return TagEvent{ name: name, self_closing: self_closing };
+        }
+        return error.InvalidResponse;
+    }
+}
+
+struct TagEvent {
+    name: string,
+    self_closing: bool,
+}
+
+fn keepDecoded(owned_strings: *Managed(string), dt: DecodedText): string {
+    if (dt.owned) bun.handleOom(owned_strings.append(dt.text));
+    return dt.text;
+}
+
+fn readOptionalNonempty(cursor: *XmlCursor, tag: string, owned_strings: *Managed(string)): !string? {
+    const dt = cursor.readLeafText(tag)?;
+    if (dt.text.len > 0) return keepDecoded(owned_strings, dt);
+    if (dt.owned) default_allocator.free(dt.text);
+    return null;
+}
+
+fn readBoolText(cursor: *XmlCursor, tag: string): !bool? {
+    const dt = cursor.readLeafText(tag)?;
+    defer if (dt.owned) default_allocator.free(dt.text);
+    const trimmed = strings.trim(dt.text, " \t\r\n");
+    if (strings.eqlComptime(trimmed, "true")) return true;
+    if (strings.eqlComptime(trimmed, "false")) return false;
+    return null;
+}
+
+fn readIntText(cursor: *XmlCursor, tag: string): !i64? {
+    const dt = cursor.readLeafText(tag)?;
+    defer if (dt.owned) default_allocator.free(dt.text);
+    return std.fmt.parseInt(i64, strings.trim(dt.text, " \t\r\n"), 10) catch null;
+}
+
+fn readOwner(cursor: *XmlCursor, owned_strings: *Managed(string)): !ObjectOwner? {
+    let owner_id: string? = null;
+    let owner_display_name: string? = null;
+    while (ev := cursor.nextTag("Owner")?) {
+        if (ev.self_closing) continue;
+        if (strings.eqlComptime(ev.name, "ID")) {
+            if (v := readOptionalNonempty(cursor, ev.name, owned_strings)?) owner_id = v;
+        } else if (strings.eqlComptime(ev.name, "DisplayName")) {
+            if (v := readOptionalNonempty(cursor, ev.name, owned_strings)?) owner_display_name = v;
+        } else {
+            cursor.skipElement(ev.name)?;
+        }
+    }
+    if (owner_id != null || owner_display_name != null) {
+        return ObjectOwner{ id: owner_id, display_name: owner_display_name };
+    }
+    return null;
+}
+
+fn readRestoreStatus(cursor: *XmlCursor, owned_strings: *Managed(string)): !ObjectRestoreStatus? {
+    let in_progress: bool? = null;
+    let expiry_date: string? = null;
+    while (ev := cursor.nextTag("RestoreStatus")?) {
+        if (ev.self_closing) continue;
+        if (strings.eqlComptime(ev.name, "IsRestoreInProgress")) {
+            if (v := readBoolText(cursor, ev.name)?) in_progress = v;
+        } else if (strings.eqlComptime(ev.name, "RestoreExpiryDate")) {
+            if (v := readOptionalNonempty(cursor, ev.name, owned_strings)?) expiry_date = v;
+        } else {
+            cursor.skipElement(ev.name)?;
+        }
+    }
+    if (in_progress != null || expiry_date != null) {
+        return ObjectRestoreStatus{ is_restore_in_progress: in_progress, restore_expiry_date: expiry_date };
+    }
+    return null;
+}
+
+fn readContentsItem(cursor: *XmlCursor, owned_strings: *Managed(string)): !S3ListObjectsContents {
+    let has_key = false;
+    let key: string = "";
+    let etag: ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator))? = null;
+    let checksum_type: string? = null;
+    let checksum_algorithme: string? = null;
+    let last_modified: string? = null;
+    let object_size: i64? = null;
+    let storage_class: string? = null;
+    let owner: ObjectOwner? = null;
+    let restore_status: ObjectRestoreStatus? = null;
+    errdefer if (*e_val := etag) e_val.deinit();
+
+    while (ev := cursor.nextTag("Contents")?) {
+        if (ev.self_closing) {
+            if (strings.eqlComptime(ev.name, "Key")) { has_key = true; key = ""; }
+            else if (strings.eqlComptime(ev.name, "ETag")) { if (*prev_e := etag) prev_e.deinit(); etag = ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn("", .initBorrowed()); }
+            else if (strings.eqlComptime(ev.name, "LastModified")) last_modified = ""
+            else if (strings.eqlComptime(ev.name, "StorageClass")) storage_class = ""
+            else if (strings.eqlComptime(ev.name, "ChecksumType")) checksum_type = ""
+            else if (strings.eqlComptime(ev.name, "ChecksumAlgorithm")) checksum_algorithme = "";
+            continue;
+        }
+        if (strings.eqlComptime(ev.name, "Key")) { key = keepDecoded(owned_strings, cursor.readLeafText(ev.name)?); has_key = true; }
+        else if (strings.eqlComptime(ev.name, "ETag")) {
+            const dt = cursor.readLeafText(ev.name)?;
+            if (*prev_e := etag) prev_e.deinit();
+            etag = if (dt.owned) ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(dt.text, .init()) else ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(dt.text, .initBorrowed());
+        } else if (strings.eqlComptime(ev.name, "LastModified")) last_modified = keepDecoded(owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "StorageClass")) storage_class = keepDecoded(owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "ChecksumType")) checksum_type = keepDecoded(owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "ChecksumAlgorithm")) checksum_algorithme = keepDecoded(owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "Size")) object_size = readIntText(cursor, ev.name)?
+        else if (strings.eqlComptime(ev.name, "Owner")) owner = readOwner(cursor, owned_strings)?
+        else if (strings.eqlComptime(ev.name, "RestoreStatus")) restore_status = readRestoreStatus(cursor, owned_strings)?
+        else cursor.skipElement(ev.name)?;
+    }
+    if (!has_key) return error.InvalidResponse;
+    return S3ListObjectsContents {
+        key: key,
+        etag: etag,
+        checksum_type: checksum_type,
+        checksum_algorithme: checksum_algorithme,
+        last_modified: last_modified,
+        object_size: object_size,
+        storage_class: storage_class,
+        owner: owner,
+        restore_status: restore_status,
+    };
 }
 
 pub fn parseS3ListObjectsResult(xml_body: string): !S3ListObjectsV2Result {
-    const empty_ctx: void = undefined;
-    if (outer := xml_response.parseWith(S3ListObjectsV2Result?, xml_body, empty_ctx, readListBucketResult)) {
-        if (res := outer) {
-            return res;
-        }
+    let cursor = XmlCursor{ xml: xml_body, pos: 0 };
+    cursor.skipProlog()?;
+    if (cursor.pos >= cursor.xml.len || cursor.xml[cursor.pos] != '<') return error.InvalidResponse;
+    cursor.pos += 1;
+    const root_name = cursor.readTagName()?;
+    if (!strings.eqlComptime(root_name, "ListBucketResult")) return error.InvalidResponse;
+    const root_self_closing = cursor.skipAttributes()?;
+
+    let result = S3ListObjectsV2Result {};
+    if (root_self_closing) {
+        cursor.skipProlog()?;
+        if (cursor.pos != cursor.xml.len) return error.InvalidResponse;
+        return result;
     }
-    return error.InvalidResponse;
+
+    let contents = Managed(S3ListObjectsContents).init(default_allocator);
+    let common_prefixes = Managed(string).init(default_allocator);
+    let owned_strings = Managed(string).init(default_allocator);
+    errdefer {
+        for (*item of contents.items) item.deinit();
+        contents.deinit();
+        common_prefixes.deinit();
+        for (s of owned_strings.items) default_allocator.free(s);
+        owned_strings.deinit();
+    }
+
+    while (ev := cursor.nextTag("ListBucketResult")?) {
+        if (ev.self_closing) {
+            if (strings.eqlComptime(ev.name, "Contents")) return error.InvalidResponse;
+            if (strings.eqlComptime(ev.name, "Name")) result.name = "";
+            if (strings.eqlComptime(ev.name, "Delimiter")) result.delimiter = "";
+            if (strings.eqlComptime(ev.name, "EncodingType")) result.encoding_type = "";
+            if (strings.eqlComptime(ev.name, "ContinuationToken")) result.continuation_token = "";
+            if (strings.eqlComptime(ev.name, "NextContinuationToken")) result.next_continuation_token = "";
+            if (strings.eqlComptime(ev.name, "StartAfter")) result.start_after = "";
+            continue;
+        }
+        if (strings.eqlComptime(ev.name, "Contents")) {
+            bun.handleOom(contents.append(readContentsItem(&cursor, &owned_strings)?));
+        } else if (strings.eqlComptime(ev.name, "CommonPrefixes")) {
+            while (cp_ev := cursor.nextTag("CommonPrefixes")?) {
+                if (cp_ev.self_closing) continue;
+                if (strings.eqlComptime(cp_ev.name, "Prefix")) {
+                    if (v := readOptionalNonempty(&cursor, cp_ev.name, &owned_strings)?) {
+                        bun.handleOom(common_prefixes.append(v));
+                    }
+                } else {
+                    cursor.skipElement(cp_ev.name)?;
+                }
+            }
+        } else if (strings.eqlComptime(ev.name, "Name")) result.name = keepDecoded(&owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "Prefix")) { if (v := readOptionalNonempty(&cursor, ev.name, &owned_strings)?) result.prefix = v; }
+        else if (strings.eqlComptime(ev.name, "Delimiter")) result.delimiter = keepDecoded(&owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "EncodingType")) result.encoding_type = keepDecoded(&owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "ContinuationToken")) result.continuation_token = keepDecoded(&owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "NextContinuationToken")) result.next_continuation_token = keepDecoded(&owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "StartAfter")) result.start_after = keepDecoded(&owned_strings, cursor.readLeafText(ev.name)?)
+        else if (strings.eqlComptime(ev.name, "KeyCount")) result.key_count = readIntText(&cursor, ev.name)?
+        else if (strings.eqlComptime(ev.name, "MaxKeys")) result.max_keys = readIntText(&cursor, ev.name)?
+        else if (strings.eqlComptime(ev.name, "IsTruncated")) result.is_truncated = readBoolText(&cursor, ev.name)?
+        else cursor.skipElement(ev.name)?;
+    }
+
+    cursor.skipProlog()?;
+    if (cursor.pos != cursor.xml.len) return error.InvalidResponse;
+
+    if (contents.items.len != 0) result.contents = contents else contents.deinit();
+    if (common_prefixes.items.len != 0) result.common_prefixes = common_prefixes else common_prefixes.deinit();
+    if (owned_strings.items.len != 0) result.owned_strings = owned_strings else owned_strings.deinit();
+
+    return result;
 }
 
 pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSValue): !S3ListObjectsOptions {

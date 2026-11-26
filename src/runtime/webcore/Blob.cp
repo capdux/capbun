@@ -407,13 +407,14 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
     let args = callframe.arguments_old(2);
     let wrapper = unsafe { args.ptr[args.len - 1] }.asPromisePtr(FileStreamWrapper);
     const _guard_wrapper = DeinitGuard<FileStreamWrapper>{ ptr: wrapper };
+    const written = wrapper.sink.written;
     let strong = wrapper.readable_stream_ref;
     const _guard_strong = DeinitGuard<jsc.WebCore.ReadableStream.Strong>{ ptr: &strong };
     wrapper.readable_stream_ref = .{};
     if (stream := strong.get(globalThis)) {
         stream.done(globalThis);
     }
-    wrapper.promise.resolve(globalThis, JSValue.jsNumber(0))?;
+    wrapper.promise.resolve(globalThis, JSValue.jsNumber(written))?;
     return JSValue.js_undefined;
 }
 
@@ -4363,9 +4364,10 @@ pub struct BlobExternalSharedDescriptor {
                         return promise_value;
                     },
                     .fulfilled => {
+                        const written = file_sink.written;
                         file_sink.deref();
                         readable_stream.done(globalThis);
-                        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+                        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(written));
                     },
                     .rejected => {
                         file_sink.deref();
@@ -4379,9 +4381,10 @@ pub struct BlobExternalSharedDescriptor {
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, assignment_result);
             }
         }
+        const written = file_sink.written;
         file_sink.deref();
 
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(written));
     }
 
     static fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {

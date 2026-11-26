@@ -1236,7 +1236,7 @@ pub fn onResolveStream(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             const args = callframe.arguments_old(2);
             if (bun.api.NativePromiseContext.take(@This(), args.ptr[@as(usize, @intCast((args.len - 1)))])) |sink| {
                 _ = &sink;
-                _ = sink.handleResolveStream(true);
+                _ = sink.handleResolveStream(true, args.ptr[0]);
             }
             return jsc.JSValue.js_undefined;
     }
@@ -1272,20 +1272,32 @@ pub fn handleRejectStream(sink: *@This(), e: JSValue, is_async: bool) void {
             _ = sink.onFinishedBuffering(sink.ctx, "", .{ .JSValue = strong_ref }, is_async);
     }
 
-pub fn handleResolveStream(sink: *@This(), is_async: bool) void {
+pub fn handleResolveStream(sink: *@This(), is_async: bool, resolved_value: ?JSValue) void {
             if (sink.readable_stream_ref.get(sink.global)) |stream| {
                 _ = &stream;
                 _ = stream.done(sink.global);
             }
             if (sink.js_sink) |wrapper| {
                 _ = &wrapper;
-                const bytes = wrapper.sink.bytes.slice();
-                _ = log("handleResolveStream {}", .{ bytes.len });
-                _ = sink.onFinishedBuffering(sink.ctx, bytes, null, is_async);
-            } else {
-                _ = log("handleResolveStream no sink", .{});
-                _ = sink.onFinishedBuffering(sink.ctx, "", null, is_async);
+                const sink_bytes = wrapper.sink.bytes.slice();
+                if ((sink_bytes.len > 0)) {
+                    _ = log("handleResolveStream {}", .{ sink_bytes.len });
+                    _ = sink.onFinishedBuffering(sink.ctx, sink_bytes, null, is_async);
+                    return;
+                }
             }
+            if (resolved_value) |resolved| {
+                _ = &resolved;
+                if (resolved.asArrayBuffer(sink.global)) |ab| {
+                    _ = &ab;
+                    const bytes = ab.slice();
+                    _ = log("handleResolveStream ab {}", .{ bytes.len });
+                    _ = sink.onFinishedBuffering(sink.ctx, bytes, null, is_async);
+                    return;
+                }
+            }
+            _ = log("handleResolveStream 0", .{});
+            _ = sink.onFinishedBuffering(sink.ctx, "", null, is_async);
     }
 
 pub fn createJSSink(sink: *@This(), stream: jsc.WebCore.ReadableStream) !void {
@@ -1322,7 +1334,7 @@ const cell = bun.api.NativePromiseContext.create(globalThis, sink);
                     _ = (blk_catch_2: { break :blk_catch_2 ((assignment_result.thenWithValue(globalThis, cell, onResolveStream, onRejectStream)) catch |__ce_2| { _ = &__ce_2;  }); });
 },
 .fulfilled => {
-_ = sink.handleResolveStream(false);
+_ = sink.handleResolveStream(false, null);
 },
 .rejected => {
 _ = sink.handleRejectStream(promise.result(globalThis.vm()), false);
@@ -1332,7 +1344,7 @@ _ = sink.handleRejectStream(promise.result(globalThis.vm()), false);
                 }
                 return error.PipeFailed;
             }
-            _ = sink.handleResolveStream(false);
+            _ = sink.handleResolveStream(false, null);
     }
 
 pub fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, owned_readable_stream: ?jsc.WebCore.ReadableStream) !void {

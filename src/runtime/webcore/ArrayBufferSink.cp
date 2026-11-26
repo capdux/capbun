@@ -102,7 +102,6 @@ const Signal = webcore.streams.Signal;
         const len = _.bytes.write(_.allocator, data.slice()) catch {
             return .{ .err = Syscall.Error.oom };
         };
-        _.signal.ready(null, null);
         return .{ .owned = len };
     }
 
@@ -115,7 +114,6 @@ const Signal = webcore.streams.Signal;
         const len = _.bytes.writeLatin1(_.allocator, data.slice()) catch {
             return .{ .err = Syscall.Error.oom };
         };
-        _.signal.ready(null, null);
         return .{ .owned = len };
     }
 
@@ -127,7 +125,6 @@ const Signal = webcore.streams.Signal;
         const len = _.bytes.writeUTF16(_.allocator, u16_slice) catch {
             return .{ .err = Syscall.Error.oom };
         };
-        _.signal.ready(null, null);
         return .{ .owned = len };
     }
 

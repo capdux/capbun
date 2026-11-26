@@ -732,14 +732,14 @@ function socketCloseNT(self) {
 }
 
 Socket.prototype.address = function () {
-  const addr = this[kStateSymbol].handle.socket?.address;
+  const addr = this[kStateSymbol].handle?.socket?.address;
   if (!addr) throw $ERR_SOCKET_DGRAM_NOT_RUNNING();
   return addr;
 };
 
 Socket.prototype.remoteAddress = function () {
   const state = this[kStateSymbol];
-  const socket = state.handle.socket;
+  const socket = state.handle?.socket;
 
   if (!socket) throw $ERR_SOCKET_DGRAM_NOT_RUNNING();
 

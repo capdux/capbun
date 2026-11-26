@@ -191,8 +191,12 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             var expected_class = ZigString.Empty;
             _ = &expected_class;
             _ = try expected_value.getClassName(globalThis, (&expected_class));
-            const received_message: JSValue = ((try result.fastGet(globalThis, .message)) orelse (.js_undefined));
-            return client.throw(globalThis, signature, "\n\nExpected constructor: not <green>{f}<r>\n\nReceived message: <red>{f}<r>\n", .{ expected_class, received_message.toFmt((&formatter.val)) });
+            const received_message_opt: ?JSValue = (if (result.isObject()) try result.fastGet(globalThis, .message) else null);
+            if (received_message_opt) |received_message| {
+                _ = &received_message;
+                return client.throw(globalThis, signature, "\n\nExpected constructor: not <green>{f}<r>\n\nReceived message: <red>{f}<r>\n", .{ expected_class, received_message.toFmt((&formatter.val)) });
+            }
+            return client.throw(globalThis, signature, "\n\nExpected constructor: not <green>{f}<r>\n\nReceived value: <red>{f}<r>\n", .{ expected_class, result.toFmt((&formatter.val)) });
         }
         if (did_throw) {
             if (((expected_value == .zero) or expected_value.isUndefined())) {

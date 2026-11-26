@@ -1360,6 +1360,9 @@ pub fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue)
         if ((archive.writeSetFormatPaxRestricted() != .ok)) {
             return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
         }
+        if ((archive.writeSetOptions("hdrcharset=BINARY") != .ok)) {
+            return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
+        }
         if (((blk: {
         break :blk lib.archive_write_open2(@ptrCast(archive), @ptrCast((&growing_buffer_guard.buf)), (&lib.GrowingBuffer.openCallback), (&lib.GrowingBuffer.writeCallback), (&lib.GrowingBuffer.closeCallback), null);
 
@@ -1396,7 +1399,7 @@ pub fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue)
             defer if (!__data_guard_moved) { __data_guard_moved = true; const __T = @TypeOf(data_guard); if (@typeInfo(__T) == .optional) { if (data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = data_guard; _drop_val.__cp_deinit(); } };
             const data = data_guard.slice.slice();
             _ = entry.clear();
-            _ = entry.setPathnameUtf8(key_str_guard.slice);
+            _ = entry.setPathname(key_str_guard.slice);
             _ = entry.setSize((if (comptime @typeInfo(@TypeOf(data.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(data.len)) else cp_cast_int(i32, data.len)));
             _ = entry.setFiletype(@intFromEnum(lib.FileType.regular));
             _ = entry.setPerm(420);

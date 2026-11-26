@@ -1735,7 +1735,12 @@ const result = try bun.jsc.fromJSHostCall(self.globalThis, @src(), JSC__JSValue_
             if (result.isString()) {
                 _ = writer.print("{f}", .{ result.fmtString(self.globalThis) });
             } else {
-                _ = try self.format(try ConsoleObject.Formatter.Tag.get(result, self.globalThis), Writer, writer_, result, self.globalThis, enable_ansi_colors);
+                if ((result == self.custom_formatted_object.@"this")) {
+                    const fallback = try ConsoleObject.Formatter.Tag.getAdvanced(result, self.globalThis, .{ .disable_inspect_custom = true });
+                    _ = try self.format(fallback, Writer, writer_, result, self.globalThis, enable_ansi_colors);
+                } else {
+                    _ = try self.format(try ConsoleObject.Formatter.Tag.get(result, self.globalThis), Writer, writer_, result, self.globalThis, enable_ansi_colors);
+                }
             }
 },
 .Symbol => {

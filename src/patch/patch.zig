@@ -547,7 +547,7 @@ if (new_side_ended) {
                 }
 },
 .deletion => {
-if (old_side_ended) {
+if ((old_side_ended or new_side_ended)) {
                     return false;
                 }
 },
@@ -654,13 +654,45 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                 }
                 _ = bun.debugAssert((i == file_line_count));
             }
-            var hunk_num: usize = 1;
-            _ = &hunk_num;
-            for (patch.hunks.items) |hunk| {
-                _ = &hunk;
-                defer {
-                hunk_num = (hunk_num + 1);
+            const IndexedHunk = struct {
+    hunk: Hunk,
+    num: usize,
+};
+            var sorted_hunks = bun.handleOom(std.ArrayListUnmanaged(IndexedHunk).initCapacity(bun.default_allocator, patch.hunks.items.len));
+            _ = &sorted_hunks;
+            var sorted_hunks_guard = DeinitWithAllocGuard(std.ArrayListUnmanaged(IndexedHunk)){ .ptr = (blk: {
+            break :blk (&sorted_hunks);
+
+}), .alloc = bun.default_allocator };
+            _ = &sorted_hunks_guard;
+            var __sorted_hunks_guard_moved = false; _ = &__sorted_hunks_guard_moved;
+            defer if (!__sorted_hunks_guard_moved) { __sorted_hunks_guard_moved = true; const __T = @TypeOf(sorted_hunks_guard); if (@typeInfo(__T) == .optional) { if (sorted_hunks_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sorted_hunks_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sorted_hunks_guard; _drop_val.__cp_deinit(); } };
+            var hunk_idx: usize = 0;
+            _ = &hunk_idx;
+            while ((hunk_idx < patch.hunks.items.len)) : (hunk_idx = (hunk_idx + 1)) {
+                _ = bun.handleOom(sorted_hunks.append(bun.default_allocator, IndexedHunk{ .hunk = patch.hunks.items[@as(usize, @intCast(hunk_idx))], .num = (hunk_idx + 1) }));
+            }
+            var sort_i: usize = 1;
+            _ = &sort_i;
+            while ((sort_i < sorted_hunks.items.len)) : (sort_i = (sort_i + 1)) {
+                const key = sorted_hunks.items[@as(usize, @intCast(sort_i))];
+                var j = sort_i;
+                _ = &j;
+                while (((j > 0) and (sorted_hunks.items[@as(usize, @intCast((j - 1)))].hunk.header.original.start > key.hunk.header.original.start))) : (j = (j - 1)) {
+                    sorted_hunks.items[cp_cast_int(usize, j)] = sorted_hunks.items[@as(usize, @intCast((j - 1)))];
                 }
+                sorted_hunks.items[cp_cast_int(usize, j)] = key;
+            }
+            var prev_original_end: u32 = 0;
+            _ = &prev_original_end;
+            for (sorted_hunks.items) |item| {
+                _ = &item;
+                const hunk = item.hunk;
+                const hunk_num = item.num;
+                if (((hunk.header.original.len > 0) and (prev_original_end > hunk.header.original.start))) {
+                    return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
+                }
+                prev_original_end = @max(prev_original_end, (hunk.header.original.start + hunk.header.original.len));
                 const hint: usize = (hunk.header.patched.start -| 1);
                 const has_old_lines = brk: {
                 for (hunk.parts.items) |p| {
@@ -674,7 +706,8 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                 var line_cursor: usize = hint;
                 _ = &line_cursor;
                 if ((!has_old_lines)) {
-                    if ((line_cursor > lines.items.len)) {
+                    const num_lines = (if (((lines.items.len > 0) and (lines.items[@as(usize, @intCast((lines.items.len - 1)))].len == 0))) (lines.items.len - 1) else lines.items.len);
+                    if ((line_cursor > num_lines)) {
                         return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
                     }
                 } else {
@@ -1766,12 +1799,6 @@ pub fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []con
         _ = @memcpy(new_buf[2..][0..new_folder_trimmed.len], new_folder_trimmed);
         new_buf[cp_cast_int(usize, (2 + new_folder_trimmed.len))] = 47;
         const b_new_folder = new_buf[0..((2 + new_folder_trimmed.len) + 1)];
-        var saw_a_folder: ?usize = null;
-        _ = &saw_a_folder;
-        var saw_b_folder: ?usize = null;
-        _ = &saw_b_folder;
-        var line_idx: u32 = 0;
-        _ = &line_idx;
         var line_iter = std.mem.splitScalar(u8, stdout.items, 10);
         _ = &line_iter;
         while (line_iter.next()) |line| {
@@ -1782,46 +1809,35 @@ pub fn gitDiffPostprocess(stdout: *std.array_list.Managed(u8), old_folder: []con
                     const line_start = ((line_iter.index.? - 1) - line.len);
                     line_iter.index.? = (line_iter.index.? - (1 + line.len));
                     _ = try stdout.replaceRange((line_start + old_folder_start), (old_folder_trimmed.len + 1), "");
-                    saw_a_folder = line_idx;
                     continue;
                 }
                 if (std.mem.indexOf(u8, line, b_new_folder)) |idx| {
                     _ = &idx;
                     const new_folder_start = (idx + 2);
                     const line_start = ((line_iter.index.? - 1) - line.len);
+                    line_iter.index.? = (line_iter.index.? - (1 + line.len));
                     _ = try stdout.replaceRange((line_start + new_folder_start), (new_folder_trimmed.len + 1), "");
-                    line_iter.index.? = (line_iter.index.? - (new_folder_trimmed.len + 1));
-                    saw_b_folder = line_idx;
                     continue;
                 }
-                if (((saw_a_folder == null) or (saw_a_folder.? != line_idx))) {
-                    if (std.mem.indexOf(u8, line, old_folder)) |idx| {
-                        _ = &idx;
-                        if ((((idx + old_folder.len) < line.len) and (line[@as(usize, @intCast((idx + old_folder.len)))] == 47))) {
-                            const line_start = ((line_iter.index.? - 1) - line.len);
-                            line_iter.index.? = (line_iter.index.? - (1 + line.len));
-                            _ = try stdout.replaceRange((line_start + idx), (old_folder.len + 1), "");
-                            saw_a_folder = line_idx;
-                            continue;
-                        }
+                if (std.mem.indexOf(u8, line, old_folder)) |idx| {
+                    _ = &idx;
+                    if ((((idx + old_folder.len) < line.len) and (line[@as(usize, @intCast((idx + old_folder.len)))] == 47))) {
+                        const line_start = ((line_iter.index.? - 1) - line.len);
+                        line_iter.index.? = (line_iter.index.? - (1 + line.len));
+                        _ = try stdout.replaceRange((line_start + idx), (old_folder.len + 1), "");
+                        continue;
                     }
                 }
-                if (((saw_b_folder == null) or (saw_b_folder.? != line_idx))) {
-                    if (std.mem.indexOf(u8, line, new_folder)) |idx| {
-                        _ = &idx;
-                        if ((((idx + new_folder.len) < line.len) and (line[@as(usize, @intCast((idx + new_folder.len)))] == 47))) {
-                            const line_start = ((line_iter.index.? - 1) - line.len);
-                            line_iter.index.? = (line_iter.index.? - (1 + line.len));
-                            _ = try stdout.replaceRange((line_start + idx), (new_folder.len + 1), "");
-                            saw_b_folder = line_idx;
-                            continue;
-                        }
+                if (std.mem.indexOf(u8, line, new_folder)) |idx| {
+                    _ = &idx;
+                    if ((((idx + new_folder.len) < line.len) and (line[@as(usize, @intCast((idx + new_folder.len)))] == 47))) {
+                        const line_start = ((line_iter.index.? - 1) - line.len);
+                        line_iter.index.? = (line_iter.index.? - (1 + line.len));
+                        _ = try stdout.replaceRange((line_start + idx), (new_folder.len + 1), "");
+                        continue;
                     }
                 }
             }
-            line_idx = (line_idx + 1);
-            saw_a_folder = null;
-            saw_b_folder = null;
         }
 }
 

@@ -4440,6 +4440,11 @@ pub struct H2FrameParser {
             return globalObject.throw("Invalid stream id", {});
         }
         const context_arg = args_list.ptr[1];
+        if (context_arg.isUndefinedOrNull()) {
+            let context_guard = DeinitGuard<jsc.Strong.Optional>{ val: stream.jsContext };
+            stream.jsContext = .empty;
+            return JSValue.js_undefined;
+        }
         if (!context_arg.isObject()) {
             return globalObject.throw("Expected context to be an object", {});
         }

@@ -25,7 +25,7 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     if (input_bytes.len > std.math.maxInt(i32)) return globalThis.throwRangeError(@as(i64, @intCast(@min(input_bytes.len, @as(usize, std.math.maxInt(i64))))), .{ .field_name = "input.byteLength", .max = std.math.maxInt(i32) });
     const source = &logger.Source.initPathString("input.jsonc", input_bytes);
     const log_ptr: *logger.Log = &log_guard.val;
-    const parse_result = json.parseTSConfig(source, log_ptr, allocator, false) catch e => {
+    const parse_result = json.parseJSONC(source, log_ptr, allocator) catch e => {
         if (e == error.StackOverflow) return globalThis.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
         let first_msg: (*const logger.Msg)? = if (log_guard.val.msgs.items.len > 0) unsafe { &log_guard.val.msgs.items[0] } else null;

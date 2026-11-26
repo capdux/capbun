@@ -1316,7 +1316,7 @@ pub struct ValueBufferer {
         * = globalObject;
         const args = callframe.arguments_old(2);
         if (sink := bun.api.NativePromiseContext.take(@This(), args.ptr[args.len - 1])) {
-            sink.handleResolveStream(true);
+            sink.handleResolveStream(true, args.ptr[0]);
         }
         return jsc.JSValue.js_undefined;
     }
@@ -1345,18 +1345,28 @@ pub struct ValueBufferer {
         sink.onFinishedBuffering(sink.ctx, "", { JSValue: strong_ref }, is_async);
     }
 
-    static fn handleResolveStream(sink: *@This(), is_async: bool) {
+    static fn handleResolveStream(sink: *@This(), is_async: bool, resolved_value: JSValue?) {
         if (stream := sink.readable_stream_ref.get(sink.global)) {
             stream.done(sink.global);
         }
         if (wrapper := sink.js_sink) {
-            const bytes = wrapper.sink.bytes.slice();
-            log("handleResolveStream {}", .{bytes.len});
-            sink.onFinishedBuffering(sink.ctx, bytes, null, is_async);
-        } else {
-            log("handleResolveStream no sink", {});
-            sink.onFinishedBuffering(sink.ctx, "", null, is_async);
+            const sink_bytes = wrapper.sink.bytes.slice();
+            if (sink_bytes.len > 0) {
+                log("handleResolveStream {}", .{sink_bytes.len});
+                sink.onFinishedBuffering(sink.ctx, sink_bytes, null, is_async);
+                return;
+            }
         }
+        if (resolved := resolved_value) {
+            if (ab := resolved.asArrayBuffer(sink.global)) {
+                const bytes = ab.slice();
+                log("handleResolveStream ab {}", .{bytes.len});
+                sink.onFinishedBuffering(sink.ctx, bytes, null, is_async);
+                return;
+            }
+        }
+        log("handleResolveStream 0", {});
+        sink.onFinishedBuffering(sink.ctx, "", null, is_async);
     }
 
     static fn createJSSink(sink: *@This(), stream: jsc.WebCore.ReadableStream)! {
@@ -1412,7 +1422,7 @@ pub struct ValueBufferer {
                         ) catch {};
                     },
                     .fulfilled => {
-                        sink.handleResolveStream(false);
+                        sink.handleResolveStream(false, null);
                     },
                     .rejected => {
                         sink.handleRejectStream(promise.result(globalThis.vm()), false);
@@ -1423,7 +1433,7 @@ pub struct ValueBufferer {
             return error.PipeFailed;
         }
 
-        sink.handleResolveStream(false);
+        sink.handleResolveStream(false, null);
     }
 
     static fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, owned_readable_stream: jsc.WebCore.ReadableStream?)! {

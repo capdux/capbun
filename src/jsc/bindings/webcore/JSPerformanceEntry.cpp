@@ -317,12 +317,7 @@ JSC_DEFINE_HOST_FUNCTION(jsPerformanceEntryPrototype_inspectCustom, (JSGlobalObj
     if (throwScope.exception()) {
         if (!dynamicDowncast<JSPerformanceEntry>(thisObject) && thisObject->structure()->mayBePrototype()) {
             CLEAR_IF_EXCEPTION(throwScope);
-            newOptions->putDirect(vm, Identifier::fromString(vm, "customInspect"_s), jsBoolean(false), 0);
-            auto callData = JSC::getCallData(inspectFn);
-            MarkedArgumentBuffer args;
-            args.append(thisObject);
-            args.append(newOptions);
-            RELEASE_AND_RETURN(throwScope, JSValue::encode(JSC::profiledCall(lexicalGlobalObject, ProfilingReason::API, inspectFn, callData, jsUndefined(), args)));
+            return JSValue::encode(thisObject);
         }
         return {};
     }

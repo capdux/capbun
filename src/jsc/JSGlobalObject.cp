@@ -1030,7 +1030,7 @@ inline fn argsIsEmpty(comptime T: type): bool {
             content_type = ct.toZigString();
         }
 
-        if (!content_type.eqlComptime("application/wasm")) {
+        if (!content_type.eqlCaseInsensitive(ZigString.static("application/wasm").*)) {
             return this_global.ERR(.WEBASSEMBLY_RESPONSE, "WebAssembly response has unsupported MIME type '{f}'", .{ content_type }).throw();
         }
 

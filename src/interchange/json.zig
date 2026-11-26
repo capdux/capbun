@@ -375,21 +375,31 @@ pub fn parseJSONMaybeTrailingComma(p: anytype, comptime opts: js_lexer.JSONOptio
 }
 
 pub fn parseJSONExpr(p: anytype, comptime opts: js_lexer.JSONOptions, comptime maybe_auto_quote: bool, comptime force_utf8: bool) !Expr {
+        return parseJSONExprImpl(p, opts, maybe_auto_quote, force_utf8, false);
+}
+
+pub fn parseJSONExprImpl(p: anytype, comptime opts: js_lexer.JSONOptions, comptime maybe_auto_quote: bool, comptime force_utf8: bool, comptime is_jsonc_root: bool) !Expr {
         if ((!p.stack_check.isSafeToRecurse())) {
             _ = try bun.throwStackOverflow();
         }
         const loc = p.lexer.loc();
         switch (p.lexer.token) {
 .t_false => {
-_ = try p.lexer.next();
+if ((!is_jsonc_root)) {
+            _ = try p.lexer.next();
+        }
         return newExpr(E.Boolean{ .value = false }, loc);
 },
 .t_true => {
-_ = try p.lexer.next();
+if ((!is_jsonc_root)) {
+            _ = try p.lexer.next();
+        }
         return newExpr(E.Boolean{ .value = true }, loc);
 },
 .t_null => {
-_ = try p.lexer.next();
+if ((!is_jsonc_root)) {
+            _ = try p.lexer.next();
+        }
         return newExpr(std.mem.zeroes(E.Null), loc);
 },
 .t_string_literal => {
@@ -398,18 +408,28 @@ var str: E.String = try p.lexer.toEString();
         if (force_utf8) {
             _ = ((str.toUTF8(p.allocator)) catch unreachable);
         }
-        _ = try p.lexer.next();
+        if ((!is_jsonc_root)) {
+            _ = try p.lexer.next();
+        }
         return newExpr(str, loc);
 },
 .t_numeric_literal => {
 const value = p.lexer.number;
-        _ = try p.lexer.next();
+        if ((!is_jsonc_root)) {
+            _ = try p.lexer.next();
+        }
         return newExpr(E.Number{ .value = value }, loc);
 },
 .t_minus => {
 _ = try p.lexer.next();
         const value = p.lexer.number;
-        _ = try p.lexer.expect(.t_numeric_literal);
+        if (is_jsonc_root) {
+            if ((p.lexer.token != .t_numeric_literal)) {
+                _ = try p.lexer.expected(.t_numeric_literal);
+            }
+        } else {
+            _ = try p.lexer.expect(.t_numeric_literal);
+        }
         return newExpr(E.Number{ .value = (-value) }, loc);
 },
 .t_open_bracket => {
@@ -434,12 +454,18 @@ _ = try p.lexer.next();
                     is_single_line = false;
                 }
             }
-            _ = ((exprs.append(try parseJSONExpr(p, opts, false, force_utf8))) catch unreachable);
+            _ = ((exprs.append(try parseJSONExprImpl(p, opts, false, force_utf8, false))) catch unreachable);
         }
         if (p.lexer.has_newline_before) {
             is_single_line = false;
         }
-        _ = try p.lexer.expect(.t_close_bracket);
+        if (is_jsonc_root) {
+            if ((p.lexer.token != .t_close_bracket)) {
+                _ = try p.lexer.expected(.t_close_bracket);
+            }
+        } else {
+            _ = try p.lexer.expect(.t_close_bracket);
+        }
         const items = ExprNodeList.moveFromList((&exprs));
         exprs_guard.active = false;
         return newExpr(E.Array{ .items = items, .is_single_line = is_single_line, .was_originally_macro = opts.was_originally_macro }, loc);
@@ -488,13 +514,19 @@ _ = try p.lexer.next();
                 }
             }
             _ = try p.lexer.expect(.t_colon);
-            const value = try parseJSONExpr(p, opts, false, force_utf8);
+            const value = try parseJSONExprImpl(p, opts, false, force_utf8, false);
             _ = ((properties.append(G.Property{ .key = key, .value = value, .kind = js_ast.G.Property.Kind.normal, .initializer = null })) catch unreachable);
         }
         if (p.lexer.has_newline_before) {
             is_single_line = false;
         }
-        _ = try p.lexer.expect(.t_close_brace);
+        if (is_jsonc_root) {
+            if ((p.lexer.token != .t_close_brace)) {
+                _ = try p.lexer.expected(.t_close_brace);
+            }
+        } else {
+            _ = try p.lexer.expect(.t_close_brace);
+        }
         const props = G.Property.List.moveFromList((&properties));
         properties_guard.active = false;
         return newExpr(E.Object{ .properties = props, .is_single_line = is_single_line, .was_originally_macro = opts.was_originally_macro }, loc);
@@ -503,7 +535,7 @@ else => {
 if (maybe_auto_quote) {
             p.lexer = try @TypeOf(p.lexer).initJSON(p.log, p.source(), p.allocator);
             _ = try p.lexer.parseStringLiteral(0);
-            return parseJSONExpr(p, opts, false, force_utf8);
+            return parseJSONExprImpl(p, opts, false, force_utf8, is_jsonc_root);
         }
         _ = try p.lexer.unexpected();
         return error.ParserError;
@@ -540,6 +572,10 @@ pub inline fn source(self: *const @This()) *const logger.Source {
 
 pub fn parseExpr(self: *@This(), comptime maybe_auto_quote: bool, comptime force_utf8: bool) !Expr {
             return parseJSONExpr(self, opts, maybe_auto_quote, force_utf8);
+    }
+
+pub fn parseExprJSONC(self: *@This()) !Expr {
+            return parseJSONExprImpl(self, opts, false, true, true);
     }
 
 pub fn parseMaybeTrailingComma(self: *@This(), closer: js_lexer.T) !bool {
@@ -927,6 +963,59 @@ else => {
         var parser = try TSConfigParser.init(allocator, source, log);
         _ = &parser;
         return parser.parseExpr(false, force_utf8);
+}
+
+pub fn validateJSONCTrailing(source: *const logger.Source, log: *logger.Log, start_pos: usize) !void {
+        const contents = source.contents;
+        var i = start_pos;
+        _ = &i;
+        while ((i < contents.len)) {
+            const c = contents[@as(usize, @intCast(i))];
+            if (((((((c == 32) or (c == 9)) or (c == 10)) or (c == 13)) or (c == 11)) or (c == 12))) {
+                i = (i + 1);
+                continue;
+            }
+            if ((c == 47)) {
+                if ((((i + 1) < contents.len) and (contents[@as(usize, @intCast((i + 1)))] == 47))) {
+                    i = (i + 2);
+                    while ((((i < contents.len) and (contents[@as(usize, @intCast(i))] != 10)) and (contents[@as(usize, @intCast(i))] != 13))) : (i = (i + 1)) {
+                    }
+                    continue;
+                }
+                if ((((i + 1) < contents.len) and (contents[@as(usize, @intCast((i + 1)))] == 42))) {
+                    i = (i + 2);
+                    var closed = false;
+                    _ = &closed;
+                    while (((i + 1) < contents.len)) : (i = (i + 1)) {
+                        if (((contents[@as(usize, @intCast(i))] == 42) and (contents[@as(usize, @intCast((i + 1)))] == 47))) {
+                            i = (i + 2);
+                            closed = true;
+                            break;
+                        }
+                    }
+                    if ((!closed)) {
+                        _ = (blk_catch_9: { break :blk_catch_9 ((log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unterminated comment")) catch |__ce_9| { _ = &__ce_9;  }); });
+                        return error.SyntaxError;
+                    }
+                    continue;
+                }
+                _ = (blk_catch_10: { break :blk_catch_10 ((log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unexpected '/'")) catch |__ce_10| { _ = &__ce_10;  }); });
+                return error.SyntaxError;
+            }
+            if ((c == 0)) {
+                _ = (blk_catch_11: { break :blk_catch_11 ((log.addError(source, logger.Loc{ .start = @as(i32, @intCast(i)) }, "Unexpected null byte")) catch |__ce_11| { _ = &__ce_11;  }); });
+                return error.SyntaxError;
+            }
+            break;
+        }
+}
+
+pub fn parseJSONC(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator) !Expr {
+        var parser = try TSConfigParser.init(allocator, source, log);
+        _ = &parser;
+        const expr = try parser.parseExprJSONC();
+        _ = try validateJSONCTrailing(source, log, parser.lexer.end);
+        return expr;
 }
 
 pub fn expectPrintedJSON(_contents: []const u8, expected: []const u8) !void {

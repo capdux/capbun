@@ -84,7 +84,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     // the profile out after header parse. Must be set PRE-header — the
     // marker buffer is discarded if we set this after.
     * = tj3Set(h, TJPARAM_SAVEMARKERS, 2);
-    if (tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
+    if (tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0 && tj3GetErrorCode(h) != TJERR_WARNING) return error.DecodeFailed;
     const rw = tj3Get(h, TJPARAM_JPEGWIDTH);
     const rh = tj3Get(h, TJPARAM_JPEGHEIGHT);
     // tj3Get returns -1 on error; treat any non-positive dim as a decode
@@ -139,7 +139,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     }
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * ht * 4)?;
     const out_guard = SliceFreeGuard{ slice: out };
-    if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), if (cmyk) TJPF_CMYK else TJPF_RGBA) != 0)
+    if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), if (cmyk) TJPF_CMYK else TJPF_RGBA) != 0 && tj3GetErrorCode(h) != TJERR_WARNING)
         return error.DecodeFailed;
     if (tj3Get(h, TJPARAM_JPEGWIDTH) != rw || tj3Get(h, TJPARAM_JPEGHEIGHT) != rh)
         return error.DecodeFailed;

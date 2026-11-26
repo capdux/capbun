@@ -448,7 +448,7 @@ class URLContext {
   }
 }
 
-function formatURL(value, ctx, recurseTimes) {
+function formatURL(value, ctx, ignored, recurseTimes) {
   const urlObj = {
     href: value.href,
     origin: value.origin,

@@ -3210,9 +3210,10 @@ const wrapper = FileStreamWrapper.new(.{ .promise = jsc.JSPromise.Strong.init(gl
                 return promise_value;
 },
 .fulfilled => {
-_ = file_sink.deref();
+const written = file_sink.written;
+                _ = file_sink.deref();
                 _ = readable_stream.done(globalThis);
-                return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+                return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(written));
 },
 .rejected => {
 _ = file_sink.deref();
@@ -3226,8 +3227,9 @@ _ = file_sink.deref();
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, assignment_result);
             }
         }
+        const written = file_sink.written;
         _ = file_sink.deref();
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(0));
+        return JSPromise.resolvedPromiseValue(globalThis, JSValue.jsNumber(written));
 }
 
 pub fn writeFile(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
@@ -3407,6 +3409,7 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
         _ = &_guard_wrapper;
         var ___guard_wrapper_moved = false; _ = &___guard_wrapper_moved;
         defer if (!___guard_wrapper_moved) { ___guard_wrapper_moved = true; const __T = @TypeOf(_guard_wrapper); if (@typeInfo(__T) == .optional) { if (_guard_wrapper) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_wrapper.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_wrapper; _drop_val.__cp_deinit(); } };
+        const written = wrapper.sink.written;
         var strong = wrapper.readable_stream_ref;
         _ = &strong;
         var _guard_strong = DeinitGuard(jsc.WebCore.ReadableStream.Strong){ .ptr = (&strong) };
@@ -3418,7 +3421,7 @@ pub fn onFileStreamResolveRequestStream(globalThis: *JSGlobalObject, callframe: 
             _ = &stream;
             _ = stream.done(globalThis);
         }
-        _ = try wrapper.promise.resolve(globalThis, JSValue.jsNumber(0));
+        _ = try wrapper.promise.resolve(globalThis, JSValue.jsNumber(written));
         return JSValue.js_undefined;
 }
 

@@ -85,7 +85,26 @@ static ExceptionOr<String> tryFormURLDecodeSegment(StringView segment)
         }
     }
 
-    auto decoded = WTF::URLParser::formURLDecode(segment);
+    std::optional<String> decoded;
+    if (segment.contains('+')) {
+        if (segment.is8Bit()) {
+            Vector<Latin1Character> buf(segment.span8());
+            for (auto& c : buf) {
+                if (c == '+')
+                    c = ' ';
+            }
+            decoded = WTF::URLParser::formURLDecode(StringView(buf.span()));
+        } else {
+            Vector<char16_t> buf(segment.span16());
+            for (auto& c : buf) {
+                if (c == '+')
+                    c = ' ';
+            }
+            decoded = WTF::URLParser::formURLDecode(StringView(buf.span()));
+        }
+    } else {
+        decoded = WTF::URLParser::formURLDecode(segment);
+    }
     if (!decoded || decoded->length() > Bun__stringSyntheticAllocationLimit) [[unlikely]]
         return Exception { OutOfMemoryError };
     return WTF::move(*decoded);

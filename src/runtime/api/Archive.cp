@@ -991,6 +991,9 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
     if (archive.writeSetFormatPaxRestricted() != .ok) {
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
     }
+    if (archive.writeSetOptions("hdrcharset=BINARY") != .ok) {
+        return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
+    }
 
     if (unsafe {
         lib.archive_write_open2(
@@ -1032,7 +1035,7 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         // Write entry to archive
         const data = data_guard.slice.slice();
         * = entry.clear();
-        entry.setPathnameUtf8(key_str_guard.slice);
+        entry.setPathname(key_str_guard.slice);
         entry.setSize(i32(data.len));
         entry.setFiletype(@intFromEnum(lib.FileType.regular));
         entry.setPerm(0o644);

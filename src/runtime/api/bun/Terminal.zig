@@ -693,6 +693,9 @@ pub fn onWriterClose(client: *Terminal) void {
 
 pub fn onWriterReady(client: *Terminal) void {
         _ = log("onWriterReady", .{});
+        if ((client.flags.closed or client.flags.finalized)) {
+            return;
+        }
         const this_jsvalue_opt = client.this_value.tryGet();
         if ((this_jsvalue_opt == null)) {
             return;
@@ -715,7 +718,11 @@ pub fn onWriterError(client: *Terminal, e: bun.sys.Error) void {
 
 pub fn onWrite(client: *Terminal, amount: usize, status: bun.io.WriteStatus) void {
         _ = log("onWrite: {} bytes, status: {any}", .{ amount, status });
-        _ = &client;
+        if (comptime Environment.isPosix) {
+            if ((status == .drained)) {
+                _ = onWriterReady(client);
+            }
+        }
 }
 
 pub fn onReaderDone(client: *Terminal) void {
