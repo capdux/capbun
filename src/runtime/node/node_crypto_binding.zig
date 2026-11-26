@@ -65,6 +65,7 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const validators = @import("./util/validators.zig");
 pub const bun = @import("bun");
+pub const Argon2 = @import("../crypto/Argon2.zig");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -879,7 +880,7 @@ pub fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
 }
 
 pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject) jsc.JSValue {
-        const crypto = jsc.JSValue.createEmptyObject(global, 16);
+        const crypto = jsc.JSValue.createEmptyObject(global, 18);
         _ = crypto.put(global, String.init("pbkdf2"), jsc.JSFunction.create(global, "pbkdf2", pbkdf2, 5, .{}));
         _ = crypto.put(global, String.init("pbkdf2Sync"), jsc.JSFunction.create(global, "pbkdf2Sync", pbkdf2Sync, 5, .{}));
         _ = crypto.put(global, String.init("randomInt"), jsc.JSFunction.create(global, "randomInt", random.randomInt, 2, .{}));
@@ -896,5 +897,7 @@ pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject) jsc.JSValue {
         _ = crypto.put(global, String.init("getHashes"), jsc.JSFunction.create(global, "getHashes", getHashes, 0, .{}));
         _ = crypto.put(global, String.init("scrypt"), jsc.JSFunction.create(global, "scrypt", scrypt, 5, .{}));
         _ = crypto.put(global, String.init("scryptSync"), jsc.JSFunction.create(global, "scryptSync", scryptSync, 4, .{}));
+        _ = crypto.put(global, String.init("argon2"), jsc.JSFunction.create(global, "argon2", Argon2.argon2, 10, .{}));
+        _ = crypto.put(global, String.init("argon2Sync"), jsc.JSFunction.create(global, "argon2Sync", Argon2.argon2Sync, 9, .{}));
         return crypto;
 }

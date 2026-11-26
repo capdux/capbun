@@ -46,6 +46,18 @@ void JSHash::finishCreation(JSC::VM& vm)
     Base::finishCreation(vm);
 }
 
+template<typename Visitor>
+void JSHash::visitChildrenImpl(JSCell* cell, Visitor& visitor)
+{
+    JSHash* thisObject = uncheckedDowncast<JSHash>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, info());
+    Base::visitChildren(thisObject, visitor);
+    if (thisObject->m_sizeForGC > 0)
+        visitor.reportExtraMemoryVisited(thisObject->m_sizeForGC);
+}
+
+DEFINE_VISIT_CHILDREN(JSHash);
+
 template<typename, JSC::SubspaceAccess mode>
 JSC::GCClient::IsoSubspace* JSHash::subspaceFor(JSC::VM& vm)
 {
@@ -94,6 +106,9 @@ bool JSHash::init(JSC::JSGlobalObject* globalObject, ThrowScope& scope, const EV
         m_mdLen = xofLen.value();
     }
 
+    m_sizeForGC = 256 + (xofLen.has_value() ? xofLen.value() : 0);
+    globalObject->vm().heap.reportExtraMemoryAllocated(this, m_sizeForGC);
+
     return true;
 }
 
@@ -109,6 +124,9 @@ bool JSHash::initZig(JSGlobalObject* globalObject, ThrowScope& scope, ExternZigH
     if (xofLen.has_value()) {
         m_mdLen = xofLen.value();
     }
+
+    m_sizeForGC = 256 + (xofLen.has_value() ? xofLen.value() : 0);
+    globalObject->vm().heap.reportExtraMemoryAllocated(this, m_sizeForGC);
 
     return true;
 }

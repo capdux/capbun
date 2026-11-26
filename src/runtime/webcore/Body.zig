@@ -1365,7 +1365,7 @@ pub fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, own
 return error.InvalidStream;
 },
 .Blob, .File => {
-_ = unreachable;
+return error.UnsupportedStreamType;
 },
 .JavaScript, .Direct => {
 return error.UnsupportedStreamType;

@@ -2437,3 +2437,10 @@
 - `src/md/blocks.cp` (.zig), `src/md/inlines.cp` (.zig), `src/md/line_analysis.cp` (.zig)
 - `src/http_jsc/websocket_client/WebSocketUpgradeClient.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 12 测试收敛与 1.4.5 版本对齐提交
+- `package.json` (`version: "1.4.5"`)
+- `src/runtime/crypto/Argon2.cp` (.zig), `src/runtime/node/node_crypto_binding.cp` (.zig), `src/js/node/crypto.ts`
+- `src/jsc/bindings/node/crypto/JSKeyObject.{h,cpp}`, `JSCipher.{h,cpp}`, `JSHash.{h,cpp}`, `JSHmac.{h,cpp}`
+- `src/runtime/webcore/Body.cp` (.zig), `src/js/node/inspector.ts`
+- `SESSION.md`, `CHANGELOG.md`

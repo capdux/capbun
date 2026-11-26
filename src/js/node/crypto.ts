@@ -66,11 +66,13 @@ const {
   getHashes,
   scrypt,
   scryptSync,
+  argon2: _argon2,
+  argon2Sync: _argon2Sync,
 } = $zig("node_crypto_binding.zig", "createNodeCryptoBindingZig");
 
 const normalizeEncoding = $newZigFunction("node_util_binding.zig", "normalizeEncoding", 1);
 
-const { validateString } = require("internal/validators");
+const { validateString, validateObject, validateInteger, validateFunction } = require("internal/validators");
 const { deprecate } = require("internal/util/deprecate");
 
 const kHandle = Symbol("kHandle");
@@ -334,14 +336,67 @@ crypto_exports.randomBytes = randomBytes;
 crypto_exports.randomUUID = randomUUID;
 crypto_exports.randomUUIDv7 = randomUUIDv7;
 
-// Node only provides Argon2 when built against OpenSSL >= 3.2; BoringSSL has no
-// Argon2, so these throw the same error an unsupported Node build throws.
-// The unused parameters are declared to keep `.length` equal to Node's (3 and 2).
-crypto_exports.argon2 = function argon2(_algorithm, _parameters, _callback) {
-  throw $ERR_CRYPTO_ARGON2_NOT_SUPPORTED("Argon2 algorithm not supported");
+function getArgon2InputBuffer(value, name) {
+  if (typeof value === "string") {
+    return Buffer.from(value, "utf8");
+  }
+  if (isAnyArrayBuffer(value) || isArrayBufferView(value)) {
+    return value;
+  }
+  throw $ERR_INVALID_ARG_TYPE(
+    name,
+    "string or an instance of ArrayBuffer, Buffer, TypedArray, or DataView",
+    value,
+  );
+}
+
+function validateArgon2(algorithm, parameters) {
+  validateString(algorithm, "algorithm");
+  let mode;
+  if (algorithm === "argon2d") mode = 0;
+  else if (algorithm === "argon2i") mode = 1;
+  else if (algorithm === "argon2id") mode = 2;
+  else {
+    throw $ERR_INVALID_ARG_VALUE("algorithm", algorithm, "must be one of: 'argon2d', 'argon2i', 'argon2id'");
+  }
+
+  validateObject(parameters, "parameters");
+
+  const message = getArgon2InputBuffer(parameters.message, "parameters.message");
+  const nonce = getArgon2InputBuffer(parameters.nonce, "parameters.nonce");
+  if (nonce.byteLength < 8 || nonce.byteLength > 4294967295) {
+    throw $ERR_OUT_OF_RANGE("parameters.nonce.byteLength", ">= 8 && <= 4294967295", nonce.byteLength);
+  }
+
+  const parallelism = validateInteger(parameters.parallelism, "parameters.parallelism", 1, 16777215);
+  const tagLength = validateInteger(parameters.tagLength, "parameters.tagLength", 4, 4294967295);
+  const memory = validateInteger(parameters.memory, "parameters.memory", 8 * parallelism, 4294967295);
+  const passes = validateInteger(parameters.passes, "parameters.passes", 1, 4294967295);
+
+  const secret =
+    parameters.secret !== undefined ? getArgon2InputBuffer(parameters.secret, "parameters.secret") : undefined;
+  const associatedData =
+    parameters.associatedData !== undefined
+      ? getArgon2InputBuffer(parameters.associatedData, "parameters.associatedData")
+      : undefined;
+
+  return { mode, message, nonce, secret, associatedData, parallelism, tagLength, memory, passes };
+}
+
+crypto_exports.argon2 = function argon2(algorithm, parameters, callback) {
+  const { mode, message, nonce, secret, associatedData, parallelism, tagLength, memory, passes } = validateArgon2(
+    algorithm,
+    parameters,
+  );
+  validateFunction(callback, "callback");
+  _argon2(mode, message, nonce, secret, associatedData, parallelism, tagLength, memory, passes, callback);
 };
-crypto_exports.argon2Sync = function argon2Sync(_algorithm, _parameters) {
-  throw $ERR_CRYPTO_ARGON2_NOT_SUPPORTED("Argon2 algorithm not supported");
+crypto_exports.argon2Sync = function argon2Sync(algorithm, parameters) {
+  const { mode, message, nonce, secret, associatedData, parallelism, tagLength, memory, passes } = validateArgon2(
+    algorithm,
+    parameters,
+  );
+  return _argon2Sync(mode, message, nonce, secret, associatedData, parallelism, tagLength, memory, passes);
 };
 
 crypto_exports.checkPrime = checkPrime;

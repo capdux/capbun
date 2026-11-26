@@ -1451,8 +1451,10 @@ pub struct ValueBufferer {
                 .Invalid => {
                     return error.InvalidStream;
                 },
-                // toBlobIfPossible should've caught this
-                .Blob, .File => unreachable,
+                // Streaming .File (e.g. pipe fd) or unconvertible .Blob cannot be buffered here
+                .Blob, .File => {
+                    return error.UnsupportedStreamType;
+                },
                 .JavaScript, .Direct => {
                     // this is broken right now
                     // return sink.createJSSink(stream);

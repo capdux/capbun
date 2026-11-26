@@ -17,6 +17,17 @@ const JSC::ClassInfo JSKeyObject::s_info = { "KeyObject"_s, &Base::s_info, nullp
 void JSKeyObject::finishCreation(JSC::VM& vm, JSC::JSGlobalObject* globalObject)
 {
     Base::finishCreation(vm);
+    if (m_handle.data()) {
+        if (m_handle.type() == WebCore::CryptoKeyType::Secret) {
+            m_sizeForGC = m_handle.symmetricKey().size();
+        } else if (m_handle.asymmetricKey()) {
+            int pkeySize = EVP_PKEY_size(m_handle.asymmetricKey().get());
+            if (pkeySize > 0)
+                m_sizeForGC = static_cast<size_t>(pkeySize);
+        }
+        if (m_sizeForGC > 0)
+            vm.heap.reportExtraMemoryAllocated(this, m_sizeForGC);
+    }
 }
 
 template<typename Visitor>
@@ -25,6 +36,8 @@ void JSKeyObject::visitChildrenImpl(JSCell* cell, Visitor& visitor)
     JSKeyObject* thisObject = uncheckedDowncast<JSKeyObject>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, info());
     Base::visitChildren(thisObject, visitor);
+    if (thisObject->m_sizeForGC > 0)
+        visitor.reportExtraMemoryVisited(thisObject->m_sizeForGC);
 }
 
 DEFINE_VISIT_CHILDREN(JSKeyObject);

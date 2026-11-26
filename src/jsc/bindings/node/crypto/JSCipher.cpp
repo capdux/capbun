@@ -21,6 +21,8 @@ const JSC::ClassInfo JSCipher::s_info = { "Cipher"_s, &Base::s_info, nullptr, nu
 void JSCipher::finishCreation(JSC::VM& vm, JSC::JSGlobalObject* globalObject)
 {
     Base::finishCreation(vm);
+    m_sizeForGC = sizeof(EVP_CIPHER_CTX);
+    vm.heap.reportExtraMemoryAllocated(this, m_sizeForGC);
 }
 
 template<typename Visitor>
@@ -29,6 +31,8 @@ void JSCipher::visitChildrenImpl(JSCell* cell, Visitor& visitor)
     JSCipher* thisObject = uncheckedDowncast<JSCipher>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, info());
     Base::visitChildren(thisObject, visitor);
+    if (thisObject->m_sizeForGC > 0)
+        visitor.reportExtraMemoryVisited(thisObject->m_sizeForGC);
 }
 
 DEFINE_VISIT_CHILDREN(JSCipher);

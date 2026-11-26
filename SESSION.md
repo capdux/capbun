@@ -1070,3 +1070,11 @@
 - **`node/child_process`**：验证 `child-process-exec.test.ts` 在 `--timeout=20000` 下 **11 pass, 0 fail**。
 - **`bun/md`**：`blocks.cp`, `inlines.cp`, `line_analysis.cp` 修复表格打断、缩进分隔行、`isBlank` 任务列表、`~` 删除线与单列带冒号分隔行 -> 原 10 项中 9 项通过。
 - **`web/websocket`**：`WebSocketUpgradeClient.cp` 实现 `100 Continue` 循环与 `Sec-WebSocket-Extensions` `permessage-deflate` 严格校验 -> `interim responses` 6 项全绿，4 项基础扩展拒绝通过。
+
+### 2026-11-26 Batch 12 测试修复与版本号对齐（`1.4.5-debug` / `node/crypto` / `node/inspector` / `node/stream`）
+- **版本号对齐**：`package.json` `"version"` 由 `"1.3.14"` 更新为 `"1.4.5"`，`bun bd -p 'Bun.version'` 验证输出 `1.4.5-debug`。
+- **`node/crypto`**：
+  - `crypto-extra-memory.test.ts`：`JSKeyObject`, `JSCipher`, `JSHash`, `JSHmac` 补充 `reportExtraMemoryAllocated` / `reportExtraMemoryVisited` -> **8 pass, 0 fail**（100% 通过）。
+  - `argon2.test.ts`：新增纯 CP 模块 `src/runtime/crypto/Argon2.cp`（基于 `std.crypto.pwhash.argon2.kdf`）与 `node_crypto_binding.cp`/`crypto.ts` 绑定，消除 `asInt52` panic -> **16 pass, 20 fail**（Ran 36 tests）。
+- **`node/stream`**：`Body.cp` `ValueBufferer` `.Blob, .File` 改为返回 `error.UnsupportedStreamType` -> 消除 `reached unreachable code` panic，完整跑通 52 项。
+- **`node/inspector`**：`inspector.ts` 修复 `close()` no-op、`waitForDebugger()` `ERR_INSPECTOR_NOT_ACTIVE`、`connectToMainThread()` `ERR_INSPECTOR_NOT_WORKER` -> **40 pass, 36 fail**（Ran 76 tests）。

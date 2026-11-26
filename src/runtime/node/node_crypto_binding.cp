@@ -1,5 +1,6 @@
 import validators from "./util/validators.zig";
 import bun from "bun";
+import Argon2 from "../crypto/Argon2.zig";
 
 const Async = bun.Async;
 const JSError = bun.JSError;
@@ -899,7 +900,7 @@ fn scryptSync(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JSVal
 }
 
 pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject): jsc.JSValue {
-    const crypto = jsc.JSValue.createEmptyObject(global, 16);
+    const crypto = jsc.JSValue.createEmptyObject(global, 18);
 
     crypto.put(global, String.init("pbkdf2"), jsc.JSFunction.create(global, "pbkdf2", pbkdf2, 5, .{}));
     crypto.put(global, String.init("pbkdf2Sync"), jsc.JSFunction.create(global, "pbkdf2Sync", pbkdf2Sync, 5, .{}));
@@ -920,6 +921,8 @@ pub fn createNodeCryptoBindingZig(global: *jsc.JSGlobalObject): jsc.JSValue {
 
     crypto.put(global, String.init("scrypt"), jsc.JSFunction.create(global, "scrypt", scrypt, 5, .{}));
     crypto.put(global, String.init("scryptSync"), jsc.JSFunction.create(global, "scryptSync", scryptSync, 4, .{}));
+    crypto.put(global, String.init("argon2"), jsc.JSFunction.create(global, "argon2", Argon2.argon2, 10, .{}));
+    crypto.put(global, String.init("argon2Sync"), jsc.JSFunction.create(global, "argon2Sync", Argon2.argon2Sync, 9, .{}));
 
     return crypto;
 }

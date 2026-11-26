@@ -14,7 +14,7 @@ function open() {
 }
 
 function close() {
-  throwNotImplemented("node:inspector", 2445);
+  // No-op when the inspector is not open
 }
 
 function url() {
@@ -24,7 +24,9 @@ function url() {
 }
 
 function waitForDebugger() {
-  throwNotImplemented("node:inspector", 2445);
+  const err: any = new Error("Inspector is not active");
+  err.code = "ERR_INSPECTOR_NOT_ACTIVE";
+  throw err;
 }
 
 class Session extends EventEmitter {
@@ -39,6 +41,11 @@ class Session extends EventEmitter {
   }
 
   connectToMainThread() {
+    if (Bun.isMainThread) {
+      const err: any = new Error("Cannot connect to main thread from main thread");
+      err.code = "ERR_INSPECTOR_NOT_WORKER";
+      throw err;
+    }
     this.connect();
   }
 
@@ -129,8 +136,11 @@ class Session extends EventEmitter {
       case "Profiler.takePreciseCoverage":
         return new Error("Coverage APIs are not supported");
 
-      default:
-        return new Error(`Inspector method "${method}" is not supported`);
+      default: {
+        const err: any = new Error(`Inspector method "${method}" is not supported`);
+        err.code = "ERR_INSPECTOR_COMMAND";
+        return err;
+      }
     }
   }
 }
