@@ -685,6 +685,7 @@ pub const PrettyFormatter = struct {
     failed: bool = false,
     estimated_line_length: usize = 0,
     always_newline_scope: bool = false,
+    stack_check: ?bun.StackCheck = null,
 
 pub fn goodTimeForANewLine(self: *PrettyFormatter) bool {
             if ((self.estimated_line_length > 80)) {
@@ -1036,7 +1037,8 @@ pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key_: [*c]ZigS
                     _ = writer.writeAll((comptime Output.prettyFmt("<r><green>", true)));
                 }
             }
-            _ = (blk_catch_8: { break :blk_catch_8 ((fmt_self.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors)) catch |__ce_8| { _ = &__ce_8; return; }); });
+            _ = (blk_catch_8: { break :blk_catch_8 ((fmt_self.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors)) catch |__ce_8| { _ = &__ce_8; fmt_self.failed = true;
+            return; }); });
             if (tag.cell.isStringLike()) {
                 if (comptime enable_ansi_colors) {
                     _ = writer.writeAll((comptime Output.prettyFmt("<r>", true)));
@@ -1050,6 +1052,13 @@ pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key_: [*c]ZigS
 pub fn printAs(self: *PrettyFormatter, comptime Format: JestPrettyFormat.Formatter.Tag, comptime Writer: type, writer_: *std.Io.Writer, value: JSValue, jsType: JSValue.JSType, comptime enable_ansi_colors: bool) !void {
             if (self.failed) {
                 return;
+            }
+            if ((self.stack_check == null)) {
+                self.stack_check = bun.StackCheck.init();
+            }
+            if ((!self.stack_check.?.isSafeToRecurse())) {
+                self.failed = true;
+                return self.globalThis.throwStackOverflow();
             }
             const WW = PrettyFormatter.WrappedWriter(Writer);
             var writer = WW{ .ctx = writer_, .estimated_line_length = (&self.estimated_line_length) };
@@ -1913,6 +1922,9 @@ const prev_quote_strings = self.quote_strings;
             var iter = Iterator{ .formatter = self, .writer = writer_, .always_newline = (self.always_newline_scope or self.goodTimeForANewLine()), .parent = value };
             _ = &iter;
             _ = try value.forEachPropertyOrdered(self.globalThis, (&iter), Iterator.forEach);
+            if (self.globalThis.hasException()) {
+                return error.JSError;
+            }
             if ((iter.i == 0)) {
                 var object_name = ZigString.Empty;
                 _ = &object_name;

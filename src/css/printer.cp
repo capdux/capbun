@@ -351,11 +351,17 @@ pub struct Printer {
             // It has an inlined url for CSS
             const urls_for_css = import_info.ast_urls_for_css[record.source_index.get()];
             if (urls_for_css.len > 0) {
+                if (hash_idx := bun.strings.indexOfScalar(record.original_path, '#')) {
+                    return std.fmt.allocPrint(_.allocator, "{s}{s}", .{ urls_for_css, record.original_path[hash_idx..] }) catch return _.addFmtError();
+                }
                 return urls_for_css;
             }
             // It is a chunk URL
             const unique_key_for_additional_file = import_info.ast_unique_key_for_additional_file[record.source_index.get()];
             if (unique_key_for_additional_file.len > 0) {
+                if (suffix_idx := bun.strings.indexOfAny(record.original_path, "?#")) {
+                    return std.fmt.allocPrint(_.allocator, "{s}{s}", .{ unique_key_for_additional_file, record.original_path[suffix_idx..] }) catch return _.addFmtError();
+                }
                 return unique_key_for_additional_file;
             }
         }

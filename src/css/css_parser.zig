@@ -1076,7 +1076,8 @@ pub fn addImportRecord(self: *Parser, url: []const u8, start_position: usize, ki
             if (self.import_records) |import_records| {
                 _ = &import_records;
                 const idx = import_records.len;
-                _ = bun.handleOom(import_records.append(self.allocator(), ImportRecord{ .path = bun.fs.Path.init(url), .kind = kind, .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast(url.len) } }));
+                const end_position = self.position();
+                _ = bun.handleOom(import_records.append(self.allocator(), ImportRecord{ .path = bun.fs.Path.init(url), .kind = kind, .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast((if ((end_position >= start_position)) (end_position - start_position) else url.len)) } }));
                 return .{ .result = idx };
             } else {
                 return .{ .err = self.newBasicUnexpectedTokenError(.{ .unquoted_url = url }) };

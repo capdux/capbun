@@ -75,7 +75,8 @@ pub struct Composes {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const v = _;
+        return css.implementDeepClone(@This(), &v, allocator);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -87,6 +88,7 @@ pub struct Composes {
 ///
 /// See [Composes](Composes).
 fn parseSpecifier(input: *css.Parser): css.Result(Specifier) {
+    input.skipWhitespace();
     const start_position = input.position();
     if (file := input.tryParse(css.Parser.expectUrlOrString, {}).asValue()) {
         const idx_res = input.addImportRecord(file, start_position, .composes);

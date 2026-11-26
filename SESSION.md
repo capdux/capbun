@@ -1026,3 +1026,11 @@
 - **`bundler/transpiler`**：`options.cp`, `tsconfig_json.cp`, `bunfig.cp`, `Arguments.cp`, `parseJSXElement.cp`, `ParseTask.cp`, `bindings.cpp`, `JSPropertyIterator.cp/.cpp`, `Macro.cp`, `visit.cp`, `visitExpr.cp`, `Expr.cp` 修复 `solid` 移除报错、宏 API Lock、Symbol 键过滤、乱序解构与 MIME essence。
 - **`web/encoding`**：`EncodingLabel.cp`, `TextDecoder.cp` 补全 `windows-1254/1256/1258`/`x-mac-cyrillic`/`unicodefffe` 与 `replacement`/`iso_8859-11` `RangeError` -> 原 15 项全绿。
 - **`web/fetch`**：`http.cp` 支持大小写不敏感与多值逗号分隔的 `Content-Encoding` / `Transfer-Encoding`。
+
+### 2026-11-26 Batch 5 测试修复与验证（`web/encoding` / `bundler/css` / `bundler/esbuild` / `cli/test` / `cli/run`）
+- **`web/encoding`**：`TextDecoder.cp` 新增 `bom_seen` 状态与 `stripUTF16BOM` -> `TextDecoder BOM across {stream: true} chunks` 13/15 通过。
+- **`bundler/esbuild/css.test.ts`**：`printer.cp` 保留 `url()` 的 `?query`/`#fragment` -> **0 fail**（100% 通过）。
+- **`bundler/css`**：`css_parser.cp`, `url.cp`, `image.cp`, `css_modules.cp` 修复 `ImportRecord.range` 覆盖完整 `url()`/`composes` 路径。
+- **`cli/test`**：`pretty_format.cp` 增加 `bun.StackCheck` 深度递归栈溢出防护，`expect.cp` 透传 `RangeError` -> 深度嵌套数组/对象/JSX/matcher 及 `--todo`/`--bail`/`--timeout` 全部通过。
+- **`cli/run/require-cache.test.ts`**：`ZigGlobalObject.cpp` `functionEsmRegistryDelete` 禁止删除未求值完成的 ESM entry -> 4 项 loading 期间 `delete require.cache[esm]` 全部通过。
+- **缺口确认**：`test/cli/lint`、`test/cli/format`、`test/cli/check` 对应上游独立 Rust `oxlint`/`oxfmt`/`tsgo` crate（与 `scripts/upstream_sync.py` `SKIP_CRATES` 一致，当前 CP-Bun 不包含这些 crate）。

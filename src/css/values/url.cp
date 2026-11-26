@@ -21,6 +21,7 @@ pub struct Url {
     const This = @This();
 
     static fn parse(input: *css.Parser): Result(Url) {
+        input.skipWhitespace();
         const start_pos = input.position();
         const loc = input.currentSourceLocation();
         const url = switch (input.expectUrl()) {
@@ -138,7 +139,8 @@ pub struct Url {
     // TODO: dedupe import records??
     // This might not fucking work
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), &_, hasher);
+        const v = _;
+        return css.implementHash(@This(), &v, hasher);
     }
 }
 

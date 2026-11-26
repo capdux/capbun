@@ -308,7 +308,8 @@ pub struct ImageSetOption {
     file_type: ([]const u8)?,
 
     static fn parse(input: *css.Parser): Result(ImageSetOption) {
-        const start_position = input.input.tokenizer.getPosition();
+        input.skipWhitespace();
+        const start_position = input.position();
         const loc = input.currentSourceLocation();
         let image: Image = undefined;
         if (url := input.tryParse(css.Parser.expectUrlOrString, {}).asValue()) {

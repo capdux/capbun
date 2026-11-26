@@ -707,6 +707,7 @@ pub struct PrettyFormatter {
     failed: bool = false,
     estimated_line_length: usize = 0,
     always_newline_scope: bool = false,
+    stack_check: bun.StackCheck? = null,
 
     fn goodTimeForANewLine(*_): bool {
         if (_.estimated_line_length > 80) {
@@ -1082,7 +1083,10 @@ pub struct PrettyFormatter {
                     }
                 }
 
-                fmt_self.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors) catch return;
+                fmt_self.format(tag, Writer, ctx.writer, value, globalThis, enable_ansi_colors) catch {
+                    fmt_self.failed = true;
+                    return;
+                };
 
                 if (tag.cell.isStringLike()) {
                     if (comptime enable_ansi_colors) {
@@ -1104,6 +1108,11 @@ pub struct PrettyFormatter {
     )! {
         if (_.failed)
             return;
+        if (_.stack_check == null) _.stack_check = bun.StackCheck.init();
+        if (!_.stack_check.?.isSafeToRecurse()) {
+            _.failed = true;
+            return _.globalThis.throwStackOverflow();
+        }
         const WW = PrettyFormatter.WrappedWriter(Writer);
         let writer = WW{ ctx: writer_, estimated_line_length: &_.estimated_line_length };
         defer {
@@ -1977,6 +1986,9 @@ pub struct PrettyFormatter {
                 };
 
                 value.forEachPropertyOrdered(_.globalThis, &iter, Iterator.forEach)?;
+                if (_.globalThis.hasException()) {
+                    return error.JSError;
+                }
 
                 if (iter.i == 0) {
                     let object_name = ZigString.Empty;

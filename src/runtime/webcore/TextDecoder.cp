@@ -61,6 +61,7 @@ pub struct Buffered {
 
     ignore_bom: bool = false,
     fatal: bool = false,
+    bom_seen: bool = false,
     encoding: EncodingLabel = EncodingLabel.@"UTF-8",
 
     pub const js = jsc.Codegen.JSTextDecoder;
@@ -232,6 +233,25 @@ pub struct Buffered {
         return _.decodeSlice(globalThis, uint8array.slice(), false);
     }
 
+    fn stripUTF16BOM(*_, buffer_slice: []const u8, comptime b0: u8, comptime b1: u8): []const u8 {
+        if (_.ignore_bom || _.bom_seen) return buffer_slice;
+        if (lead := _.lead_byte) {
+            if (buffer_slice.len > 0) {
+                _.bom_seen = true;
+                if (lead == b0 && buffer_slice[0] == b1) {
+                    _.lead_byte = null;
+                    return buffer_slice[1..];
+                }
+            }
+        } else if (buffer_slice.len >= 2) {
+            _.bom_seen = true;
+            if (buffer_slice[0] == b0 && buffer_slice[1] == b1) return buffer_slice[2..];
+        } else if (buffer_slice.len == 1 && buffer_slice[0] != b0) {
+            _.bom_seen = true;
+        }
+        return buffer_slice;
+    }
+
     fn decodeSlice(*_, globalThis: *JSGlobalObject, buffer_slice: []const u8, comptime flush: bool): JSValue ! JSError {
         switch (_.encoding) {
             EncodingLabel.latin1 => {
@@ -246,25 +266,30 @@ pub struct Buffered {
                 return ZigString.toExternalU16(bytes.ptr, out.written, globalThis);
             },
             EncodingLabel.@"UTF-8" => {
-                let maybe_without_bom = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, "\xef\xbb\xbf"))
-                    buffer_slice[3..]
-                else
-                    buffer_slice;
-
-                let input = maybe_without_bom;
-                let deinit_input = false;
+                let input = buffer_slice;
+                let alloc_buf: ([]u8)? = null;
                 if (_.buffered.len > 0) {
                     defer _.buffered.len = 0;
-                    let joined = default_allocator.alloc(u8, maybe_without_bom.len + _.buffered.len)?;
+                    let joined = default_allocator.alloc(u8, buffer_slice.len + _.buffered.len)?;
                     @memcpy(joined[0.._.buffered.len], _.buffered.slice());
-                    @memcpy(joined[_.buffered.len..][0..maybe_without_bom.len], maybe_without_bom);
+                    @memcpy(joined[_.buffered.len..][0..buffer_slice.len], buffer_slice);
                     input = joined;
-                    deinit_input = true;
+                    alloc_buf = joined;
+                }
+
+                if (!_.ignore_bom && !_.bom_seen) {
+                    if (strings.hasPrefixComptime(input, "\xef\xbb\xbf")) {
+                        input = input[3..];
+                        _.bom_seen = true;
+                    } else if (input.len >= 3 || (input.len > 0 && !(input[0] == 0xef && (input.len == 1 || input[1] == 0xbb)))) {
+                        _.bom_seen = true;
+                    }
                 }
 
                 let maybe_decode_result = if (_.fatal) {
                     strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush) catch e => {
-                        if (deinit_input) default_allocator.free(input);
+                        if (buf := alloc_buf) default_allocator.free(buf);
+                        if (flush) _.bom_seen = false;
                         if (e == error.InvalidByteSequence) {
                             return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "Invalid byte sequence", .{}).throw();
                         }
@@ -274,14 +299,14 @@ pub struct Buffered {
                     }
                 } else {
                     strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush) catch e => {
-                        if (deinit_input) default_allocator.free(input);
+                        if (buf := alloc_buf) default_allocator.free(buf);
                         assert(e == error.OutOfMemory);
                         return globalThis.throwOutOfMemory();
                     }
                 };
 
                 if (decode_result := maybe_decode_result) {
-                    if (deinit_input) default_allocator.free(input);
+                    if (buf := alloc_buf) default_allocator.free(buf);
                     const decoded = decode_result[0];
                     const leftover = decode_result[1];
                     const leftover_len = decode_result[2];
@@ -291,20 +316,23 @@ pub struct Buffered {
                             _.buffered.buf = leftover;
                             _.buffered.len = leftover_len;
                         }
+                    } else {
+                        _.bom_seen = false;
                     }
                     return ZigString.toExternalU16(decoded.ptr, decoded.len, globalThis);
                 }
 
-                debugAssert(input.len == 0 || !deinit_input);
+                if (flush) _.bom_seen = false;
+                if (buf := alloc_buf) {
+                    const out_str = ZigString.init(input).toJS(globalThis);
+                    default_allocator.free(buf);
+                    return out_str;
+                }
                 return ZigString.init(input).toJS(globalThis);
             },
 
             .@"UTF-16LE" => {
-                const bom = "\xff\xfe";
-                let input = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, bom))
-                    buffer_slice[2..]
-                else
-                    buffer_slice;
+                const input = _.stripUTF16BOM(buffer_slice, 0xff, 0xfe);
 
                 const res_le = _.decodeUTF16(input, false, flush)?;
                 let decoded = res_le[0];
@@ -312,9 +340,11 @@ pub struct Buffered {
 
                 if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
+                    if (flush) _.bom_seen = false;
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16LE data", .{}).throw();
                 }
 
+                if (flush) _.bom_seen = false;
                 if (decoded.items.len == 0) {
                     decoded.deinit(default_allocator);
                     return ZigString.Empty.toJS(globalThis);
@@ -323,11 +353,7 @@ pub struct Buffered {
                 return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
             },
             .@"UTF-16BE" => {
-                const bom = "\xfe\xff";
-                let input = if (!_.ignore_bom && strings.hasPrefixComptime(buffer_slice, bom))
-                    buffer_slice[2..]
-                else
-                    buffer_slice;
+                const input = _.stripUTF16BOM(buffer_slice, 0xfe, 0xff);
 
                 const res_be = _.decodeUTF16(input, true, flush)?;
                 let decoded = res_be[0];
@@ -335,9 +361,11 @@ pub struct Buffered {
 
                 if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
+                    if (flush) _.bom_seen = false;
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16BE data", .{}).throw();
                 }
 
+                if (flush) _.bom_seen = false;
                 if (decoded.items.len == 0) {
                     decoded.deinit(default_allocator);
                     return ZigString.Empty.toJS(globalThis);

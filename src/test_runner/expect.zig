@@ -432,9 +432,9 @@ pub fn bunTest(self: *Expect) ?bun.jsc.Jest.bun_test.BunTestPtr {
 
 pub fn getSignature(comptime matcher_name: []const u8, comptime args: []const u8, comptime not: bool) [:0]const u8 {
             const received: []const u8 = "<d>expect(<r><red>received<r><d>).<r>";
-            _ = (comptime (if (not) ({
-            return (((((received ++ "not<d>.<r>") ++ matcher_name) ++ "<d>(<r>") ++ args) ++ "<d>)<r>");
-}) else null));
+            if (comptime not) {
+                return (((((received ++ "not<d>.<r>") ++ matcher_name) ++ "<d>(<r>") ++ args) ++ "<d>)<r>");
+            }
             return ((((received ++ matcher_name) ++ "<d>(<r>") ++ args) ++ "<d>)<r>");
     }
 
@@ -1184,7 +1184,10 @@ pub fn matchAndFmtSnapshot(self: *Expect, globalThis: *JSGlobalObject, value: JS
                     return globalThis.throwPretty(fmt, .{ value.toFmt((&formatter.val)) });
                 }
             }
-            _ = (blk_catch_6: { break :blk_catch_6 ((value.jestSnapshotPrettyFormat(pretty_value, globalThis)) catch |__ce_6| { _ = &__ce_6; var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis } };
+            _ = (blk_catch_6: { break :blk_catch_6 ((value.jestSnapshotPrettyFormat(pretty_value, globalThis)) catch |e| { _ = &e; if ((e == error.JSError)) {
+                return error.JSError;
+            }
+            var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis } };
             _ = &formatter;
             var __formatter_moved = false; _ = &__formatter_moved;
             defer if (!__formatter_moved) { __formatter_moved = true; const __T = @TypeOf(formatter); if (@typeInfo(__T) == .optional) { if (formatter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter; _drop_val.__cp_deinit(); } };

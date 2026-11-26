@@ -333,9 +333,9 @@ pub struct Expect {
 
     static fn getSignature(comptime matcher_name: string, comptime args: string, comptime not: bool): [:0]const u8 {
         const received = "<d>expect(<r><red>received<r><d>).<r>";
-        comptime if (not) {
+        if (comptime not) {
             return received ++ "not<d>.<r>" ++ matcher_name ++ "<d>(<r>" ++ args ++ "<d>)<r>";
-        };
+        }
         return received ++ matcher_name ++ "<d>(<r>" ++ args ++ "<d>)<r>";
     }
 
@@ -1111,7 +1111,8 @@ pub struct Expect {
             }
         }
 
-        value.jestSnapshotPrettyFormat(pretty_value, globalThis) catch {
+        value.jestSnapshotPrettyFormat(pretty_value, globalThis) catch e => {
+            if (e == error.JSError) return error.JSError;
             let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
             return globalThis.throw("Failed to pretty format value: {f}", .{ value.toFmt(&formatter.val) });
         };

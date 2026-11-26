@@ -730,7 +730,11 @@ JSC_DEFINE_HOST_FUNCTION(functionEsmRegistryDelete, (JSC::JSGlobalObject * globa
         return JSValue::encode(jsBoolean(false));
     auto key = JSC::Identifier::fromString(vm, asString(keyValue)->value(globalObject));
     RETURN_IF_EXCEPTION(scope, {});
-    return JSValue::encode(jsBoolean(globalObject->moduleLoader()->removeEntry(key)));
+    auto* loader = globalObject->moduleLoader();
+    auto* entry = loader->registryEntry(key);
+    if (!entry || !isModuleEvaluated(entry->record()))
+        return JSValue::encode(jsBoolean(false));
+    return JSValue::encode(jsBoolean(loader->removeEntry(key)));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionEsmRegistryEvaluatedKeys, (JSC::JSGlobalObject * globalObject, JSC::CallFrame*))

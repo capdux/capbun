@@ -2392,3 +2392,9 @@
 - `src/js_parser/ast/visit.cp` (.zig), `src/js_parser/ast/visitExpr.cp` (.zig), `src/js_parser/ast/Expr.cp` (.zig)
 - `src/runtime/webcore/EncodingLabel.cp` (.zig), `src/runtime/webcore/TextDecoder.cp` (.zig), `src/http/http.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 5 测试收敛提交
+- `src/runtime/webcore/TextDecoder.cp` (.zig)
+- `src/css/css_parser.cp` (.zig), `src/css/values/url.cp` (.zig), `src/css/values/image.cp` (.zig), `src/css/properties/css_modules.cp` (.zig), `src/css/printer.cp` (.zig)
+- `src/test_runner/pretty_format.cp` (.zig), `src/test_runner/expect.cp` (.zig), `src/jsc/bindings/ZigGlobalObject.cpp`
+- `SESSION.md`, `CHANGELOG.md`

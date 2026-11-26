@@ -4056,12 +4056,13 @@ pub struct Parser {
     fn addImportRecord(*_, url: []const u8, start_position: usize, kind: ImportKind): Result(u32) {
         if (import_records := _.import_records) {
             const idx = import_records.len;
+            const end_position = _.position();
             bun.handleOom(import_records.append(_.allocator(), ImportRecord{
                 path: bun.fs.Path.init(url),
                 kind: kind,
                 range: bun.logger.Range{
                     loc: bun.logger.Loc{ .start = @intCast(start_position) },
-                    len: @intCast(url.len), // TODO: technically this is not correct because the url could be escaped
+                    len: @intCast(if (end_position >= start_position) end_position - start_position else url.len),
                 },
             }));
             return { result: idx };
