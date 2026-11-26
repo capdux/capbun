@@ -85,7 +85,7 @@ export struct BufferReadStream {
 
         // Ignore zeroed blocks in the archive, which occurs when multiple tar archives
         // have been concatenated together.
-        * = _.archive.readSetOptions("read_concatenated_archives");
+        * = _.archive.readSetOptions("read_concatenated_archives,hdrcharset=UTF-8");
 
         const rc = _.archive.readOpenMemory(_.buf);
         _.reading = @intFromEnum(rc) > -1;
@@ -586,22 +586,12 @@ export struct Archiver {
                                         }
                                     }
                                 }
-                                if (comptime Environment.isLinux) {
-                                    if (size > 1_000_000) {
-                                        bun.sys.preallocate_file(
-                                            file_handle.cast(),
-                                            0,
-                                            @intCast(size),
-                                        ) catch {};
-                                    }
-                                }
-
                                 let retries_remaining: u8 = 5;
 
                                 possibly_retry: while (retries_remaining != 0) : (retries_remaining -= 1) {
                                     const fd_res = unsafe { archive.readDataIntoFd(file_handle, (&use_pwrite) as *bool, (&use_lseek) as *bool) };
                                     switch (fd_res) {
-                                        .eof => { break :loop; },
+                                        .eof => { break :possibly_retry; },
                                         .ok => { break :possibly_retry; },
                                         .retry => {
                                             if (options.log) {
@@ -623,6 +613,11 @@ export struct Archiver {
                                             return error.Fail;
                                         },
                                     }
+                                }
+
+                                switch (bun.sys.ftruncate(file_handle, @intCast(size))) {
+                                    .err => return error.Fail,
+                                    .result => {},
                                 }
                             }
                         },

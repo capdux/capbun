@@ -44,6 +44,7 @@ private:
         ENABLED,
         COMPRESSED_FRAME
     } compressionStatus;
+    bool canCompress = false;
 
     /* We might have a dedicated compressor */
     DeflationStream *deflationStream = nullptr;
@@ -63,10 +64,13 @@ public:
 
         /* Initialize the dedicated sliding window(s) */
         if (perMessageDeflate) {
-            if ((compressOptions & CompressOptions::_COMPRESSOR_MASK) != CompressOptions::SHARED_COMPRESSOR) {
+            auto compressor = compressOptions & CompressOptions::_COMPRESSOR_MASK;
+            canCompress = compressor != 0;
+            if (compressor != 0 && compressor != CompressOptions::SHARED_COMPRESSOR) {
                 deflationStream = new DeflationStream(compressOptions);
             }
-            if ((compressOptions & CompressOptions::_DECOMPRESSOR_MASK) != CompressOptions::SHARED_DECOMPRESSOR) {
+            auto decompressor = compressOptions & CompressOptions::_DECOMPRESSOR_MASK;
+            if (decompressor != 0 && decompressor != CompressOptions::SHARED_DECOMPRESSOR) {
                 inflationStream = new InflationStream(compressOptions);
             }
         }

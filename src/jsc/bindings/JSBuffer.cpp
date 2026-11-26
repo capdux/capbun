@@ -1760,8 +1760,6 @@ static int64_t indexOf(JSC::JSGlobalObject* lexicalGlobalObject, ThrowScope& sco
     std::optional<BufferEncodingType> encoding = std::nullopt;
     double byteOffsetD = 0;
 
-    if (byteLength == 0) return -1;
-
     auto valueValue = callFrame->argument(0);
     auto byteOffsetValue = callFrame->argument(1);
     auto encodingValue = callFrame->argument(2);
@@ -1826,7 +1824,6 @@ static int64_t indexOf(JSC::JSGlobalObject* lexicalGlobalObject, ThrowScope& sco
         RETURN_IF_EXCEPTION(scope, -1);
         const uint8_t* typedVector;
         if (!refetchBufferState(typedVector, byteLength)) return -1;
-        if (byteLength == 0) return -1;
         return indexOfString(lexicalGlobalObject, last, typedVector, byteLength, byteOffsetD, str, encoding.value());
     }
 
@@ -1834,7 +1831,6 @@ static int64_t indexOf(JSC::JSGlobalObject* lexicalGlobalObject, ThrowScope& sco
         if (!encoding.has_value()) encoding = BufferEncodingType::utf8;
         const uint8_t* typedVector;
         if (!refetchBufferState(typedVector, byteLength)) return -1;
-        if (byteLength == 0) return -1;
         // The needle's backing buffer may also have been detached by a
         // valueOf/toPrimitive callback during toNumber/toWTFString above.
         // Treat a detached needle as an empty buffer (matches Node.js:
@@ -2080,8 +2076,7 @@ JSC::EncodedJSValue jsBufferToStringFromBytes(JSGlobalObject* lexicalGlobalObjec
         std::span<Latin1Character> data;
         auto str = String::tryCreateUninitialized(bytes.size(), data);
         if (str.isNull()) [[unlikely]] {
-            throwOutOfMemoryError(lexicalGlobalObject, scope);
-            return {};
+            return Bun::throwError(lexicalGlobalObject, scope, Bun::ErrorCode::ERR_MEMORY_ALLOCATION_FAILED, "Failed to allocate memory"_s);
         }
 
         memcpy(data.data(), bytes.data(), bytes.size());
@@ -2096,8 +2091,7 @@ JSC::EncodedJSValue jsBufferToStringFromBytes(JSGlobalObject* lexicalGlobalObjec
         }
         auto str = String::tryCreateUninitialized(u16length, data);
         if (str.isNull()) [[unlikely]] {
-            throwOutOfMemoryError(lexicalGlobalObject, scope);
-            return {};
+            return Bun::throwError(lexicalGlobalObject, scope, Bun::ErrorCode::ERR_MEMORY_ALLOCATION_FAILED, "Failed to allocate memory"_s);
         }
         memcpy(reinterpret_cast<void*>(data.data()), bytes.data(), u16length * 2);
         return JSValue::encode(jsString(vm, WTF::move(str)));
@@ -2106,8 +2100,7 @@ JSC::EncodedJSValue jsBufferToStringFromBytes(JSGlobalObject* lexicalGlobalObjec
         std::span<Latin1Character> data;
         auto str = String::tryCreateUninitialized(bytes.size(), data);
         if (str.isNull()) [[unlikely]] {
-            throwOutOfMemoryError(lexicalGlobalObject, scope);
-            return {};
+            return Bun::throwError(lexicalGlobalObject, scope, Bun::ErrorCode::ERR_MEMORY_ALLOCATION_FAILED, "Failed to allocate memory"_s);
         }
         Bun__encoding__writeLatin1(bytes.data(), bytes.size(), data.data(), data.size(), static_cast<uint8_t>(encoding));
         return JSValue::encode(jsString(vm, WTF::move(str)));
@@ -3039,8 +3032,8 @@ JSC_DEFINE_HOST_FUNCTION(jsBufferPrototypeFunction_writeBigInt64LE, (JSGlobalObj
 
     auto* castedThis = dynamicDowncast<JSC::JSArrayBufferView>(callFrame->thisValue());
     if (!castedThis) [[unlikely]]
-        return throwVMError(lexicalGlobalObject, scope, "Expected ArrayBufferView"_s);
-    auto byteLength = castedThis->byteLength();
+        return Bun::ERR::INVALID_ARG_TYPE(scope, lexicalGlobalObject, "buf"_s, "Buffer"_s, callFrame->thisValue());
+    auto byteLength = castedThis->length();
 
     auto valueVal = callFrame->argument(0);
     auto offsetVal = callFrame->argument(1);
@@ -3069,8 +3062,8 @@ JSC_DEFINE_HOST_FUNCTION(jsBufferPrototypeFunction_writeBigInt64BE, (JSGlobalObj
 
     auto* castedThis = dynamicDowncast<JSC::JSArrayBufferView>(callFrame->thisValue());
     if (!castedThis) [[unlikely]]
-        return throwVMError(lexicalGlobalObject, scope, "Expected ArrayBufferView"_s);
-    auto byteLength = castedThis->byteLength();
+        return Bun::ERR::INVALID_ARG_TYPE(scope, lexicalGlobalObject, "buf"_s, "Buffer"_s, callFrame->thisValue());
+    auto byteLength = castedThis->length();
 
     auto valueVal = callFrame->argument(0);
     auto offsetVal = callFrame->argument(1);
@@ -3099,8 +3092,8 @@ JSC_DEFINE_HOST_FUNCTION(jsBufferPrototypeFunction_writeBigUInt64LE, (JSGlobalOb
 
     auto* castedThis = dynamicDowncast<JSC::JSArrayBufferView>(callFrame->thisValue());
     if (!castedThis) [[unlikely]]
-        return throwVMError(lexicalGlobalObject, scope, "Expected ArrayBufferView"_s);
-    auto byteLength = castedThis->byteLength();
+        return Bun::ERR::INVALID_ARG_TYPE(scope, lexicalGlobalObject, "buf"_s, "Buffer"_s, callFrame->thisValue());
+    auto byteLength = castedThis->length();
 
     auto valueVal = callFrame->argument(0);
     auto offsetVal = callFrame->argument(1);
@@ -3128,8 +3121,8 @@ JSC_DEFINE_HOST_FUNCTION(jsBufferPrototypeFunction_writeBigUInt64BE, (JSGlobalOb
 
     auto* castedThis = dynamicDowncast<JSC::JSArrayBufferView>(callFrame->thisValue());
     if (!castedThis) [[unlikely]]
-        return throwVMError(lexicalGlobalObject, scope, "Expected ArrayBufferView"_s);
-    auto byteLength = castedThis->byteLength();
+        return Bun::ERR::INVALID_ARG_TYPE(scope, lexicalGlobalObject, "buf"_s, "Buffer"_s, callFrame->thisValue());
+    auto byteLength = castedThis->length();
 
     auto valueVal = callFrame->argument(0);
     auto offsetVal = callFrame->argument(1);

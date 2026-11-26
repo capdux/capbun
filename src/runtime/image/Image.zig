@@ -452,6 +452,9 @@ pub fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_value:
                 }
                 return .{ .owned = out[0..r.count] };
             }
+            if ((std.mem.indexOfScalar(u8, s, 0) != null)) {
+                return global.ERR(.INVALID_ARG_VALUE, "The argument 'path' must be a string, Uint8Array, or URL without null bytes", .{}).throw();
+            }
             return .{ .path = try bun.default_allocator.dupeZ(u8, s) };
         }
         if (value.asArrayBuffer(global)) |ab| {
@@ -705,11 +708,17 @@ const v_opt = js.sourceJSGetCached(this_value);
         _ = &len;
         return (switch (JSC__JSValue__borrowBytesForOffThread(v, (&ptr), (&len))) {
 0 => error.Detached,
-1 => (if ((len == 0)) error.Detached else PipelineTaskInput{ .copied = try bun.default_allocator.dupe(u8, ptr[0..len]) }),
+1 => (if ((len == 0)) error.Detached else PipelineTaskInput{ .copied = try bun.default_allocator.dupe(u8, (blk: {
+        break :blk ptr[0..len];
+
+})) }),
 2 => (if ((len == 0)) blk: {
         _ = JSC__JSValue__unpinArrayBuffer(v);
         break :blk error.Detached;
-} else PipelineTaskInput{ .bytes = ptr[0..len], .pinned = v }),
+} else PipelineTaskInput{ .bytes = (blk: {
+        break :blk ptr[0..len];
+
+}), .pinned = v }),
 else => unreachable,
 });
 },

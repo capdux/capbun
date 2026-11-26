@@ -254,7 +254,7 @@ pub enum SideEffects {
     preserve_unused_imports_ts: bool = false,
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
-    _padding: u1 = 0,
+    use_define_for_class_fields: bool = true,
 }
 
 pub enum ResultSuggestionRange { full, end }
@@ -342,21 +342,25 @@ pub struct Result {
         return null;
     }
 
-    fn pathConst(): (*const Path)? {
-        if (!_.path_pair.primary.is_disabled)
-            return &_.path_pair.primary;
+    static fn pathConst(this_ptr: *const @This()): (*const Path)? {
+        if (!this_ptr.path_pair.primary.is_disabled)
+            return &this_ptr.path_pair.primary;
 
-        if (_.path_pair.secondary != null) {
-            if (!_.path_pair.secondary.?.is_disabled) return &_.path_pair.secondary.?;
+        if (this_ptr.path_pair.secondary != null) {
+            if (!this_ptr.path_pair.secondary.?.is_disabled) return &this_ptr.path_pair.secondary.?;
         }
 
         return null;
     }
 
+    fn pathConstOrNull(*_): (*const Path)? {
+        return _.pathConst();
+    }
+
     // remember: non-node_modules can have package.json
     // checking package.json may not be relevant
     fn isLikelyNodeModule(): bool {
-        const path_opt = _.pathConst();
+        const path_opt = Result.pathConst(&_);
         if (path_opt == null) return false;
         const path_ = path_opt.?;
         return _.flags.is_from_node_modules || strings.indexOf(path_.text, "/node_modules/") != null;
@@ -876,7 +880,7 @@ pub struct Resolver {
 
         // Only setting 'current_action' in debug mode because module resolution
         // is done very often, and has a very low crash rate.
-        const prev_action = if (Environment.show_crash_trace) bun.crash_handler.current_action;
+        const prev_action = if (Environment.show_crash_trace) bun.crash_handler.current_action else @as(void, undefined);
         if (Environment.show_crash_trace) bun.crash_handler.current_action = { resolver: {
             source_dir: source_dir,
             import_path: import_path,
@@ -1300,6 +1304,9 @@ pub struct Resolver {
                 result.jsx = tsconfig.mergeJSX(result.jsx);
                 result.flags.emit_decorator_metadata = result.flags.emit_decorator_metadata || tsconfig.emit_decorator_metadata;
                 result.flags.experimental_decorators = result.flags.experimental_decorators || tsconfig.experimental_decorators;
+                if (v := tsconfig.use_define_for_class_fields) {
+                    result.flags.use_define_for_class_fields = v;
+                }
             }
 
             // If you use mjs or mts, then you're using esm
@@ -3172,7 +3179,7 @@ pub struct Resolver {
                     });
                     const res = dirfd_result.unwrap() catch e => break :open_req e;
                     break :open_req res;
-                };
+                } else @as(void, undefined);
 
                 bun.fs.debug("open({s})", .{sentinel});
 
@@ -4108,11 +4115,11 @@ pub struct Resolver {
                                 path: brk: {
                                     if (query.entry.abs_path.isEmpty()) {
                                         if (query.entry.dir.len > 0 && query.entry.dir[query.entry.dir.len - 1] == std.fs.path.sep) {
-                                            const parts: [2]string = [query.entry.dir, buffer];
+                                            const parts: [2]string = [query.entry.dir, @as(string, buffer)];
                                             query.entry.abs_path = PathString.init(r.fs.filename_store.append(@TypeOf(parts), parts) catch unreachable);
                                             // the trailing path CAN be missing here
                                         } else {
-                                            const parts: [3]string = [query.entry.dir, std.fs.path.sep_str, buffer];
+                                            const parts: [3]string = [query.entry.dir, std.fs.path.sep_str, @as(string, buffer)];
                                             query.entry.abs_path = PathString.init(r.fs.filename_store.append(@TypeOf(parts), parts) catch unreachable);
                                         }
                                     }
@@ -4458,6 +4465,9 @@ pub struct Resolver {
 
                         if (value := parent_config.preserve_imports_not_used_as_values) {
                             merged_config.preserve_imports_not_used_as_values = value;
+                        }
+                        if (value := parent_config.use_define_for_class_fields) {
+                            merged_config.use_define_for_class_fields = value;
                         }
 
                         // TypeScript replaces paths across extends (child overrides parent

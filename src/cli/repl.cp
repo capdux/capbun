@@ -157,8 +157,8 @@ union(enum) Key {
     alt_left: void,
     alt_right: void,
 
-    // Regular printable character
-    char: u8,
+    // Regular printable character (Unicode codepoint)
+    char: u21,
 
     // Unknown/unhandled
     unknown: void,
@@ -387,13 +387,10 @@ struct LineEditor {
         _.cursor = text.len;
     }
 
-    fn insert(*_, char: u8)! {
-        if (_.cursor == _.buffer.items.len) {
-            _.buffer.append(char)?;
-        } else {
-            _.buffer.insert(_.cursor, char)?;
-        }
-        _.cursor += 1;
+    fn insert(*_, cp: u21)! {
+        let utf8_buf: [4]u8 = undefined;
+        const len = std.unicode.utf8Encode(cp, &utf8_buf) catch return;
+        _.insertSlice(utf8_buf[0..len])?;
     }
 
     fn insertSlice(*_, slice: []const u8)! {
@@ -405,16 +402,41 @@ struct LineEditor {
         _.cursor += slice.len;
     }
 
+    fn prevCharStart(items: []const u8, pos: usize): usize {
+        if (pos == 0) return 0;
+        let i = pos - 1;
+        while (i > 0 && (items[i] & 0xC0) == 0x80) {
+            i -= 1;
+        }
+        return i;
+    }
+
+    fn nextCharEnd(items: []const u8, pos: usize): usize {
+        if (pos >= items.len) return items.len;
+        const seq_len = std.unicode.utf8ByteSequenceLength(items[pos]) catch 1;
+        return @min(items.len, pos + seq_len);
+    }
+
     fn deleteChar(*_) {
         if (_.cursor < _.buffer.items.len) {
-            * = _.buffer.orderedRemove(_.cursor);
+            const end = nextCharEnd(_.buffer.items, _.cursor);
+            const count = end - _.cursor;
+            let i: usize = 0;
+            while (i < count) : (i += 1) {
+                * = _.buffer.orderedRemove(_.cursor);
+            }
         }
     }
 
     fn backspace(*_) {
         if (_.cursor > 0) {
-            _.cursor -= 1;
-            * = _.buffer.orderedRemove(_.cursor);
+            const start = prevCharStart(_.buffer.items, _.cursor);
+            const count = _.cursor - start;
+            _.cursor = start;
+            let i: usize = 0;
+            while (i < count) : (i += 1) {
+                * = _.buffer.orderedRemove(start);
+            }
         }
     }
 
@@ -461,15 +483,11 @@ struct LineEditor {
     }
 
     fn moveLeft(*_) {
-        if (_.cursor > 0) {
-            _.cursor -= 1;
-        }
+        _.cursor = prevCharStart(_.buffer.items, _.cursor);
     }
 
     fn moveRight(*_) {
-        if (_.cursor < _.buffer.items.len) {
-            _.cursor += 1;
-        }
+        _.cursor = nextCharEnd(_.buffer.items, _.cursor);
     }
 
     fn moveWordLeft(*_) {
@@ -507,16 +525,20 @@ struct LineEditor {
     }
 
     fn swap(*_) {
-        if (_.cursor > 0 && _.cursor < _.buffer.items.len) {
-            const temp = _.buffer.items[_.cursor - 1];
-            _.buffer.items[_.cursor - 1] = _.buffer.items[_.cursor];
-            _.buffer.items[_.cursor] = temp;
-            _.cursor += 1;
-        } else if (_.cursor > 1 && _.cursor == _.buffer.items.len) {
-            const temp = _.buffer.items[_.cursor - 2];
-            _.buffer.items[_.cursor - 2] = _.buffer.items[_.cursor - 1];
-            _.buffer.items[_.cursor - 1] = temp;
-        }
+        const items = _.buffer.items;
+        if (items.len == 0 || _.cursor == 0) return;
+        const pivot = if (_.cursor < items.len) _.cursor else prevCharStart(items, items.len);
+        if (pivot == 0) return;
+        const first_start = prevCharStart(items, pivot);
+        const second_end = nextCharEnd(items, pivot);
+        const first_len = pivot - first_start;
+        const second_len = second_end - pivot;
+        if (first_len == 0 || second_len == 0 || first_len + second_len > 8) return;
+        let tmp: [8]u8 = undefined;
+        @memcpy(tmp[0..second_len], items[pivot..second_end]);
+        @memcpy(tmp[second_len .. second_len + first_len], items[first_start..pivot]);
+        @memcpy(items[first_start..second_end], tmp[0 .. first_len + second_len]);
+        _.cursor = second_end;
     }
 
     fn getLine(): []const u8 {
@@ -678,6 +700,9 @@ fn cmdSave(repl: *Repl, args: []const u8): ReplResult {
 }
 
 fn cmdEditor(repl: *Repl, _: []const u8): ReplResult {
+    if (repl.in_multiline) {
+        return .skip_eval;
+    }
     repl.print("{s}// Entering editor mode (Ctrl+D to finish, Ctrl+C to cancel){s}\n", .{ Color.dim, Color.reset });
     repl.editor_mode = true;
     repl.editor_buffer.clearRetainingCapacity();
@@ -981,6 +1006,20 @@ fn readKey(*_): Key? {
         return .escape;
     }
 
+    if (byte >= 0x80) {
+        const seq_len = std.unicode.utf8ByteSequenceLength(byte) catch return .unknown;
+        let utf8_buf: [4]u8 = undefined;
+        utf8_buf[0] = byte;
+        let i: usize = 1;
+        while (i < seq_len) : (i += 1) {
+            const next_opt = _.readByte();
+            if (next_opt == null) return .unknown;
+            utf8_buf[i] = next_opt.?;
+        }
+        const cp = std.unicode.utf8Decode(utf8_buf[0..seq_len]) catch return .unknown;
+        return Key{ char: cp };
+    }
+
     return Key.fromByte(byte);
 }
 
@@ -1034,6 +1073,9 @@ fn refreshLine(*_) {
     }
 
     // Position cursor
+    if (Output.terminal_size.col > 0) {
+        _.terminal_width = Output.terminal_size.col;
+    }
     const cursor_pos = prompt_len + _.line_editor.cursor;
     if (cursor_pos < _.terminal_width) {
         _.write("\r");

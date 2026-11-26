@@ -345,9 +345,12 @@ pub fn scan(self: *JSON5Parser) ParseError!void {
                 const c = self.peek();
                 switch (c) {
 0 => {
-self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
-                self.token.data = .eof;
-                return;
+if ((self.pos >= self.source.len)) {
+                    self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                    self.token.data = .eof;
+                    return;
+                }
+                return error.UnexpectedCharacter;
 },
 9, 10, 13, ' ', 11, 12 => {
 self.pos = (self.pos + 1);
@@ -957,7 +960,7 @@ pub fn scanIdentifier(self: *JSON5Parser) ParseError![]u8 {
                 if ((cont_cp.cp == 92)) {
                     const escaped_cp = try self.parseIdentifierUnicodeEscape();
                     if ((!identifier.isIdentifierPart(escaped_cp))) {
-                        break;
+                        return error.InvalidIdentifier;
                     }
                     _ = try appendCodepointToUtf8((&buf), @intCast(escaped_cp));
                 } else {

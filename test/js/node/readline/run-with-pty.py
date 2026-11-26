@@ -50,7 +50,7 @@ if pid == 0:
 else:
     os.close(slave_fd)
     signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(3)  # 3 second timeout
+    signal.alarm(15)  # 15 second timeout (debug/ASAN builds take ~3s per process)
 
     # Send to parent
     waitAndWrite(b'1')

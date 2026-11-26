@@ -86,15 +86,15 @@ promisify.custom = kCustomPromisifiedSymbol;
     setInterval: intervalPromise,
   } = require("node:timers/promises");
 
-  if (timeout && $isCallable(timeout)) {
+  if (timeout && $isCallable(timeout) && !Object.hasOwn(timeout, kCustomPromisifiedSymbol)) {
     defineCustomPromisify(timeout, timeoutPromise);
   }
 
-  if (immediate && $isCallable(immediate)) {
+  if (immediate && $isCallable(immediate) && !Object.hasOwn(immediate, kCustomPromisifiedSymbol)) {
     defineCustomPromisify(immediate, immediatePromise);
   }
 
-  if (interval && $isCallable(interval)) {
+  if (interval && $isCallable(interval) && !Object.hasOwn(interval, kCustomPromisifiedSymbol)) {
     defineCustomPromisify(interval, intervalPromise);
   }
 }

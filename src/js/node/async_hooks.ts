@@ -26,57 +26,55 @@ const setAsyncHooksEnabled = $newCppFunction("NodeAsyncHooks.cpp", "jsSetAsyncHo
 const cleanupLater = $newCppFunction("NodeAsyncHooks.cpp", "jsCleanupLater", 0);
 const { validateFunction, validateString, validateObject } = require("internal/validators");
 
+const ObjectIs = Object.is;
+
 // Only run during debug
-function assertValidAsyncContextArray(array: unknown): array is ReadonlyArray<any> | undefined {
+function assertValidAsyncContextArray(frame: unknown): frame is Map<AsyncLocalStorage, any> | undefined {
   // undefined is OK
-  if (array === undefined) return true;
-  // Otherwise, it must be an array
+  if (frame === undefined) return true;
+  // Otherwise, it must be a Map
   $assert(
-    Array.isArray(array),
-    "AsyncContextData must be an array or undefined, got",
-    Bun.inspect(array, { depth: 1 }),
+    frame instanceof Map,
+    "AsyncContextData must be a Map or undefined, got",
+    Bun.inspect(frame, { depth: 1 }),
   );
-  // the array has to be even
-  $assert(array.length % 2 === 0, "AsyncContextData should be even-length, got", Bun.inspect(array, { depth: 1 }));
-  // if it is zero-length, use undefined instead
-  $assert(array.length > 0, "AsyncContextData should be undefined if empty, got", Bun.inspect(array, { depth: 1 }));
-  for (var i = 0; i < array.length; i += 2) {
-    $assert(
-      array[i] instanceof AsyncLocalStorage,
-      `Odd indexes in AsyncContextData should be an array of AsyncLocalStorage\nIndex %s was %s`,
-      i,
-      array[i],
-    );
-  }
   return true;
 }
 
 // Only run during debug
-function debugFormatContextValue(value: ReadonlyArray<any> | undefined) {
+function debugFormatContextValue(value: Map<AsyncLocalStorage, any> | undefined) {
   if (value === undefined) return "undefined";
   let str = "{\n";
-  for (var i = 0; i < value.length; i += 2) {
-    str += `  ${value[i].__id__}: typeof = ${typeof value[i + 1]}\n`;
+  for (const [als, store] of value) {
+    str += `  ${(als as any).__id__}: typeof = ${typeof store}\n`;
   }
   str += "}";
   return str;
 }
 
-function get(): ReadonlyArray<any> | undefined {
+function get(): Map<AsyncLocalStorage, any> | undefined {
   $debug("get", debugFormatContextValue($getInternalField($asyncContext, 0)));
   return $getInternalField($asyncContext, 0);
 }
 
-function set(contextValue: ReadonlyArray<any> | undefined) {
+function set(contextValue: Map<AsyncLocalStorage, any> | undefined) {
   $assert(assertValidAsyncContextArray(contextValue));
   $debug("set", debugFormatContextValue(contextValue));
   return $putInternalField($asyncContext, 0, contextValue);
 }
 
 class AsyncLocalStorage {
-  #disabled = false;
+  #defaultValue = undefined;
+  #name = "";
 
-  constructor() {
+  constructor(options?: { defaultValue?: any; name?: string }) {
+    if (options !== undefined) {
+      validateObject(options, "options");
+      this.#defaultValue = options.defaultValue;
+      if (options.name !== undefined) {
+        this.#name = `${options.name}`;
+      }
+    }
     setAsyncHooksEnabled(true);
 
     // In debug mode assign every AsyncLocalStorage a unique ID
@@ -90,8 +88,12 @@ class AsyncLocalStorage {
     }
   }
 
+  get name() {
+    return this.#name;
+  }
+
   static bind(fn, ...args: any) {
-    validateFunction(fn);
+    validateFunction(fn, "fn");
     return this.snapshot().bind(null, fn, ...args);
   }
 
@@ -110,128 +112,93 @@ class AsyncLocalStorage {
 
   enterWith(store) {
     cleanupLater();
-    // we must renable it when asyncLocalStorage.enterWith() is called https://nodejs.org/api/async_context.html#asynclocalstoragedisable
-    this.#disabled = false;
-    var context = get();
-    if (!context) {
-      set([this, store]);
-      return;
-    }
-    var { length } = context;
-    $assert(length > 0);
-    $assert(length % 2 === 0);
-    for (var i = 0; i < length; i += 2) {
-      if (context[i] === this) {
-        $assert(length > i + 1);
-        const clone = context.slice();
-        clone[i + 1] = store;
-        set(clone);
-        return;
-      }
-    }
-    set(context.concat(this, store));
-    $assert(this.getStore() === store);
+    const context = get();
+    const next = new Map(context);
+    next.set(this, store);
+    set(next);
+    $assert(ObjectIs(this.getStore(), store));
   }
 
   exit(cb, ...args) {
     return this.run(undefined, cb, ...args);
   }
 
+  #restoreAfterScope(hadPrior: boolean, prior: any) {
+    const current = get();
+    if (hadPrior) {
+      const restored = new Map(current);
+      restored.set(this, prior);
+      set(restored);
+    } else if (current !== undefined) {
+      if (current.has(this)) {
+        if (current.size === 1) {
+          set(undefined);
+        } else {
+          const restored = new Map(current);
+          restored.delete(this);
+          set(restored);
+        }
+      } else if (current.size === 0) {
+        set(undefined);
+      }
+    }
+  }
+
+  withScope(store_value) {
+    const context = get();
+    const hadPrior = context !== undefined && context.has(this);
+    const prior = hadPrior ? context.get(this) : this.#defaultValue;
+    if (ObjectIs(store_value, prior)) {
+      return {
+        [Symbol.dispose]() {},
+      };
+    }
+    const next = new Map(context);
+    next.set(this, store_value);
+    set(next);
+    return {
+      [Symbol.dispose]: () => {
+        this.#restoreAfterScope(hadPrior, prior);
+      },
+    };
+  }
+
   // This function is litered with $asserts to ensure that everything that
   // is assumed to be true is *actually* true.
   run(store_value, callback, ...args) {
     $debug("run " + (this as any).__id__);
-    var context = get() as any[]; // we make sure to .slice() before mutating
-    var hasPrevious = false;
-    var previous_value;
-    var i = 0;
-    var contextWasAlreadyInit = !context;
-    // we must renable it when asyncLocalStorage.run() is called https://nodejs.org/api/async_context.html#asynclocalstoragedisable
-    const wasDisabled = this.#disabled;
-    this.#disabled = false;
-    if (contextWasAlreadyInit) {
-      set((context = [this, store_value]));
-    } else {
-      // it's safe to mutate context now that it was cloned
-      context = context!.slice();
-      i = context.indexOf(this);
-      if (i > -1) {
-        $assert(i % 2 === 0);
-        hasPrevious = true;
-        previous_value = context[i + 1];
-        context[i + 1] = store_value;
-      } else {
-        i = context.length;
-        context.push(this, store_value);
-        $assert(i % 2 === 0);
-        $assert(context.length % 2 === 0);
-      }
-      set(context);
+    const context = get();
+    const hadPrior = context !== undefined && context.has(this);
+    const prior = hadPrior ? context.get(this) : this.#defaultValue;
+    if (ObjectIs(store_value, prior)) {
+      return callback(...args);
     }
-    $assert(i > -1, "i was not set");
-    $assert(this.getStore() === store_value, "run: store_value was not set");
+    const next = new Map(context);
+    next.set(this, store_value);
+    set(next);
+    $assert(ObjectIs(this.getStore(), store_value), "run: store_value was not set");
     try {
       return callback(...args);
     } finally {
-      // Note: early `return` will prevent `throw` above from working. I think...
-      // Set AsyncContextFrame to undefined if we are out of context values
-      if (!wasDisabled) {
-        var context2 = get()! as any[]; // we make sure to .slice() before mutating
-        if (context2 === context && contextWasAlreadyInit) {
-          $assert(context2.length === 2, "context was mutated without copy");
-          set(undefined);
-        } else {
-          context2 = context2.slice(); // array is cloned here
-          $assert(context2[i] === this);
-          if (hasPrevious) {
-            context2[i + 1] = previous_value;
-            set(context2);
-          } else {
-            // i wonder if this is a fair assert to make
-            context2.splice(i, 2);
-            $assert(context2.length % 2 === 0);
-            set(context2.length ? context2 : undefined);
-          }
-        }
-        $assert(
-          this.getStore() === previous_value,
-          "run: previous_value",
-          Bun.inspect(previous_value),
-          "was not restored, i see",
-          this.getStore(),
-        );
-      }
+      this.#restoreAfterScope(hadPrior, prior);
     }
   }
 
   disable() {
     $debug("disable " + (this as any).__id__);
-    // In this case, we actually do want to mutate the context state
-    if (this.#disabled) return;
-    this.#disabled = true;
-    var context = get() as any[];
-    if (context) {
-      var { length } = context;
-      for (var i = 0; i < length; i += 2) {
-        if (context[i] === this) {
-          context.splice(i, 2);
-          set(context.length ? context : undefined);
-          break;
-        }
-      }
+    const context = get();
+    if (context !== undefined && context.delete(this) && context.size === 0) {
+      set(undefined);
     }
   }
 
   getStore() {
     $debug("getStore " + (this as any).__id__);
-    // disabled AsyncLocalStorage always returns undefined https://nodejs.org/api/async_context.html#asynclocalstoragedisable
-    if (this.#disabled) return;
-    var context = get();
-    if (!context) return;
-    var { length } = context;
-    for (var i = 0; i < length; i += 2) {
-      if (context[i] === this) return context[i + 1];
+    const context = get();
+    if (context !== undefined && context.has(this)) {
+      return context.get(this);
     }
+    return this.#defaultValue;
   }
 
   // Node.js internal function. In Bun's implementation, calling this is not
@@ -310,7 +277,13 @@ class AsyncResource {
 
   bind(fn, thisArg) {
     validateFunction(fn, "fn");
-    return this.runInAsyncScope.bind(this, fn, thisArg ?? this);
+    const bound = this.runInAsyncScope.bind(this, fn, thisArg ?? this);
+    Object.defineProperty(bound, "length", {
+      __proto__: null,
+      value: fn.length,
+      configurable: true,
+    } as PropertyDescriptor);
+    return bound;
   }
 
   static bind(fn, type, thisArg) {

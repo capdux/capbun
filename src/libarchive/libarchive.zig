@@ -163,7 +163,7 @@ pub fn openRead(self: *BufferReadStream) lib.ArchiveResult {
             _ = self.archive.readSupportFormatTar();
             _ = self.archive.readSupportFormatGnutar();
             _ = self.archive.readSupportFilterGzip();
-            _ = self.archive.readSetOptions("read_concatenated_archives");
+            _ = self.archive.readSetOptions("read_concatenated_archives,hdrcharset=UTF-8");
             const rc = self.archive.readOpenMemory(self.buf);
             self.reading = (@intFromEnum(rc) > -1);
             return rc;
@@ -632,11 +632,6 @@ return e;
                             }
                         }
                     }
-                    if (comptime Environment.isLinux) {
-                        if ((size > 1000000)) {
-                            _ = (blk_catch_12: { break :blk_catch_12 ((bun.sys.preallocate_file(file_handle.cast(), 0, @intCast(size))) catch |__ce_12| { _ = &__ce_12;  }); });
-                        }
-                    }
                     var retries_remaining: u8 = 5;
                     _ = &retries_remaining;
                     possibly_retry: while ((retries_remaining != 0)) : (retries_remaining = (retries_remaining - 1)) {
@@ -646,7 +641,7 @@ return e;
 });
                         switch (fd_res) {
 .eof => {
-break :loop;
+break :possibly_retry;
 },
 .ok => {
 break :possibly_retry;
@@ -665,6 +660,14 @@ if (options.log) {
 },
 }
                     }
+                    switch (bun.sys.ftruncate(file_handle, @intCast(size))) {
+.err => {
+return error.Fail;
+},
+.result => {
+
+},
+}
                 }
 },
 else => {
@@ -684,7 +687,7 @@ else => {
 
 pub fn extractToDisk(file_buffer: []const u8, root: []const u8, ctx: ?*ArchiverContext, comptime FilePathAppender: type, appender: FilePathAppender, comptime options: ArchiverExtractOptions) !u32 {
             const cwd = std.fs.cwd();
-            _ = (blk_catch_13: { break :blk_catch_13 ((cwd.makePath(root)) catch |__ce_13| { _ = &__ce_13;  }); });
+            _ = (blk_catch_12: { break :blk_catch_12 ((cwd.makePath(root)) catch |__ce_12| { _ = &__ce_12;  }); });
             var dir: std.fs.Dir = undefined;
             _ = &dir;
             if (std.fs.path.isAbsolute(root)) {

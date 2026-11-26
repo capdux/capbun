@@ -169,6 +169,25 @@ struct SecretsJobOptions {
                     allowUnrestrictedAccess = allowUnrestrictedAccessValue.toBoolean(globalObject);
                     RETURN_IF_EXCEPTION(scope, false);
                 }
+
+                // Validate persist parameter (optional, must be "local" or "enterprise" if defined)
+                JSValue persistValue = getIfPropertyExistsPrototypePollutionMitigation(globalObject, options, Identifier::fromString(vm, "persist"_s));
+                RETURN_IF_EXCEPTION(scope, false);
+
+                if (!persistValue.isUndefined()) {
+                    bool validPersist = false;
+                    if (persistValue.isString()) {
+                        String persistStr = persistValue.toWTFString(globalObject);
+                        RETURN_IF_EXCEPTION(scope, false);
+                        if (persistStr == "local"_s || persistStr == "enterprise"_s) {
+                            validPersist = true;
+                        }
+                    }
+                    if (!validPersist) {
+                        scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, "The property 'options.persist' must be one of: `local`, `enterprise`"_s));
+                        return false;
+                    }
+                }
             }
 
             service = serviceValue.toWTFString(globalObject);
@@ -224,6 +243,11 @@ struct SecretsJobOptions {
         }
 
         scope.assertNoException();
+
+        if (service.contains('\0') || name.contains('\0') || (operation == SET && password.contains('\0'))) {
+            scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, "Expected service, name, and value to be strings without null bytes"_s));
+            RELEASE_AND_RETURN(scope, nullptr);
+        }
 
         if (service.isEmpty() || name.isEmpty()) {
             Bun::ERR::INVALID_ARG_TYPE(scope, globalObject, "Expected service and name to not be empty"_s);

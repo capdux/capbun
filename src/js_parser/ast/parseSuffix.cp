@@ -318,13 +318,16 @@ pub fn ParseSuffix(
 
             // Allow "in" in between "?" and ":"
             const old_allow_in = p.allow_in;
+            const old_in_ternary_yes = p.in_ternary_yes;
             p.allow_in = true;
+            p.in_ternary_yes = true;
 
             // condition ? yes : no
             //             ^
             p.parseExprWithFlags(.comma, .none, &ternary.data.e_if.yes)?;
 
             p.allow_in = old_allow_in;
+            p.in_ternary_yes = old_in_ternary_yes;
 
             // condition ? yes : no
             //                 ^

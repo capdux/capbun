@@ -582,7 +582,7 @@ pub fn getWidthForValue(self: *TablePrinter, value: JSValue) bun.JSError!u32 {
             const tag = try ConsoleObject.Formatter.Tag.get(value, self.globalObject);
             value_formatter.quote_strings = (!((tag.tag == .String) or (tag.tag == .StringPossiblyFormatted)));
             _ = (blk_catch_3: { break :blk_catch_3 ((value_formatter.format(tag, *std.Io.Writer, (&adapted_writer.new_interface), value, self.globalObject, false)) catch |__ce_3| { _ = &__ce_3;  }); });
-            _ = (blk_catch_4: { break :blk_catch_4 ((adapted_writer.new_interface.flush()) catch |e| { _ = &e; break :blk_catch_4 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .WriteFailed)) {  break :__sw_blk_1 cp_val((if (Environment.ci_assert) bun.assert(false) else null)); } }  unreachable; }); }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((adapted_writer.new_interface.flush()) catch |e| { _ = &e; break :blk_catch_4 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .WriteFailed)) {  break :__sw_blk_1 cp_val((if (Environment.ci_assert) bun.assert(false) else @as(void, undefined))); } }  unreachable; }); }); });
             return @truncate(width);
     }
 
@@ -3124,11 +3124,16 @@ else => .normal,
             if (opts.isObject()) {
                 if (try opts.get(global, "depth")) |depth_prop| {
                     _ = &depth_prop;
-                    if (((depth_prop.isInt32() or depth_prop.isNumber()) or depth_prop.isBigInt())) {
-                        print_options.max_depth = depth_prop.toU16();
+                    if (depth_prop.isBigInt()) {
+                        const v = depth_prop.toInt64();
+                        print_options.max_depth = @as(u16, @intCast(@min(@max(v, 0), std.math.maxInt(u16))));
                     } else {
-                        if (depth_prop.isNull()) {
-                            print_options.max_depth = std.math.maxInt(u16);
+                        if ((depth_prop.isInt32() or depth_prop.isNumber())) {
+                            print_options.max_depth = depth_prop.toU16();
+                        } else {
+                            if (depth_prop.isNull()) {
+                                print_options.max_depth = std.math.maxInt(u16);
+                            }
                         }
                     }
                 }

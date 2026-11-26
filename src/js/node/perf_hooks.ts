@@ -1,5 +1,7 @@
 // Hardcoded module "node:perf_hooks"
 const { throwNotImplemented } = require("internal/shared");
+const { validateFunction, validateObject } = require("internal/validators");
+const ObjectHasOwn = Object.hasOwn;
 
 const cppCreateHistogram = $newCppFunction("JSNodePerformanceHooksHistogram.cpp", "jsFunction_createHistogram", 3) as (
   min: number,
@@ -113,6 +115,169 @@ class PerformanceResourceTiming {
 }
 $toClass(PerformanceResourceTiming, "PerformanceResourceTiming", PerformanceEntry);
 
+class PerformanceNodeEntry {
+  name: string;
+  entryType: string;
+  startTime: number;
+  duration: number;
+  detail: any;
+
+  constructor(name: string, entryType: string, startTime: number, duration: number, detail?: any) {
+    this.name = name;
+    this.entryType = entryType;
+    this.startTime = startTime;
+    this.duration = duration;
+    this.detail = detail;
+    if (entryType === "function" && Array.isArray(detail)) {
+      for (let i = 0; i < detail.length; i++) {
+        this[i] = detail[i];
+      }
+    }
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      entryType: this.entryType,
+      startTime: this.startTime,
+      duration: this.duration,
+      detail: this.detail,
+    };
+  }
+}
+Object.setPrototypeOf(PerformanceNodeEntry.prototype, PerformanceEntry.prototype);
+Object.setPrototypeOf(PerformanceNodeEntry, PerformanceEntry);
+
+const kObserverCallback = Symbol("kObserverCallback");
+const kObserverTypes = Symbol("kObserverTypes");
+const functionObservers = new Set<any>();
+
+const origObserve = PerformanceObserver.prototype.observe;
+PerformanceObserver.prototype.observe = function observe(options: any) {
+  if (options && typeof options === "object") {
+    const types = Array.isArray(options.entryTypes)
+      ? options.entryTypes
+      : typeof options.type === "string"
+        ? [options.type]
+        : null;
+    if (types && types.includes("function")) {
+      this[kObserverTypes] = new Set(types);
+      functionObservers.add(this);
+      const webTypes = types.filter((t: string) => t !== "function");
+      if (webTypes.length === 0) {
+        return;
+      }
+      options = Array.isArray(options.entryTypes) ? { ...options, entryTypes: webTypes } : options;
+    }
+  }
+  return origObserve.$call(this, options);
+};
+
+const origDisconnect = PerformanceObserver.prototype.disconnect;
+PerformanceObserver.prototype.disconnect = function disconnect() {
+  functionObservers.delete(this);
+  return origDisconnect.$call(this);
+};
+
+function notifyFunctionObservers(entry: PerformanceNodeEntry) {
+  if (functionObservers.size === 0) return;
+  queueMicrotask(() => {
+    for (const observer of functionObservers) {
+      const cb = observer[kObserverCallback];
+      if (typeof cb === "function") {
+        const list = {
+          getEntries: () => [entry],
+          getEntriesByName: (name: string, type?: string) =>
+            entry.name === name && (!type || entry.entryType === type) ? [entry] : [],
+          getEntriesByType: (type: string) => (entry.entryType === type ? [entry] : []),
+        };
+        cb.$call(observer, list, observer);
+      }
+    }
+  });
+}
+
+// Intercept PerformanceObserver construction to capture callback for "function" entries
+const OrigPerformanceObserver = PerformanceObserver;
+const WrappedPerformanceObserver = function PerformanceObserver(this: any, callback: any) {
+  const obs = new OrigPerformanceObserver(callback);
+  obs[kObserverCallback] = callback;
+  return obs;
+} as unknown as typeof PerformanceObserver;
+WrappedPerformanceObserver.prototype = OrigPerformanceObserver.prototype;
+Object.setPrototypeOf(WrappedPerformanceObserver, OrigPerformanceObserver);
+PerformanceObserver = WrappedPerformanceObserver;
+
+function timerify<T extends (...args: any[]) => any>(fn: T, options?: { histogram?: any }): T {
+  validateFunction(fn, "fn");
+  let histogram: any;
+  if (options !== undefined) {
+    validateObject(options, "options");
+    if (ObjectHasOwn(options, "histogram")) {
+      histogram = options.histogram;
+      if (histogram !== undefined) {
+        validateObject(histogram, "options.histogram");
+        if (typeof histogram.record !== "function") {
+          throw $ERR_INVALID_ARG_TYPE("options.histogram", "RecordableHistogram", histogram);
+        }
+      }
+    }
+  }
+
+  function timerified(this: any, ...args: any[]) {
+    const start = performance.now();
+    let result: any;
+    let isAsync = false;
+    try {
+      result = new.target ? Reflect.construct(fn, args, new.target) : fn.$apply(this, args);
+      if (result && typeof result.then === "function") {
+        isAsync = true;
+        return result.then(
+          (val: any) => {
+            const duration = performance.now() - start;
+            if (histogram) {
+              histogram.record(Math.max(1, Math.round(duration * 1e6)));
+            }
+            notifyFunctionObservers(new PerformanceNodeEntry(fn.name || "anonymous", "function", start, duration, args));
+            return val;
+          },
+          (err: any) => {
+            const duration = performance.now() - start;
+            if (histogram) {
+              histogram.record(Math.max(1, Math.round(duration * 1e6)));
+            }
+            notifyFunctionObservers(new PerformanceNodeEntry(fn.name || "anonymous", "function", start, duration, args));
+            throw err;
+          },
+        );
+      }
+      return result;
+    } finally {
+      if (!isAsync) {
+        const duration = performance.now() - start;
+        if (histogram) {
+          histogram.record(Math.max(1, Math.round(duration * 1e6)));
+        }
+        notifyFunctionObservers(new PerformanceNodeEntry(fn.name || "anonymous", "function", start, duration, args));
+      }
+    }
+  }
+
+  Object.defineProperties(timerified, {
+    __proto__: null,
+    length: { __proto__: null, value: fn.length, writable: false, enumerable: false, configurable: true },
+    name: {
+      __proto__: null,
+      value: `timerified ${fn.name || "anonymous"}`,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    },
+  } as PropertyDescriptorMap);
+
+  return timerified as unknown as T;
+}
+
 export default {
   performance: {
     mark(_) {
@@ -148,7 +313,10 @@ export default {
     now: () => performance.now(),
     eventLoopUtilization: eventLoopUtilization,
     clearResourceTimings: function () {},
+    timerify,
   },
+  timerify,
+  eventLoopUtilization,
   // performance: {
   //   clearMarks: [Function: clearMarks],
   //   clearMeasures: [Function: clearMeasures],
@@ -187,7 +355,7 @@ export default {
     let highest = Number.MAX_SAFE_INTEGER;
     let figures = 3;
 
-    if (opts.lowest !== undefined) {
+    if (ObjectHasOwn(opts, "lowest") && opts.lowest !== undefined) {
       if (typeof opts.lowest === "bigint") {
         lowest = Number(opts.lowest);
       } else if (typeof opts.lowest === "number") {
@@ -197,7 +365,7 @@ export default {
       }
     }
 
-    if (opts.highest !== undefined) {
+    if (ObjectHasOwn(opts, "highest") && opts.highest !== undefined) {
       if (typeof opts.highest === "bigint") {
         highest = Number(opts.highest);
       } else if (typeof opts.highest === "number") {
@@ -207,7 +375,7 @@ export default {
       }
     }
 
-    if (opts.figures !== undefined) {
+    if (ObjectHasOwn(opts, "figures") && opts.figures !== undefined) {
       if (typeof opts.figures !== "number") {
         throw $ERR_INVALID_ARG_TYPE("options.figures", "number", opts.figures);
       }

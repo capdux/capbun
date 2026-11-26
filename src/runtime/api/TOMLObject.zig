@@ -661,7 +661,31 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         const parse_result = (blk_catch_1: { break :blk_catch_1 ((TOML.parse(source, log_ptr, allocator, false)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return globalThis.throwStackOverflow();
         }
-        return globalThis.throwValue(try log.toJS(globalThis, default_allocator, "Failed to parse toml")); }); });
+        var first_msg: ?*const logger.Msg = (if ((log.msgs.items.len > 0)) (blk: {
+        break :blk (&log.msgs.items[0]);
+
+}) else null);
+        _ = &first_msg;
+        {
+            var i: i32 = 0;
+            _ = &i;
+            const __end_0 = log.msgs.items.len;
+            while (i < __end_0) : (i += 1) {
+                const m = (blk: {
+                break :blk (&log.msgs.items[@as(usize, @intCast(i))]);
+
+});
+                if ((m.kind == .@"err")) {
+                    first_msg = m;
+                    break;
+                }
+            }
+        }
+        if (first_msg) |msg| {
+            _ = &msg;
+            return globalThis.throwValue(globalThis.createSyntaxErrorInstance("TOML Parse error: {s}", .{ msg.data.text }));
+        }
+        return globalThis.throwValue(globalThis.createSyntaxErrorInstance("TOML Parse error: Unable to parse TOML string", .{})); }); });
         const buffer_writer = js_printer.BufferWriter.init(allocator);
         var writer = js_printer.BufferPrinter.init(buffer_writer);
         _ = &writer;

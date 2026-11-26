@@ -455,6 +455,11 @@ _ = Output.prettyError("<r><red>error<r> migrating lockfile:<r> {s}\n<r>", .{ @e
 
 },
 }
+        const prev_lockfile = manager.lockfile;
+        manager.lockfile = (&lockfile.*);
+        defer {
+        manager.lockfile = prev_lockfile;
+        }
         var argument = manager.options.positionals[1];
         _ = &argument;
         const arg_kind: PatchArgKind = PatchArgKind.fromArg(argument);

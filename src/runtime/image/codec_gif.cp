@@ -12,26 +12,9 @@
 //! transparency index. Animated/disposal/NETSCAPE loop are skipped — Sharp's
 //! default `pages:1` does the same.
 
-pub struct DestroyGuard<T> {
-    ptr: *T!,
-    ~init() {
-        bun.default_allocator.destroy(_.ptr);
-    }
-}
-
-pub struct FreeGuard<T> {
-    slice: []T,
-    ~init() {
-        bun.default_allocator.free(_.slice);
-    }
-}
-
-pub struct OptFreeGuard<T> {
-    slice: ([]T)?,
-    ~init() {
-        if (s := _.slice) bun.default_allocator.free(s);
-    }
-}
+pub struct DestroyGuard<T> { ptr: *T!, ~init() { bun.default_allocator.destroy(_.ptr); } }
+pub struct FreeGuard<T> { slice: []T, ~init() { bun.default_allocator.free(_.slice); } }
+pub struct OptFreeGuard<T> { slice: ([]T)?, ~init() { if (s := _.slice) bun.default_allocator.free(s); } }
 
 pub struct Bits {
     /// Sub-block-aware bit reader. GIF wraps the LZW bitstream in length-
@@ -136,6 +119,29 @@ pub struct Dict {
         }
         return { len: cap, first: first };
     }
+}
+
+pub struct Dimensions { width: u32, height: u32 }
+
+pub fn probeDimensions(bytes: []const u8): codecs.Error!Dimensions {
+    if (bytes.len < 10) return error.DecodeFailed;
+    const lsd_w: u32 = std.mem.readInt(u16, bytes[6..8], .little);
+    const lsd_h: u32 = std.mem.readInt(u16, bytes[8..10], .little);
+    if (bytes.len < 13) return Dimensions{ width: lsd_w, height: lsd_h };
+    const p = bytes[10];
+    const gct_sz: u16 = if ((p & 0x80) != 0) @as(u16, 1) << @as(u4, @intCast((p & 7) + 1)) else 0;
+    let i: usize = @as(usize, 13) + @as(usize, gct_sz) * 3;
+    while (i < bytes.len) {
+        if (bytes[i] == 0x21) {
+            if (i + 2 > bytes.len) break;
+            i += 2;
+            while (i < bytes.len) { const n: usize = bytes[i]; i += 1 + n; if (n == 0) break; }
+        } else if (bytes[i] == 0x2C) {
+            if (i + 10 > bytes.len) break;
+            return Dimensions{ width: std.mem.readInt(u16, bytes[i + 5 ..][0..2], .little), height: std.mem.readInt(u16, bytes[i + 7 ..][0..2], .little) };
+        } else break;
+    }
+    return Dimensions{ width: lsd_w, height: lsd_h };
 }
 
 pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {

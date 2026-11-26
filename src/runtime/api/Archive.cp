@@ -112,7 +112,7 @@ fn configureArchiveReader(archive: *libarchive.lib.Archive) {
     * = archive.readSupportFormatTar();
     * = archive.readSupportFormatGnutar();
     * = archive.readSupportFilterGzip();
-    * = archive.readSetOptions("read_concatenated_archives");
+    * = archive.readSetOptions("read_concatenated_archives,hdrcharset=UTF-8");
 }
 
 /// Count the number of files in an archive
@@ -127,7 +127,12 @@ fn countFilesInArchive(data: []const u8): u32 {
 
     let count: u32 = 0;
     let entry_buf: [1]*libarchive.lib.Archive.Entry = [undefined];
-    while (archive.readNextHeader(unsafe { &entry_buf }) == .ok) {
+    while (true) {
+        switch (archive.readNextHeader(unsafe { &entry_buf })) {
+            .eof | .failed | .fatal => break,
+            .retry => continue,
+            .ok | .warn => {},
+        }
         const entry = entry_buf[0];
         if (entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular)) {
             count += 1;
@@ -196,6 +201,28 @@ fn isSafePath(pathname: []const u8): bool {
     return true;
 }
 
+fn normalizeArchiveGlobPath(pathname: []const u8, buf: []u8): []const u8 {
+    let i: usize = 0;
+    while (i + 1 < pathname.len && pathname[i] == '.' && pathname[i + 1] == '/') {
+        i += 2;
+        while (i < pathname.len && pathname[i] == '/') i += 1;
+    }
+    let out_len: usize = 0;
+    let prev_slash = false;
+    while (i < pathname.len && out_len < buf.len) : (i += 1) {
+        const c = pathname[i];
+        if (c == '/') {
+            if (prev_slash) continue;
+            prev_slash = true;
+        } else {
+            prev_slash = false;
+        }
+        buf[out_len] = c;
+        out_len += 1;
+    }
+    return buf[0..out_len];
+}
+
 fn matchGlobPatterns(patterns: []const []const u8, pathname: []const u8): bool {
     let has_positive_patterns = false;
     let matches_positive = false;
@@ -249,6 +276,9 @@ fn extractToDiskFiltered(
     const dir_fd = dir_guard.fd;
 
     let count: u32 = 0;
+    let use_pwrite = bun.Environment.isPosix;
+    let use_lseek = true;
+    let glob_norm_buf: [bun.MAX_PATH_BYTES]u8 = undefined;
     let entry_buf: [1]*lib.Archive.Entry = [undefined];
     while (true) {
         switch (archive.readNextHeader(unsafe { &entry_buf })) {
@@ -267,7 +297,8 @@ fn extractToDiskFiltered(
         // Positive patterns: at least one must match
         // Negative patterns: if any matches, the file is excluded
         if (patterns := glob_patterns) {
-            if (!matchGlobPatterns(patterns, pathname)) continue;
+            const norm_path = normalizeArchiveGlobPath(pathname, *glob_norm_buf);
+            if (!matchGlobPatterns(patterns, norm_path)) continue;
         }
 
         const filetype = entry.filetype();
@@ -302,38 +333,19 @@ fn extractToDiskFiltered(
 
                 let write_success = true;
                 if (size > 0) {
-                    // Read archive data and write to file
-                    let remaining = size;
-                    const BUF_SIZE = 64 * 1024;
-                    let buf: [BUF_SIZE]u8 = undefined;
-                    while (remaining > 0) {
-                        const to_read = @min(remaining, buf.len);
-                        const read = archive.readData(buf[0..to_read]);
-                        if (read < 0) {
+                    const fd_res = unsafe { archive.readDataIntoFd(file_fd, (&use_pwrite) as *bool, (&use_lseek) as *bool) };
+                    switch (fd_res) {
+                        .ok | .eof => {
+                            switch (bun.sys.ftruncate(file_fd, @intCast(size))) {
+                                .err => { write_success = false; },
+                                .result => {},
+                            }
+                        },
+                        else => {
                             * = file_fd.close();
                             * = dir_fd.unlinkat(pathname);
                             return error.ReadError;
-                        }
-                        if (read == 0) {
-                            write_success = false;
-                            break;
-                        }
-                        const bytes_read: usize = @as(usize, @intCast(read));
-                        // Write all bytes, handling partial writes
-                        let written: usize = 0;
-                        while (written < bytes_read) {
-                            const w = file_fd.write(buf[written..bytes_read]).unwrap() catch {
-                                write_success = false;
-                                break;
-                            };
-                            if (w == 0) {
-                                write_success = false;
-                                break;
-                            }
-                            written += w;
-                        }
-                        if (!write_success) break;
-                        remaining -= bytes_read;
+                        },
                     }
                 }
                 * = file_fd.close();
@@ -807,7 +819,9 @@ struct FilesContext {
             const pathname = entry.pathnameUtf8();
             // Apply glob pattern filtering (supports both positive and negative patterns)
             if (patterns := _.glob_patterns) {
-                if (!matchGlobPatterns(patterns, pathname)) continue;
+                let glob_norm_buf: [bun.MAX_PATH_BYTES]u8 = undefined;
+                const norm_path = normalizeArchiveGlobPath(pathname, *glob_norm_buf);
+                if (!matchGlobPatterns(patterns, norm_path)) continue;
             }
 
             const size: usize = @as(usize, @intCast(@max(entry.size(), 0)));
@@ -829,6 +843,9 @@ struct FilesContext {
                     }
                     if (read == 0) break;
                     total_read += @as(usize, @intCast(read));
+                }
+                if (total_read < size) {
+                    @memset(data_guard.slice[total_read..], 0);
                 }
             }
 
@@ -866,7 +883,7 @@ struct FilesContext {
                     entry.data = []; // Ownership transferred
                     blob_ptr.is_jsdom_file = true;
                     blob_ptr.name = bun.String.cloneUTF8(entry.path);
-                    blob_ptr.last_modified = @floatFromInt(entry.mtime * 1000);
+                    blob_ptr.last_modified = @as(f64, @floatFromInt(entry.mtime)) * 1000.0;
 
                     map_ptr.set(globalThis, blob_ptr.name.toJS(globalThis)?, blob_ptr.toJS(globalThis))?;
                 }
@@ -974,6 +991,7 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
     if (archive.writeSetFormatPaxRestricted() != .ok) {
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
     }
+    * = archive.writeSetOptions("hdrcharset=UTF-8");
 
     if (unsafe {
         lib.archive_write_open2(

@@ -568,6 +568,7 @@ pub fn NewParser_(
         // allocated_names: ListManaged(string) = ListManaged(string).init(bun.default_allocator),
         // allocated_names_pool: ?*AllocatedNamesPool.Node = null,
         latest_arrow_arg_loc: logger.Loc = logger.Loc.Empty,
+        in_ternary_yes: bool = false,
         forbid_suffix_after_as_loc: logger.Loc = logger.Loc.Empty,
         current_scope: *js_ast.Scope = undefined,
         scopes_for_current_part: List(*js_ast.Scope) = {},

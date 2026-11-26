@@ -753,7 +753,7 @@ JSC::JSObject* JSX509Certificate::toLegacyObject(ncrypto::X509View view, JSGloba
                 // Convert modulus to string
                 auto bio = ncrypto::BIOPointer::New(n);
                 if (bio) {
-                    object->putDirect(vm, Identifier::fromString(vm, "modulus"_s), jsString(vm, toWTFString(bio)));
+                    object->putDirect(vm, Identifier::fromString(vm, "modulus"_s), jsString(vm, toWTFString(bio).convertToASCIIUppercase()));
                     RETURN_IF_EXCEPTION(scope, nullptr);
                 }
 
@@ -927,7 +927,7 @@ JSC::JSObject* JSX509Certificate::toLegacyObject(JSGlobalObject* globalObject)
                 // Convert modulus to string
                 auto bio = ncrypto::BIOPointer::New(n);
                 if (bio) {
-                    object->putDirect(vm, Identifier::fromString(vm, "modulus"_s), jsString(vm, toWTFString(bio)));
+                    object->putDirect(vm, Identifier::fromString(vm, "modulus"_s), jsString(vm, toWTFString(bio).convertToASCIIUppercase()));
                     RETURN_IF_EXCEPTION(scope, nullptr);
                 }
 

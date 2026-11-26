@@ -35,6 +35,7 @@
 #include "JSDOMWrapperCache.h"
 #include "ScriptExecutionContext.h"
 #include "WebCoreJSClientData.h"
+#include "ZigGlobalObject.h"
 #include <JavaScriptCore/FunctionPrototype.h>
 #include <JavaScriptCore/HeapAnalyzer.h>
 #include <JavaScriptCore/JSCInlines.h>
@@ -52,6 +53,7 @@ using namespace JSC;
 // Functions
 
 static JSC_DECLARE_HOST_FUNCTION(jsPerformanceEntryPrototypeFunction_toJSON);
+static JSC_DECLARE_HOST_FUNCTION(jsPerformanceEntryPrototype_inspectCustom);
 
 // Attributes
 
@@ -120,7 +122,7 @@ static const HashTableValue JSPerformanceEntryPrototypeTableValues[] = {
     { "entryType"_s, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor | JSC::PropertyAttribute::DOMAttribute, NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceEntry_entryType, 0 } },
     { "startTime"_s, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor | JSC::PropertyAttribute::DOMAttribute, NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceEntry_startTime, 0 } },
     { "duration"_s, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor | JSC::PropertyAttribute::DOMAttribute, NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceEntry_duration, 0 } },
-    { "toJSON"_s, static_cast<unsigned>(JSC::PropertyAttribute::Function), NoIntrinsic, { HashTableValue::NativeFunctionType, jsPerformanceEntryPrototypeFunction_toJSON, 0 } },
+    { "toJSON"_s, static_cast<unsigned>(JSC::PropertyAttribute::Function | JSC::PropertyAttribute::DontEnum), NoIntrinsic, { HashTableValue::NativeFunctionType, jsPerformanceEntryPrototypeFunction_toJSON, 0 } },
 };
 
 const ClassInfo JSPerformanceEntryPrototype::s_info = { "PerformanceEntry"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSPerformanceEntryPrototype) };
@@ -129,6 +131,7 @@ void JSPerformanceEntryPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSPerformanceEntry::info(), JSPerformanceEntryPrototypeTableValues, *this);
+    putDirectNativeFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsPerformanceEntryPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, static_cast<unsigned>(JSC::PropertyAttribute::DontEnum));
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 
@@ -251,6 +254,104 @@ static inline EncodedJSValue jsPerformanceEntryPrototypeFunction_toJSONBody(JSGl
 JSC_DEFINE_HOST_FUNCTION(jsPerformanceEntryPrototypeFunction_toJSON, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
 {
     return IDLOperation<JSPerformanceEntry>::call<jsPerformanceEntryPrototypeFunction_toJSONBody>(*lexicalGlobalObject, *callFrame, "toJSON");
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsPerformanceEntryPrototype_inspectCustom, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+
+    JSValue thisValue = callFrame->thisValue();
+    if (!thisValue.isObject())
+        return JSValue::encode(jsUndefined());
+    JSObject* thisObject = thisValue.getObject();
+
+    JSValue depthValue = callFrame->argument(0);
+    JSValue optionsValue = callFrame->argument(1);
+    JSValue inspectArg = callFrame->argument(2);
+
+    JSObject* inspectFn = nullptr;
+    if (inspectArg.isCallable()) {
+        inspectFn = inspectArg.getObject();
+    } else {
+        auto* zigGlobal = defaultGlobalObject(lexicalGlobalObject);
+        inspectFn = zigGlobal->utilInspectFunction();
+        RETURN_IF_EXCEPTION(throwScope, {});
+    }
+
+    JSObject* newOptions = constructEmptyObject(vm, lexicalGlobalObject->nullPrototypeObjectStructure());
+    if (optionsValue.isObject()) {
+        JSObject* options = optionsValue.getObject();
+        PropertyNameArrayBuilder optionsArray(vm, PropertyNameMode::StringsAndSymbols, PrivateSymbolMode::Exclude);
+        options->methodTable()->getOwnPropertyNames(options, lexicalGlobalObject, optionsArray, DontEnumPropertiesMode::Exclude);
+        RETURN_IF_EXCEPTION(throwScope, {});
+        for (size_t i = 0; i < optionsArray.size(); i++) {
+            auto name = optionsArray[i];
+            JSValue value = options->get(lexicalGlobalObject, name);
+            RETURN_IF_EXCEPTION(throwScope, {});
+            newOptions->putDirect(vm, name, value, 0);
+        }
+    }
+
+    double depth = 2;
+    bool depthIsNull = depthValue.isNull();
+    if (!depthIsNull && !depthValue.isUndefined()) {
+        depth = depthValue.toNumber(lexicalGlobalObject);
+        RETURN_IF_EXCEPTION(throwScope, {});
+    }
+
+    JSValue toJSONVal = thisObject->get(lexicalGlobalObject, Identifier::fromString(vm, "toJSON"_s));
+    RETURN_IF_EXCEPTION(throwScope, {});
+    if (!toJSONVal.isCallable()) {
+        newOptions->putDirect(vm, Identifier::fromString(vm, "customInspect"_s), jsBoolean(false), 0);
+        auto callData = JSC::getCallData(inspectFn);
+        MarkedArgumentBuffer args;
+        args.append(thisObject);
+        args.append(newOptions);
+        RELEASE_AND_RETURN(throwScope, JSValue::encode(JSC::profiledCall(lexicalGlobalObject, ProfilingReason::API, inspectFn, callData, jsUndefined(), args)));
+    }
+
+    auto toJSONCallData = JSC::getCallData(toJSONVal);
+    MarkedArgumentBuffer emptyArgs;
+    JSValue jsonVal = JSC::profiledCall(lexicalGlobalObject, ProfilingReason::API, toJSONVal, toJSONCallData, thisObject, emptyArgs);
+    if (throwScope.exception()) {
+        if (!dynamicDowncast<JSPerformanceEntry>(thisObject) && thisObject->structure()->mayBePrototype()) {
+            CLEAR_IF_EXCEPTION(throwScope);
+            newOptions->putDirect(vm, Identifier::fromString(vm, "customInspect"_s), jsBoolean(false), 0);
+            auto callData = JSC::getCallData(inspectFn);
+            MarkedArgumentBuffer args;
+            args.append(thisObject);
+            args.append(newOptions);
+            RELEASE_AND_RETURN(throwScope, JSValue::encode(JSC::profiledCall(lexicalGlobalObject, ProfilingReason::API, inspectFn, callData, jsUndefined(), args)));
+        }
+        return {};
+    }
+
+    String ctorName = "PerformanceEntry"_s;
+    JSValue ctorVal = thisObject->get(lexicalGlobalObject, vm.propertyNames->constructor);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    if (ctorVal.isObject()) {
+        JSValue nameVal = ctorVal.getObject()->get(lexicalGlobalObject, vm.propertyNames->name);
+        RETURN_IF_EXCEPTION(throwScope, {});
+        if (!nameVal.isUndefinedOrNull()) {
+            ctorName = nameVal.toWTFString(lexicalGlobalObject);
+            RETURN_IF_EXCEPTION(throwScope, {});
+        }
+    }
+
+    if (!depthIsNull && depth < 0)
+        return JSValue::encode(jsString(vm, makeString(ctorName, " {}"_s)));
+
+    newOptions->putDirect(vm, Identifier::fromString(vm, "depth"_s), depthIsNull ? jsNull() : jsNumber(depth - 1), 0);
+    auto callData = JSC::getCallData(inspectFn);
+    MarkedArgumentBuffer args;
+    args.append(jsonVal);
+    args.append(newOptions);
+    JSValue inspected = JSC::profiledCall(lexicalGlobalObject, ProfilingReason::API, inspectFn, callData, jsUndefined(), args);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    String inspectedStr = inspected.toWTFString(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    return JSValue::encode(jsString(vm, makeString(ctorName, ' ', inspectedStr)));
 }
 
 JSC::GCClient::IsoSubspace* JSPerformanceEntry::subspaceForImpl(JSC::VM& vm)

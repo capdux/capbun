@@ -124,6 +124,7 @@ function newHandle(type, lookup) {
 
 function onMessage(nread, handle, buf, rinfo) {
   const self = handle[kOwnerSymbol];
+  if (!self[kStateSymbol].handle) return;
   if (nread < 0) {
     return self.emit(
       "error",

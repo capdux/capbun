@@ -33,15 +33,28 @@ struct DetachGuard<T> {
     }
 }
 
+fn indexOfCaseInsensitiveASCII(haystack: []const u8, needle: []const u8): usize? {
+    if (needle.len == 0) return 0;
+    if (haystack.len < needle.len) return null;
+    let i: usize = 0;
+    const limit = haystack.len - needle.len;
+    while (i <= limit) : (i += 1) {
+        if (strings.eqlCaseInsensitiveASCIIICheckLength(haystack[i .. i + needle.len], needle)) {
+            return i;
+        }
+    }
+    return null;
+}
+
 pub union(enum) _Encoding {
     URLEncoded: void,
     Multipart: []const u8,
 
     static fn get(content_type: []const u8): _Encoding? {
-        if (strings.indexOf(content_type, "application/x-www-form-urlencoded") != null)
+        if (indexOfCaseInsensitiveASCII(content_type, "application/x-www-form-urlencoded") != null)
             return _Encoding{ URLEncoded: undefined };
 
-        if (strings.indexOf(content_type, "multipart/form-data") == null) return null;
+        if (indexOfCaseInsensitiveASCII(content_type, "multipart/form-data") == null) return null;
 
         const boundary = FormData.getBoundary(content_type) ?? return null;
         return {
@@ -191,7 +204,7 @@ export class FormData {
     pub const Field = _Field;
 
     pub static fn getBoundary(content_type: []const u8): ([]const u8)? {
-        const boundary_index = strings.indexOf(content_type, "boundary=") ?? return null;
+        const boundary_index = indexOfCaseInsensitiveASCII(content_type, "boundary=") ?? return null;
         const boundary_start = boundary_index + "boundary=".len;
         const begin = content_type[boundary_start..];
         if (begin.len == 0)
@@ -361,10 +374,12 @@ export class FormData {
                 const key = line[0..colon];
                 let value = if (line.len > colon + 1) line[colon + 1 ..] else "";
                 if (strings.eqlCaseInsensitiveASCII(key, "content-disposition", true)) {
-                    value = strings.trim(value, " ");
-                    if (strings.hasPrefixComptime(value, "form-data;")) {
-                        value = value["form-data;".len..];
-                        value = strings.trim(value, " ");
+                    value = strings.trim(value, " \t");
+                    if (strings.hasPrefixCaseInsensitive(value, "form-data")) {
+                        const rest = value["form-data".len..];
+                        if (rest.len == 0 || rest[0] == ';' || rest[0] == ' ' || rest[0] == '\t') {
+                            value = strings.trim(rest, " \t;");
+                        }
                     }
 
                     while (eql_start := strings.indexOf(value, "=")) {

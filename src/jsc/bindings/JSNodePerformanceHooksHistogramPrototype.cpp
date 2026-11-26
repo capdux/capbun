@@ -424,7 +424,7 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_createHistogram, (JSGlobalObject * globalObj
 }
 
 // Extern declarations for Timer.zig
-extern "C" void Timer_enableEventLoopDelayMonitoring(void* vm, JSC::EncodedJSValue histogram, int32_t resolution);
+extern "C" void Timer_enableEventLoopDelayMonitoring(void* vm, JSC::EncodedJSValue histogram, int64_t resolution);
 extern "C" void Timer_disableEventLoopDelayMonitoring();
 
 // Create histogram for event loop delay monitoring
@@ -433,12 +433,11 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_monitorEventLoopDelay, (JSGlobalObject * glo
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
 
-    int32_t resolution = 10; // default 10ms
     if (callFrame->argumentCount() > 0) {
-        resolution = callFrame->argument(0).toInt32(globalObject);
+        double resDouble = callFrame->argument(0).toIntegerOrInfinity(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
 
-        if (resolution < 1) {
+        if (!std::isfinite(resDouble) || resDouble < 1 || resDouble > 9007199254740991.0) {
             throwRangeError(globalObject, scope, "Resolution must be >= 1"_s);
             return JSValue::encode(jsUndefined());
         }
@@ -480,8 +479,9 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_enableEventLoopDelay, (JSGlobalObject * glob
         return JSValue::encode(jsUndefined());
     }
 
-    int32_t resolution = callFrame->argument(1).toInt32(globalObject);
+    double resDouble = callFrame->argument(1).toIntegerOrInfinity(globalObject);
     RETURN_IF_EXCEPTION(scope, {});
+    int64_t resolution = std::isfinite(resDouble) ? static_cast<int64_t>(resDouble) : 10;
 
     // Reset histogram data on enable
     histogram->reset();

@@ -164,6 +164,8 @@ static inline JSC::EncodedJSValue constructJSWebSocket1(JSGlobalObject* lexicalG
     EnsureStillAliveScope argument1 = callFrame->argument(1);
     auto protocols = argument1.value().isUndefined() ? Converter<IDLSequence<IDLDOMString>>::ReturnType {} : convert<IDLSequence<IDLDOMString>>(*lexicalGlobalObject, argument1.value());
     RETURN_IF_EXCEPTION(throwScope, {});
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<WebSocket>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
     auto object = WebSocket::create(*context, WTF::move(url), WTF::move(protocols));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
@@ -171,8 +173,8 @@ static inline JSC::EncodedJSValue constructJSWebSocket1(JSGlobalObject* lexicalG
     auto jsValue = toJSNewlyCreated<IDLInterface<WebSocket>>(*lexicalGlobalObject, *castedThis->globalObject(), throwScope, WTF::move(object));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
-    setSubclassStructureIfNeeded<WebSocket>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (subclassStructure)
+        asObject(jsValue)->setStructure(vm, subclassStructure);
     return JSValue::encode(jsValue);
 }
 
@@ -191,6 +193,8 @@ static inline JSC::EncodedJSValue constructJSWebSocket2(JSGlobalObject* lexicalG
     EnsureStillAliveScope argument1 = callFrame->uncheckedArgument(1);
     auto protocol = convert<IDLDOMString>(*lexicalGlobalObject, argument1.value());
     RETURN_IF_EXCEPTION(throwScope, {});
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<WebSocket>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
     auto object = WebSocket::create(*context, WTF::move(url), WTF::move(protocol));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
@@ -198,8 +202,8 @@ static inline JSC::EncodedJSValue constructJSWebSocket2(JSGlobalObject* lexicalG
     auto jsValue = toJSNewlyCreated<IDLInterface<WebSocket>>(*lexicalGlobalObject, *castedThis->globalObject(), throwScope, WTF::move(object));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
-    setSubclassStructureIfNeeded<WebSocket>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (subclassStructure)
+        asObject(jsValue)->setStructure(vm, subclassStructure);
     return JSValue::encode(jsValue);
 }
 
@@ -329,6 +333,9 @@ static inline JSC::EncodedJSValue constructJSWebSocket3(JSGlobalObject* lexicalG
         }
     }
 
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<WebSocket>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
     auto object = (rejectUnauthorized == -1)
         ? WebSocket::create(*context, WTF::move(url), protocols, WTF::move(headersInit), WTF::move(proxyUrl), WTF::move(proxyHeadersInit), WTF::move(sslConfig), offerPerMessageDeflate)
         : WebSocket::create(*context, WTF::move(url), protocols, WTF::move(headersInit), rejectUnauthorized ? true : false, WTF::move(proxyUrl), WTF::move(proxyHeadersInit), WTF::move(sslConfig), offerPerMessageDeflate);
@@ -340,8 +347,8 @@ static inline JSC::EncodedJSValue constructJSWebSocket3(JSGlobalObject* lexicalG
     auto jsValue = toJSNewlyCreated<IDLInterface<WebSocket>>(*lexicalGlobalObject, *globalObject, throwScope, WTF::move(object));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
-    setSubclassStructureIfNeeded<WebSocket>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (subclassStructure)
+        asObject(jsValue)->setStructure(vm, subclassStructure);
     return JSValue::encode(jsValue);
 }
 

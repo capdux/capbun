@@ -394,7 +394,9 @@ pub fn parseParenExpr(p: *P, loc: logger.Loc, level: Level, opts: ParenExprOpts)
             _ = &comma_after_spread;
             const scope_index = try p.pushScopeForParsePass(.function_args, loc);
             const oldAllowIn = p.allow_in;
+            const old_in_ternary_yes = p.in_ternary_yes;
             p.allow_in = true;
+            p.in_ternary_yes = false;
             var old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_parse);
             _ = &old_fn_or_arrow_data;
             p.fn_or_arrow_data_parse.arrow_arg_errors = arrowArgErrors;
@@ -434,6 +436,7 @@ pub fn parseParenExpr(p: *P, loc: logger.Loc, level: Level, opts: ParenExprOpts)
             _ = &items;
             _ = try p.lexer.expect(.t_close_paren);
             p.allow_in = oldAllowIn;
+            p.in_ternary_yes = old_in_ternary_yes;
             p.fn_or_arrow_data_parse = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_parse), (&old_fn_or_arrow_data));
             if ((((p.lexer.token == .t_equals_greater_than) or opts.force_arrow_fn) or (is_typescript_enabled and (p.lexer.token == .t_colon)))) {
                 if (level.gt(.assign)) {

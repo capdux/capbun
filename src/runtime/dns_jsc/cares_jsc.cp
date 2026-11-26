@@ -192,8 +192,13 @@ pub fn caaReplyToJS(reply: *c_ares.struct_ares_caa_reply, globalThis: *jsc.JSGlo
 
     const property = reply.property[0..reply.plength];
     const value = reply.value[0..reply.length];
-    const property_str = jsc.ZigString.fromUTF8(property);
-    obj.put(globalThis, &property_str, jsc.ZigString.fromUTF8(value).toJS(globalThis));
+    const js_val = jsc.ZigString.fromUTF8(value).toJS(globalThis);
+    if (idx := (std.fmt.parseInt(u32, property, 10) catch null)) {
+        obj.putIndex(globalThis, idx, js_val) catch {};
+    } else {
+        const property_str = jsc.ZigString.fromUTF8(property);
+        obj.put(globalThis, &property_str, js_val);
+    }
 
     return obj;
 }
@@ -621,6 +626,7 @@ fn caresErrorCode(err_val: c_ares.Error): [:0]const u8 {
         .ECANCELLED => "DNS_ECANCELLED",
         .ESERVICE => "DNS_ESERVICE",
         .ENOSERVER => "DNS_ENOSERVER",
+        .EAI_AGAIN => "DNS_EAI_AGAIN",
     };
 }
 
@@ -706,5 +712,12 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
 }
 
 pub fn notAHostnameError(globalThis: *jsc.JSGlobalObject, hostname: []const u8): jsc.JSValue {
-    return errorToJSWithSyscallAndHostname(.ENOTFOUND, globalThis, "getaddrinfo", hostname) catch return .js_undefined;
+    const sys_err = jsc.SystemError{
+        .errno = @intFromEnum(c_ares.Error.ENOTFOUND),
+        .code = bun.String.static("ENOTFOUND"),
+        .message = bun.handleOom(bun.String.createFormat("getaddrinfo ENOTFOUND {s}", .{hostname})),
+        .syscall = bun.String.static("getaddrinfo"),
+        .hostname = bun.String.cloneUTF8(hostname),
+    };
+    return sys_err.toErrorInstance(globalThis);
 }

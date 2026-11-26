@@ -104,9 +104,22 @@ void MessagePort::start()
 
 void MessagePort::close()
 {
+    closeInternal(false);
+}
+
+void MessagePort::closeInternal(bool force)
+{
     if (m_isDetached)
         return;
+
+    if (!force && m_dispatchDepth > 0 && scriptExecutionContext() && scriptExecutionContext()->globalObject()) {
+        m_closePending = true;
+        m_pipe->markClosed(m_side);
+        return;
+    }
+
     m_isDetached = true;
+    m_closePending = false;
 
     // m_pipe is held for the port's whole lifetime (the GC thread reads
     // it in hasPendingActivity()); marking our side Closed is sufficient.
@@ -127,6 +140,13 @@ void MessagePort::close()
             context->unrefEventLoop();
         deref();
     }
+}
+
+void MessagePort::endDispatch()
+{
+    ASSERT(m_dispatchDepth > 0);
+    if (--m_dispatchDepth == 0 && m_closePending)
+        closeInternal(true);
 }
 
 TransferredMessagePort MessagePort::disentangle()
@@ -232,7 +252,7 @@ void MessagePort::contextDestroyed()
     // first — otherwise ~ContextDestructionObserver() would call back into
     // it while it is mid-destruction.
     Ref protectedThis { *this };
-    close();
+    closeInternal(true);
     ContextDestructionObserver::contextDestroyed();
 }
 

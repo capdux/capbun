@@ -2120,6 +2120,11 @@ pub fn inc(self: *@This(), n: usize) void {
                 self.pos = Pos.@"from"(@min((self.pos.cast() + n), self.input.len));
         }
 
+pub fn isAtCol0(self: @This()) bool {
+                const p = self.pos.cast();
+                return (((p == 0) or (self.input[@as(usize, @intCast((p - 1)))] == 10)) or (self.input[@as(usize, @intCast((p - 1)))] == 13));
+        }
+
 pub fn newline(self: *@This()) void {
                 self.line_indent = .none;
                 self.tab_after_indent = false;
@@ -3051,7 +3056,7 @@ if ((!self.isEof())) {
                     return ctx.done();
 },
 '-' => {
-if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
+if (((self.isAtCol0() and self.remainStartsWith("---")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
                         return ctx.done();
                     }
                     if (((!ctx.resolved) and (ctx.str_builder.len() == 0))) {
@@ -3067,7 +3072,7 @@ if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isA
                     continue :sw_12;
 },
 '.' => {
-if ((((self.line_indent == .none) and self.remainStartsWith("...")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
+if (((self.isAtCol0() and self.remainStartsWith("...")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
                         return ctx.done();
                     }
                     if (((!ctx.resolved) and (ctx.str_builder.len() == 0))) {
@@ -3574,7 +3579,7 @@ ctx.cur_more_indented = (c == 9);
                     }
 },
 '-' => {
-if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
+if (((self.isAtCol0() and self.remainStartsWith("---")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
                         return ctx.done();
                     }
                     if (self.line_indent.isLessThan(min_indent)) {
@@ -3586,7 +3591,7 @@ if ((((self.line_indent == .none) and self.remainStartsWith("---")) and self.isA
                     continue :lit_sw;
 },
 '.' => {
-if ((((self.line_indent == .none) and self.remainStartsWith("...")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
+if (((self.isAtCol0() and self.remainStartsWith("...")) and self.isAnyOrEofAt(" \t\n\r", 3))) {
                         return ctx.done();
                     }
                     if (self.line_indent.isLessThan(min_indent)) {
@@ -3650,7 +3655,7 @@ pub fn scanSingleQuotedScalar(self: *@This()) ScanSingleQuotedScalarError!Token(
 return error.UnexpectedCharacter;
 },
 '.' => {
-if ((((nl and (self.line_indent == .none)) and self.remainStartsWith("...")) and self.isSWhiteOrBCharAt(3))) {
+if ((((nl and self.isAtCol0()) and self.remainStartsWith("...")) and self.isSWhiteOrBCharAt(3))) {
                         return error.UnexpectedDocumentEnd;
                     }
                     nl = false;
@@ -3660,7 +3665,7 @@ if ((((nl and (self.line_indent == .none)) and self.remainStartsWith("...")) and
                     continue :sw_14;
 },
 '-' => {
-if ((((nl and (self.line_indent == .none)) and self.remainStartsWith("---")) and self.isSWhiteOrBCharAt(3))) {
+if ((((nl and self.isAtCol0()) and self.remainStartsWith("---")) and self.isSWhiteOrBCharAt(3))) {
                         return error.UnexpectedDocumentStart;
                     }
                     nl = false;
@@ -3742,7 +3747,7 @@ pub fn scanDoubleQuotedScalar(self: *@This()) ScanDoubleQuotedScalarError!Token(
 return error.UnexpectedCharacter;
 },
 '.' => {
-if ((((nl and (self.line_indent == .none)) and self.remainStartsWith("...")) and self.isSWhiteOrBCharAt(3))) {
+if ((((nl and self.isAtCol0()) and self.remainStartsWith("...")) and self.isSWhiteOrBCharAt(3))) {
                         return error.UnexpectedDocumentEnd;
                     }
                     nl = false;
@@ -3752,7 +3757,7 @@ if ((((nl and (self.line_indent == .none)) and self.remainStartsWith("...")) and
                     continue :sw_15;
 },
 '-' => {
-if ((((nl and (self.line_indent == .none)) and self.remainStartsWith("---")) and self.isSWhiteOrBCharAt(3))) {
+if ((((nl and self.isAtCol0()) and self.remainStartsWith("---")) and self.isSWhiteOrBCharAt(3))) {
                         return error.UnexpectedDocumentStart;
                     }
                     nl = false;
@@ -4169,7 +4174,7 @@ if ((!self.isEof())) {
 },
 '-' => {
 const start = self.pos;
-                    if ((((self.line_indent == .none) and self.remainStartsWith(enc.literal("---"))) and self.isSWhiteOrBCharOrEofAt(3))) {
+                    if (((self.isAtCol0() and self.remainStartsWith(enc.literal("---"))) and self.isSWhiteOrBCharOrEofAt(3))) {
                         _ = self.inc(3);
                         self.token = Token(enc).documentStart(.{ .start = start, .indent = self.line_indent, .line = self.line });
                         break :scan_sw;
@@ -4210,7 +4215,7 @@ else => {
 },
 '.' => {
 const start = self.pos;
-                    if ((((self.line_indent == .none) and self.remainStartsWith(enc.literal("..."))) and self.isSWhiteOrBCharOrEofAt(3))) {
+                    if (((self.isAtCol0() and self.remainStartsWith(enc.literal("..."))) and self.isSWhiteOrBCharOrEofAt(3))) {
                         _ = self.inc(3);
                         self.token = Token(enc).documentEnd(.{ .start = start, .indent = self.line_indent, .line = self.line });
                         break :scan_sw;
@@ -4638,7 +4643,7 @@ pub fn isAnyOrEofAt(self: @This(), values: []const enc.unit(), n: usize) bool {
                 if (pos.isLessThan(self.input.len)) {
                     return (std.mem.indexOfScalar(enc.unit(), values, self.input[@as(usize, @intCast(pos.cast()))]) != null);
                 }
-                return false;
+                return true;
         }
 
 pub fn isEof(self: @This()) bool {

@@ -936,7 +936,17 @@ pub fn getBinaryType(self: *const UDPSocket, globalThis: *JSGlobalObject) bun.JS
 .Buffer => globalThis.commonStrings().buffer(),
 .Uint8Array => globalThis.commonStrings().uint8array(),
 .ArrayBuffer => globalThis.commonStrings().arraybuffer(),
-else => @panic("Invalid binary type"),
+.Uint8ClampedArray => bun.String.static("uint8clampedarray").toJS(globalThis),
+.Uint16Array => bun.String.static("uint16array").toJS(globalThis),
+.Uint32Array => bun.String.static("uint32array").toJS(globalThis),
+.Int8Array => bun.String.static("int8array").toJS(globalThis),
+.Int16Array => bun.String.static("int16array").toJS(globalThis),
+.Int32Array => bun.String.static("int32array").toJS(globalThis),
+.Float16Array => bun.String.static("float16array").toJS(globalThis),
+.Float32Array => bun.String.static("float32array").toJS(globalThis),
+.Float64Array => bun.String.static("float64array").toJS(globalThis),
+.BigInt64Array => bun.String.static("bigint64array").toJS(globalThis),
+.BigUint64Array => bun.String.static("biguint64array").toJS(globalThis),
 });
     }
 
@@ -1192,6 +1202,9 @@ pub fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_in
             break :blk .js_undefined;
 }; }); });
             _ = &call_res;
+            if ((udpSocket.closed or (udpSocket.socket == null))) {
+                break;
+            }
         }
 }
 

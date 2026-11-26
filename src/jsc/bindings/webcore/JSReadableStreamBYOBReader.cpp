@@ -121,6 +121,7 @@ void JSReadableStreamBYOBReaderPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSReadableStreamBYOBReader::info(), JSReadableStreamBYOBReaderPrototypeTableValues, *this);
+    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectReadableStreamBYOBReaderCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

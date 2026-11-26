@@ -303,6 +303,9 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSWorkerDOMConstructor::
         }
     }
 
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<Worker>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
     Vector<RefPtr<MessagePort>> ports;
     auto* valueToTransfer = constructEmptyArray(globalObject, nullptr, 2);
     RETURN_IF_EXCEPTION(throwScope, {});
@@ -340,8 +343,8 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSWorkerDOMConstructor::
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
 
-    setSubclassStructureIfNeeded<Worker>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (subclassStructure)
+        asObject(jsValue)->setStructure(vm, subclassStructure);
 
     // Emit the 'worker' event on the process. If we are constructing a `node:worker_threads`
     // worker, we emit the event with the worker_threads Worker object instead of the Web Worker.

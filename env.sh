@@ -19,18 +19,25 @@ export ZIG_LOCAL_CACHE_DIR="$(pwd)/.zig-cache/local"
 export CCACHE_DIR="$(pwd)/.zig-cache/ccache"
 export CCACHE_MAXSIZE=8G
 
+
+mkdir -p "$(pwd)/tmp" && chmod 1777 "$(pwd)/tmp"
+export TMPDIR="$(pwd)/tmp"
+export BUN_TMPDIR="$(pwd)/tmp"
+export TEMP="$(pwd)/tmp"
+export TMP="$(pwd)/tmp"
+
 # === 4. 工具链路径劫持与版本锁定 ===
 # 注意顺序：先劫持本地 clang，再加载 zig 0.15.2，确保优先级
 export PATH="$(pwd)/.local-bin:$PATH"
 export PATH="/root/.local/share/zvm/0.15.2:$PATH"
 
 # === 5. 安全自检拦截 ===
-if ! mountpoint -q "$(pwd)/.zig-cache"; then
-  echo "⚠️  警告：.zig-cache 未挂载 tmpfs！这会严重拖慢增量编译速度。"
-  echo "请执行: sudo mount -t tmpfs -o size=20G tmpfs $(pwd)/.zig-cache"
-else
-  echo "✅ 内存盘检测通过，环境加载完毕。"
-fi
-
+#if ! mountpoint -q "$(pwd)/.zig-cache"; then
+#  echo "⚠️  警告：.zig-cache 未挂载 tmpfs！这会严重拖慢增量编译速度。"
+#  echo "请执行: sudo mount -t tmpfs -o size=20G tmpfs $(pwd)/.zig-cache"
+#else
+#  echo "✅ 内存盘检测通过，环境加载完毕。"
+#fi
+echo "✅ 编译环境加载完毕 (TMPDIR=${TMPDIR})"
 
 

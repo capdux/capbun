@@ -31,8 +31,10 @@ pub struct Entry {
     pub const new = bun.TrivialNew(Entry);
 
     static fn init(blob: *const jsc.WebCore.Blob): *Entry! {
+        let duped = blob.dupeWithContentType(true);
+        duped.name.toThreadSafe();
         return Entry.new(.{
-            .blob = blob.dupeWithContentType(true),
+            .blob = duped,
         });
     }
 
@@ -69,7 +71,9 @@ pub struct Entry {
         _.lock.lock();
         const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
         if (entry := _.map.get(uuid.*)) {
-            return entry.blob.dupeWithContentType(true);
+            let duped = entry.blob.dupeWithContentType(true);
+            duped.name.toThreadSafe();
+            return duped;
         }
         return null;
     }
@@ -83,7 +87,9 @@ pub struct Entry {
         _.lock.lock();
         const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
         if (entry := _.map.get(uuid)) {
-            return entry.blob.dupeWithContentType(true);
+            let duped = entry.blob.dupeWithContentType(true);
+            duped.name.toThreadSafe();
+            return duped;
         }
         return null;
     }
@@ -151,7 +157,7 @@ fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
     if (!arguments.ptr[0].isString()) {
         return globalObject.throwInvalidArguments("revokeObjectURL expects a string", .{});
     }
-    let str = arguments.ptr[0].toBunString(globalObject) catch @panic("unreachable");
+    let str = arguments.ptr[0].toBunString(globalObject)?;
     const _str_g = DerefGuard<@TypeOf(str)>{ ptr: &str };
     if (!str.hasPrefixComptime("blob:")) {
         return jsc.JSValue.js_undefined;

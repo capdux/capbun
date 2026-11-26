@@ -821,8 +821,19 @@ pub struct TokenList {
     }
 
     fn deepClone(allocator: Allocator): TokenList {
+        const v_ref = &_.v;
         return {
-            v: css.deepClone(TokenOrValue, allocator, &_.v),
+            v: css.deepClone(TokenOrValue, allocator, v_ref),
+        };
+    }
+
+    fn cloneWithImportRecords(allocator: Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): TokenList {
+        let list = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, _.v.items.len));
+        for (tok of _.v.items) {
+            list.appendAssumeCapacity(tok.cloneWithImportRecords(allocator, src, dst));
+        }
+        return {
+            v: list,
         };
     }
 }
@@ -1121,6 +1132,17 @@ pub struct Variable {
             fallback: fallback_val,
         };
     }
+
+    fn cloneWithImportRecords(allocator: Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): Variable {
+        let fallback_val: TokenList? = null;
+        if (fallback := _.fallback) {
+            fallback_val = fallback.cloneWithImportRecords(allocator, src, dst);
+        }
+        return Variable{
+            name: _.name,
+            fallback: fallback_val,
+        };
+    }
 }
 
 /// A CSS environment variable reference.
@@ -1224,6 +1246,18 @@ pub struct EnvironmentVariable {
         let fallback_val: TokenList? = null;
         if (fallback := _.fallback) {
             fallback_val = fallback.deepClone(allocator);
+        }
+        return EnvironmentVariable{
+            name: _.name,
+            indices: bun.handleOom(_.indices.clone(allocator)),
+            fallback: fallback_val,
+        };
+    }
+
+    fn cloneWithImportRecords(allocator: Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): EnvironmentVariable {
+        let fallback_val: TokenList? = null;
+        if (fallback := _.fallback) {
+            fallback_val = fallback.cloneWithImportRecords(allocator, src, dst);
         }
         return EnvironmentVariable{
             name: _.name,
@@ -1349,6 +1383,13 @@ pub struct Function {
         };
     }
 
+    fn cloneWithImportRecords(allocator: Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): Function {
+        return {
+            name: _.name,
+            arguments: _.arguments.cloneWithImportRecords(allocator, src, dst),
+        };
+    }
+
     fn getFallback(allocator: Allocator, kind: ColorFallbackKind): @This() {
         return Function{
             name: _.name.deepClone(allocator),
@@ -1404,6 +1445,32 @@ pub union(enum) TokenOrValue {
             .@"var" => |*@"var"| TokenOrValue{ @"var": @"var".deepClone(allocator) },
             .env => |*env| TokenOrValue{ env: env.deepClone(allocator) },
             .function => |*f| TokenOrValue{ function: f.deepClone(allocator) },
+            .length => _,
+            .angle => _,
+            .time => _,
+            .resolution => _,
+            .dashed_ident => _,
+            .animation_name => _,
+        };
+    }
+
+    fn cloneWithImportRecords(allocator: Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): TokenOrValue {
+        return switch (_) {
+            .token => _,
+            .color => |*color| TokenOrValue{ color: color.deepClone(allocator) },
+            .unresolved_color => |*color| TokenOrValue{ unresolved_color: color.deepClone(allocator) },
+            .url => |url| brk: {
+                let new_url = url;
+                if (url.import_record_idx < src.len) {
+                    const new_idx: u32 = @intCast(dst.len);
+                    bun.handleOom(dst.append(allocator, src.at(url.import_record_idx).*));
+                    new_url.import_record_idx = new_idx;
+                }
+                break :brk TokenOrValue{ url: new_url };
+            },
+            .@"var" => |*@"var"| TokenOrValue{ @"var": @"var".cloneWithImportRecords(allocator, src, dst) },
+            .env => |*env| TokenOrValue{ env: env.cloneWithImportRecords(allocator, src, dst) },
+            .function => |*f| TokenOrValue{ function: f.cloneWithImportRecords(allocator, src, dst) },
             .length => _,
             .angle => _,
             .time => _,
@@ -1493,7 +1560,7 @@ pub struct CustomProperty {
             options: options,
         };
 
-        const value = switch (input.parseUntilBefore(
+        let value = switch (input.parseUntilBefore(
             css.Delimiters{
                 bang: true,
                 semicolon: true,
@@ -1505,6 +1572,60 @@ pub struct CustomProperty {
             .result => |v| v,
             .err => |e| return { err: e },
         };
+
+        if (name == .unknown) {
+            const prop_name = name.unknown.v;
+            const is_anim_name = bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "animation-name") ||
+                bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "-webkit-animation-name") ||
+                bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "-moz-animation-name") ||
+                bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "-o-animation-name");
+            const is_anim = !is_anim_name && (bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "animation") ||
+                bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "-webkit-animation") ||
+                bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "-moz-animation") ||
+                bun.strings.eqlCaseInsensitiveASCIIICheckLength(prop_name, "-o-animation"));
+            if (is_anim_name || is_anim) {
+                for (*tok of value.v.items) {
+                    if (tok == .token) {
+                        switch (tok.token) {
+                            .ident => |ident| {
+                                const is_kw = bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "none") ||
+                                    bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "initial") ||
+                                    bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "inherit") ||
+                                    bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "unset") ||
+                                    bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "default") ||
+                                    bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "revert") ||
+                                    bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "revert-layer") ||
+                                    (is_anim && (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "normal") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "reverse") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "alternate") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "alternate-reverse") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "running") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "paused") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "forwards") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "backwards") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "both") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "infinite") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "ease") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "linear") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "ease-in") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "ease-out") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "ease-in-out") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "step-start") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "step-end") ||
+                                        bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "auto")));
+                                if (!is_kw) {
+                                    tok = { animation_name: { ident: { v: ident } } };
+                                }
+                            },
+                            .quoted_string => |s| {
+                                tok = { animation_name: { string: s } };
+                            },
+                            else => {},
+                        }
+                    }
+                }
+            }
+        }
 
         return { result: CustomProperty{
             name: name,

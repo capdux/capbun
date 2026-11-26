@@ -123,7 +123,7 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         defer if (!__log_guard_moved) { __log_guard_moved = true; const __T = @TypeOf(log_guard); if (@typeInfo(__T) == .optional) { if (log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = log_guard; _drop_val.__cp_deinit(); } };
         const input_value = callframe.argument(0);
         if (input_value.isEmptyOrUndefinedOrNull()) {
-            return globalThis.throwInvalidArguments("Expected a string to parse", .{});
+            return globalThis.throwInvalidArguments("input must be a string", .{});
         }
         var input_slice_guard = DeinitGuard(jsc.ZigString.Slice){ .val = try input_value.toSlice(globalThis, bun.default_allocator) };
         _ = &input_slice_guard;
@@ -138,7 +138,7 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
         }
         const source = (&logger.Source.initPathString("input.jsonc", input_bytes));
         const log_ptr: *logger.Log = (&log_guard.val);
-        const parse_result = (blk_catch_0: { break :blk_catch_0 ((json.parseTSConfig(source, log_ptr, allocator, true)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
+        const parse_result = (blk_catch_0: { break :blk_catch_0 ((json.parseTSConfig(source, log_ptr, allocator, false)) catch |e| { _ = &e; if ((e == error.StackOverflow)) {
             return globalThis.throwStackOverflow();
         }
         if ((e == error.OutOfMemory)) {
@@ -169,5 +169,32 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSE
             return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: {s}", .{ msg.data.text }));
         }
         return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: Unable to parse JSONC string", .{})); }); });
-        return (blk_catch_1: { break :blk_catch_1 ((parse_result.toJS(allocator, globalThis)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  return error.OutOfMemory; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .JSError)) {  return error.JSError; } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .JSTerminated)) {  return error.JSTerminated; } } {  break :__sw_blk_1 cp_val(unreachable); }  unreachable; }); }); });
+        if ((log_guard.val.errors > 0)) {
+            var first_msg: ?*const logger.Msg = (if ((log_guard.val.msgs.items.len > 0)) (blk: {
+            break :blk (&log_guard.val.msgs.items[0]);
+
+}) else null);
+            _ = &first_msg;
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_1 = log_guard.val.msgs.items.len;
+                while (i < __end_1) : (i += 1) {
+                    const m = (blk: {
+                    break :blk (&log_guard.val.msgs.items[@as(usize, @intCast(i))]);
+
+});
+                    if ((m.kind == .@"err")) {
+                        first_msg = m;
+                        break;
+                    }
+                }
+            }
+            if (first_msg) |msg| {
+                _ = &msg;
+                return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: {s}", .{ msg.data.text }));
+            }
+            return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: Unable to parse JSONC string", .{}));
+        }
+        return (blk_catch_1: { break :blk_catch_1 ((parse_result.toJS(allocator, globalThis)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  return error.OutOfMemory; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .JSError)) {  return error.JSError; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .JSTerminated)) {  return error.JSTerminated; } } {  break :__sw_blk_2 cp_val(unreachable); }  unreachable; }); }); });
 }

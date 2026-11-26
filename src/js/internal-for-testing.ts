@@ -327,3 +327,21 @@ export const isMemoryPressureWatcherInstalled: () => boolean = $newCppFunction(
   "jsFunction_isMemoryPressureWatcherInstalled",
   0,
 );
+
+export const memoryPressurePsiTrigger: () => string = $newCppFunction(
+  "InternalForTesting.cpp",
+  "jsFunction_memoryPressurePsiTrigger",
+  0,
+);
+
+export const memoryPressurePsiFilter: (...samples: string[]) => boolean[] = $newCppFunction(
+  "InternalForTesting.cpp",
+  "jsFunction_memoryPressurePsiFilter",
+  1,
+);
+
+export const dnsGetaddrinfoError: (code: string, hostname: string) => Error = $newZigFunction(
+  "runtime/dns_jsc/dns.zig",
+  "TestingAPIs.dnsGetaddrinfoError",
+  2,
+);

@@ -858,7 +858,10 @@ pub @opaque struct Archive {
                 unsafe { try_pwrite = can_use_pwrite.*; }
                 if (try_pwrite) {
                     switch (file.pwriteAll(data, block.offset)) {
-                        .err => {
+                        .err e => {
+                            if (e.getErrno() != .SPIPE || actual_offset != 0) {
+                                return ArchiveResult.failed;
+                            }
                             unsafe { can_use_pwrite.* = false; }
                             bun.Output.debugWarn("libarchive: falling back to write() after pwrite() failure", []);
                         },

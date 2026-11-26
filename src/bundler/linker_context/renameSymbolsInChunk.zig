@@ -141,11 +141,11 @@ pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chu
         const all_import_records: []const ImportRecord.List = c.graph.ast.items(.import_records);
         const cjs_export_copies_col = c.graph.@"meta".items(.cjs_export_copies);
         const entry_point_cjs_export_copies: []const Ref = (if (chunk.entry_point.is_entry_point) cjs_export_copies_col[@as(usize, @intCast(chunk.entry_point.source_index))] else &.{});
-        var reserved_names = try renamer.computeInitialReservedNames(allocator, c.options.output_format);
+        var reserved_names = try renamer.computeInitialReservedNames(bun.default_allocator, c.options.output_format);
         _ = &reserved_names;
         for (cp_iter_slice(files_in_order)) |source_index| {
             _ = &source_index;
-            _ = renamer.computeReservedNamesForScope((&all_module_scopes[@as(usize, @intCast(source_index))]), (&c.graph.symbols), (&reserved_names), allocator);
+            _ = renamer.computeReservedNamesForScope((&all_module_scopes[@as(usize, @intCast(source_index))]), (&c.graph.symbols), (&reserved_names), bun.default_allocator);
         }
         var sorted_imports_from_other_chunks: std.array_list.Managed(StableRef) = brk: {
         var list = std.array_list.Managed(StableRef).init(allocator);
@@ -193,7 +193,7 @@ pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chu
             }
             break :brk slots;
 };
-            var minify_renamer = try MinifyRenamer.init(allocator, c.graph.symbols, first_top_level_slots, reserved_names);
+            var minify_renamer = try MinifyRenamer.init(bun.default_allocator, c.graph.symbols, first_top_level_slots, reserved_names);
             _ = &minify_renamer;
             var top_level_symbols = renamer.StableSymbolCount.Array.init(allocator);
             _ = &top_level_symbols;
@@ -271,7 +271,7 @@ pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chu
             minify_renamer.name_minifier = minifier;
             return minify_renamer.toRenamer();
         }
-        var r = try renamer.NumberRenamer.init(allocator, allocator, c.graph.symbols, reserved_names);
+        var r = try renamer.NumberRenamer.init(bun.default_allocator, bun.default_allocator, c.graph.symbols, reserved_names);
         _ = &r;
         for (cp_iter_slice(chunk.content.javascript.exports_to_other_chunks.keys())) |sym_ref| {
             _ = &sym_ref;
@@ -289,7 +289,7 @@ pub fn renameSymbolsInChunk(c: *LinkerContext, allocator: std.mem.Allocator, chu
                 _ = r.addTopLevelSymbol(stable_ref.@"ref");
             }
         }
-        var sorted_ = std.array_list.Managed(u32).init(r.temp_allocator);
+        var sorted_ = std.array_list.Managed(u32).init(allocator);
         _ = &sorted_;
         var sorted = (&sorted_);
         _ = &sorted;

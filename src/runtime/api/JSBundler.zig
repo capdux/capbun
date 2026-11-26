@@ -1581,8 +1581,18 @@ pub export fn JSBundlerPlugin__onResolveAsync(resolve: *BundlerResolve, _: *anyo
                 resolve.value = .{ .no_match = undefined };
             } else {
                 const global = resolve.bv2.plugins.?.globalObject();
-                const path = (blk_catch_2: { break :blk_catch_2 ((path_value.toSliceCloneWithAllocator(global, bun.default_allocator)) catch |__ce_2| { _ = &__ce_2; @panic("Unexpected: path is not a string"); }); });
-                const namespace = (blk_catch_3: { break :blk_catch_3 ((namespace_value.toSliceCloneWithAllocator(global, bun.default_allocator)) catch |__ce_3| { _ = &__ce_3; @panic("Unexpected: namespace is not a string"); }); });
+                var path = (blk_catch_2: { break :blk_catch_2 ((path_value.toSliceCloneWithAllocator(global, bun.default_allocator)) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  break :__sw_blk_5 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if ((cp_match_tag(__err_v_5, .JSError) or cp_match_tag(__err_v_5, .JSTerminated))) {  const exception = global.takeException(e);
+                const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
+                resolve.value = .{ .@"err" = msg };
+                _ = resolve.bv2.onResolveAsync(resolve);
+                return; } }  unreachable; }); }); });
+                _ = &path;
+                const namespace = (blk_catch_3: { break :blk_catch_3 ((namespace_value.toSliceCloneWithAllocator(global, bun.default_allocator)) catch |e| { _ = &e; _ = path.deinit();
+                break :blk_catch_3 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if ((cp_match_tag(__err_v_6, .JSError) or cp_match_tag(__err_v_6, .JSTerminated))) {  const exception = global.takeException(e);
+                const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
+                resolve.value = .{ .@"err" = msg };
+                _ = resolve.bv2.onResolveAsync(resolve);
+                return; } }  unreachable; }); }); });
                 resolve.value = .{ .success = .{ .path = path.slice(), .namespace = namespace.slice(), .external = external_value.to(bool) } };
             }
             _ = resolve.bv2.onResolveAsync(resolve);
@@ -1705,8 +1715,11 @@ pub export fn JSBundlerPlugin__onLoadAsync(self: *BundlerLoad, _: *anyopaque, so
             } else {
                 const loader: api.Loader = @enumFromInt(loader_as_int.to(u8));
                 const global = self.bv2.plugins.?.globalObject();
-                const source_code = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.StringOrBuffer.fromJSToOwnedSlice(global, source_code_value, bun.default_allocator)) catch |e| { _ = &e; __sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .JSError)) {   break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .JSTerminated)) {   break :__sw_blk_5; } }  }
-                @panic("Unexpected: source_code is not a string"); }); });
+                const source_code = (blk_catch_4: { break :blk_catch_4 ((jsc.Node.StringOrBuffer.fromJSToOwnedSlice(global, source_code_value, bun.default_allocator)) catch |e| { _ = &e; break :blk_catch_4 (__sw_blk_7: { const __disc_7 = e; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .OutOfMemory)) {  break :__sw_blk_7 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if ((cp_match_tag(__err_v_7, .JSError) or cp_match_tag(__err_v_7, .JSTerminated))) {  const exception = global.takeException(e);
+                const msg = BundlerPlugin.msgFromJS(self.bv2.plugins.?, self.path, exception);
+                self.value = .{ .@"err" = msg };
+                _ = self.bv2.onLoadAsync(self);
+                return; } }  unreachable; }); }); });
                 self.value = .{ .success = .{ .loader = options.Loader.fromAPI(loader), .source_code = source_code } };
             }
             _ = self.bv2.onLoadAsync(self);
@@ -1736,7 +1749,7 @@ pub fn hasOnBeforeParsePlugins(self: *BundlerPlugin) bool {
 
 pub fn runOnEndCallbacks(self: *BundlerPlugin, globalThis: *jsc.JSGlobalObject, build_promise: *jsc.JSPromise, build_result: jsc.JSValue, rejection: bun.JSError!jsc.JSValue) bun.JSError!jsc.JSValue {
             _ = jsc.markBinding(@src());
-            const rejection_value = (blk_catch_5: { break :blk_catch_5 ((rejection) catch |e| { _ = &e; break :blk_catch_5 @as(jsc.JSValue, (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(globalThis.createOutOfMemoryError()); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .JSError)) {  break :__sw_blk_6 cp_val(globalThis.takeError(e)); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .JSTerminated)) {  return error.JSTerminated; } }  unreachable; })); }); });
+            const rejection_value = (blk_catch_5: { break :blk_catch_5 ((rejection) catch |e| { _ = &e; break :blk_catch_5 @as(jsc.JSValue, (__sw_blk_8: { const __disc_8 = e; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .OutOfMemory)) {  break :__sw_blk_8 cp_val(globalThis.createOutOfMemoryError()); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .JSError)) {  break :__sw_blk_8 cp_val(globalThis.takeError(e)); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .JSTerminated)) {  return error.JSTerminated; } }  unreachable; })); }); });
             var scope: jsc.TopExceptionScope = undefined;
             _ = &scope;
             _ = scope.init(globalThis, @src());
@@ -1852,7 +1865,7 @@ _ = @panic("invalid error type");
     }
 
 pub fn msgFromJS(plugin: *BundlerPlugin, file: []const u8, exception: JSValue) logger.Msg {
-            return (blk_catch_6: { break :blk_catch_6 ((logger.Msg.fromJS(bun.default_allocator, plugin.globalObject(), file, exception)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_7: { const __disc_7 = e; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .OutOfMemory)) {  break :__sw_blk_7 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if ((cp_match_tag(__err_v_7, .JSError) or cp_match_tag(__err_v_7, .JSTerminated))) {  _ = plugin.globalObject().clearExceptionExceptTermination();
+            return (blk_catch_6: { break :blk_catch_6 ((logger.Msg.fromJS(bun.default_allocator, plugin.globalObject(), file, exception)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .OutOfMemory)) {  break :__sw_blk_9 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if ((cp_match_tag(__err_v_9, .JSError) or cp_match_tag(__err_v_9, .JSTerminated))) {  _ = plugin.globalObject().clearExceptionExceptTermination();
             return .{ .data = .{ .text = bun.handleOom(bun.default_allocator.dupe(u8, "A bundler plugin threw a value that could not be converted to a string")), .location = .{ .file = file, .line = -1, .column = -1 } } }; } }  unreachable; }); }); });
     }
     pub const globalObject = JSBundlerPlugin__globalObject;

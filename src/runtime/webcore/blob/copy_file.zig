@@ -1314,7 +1314,12 @@ const unsupported_directory_error = SystemError{ .errno = @as(c_int, @intCast(@i
 const unsupported_non_regular_file_error = SystemError{ .errno = @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.ENOTSUP))), .message = BunString.static("Non-regular files aren't supported yet"), .syscall = BunString.static("fstat") };
 pub const CopyFilePromiseTask = ConcurrentPromiseTask(CopyFile);
 
+extern "c" fn posix_fadvise(fd: c_int, offset: i64, len: i64, advice: c_int) callconv(.c) c_int;
+
 pub fn readWriteFallback(src_fd: FD, dest_fd: FD, bun_opened_dest: bool, cap: SizeType, total: *u64) sys.Maybe(void) {
+        if (comptime Environment.isLinux) {
+            _ = posix_fadvise(src_fd.cast(), 0, 0, 2);
+        }
         if (bun_opened_dest) {
             const stat_size: usize = (if ((cap == Blob.max_size)) 0 else (if (comptime @typeInfo(@TypeOf(cap)) == .@"enum") cp_cast_int(usize, @intFromEnum(cap)) else cp_cast_int(usize, cap)));
             const res = jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, stat_size, total);

@@ -76,6 +76,9 @@ pub struct ScanOpts {
             }
 
             let _utf8_guard = DeinitGuard<@TypeOf(cwd_utf8)>{ ptr: unsafe { &cwd_utf8 } };
+            if (cwd_utf8.slice().len > bun.MAX_PATH_BYTES) {
+                return globalThis.throw("{s}: invalid `cwd`, longer than {d} bytes", [ fnName, bun.MAX_PATH_BYTES ]);
+            }
             let path_buf2: [MAX_PATH_BYTES_2]u8 = undefined;
 
             if (!absolute) {
@@ -124,38 +127,42 @@ pub struct ScanOpts {
                 }
                 return out;
             }
-            return globalThis.throw("{s}: expected first argument to be an object", [ fnName ]);
+            return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions must be an object", {}).throw();
         }
 
         if (only_files := optsObj.getTruthy(globalThis, "onlyFiles")?) {
-            out.only_files = if (only_files.isBoolean()) only_files.asBoolean() else false;
+            out.only_files = only_files.toBoolean();
         }
 
         if (error_on_broken_symlinks := optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymlink")?) {
-            out.error_on_broken_symlinks = if (error_on_broken_symlinks.isBoolean()) error_on_broken_symlinks.asBoolean() else false;
+            out.error_on_broken_symlinks = error_on_broken_symlinks.toBoolean();
         }
 
         if (follow_symlinks := optsObj.getTruthy(globalThis, "followSymlinks")?) {
-            out.follow_symlinks = if (follow_symlinks.isBoolean()) follow_symlinks.asBoolean() else false;
+            out.follow_symlinks = follow_symlinks.toBoolean();
         }
 
         if (absolute := optsObj.getTruthy(globalThis, "absolute")?) {
-            out.absolute = if (absolute.isBoolean()) absolute.asBoolean() else false;
+            out.absolute = absolute.toBoolean();
         }
 
+        let cwd_val: jsc.JSValue? = null;
         if (cwdVal := optsObj.getTruthy(globalThis, "cwd")?) {
             if (!cwdVal.isString()) {
-                return globalThis.throw("{s}: invalid `cwd`, not a string", [ fnName ]);
+                return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions.cwd must be a string", {}).throw();
             }
+            cwd_val = cwdVal;
+        }
 
+        if (dot := optsObj.getTruthy(globalThis, "dot")?) {
+            out.dot = dot.toBoolean();
+        }
+
+        if (cwdVal := cwd_val) {
             const result = parseCWD(globalThis, arena_alloc.allocator(), cwdVal, out.absolute, fnName)?;
             if (result.len > 0) {
                 out.cwd = result;
             }
-        }
-
-        if (dot := optsObj.getTruthy(globalThis, "dot")?) {
-            out.dot = if (dot.isBoolean()) dot.asBoolean() else false;
         }
 
         return out;
@@ -331,12 +338,12 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
         const pat_arg_opt = arguments.nextEat();
         if (pat_arg_opt == null) {
-            return globalThis.throw("Glob.constructor: expected 1 arguments, got 0", {});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "pattern must be a string", {}).throw();
         }
         const pat_arg: JSValue = pat_arg_opt.?;
 
         if (!pat_arg.isString()) {
-            return globalThis.throw("Glob.constructor: first argument is not a string", {});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "pattern must be a string", {}).throw();
         }
 
         const pat_slice = pat_arg.toSliceClone(globalThis)?;
@@ -427,12 +434,12 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
         const str_arg_opt = arguments.nextEat();
         if (str_arg_opt == null) {
-            return globalThis.throw("Glob.matchString: expected 1 arguments, got 0", {});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "str must be a string", {}).throw();
         }
         const str_arg = str_arg_opt.?;
 
         if (!str_arg.isString()) {
-            return globalThis.throw("Glob.matchString: first argument is not a string", {});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "str must be a string", {}).throw();
         }
 
         let str = str_arg.toSlice(globalThis, arena_alloc.allocator())?;

@@ -22,6 +22,8 @@
 #include "ErrorCode.h" // For Bun::ERR::
 #include "JavaScriptCore/JSMapInlines.h"
 
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
+
 namespace WebCore {
 
 using namespace JSC;
@@ -552,6 +554,11 @@ JSC_DEFINE_HOST_FUNCTION(jsMIMEParamsProtoFuncToString, (JSGlobalObject * global
         builder.append(key);
         builder.append('=');
         encodeParamValue(value, builder);
+    }
+
+    if (builder.hasOverflowed() || builder.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
     }
 
     return JSValue::encode(jsString(vm, builder.toString()));

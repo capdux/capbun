@@ -408,7 +408,7 @@ fn NewLexer_(
                             '0'..='7' => {
                                 const octal_start = (iter.i + width2) - 2;
                                 if (comptime is_json) {
-                                    lexer.end = start + iter.i - width2;
+                                    lexer.end = start + iter.i;
                                     lexer.syntaxError()?;
                                 }
 
@@ -495,7 +495,7 @@ fn NewLexer_(
                                         value = value * 16 | (c3 + 10 - 'A');
                                     },
                                     else => {
-                                        lexer.end = start + iter.i - width3;
+                                        lexer.end = start + iter.i;
                                         return lexer.syntaxError();
                                     },
                                 }
@@ -514,7 +514,7 @@ fn NewLexer_(
                                         value = value * 16 | (c3 + 10 - 'A');
                                     },
                                     else => {
-                                        lexer.end = start + iter.i - width3;
+                                        lexer.end = start + iter.i;
                                         return lexer.syntaxError();
                                     },
                                 }
@@ -603,7 +603,7 @@ fn NewLexer_(
                                                 value = value * 16 | (c3 + 10 - 'A');
                                             },
                                             else => {
-                                                lexer.end = start + iter.i - width3;
+                                                lexer.end = start + iter.i;
                                                 return lexer.syntaxError();
                                             },
                                         }
@@ -621,7 +621,7 @@ fn NewLexer_(
                             },
                             '\r' => {
                                 if (comptime is_json) {
-                                    lexer.end = start + iter.i - width2;
+                                    lexer.end = start + iter.i;
                                     lexer.syntaxError()?;
                                 }
 
@@ -634,7 +634,7 @@ fn NewLexer_(
                             },
                             '\n', 0x2028, 0x2029 => {
                                 if (comptime is_json) {
-                                    lexer.end = start + iter.i - width2;
+                                    lexer.end = start + iter.i;
                                     lexer.syntaxError()?;
                                 }
 
@@ -646,7 +646,7 @@ fn NewLexer_(
                                     switch (c2) {
                                         '"', '\\', '/' => {},
                                         else => {
-                                            lexer.end = start + iter.i - width2;
+                                            lexer.end = start + iter.i;
                                             lexer.syntaxError()?;
                                         },
                                     }

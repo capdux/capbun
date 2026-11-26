@@ -79,11 +79,15 @@ pub fn toJS(globalThis: *jsc.JSGlobalObject) jsc.JSValue {
             return obj;
     }
 
+pub fn offsetAddr(raw_addr: usize, offset: i32) usize {
+            return @bitCast((@as(isize, @bitCast(raw_addr)) +% (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(isize, @intFromEnum(offset)) else cp_cast_int(isize, offset))));
+    }
+
 pub fn @"u8"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSValue) bun.JSError!JSValue {
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) u8 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -95,7 +99,7 @@ pub fn @"u16"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) u16 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -107,7 +111,7 @@ pub fn @"u32"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) u32 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -119,7 +123,7 @@ pub fn ptr(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSValue
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) u64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -131,7 +135,7 @@ pub fn @"i8"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVal
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) i8 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -143,7 +147,7 @@ pub fn @"i16"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) i16 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -155,7 +159,7 @@ pub fn @"i32"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) i32 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -167,7 +171,7 @@ pub fn intptr(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) i64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -179,7 +183,7 @@ pub fn @"f32"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) f32 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -191,7 +195,7 @@ pub fn @"f64"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) f64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -203,7 +207,7 @@ pub fn @"i64"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) i64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -215,7 +219,7 @@ pub fn @"u64"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
             if (((arguments.len == 0) or (!arguments[0].isNumber()))) {
                 return globalObject.throwInvalidArguments("Expected a pointer", .{});
             }
-            const addr = (arguments[0].asPtrAddress() + (if ((arguments.len > 1)) @as(usize, @intCast(arguments[1].to(i32))) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0))));
+            const addr = offsetAddr(arguments[0].asPtrAddress(), (if ((arguments.len > 1)) arguments[1].to(i32) else 0));
             const mem_ptr: *align(1) u64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -224,7 +228,7 @@ pub fn @"u64"(globalObject: *JSGlobalObject, _: JSValue, arguments: []const JSVa
     }
 
 pub fn u8WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) u8 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -233,7 +237,7 @@ pub fn u8WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, off
     }
 
 pub fn u16WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) u16 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -242,7 +246,7 @@ pub fn u16WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn u32WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) u32 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -251,7 +255,7 @@ pub fn u32WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn ptrWithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) u64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -260,7 +264,7 @@ pub fn ptrWithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn i8WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) i8 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -269,7 +273,7 @@ pub fn i8WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, off
     }
 
 pub fn i16WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) i16 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -278,7 +282,7 @@ pub fn i16WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn i32WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) i32 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -287,7 +291,7 @@ pub fn i32WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn intptrWithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) i64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -296,7 +300,7 @@ pub fn intptrWithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64,
     }
 
 pub fn f32WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) f32 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -305,7 +309,7 @@ pub fn f32WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn f64WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) f64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -314,7 +318,7 @@ pub fn f64WithoutTypeChecks(_: *JSGlobalObject, _: *anyopaque, raw_addr: i64, of
     }
 
 pub fn u64WithoutTypeChecks(global: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) u64 = (blk: {
             break :blk @ptrFromInt(addr);
 
@@ -323,7 +327,7 @@ pub fn u64WithoutTypeChecks(global: *JSGlobalObject, _: *anyopaque, raw_addr: i6
     }
 
 pub fn i64WithoutTypeChecks(global: *JSGlobalObject, _: *anyopaque, raw_addr: i64, offset: i32) callconv(jsc.conv) JSValue {
-            const addr = (@as(usize, @intCast(raw_addr)) + @as(usize, @intCast(offset)));
+            const addr = offsetAddr(@as(usize, @intCast(raw_addr)), offset);
             const mem_ptr: *align(1) i64 = (blk: {
             break :blk @ptrFromInt(addr);
 

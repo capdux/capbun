@@ -369,7 +369,7 @@ pub fn parseTypescriptEnumStmt(p: *P, loc: logger.Loc, opts: *ParseStatementOpti
                 name.ref = enum_ref;
                 _ = try p.pushScopeForParsePass(.entry, loc);
                 p.current_scope.ts_namespace = ts_namespace;
-                _ = bun.handleOom(p.ref_to_ts_namespace_member.putNoClobber(p.allocator, enum_ref, enum_member_data));
+                _ = bun.handleOom(p.ref_to_ts_namespace_member.put(p.allocator, enum_ref, enum_member_data));
             }
             _ = try p.lexer.expect(.t_open_brace);
             const old_fn_or_arrow_data = p.fn_or_arrow_data_parse;

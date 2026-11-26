@@ -1567,7 +1567,7 @@ pub fn doUnreachable(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSE
             }
             if (arg.isString()) {
                 const arg_str = try arg.toBunString(globalThis);
-                const error_value = arg_str.toErrorInstance(globalThis);
+                const error_value = (if (arg_str.isEmpty()) ZigString.Empty.toErrorInstance(globalThis) else arg_str.toErrorInstance(globalThis));
                 _ = error_value.put(globalThis, ZigString.static("name"), try bun.String.init("UnreachableError").toJS(globalThis));
                 return globalThis.throwValue(error_value);
             }

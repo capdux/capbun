@@ -9,7 +9,7 @@ interface BufferExt extends Buffer {
 }
 
 export function setBigUint64(this: BufferExt, offset, value, le) {
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setBigUint64(
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setBigUint64(
     offset,
     value,
     le,
@@ -17,77 +17,88 @@ export function setBigUint64(this: BufferExt, offset, value, le) {
 }
 
 export function readInt8(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined) $checkBufferRead(this, offset, 1);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getInt8(offset);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getInt8(offset);
 }
 
 export function readUInt8(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined) $checkBufferRead(this, offset, 1);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getUint8(offset);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getUint8(offset);
 }
 
 export function readInt16LE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 1] === undefined)
     $checkBufferRead(this, offset, 2);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getInt16(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getInt16(offset, true);
 }
 
 export function readInt16BE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 1] === undefined)
     $checkBufferRead(this, offset, 2);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getInt16(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getInt16(offset, false);
 }
 
 export function readUInt16LE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 1] === undefined)
     $checkBufferRead(this, offset, 2);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getUint16(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getUint16(offset, true);
 }
 
 export function readUInt16BE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 1] === undefined)
     $checkBufferRead(this, offset, 2);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getUint16(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getUint16(offset, false);
 }
 
 export function readInt32LE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined)
     $checkBufferRead(this, offset, 4);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getInt32(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getInt32(offset, true);
 }
 
 export function readInt32BE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined)
     $checkBufferRead(this, offset, 4);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getInt32(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getInt32(offset, false);
 }
 
 export function readUInt32LE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined)
     $checkBufferRead(this, offset, 4);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getUint32(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getUint32(offset, true);
 }
 
 export function readUInt32BE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined)
     $checkBufferRead(this, offset, 4);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getUint32(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getUint32(offset, false);
 }
 
 export function readIntLE(this: BufferExt, offset, byteLength) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) throw $ERR_INVALID_ARG_TYPE("offset", "number", offset);
   if (typeof byteLength !== "number") throw $ERR_INVALID_ARG_TYPE("byteLength", "number", byteLength);
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -128,9 +139,10 @@ export function readIntLE(this: BufferExt, offset, byteLength) {
 }
 
 export function readIntBE(this: BufferExt, offset, byteLength) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) throw $ERR_INVALID_ARG_TYPE("offset", "number", offset);
   if (typeof byteLength !== "number") throw $ERR_INVALID_ARG_TYPE("byteLength", "number", byteLength);
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -171,9 +183,10 @@ export function readIntBE(this: BufferExt, offset, byteLength) {
 }
 
 export function readUIntLE(this: BufferExt, offset, byteLength) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) throw $ERR_INVALID_ARG_TYPE("offset", "number", offset);
   if (typeof byteLength !== "number") throw $ERR_INVALID_ARG_TYPE("byteLength", "number", byteLength);
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -211,9 +224,10 @@ export function readUIntLE(this: BufferExt, offset, byteLength) {
 }
 
 export function readUIntBE(this: BufferExt, offset, byteLength) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) throw $ERR_INVALID_ARG_TYPE("offset", "number", offset);
   if (typeof byteLength !== "number") throw $ERR_INVALID_ARG_TYPE("byteLength", "number", byteLength);
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -251,175 +265,192 @@ export function readUIntBE(this: BufferExt, offset, byteLength) {
 }
 
 export function readFloatLE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined)
     $checkBufferRead(this, offset, 4);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getFloat32(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getFloat32(offset, true);
 }
 
 export function readFloatBE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined)
     $checkBufferRead(this, offset, 4);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getFloat32(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getFloat32(offset, false);
 }
 
 export function readDoubleLE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined)
     $checkBufferRead(this, offset, 8);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getFloat64(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getFloat64(offset, true);
 }
 
 export function readDoubleBE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined)
     $checkBufferRead(this, offset, 8);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getFloat64(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getFloat64(offset, false);
 }
 
 export function readBigInt64LE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined)
     $checkBufferRead(this, offset, 8);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getBigInt64(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getBigInt64(offset, true);
 }
 
 export function readBigInt64BE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined)
     $checkBufferRead(this, offset, 8);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getBigInt64(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getBigInt64(offset, false);
 }
 
 export function readBigUInt64LE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined)
     $checkBufferRead(this, offset, 8);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getBigUint64(offset, true);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getBigUint64(offset, true);
 }
 
 export function readBigUInt64BE(this: BufferExt, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined)
     $checkBufferRead(this, offset, 8);
-  return (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).getBigUint64(offset, false);
+  return (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).getBigUint64(offset, false);
 }
 
 export function writeInt8(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = -0x80;
   const max = 0x7f;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined) require("internal/buffer").writeU_Int8(this, value, offset, min, max);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setInt8(offset, value);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setInt8(offset, value);
   return offset + 1;
 }
 
 export function writeUInt8(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = 0;
   const max = 0xff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined) require("internal/buffer").writeU_Int8(this, value, offset, min, max);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setUint8(offset, value);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setUint8(offset, value);
   return offset + 1;
 }
 
 export function writeInt16LE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = -0x8000;
   const max = 0x7fff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 1] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 2);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setInt16(offset, value, true);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setInt16(offset, value, true);
   return offset + 2;
 }
 
 export function writeInt16BE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = -0x8000;
   const max = 0x7fff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 1] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 2);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setInt16(offset, value, false);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setInt16(offset, value, false);
   return offset + 2;
 }
 
 export function writeUInt16LE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = 0;
   const max = 0xffff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 1] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 2);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setUint16(offset, value, true);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setUint16(offset, value, true);
   return offset + 2;
 }
 
 export function writeUInt16BE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = 0;
   const max = 0xffff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 1] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 2);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setUint16(offset, value, false);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setUint16(offset, value, false);
   return offset + 2;
 }
 
 export function writeInt32LE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = -0x80000000;
   const max = 0x7fffffff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 3] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 4);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setInt32(offset, value, true);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setInt32(offset, value, true);
   return offset + 4;
 }
 
 export function writeInt32BE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = -0x80000000;
   const max = 0x7fffffff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 3] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 4);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setInt32(offset, value, false);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setInt32(offset, value, false);
   return offset + 4;
 }
 
 export function writeUInt32LE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = 0;
   const max = 0xffffffff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 3] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 4);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setUint32(offset, value, true);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setUint32(offset, value, true);
   return offset + 4;
 }
 
 export function writeUInt32BE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   const min = 0;
   const max = 0xffffffff;
   // prettier-ignore
   if (typeof offset !== "number" || value < min || value > max || this[offset] === undefined || this[offset + 3] === undefined) require("internal/buffer").checkInt(this, value, offset, min, max, 4);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setUint32(offset, value, false);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setUint32(offset, value, false);
   return offset + 4;
 }
 
 export function writeIntLE(this: BufferExt, value, offset, byteLength) {
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
-  value = +value;
-
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -427,6 +458,7 @@ export function writeIntLE(this: BufferExt, value, offset, byteLength) {
     case 4:
     case 5:
     case 6: {
+      value = +value;
       const max = 2 ** (8 * byteLength - 1) - 1;
       require("internal/buffer").checkInt(this, value, offset, -max - 1, max, byteLength);
       break;
@@ -469,9 +501,8 @@ export function writeIntLE(this: BufferExt, value, offset, byteLength) {
 }
 
 export function writeIntBE(this: BufferExt, value, offset, byteLength) {
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
-  value = +value;
-
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -479,6 +510,7 @@ export function writeIntBE(this: BufferExt, value, offset, byteLength) {
     case 4:
     case 5:
     case 6: {
+      value = +value;
       const max = 2 ** (8 * byteLength - 1) - 1;
       require("internal/buffer").checkInt(this, value, offset, -max - 1, max, byteLength);
       break;
@@ -521,9 +553,8 @@ export function writeIntBE(this: BufferExt, value, offset, byteLength) {
 }
 
 export function writeUIntLE(this: BufferExt, value, offset, byteLength) {
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
-  value = +value;
-
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -531,6 +562,7 @@ export function writeUIntLE(this: BufferExt, value, offset, byteLength) {
     case 4:
     case 5:
     case 6: {
+      value = +value;
       require("internal/buffer").checkInt(this, value, offset, 0, 2 ** (8 * byteLength) - 1, byteLength);
       break;
     }
@@ -572,9 +604,8 @@ export function writeUIntLE(this: BufferExt, value, offset, byteLength) {
 }
 
 export function writeUIntBE(this: BufferExt, value, offset, byteLength) {
-  const view = (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength));
-  value = +value;
-
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
+  const view = (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength)));
   switch (byteLength) {
     case 1:
     case 2:
@@ -582,6 +613,7 @@ export function writeUIntBE(this: BufferExt, value, offset, byteLength) {
     case 4:
     case 5:
     case 6: {
+      value = +value;
       require("internal/buffer").checkInt(this, value, offset, 0, 2 ** (8 * byteLength) - 1, byteLength);
       break;
     }
@@ -623,38 +655,42 @@ export function writeUIntBE(this: BufferExt, value, offset, byteLength) {
 }
 
 export function writeFloatLE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   // prettier-ignore
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined) require("internal/buffer").checkBounds(this, offset, 4);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setFloat32(offset, value, true);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setFloat32(offset, value, true);
   return offset + 4;
 }
 
 export function writeFloatBE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   // prettier-ignore
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 3] === undefined) require("internal/buffer").checkBounds(this, offset, 4);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setFloat32(offset, value, false);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setFloat32(offset, value, false);
   return offset + 4;
 }
 
 export function writeDoubleLE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   // prettier-ignore
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined) require("internal/buffer").checkBounds(this, offset, 8);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setFloat64(offset, value, true);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setFloat64(offset, value, true);
   return offset + 8;
 }
 
 export function writeDoubleBE(this: BufferExt, value, offset) {
+  if (!$isTypedArrayView(this)) throw $ERR_INVALID_ARG_TYPE("buf", "Buffer", this);
   if (offset === undefined) offset = 0;
   value = +value;
   // prettier-ignore
   if (typeof offset !== "number" || this[offset] === undefined || this[offset + 7] === undefined) require("internal/buffer").checkBounds(this, offset, 8);
-  (this.$dataView ||= new DataView(this.buffer, this.byteOffset, this.byteLength)).setFloat64(offset, value, false);
+  (this.$dataView && this.$dataView.byteLength === this.byteLength ? this.$dataView : (this.$dataView = new DataView(this.buffer, this.byteOffset, this.byteLength))).setFloat64(offset, value, false);
   return offset + 8;
 }
 

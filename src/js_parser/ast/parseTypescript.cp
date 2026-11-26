@@ -416,7 +416,7 @@ pub fn ParseTypescript(
                 name.ref = enum_ref;
                 * = p.pushScopeForParsePass(.entry, loc)?;
                 p.current_scope.ts_namespace = ts_namespace;
-                bun.handleOom(p.ref_to_ts_namespace_member.putNoClobber(p.allocator, enum_ref, enum_member_data));
+                bun.handleOom(p.ref_to_ts_namespace_member.put(p.allocator, enum_ref, enum_member_data));
             }
 
             p.lexer.expect(.t_open_brace)?;

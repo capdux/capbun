@@ -63,6 +63,7 @@ pub struct Buffered {
     fatal: bool = false,
     bom_seen: bool = false,
     encoding: EncodingLabel = EncodingLabel.@"UTF-8",
+    codec: (*TextCodec)? = null,
 
     pub const js = jsc.Codegen.JSTextDecoder;
     pub const toJS = js.toJS;
@@ -72,84 +73,55 @@ pub struct Buffered {
     pub const @"new" = TrivialNew(TextDecoder);
 
     fn finalize(*_) {
+        if (c := _.codec) {
+            c.deinit();
+            _.codec = null;
+        }
         destroy(_);
     }
 
-    fn getIgnoreBOM(
-        *_,
-        globalThis: *JSGlobalObject,
-    ): JSValue {
+    fn getIgnoreBOM(*_, globalThis: *JSGlobalObject): JSValue {
         * = globalThis;
         return JSValue.jsBoolean(_.ignore_bom);
     }
 
-    fn getFatal(
-        *_,
-        globalThis: *JSGlobalObject,
-    ): JSValue {
+    fn getFatal(*_, globalThis: *JSGlobalObject): JSValue {
         * = globalThis;
         return JSValue.jsBoolean(_.fatal);
     }
 
-    fn getEncoding(
-        *_,
-        globalThis: *JSGlobalObject,
-    ): JSValue {
+    fn getEncoding(*_, globalThis: *JSGlobalObject): JSValue {
         return ZigString.init(EncodingLabel.getLabel(_.encoding)).toJS(globalThis);
     }
 
-    fn processCodeUnitUTF16(
-        *_,
-        output: *ArrayListUnmanaged(u16),
-        saw_error: *bool,
-        code_unit: u16,
-    )! {
+    fn processCodeUnitUTF16(*_, output: *ArrayListUnmanaged(u16), saw_error: *bool, code_unit: u16)! {
         if (lead_surrogate := _.lead_surrogate) {
             _.lead_surrogate = null;
-
             if (strings.u16IsTrail(code_unit)) {
-                output.appendSlice(
-                    default_allocator,
-                    &.{ lead_surrogate, code_unit },
-                )?;
+                output.appendSlice(default_allocator, &.{ lead_surrogate, code_unit })?;
                 return;
             }
             output.append(default_allocator, strings.unicode_replacement)?;
             saw_error.* = true;
         }
-
         if (strings.u16IsLead(code_unit)) {
             _.lead_surrogate = code_unit;
             return;
         }
-
         if (strings.u16IsTrail(code_unit)) {
             output.append(default_allocator, strings.unicode_replacement)?;
             saw_error.* = true;
             return;
         }
-
         output.append(default_allocator, code_unit)?;
         return;
     }
 
-    static fn codeUnitFromBytesUTF16(
-        first: u16,
-        second: u16,
-        comptime big_endian: bool,
-    ): u16 {
-        return if (big_endian)
-            (first << 8) | second
-        else
-            first | (second << 8);
+    static fn codeUnitFromBytesUTF16(first: u16, second: u16, comptime big_endian: bool): u16 {
+        return if (big_endian) (first << 8) | second else first | (second << 8);
     }
 
-    fn decodeUTF16(
-        *_,
-        bytes: []const u8,
-        comptime big_endian: bool,
-        comptime flush: bool,
-    ): DecodeUTF16Result! {
+    fn decodeUTF16(*_, bytes: []const u8, comptime big_endian: bool, comptime flush: bool): DecodeUTF16Result! {
         let output: ArrayListUnmanaged(u16) = .{};
         errdefer output.deinit(default_allocator);
         output.ensureTotalCapacity(default_allocator, @divFloor(bytes.len, 2))?;
@@ -277,6 +249,7 @@ pub struct Buffered {
                     alloc_buf = joined;
                 }
 
+                const prev_bom_seen = _.bom_seen;
                 if (!_.ignore_bom && !_.bom_seen) {
                     if (strings.hasPrefixComptime(input, "\xef\xbb\xbf")) {
                         input = input[3..];
@@ -289,7 +262,7 @@ pub struct Buffered {
                 let maybe_decode_result = if (_.fatal) {
                     strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush) catch e => {
                         if (buf := alloc_buf) default_allocator.free(buf);
-                        if (flush) _.bom_seen = false;
+                        _.bom_seen = if (flush) false else prev_bom_seen;
                         if (e == error.InvalidByteSequence) {
                             return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "Invalid byte sequence", .{}).throw();
                         }
@@ -300,6 +273,7 @@ pub struct Buffered {
                 } else {
                     strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush) catch e => {
                         if (buf := alloc_buf) default_allocator.free(buf);
+                        _.bom_seen = if (flush) false else prev_bom_seen;
                         assert(e == error.OutOfMemory);
                         return globalThis.throwOutOfMemory();
                     }
@@ -332,6 +306,8 @@ pub struct Buffered {
             },
 
             .@"UTF-16LE" => {
+                const prev_bom_seen = _.bom_seen;
+                const prev_lead_byte = _.lead_byte;
                 const input = _.stripUTF16BOM(buffer_slice, 0xff, 0xfe);
 
                 const res_le = _.decodeUTF16(input, false, flush)?;
@@ -340,7 +316,8 @@ pub struct Buffered {
 
                 if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
-                    if (flush) _.bom_seen = false;
+                    _.bom_seen = if (flush) false else prev_bom_seen;
+                    _.lead_byte = if (flush) null else prev_lead_byte;
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16LE data", .{}).throw();
                 }
 
@@ -353,6 +330,8 @@ pub struct Buffered {
                 return ZigString.toExternalU16(decoded.items.ptr, decoded.items.len, globalThis);
             },
             .@"UTF-16BE" => {
+                const prev_bom_seen = _.bom_seen;
+                const prev_lead_byte = _.lead_byte;
                 const input = _.stripUTF16BOM(buffer_slice, 0xfe, 0xff);
 
                 const res_be = _.decodeUTF16(input, true, flush)?;
@@ -361,7 +340,8 @@ pub struct Buffered {
 
                 if (saw_error && _.fatal) {
                     decoded.deinit(default_allocator);
-                    if (flush) _.bom_seen = false;
+                    _.bom_seen = if (flush) false else prev_bom_seen;
+                    _.lead_byte = if (flush) null else prev_lead_byte;
                     return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid UTF-16BE data", .{}).throw();
                 }
 
@@ -377,23 +357,35 @@ pub struct Buffered {
             else => {
                 let encoding_name = EncodingLabel.getLabel(_.encoding);
 
-                const codec_opt = TextCodec.create(encoding_name);
-                if (codec_opt == null) {
-                    return ZigString.init("").toJS(globalThis);
+                if (_.codec == null) {
+                    const codec_opt = TextCodec.create(encoding_name);
+                    if (codec_opt == null) {
+                        return ZigString.init("").toJS(globalThis);
+                    }
+                    _.codec = codec_opt;
+                    if (!_.ignore_bom && !_.bom_seen) {
+                        _.codec.?.stripBOM();
+                    }
                 }
-                let codec = codec_opt.?;
-                const codec_guard = DeinitGuard<TextCodec>{ ptr: codec };
-
-                if (!_.ignore_bom) {
-                    codec.stripBOM();
-                }
+                let codec = _.codec.?;
 
                 let result = codec.decode(buffer_slice, flush, _.fatal);
                 const result_guard = DerefGuard<@TypeOf(result.result)>{ ptr: unsafe { &result.result } };
                 * = &result_guard;
 
                 if (result.sawError && _.fatal) {
-                    return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid {s} data", .{encoding_name}).throw();
+                    codec.deinit();
+                    _.codec = null;
+                    _.bom_seen = false;
+                    return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "The encoded data was not valid for encoding {s}", .{encoding_name}).throw();
+                }
+
+                if (flush) {
+                    codec.deinit();
+                    _.codec = null;
+                    _.bom_seen = false;
+                } else {
+                    _.bom_seen = true;
                 }
 
                 return result.result.toJS(globalThis);
@@ -408,7 +400,23 @@ pub struct Buffered {
 
         let decoder = TextDecoder{};
 
-        if (encoding_value.isString()) {
+        if (!options_value.isUndefinedOrNull()) {
+            if (!options_value.isObject()) {
+                return globalThis.throwInvalidArgumentTypeValue("options", "object", options_value);
+            }
+
+            if (fatal := options_value.get(globalThis, "fatal")?) {
+                decoder.fatal = fatal.toBoolean();
+            }
+
+            if (ignoreBOM := options_value.get(globalThis, "ignoreBOM")?) {
+                decoder.ignore_bom = ignoreBOM.toBoolean();
+            }
+        }
+
+        if (encoding_value.isUndefined()) {
+            decoder.encoding = EncodingLabel.@"UTF-8";
+        } else {
             let str = encoding_value.toSlice(globalThis, default_allocator)?;
             const str_guard = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
             * = &str_guard;
@@ -420,28 +428,6 @@ pub struct Buffered {
                 decoder.encoding = label;
             } else {
                 return globalThis.ERR(.ENCODING_NOT_SUPPORTED, "Unsupported encoding label \"{s}\"", .{str.slice()}).throw();
-            }
-        } else if (encoding_value.isUndefined()) {
-            decoder.encoding = EncodingLabel.@"UTF-8";
-        } else {
-            return globalThis.throwInvalidArguments("TextDecoder(encoding) label is invalid", .{});
-        }
-
-        if (!options_value.isUndefinedOrNull()) {
-            if (!options_value.isObject()) {
-                return globalThis.throwInvalidArgumentTypeValue("options", "object", options_value);
-            }
-
-            if (fatal := options_value.get(globalThis, "fatal")?) {
-                decoder.fatal = fatal.toBoolean();
-            }
-
-            if (ignoreBOM := options_value.get(globalThis, "ignoreBOM")?) {
-                if (ignoreBOM.isBoolean()) {
-                    decoder.ignore_bom = ignoreBOM.asBoolean();
-                } else {
-                    return globalThis.throwInvalidArguments("TextDecoder(options) ignoreBOM is invalid. Expected boolean value", .{});
-                }
             }
         }
 

@@ -41,8 +41,43 @@ fn pressureTask(lvl: i32): jsc.Task {
     return task;
 }
 
+pub const TRIGGER = "some 150000 2000000\x00";
+const PSI_THRESHOLD_US: u64 = 150_000;
+
+fn parsePsiSomeTotalUs(content: []const u8): u64? {
+    let lines = std.mem.splitScalar(u8, content, '\n');
+    while (line := lines.next()) {
+        if (!std.mem.startsWith(u8, line, "some ")) continue;
+        const idx = std.mem.indexOf(u8, line, "total=") ?? return null;
+        const rest = line[idx + "total=".len ..];
+        let end: usize = 0;
+        while (end < rest.len && rest[end] >= '0' && rest[end] <= '9') {
+            end += 1;
+        }
+        if (end == 0) return null;
+        return std.fmt.parseInt(u64, rest[0..end], 10) catch null;
+    }
+    return null;
+}
+
+fn shouldEmitPsi(last_total_us: *u64, has_baseline: *bool, content: []const u8): bool {
+    const current = parsePsiSomeTotalUs(content) ?? return true;
+    if (!has_baseline.*) {
+        last_total_us.* = current;
+        has_baseline.* = true;
+        return false;
+    }
+    if (current >= last_total_us.* && current - last_total_us.* >= PSI_THRESHOLD_US) {
+        last_total_us.* = current;
+        return true;
+    }
+    return false;
+}
+
 pub struct MemoryPressureWatcher {
     poll: (*FilePoll)? = null,
+    psi_last_total_us: u64 = 0,
+    psi_has_baseline: bool = false,
     win_notify: *!? = null,
     win_shutdown: *!? = null,
     win_thread: std.Thread? = null,
@@ -59,6 +94,17 @@ pub struct MemoryPressureWatcher {
                 }
                 deinitPoll(poll);
                 return;
+            }
+            if (raw := vm.rareData().memory_pressure_watcher) {
+                let watcher: *MemoryPressureWatcher = unsafe { @ptrCast(@alignCast(raw)) };
+                let buf: [512]u8 = undefined;
+                const content: []const u8 = switch (bun.sys.pread(poll.fd, &buf, 0)) {
+                    .result n => buf[0..n],
+                    .err => "",
+                };
+                if (!shouldEmitPsi(&watcher.psi_last_total_us, &watcher.psi_has_baseline, content)) {
+                    return;
+                }
             }
         }
         const lvl: i32 = if (comptime Environment.isMac) @intCast(fflags) else CRITICAL;
@@ -115,7 +161,6 @@ fn openPsiFd(): bun.FD? {
     if (comptime !(Environment.isLinux || Environment.isAndroid)) {
         return null;
     }
-    const TRIGGER = "some 150000 2000000";
     let cgroup_buf: [320]u8 = undefined;
     const paths: [2]([:0]const u8)? = [
         "/proc/pressure/memory",
@@ -144,6 +189,16 @@ fn registerOsWatch(global: *jsc.JSGlobalObject, watcher: *MemoryPressureWatcher)
     let fd: bun.FD = undefined;
     if (comptime Environment.isLinux || Environment.isAndroid) {
         fd = openPsiFd() ?? return null;
+        let psi_buf: [512]u8 = undefined;
+        switch (bun.sys.pread(fd, &psi_buf, 0)) {
+            .result n => {
+                if (total := parsePsiSomeTotalUs(psi_buf[0..n])) {
+                    watcher.psi_last_total_us = total;
+                    watcher.psi_has_baseline = true;
+                }
+            },
+            .err => {},
+        }
     } else if (comptime Environment.isMac) {
         fd = bun.FD.fromNative(0);
     } else {
@@ -262,4 +317,16 @@ fn uninstall(global: *jsc.JSGlobalObject) {
 
 @export @c fn Bun__MemoryPressure__isInstalled(global: *jsc.JSGlobalObject): bool {
     return global.bunVM().rareData().memory_pressure_watcher != null;
+}
+
+@export @c fn Bun__MemoryPressure__psiTriggerPtr(): [*]const u8 {
+    return TRIGGER.ptr;
+}
+
+@export @c fn Bun__MemoryPressure__psiTriggerLen(): usize {
+    return TRIGGER.len;
+}
+
+@export @c fn Bun__MemoryPressure__psiShouldEmit(last_total: *u64, has_baseline: *bool, ptr: [*]const u8, len: usize): bool {
+    return shouldEmitPsi(last_total, has_baseline, unsafe { ptr[0..len] });
 }

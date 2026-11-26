@@ -152,7 +152,7 @@ pub fn __cp_deinit(self: *ListenerCloseGuard) void {
 _ = socket.close();
 },
 .namedPipe => |namedPipe| {
-_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
+_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined));
 },
 .none => {
 
@@ -432,7 +432,7 @@ _ = self.unlinkUnixSocketPath();
         _ = socket.close();
 },
 .namedPipe => |namedPipe| {
-_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else null);
+_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined));
 },
 .none => {
 
@@ -729,6 +729,25 @@ pub fn deinit(self: *_WindowsNamedPipeListeningContextImpl) void {
     const new = bun.TrivialNew(_WindowsNamedPipeListeningContextImpl);
 };
 
+pub const InvalidHostTask = struct {
+    handlers: *Handlers,
+    hostname: []const u8,
+    globalObject: *jsc.JSGlobalObject,
+    task: jsc.AnyTask,
+
+pub fn run(self: *InvalidHostTask) void {
+            const err_val = @import("../dns_jsc/cares_jsc.zig").notAHostnameError(self.globalObject, self.hostname);
+            if ((self.handlers.onConnectError != .zero)) {
+                _ = (blk_catch_5: { break :blk_catch_5 ((self.handlers.onConnectError.call(self.globalObject, .js_undefined, (&.{ .js_undefined, err_val }))) catch |e| { _ = &e; break :blk_catch_5 self.globalObject.reportActiveExceptionAsUnhandled(e); }); });
+            }
+            _ = (blk_catch_6: { break :blk_catch_6 ((self.handlers.rejectPromise(err_val)) catch |__ce_6| { _ = &__ce_6;  }); });
+            _ = bun.default_allocator.free(self.hostname);
+            _ = self.handlers.deinit();
+            _ = bun.destroy(self.handlers);
+            _ = bun.destroy(self);
+    }
+};
+
 const OpaquePtrPtr = **anyopaque;
 const Async = bun.Async;
 const Environment = bun.Environment;
@@ -802,7 +821,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
                 _ = &_guard_named_pipe;
                 var ___guard_named_pipe_moved = false; _ = &___guard_named_pipe_moved;
                 defer if (!___guard_named_pipe_moved) { ___guard_named_pipe_moved = true; const __T = @TypeOf(_guard_named_pipe); if (@typeInfo(__T) == .optional) { if (_guard_named_pipe) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_named_pipe.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_named_pipe; _drop_val.__cp_deinit(); } };
-                const named_pipe = (blk_catch_5: { break :blk_catch_5 ((WindowsNamedPipeListeningContext.listen(globalObject, pipe_name, 511, ssl, this_ptr)) catch |__ce_5| { _ = &__ce_5; return globalObject.throwInvalidArguments("Failed to listen at {s}", .{ pipe_name }); }); });
+                const named_pipe = (blk_catch_7: { break :blk_catch_7 ((WindowsNamedPipeListeningContext.listen(globalObject, pipe_name, 511, ssl, this_ptr)) catch |__ce_7| { _ = &__ce_7; return globalObject.throwInvalidArguments("Failed to listen at {s}", .{ pipe_name }); }); });
                 this_ptr.listener = .{ .namedPipe = named_pipe };
                 _guard_named_pipe.armed = false;
                 _guard_handlers.armed = false;
@@ -975,8 +994,22 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: ?*TCPSock
         const port = socket_config.port;
         if ((port != null)) {
             const hn = hostname_or_unix.slice();
-            if ((!bun.dns.isValidHostname(hn))) {
-                return globalObject.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalObject, hn));
+            const valid_hn = (if ((((hn.len >= 2) and (hn[0] == 91)) and (hn[@as(usize, @intCast((hn.len - 1)))] == 93))) ((blk_catch_8: { break :blk_catch_8 ((std.net.Address.parseIp(hn[1..(hn.len - 1)], 0)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); }) != null) else bun.dns.isValidHostname(hn));
+            if ((!valid_hn)) {
+                var promise = jsc.JSPromise.create(globalObject);
+                _ = &promise;
+                const promise_val = promise.asValue(globalObject);
+                var handlers_ptr = bun.new(Handlers, handlers.*);
+                _ = &handlers_ptr;
+                _ = handlers_ptr.promise.set(globalObject, promise_val);
+                _ = handlers_ptr.protect();
+                const host_copy = bun.handleOom(bun.default_allocator.dupe(u8, hn));
+                var t = bun.new(InvalidHostTask, .{ .handlers = handlers_ptr, .hostname = host_copy, .globalObject = globalObject, .task = undefined });
+                _ = &t;
+                t.task = jsc.AnyTask.New(InvalidHostTask, InvalidHostTask.run).init(t);
+                _ = vm.enqueueTask(jsc.Task.init((&t.task)));
+                _guard_handlers.armed = false;
+                return promise_val;
             }
         }
         const ssl = (if ((socket_config.ssl != null)) (&socket_config.ssl.?) else null);
@@ -1053,7 +1086,7 @@ const uvfd = fd.uv();
 
 });
                     if ((bun.windows.GetFileType(osfd) == bun.windows.FILE_TYPE_PIPE)) {
-                        connection.fd = (blk_catch_6: { break :blk_catch_6 ((bun.FD.fromNative(osfd).makeLibUVOwned()) catch |__ce_6| { _ = &__ce_6; @panic("failed to allocate file descriptor"); }); });
+                        connection.fd = (blk_catch_9: { break :blk_catch_9 ((bun.FD.fromNative(osfd).makeLibUVOwned()) catch |__ce_9| { _ = &__ce_9; @panic("failed to allocate file descriptor"); }); });
                         isNamedPipe = true;
                     }
                 }
@@ -1116,10 +1149,10 @@ else => {
                     _guard_connection.armed = false;
                     _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
-.unix => (blk_catch_7: { break :blk_catch_7 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_7| { _ = &__ce_7; _ = tls.poll_ref.unref(handlers.vm);
+.unix => (blk_catch_10: { break :blk_catch_10 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_10| { _ = &__ce_10; _ = tls.poll_ref.unref(handlers.vm);
                     _ = tls.deref();
                     return promise_value; }); }),
-.fd => |fd| (blk_catch_8: { break :blk_catch_8 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_8| { _ = &__ce_8; _ = tls.poll_ref.unref(handlers.vm);
+.fd => |fd| (blk_catch_11: { break :blk_catch_11 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_11| { _ = &__ce_11; _ = tls.poll_ref.unref(handlers.vm);
                     _ = tls.deref();
                     return promise_value; }); }),
 else => unreachable,
@@ -1156,10 +1189,10 @@ else => unreachable,
                     _guard_connection.armed = false;
                     _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
-.unix => (blk_catch_9: { break :blk_catch_9 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_9| { _ = &__ce_9; _ = tcp.poll_ref.unref(handlers.vm);
+.unix => (blk_catch_12: { break :blk_catch_12 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_12| { _ = &__ce_12; _ = tcp.poll_ref.unref(handlers.vm);
                     _ = tcp.deref();
                     return promise_value; }); }),
-.fd => |fd| (blk_catch_10: { break :blk_catch_10 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_10| { _ = &__ce_10; _ = tcp.poll_ref.unref(handlers.vm);
+.fd => |fd| (blk_catch_13: { break :blk_catch_13 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_13| { _ = &__ce_13; _ = tcp.poll_ref.unref(handlers.vm);
                     _ = tcp.deref();
                     return promise_value; }); }),
 else => unreachable,
@@ -1241,7 +1274,7 @@ else => unreachable,
                 _ = SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
                 socket.flags.allow_half_open = socket_config.allowHalfOpen;
                 _ = socket.poll_ref.ref(handlers.vm);
-                _ = (blk_catch_11: { break :blk_catch_11 ((socket.doConnect(connection)) catch |__ce_11| { _ = &__ce_11; var connect_err: c_int = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
+                _ = (blk_catch_14: { break :blk_catch_14 ((socket.doConnect(connection)) catch |__ce_14| { _ = &__ce_14; var connect_err: c_int = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
                 _ = &connect_err;
                 if (Environment.isWindows) {
                     var os_err: c_int = (if (bun.windows.WSAGetLastError()) |wsa| @intFromEnum(wsa) else 0);
@@ -1260,7 +1293,7 @@ else => unreachable,
                         connect_err = os_err;
                     }
                 }
-                _ = (blk_catch_12: { break :blk_catch_12 ((socket.handleConnectError(connect_err)) catch |__ce_12| { _ = &__ce_12;  }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((socket.handleConnectError(connect_err)) catch |__ce_15| { _ = &__ce_15;  }); });
                 _ = socket.deref();
                 return promise_value; }); });
                 return promise_value;

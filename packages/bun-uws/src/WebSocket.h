@@ -151,7 +151,7 @@ public:
                 WebSocketData *webSocketData = (WebSocketData *) Super::getAsyncSocketData();
 
                 /* Check and correct the compress hint. It is never valid to compress 0 bytes */
-                if (message.length() && opCode < 3 && webSocketData->compressionStatus == WebSocketData::ENABLED) {
+                if (message.length() && opCode < 3 && webSocketData->compressionStatus == WebSocketData::ENABLED && webSocketData->canCompress) {
                     LoopData *loopData = Super::getLoopData();
                     /* Compress using either shared or dedicated deflationStream */
                     if (webSocketData->deflationStream) {

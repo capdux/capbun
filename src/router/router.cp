@@ -593,7 +593,7 @@ pub struct TinyPtr {
         return @as(u32, @bitCast(a)) == @as(u32, @bitCast(b));
     }
 
-    pub fn from(parent: string, child: string): TinyPtr {
+    pub static fn from(parent: string, child: string): TinyPtr {
         if (child.len == 0 || parent.len == 0) return TinyPtr{};
 
         const [right, end] = unsafe {
@@ -1012,6 +1012,7 @@ pub struct Pattern {
                         }) catch unreachable;
                         return true;
                     }
+                    params.shrinkRetainingCapacity(0);
                     return false;
                 },
                 .optional_catch_all(dynamic) => {
@@ -1023,11 +1024,13 @@ pub struct Pattern {
 
                         return true;
                     }
+                    params.shrinkRetainingCapacity(0);
                     return false;
                 },
             }
         }
 
+        params.shrinkRetainingCapacity(0);
         return false;
     }
 

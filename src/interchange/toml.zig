@@ -111,8 +111,11 @@ pub fn init(allocator: std.mem.Allocator, source_: logger.Source, log: *logger.L
             return TOML{ .lexer = try Lexer.init(log, source_, allocator, redact_logs), .allocator = allocator, .log = log, .stack_check = bun.StackCheck.init() };
     }
 
-pub inline fn source(self: *const TOML) *const logger.Source {
-            return (&self.lexer.source);
+pub inline fn source(self: *TOML) *const logger.Source {
+            return (blk: {
+            break :blk (&self.lexer.source);
+
+});
     }
 
 pub fn e(self: *TOML, t: anytype, loc: logger.Loc) Expr {
@@ -264,7 +267,15 @@ pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator
             if (is_array) {
                 _ = try self.lexer.next();
             }
+            if (self.lexer.has_newline_before) {
+                _ = self.lexer.addError(self.lexer.start, "Unexpected newline before '='", .{});
+                return error.SyntaxError;
+            }
             _ = try self.lexer.expectAssignment();
+            if (self.lexer.has_newline_before) {
+                _ = self.lexer.addError(self.lexer.start, "Missing value after '='; values must be on the same line", .{});
+                return error.SyntaxError;
+            }
             if ((!is_array)) {
                 _ = (blk_catch_3: { break :blk_catch_3 ((obj.setRope(rope, self.allocator, try self.parseValue())) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
                     const loc = rope.head.loc;
@@ -284,7 +295,6 @@ pub fn parseValue(self: *TOML) !Expr {
                 _ = try bun.throwStackOverflow();
             }
             const loc = self.lexer.loc();
-            self.lexer.allow_double_bracket = true;
             switch (self.lexer.token) {
 .t_false => {
 _ = try self.lexer.next();

@@ -531,11 +531,14 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         }
 
         static fn handleReject(ctx: *RequestContext, value: jsc.JSValue) {
-            if (ctx.isAbortedOrEnded()) {
+            if (ctx.flags.aborted || ctx.server == null || ctx.server.?.flags.terminated) {
+                return;
+            }
+            if (ctx.resp == null && !ctx.didUpgradeWebSocket()) {
                 return;
             }
 
-            const has_responded = ctx.resp.?.hasResponded();
+            const has_responded = if (ctx.resp != null) ctx.resp.?.hasResponded() else false;
             if (!has_responded) {
                 const original_state = ctx.defer_deinit_until_callback_completes;
                 let should_deinit_context = false;
@@ -624,9 +627,14 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 }
             }
 
-            const msg = std.fmt.allocPrint(arena_allocator, comptime Output.prettyFmt(fmt, false), args) catch unreachable;
             if (comptime fmt.len > 0) Output.prettyErrorln(fmt, args);
             Output.flush();
+
+            if (_.resp == null) {
+                return;
+            }
+
+            const msg = std.fmt.allocPrint(arena_allocator, comptime Output.prettyFmt(fmt, false), args) catch unreachable;
 
             // Explicitly use `this.allocator` and *not* the arena
             const bb = bun.handleOom((DevErrorPage{
@@ -1626,6 +1634,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     req_ctx.renderMetadata();
                     App.Response.writeHeader(resp, "transfer-encoding", transfer_encoding_str.slice());
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+                    cancelUnreadBody(response, globalThis);
 
                     return;
                 }
@@ -1639,6 +1648,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     req_ctx.renderMetadata();
                     App.Response.writeHeaderInt(resp, "content-length", len);
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+                    cancelUnreadBody(response, globalThis);
                     return;
                 }
             }
@@ -1687,6 +1697,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     req_ctx.renderMetadata();
                     if (comptime !http3) App.Response.writeHeader(resp, "transfer-encoding", "chunked");
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+                    cancelUnreadBody(response, globalThis);
                 },
                 .Used, .Null, .Empty, .Error => {
                     req_ctx.renderMetadata();
@@ -1724,7 +1735,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             response_value.ensureStillAlive();
             ctx.drainMicrotasks();
 
-            if (ctx.isAbortedOrEnded()) {
+            if (ctx.flags.aborted || ctx.server == null || ctx.server.?.flags.terminated) {
+                return;
+            }
+            if (ctx.resp == null && !ctx.didUpgradeWebSocket()) {
                 return;
             }
             if (resp := ctx.resp) {
@@ -1733,21 +1747,21 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     return;
                 }
             }
+            if (err_value := response_value.toError()) {
+                ctx.runErrorHandler(err_value);
+                return;
+            }
             // if you return a Response object or a Promise<Response>
             // but you upgraded the connection to a WebSocket
             // just ignore the Response object. It doesn't do anything.
             // it's better to do that than to throw an error
             if (ctx.didUpgradeWebSocket()) {
+                discardResponseBody(req_ctx.globalThis, response_value);
                 return;
             }
 
             if (response_value.isEmptyOrUndefinedOrNull()) {
                 ctx.renderMissingInvalidResponse(response_value);
-                return;
-            }
-
-            if (err_value := response_value.toError()) {
-                ctx.runErrorHandler(err_value);
                 return;
             }
 
@@ -2350,7 +2364,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                         &.{value},
                     ) catch |err| server.globalThis.takeException(err);
                     const _guard_res = EnsureStillAliveGuard<@TypeOf(result)>{ val: result };
-                    if (_.isAbortedOrEnded() || _.didUpgradeWebSocket()) {
+                    if (_.flags.aborted || _.server == null || _.server.?.flags.terminated) {
+                        return;
+                    }
+                    if (_.resp == null && !_.didUpgradeWebSocket()) {
                         return;
                     }
                     if (resp := _.resp) {
@@ -2367,9 +2384,16 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                             _.processOnErrorPromise(result, promise, value, status);
                             return;
                         } else if (response := result.as(Response)) {
+                            if (_.didUpgradeWebSocket()) {
+                                discardResponseBody(server.globalThis, result);
+                                return;
+                            }
                             _.render(response);
                             return;
                         }
+                    }
+                    if (_.didUpgradeWebSocket()) {
+                        return;
                     }
                 }
             }
@@ -2447,7 +2471,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         fn runErrorHandlerWithStatusCode(*_, value: jsc.JSValue,
             status: u16,) {
             jsc.markBinding(@src());
-            if (_.resp == null || _.resp.?.hasResponded()) return;
+            if (!_.didUpgradeWebSocket() && (_.resp == null || _.resp.?.hasResponded())) return;
 
             runErrorHandlerWithStatusCodeDontCheckResponded(_, value, status);
         }

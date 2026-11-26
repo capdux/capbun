@@ -173,6 +173,9 @@ pub fn parseCWD(globalThis: *JSGlobalObject, allocator: std.mem.Allocator, cwdVa
             _ = &_utf8_guard;
             var ___utf8_guard_moved = false; _ = &___utf8_guard_moved;
             defer if (!___utf8_guard_moved) { ___utf8_guard_moved = true; const __T = @TypeOf(_utf8_guard); if (@typeInfo(__T) == .optional) { if (_utf8_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _utf8_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _utf8_guard; _drop_val.__cp_deinit(); } };
+            if ((cwd_utf8.slice().len > bun.MAX_PATH_BYTES)) {
+                return globalThis.throw("{s}: invalid `cwd`, longer than {d} bytes", .{ fnName, bun.MAX_PATH_BYTES });
+            }
             var path_buf2: [MAX_PATH_BYTES_2]u8 = undefined;
             _ = &path_buf2;
             if ((!absolute)) {
@@ -221,37 +224,43 @@ pub fn fromJS(globalThis: *JSGlobalObject, arguments: *ArgumentsSlice, comptime 
                     }
                     return out;
                 }
-                return globalThis.throw("{s}: expected first argument to be an object", .{ fnName });
+                return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions must be an object", .{}).throw();
             }
             if (try optsObj.getTruthy(globalThis, "onlyFiles")) |only_files| {
                 _ = &only_files;
-                out.only_files = (if (only_files.isBoolean()) only_files.asBoolean() else false);
+                out.only_files = only_files.toBoolean();
             }
             if (try optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymlink")) |error_on_broken_symlinks| {
                 _ = &error_on_broken_symlinks;
-                out.error_on_broken_symlinks = (if (error_on_broken_symlinks.isBoolean()) error_on_broken_symlinks.asBoolean() else false);
+                out.error_on_broken_symlinks = error_on_broken_symlinks.toBoolean();
             }
             if (try optsObj.getTruthy(globalThis, "followSymlinks")) |follow_symlinks| {
                 _ = &follow_symlinks;
-                out.follow_symlinks = (if (follow_symlinks.isBoolean()) follow_symlinks.asBoolean() else false);
+                out.follow_symlinks = follow_symlinks.toBoolean();
             }
             if (try optsObj.getTruthy(globalThis, "absolute")) |absolute| {
                 _ = &absolute;
-                out.absolute = (if (absolute.isBoolean()) absolute.asBoolean() else false);
+                out.absolute = absolute.toBoolean();
             }
+            var cwd_val: ?jsc.JSValue = null;
+            _ = &cwd_val;
             if (try optsObj.getTruthy(globalThis, "cwd")) |cwdVal| {
                 _ = &cwdVal;
                 if ((!cwdVal.isString())) {
-                    return globalThis.throw("{s}: invalid `cwd`, not a string", .{ fnName });
+                    return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions.cwd must be a string", .{}).throw();
                 }
+                cwd_val = cwdVal;
+            }
+            if (try optsObj.getTruthy(globalThis, "dot")) |dot| {
+                _ = &dot;
+                out.dot = dot.toBoolean();
+            }
+            if (cwd_val) |cwdVal| {
+                _ = &cwdVal;
                 const result = try parseCWD(globalThis, arena_alloc.allocator(), cwdVal, out.absolute, fnName);
                 if ((result.len > 0)) {
                     out.cwd = result;
                 }
-            }
-            if (try optsObj.getTruthy(globalThis, "dot")) |dot| {
-                _ = &dot;
-                out.dot = (if (dot.isBoolean()) dot.asBoolean() else false);
             }
             return out;
     }
@@ -391,11 +400,11 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         defer if (!___args_guard_moved) { ___args_guard_moved = true; const __T = @TypeOf(_args_guard); if (@typeInfo(__T) == .optional) { if (_args_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_guard; _drop_val.__cp_deinit(); } };
         const pat_arg_opt = arguments.nextEat();
         if ((pat_arg_opt == null)) {
-            return globalThis.throw("Glob.constructor: expected 1 arguments, got 0", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "pattern must be a string", .{}).throw();
         }
         const pat_arg: JSValue = pat_arg_opt.?;
         if ((!pat_arg.isString())) {
-            return globalThis.throw("Glob.constructor: first argument is not a string", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "pattern must be a string", .{}).throw();
         }
         const pat_slice = try pat_arg.toSliceClone(globalThis);
         const pat_str: []const u8 = pat_slice.slice();
@@ -515,11 +524,11 @@ pub fn match(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFra
         defer if (!___args_guard_moved) { ___args_guard_moved = true; const __T = @TypeOf(_args_guard); if (@typeInfo(__T) == .optional) { if (_args_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_guard; _drop_val.__cp_deinit(); } };
         const str_arg_opt = arguments.nextEat();
         if ((str_arg_opt == null)) {
-            return globalThis.throw("Glob.matchString: expected 1 arguments, got 0", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "str must be a string", .{}).throw();
         }
         const str_arg = str_arg_opt.?;
         if ((!str_arg.isString())) {
-            return globalThis.throw("Glob.matchString: first argument is not a string", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "str must be a string", .{}).throw();
         }
         var str = try str_arg.toSlice(globalThis, arena_alloc.allocator());
         _ = &str;

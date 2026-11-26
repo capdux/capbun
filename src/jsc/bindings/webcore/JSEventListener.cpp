@@ -193,6 +193,8 @@ void JSEventListener::handleEvent(ScriptExecutionContext& scriptExecutionContext
     // });
 
     JSGlobalObject* lexicalGlobalObject = jsFunction->globalObject();
+    if (!lexicalGlobalObject)
+        return;
 
     JSValue handleEventFunction = jsFunction;
 

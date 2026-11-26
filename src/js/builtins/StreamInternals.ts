@@ -167,3 +167,227 @@ export function toDictionary(value, defaultValue, errorMessage) {
   if (!$isObject(value)) throw $ERR_INVALID_ARG_TYPE(errorMessage);
   return value;
 }
+
+export function inspectWebStream(recv, name, fields, depth, options, inspectFn) {
+  if (depth !== null && depth < 0) {
+    return recv;
+  }
+  const nextOptions = Object.assign({}, options, {
+    depth: options?.depth == null ? null : options.depth - 1,
+  });
+  const fn = typeof inspectFn === "function" ? inspectFn : Bun.inspect;
+  return `${name} ${fn(fields, nextOptions)}`;
+}
+
+export function inspectReadableStream(this: any, depth, options, inspectFn) {
+  const state = $getByIdDirectPrivate(this, "state");
+  if (state === undefined) return this;
+  const stateStr = state === $streamReadable ? "readable" : state === $streamClosed ? "closed" : "errored";
+  const controller = $getByIdDirectPrivate(this, "readableStreamController");
+  const supportsBYOB = !!($isObject(controller) && $getByIdDirectPrivate(controller, "pendingPullIntos") !== undefined);
+  return $inspectWebStream(
+    this,
+    "ReadableStream",
+    {
+      locked: $getByIdDirectPrivate(this, "reader") !== undefined,
+      state: stateStr,
+      supportsBYOB,
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectWritableStream(this: any, depth, options, inspectFn) {
+  const state = $getByIdDirectPrivate(this, "state");
+  if (state === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "WritableStream",
+    {
+      locked: $getByIdDirectPrivate(this, "writer") !== undefined,
+      state,
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectTransformStream(this: any, depth, options, inspectFn) {
+  const readable = $getByIdDirectPrivate(this, "readable");
+  if (readable === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "TransformStream",
+    {
+      readable,
+      writable: $getByIdDirectPrivate(this, "writable"),
+      backpressure: $getByIdDirectPrivate(this, "backpressure"),
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectReadableStreamDefaultReader(this: any, depth, options, inspectFn) {
+  const closedPromiseCapability = $getByIdDirectPrivate(this, "closedPromiseCapability");
+  if (!closedPromiseCapability) return this;
+  const readRequests = $getByIdDirectPrivate(this, "readRequests");
+  return $inspectWebStream(
+    this,
+    "ReadableStreamDefaultReader",
+    {
+      stream: $getByIdDirectPrivate(this, "ownerReadableStream"),
+      readRequests: readRequests ? readRequests.size() : 0,
+      close: closedPromiseCapability.promise,
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectReadableStreamBYOBReader(this: any, depth, options, inspectFn) {
+  const closedPromiseCapability = $getByIdDirectPrivate(this, "closedPromiseCapability");
+  if (!closedPromiseCapability) return this;
+  const readIntoRequests = $getByIdDirectPrivate(this, "readIntoRequests");
+  return $inspectWebStream(
+    this,
+    "ReadableStreamBYOBReader",
+    {
+      stream: $getByIdDirectPrivate(this, "ownerReadableStream"),
+      readIntoRequests: readIntoRequests ? readIntoRequests.size() : 0,
+      close: closedPromiseCapability.promise,
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectReadableStreamBYOBRequest(this: any, depth, options, inspectFn) {
+  const controller = $getByIdDirectPrivate(this, "associatedReadableByteStreamController");
+  if (!controller) return this;
+  return $inspectWebStream(
+    this,
+    "ReadableStreamBYOBRequest",
+    {
+      view: $getByIdDirectPrivate(this, "view"),
+      controller,
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectWritableStreamDefaultWriter(this: any, depth, options, inspectFn) {
+  const closedPromise = $getByIdDirectPrivate(this, "closedPromise");
+  if (!closedPromise) return this;
+  const stream = $getByIdDirectPrivate(this, "stream");
+  return $inspectWebStream(
+    this,
+    "WritableStreamDefaultWriter",
+    {
+      stream,
+      close: closedPromise.promise,
+      ready: $getByIdDirectPrivate(this, "readyPromise")?.promise,
+      desiredSize: stream ? this.desiredSize : null,
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectWritableStreamDefaultController(this: any, depth, options, inspectFn) {
+  const stream = $getByIdDirectPrivate(this, "stream");
+  if (stream === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "WritableStreamDefaultController",
+    { stream },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectTransformStreamDefaultController(this: any, depth, options, inspectFn) {
+  const stream = $getByIdDirectPrivate(this, "stream");
+  if (stream === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "TransformStreamDefaultController",
+    { stream },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectByteLengthQueuingStrategy(this: any, depth, options, inspectFn) {
+  const highWaterMark = $getByIdDirectPrivate(this, "highWaterMark");
+  if (highWaterMark === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "ByteLengthQueuingStrategy",
+    { highWaterMark },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectCountQueuingStrategy(this: any, depth, options, inspectFn) {
+  const highWaterMark = $getByIdDirectPrivate(this, "highWaterMark");
+  if (highWaterMark === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "CountQueuingStrategy",
+    { highWaterMark },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectTextEncoderStream(this: any, depth, options, inspectFn) {
+  const transform = $getByIdDirectPrivate(this, "textEncoderStreamTransform");
+  if (!transform) throw $ERR_INVALID_THIS("TextEncoderStream");
+  return $inspectWebStream(
+    this,
+    "TextEncoderStream",
+    {
+      encoding: "utf-8",
+      readable: $getByIdDirectPrivate(transform, "readable"),
+      writable: $getByIdDirectPrivate(transform, "writable"),
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectTextDecoderStream(this: any, depth, options, inspectFn) {
+  const transform = $getByIdDirectPrivate(this, "textDecoderStreamTransform");
+  if (!transform) throw $ERR_INVALID_THIS("TextDecoderStream");
+  const decoder = $getByIdDirectPrivate(this, "textDecoderStreamDecoder");
+  return $inspectWebStream(
+    this,
+    "TextDecoderStream",
+    {
+      encoding: decoder.encoding,
+      fatal: decoder.fatal,
+      ignoreBOM: decoder.ignoreBOM,
+      readable: $getByIdDirectPrivate(transform, "readable"),
+      writable: $getByIdDirectPrivate(transform, "writable"),
+    },
+    depth,
+    options,
+    inspectFn,
+  );
+}

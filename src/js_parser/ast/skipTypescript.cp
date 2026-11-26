@@ -132,6 +132,83 @@ pub struct BacktrackingImpl<P> {
         if (p.lexer.token != .t_equals_greater_than) {
             return error.Backtrack;
         }
+
+        if (p.in_ternary_yes) {
+            // Inside the true branch of a conditional expression (`a ? (b) : c => d : e`),
+            // `:` is only an arrow return type if another `:` follows the arrow body.
+            const arrow_lexer = p.lexer;
+            defer p.lexer.restore(&arrow_lexer);
+            p.lexer.next()?;
+            if (p.lexer.token == .t_open_brace) {
+                let brace_depth: usize = 0;
+                while (true) {
+                    switch (p.lexer.token) {
+                        .t_open_brace => brace_depth += 1,
+                        .t_close_brace => {
+                            brace_depth -= 1;
+                            if (brace_depth == 0) {
+                                p.lexer.next()?;
+                                break;
+                            }
+                        },
+                        .t_end_of_file => return error.Backtrack,
+                        else => {},
+                    }
+                    p.lexer.next()?;
+                }
+                if (p.lexer.token != .t_colon) {
+                    return error.Backtrack;
+                }
+            } else {
+                let paren_depth: usize = 0;
+                let bracket_depth: usize = 0;
+                let brace_depth: usize = 0;
+                let ternary_depth: usize = 0;
+                let found_colon = false;
+                scan: while (true) {
+                    switch (p.lexer.token) {
+                        .t_open_paren => paren_depth += 1,
+                        .t_close_paren => {
+                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) break :scan;
+                            if (paren_depth > 0) paren_depth -= 1;
+                        },
+                        .t_open_bracket => bracket_depth += 1,
+                        .t_close_bracket => {
+                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) break :scan;
+                            if (bracket_depth > 0) bracket_depth -= 1;
+                        },
+                        .t_open_brace => brace_depth += 1,
+                        .t_close_brace => {
+                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) break :scan;
+                            if (brace_depth > 0) brace_depth -= 1;
+                        },
+                        .t_question => {
+                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+                                ternary_depth += 1;
+                            }
+                        },
+                        .t_colon => {
+                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+                                if (ternary_depth > 0) {
+                                    ternary_depth -= 1;
+                                } else {
+                                    found_colon = true;
+                                    break :scan;
+                                }
+                            }
+                        },
+                        .t_comma, .t_semicolon, .t_end_of_file => {
+                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) break :scan;
+                        },
+                        else => {},
+                    }
+                    p.lexer.next()?;
+                }
+                if (!found_colon) {
+                    return error.Backtrack;
+                }
+            }
+        }
     }
 }
 

@@ -1015,6 +1015,10 @@ void Transport::handleResponse(uint32_t id, std::span<const char> result, std::s
         while (p < end && (*p == ',' || *p == ' '))
             ++p;
         float cy = strtof(p, nullptr);
+        if (!std::isfinite(cx) || !std::isfinite(cy)) {
+            settle(g, view, entry.slot, false, createError(g, "Element position is not finite"_s));
+            return;
+        }
 
         // Chain into dispatchMouseEvent. Same down+up pair as Ops::click.
         auto ss = view->m_sessionId.utf8();

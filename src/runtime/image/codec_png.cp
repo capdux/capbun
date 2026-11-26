@@ -15,6 +15,7 @@ extern fn spng_encode_image(ctx: *spng_ctx, img: [*]const u8, len: usize, fmt: c
 extern fn spng_get_png_buffer(ctx: *spng_ctx, len: *usize, e: *c_int): ([*]u8)? ;
 extern fn spng_set_option(ctx: *spng_ctx, opt: c_int, value: c_int): c_int ;
 extern fn spng_set_crc_action(ctx: *spng_ctx, critical: c_int, ancillary: c_int): c_int ;
+extern fn spng_set_chunk_limits(ctx: *spng_ctx, chunk_size: usize, cache_size: usize): c_int ;
 /// iCCP chunk read/write — PNG carries an optional ICC profile alongside
 /// the pixels for every colour type (including indexed). `spng_get_iccp`
 /// returns non-zero when the source has no iCCP (or the chunk was
@@ -103,6 +104,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     let ihdr: Ihdr = undefined;
     if (spng_get_ihdr(ctx, &ihdr) != 0) return error.DecodeFailed;
     codecs.guard(ihdr.width, ihdr.height, max_pixels)?;
+    const chunk_limit: usize = @intCast(@min(@as(u64, std.math.maxInt(usize)), @max(max_pixels *| 4, @as(u64, 4 << 20))));
+    * = spng_set_chunk_limits(ctx, chunk_limit, chunk_limit);
     let size: usize = 0;
     if (spng_decoded_image_size(ctx, SPNG_FMT_RGBA8, &size) != 0) return error.DecodeFailed;
     const out = bun.default_allocator.alloc(u8, size)?;

@@ -1239,7 +1239,7 @@ fn throwCommandNotFound(globalThis: *jsc.JSGlobalObject, command: []const u8): b
 }
 
 pub fn appendEnvpFromJS(globalThis: *jsc.JSGlobalObject, object: *jsc.JSObject, envp: *std.array_list.Managed(NullableStringZ), PATH: *[]const u8): bun.JSError!void {
-    let object_iter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(globalThis, object)?;
+    let object_iter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true, .include_symbols = false }).init(globalThis, object)?;
     const _guard_object_iter = DeinitGuard<@TypeOf(object_iter)>{ ptr: unsafe { &object_iter } };
 
     envp.ensureTotalCapacityPrecise(object_iter.len +

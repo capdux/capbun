@@ -66,7 +66,7 @@ pub struct StoreS3UnlinkWrapper {
     store: *Store,
     global: *JSGlobalObject,
 
-    fn resolve(result: S3DeleteResult, opaque_self: *!?): ! {
+    static fn resolve(result: S3DeleteResult, opaque_self: *!?): ! {
         let wrap: *StoreS3UnlinkWrapper = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
         const wrap_guard = DeinitPtrGuard<StoreS3UnlinkWrapper>{ ptr: wrap };
         const globalObject = wrap.global;
@@ -93,7 +93,7 @@ pub struct StoreS3ListObjectsWrapper {
     resolvedlistOptions: S3ListObjectsOptions,
     global: *JSGlobalObject,
 
-    fn resolve(result: S3ListObjectsResult, opaque_self: *!?): ! {
+    static fn resolve(result: S3ListObjectsResult, opaque_self: *!?): ! {
         let wrap: *StoreS3ListObjectsWrapper = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
         const wrap_guard = DeinitPtrGuard<StoreS3ListObjectsWrapper>{ ptr: wrap };
         const globalObject = wrap.global;

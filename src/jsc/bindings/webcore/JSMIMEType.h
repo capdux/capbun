@@ -11,10 +11,16 @@
 
 namespace WebCore {
 
-class JSMIMEType final : public JSC::JSNonFinalObject {
+class JSMIMEType final : public JSC::JSDestructibleObject {
 public:
-    using Base = JSC::JSNonFinalObject;
+    using Base = JSC::JSDestructibleObject;
     static constexpr unsigned StructureFlags = Base::StructureFlags;
+    static constexpr JSC::DestructionMode needsDestruction = NeedsDestruction;
+
+    static void destroy(JSC::JSCell* cell)
+    {
+        static_cast<JSMIMEType*>(cell)->~JSMIMEType();
+    }
 
     template<typename MyClassT, JSC::SubspaceAccess mode>
     static JSC::GCClient::IsoSubspace* subspaceFor(JSC::VM& vm)

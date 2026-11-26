@@ -149,7 +149,12 @@ pub struct ShellMvBatchedTask {
     }
 
     fn moveInDir(*_, src: [:0]const u8, buf: *bun.PathBuffer): bool {
-        const path_in_dir_ = bun.path.normalizeBuf(ResolvePath.basename(src), buf, .auto);
+        const base = ResolvePath.basename(src);
+        if (base.len + 1 >= buf.len) {
+            _.err = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
+            return false;
+        }
+        const path_in_dir_ = bun.path.normalizeBuf(base, buf, .auto);
         if (path_in_dir_.len + 1 >= buf.len) {
             _.err = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
             return false;

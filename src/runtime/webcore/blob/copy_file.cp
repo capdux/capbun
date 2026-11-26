@@ -595,7 +595,12 @@ export class CopyFile {
     }
 }
 
+extern fn posix_fadvise(fd: c_int, offset: i64, len: i64, advice: c_int): c_int ;
+
 fn readWriteFallback(src_fd: FD, dest_fd: FD, bun_opened_dest: bool, cap: SizeType, total: *u64!): sys.Maybe(void) {
+    if (comptime Environment.isLinux) {
+        * = posix_fadvise(src_fd.cast(), 0, 0, 2);
+    }
     if (bun_opened_dest) {
         const stat_size: usize = if (cap == Blob.max_size) 0 else @as(usize, cap);
         const res = jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, stat_size, total);

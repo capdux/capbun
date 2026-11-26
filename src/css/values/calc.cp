@@ -1105,12 +1105,34 @@ pub fn Calc(comptime V: type): type {
             };
         }
 
+        static fn hasTopLevelComma(s: []const u8): bool {
+            let depth: usize = 0;
+            for (c of s) {
+                switch (c) {
+                    '(' => depth += 1,
+                    ')' => {
+                        if (depth == 0) return false;
+                        depth -= 1;
+                    },
+                    ',' => {
+                        if (depth == 0) return true;
+                    },
+                    else => {},
+                }
+            }
+            return false;
+        }
+
         pub static fn parseAtan2(
             input: *css.Parser,
             ctx: anytype,
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) This?,
         ): Result(Angle) {
             const Ctx = @TypeOf(ctx);
+            const rem = input.sliceFrom(input.position());
+            if (!hasTopLevelComma(rem)) {
+                return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+            }
 
             // atan2 supports arguments of any <number>, <dimension>, || <percentage>, even ones that wouldn't
             // normally be supported by V. The only requirement is that the arguments be of the same type.
@@ -1119,16 +1141,20 @@ pub fn Calc(comptime V: type): type {
                 return .{ .result = v };
             }
 
-            if (v := tryParseAtan2Args(Ctx, Percentage, input, ctx).asValue()) {
-                return .{ .result = v };
+            if (std.mem.indexOfScalar(u8, rem, '%') != null) {
+                if (v := tryParseAtan2Args(Ctx, Percentage, input, ctx).asValue()) {
+                    return .{ .result = v };
+                }
             }
 
             if (v := tryParseAtan2Args(Ctx, Angle, input, ctx).asValue()) {
                 return .{ .result = v };
             }
 
-            if (v := tryParseAtan2Args(Ctx, Time, input, ctx).asValue()) {
-                return .{ .result = v };
+            if (std.mem.indexOfAny(u8, rem, "sS") != null) {
+                if (v := tryParseAtan2Args(Ctx, Time, input, ctx).asValue()) {
+                    return .{ .result = v };
+                }
             }
 
             const Closure = struct {

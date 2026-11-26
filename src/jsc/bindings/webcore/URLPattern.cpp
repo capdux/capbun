@@ -34,6 +34,7 @@
 #include "URLPatternOptions.h"
 #include "URLPatternParser.h"
 #include "URLPatternResult.h"
+#include "VectorSizeLimit.h"
 #include <JavaScriptCore/RegExp.h>
 #include <wtf/RefCounted.h>
 #include <wtf/URL.h>
@@ -45,7 +46,7 @@ namespace WebCore {
 using namespace JSC;
 
 // https://urlpattern.spec.whatwg.org/#process-a-base-url-string
-static String processBaseURLString(StringView input, BaseURLStringType type)
+static ExceptionOr<String> processBaseURLString(StringView input, BaseURLStringType type)
 {
     if (type != BaseURLStringType::Pattern)
         return input.toString();
@@ -74,6 +75,19 @@ static ExceptionOr<URLPatternInit> processInit(URLPatternInit&& init, BaseURLStr
 {
     URLPatternInit result { WTF::move(protocol), WTF::move(username), WTF::move(password), WTF::move(hostname), WTF::move(port), WTF::move(pathname), WTF::move(search), WTF::move(hash), {} };
 
+    if (type == BaseURLStringType::URL) {
+        if (init.protocol.length() >= Bun__stringSyntheticAllocationLimit
+            || init.username.length() >= Bun__stringSyntheticAllocationLimit
+            || init.password.length() >= Bun__stringSyntheticAllocationLimit
+            || init.hostname.length() >= Bun__stringSyntheticAllocationLimit
+            || init.port.length() >= Bun__stringSyntheticAllocationLimit
+            || init.pathname.length() >= Bun__stringSyntheticAllocationLimit
+            || init.search.length() >= Bun__stringSyntheticAllocationLimit
+            || init.hash.length() >= Bun__stringSyntheticAllocationLimit) {
+            return Exception { ExceptionCode::RangeError, "Out of memory"_s };
+        }
+    }
+
     URL baseURL;
 
     if (!init.baseURL.isNull()) {
@@ -82,27 +96,42 @@ static ExceptionOr<URLPatternInit> processInit(URLPatternInit&& init, BaseURLStr
         if (!baseURL.isValid())
             return Exception { ExceptionCode::TypeError, "Invalid baseURL."_s };
 
-        if (init.protocol.isNull())
-            result.protocol = processBaseURLString(baseURL.protocol(), type);
+        if (init.protocol.isNull()) {
+            auto maybeProtocol = processBaseURLString(baseURL.protocol(), type);
+            if (maybeProtocol.hasException())
+                return maybeProtocol.releaseException();
+            result.protocol = maybeProtocol.releaseReturnValue();
+        }
 
         if (type != BaseURLStringType::Pattern
             && init.protocol.isNull()
             && init.hostname.isNull()
             && init.port.isNull()
-            && init.username.isNull())
-            result.username = processBaseURLString(baseURL.user(), type);
+            && init.username.isNull()) {
+            auto maybeUsername = processBaseURLString(baseURL.user(), type);
+            if (maybeUsername.hasException())
+                return maybeUsername.releaseException();
+            result.username = maybeUsername.releaseReturnValue();
+        }
 
         if (type != BaseURLStringType::Pattern
             && init.protocol.isNull()
             && init.hostname.isNull()
             && init.port.isNull()
             && init.username.isNull()
-            && init.password.isNull())
-            result.password = processBaseURLString(baseURL.password(), type);
+            && init.password.isNull()) {
+            auto maybePassword = processBaseURLString(baseURL.password(), type);
+            if (maybePassword.hasException())
+                return maybePassword.releaseException();
+            result.password = maybePassword.releaseReturnValue();
+        }
 
         if (init.protocol.isNull()
             && init.hostname.isNull()) {
-            result.hostname = processBaseURLString(!baseURL.host().isNull() ? baseURL.host() : StringView { emptyString() }, type);
+            auto maybeHostname = processBaseURLString(!baseURL.host().isNull() ? baseURL.host() : StringView { emptyString() }, type);
+            if (maybeHostname.hasException())
+                return maybeHostname.releaseException();
+            result.hostname = maybeHostname.releaseReturnValue();
         }
 
         if (init.protocol.isNull()
@@ -116,7 +145,10 @@ static ExceptionOr<URLPatternInit> processInit(URLPatternInit&& init, BaseURLStr
             && init.hostname.isNull()
             && init.port.isNull()
             && init.pathname.isNull()) {
-            result.pathname = processBaseURLString(baseURL.path(), type);
+            auto maybePathname = processBaseURLString(baseURL.path(), type);
+            if (maybePathname.hasException())
+                return maybePathname.releaseException();
+            result.pathname = maybePathname.releaseReturnValue();
         }
 
         if (init.protocol.isNull()
@@ -124,7 +156,10 @@ static ExceptionOr<URLPatternInit> processInit(URLPatternInit&& init, BaseURLStr
             && init.port.isNull()
             && init.pathname.isNull()
             && init.search.isNull()) {
-            result.search = processBaseURLString(baseURL.hasQuery() ? baseURL.query() : StringView { emptyString() }, type);
+            auto maybeSearch = processBaseURLString(baseURL.hasQuery() ? baseURL.query() : StringView { emptyString() }, type);
+            if (maybeSearch.hasException())
+                return maybeSearch.releaseException();
+            result.search = maybeSearch.releaseReturnValue();
         }
 
         if (init.protocol.isNull()
@@ -133,7 +168,10 @@ static ExceptionOr<URLPatternInit> processInit(URLPatternInit&& init, BaseURLStr
             && init.pathname.isNull()
             && init.search.isNull()
             && init.hash.isNull()) {
-            result.hash = processBaseURLString(baseURL.hasFragmentIdentifier() ? baseURL.fragmentIdentifier() : StringView { emptyString() }, type);
+            auto maybeHash = processBaseURLString(baseURL.hasFragmentIdentifier() ? baseURL.fragmentIdentifier() : StringView { emptyString() }, type);
+            if (maybeHash.hasException())
+                return maybeHash.releaseException();
+            result.hash = maybeHash.releaseReturnValue();
         }
     }
 
@@ -174,7 +212,10 @@ static ExceptionOr<URLPatternInit> processInit(URLPatternInit&& init, BaseURLStr
         result.pathname = init.pathname;
 
         if (!baseURL.isNull() && !baseURL.hasOpaquePath() && !isAbsolutePathname(result.pathname, type)) {
-            auto baseURLPath = processBaseURLString(baseURL.path(), type);
+            auto maybeBaseURLPath = processBaseURLString(baseURL.path(), type);
+            if (maybeBaseURLPath.hasException())
+                return maybeBaseURLPath.releaseException();
+            auto baseURLPath = maybeBaseURLPath.releaseReturnValue();
             size_t slashIndex = baseURLPath.reverseFind('/');
 
             if (slashIndex != notFound)

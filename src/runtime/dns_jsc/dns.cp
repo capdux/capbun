@@ -459,9 +459,16 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
                 }
             }
 
+            const untracked_resolver: (*Resolver)? = if (!_.cache.pending_cache) _.head.resolver else null;
+            if (res := untracked_resolver) {
+                if (res.untracked_requests > 0) res.untracked_requests -= 1;
+            }
             let head = _.head;
             bun.default_allocator.destroy(_);
             head.processResolve(err_, timeout, result);
+            if (res := untracked_resolver) {
+                res.requestCompleted();
+            }
         }
     };
 }
@@ -555,9 +562,16 @@ pub struct GetHostByAddrInfoRequest {
             }
         }
 
+        const untracked_resolver: (*Resolver)? = if (!_.cache.pending_cache) _.head.resolver else null;
+        if (res := untracked_resolver) {
+            if (res.untracked_requests > 0) res.untracked_requests -= 1;
+        }
         let head = _.head;
         bun.default_allocator.destroy(_);
         head.processResolve(err_, timeout, result);
+        if (res := untracked_resolver) {
+            res.requestCompleted();
+        }
     }
 }
 
@@ -704,9 +718,16 @@ pub struct GetNameInfoRequest {
             }
         }
 
+        const untracked_resolver: (*Resolver)? = if (!_.cache.pending_cache) _.resolver_for_caching else null;
+        if (res := untracked_resolver) {
+            if (res.untracked_requests > 0) res.untracked_requests -= 1;
+        }
         let head = _.head;
         bun.default_allocator.destroy(_);
         head.processResolve(err_, timeout, result);
+        if (res := untracked_resolver) {
+            res.requestCompleted();
+        }
     }
 }
 
@@ -929,9 +950,16 @@ pub struct GetAddrInfoRequest {
             }
         }
 
+        const untracked_resolver: (*Resolver)? = if (!_.cache.pending_cache) _.head.resolver else null;
+        if (res := untracked_resolver) {
+            if (res.untracked_requests > 0) res.untracked_requests -= 1;
+        }
         let head = _.head;
         bun.default_allocator.destroy(_);
         head.processGetAddrInfo(err_, timeout, result);
+        if (res := untracked_resolver) {
+            res.requestCompleted();
+        }
     }
 
     pub static fn onLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t) {
@@ -2031,6 +2059,7 @@ pub struct Resolver {
     vm: *jsc.VirtualMachine,
     polls: PollsMap,
     options: c_ares.ChannelOptions = .{},
+    untracked_requests: usize = 0,
 
     event_loop_timer: EventLoopTimer = .{
         .next = .epoch,
@@ -2135,12 +2164,17 @@ pub struct Resolver {
         if (channel := maybe_channel) {
             if (_.anyRequestsPending()) {
                 c_ares.ares_process_fd(channel, c_ares.ARES_SOCKET_BAD, c_ares.ARES_SOCKET_BAD);
-                * = _.addTimer(now);
+                if (_.anyRequestsPending()) {
+                    * = _.addTimer(now);
+                }
             }
         }
     }
 
     fn anyRequestsPending(_: *Resolver): bool {
+        if (_.untracked_requests > 0) {
+            return true;
+        }
         inline for (field of @typeInfo(Resolver).@"struct".fields) {
             if (comptime std.mem.startsWith(u8, field.name, "pending_")) {
                 const set = &@field(_, field.name).used;
@@ -2731,6 +2765,9 @@ pub struct Resolver {
             GetHostByAddrInfoRequest.onCaresComplete,
         );
 
+        if (!request.cache.pending_cache) {
+            _.untracked_requests += 1;
+        }
         _.requestSent(globalThis.bunVM());
         return promise;
     }
@@ -3098,6 +3135,9 @@ pub struct Resolver {
             ResolveInfoRequest(cares_type, type_name).onCaresComplete,
         );
 
+        if (!request.cache.pending_cache) {
+            _.untracked_requests += 1;
+        }
         _.requestSent(globalThis.bunVM());
         return promise;
     }
@@ -3148,6 +3188,9 @@ pub struct Resolver {
             GetAddrInfoRequest.onCaresComplete,
         );
 
+        if (!request.cache.pending_cache) {
+            _.untracked_requests += 1;
+        }
         _.requestSent(globalThis.bunVM());
         return promise;
     }
@@ -3446,12 +3489,54 @@ pub struct Resolver {
             GetNameInfoRequest.onCaresComplete,
         );
 
+        if (!request.cache.pending_cache) {
+            resolver.untracked_requests += 1;
+        }
         resolver.requestSent(globalThis.bunVM());
         return promise;
     }
 
     pub static fn getRuntimeDefaultResultOrderOption(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         return globalThis.bunVM().dns_result_order.toJS(globalThis);
+    }
+}
+
+pub struct TestingAPIs {
+    pub static fn dnsGetaddrinfoError(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        const arguments = callframe.arguments();
+        if (arguments.len < 2) {
+            return globalThis.throwNotEnoughArguments("dnsGetaddrinfoError", 2, arguments.len);
+        }
+
+        let code_slice = arguments[0].toSlice(globalThis, bun.default_allocator) catch e => return e;
+        const _code_guard = DeinitGuard<*jsc.ZigString.Slice>{ val: &code_slice };
+        let host_slice = arguments[1].toSlice(globalThis, bun.default_allocator) catch e => return e;
+        const _host_guard = DeinitGuard<*jsc.ZigString.Slice>{ val: &host_slice };
+
+        const code_str = code_slice.slice();
+        const is_again = bun.strings.eqlComptime(code_str, "EAI_AGAIN");
+        if (!is_again && !bun.strings.eqlComptime(code_str, "EAI_NONAME")) {
+            return globalThis.throwInvalidArguments("Unknown EAI code: {s}", .{code_str});
+        }
+
+        const err: c_ares.Error = if (is_again)
+            c_ares.Error.initEAI(if (comptime bun.Environment.isWindows) bun.c.libuv.UV_EAI_AGAIN else @intFromEnum(std.posix.system.EAI.AGAIN)).?
+        else
+            c_ares.Error.initEAI(if (comptime bun.Environment.isWindows) bun.c.libuv.UV_EAI_NONAME else @intFromEnum(std.posix.system.EAI.NONAME)).?;
+
+        const err_code: [:0]const u8 = if (err == .EAI_AGAIN) "EAI_AGAIN" else "ENOTFOUND";
+        const hostname = host_slice.slice();
+        const sys_err = jsc.SystemError{
+            .errno = @intFromEnum(err),
+            .code = bun.String.static(err_code),
+            .message = bun.handleOom(bun.String.createFormat("getaddrinfo {s} {s}", .{ err_code, hostname })),
+            .syscall = bun.String.static("getaddrinfo"),
+            .hostname = bun.String.cloneUTF8(hostname),
+        };
+        const instance = sys_err.toErrorInstance(globalThis);
+        const dns_name = bun.String.static("DNSException").toJS(globalThis) catch e => return e;
+        instance.put(globalThis, "name", dns_name);
+        return instance;
     }
 }
 

@@ -295,6 +295,22 @@ pub struct InstallCompletionsCommand {
                         completions_dir = "/etc/fish/completions";
                         break :found std.fs.openDirAbsolute("/etc/fish/completions", .{}) catch break :outer;
                     }
+
+                    if (config_dir := bun.env_var.XDG_CONFIG_HOME.get()) {
+                        outer: {
+                            const paths: [2]string = [ config_dir, "./fish/completions" ];
+                            completions_dir = resolve_path.joinAbsString(cwd, &paths, .auto);
+                            bun.makePath(std.fs.cwd(), completions_dir) catch break :outer;
+                            break :found std.fs.openDirAbsolute(completions_dir, .{}) catch break :outer;
+                        }
+                    } else if (home_dir := bun.env_var.HOME.get()) {
+                        outer: {
+                            const paths: [2]string = [ home_dir, "./.config/fish/completions" ];
+                            completions_dir = resolve_path.joinAbsString(cwd, &paths, .auto);
+                            bun.makePath(std.fs.cwd(), completions_dir) catch break :outer;
+                            break :found std.fs.openDirAbsolute(completions_dir, .{}) catch break :outer;
+                        }
+                    }
                 },
                 .zsh => {
                     if (fpath := bun.env_var.fpath.get()) {
@@ -527,7 +543,11 @@ pub struct InstallCompletionsCommand {
                 const contents = buf[0..read];
 
                 // Do they possibly have it in the file already?
-                if (strings.contains(contents, completions_path) || strings.contains(contents, "# bun completions\n")) {
+                if (strings.contains(contents, completions_path) ||
+                    strings.contains(contents, "# bun completions") ||
+                    strings.contains(contents, ".bun/_bun") ||
+                    strings.contains(contents, "$BUN_INSTALL/_bun"))
+                {
                     break :brk false;
                 }
 

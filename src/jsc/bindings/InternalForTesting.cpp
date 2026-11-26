@@ -78,6 +78,9 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_BunString_toThreadSafeRefCountDelta, (JSC::J
 
 extern "C" void Bun__MemoryPressure__emit(JSC::JSGlobalObject* global, int level);
 extern "C" bool Bun__MemoryPressure__isInstalled(JSC::JSGlobalObject* global);
+extern "C" const uint8_t* Bun__MemoryPressure__psiTriggerPtr();
+extern "C" size_t Bun__MemoryPressure__psiTriggerLen();
+extern "C" bool Bun__MemoryPressure__psiShouldEmit(uint64_t* lastTotal, bool* hasBaseline, const uint8_t* ptr, size_t len);
 
 JSC_DEFINE_HOST_FUNCTION(jsFunction_emitMemoryPressure, (JSC::JSGlobalObject * globalObject, JSC::CallFrame* callFrame))
 {
@@ -93,6 +96,43 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_emitMemoryPressure, (JSC::JSGlobalObject * g
 JSC_DEFINE_HOST_FUNCTION(jsFunction_isMemoryPressureWatcherInstalled, (JSC::JSGlobalObject * globalObject, JSC::CallFrame* callFrame))
 {
     return JSValue::encode(jsBoolean(Bun__MemoryPressure__isInstalled(defaultGlobalObject(globalObject))));
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsFunction_memoryPressurePsiTrigger, (JSC::JSGlobalObject * globalObject, JSC::CallFrame*))
+{
+    auto& vm = globalObject->vm();
+    const uint8_t* ptr = Bun__MemoryPressure__psiTriggerPtr();
+    size_t len = Bun__MemoryPressure__psiTriggerLen();
+    return JSValue::encode(JSC::jsString(vm, WTF::String::fromUTF8(std::span<const uint8_t> { ptr, len })));
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsFunction_memoryPressurePsiFilter, (JSC::JSGlobalObject * globalObject, JSC::CallFrame* callFrame))
+{
+    auto& vm = globalObject->vm();
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    size_t argc = callFrame->argumentCount();
+    if (argc < 1) {
+        return JSValue::encode(JSC::constructEmptyArray(globalObject, nullptr, 0));
+    }
+    uint64_t lastTotal = 0;
+    bool hasBaseline = false;
+    {
+        auto armed = callFrame->argument(0).toWTFString(globalObject);
+        RETURN_IF_EXCEPTION(scope, {});
+        auto utf8 = armed.utf8();
+        Bun__MemoryPressure__psiShouldEmit(&lastTotal, &hasBaseline, reinterpret_cast<const uint8_t*>(utf8.data()), utf8.length());
+    }
+    JSC::JSArray* out = JSC::constructEmptyArray(globalObject, nullptr, argc - 1);
+    RETURN_IF_EXCEPTION(scope, {});
+    for (size_t i = 1; i < argc; i++) {
+        auto s = callFrame->argument(i).toWTFString(globalObject);
+        RETURN_IF_EXCEPTION(scope, {});
+        auto utf8 = s.utf8();
+        bool emitted = Bun__MemoryPressure__psiShouldEmit(&lastTotal, &hasBaseline, reinterpret_cast<const uint8_t*>(utf8.data()), utf8.length());
+        out->putDirectIndex(globalObject, static_cast<unsigned>(i - 1), jsBoolean(emitted));
+        RETURN_IF_EXCEPTION(scope, {});
+    }
+    return JSValue::encode(out);
 }
 
 }

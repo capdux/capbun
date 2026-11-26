@@ -121,6 +121,7 @@ void JSTransformStreamDefaultControllerPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSTransformStreamDefaultController::info(), JSTransformStreamDefaultControllerPrototypeTableValues, *this);
+    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectTransformStreamDefaultControllerCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

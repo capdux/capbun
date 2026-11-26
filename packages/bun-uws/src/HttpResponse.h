@@ -313,24 +313,28 @@ public:
                 perMessageDeflate = true;
 
                 /* Map from negotiated windowBits to compressor and decompressor */
-                if (negCompressionWindow == 0) {
-                    compressOptions = CompressOptions::SHARED_COMPRESSOR;
-                } else {
-                    compressOptions = (CompressOptions) ((uint32_t) (negCompressionWindow << 4)
-                                                        | (uint32_t) (negCompressionWindow - 7));
+                if (webSocketContextData->compression & CompressOptions::_COMPRESSOR_MASK) {
+                    if (negCompressionWindow == 0) {
+                        compressOptions = CompressOptions::SHARED_COMPRESSOR;
+                    } else {
+                        compressOptions = (CompressOptions) ((uint32_t) (negCompressionWindow << 4)
+                                                            | (uint32_t) (negCompressionWindow - 7));
 
-                    /* If we are dedicated and have the 3kb then correct any 4kb to 3kb,
-                     * (they both share the windowBits = 9) */
-                    if (webSocketContextData->compression & DEDICATED_COMPRESSOR_3KB) {
-                        compressOptions = DEDICATED_COMPRESSOR_3KB;
+                        /* If we are dedicated and have the 3kb then correct any 4kb to 3kb,
+                         * (they both share the windowBits = 9) */
+                        if (webSocketContextData->compression & DEDICATED_COMPRESSOR_3KB) {
+                            compressOptions = DEDICATED_COMPRESSOR_3KB;
+                        }
                     }
                 }
 
                 /* Here we modify the above compression with negotiated decompressor */
-                if (negInflationWindow == 0) {
-                    compressOptions = CompressOptions(compressOptions | CompressOptions::SHARED_DECOMPRESSOR);
-                } else {
-                    compressOptions = CompressOptions(compressOptions | (negInflationWindow << 8));
+                if (webSocketContextData->compression & CompressOptions::_DECOMPRESSOR_MASK) {
+                    if (negInflationWindow == 0) {
+                        compressOptions = CompressOptions(compressOptions | CompressOptions::SHARED_DECOMPRESSOR);
+                    } else {
+                        compressOptions = CompressOptions(compressOptions | (negInflationWindow << 8));
+                    }
                 }
 
                 writeHeader("Sec-WebSocket-Extensions", negResponse);
@@ -466,6 +470,10 @@ public:
     /* Write an HTTP header with string value */
     HttpResponse *writeHeader(std::string_view key, std::string_view value) {
         writeStatus(HTTP_200_OK);
+
+        if (key.length() == 4 && (key[0] | 0x20) == 'd' && (key[1] | 0x20) == 'a' && (key[2] | 0x20) == 't' && (key[3] | 0x20) == 'e') {
+            getHttpResponseData()->state |= HttpResponseData<SSL>::HTTP_WROTE_DATE_HEADER;
+        }
 
         Super::write(key.data(), (int) key.length());
         Super::write(": ", 2);

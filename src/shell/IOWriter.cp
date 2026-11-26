@@ -473,8 +473,7 @@ pub fn doFileWrite(*_): Yield {
         // mode
         .pending => bun.unreachablePanic("drainBufferedData returning .pending in IOWriter.doFileWrite should not happen", {}),
         .err => |e| {
-            _.onError(e);
-            return .done;
+            return _.onErrorReturnYield(e);
         },
     };
     if (bl := child.bytelist) {
@@ -591,6 +590,14 @@ pub fn onClose(*_) {
 }
 
 pub fn onError(*_, err__: bun.sys.Error) {
+    * = _.onErrorImpl(err__, false);
+}
+
+pub fn onErrorReturnYield(*_, err__: bun.sys.Error): Yield {
+    return _.onErrorImpl(err__, true);
+}
+
+fn onErrorImpl(*_, err__: bun.sys.Error, return_first_yield: bool): Yield {
     _.setWriting(false);
     const ee = err__.toShellSystemError();
     _.e = ee;
@@ -603,6 +610,8 @@ pub fn onError(*_, err__: bun.sys.Error) {
     let seen_alloc = std.heap.stackFallback(@sizeOf(usize) * 64, bun.default_allocator);
     let seen = bun.handleOom(std.array_list.Managed(usize).initCapacity(seen_alloc.get(), 64));
     const _seen_guard = DeinitGuard<@TypeOf(seen)>{ ptr: unsafe { &seen } };
+    let first_yield: Yield = .done;
+    let has_first = false;
     // Writers before writer_idx have already had their onIOWriterChunk callback fired and may
     // have been freed; only notify the still-pending ones.
     for (w of _.writers.slice()[_.writer_idx..]) {
@@ -625,15 +634,25 @@ pub fn onError(*_, err__: bun.sys.Error) {
         // Callee consumes the error (derefs it). Ref before each pass so deinitOnMainThread's
         // deref of this.err is balanced and multiple callees don't over-deref. Matches IOReader.
         if (*e := _.e) e.ref();
-        // TODO: This probably shouldn't call .run()
-        let err_y = w.ptr.onIOWriterChunk(0, _.e);
-        err_y.run();
+        if (return_first_yield && !has_first) {
+            has_first = true;
+            first_yield = Yield{ .on_io_writer_chunk = .{
+                .child = ptr,
+                .written = 0,
+                .e = _.e,
+            } };
+        } else {
+            // TODO: This probably shouldn't call .run()
+            let err_y = w.ptr.onIOWriterChunk(0, _.e);
+            err_y.run();
+        }
     }
 
     _.total_bytes_written = 0;
     _.writer_idx = 0;
     _.buf.clearRetainingCapacity();
     _.writers.clearRetainingCapacity();
+    return first_yield;
 }
 
 /// Returns the buffer of data that needs to be written

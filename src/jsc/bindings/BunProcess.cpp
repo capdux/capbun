@@ -1190,12 +1190,23 @@ extern "C" void Bun__onSignalForJS(int signalNumber, Zig::GlobalObject* globalOb
     String signalName = signalNumberToNameMap->get(signalNumber);
     if (signalName.isNull())
         return;
-    Identifier signalNameIdentifier = Identifier::fromString(JSC::getVM(globalObject), signalName);
+    auto& vm = JSC::getVM(globalObject);
+    Identifier signalNameIdentifier = Identifier::fromString(vm, signalName);
     MarkedArgumentBuffer args;
-    args.append(jsString(JSC::getVM(globalObject), signalNameIdentifier.string()));
+    args.append(jsString(vm, signalNameIdentifier.string()));
     args.append(jsNumber(signalNumber));
 
     process->wrapped().emitForBindings(signalNameIdentifier, args);
+
+#if defined(SIGIOT) && SIGIOT == SIGABRT
+    if (signalNumber == SIGABRT) {
+        Identifier sigiotIdentifier = Identifier::fromString(vm, getSignalNames()[6].get());
+        MarkedArgumentBuffer sigiotArgs;
+        sigiotArgs.append(jsString(vm, sigiotIdentifier.string()));
+        sigiotArgs.append(jsNumber(SIGIOT));
+        process->wrapped().emitForBindings(sigiotIdentifier, sigiotArgs);
+    }
+#endif
 }
 
 #if OS(WINDOWS)
@@ -1590,7 +1601,16 @@ static void onDidChangeListeners(EventEmitter& eventEmitter, const Identifier& e
                         signalToContextIdsMap->set(signalNumber, signal_handle);
                     }
                 } else {
-                    if (signalToContextIdsMap->find(signalNumber) != signalToContextIdsMap->end() && eventEmitter.listenerCount(eventName) == 0) {
+                    bool noListeners = eventEmitter.listenerCount(eventName) == 0;
+#if defined(SIGIOT) && SIGIOT == SIGABRT
+                    if (noListeners && signalNumber == SIGABRT) {
+                        auto& vm = eventEmitter.scriptExecutionContext()->vm();
+                        auto* names = getSignalNames();
+                        noListeners = eventEmitter.listenerCount(Identifier::fromString(vm, names[5].get())) == 0
+                            && eventEmitter.listenerCount(Identifier::fromString(vm, names[6].get())) == 0;
+                    }
+#endif
+                    if (signalToContextIdsMap->find(signalNumber) != signalToContextIdsMap->end() && noListeners) {
 
 #if !OS(WINDOWS)
                         if (void (*oldHandler)(int) = signal(signalNumber, SIG_DFL); oldHandler != forwardSignal) {

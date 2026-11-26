@@ -410,7 +410,7 @@ pub fn countTableRowColumns(p: &Parser, beg: u32, end: u32): u32 {
         } else if (helpers.isNewline(row[pos])) {
             break;
         } else {
-            in_cell = true;
+            if (!helpers.isBlank(row[pos])) in_cell = true;
             pos += 1;
         }
     }

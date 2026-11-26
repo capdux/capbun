@@ -201,11 +201,13 @@ pub struct Pattern {
 
                         return true;
                     }
+                    params.shrinkRetainingCapacity(0);
                     return false;
                 },
             }
         }
 
+        params.shrinkRetainingCapacity(0);
         return false;
     }
 

@@ -263,6 +263,7 @@ known_target: options.Target,
 module_type: options.ModuleType = .unknown,
 emit_decorator_metadata: bool = false,
 experimental_decorators: bool = false,
+use_define_for_class_fields: bool = true,
 ctx: *BundleV2,
 package_version: []const u8 = "",
 package_name: []const u8 = "",
@@ -278,7 +279,7 @@ pub fn init(resolve_result: *const _resolver.Result, source_index: Index, ctx: *
             pkg_version = package_json.version;
             pkg_name = (if (@typeInfo(@TypeOf(package_json)) == .@"enum" or @typeInfo(@TypeOf(package_json)) == .@"union") @tagName(package_json) else package_json.name);
         }
-        return .{ .ctx = ctx, .path = resolve_result.path_pair.primary, .contents_or_fd = .{ .fd = .{ .dir = resolve_result.dirname_fd, .file = resolve_result.file_fd } }, .side_effects = resolve_result.primary_side_effects_data, .jsx = resolve_result.jsx, .source_index = source_index, .module_type = resolve_result.module_type, .emit_decorator_metadata = resolve_result.flags.emit_decorator_metadata, .experimental_decorators = resolve_result.flags.experimental_decorators, .package_version = pkg_version, .package_name = pkg_name, .known_target = ctx.transpiler.options.target };
+        return .{ .ctx = ctx, .path = resolve_result.path_pair.primary, .contents_or_fd = .{ .fd = .{ .dir = resolve_result.dirname_fd, .file = resolve_result.file_fd } }, .side_effects = resolve_result.primary_side_effects_data, .jsx = resolve_result.jsx, .source_index = source_index, .module_type = resolve_result.module_type, .emit_decorator_metadata = resolve_result.flags.emit_decorator_metadata, .experimental_decorators = resolve_result.flags.experimental_decorators, .use_define_for_class_fields = resolve_result.flags.use_define_for_class_fields, .package_version = pkg_version, .package_name = pkg_name, .known_target = ctx.transpiler.options.target };
 }
 
 pub fn getRuntimeSource(target: options.Target) RuntimeSource {
@@ -846,7 +847,7 @@ var import_records: BabyList(ImportRecord) = .{};
         const parser_options = (if (enable_css_modules) init: {
         var parseropts = bun.css.ParserOptions.default(allocator, (&temp_log));
         _ = &parseropts;
-        parseropts.filename = bun.path.basename(source.path.pretty);
+        parseropts.filename = source.path.pretty;
         parseropts.css_modules = bun.css.CssModuleConfig{  };
         break :init parseropts;
 } else bun.css.ParserOptions.default(allocator, (&temp_log)));
@@ -1057,6 +1058,7 @@ pub fn runWithSourceCode(task: *ParseTask, worker: *ThreadPool.Worker, step: *Re
         opts.features.minify_keep_names = transpiler.options.keep_names;
         opts.features.minify_whitespace = transpiler.options.minify_whitespace;
         opts.features.emit_decorator_metadata = task.emit_decorator_metadata;
+        opts.use_define_for_class_fields = task.use_define_for_class_fields;
         opts.features.standard_decorators = ((!loader.isTypeScript()) or (!(task.experimental_decorators or task.emit_decorator_metadata)));
         opts.features.unwrap_commonjs_packages = transpiler.options.unwrap_commonjs_packages;
         opts.features.bundler_feature_flags = transpiler.options.bundler_feature_flags;

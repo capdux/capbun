@@ -616,10 +616,6 @@ static JSValue toJS(JSC::VM& vm, JSC::JSGlobalObject* globalObject, sqlite3_stmt
             return jsEmptyString(vm);
         }
 
-        if (len < 64) {
-            return jsString(vm, WTF::String::fromUTF8({ text, len }));
-        }
-
         auto encoded = Bun__encoding__toStringUTF8(text, len, globalObject);
         RETURN_IF_EXCEPTION(throwScope, {});
         return JSC::JSValue::decode(encoded);
@@ -1185,11 +1181,12 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementSetCustomSQLite, (JSC::JSGlobalObject * l
         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, msg));
         return {};
     }
-#endif
-
     Bun__initializeSQLite();
 
     RELEASE_AND_RETURN(scope, JSValue::encode(JSC::jsBoolean(true)));
+#else
+    RELEASE_AND_RETURN(scope, JSValue::encode(JSC::jsBoolean(false)));
+#endif
 }
 
 JSC_DEFINE_HOST_FUNCTION(jsSQLStatementDeserialize, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame* callFrame))

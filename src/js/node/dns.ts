@@ -368,7 +368,7 @@ function validateResolverOptions(options) {
   }
 }
 
-var InternalResolver = class Resolver {
+class Resolver {
   #resolver;
 
   constructor(options) {
@@ -642,11 +642,6 @@ var InternalResolver = class Resolver {
   }
 };
 
-function Resolver(options) {
-  return new InternalResolver(options);
-}
-$toClass(Resolver, "Resolver", InternalResolver);
-
 var {
   resolve,
   resolve4,
@@ -662,7 +657,7 @@ var {
   resolveSrv,
   reverse,
   resolveTxt,
-} = InternalResolver.prototype;
+} = Resolver.prototype;
 
 const mapLookupAll = res => {
   const { address, family } = res;

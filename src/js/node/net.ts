@@ -81,6 +81,7 @@ const kclosed = Symbol("closed");
 const kended = Symbol("ended");
 const kwriteCallback = Symbol("writeCallback");
 const kSocketClass = Symbol("kSocketClass");
+const kConnectReq = Symbol("kConnectReq");
 
 function endNT(socket, callback, err) {
   socket.$end();
@@ -494,6 +495,7 @@ const SocketHandlers2: SocketHandler<NonNullable<import("node:net").Socket["_han
     $debug("self[kupgraded]", String(self[kupgraded]));
     if (!self[kupgraded]) req!.oncomplete(0, self._handle, req, true, true);
     socket.data.req = undefined;
+    self[kConnectReq] = undefined;
     if (self.pauseOnConnect) {
       self.pause();
     }
@@ -547,6 +549,7 @@ const SocketHandlers2: SocketHandler<NonNullable<import("node:net").Socket["_han
     let { self, req } = socket.data;
     if (req) {
       socket.data.req = undefined;
+      self[kConnectReq] = undefined;
       if (typeof req.oncomplete === "function") {
         req.oncomplete(UV_ECANCELED, socket, req, false, false);
       }
@@ -624,6 +627,7 @@ const SocketHandlers2: SocketHandler<NonNullable<import("node:net").Socket["_han
     let { self, req } = socket.data;
     socket[owner_symbol] = self;
     socket.data.req = undefined;
+    self[kConnectReq] = undefined;
     // doConnect dispatches this synchronously when connect()/bind() fails at
     // the syscall; surface it as kConnectTcp/Pipe's return value (callers'
     // Node-derived `if (err)` expects that) instead of re-entering oncomplete.
@@ -665,6 +669,7 @@ function kConnectDispatch(self, req, opts) {
   // oncomplete; doConnect instead fires connectError inside this call. Bracket
   // it so connectError hands the errno back here instead of re-entering.
   req.dispatching = true;
+  self[kConnectReq] = req;
   const promise = doConnect(self._handle, opts);
   req.dispatching = false;
   promise.catch(_reason => {
@@ -674,6 +679,7 @@ function kConnectDispatch(self, req, opts) {
   const errno = req.errno;
   if (errno !== undefined) {
     req.errno = undefined;
+    self[kConnectReq] = undefined;
     return errno;
   }
   return 0;
@@ -1172,6 +1178,14 @@ Socket.prototype._destroy = function _destroy(err, callback) {
       if (this._handle) this._handle.onread = () => {};
       this._handle = null;
       this._sockname = null;
+    }
+
+    const connectReq = this[kConnectReq];
+    if (connectReq) {
+      this[kConnectReq] = undefined;
+      if (typeof connectReq.oncomplete === "function") {
+        connectReq.oncomplete(UV_ECANCELED, this._handle, connectReq, false, false);
+      }
     }
     callback(err);
   } else {
@@ -1972,6 +1986,7 @@ function internalConnectMultipleTimeout(context, req, handle) {
   context.socket.emit("connectionAttemptTimeout", req.address, req.port, req.addressType);
 
   req.oncomplete = undefined;
+  context.socket[kConnectReq] = undefined;
   ArrayPrototypePush.$call(context.errors, createConnectionError(req, UV_ETIMEDOUT));
   handle.close();
 

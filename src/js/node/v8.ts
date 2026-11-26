@@ -257,7 +257,7 @@ const promiseHooks = {
     addDeserializeCallback: () => notimpl("addDeserializeCallback"),
     addSerializeCallback: () => notimpl("addSerializeCallback"),
     setDeserializeMainFunction: () => notimpl("setDeserializeMainFunction"),
-    isBuildingSnapshot: () => notimpl("isBuildingSnapshot"),
+    isBuildingSnapshot: () => false,
   };
 
 export default {

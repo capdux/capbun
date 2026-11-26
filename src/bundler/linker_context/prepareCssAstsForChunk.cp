@@ -52,7 +52,8 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                         options: bun.css.ParserOptions.default(allocator, null),
                         composes: {},
                     };
-                    wrapRulesWithConditions(&ast, allocator, &entry.conditions);
+                    const src_copy = entry.condition_import_records;
+                    wrapRulesWithConditions(&ast, allocator, &entry.conditions, &src_copy, &entry.condition_import_records);
                     chunk.content.css.asts[i] = ast;
                 },
                 .external_path => {
@@ -227,7 +228,13 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                         }
                     }
 
-                    wrapRulesWithConditions(ast, allocator, &entry.conditions);
+                    wrapRulesWithConditions(
+                        ast,
+                        allocator,
+                        &entry.conditions,
+                        &entry.condition_import_records,
+                        &c.graph.ast.items(.import_records)[source_index.get()],
+                    );
                     // TODO: Remove top-level duplicate rules across files
                 },
             }
@@ -239,6 +246,8 @@ fn wrapRulesWithConditions(
     ast: *bun.css.BundlerStyleSheet,
     temp_allocator: std.mem.Allocator,
     conditions: *const BabyList(bun.css.ImportConditions),
+    src_import_records: *const bun.BabyList(bun.ImportRecord),
+    dst_import_records: *bun.BabyList(bun.ImportRecord),
 ) {
     let dummy_import_records: bun.BabyList(bun.ImportRecord) = .{};
     defer bun.debugAssert(dummy_import_records.len == 0);
@@ -320,7 +329,7 @@ fn wrapRulesWithConditions(
                 let new_rules = bun.css.BundlerCssRuleList{};
                 new_rules.v.append(temp_allocator, {
                     media: bun.css.BundlerMediaRule{
-                        query: item.media.cloneWithImportRecords(temp_allocator, &dummy_import_records),
+                        query: item.media.cloneWithSrcAndDstImportRecords(temp_allocator, src_import_records, dst_import_records),
                         rules: ast.rules,
                         loc: bun.css.Location.dummy(),
                     },

@@ -539,7 +539,9 @@ pub fn countTableRowColumns(p: *const Parser, beg: u32, end: u32) u32 {
                     if (helpers.isNewline(row[@as(usize, @intCast(pos))])) {
                         break;
                     } else {
-                        in_cell = true;
+                        if ((!helpers.isBlank(row[@as(usize, @intCast(pos))]))) {
+                            in_cell = true;
+                        }
                         pos = (pos + 1);
                     }
                 }

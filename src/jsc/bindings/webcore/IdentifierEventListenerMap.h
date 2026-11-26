@@ -55,6 +55,7 @@ public:
     bool add(const JSC::Identifier& eventType, Ref<EventListener>&&, bool once);
     bool prepend(const JSC::Identifier& eventType, Ref<EventListener>&&, bool once);
     bool remove(const JSC::Identifier& eventType, EventListener&);
+    bool removeRegistered(const JSC::Identifier& eventType, SimpleRegisteredEventListener&);
     bool removeAll(const JSC::Identifier& eventType);
     WEBCORE_EXPORT SimpleEventListenerVector* find(const JSC::Identifier& eventType);
     const SimpleEventListenerVector* find(const JSC::Identifier& eventType) const { return const_cast<IdentifierEventListenerMap*>(this)->find(eventType); }

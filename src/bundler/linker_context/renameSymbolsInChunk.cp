@@ -45,9 +45,9 @@ pub fn renameSymbolsInChunk(
     else
         [];
 
-    let reserved_names = renamer.computeInitialReservedNames(allocator, c.options.output_format)?;
+    let reserved_names = renamer.computeInitialReservedNames(bun.default_allocator, c.options.output_format)?;
     for (source_index of files_in_order) {
-        renamer.computeReservedNamesForScope(&all_module_scopes[source_index], &c.graph.symbols, &reserved_names, allocator);
+        renamer.computeReservedNamesForScope(&all_module_scopes[source_index], &c.graph.symbols, &reserved_names, bun.default_allocator);
     }
 
     let sorted_imports_from_other_chunks: std.array_list.Managed(StableRef) = brk: {
@@ -88,7 +88,7 @@ pub fn renameSymbolsInChunk(
             break :brk slots;
         };
 
-        let minify_renamer = MinifyRenamer.init(allocator, c.graph.symbols, first_top_level_slots, reserved_names)?;
+        let minify_renamer = MinifyRenamer.init(bun.default_allocator, c.graph.symbols, first_top_level_slots, reserved_names)?;
 
         let top_level_symbols = renamer.StableSymbolCount.Array.init(allocator);
         const _top_level_symbols_guard = DeinitGuard<renamer.StableSymbolCount.Array>{ ptr: unsafe { &top_level_symbols } };
@@ -169,8 +169,8 @@ pub fn renameSymbolsInChunk(
     }
 
     let r = renamer.NumberRenamer.init(
-        allocator,
-        allocator,
+        bun.default_allocator,
+        bun.default_allocator,
         c.graph.symbols,
         reserved_names,
     )?;
@@ -187,7 +187,7 @@ pub fn renameSymbolsInChunk(
         }
     }
 
-    let sorted_ = std.array_list.Managed(u32).init(r.temp_allocator);
+    let sorted_ = std.array_list.Managed(u32).init(allocator);
     let sorted = &sorted_;
     const _sorted_guard = DeinitGuard<std.array_list.Managed(u32)>{ ptr: unsafe { &sorted_ } };
 

@@ -62,6 +62,7 @@ public:
     // means "just buffer, don't dispatch" (used before start()).
     void attach(uint8_t side, ScriptExecutionContextIdentifier, ThreadSafeWeakPtr<MessagePort>);
     void detach(uint8_t side);
+    void markClosed(uint8_t side);
     void close(uint8_t side);
 
     // Lockless snapshot for the GC visitor / hasPendingActivity.

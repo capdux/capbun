@@ -178,13 +178,14 @@ static JSC::JSUint8Array* adoptSqliteBuffer(JSGlobalObject* globalObject, void* 
 
 // Every ERR_SQLITE_ERROR carries `errcode` (the extended result code) and
 // `errstr` (its canonical English text), matching node_sqlite.cc.
-static JSObject* createNodeSqliteError(JSGlobalObject* globalObject, int errcode, const WTF::String& message)
+static JSObject* createNodeSqliteError(JSGlobalObject* globalObject, int errcode, const WTF::String& message, bool includeErrstr = true)
 {
     auto& vm = getVM(globalObject);
     auto* zigGlobal = defaultGlobalObject(globalObject);
     JSObject* error = createError(zigGlobal, ErrorCode::ERR_SQLITE_ERROR, message);
     error->putDirect(vm, Identifier::fromString(vm, "errcode"_s), jsNumber(errcode), 0);
-    error->putDirect(vm, Identifier::fromString(vm, "errstr"_s), jsString(vm, WTF::String::fromUTF8(sqlite3_errstr(errcode))), 0);
+    if (includeErrstr)
+        error->putDirect(vm, Identifier::fromString(vm, "errstr"_s), jsString(vm, WTF::String::fromUTF8(sqlite3_errstr(errcode))), 0);
     return error;
 }
 
@@ -932,6 +933,9 @@ void JSDatabaseSync::closeInternal()
         return;
     }
 
+    // Finalize script-held StatementSync handles before sessions/close_v2 so
+    // the connection is not zombified and WAL/SHM files & FDs close immediately.
+    finalizeTrackedStatements();
     // Sessions must go before close_v2: the preupdate hook they install
     // keeps a back-pointer into the connection, and close_v2 does NOT
     // tear them down.
@@ -953,6 +957,7 @@ void JSDatabaseSync::finishDeferredClose()
     sqlite3* handle = m_deferredClose;
     m_deferredClose = nullptr;
     if (!handle) return;
+    finalizeTrackedStatements();
     deleteTrackedSessions();
     sqlite3_close_v2(handle);
     unregisterOpenDatabase(this);
@@ -1024,6 +1029,32 @@ void JSDatabaseSync::sweepOrphanedSessions()
             record->handle = nullptr;
         }
         record->dbGone = true;
+        return true;
+    });
+}
+
+void JSDatabaseSync::finalizeTrackedStatements()
+{
+    for (auto& record : m_statements) {
+        if (record->stmt) {
+            sqlite3_finalize(record->stmt);
+            record->stmt = nullptr;
+        }
+    }
+    m_statements.clear();
+}
+
+void JSDatabaseSync::sweepOrphanedStatements()
+{
+    if (m_statements.isEmpty() || m_busyDepth > 0)
+        return;
+    m_statements.removeAllMatching([](auto& record) {
+        if (!record->wrapperGone)
+            return false;
+        if (record->stmt) {
+            sqlite3_finalize(record->stmt);
+            record->stmt = nullptr;
+        }
         return true;
     });
 }
@@ -1836,8 +1867,9 @@ JSC_DEFINE_HOST_FUNCTION(jsDatabaseSyncApplyChangeset, (JSGlobalObject * globalO
     }
     if (r != SQLITE_OK) {
         // An invalid conflict-handler return is SQLITE_MISUSE and a malformed
-        // changeset is SQLITE_CORRUPT; the vendored tests assert both exactly.
-        throwSqliteReturnCodeError(globalObject, scope, self->connection(), r);
+        // changeset is SQLITE_CORRUPT; the vendored tests assert both exactly
+        // and expect errcode without errstr.
+        scope.throwException(globalObject, createNodeSqliteError(globalObject, r, sqliteText(sqlite3_errstr(r)), false));
         return {};
     }
     return JSValue::encode(jsBoolean(true));
@@ -2428,7 +2460,10 @@ void JSStatementSync::finishCreation(VM& vm, JSDatabaseSync* db, sqlite3_stmt* s
     ASSERT(inherits(info()));
     putNodeInstanceGetter(vm, this, "sourceSQL"_s, jsStatementSyncSourceSQL);
     putNodeInstanceGetter(vm, this, "expandedSQL"_s, jsStatementSyncExpandedSQL);
-    m_stmt = stmt;
+    if (stmt) {
+        m_record = adoptRef(new NodeSqliteStmtRecord(stmt));
+        db->trackStatement(*m_record);
+    }
     m_originGeneration = db->openGeneration();
     m_database.set(vm, this, db);
     m_extraMemorySize = stmt ? static_cast<size_t>(sqlite3_stmt_status(stmt, SQLITE_STMTSTATUS_MEMUSED, 0)) : 0;
@@ -2438,25 +2473,16 @@ void JSStatementSync::finishCreation(VM& vm, JSDatabaseSync* db, sqlite3_stmt* s
 
 void JSStatementSync::finalizeStatement()
 {
-    if (m_stmt) {
-        sqlite3_finalize(m_stmt);
-        m_stmt = nullptr;
+    if (m_record && m_record->stmt) {
+        sqlite3_finalize(m_record->stmt);
+        m_record->stmt = nullptr;
     }
 }
 
 JSStatementSync::~JSStatementSync()
 {
-    // A live SteppingScope here means process.exit() from inside a
-    // UDF/aggregate under BUN_DESTRUCT_VM_ON_EXIT=1. sqlite3_finalize on a
-    // running VDBE fires xFinal, which JSC::call()s raw pointers into a heap
-    // that lastChanceToFinalize is sweeping — same skip as ~JSDatabaseSync.
-    if (isStepping())
-        return;
-    // Do NOT dereference m_database here: GC may have already destroyed
-    // the JSDatabaseSync, leaving the WriteBarrier pointing at freed
-    // memory. sqlite3_finalize is safe even if the owning connection has
-    // already been sqlite3_close_v2'd (it simply releases the zombie).
-    finalizeStatement();
+    if (auto record = std::exchange(m_record, nullptr))
+        record->wrapperGone = true;
 }
 
 sqlite3* JSStatementSync::connection() const
@@ -2467,7 +2493,7 @@ sqlite3* JSStatementSync::connection() const
 
 bool JSStatementSync::isFinalized() const
 {
-    if (m_stmt == nullptr) return true;
+    if (!m_record || m_record->stmt == nullptr) return true;
     auto* db = m_database.get();
     // The generation check covers both "database is closed" and
     // "database was closed then re-opened" — the stmt belongs to the
@@ -2515,7 +2541,8 @@ void JSStatementSync::invalidateRowStructure()
 Structure* JSStatementSync::ensureRowStructure(JSGlobalObject* globalObject)
 {
     auto& vm = getVM(globalObject);
-    int count = sqlite3_column_count(m_stmt);
+    sqlite3_stmt* stmt = statement();
+    int count = sqlite3_column_count(stmt);
     if (m_rowResetGeneration == m_resetGeneration && m_rowColumnCount == count && m_rowStructure) {
         return m_rowStructure.get();
     }
@@ -2537,7 +2564,7 @@ Structure* JSStatementSync::ensureRowStructure(JSGlobalObject* globalObject)
     m_columnOffsets.reserveCapacity(static_cast<size_t>(count));
     WTF::Vector<Identifier, JSFinalObject::maxInlineCapacity> names;
     for (int i = 0; i < count; ++i) {
-        const char* name = sqlite3_column_name(m_stmt, i);
+        const char* name = sqlite3_column_name(stmt, i);
         if (!name || name[0] == '\0') {
             // Pathological — give up on the fast path for this stmt.
             m_columnOffsets.clear();
@@ -2596,20 +2623,21 @@ GCClient::IsoSubspace* JSStatementSync::subspaceForImpl(VM& vm)
 
 bool JSStatementSync::bindValue(JSGlobalObject* globalObject, ThrowScope& scope, int index, JSValue value)
 {
+    sqlite3_stmt* stmt = statement();
     int r = SQLITE_OK;
     if (value.isNumber()) {
         // Match Node: always bind_double, no IsInt32 fast path. Branching on
         // JSC's isInt32() (a tag-bit check) would be representation-dependent:
         // literal 42 vs Float64Array[0]=42 would get different storage classes.
-        r = sqlite3_bind_double(m_stmt, index, value.asNumber());
+        r = sqlite3_bind_double(stmt, index, value.asNumber());
     } else if (value.isString()) {
         auto str = value.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, false);
         auto utf8 = str.utf8();
         // *64: see jsValueToSqliteResult().
-        r = sqlite3_bind_text64(m_stmt, index, utf8.data(), utf8.length(), SQLITE_TRANSIENT, SQLITE_UTF8);
+        r = sqlite3_bind_text64(stmt, index, utf8.data(), utf8.length(), SQLITE_TRANSIENT, SQLITE_UTF8);
     } else if (value.isNull()) {
-        r = sqlite3_bind_null(m_stmt, index);
+        r = sqlite3_bind_null(stmt, index);
     } else if (value.isBigInt()) {
         int64_t iv = JSBigInt::toBigInt64(value);
         // toBigInt64 truncates; detect loss by round-tripping.
@@ -2620,7 +2648,7 @@ bool JSStatementSync::bindValue(JSGlobalObject* globalObject, ThrowScope& scope,
             Bun::throwError(globalObject, scope, ErrorCode::ERR_INVALID_ARG_VALUE, "BigInt value is too large to bind."_s);
             return false;
         }
-        r = sqlite3_bind_int64(m_stmt, index, iv);
+        r = sqlite3_bind_int64(stmt, index, iv);
     } else if (auto* view = dynamicDowncast<JSC::JSArrayBufferView>(value)) {
         auto span = view->span();
         // sqlite3_bind_blob64(nullptr, 0) leaves the parameter as NULL (see
@@ -2628,7 +2656,7 @@ bool JSStatementSync::bindValue(JSGlobalObject* globalObject, ThrowScope& scope,
         // span() is {nullptr, 0}; Node binds it as a zero-length BLOB (its
         // ArrayBufferViewContents falls back to non-null stack storage), so
         // hand SQLite a non-null sentinel when the vector is gone.
-        r = sqlite3_bind_blob64(m_stmt, index, span.data() ? static_cast<const void*>(span.data()) : "", span.size(), SQLITE_TRANSIENT);
+        r = sqlite3_bind_blob64(stmt, index, span.data() ? static_cast<const void*>(span.data()) : "", span.size(), SQLITE_TRANSIENT);
     } else {
         Bun::throwError(globalObject, scope, ErrorCode::ERR_INVALID_ARG_TYPE,
             makeString("Provided value cannot be bound to SQLite parameter "_s, index, '.'));
@@ -2644,11 +2672,12 @@ bool JSStatementSync::bindValue(JSGlobalObject* globalObject, ThrowScope& scope,
 bool JSStatementSync::bindParams(JSGlobalObject* globalObject, ThrowScope& scope, CallFrame* callFrame)
 {
     auto& vm = getVM(globalObject);
-    sqlite3_clear_bindings(m_stmt);
+    sqlite3_stmt* stmt = statement();
+    sqlite3_clear_bindings(stmt);
 
     size_t anonStart = 0;
     size_t argc = callFrame->argumentCount();
-    int paramCount = sqlite3_bind_parameter_count(m_stmt);
+    int paramCount = sqlite3_bind_parameter_count(stmt);
 
     // Named parameters: Node treats any non-ArrayBufferView object in the
     // first slot as a named-params bag (V8's IsObject() && !IsArrayBufferView()).
@@ -2664,7 +2693,7 @@ bool JSStatementSync::bindParams(JSGlobalObject* globalObject, ThrowScope& scope
                 // populated map cached on the statement.
                 WTF::HashMap<WTF::String, WTF::String> bare;
                 for (int i = 1; i <= paramCount; ++i) {
-                    const char* full = sqlite3_bind_parameter_name(m_stmt, i);
+                    const char* full = sqlite3_bind_parameter_name(stmt, i);
                     if (full == nullptr || full[0] == '\0') continue;
                     WTF::String fullStr = sqliteText(full);
                     WTF::String bareName = fullStr.substring(1);
@@ -2682,17 +2711,17 @@ bool JSStatementSync::bindParams(JSGlobalObject* globalObject, ThrowScope& scope
             }
 
             PropertyNameArrayBuilder keys(vm, PropertyNameMode::Strings, PrivateSymbolMode::Exclude);
-            named->getOwnPropertyNames(named, globalObject, keys, DontEnumPropertiesMode::Exclude);
+            named->methodTable()->getOwnPropertyNames(named, globalObject, keys, DontEnumPropertiesMode::Exclude);
             RETURN_IF_EXCEPTION(scope, false);
             for (auto& key : keys) {
                 WTF::String keyStr = key.string();
                 auto keyUtf8 = keyStr.utf8();
-                int index = sqlite3_bind_parameter_index(m_stmt, keyUtf8.data());
+                int index = sqlite3_bind_parameter_index(stmt, keyUtf8.data());
                 if (index == 0 && m_allowBareNamedParams && m_bareNamedParams.has_value()) {
                     auto it = m_bareNamedParams->find(keyStr);
                     if (it != m_bareNamedParams->end()) {
                         auto fullUtf8 = it->value.utf8();
-                        index = sqlite3_bind_parameter_index(m_stmt, fullUtf8.data());
+                        index = sqlite3_bind_parameter_index(stmt, fullUtf8.data());
                     }
                 }
                 if (index == 0) {
@@ -2724,7 +2753,7 @@ bool JSStatementSync::bindParams(JSGlobalObject* globalObject, ThrowScope& scope
     int anonIdx = 1;
     for (size_t i = anonStart; i < argc; ++i) {
         while (true) {
-            const char* name = sqlite3_bind_parameter_name(m_stmt, anonIdx);
+            const char* name = sqlite3_bind_parameter_name(stmt, anonIdx);
             if (name == nullptr || name[0] == '?') break;
             ++anonIdx;
         }
@@ -2771,22 +2800,20 @@ struct StatementResetter {
 
 static EncodedJSValue statementStepRun(VM& vm, JSGlobalObject* globalObject, ThrowScope& scope, JSStatementSync* self)
 {
-    StatementResetter resetter { self->statement() };
-    JSStatementSync::SteppingScope stepping { self };
-    int r = sqlite3_step(self->statement());
-    while (r == SQLITE_ROW)
+    int r;
+    {
+        JSStatementSync::SteppingScope stepping { self };
         r = sqlite3_step(self->statement());
+    }
     CHECK_UDF_EXCEPTION(scope);
-    // Don't go through self->connection(): a named-parameter getter or UDF
-    // callback may have called db.close() since the caller's liveness
-    // check, in which case the wrapper's m_db is now null (deferred close)
-    // and sqlite3_changes64(NULL) is a raw db->nChange deref — and on the
-    // error path sqlite3_errmsg(NULL) reports "out of memory" instead of
-    // the real message. sqlite3_db_handle reads the statement's own
-    // back-pointer, which survives until the BusyScope unwinds and is what
-    // Node's StatementSync::Run uses.
     sqlite3* db = sqlite3_db_handle(self->statement());
-    if (r != SQLITE_DONE && r != SQLITE_OK) {
+    if (r != SQLITE_DONE && r != SQLITE_OK && r != SQLITE_ROW) {
+        sqlite3_reset(self->statement());
+        throwSqliteError(globalObject, scope, db);
+        return {};
+    }
+    int resetResult = sqlite3_reset(self->statement());
+    if (resetResult != SQLITE_OK) {
         throwSqliteError(globalObject, scope, db);
         return {};
     }
@@ -2809,20 +2836,38 @@ static EncodedJSValue statementStepRun(VM& vm, JSGlobalObject* globalObject, Thr
 static EncodedJSValue statementStepGet(JSGlobalObject* globalObject, ThrowScope& scope, JSStatementSync* self)
 {
     StatementResetter resetter { self->statement() };
-    JSStatementSync::SteppingScope stepping { self };
-    int r = sqlite3_step(self->statement());
+    int r;
+    {
+        JSStatementSync::SteppingScope stepping { self };
+        r = sqlite3_step(self->statement());
+    }
     CHECK_UDF_EXCEPTION(scope);
-    if (r == SQLITE_DONE) return JSValue::encode(jsUndefined());
+    sqlite3* db = sqlite3_db_handle(self->statement());
+    if (r == SQLITE_DONE) {
+        resetter.stmt = nullptr;
+        if (sqlite3_reset(self->statement()) != SQLITE_OK) {
+            throwSqliteError(globalObject, scope, db);
+            return {};
+        }
+        return JSValue::encode(jsUndefined());
+    }
     if (r != SQLITE_ROW) {
-        throwSqliteError(globalObject, scope, sqlite3_db_handle(self->statement()));
+        throwSqliteError(globalObject, scope, db);
         return {};
     }
     int numCols = sqlite3_column_count(self->statement());
-    if (numCols == 0) return JSValue::encode(jsUndefined());
-    JSValue row = self->returnArrays()
-        ? rowToArray(globalObject, scope, self->statement(), numCols, self->useBigInts())
-        : rowToObjectCached(globalObject, scope, self, numCols, self->useBigInts());
-    RETURN_IF_EXCEPTION(scope, {});
+    JSValue row = jsUndefined();
+    if (numCols > 0) {
+        row = self->returnArrays()
+            ? rowToArray(globalObject, scope, self->statement(), numCols, self->useBigInts())
+            : rowToObjectCached(globalObject, scope, self, numCols, self->useBigInts());
+        RETURN_IF_EXCEPTION(scope, {});
+    }
+    resetter.stmt = nullptr;
+    if (sqlite3_reset(self->statement()) != SQLITE_OK) {
+        throwSqliteError(globalObject, scope, db);
+        return {};
+    }
     return JSValue::encode(row);
 }
 
@@ -3105,7 +3150,7 @@ JSC_DEFINE_HOST_FUNCTION(jsStatementSyncIteratorNext, (JSGlobalObject * globalOb
         return throwNodeState(globalObject, scope, "statement has been finalized"_s);
     }
     if (self->capturedGeneration() != stmt->resetGeneration()) {
-        return throwNodeState(globalObject, scope, "iterator was invalidated by calling run(), get(), all(), or iterate() on the backing statement"_s);
+        return throwNodeState(globalObject, scope, "iterator was invalidated"_s);
     }
     if (stmt->isStepping()) [[unlikely]] {
         return throwNodeState(globalObject, scope, "statement is currently executing"_s);
@@ -3339,15 +3384,26 @@ JSC_DEFINE_HOST_FUNCTION(jsSessionClose, (JSGlobalObject * globalObject, CallFra
     if (self->record()->inUse) {
         return throwNodeState(globalObject, scope, "session is currently generating a changeset"_s);
     }
+    if (self->database() && self->database()->isBusy()) {
+        return throwNodeState(globalObject, scope, "session cannot be closed while in a callback"_s);
+    }
     self->deleteSession();
     return JSValue::encode(jsUndefined());
 }
 
 JSC_DEFINE_HOST_FUNCTION(jsSessionDispose, (JSGlobalObject * globalObject, CallFrame* callFrame))
 {
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
     auto* self = dynamicDowncast<JSNodeSqliteSession>(callFrame->thisValue());
-    (void)globalObject;
-    if (self) self->deleteSession();
+    if (!self) return JSValue::encode(jsUndefined());
+    if (self->record() && self->record()->inUse) {
+        return throwNodeState(globalObject, scope, "session is currently generating a changeset"_s);
+    }
+    if (self->database() && self->database()->isBusy()) {
+        return throwNodeState(globalObject, scope, "session cannot be closed while in a callback"_s);
+    }
+    self->deleteSession();
     return JSValue::encode(jsUndefined());
 }
 

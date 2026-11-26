@@ -2279,7 +2279,8 @@ pub fn getLastModified(self: *Blob, _: *JSGlobalObject) JSValue {
             }
         }
         if (self.is_jsdom_file) {
-            return JSValue.jsNumber(self.last_modified);
+            const lm = self.last_modified;
+            return JSValue.jsNumber((if (std.math.isNan(lm)) std.math.nan(f64) else lm));
         }
         return JSValue.jsNumber(jsc.init_timestamp);
 }
@@ -4034,10 +4035,7 @@ if (destination_blob.isS3()) {
 pub fn writeDestinationFromJS(globalThis: *JSGlobalObject, args: *jsc.CallFrame.ArgumentsSlice) JSError!PathOrBlob {
         const path_or_blob = try PathOrBlob.fromJSNoCopy(globalThis, args);
         if ((path_or_blob == .blob)) {
-            _ = (blk_catch_24: { break :blk_catch_24 ((validateWritableBlob(globalThis, (&path_or_blob.blob))) catch |e| { _ = &e; var mut_blob = path_or_blob.blob;
-            _ = &mut_blob;
-            _ = mut_blob.deinit();
-            return e; }); });
+            _ = try validateWritableBlob(globalThis, (&path_or_blob.blob));
         }
         return path_or_blob;
 }
@@ -4268,16 +4266,20 @@ pub fn readSlice(reader: anytype, len: usize, allocator: std.mem.Allocator) ![]u
 
 pub fn _onStructuredCloneSerialize(blob: *Blob, comptime Writer: type, writer: Writer) !void {
         _ = try writer.writeInt(u8, serialization_version, .little);
-        _ = try writer.writeInt(u64, @intCast(blob.offset), .little);
-        _ = try writer.writeInt(u32, @truncate(blob.content_type.len), .little);
-        _ = try writer.writeAll(blob.content_type);
-        _ = try writer.writeInt(u8, @intFromBool(blob.content_type_was_set), .little);
         var store_tag: BlobStore.SerializeTag = .empty;
         _ = &store_tag;
+        var is_bytes_store = false;
+        _ = &is_bytes_store;
         if (blob.store) |store| {
             _ = &store;
             store_tag = (if ((store.data == .file)) .file else .bytes);
+            is_bytes_store = (store.data == .bytes);
         }
+        const wire_offset: u64 = (if (is_bytes_store) 0 else @intCast(blob.offset));
+        _ = try writer.writeInt(u64, wire_offset, .little);
+        _ = try writer.writeInt(u32, @truncate(blob.content_type.len), .little);
+        _ = try writer.writeAll(blob.content_type);
+        _ = try writer.writeInt(u8, @intFromBool(blob.content_type_was_set), .little);
         _ = try writer.writeInt(u8, @intFromEnum(store_tag), .little);
         if ((store_tag == .file)) {
             _ = try writer.writeInt(u64, @intCast(blob.size), .little);
@@ -4285,7 +4287,15 @@ pub fn _onStructuredCloneSerialize(blob: *Blob, comptime Writer: type, writer: W
         _ = blob.resolveSize();
         if (blob.store) |store| {
             _ = &store;
-            _ = try store.serialize(Writer, writer);
+            if ((store.data == .bytes)) {
+                const view = blob.sharedView();
+                _ = try writer.writeInt(u32, @truncate(view.len), .little);
+                _ = try writer.writeAll(view);
+                _ = try writer.writeInt(u32, @truncate(store.data.bytes.stored_name.slice().len), .little);
+                _ = try writer.writeAll(store.data.bytes.stored_name.slice());
+            } else {
+                _ = try store.serialize(Writer, writer);
+            }
         }
         _ = try writer.writeInt(u8, @intFromBool(blob.is_jsdom_file), .little);
         _ = try writeFloat(f64, blob.last_modified, Writer, writer);
@@ -4364,6 +4374,11 @@ else => {
         switch (pathlike_tag) {
 .fd => {
 const fd = try reader.readStruct(bun.FD);
+        if (comptime (!Environment.isWindows)) {
+            if ((fd.native() < 0)) {
+                return error.InvalidValue;
+            }
+        }
         var path_or_fd = jsc.Node.PathOrFileDescriptor{ .fd = fd };
         _ = &path_or_fd;
         const b = Blob.new(Blob.findOrCreateFileFromPath((&path_or_fd), globalThis, true));
@@ -4371,7 +4386,14 @@ const fd = try reader.readStruct(bun.FD);
 },
 .path => {
 const path_len = try reader.readInt(u32, .little);
+        if ((path_len > bun.MAX_PATH_BYTES)) {
+            return error.InvalidValue;
+        }
         const path = try readSlice(reader, path_len, default_allocator);
+        if ((std.mem.indexOfScalar(u8, path, 0) != null)) {
+            _ = default_allocator.free(path);
+            return error.InvalidValue;
+        }
         var dest = jsc.Node.PathOrFileDescriptor{ .path = .{ .string = bun.PathString.init(path) } };
         _ = &dest;
         const b = Blob.new(Blob.findOrCreateFileFromPath((&dest), globalThis, true));
@@ -4390,7 +4412,8 @@ const path_len = try reader.readInt(u32, .little);
             break :versions;
         }
         blob.is_jsdom_file = (try reader.readInt(u8, .little) != 0);
-        blob.last_modified = try readFloat(f64, Reader, reader);
+        const lm = try readFloat(f64, Reader, reader);
+        blob.last_modified = (if (std.math.isNan(lm)) std.math.nan(f64) else lm);
         if ((version == 2)) {
             break :versions;
         }
@@ -4405,11 +4428,13 @@ const path_len = try reader.readInt(u32, .little);
         }
 };
         _ = bun.assertf(blob.isHeapAllocated(), "expected blob to be heap-allocated", .{});
-        blob.offset = @as(BlobSizeType, @truncate(offset));
+        blob.offset = (if ((offset >= Blob.max_size)) Blob.max_size else @as(BlobSizeType, @intCast(offset)));
         if (file_size) |size| {
             _ = &size;
-            if ((size != Blob.max_size)) {
-                blob.size = @as(BlobSizeType, @truncate(size));
+            if ((size < Blob.max_size)) {
+                blob.size = @as(BlobSizeType, @intCast(size));
+            } else {
+                blob.size = Blob.max_size;
             }
         }
         if (blob.store) |store| {
@@ -4643,7 +4668,7 @@ blob.name = name_value_str.dupeRef();
 }
 
 pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
-        return (blk_catch_25: { break :blk_catch_25 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        return (blk_catch_24: { break :blk_catch_24 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             if ((globalThis.throwOutOfMemory() == error.JSError)) {
             }
         }

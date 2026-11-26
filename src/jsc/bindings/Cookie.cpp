@@ -102,7 +102,6 @@ ExceptionOr<Ref<Cookie>> Cookie::parse(StringView cookieString)
     bool httpOnly = false;
     double maxAge = std::numeric_limits<double>::quiet_NaN();
     bool partitioned = false;
-    bool hasMaxAge = false;
     ASSERT(value.isEmpty() || isValidHTTPHeaderValue(value));
     // Parse attributes if there are any
     if (firstSemicolonPos != notFound) {
@@ -130,7 +129,7 @@ ExceptionOr<Ref<Cookie>> Cookie::parse(StringView cookieString)
             } else if (attributeName == "path"_s) {
                 if (!attributeValue.isEmpty() && attributeValue.startsWith('/'))
                     path = attributeValue;
-            } else if (attributeName == "expires"_s && !hasMaxAge && !attributeValue.isEmpty()) {
+            } else if (attributeName == "expires"_s && !attributeValue.isEmpty()) {
                 if (!attributeValue.is8Bit()) [[unlikely]] {
                     auto asLatin1 = attributeValue.latin1();
                     double parsed = WTF::parseDate({ reinterpret_cast<const Latin1Character*>(asLatin1.data()), asLatin1.length() });
@@ -147,7 +146,6 @@ ExceptionOr<Ref<Cookie>> Cookie::parse(StringView cookieString)
             } else if (attributeName == "max-age"_s) {
                 if (auto parsed = WTF::parseIntegerAllowingTrailingJunk<int64_t>(attributeValue); parsed.has_value()) {
                     maxAge = static_cast<double>(parsed.value());
-                    hasMaxAge = true;
                 }
             } else if (attributeName == "secure"_s) {
                 secure = true;
@@ -171,6 +169,8 @@ ExceptionOr<Ref<Cookie>> Cookie::parse(StringView cookieString)
 
 bool Cookie::isExpired() const
 {
+    if (!std::isnan(m_maxAge))
+        return m_maxAge <= 0;
     if (m_expires == Cookie::emptyExpiresAtValue)
         return false; // Session cookie
 

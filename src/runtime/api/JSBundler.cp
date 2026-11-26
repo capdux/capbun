@@ -1392,8 +1392,31 @@ pub union(enum) BundlerResolveValue {
                 resolve.value = { no_match: undefined };
             } else {
                 const global = resolve.bv2.plugins.?.globalObject();
-                const path = path_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch @panic("Unexpected: path is not a string");
-                const namespace = namespace_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch @panic("Unexpected: namespace is not a string");
+                let path = path_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch e => {
+                    switch (e) {
+                        error.OutOfMemory => bun.outOfMemory(),
+                        error.JSError, error.JSTerminated => {
+                            const exception = global.takeException(e);
+                            const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
+                            resolve.value = { @"err": msg };
+                            resolve.bv2.onResolveAsync(resolve);
+                            return;
+                        },
+                    }
+                };
+                const namespace = namespace_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch e => {
+                    path.deinit();
+                    switch (e) {
+                        error.OutOfMemory => bun.outOfMemory(),
+                        error.JSError, error.JSTerminated => {
+                            const exception = global.takeException(e);
+                            const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
+                            resolve.value = { @"err": msg };
+                            resolve.bv2.onResolveAsync(resolve);
+                            return;
+                        },
+                    }
+                };
                 resolve.value = {
                     success: {
                         path: path.slice(),
@@ -1570,11 +1593,14 @@ pub union(enum) BundlerLoadValue {
                         error.OutOfMemory => {
                             bun.outOfMemory();
                         },
-                        error.JSError => {},
-                        error.JSTerminated => {},
+                        error.JSError, error.JSTerminated => {
+                            const exception = global.takeException(e);
+                            const msg = BundlerPlugin.msgFromJS(_.bv2.plugins.?, _.path, exception);
+                            _.value = { @"err": msg };
+                            _.bv2.onLoadAsync(_);
+                            return;
+                        },
                     }
-
-                    @panic("Unexpected: source_code is not a string");
                 };
                 _.value = {
                     success: {

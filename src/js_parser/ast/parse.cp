@@ -355,7 +355,9 @@ pub fn Parse(
 
             // Allow "in" inside parentheses
             const oldAllowIn = p.allow_in;
+            const old_in_ternary_yes = p.in_ternary_yes;
             p.allow_in = true;
+            p.in_ternary_yes = false;
 
             // Forbid "await" and "yield", but only for arrow functions
             let old_fn_or_arrow_data = std.mem.toBytes(p.fn_or_arrow_data_parse);
@@ -416,6 +418,7 @@ pub fn Parse(
 
             // Restore "in" operator status before we parse the arrow function body
             p.allow_in = oldAllowIn;
+            p.in_ternary_yes = old_in_ternary_yes;
 
             // Also restore "await" and "yield" expression errors
             p.fn_or_arrow_data_parse = std.mem.bytesToValue(@TypeOf(p.fn_or_arrow_data_parse), &old_fn_or_arrow_data);

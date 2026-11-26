@@ -533,9 +533,11 @@ const index = p.visitExpr(e_.index);
                     }
                     return dot;
                 }
-                if (p.maybeRewritePropertyAccess(expr.loc, e_.target, unwrapped.data.e_string.data, unwrapped.loc, .{ .is_call_target = is_call_target, .is_delete_target = is_delete_target, .assign_target = expr_in.assign_target, .is_property_access_target = expr_in.is_property_access_target })) |rewrite| {
-                    _ = &rewrite;
-                    return rewrite;
+                if ((e_.optional_chain == null)) {
+                    if (p.maybeRewritePropertyAccess(expr.loc, e_.target, unwrapped.data.e_string.data, unwrapped.loc, .{ .is_call_target = is_call_target, .is_delete_target = is_delete_target, .assign_target = expr_in.assign_target, .is_property_access_target = expr_in.is_property_access_target })) |rewrite| {
+                        _ = &rewrite;
+                        return rewrite;
+                    }
                 }
             }
 },

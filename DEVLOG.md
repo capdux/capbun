@@ -1922,3 +1922,5 @@
 - Phase 3 第二十九批安全性加固要点：全仓 124 处句柄打开站点扫雷，修复 `libarchive.cp:273` `CloseGuard` 缺失、`patch_jsc/testing.cp:142` `dir_fd` 错误分支泄漏、`init_command.cp:463` 与 `create_command.cp:562,1860` `package_json_file`/`folders` 早退与置空泄漏。
 
 - Phase 3 第三十批安全性加固要点：`uws.cp:179-182` `BUN__warn__extra_ca_load_failed` 在 `bun.Output.warn` 后补充换行与 `bun.Output.flush()`，消除 `NODE_EXTRA_CA_CERTS` 加载失败时缓冲警告随进程退出丢失的问题。
+
+- Batch 14–26 收敛要点：建立全仓 225 分块扫测账本（`scripts/scan_tests.py` + `test/stats.md`），采用 3 路子智能体 + 主智能体集中修复后单次 `bun bd` 构建回归，清零 `ThreadLock` / `Archive` / `wyhash` / `Invalid binary type` / `atan2` 回溯 / `NodeSqlite` / `h2_frame_parser` 等大量高频崩溃与功能偏差。

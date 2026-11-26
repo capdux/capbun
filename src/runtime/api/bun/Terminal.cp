@@ -575,6 +575,10 @@ struct PosixIoctl {
     /// State flags
     flags: Flags = {},
 
+    /// Per-terminal raw mode state and saved original termios
+    tty_mode: i32 = 0,
+    orig_termios: Termios = if (Environment.isPosix) std.mem.zeroes(Termios) else {},
+
 
     pub const IOWriter = bun.io.StreamingWriter(Terminal, struct {
         pub const onClose = Terminal.onWriterClose;
@@ -837,9 +841,7 @@ struct PosixIoctl {
         const clamped = @max(0, @min(num, max_val));
         const int_val: Int = @intFromFloat(clamped);
         @field(termios_data, @tagName(field)) = @bitCast(int_val);
-        if (!setTermios(client.master_fd, &termios_data)) {
-            return globalObject.throw("Failed to set terminal flags", {});
-        }
+        * = setTermios(client.master_fd, &termios_data);
     }
 
     static fn getInputFlags(client: *Terminal, _: *jsc.JSGlobalObject): JSValue {
@@ -908,9 +910,9 @@ struct PosixIoctl {
         return switch (write_result) {
             .done => |amt| JSValue.jsNumber(@as(i32, @intCast(amt))),
             .wrote => |amt| JSValue.jsNumber(@as(i32, @intCast(amt))),
-            // On Windows the streaming writer buffers and returns .pending=0; the
-            // bytes were accepted, so report bytes.len to match POSIX semantics.
-            .pending => |amt| JSValue.jsNumber(@as(i32, @intCast(if (Environment.isWindows) bytes.len else amt))),
+            // The streaming writer buffers any tail that doesn't fit in the PTY
+            // buffer synchronously; all bytes were accepted, so report bytes.len.
+            .pending => JSValue.jsNumber(@as(i32, @intCast(bytes.len))),
             .err => |e| globalObject.throwValue(e.toJS(globalObject)?),
         };
     }
@@ -990,7 +992,13 @@ struct PosixIoctl {
             // write() on a full PTY, the drain waits on a lock only our
             // own reads can release, freezing the JS thread for as long
             // as the child stays blocked.
-            const tty_result = bun.tty.setModeWhen(_.master_fd.cast(), if (enabled) .raw else .normal, .now);
+            const tty_result = bun.tty.setModeWithSnapshot(
+                _.master_fd.cast(),
+                if (enabled) .raw else .normal,
+                .now,
+                unsafe { &_.tty_mode },
+                unsafe { &_.orig_termios },
+            );
             if (tty_result != 0) {
                 return globalObject.throw("Failed to set raw mode", {});
             }

@@ -36,6 +36,7 @@
 #include "JSDOMOperationReturningPromise.h"
 #include "JSDOMWrapperCache.h"
 #include "ScriptExecutionContext.h"
+#include "WebCoreJSBuiltins.h"
 #include "WebCoreJSClientData.h"
 #include <JavaScriptCore/FunctionPrototype.h>
 #include <JavaScriptCore/HeapAnalyzer.h>
@@ -153,6 +154,7 @@ void JSWritableStreamPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSWritableStream::info(), JSWritableStreamPrototypeTableValues, *this);
+    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectWritableStreamCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

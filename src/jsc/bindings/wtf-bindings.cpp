@@ -107,19 +107,19 @@ extern "C" void Bun__atexit(void (*func)(void));
 extern "C" volatile sig_atomic_t bun_stdio_modified[3];
 #endif
 
-extern "C" int Bun__ttySetMode(int fd, int mode, int drain)
+extern "C" int Bun__ttySetModeWithSnapshot(int fd, int mode, int drain, int* current_mode, struct termios* orig_termios_ptr)
 {
 #if !OS(WINDOWS)
     struct termios tmp;
     int expected;
     int rc;
 
-    if (current_tty_mode == mode)
+    if (*current_mode == mode)
         return 0;
 
-    if (current_tty_mode == 0 && mode != 0) {
+    if (*current_mode == 0 && mode != 0) {
         do {
-            rc = tcgetattr(fd, &orig_tty_termios);
+            rc = tcgetattr(fd, orig_termios_ptr);
         } while (rc == -1 && errno == EINTR);
 
         if (rc == -1)
@@ -131,14 +131,14 @@ extern "C" int Bun__ttySetMode(int fd, int mode, int drain)
         } while (!atomic_compare_exchange_strong(&orig_termios_spinlock, &expected, 1));
 
         if (orig_termios_fd == -1) {
-            orig_termios = orig_tty_termios;
+            orig_termios = *orig_termios_ptr;
             orig_termios_fd = fd;
         }
 
         atomic_store(&orig_termios_spinlock, 0);
     }
 
-    tmp = orig_tty_termios;
+    tmp = *orig_termios_ptr;
     switch (mode) {
     case 0: // normal
         break;
@@ -167,35 +167,27 @@ extern "C" int Bun__ttySetMode(int fd, int mode, int drain)
         break;
     }
 
-    // Mark the fd as modified *before* applying the change. If a
-    // SIGINT/SIGTERM lands between the device going raw and our bookkeeping
-    // catching up, bun_restore_stdio would otherwise read 0 and skip the
-    // restore — leaving the terminal in raw mode after exit. A spurious set
-    // when uv__tcsetattr fails is harmless: bun_restore_stdio then writes
-    // the cooked startup snapshot back to a still-cooked device (no-op,
-    // pre-PR behavior). Bounds-checked because the PTY master fd from
-    // Bun.Terminal calls through here too. See #29592.
-    //
-    // Marked on every transition, including setRawMode(true)→(false), so
-    // the signal-exit path (which runs only bun_restore_stdio, not the
-    // atexit uv_tty_reset_mode hook) still restores cooked mode on Ctrl-C.
     if (fd >= 0 && fd < 3) {
         bun_stdio_modified[fd] = 1;
     }
 
-    // TCSADRAIN matches libuv on real ttys. It must never be used on a PTY
-    // master: draining waits on the slave's write lock, and a child blocked
-    // in write() holds that lock until the master's owner (this caller)
-    // reads the master, so the two deadlock. Those callers pass drain == 0.
     rc = uv__tcsetattr(fd, drain ? TCSADRAIN : TCSANOW, &tmp);
     if (rc == 0) {
-        current_tty_mode = mode;
+        *current_mode = mode;
     }
 
     return rc;
 #else
     return 0;
+#endif
+}
 
+extern "C" int Bun__ttySetMode(int fd, int mode, int drain)
+{
+#if !OS(WINDOWS)
+    return Bun__ttySetModeWithSnapshot(fd, mode, drain, &current_tty_mode, &orig_tty_termios);
+#else
+    return 0;
 #endif
 }
 

@@ -491,6 +491,21 @@ pub fn reschedule(self: *TimerObjectInternals, timer: JSValue, vm: *VirtualMachi
             }
     }
 
+pub fn rescheduleWithIdleStart(self: *TimerObjectInternals, vm: *VirtualMachine, idle_start_ms: f64) void {
+            if ((((self.flags.kind == .setImmediate) or (self.id == -1)) or self.getDestroyed())) {
+                return;
+            }
+            const start_ms = std.math.lossyCast(i64, @floor(idle_start_ms));
+            const base_ts: timespec = .{ .sec = @divTrunc(start_ms, std.time.ms_per_s), .nsec = (@rem(start_ms, std.time.ms_per_s) * std.time.ns_per_ms) };
+            const scheduled_time = base_ts.addMs(self.interval);
+            if ((self.eventLoopTimer().state == .ACTIVE)) {
+                _ = vm.timer.remove(self.eventLoopTimer());
+            } else {
+                _ = self.ref();
+            }
+            _ = vm.timer.update(self.eventLoopTimer(), (&scheduled_time));
+    }
+
 pub fn setEnableKeepingEventLoopAlive(self: *TimerObjectInternals, vm: *VirtualMachine, enable: bool) void {
             if ((self.flags.is_keeping_event_loop_alive == enable)) {
                 return;

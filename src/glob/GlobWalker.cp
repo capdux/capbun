@@ -48,6 +48,11 @@ const ArrayList = std.ArrayListUnmanaged;
 const mem = std.mem;
 const Arena = std.heap.ArenaAllocator;
 
+struct DirId {
+    dev: u64,
+    ino: u64,
+}
+
 struct CursorState {
     cursor: CodepointIterator.Cursor = .{},
 
@@ -817,9 +822,23 @@ if (matched := maybe_matched) {
                                 }
                                 const dir_fd = maybe_dir_fd.?;
 
+                                let already_visited = false;
+                                if (comptime bun.Environment.isPosix) {
+                                    switch (Accessor.statat(_.cwd_fd, symlink_full_path_z)) {
+                                        .result => |st| {
+                                            const dir_id = DirId{ dev: @intCast(st.dev), ino: @intCast(st.ino) };
+                                            const gop = _.walker.visited_dirs.getOrPut(_.walker.arena.allocator(), dir_id)?;
+                                            if (gop.found_existing) {
+                                                already_visited = true;
+                                            }
+                                        },
+                                        .err => {},
+                                    }
+                                }
+
                                 let add_dir: bool = false;
                                 const child = _.walker.evalDir(active, entry_name, &add_dir);
-                                if (child.count() != 0) {
+                                if (!already_visited && child.count() != 0) {
                                     _.walker.workbuf.append(
                                         _.walker.arena.allocator(),
                                         WorkItem.newWithFd(work_item.path, child, .directory, dir_fd),
@@ -1030,6 +1049,7 @@ pub fn GlobWalker_(
 
         patternComponents: ArrayList(Component) = .{},
         matchedPaths: MatchedMap = .{},
+        visited_dirs: std.AutoHashMapUnmanaged(DirId, void) = .{},
         i: u32 = 0,
 
         dot: bool = false,

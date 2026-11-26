@@ -6,6 +6,8 @@
 #include "JavaScriptCore/JIT.h"
 #include "JavaScriptCore/JSWeakMap.h"
 #include "JavaScriptCore/JSWeakMapInlines.h"
+#include "JavaScriptCore/Options.h"
+#include "JavaScriptCore/ParserError.h"
 #include "JavaScriptCore/ProgramCodeBlock.h"
 #include "JavaScriptCore/SourceCodeKey.h"
 
@@ -165,18 +167,30 @@ constructScript(JSGlobalObject* globalObject, CallFrame* callFrame, JSValue newT
                 codeBlock = JSC::ProgramCodeBlock::create(vm, executable, unlinkedBlock, jsScope);
                 RETURN_IF_EXCEPTION(scope, {});
             }
-            JSC::CompilationResult compilationResult = JIT::compileSync(vm, codeBlock, JITCompilationEffort::JITCompilationCanFail);
-            if (compilationResult != JSC::CompilationResult::CompilationFailed) {
+            if (JSC::Options::useJIT()) {
+                JSC::CompilationResult compilationResult = JIT::compileSync(vm, codeBlock, JITCompilationEffort::JITCompilationCanFail);
+                if (compilationResult != JSC::CompilationResult::CompilationFailed) {
+                    executable->installCode(codeBlock);
+                    script->cachedDataRejected(TriState::False);
+                } else {
+                    script->cachedDataRejected(TriState::True);
+                }
+            } else {
                 executable->installCode(codeBlock);
                 script->cachedDataRejected(TriState::False);
-            } else {
-                script->cachedDataRejected(TriState::True);
             }
         }
     } else if (produceCachedData) {
         script->cacheBytecode();
         // TODO(@heimskr): is there ever a case where bytecode production fails?
         script->cachedDataProduced(true);
+    } else {
+        JSC::ParserError parserError;
+        if (!JSC::checkSyntax(vm, script->source(), parserError)) {
+            ASSERT(parserError.isValid());
+            throwException(globalObject, scope, parserError.toErrorObject(globalObject, script->source()));
+            return {};
+        }
     }
 
     return JSValue::encode(script);

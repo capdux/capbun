@@ -90,7 +90,9 @@ pub fn ParseJSXElement(comptime parser_feature__typescript: bool, comptime parse
         return struct {
 
 pub fn parseJSXElement(p: *P, loc: logger.Loc) anyerror!Expr {
-            _ = try bun.throwStackOverflow();
+            if ((!p.stack_check.isSafeToRecurse())) {
+                _ = try bun.throwStackOverflow();
+            }
             if (only_scan_imports_and_do_not_visit) {
                 p.needs_jsx_import = true;
             }

@@ -1892,6 +1892,40 @@ pub fn onUpgrade(self: *@This(), globalThis: *jsc.JSGlobalObject, object: jsc.JS
             if ((sec_websocket_key_str.len != 24)) {
                 return JSValue.false;
             }
+            {
+                var sec_ws_version_owned = ZigString.Slice.empty;
+                _ = &sec_ws_version_owned;
+                var _guard_ws_ver_owned = DeinitGuard(ZigString.Slice){ .ptr = (blk: {
+                break :blk (&sec_ws_version_owned);
+
+}) };
+                _ = &_guard_ws_ver_owned;
+                var ___guard_ws_ver_owned_moved = false; _ = &___guard_ws_ver_owned_moved;
+                defer if (!___guard_ws_ver_owned_moved) { ___guard_ws_ver_owned_moved = true; const __T = @TypeOf(_guard_ws_ver_owned); if (@typeInfo(__T) == .optional) { if (_guard_ws_ver_owned) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ws_ver_owned.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ws_ver_owned; _drop_val.__cp_deinit(); } };
+                var sec_ws_version: []const u8 = "";
+                _ = &sec_ws_version;
+                if (request.getFetchHeaders()) |head| {
+                    _ = &head;
+                    if (head.fastGet(.SecWebSocketVersion)) |ver| {
+                        _ = &ver;
+                        sec_ws_version_owned = bun.handleOom(ver.toSliceClone(bun.default_allocator));
+                        sec_ws_version = sec_ws_version_owned.slice();
+                    }
+                }
+                if ((sec_ws_version.len == 0)) {
+                    if (upgrader.req) |req| {
+                        _ = &req;
+                        sec_ws_version = ((req.header("sec-websocket-version")) orelse (""));
+                    }
+                }
+                if (((sec_ws_version.len > 0) and (!std.mem.eql(u8, sec_ws_version, "13")))) {
+                    _ = resp.writeStatus("426 Upgrade Required");
+                    _ = resp.writeHeader("Sec-WebSocket-Version", "13");
+                    _ = resp.writeHeaderInt("Content-Length", 0);
+                    _ = resp.endWithoutBody(resp.shouldCloseConnection());
+                    return JSValue.false;
+                }
+            }
             if ((sec_websocket_protocol.len > 0)) {
                 _ = sec_websocket_protocol.markUTF8();
             }
@@ -2024,7 +2058,6 @@ pub fn onUpgrade(self: *@This(), globalThis: *jsc.JSGlobalObject, object: jsc.JS
             _ = resp.clearOnData();
             _ = resp.clearOnWritable();
             _ = resp.clearTimeout();
-            _ = upgrader.reclaimPromiseCell();
             _ = upgrader.deref();
             _ = resp.upgrade(_Ptrs.ServerWebSocketPtr, ws, sec_websocket_key_str.slice(), sec_websocket_protocol_str.slice(), sec_websocket_extensions_str.slice(), ctx);
             return JSValue.true;

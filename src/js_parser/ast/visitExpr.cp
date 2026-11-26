@@ -667,20 +667,22 @@ fn VisitExprVisitors(
                         // like .e_import_identifier tracking works
                         // Reminder that this can only be done after
                         // `target` is visited.
-                        if (rewrite := p.maybeRewritePropertyAccess(
-                            expr.loc,
-                            e_.target,
-                            unwrapped.data.e_string.data,
-                            unwrapped.loc,
-                            {
-                                is_call_target: is_call_target,
-                                // .is_template_tag = is_template_tag,
-                                is_delete_target: is_delete_target,
-                                assign_target: expr_in.assign_target,
-                                is_property_access_target: expr_in.is_property_access_target,
-                            },
-                        )) {
-                            return rewrite;
+                        if (e_.optional_chain == null) {
+                            if (rewrite := p.maybeRewritePropertyAccess(
+                                expr.loc,
+                                e_.target,
+                                unwrapped.data.e_string.data,
+                                unwrapped.loc,
+                                {
+                                    is_call_target: is_call_target,
+                                    // .is_template_tag = is_template_tag,
+                                    is_delete_target: is_delete_target,
+                                    assign_target: expr_in.assign_target,
+                                    is_property_access_target: expr_in.is_property_access_target,
+                                },
+                            )) {
+                                return rewrite;
+                            }
                         }
                     }
                 },

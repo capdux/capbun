@@ -20,6 +20,8 @@
 #include "ErrorCode.h" // For Bun::ERR::
 #include "JavaScriptCore/JSMapInlines.h"
 
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
+
 namespace WebCore {
 
 using namespace JSC;
@@ -239,7 +241,7 @@ static std::tuple<String, String, size_t> parseTypeAndSubtype(JSGlobalObject* gl
     StringView typeView = input->substring(position, typeEnd - position);
     int invalidTypeIndex = findFirstInvalidHTTPTokenChar(typeView);
     if (typeView.isEmpty() || invalidTypeIndex != -1) {
-        size_t originalIndex = (invalidTypeIndex == -1) ? position : position + invalidTypeIndex;
+        int originalIndex = (invalidTypeIndex == -1) ? -1 : static_cast<int>(position + invalidTypeIndex);
         Bun::ERR::INVALID_MIME_SYNTAX(scope, globalObject, "type"_s, input->toString(), originalIndex);
         return {};
     }
@@ -265,7 +267,7 @@ static std::tuple<String, String, size_t> parseTypeAndSubtype(JSGlobalObject* gl
 
     int invalidSubtypeIndex = findFirstInvalidHTTPTokenChar(subtypeView);
     if (subtypeView.isEmpty() || invalidSubtypeIndex != -1) {
-        size_t originalIndex = (invalidSubtypeIndex == -1) ? position : position + invalidSubtypeIndex;
+        int originalIndex = (invalidSubtypeIndex == -1) ? -1 : invalidSubtypeIndex;
         Bun::ERR::INVALID_MIME_SYNTAX(scope, globalObject, "subtype"_s, input->toString(), originalIndex);
         return {};
     }
@@ -476,6 +478,11 @@ JSC_DEFINE_HOST_FUNCTION(jsMIMETypeProtoFuncToString, (JSGlobalObject * globalOb
     if (!paramsStr.isEmpty()) {
         builder.append(';');
         builder.append(paramsStr);
+    }
+
+    if (builder.hasOverflowed() || builder.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
     }
 
     return JSValue::encode(jsString(vm, builder.toString()));

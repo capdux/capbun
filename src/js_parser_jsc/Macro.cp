@@ -636,12 +636,18 @@ export struct Runner {
 
             jsc.initialize(false);
 
+            const macro_env_map = bun.handleOom(default_allocator.create(DotEnv.Map));
+            macro_env_map.* = DotEnv.Map.init(default_allocator);
+            const macro_env = bun.handleOom(default_allocator.create(DotEnv.Loader));
+            macro_env.* = DotEnv.Loader.init(macro_env_map, default_allocator);
+            macro_env.quiet = env.quiet;
+
             let _vm = JavaScript.VirtualMachine.init({
                 allocator: default_allocator,
                 args: resolver.opts.transform_options,
                 log: log,
                 is_main_thread: false,
-                env_loader: env,
+                env_loader: macro_env,
             })?;
 
             _vm.enableMacroMode();

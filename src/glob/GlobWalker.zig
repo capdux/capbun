@@ -135,6 +135,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const DirId = struct {
+    dev: u64,
+    ino: u64,
+};
+
 pub const CursorState = struct {
     cursor: CodepointIterator.Cursor = .{},
 
@@ -916,10 +921,26 @@ return .{ .err = e };
                     continue;
                 }
                 const dir_fd = maybe_dir_fd.?;
+                var already_visited = false;
+                _ = &already_visited;
+                if (comptime bun.Environment.isPosix) {
+                    switch (Accessor.statat(self.cwd_fd, symlink_full_path_z)) {
+.result => |st| {
+const dir_id = DirId{ .dev = @intCast(st.dev), .ino = @intCast(st.ino) };
+                    const gop = try self.walker.visited_dirs.getOrPut(self.walker.arena.allocator(), dir_id);
+                    if (gop.found_existing) {
+                        already_visited = true;
+                    }
+},
+.err => {
+
+},
+}
+                }
                 var add_dir: bool = false;
                 _ = &add_dir;
                 const child = self.walker.evalDir(active, entry_name, (&add_dir));
-                if ((child.count() != 0)) {
+                if (((!already_visited) and (child.count() != 0))) {
                     _ = try self.walker.workbuf.append(self.walker.arena.allocator(), WorkItem.newWithFd(work_item.path, child, .directory, dir_fd));
                 } else {
                     _ = self.closeDisallowingCwd(dir_fd);
@@ -1112,6 +1133,7 @@ pub fn GlobWalker_(comptime ignore_filter_fn: ?*const fn ([]const u8) bool, comp
     basename_excluding_special_syntax_component_idx: u32 = 0,
     patternComponents: ArrayList(Component) = .{},
     matchedPaths: MatchedMap = .{},
+    visited_dirs: std.AutoHashMapUnmanaged(DirId, void) = .{},
     i: u32 = 0,
     dot: bool = false,
     absolute: bool = false,

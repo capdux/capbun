@@ -108,7 +108,9 @@ pub const TJPARAM_JPEGWIDTH = 5;
 pub const TJPARAM_JPEGHEIGHT = 6;
 const TJPARAM_COLORSPACE = 8;
 const TJPARAM_PROGRESSIVE = 12;
+const TJPARAM_LOSSLESS = 15;
 const TJPARAM_MAXPIXELS = 24;
+pub const TJERR_WARNING: c_int = 0;
 const TJPARAM_SAVEMARKERS = 25;
 const TJPF_RGBA = 7;
 const TJPF_CMYK = 11;
@@ -140,6 +142,8 @@ pub extern "c" fn tj3Free(ptr: ?*anyopaque) callconv(.c) void;
 
 extern "c" fn tj3GetErrorStr(h: tjhandle) callconv(.c) [*:0]const u8;
 
+pub extern "c" fn tj3GetErrorCode(h: tjhandle) callconv(.c) c_int;
+
 extern "c" fn tj3GetICCProfile(h: tjhandle, icc_buf: *OptU8ManyPtr, icc_size: *usize) callconv(.c) c_int;
 
 extern "c" fn tj3SetICCProfile(h: tjhandle, icc_buf: ?[*]const u8, icc_size: usize) callconv(.c) c_int;
@@ -159,7 +163,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         defer if (!__h_guard_moved) { __h_guard_moved = true; const __T = @TypeOf(h_guard); if (@typeInfo(__T) == .optional) { if (h_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { h_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = h_guard; _drop_val.__cp_deinit(); } };
         const h = h_guard.h;
         _ = tj3Set(h, TJPARAM_SAVEMARKERS, 2);
-        if ((tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0)) {
+        if (((tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0) and (tj3GetErrorCode(h) != TJERR_WARNING))) {
             return error.DecodeFailed;
         }
         const rw = tj3Get(h, TJPARAM_JPEGWIDTH);
@@ -172,11 +176,12 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         _ = try codecs.guard(src_w, src_h, max_pixels);
         const cs = tj3Get(h, TJPARAM_COLORSPACE);
         const cmyk = ((cs == TJCS_CMYK) or (cs == TJCS_YCCK));
+        const is_lossless = (tj3Get(h, TJPARAM_LOSSLESS) != 0);
         var w = src_w;
         _ = &w;
         var ht = src_h;
         _ = &ht;
-        if ((((hint.target_w != 0) and (hint.target_h != 0)) and ((hint.target_w < src_w) or (hint.target_h < src_h)))) {
+        if (((((!is_lossless) and (hint.target_w != 0)) and (hint.target_h != 0)) and ((hint.target_w < src_w) or (hint.target_h < src_h)))) {
             var n: c_int = 0;
             _ = &n;
             if (tj3GetScalingFactors((&n))) |sfs| {
@@ -208,13 +213,15 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
             }
         }
         _ = tj3Set(h, TJPARAM_MAXPIXELS, ((std.math.cast(c_int, (src_w * src_h))) orelse (std.math.maxInt(c_int))));
-        _ = tj3SetCroppingRegion(h, .{ .x = 0, .y = 0, .w = @intCast(w), .h = @intCast(ht) });
+        if ((!is_lossless)) {
+            _ = tj3SetCroppingRegion(h, .{ .x = 0, .y = 0, .w = @intCast(w), .h = @intCast(ht) });
+        }
         const out = try bun.default_allocator.alloc(u8, (((if (comptime @typeInfo(@TypeOf(w)) == .@"enum") cp_cast_int(usize, @intFromEnum(w)) else cp_cast_int(usize, w)) * ht) * 4));
         var out_guard = SliceFreeGuard{ .slice = out };
         _ = &out_guard;
         var __out_guard_moved = false; _ = &__out_guard_moved;
         errdefer if (!__out_guard_moved) { __out_guard_moved = true; const __T = @TypeOf(out_guard); if (@typeInfo(__T) == .optional) { if (out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { out_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = out_guard; _drop_val.__cp_errdeinit(); } };
-        if ((tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast((w * 4)), (if (cmyk) TJPF_CMYK else TJPF_RGBA)) != 0)) {
+        if (((tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast((w * 4)), (if (cmyk) TJPF_CMYK else TJPF_RGBA)) != 0) and (tj3GetErrorCode(h) != TJERR_WARNING))) {
             return error.DecodeFailed;
         }
         if (((tj3Get(h, TJPARAM_JPEGWIDTH) != rw) or (tj3Get(h, TJPARAM_JPEGHEIGHT) != rh))) {

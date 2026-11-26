@@ -84,6 +84,8 @@ pub fn runFromJSThread(lvl: i32, global: *jsc.JSGlobalObject) void {
 
 pub const MemoryPressureWatcher = struct {
     poll: ?*FilePoll = null,
+    psi_last_total_us: u64 = 0,
+    psi_has_baseline: bool = false,
     win_notify: ?*anyopaque = null,
     win_shutdown: ?*anyopaque = null,
     win_thread: ?std.Thread = null,
@@ -103,6 +105,23 @@ pub fn onPoll(poll: *FilePoll, fflags: i64) void {
                     _ = deinitPoll(poll);
                     return;
                 }
+                if (vm.rareData().memory_pressure_watcher) |raw| {
+                    _ = &raw;
+                    var watcher: *MemoryPressureWatcher = (blk: {
+                    break :blk @ptrCast(@alignCast(raw));
+
+});
+                    _ = &watcher;
+                    var buf: [512]u8 = undefined;
+                    _ = &buf;
+                    const content: []const u8 = (switch (bun.sys.pread(poll.fd, (&buf), 0)) {
+.result => |n| buf[0..n],
+.err => "",
+});
+                    if ((!shouldEmitPsi((&watcher.psi_last_total_us), (&watcher.psi_has_baseline), content))) {
+                        return;
+                    }
+                }
             }
             const lvl: i32 = (if (comptime Environment.isMac) @intCast(fflags) else CRITICAL);
             _ = vm.eventLoop().enqueueTask(pressureTask(lvl));
@@ -115,6 +134,8 @@ const Async = bun.Async;
 const FilePoll = Async.FilePoll;
 pub const WARNING: i32 = 2;
 pub const CRITICAL: i32 = 4;
+pub const TRIGGER = "some 150000 2000000\x00";
+const PSI_THRESHOLD_US: u64 = 150000;
 const WinHandle = ?*anyopaque;
 const WAIT_OBJECT_0: u32 = 0;
 const LOW_MEMORY_RESOURCE_NOTIFICATION: i32 = 0;
@@ -134,6 +155,42 @@ pub fn pressureTask(lvl: i32) jsc.Task {
         _ = &task;
         _ = task.setUintptr(@intCast(@as(usize, @intCast(lvl))));
         return task;
+}
+
+pub fn parsePsiSomeTotalUs(content: []const u8) ?u64 {
+        var lines = std.mem.splitScalar(u8, content, 10);
+        _ = &lines;
+        while (lines.next()) |line| {
+            if ((!std.mem.startsWith(u8, line, "some "))) {
+                continue;
+            }
+            const idx = ((std.mem.indexOf(u8, line, "total=")) orelse { return null; });
+            const rest = line[(idx + "total=".len)..];
+            var end: usize = 0;
+            _ = &end;
+            while ((((end < rest.len) and (rest[@as(usize, @intCast(end))] >= 48)) and (rest[@as(usize, @intCast(end))] <= 57))) {
+                end = (end + 1);
+            }
+            if ((end == 0)) {
+                return null;
+            }
+            return (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseInt(u64, rest[0..end], 10)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
+        }
+        return null;
+}
+
+pub fn shouldEmitPsi(last_total_us: *u64, has_baseline: *bool, content: []const u8) bool {
+        const current = ((parsePsiSomeTotalUs(content)) orelse { return true; });
+        if ((!has_baseline.*)) {
+            last_total_us.* = current;
+            has_baseline.* = true;
+            return false;
+        }
+        if (((current >= last_total_us.*) and ((current - last_total_us.*) >= PSI_THRESHOLD_US))) {
+            last_total_us.* = current;
+            return true;
+        }
+        return false;
 }
 
 pub fn takeWatcher(vm: *jsc.VirtualMachine) ?*MemoryPressureWatcher {
@@ -190,7 +247,7 @@ return null;
                 rest = rest[1..];
             }
             const sep = (if ((rest.len == 0)) "" else "/");
-            return (blk_catch_0: { break :blk_catch_0 ((std.fmt.bufPrintZ(buf, "/sys/fs/cgroup/{s}{s}memory.pressure", .{ rest, sep })) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
+            return (blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrintZ(buf, "/sys/fs/cgroup/{s}{s}memory.pressure", .{ rest, sep })) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
         }
         return null;
 }
@@ -199,7 +256,6 @@ pub fn openPsiFd() ?bun.FD {
         if (comptime (!(Environment.isLinux or Environment.isAndroid))) {
             return null;
         }
-        const TRIGGER: []const u8 = "some 150000 2000000";
         var cgroup_buf: [320]u8 = undefined;
         _ = &cgroup_buf;
         const paths: [2]?[:0]const u8 = .{ "/proc/pressure/memory", ownCgroupPressurePath((&cgroup_buf)) };
@@ -230,6 +286,20 @@ pub fn registerOsWatch(global: *jsc.JSGlobalObject, watcher: *MemoryPressureWatc
         _ = &fd;
         if (comptime (Environment.isLinux or Environment.isAndroid)) {
             fd = ((openPsiFd()) orelse { return null; });
+            var psi_buf: [512]u8 = undefined;
+            _ = &psi_buf;
+            switch (bun.sys.pread(fd, (&psi_buf), 0)) {
+.result => |n| {
+if (parsePsiSomeTotalUs(psi_buf[0..n])) |total| {
+                _ = &total;
+                watcher.psi_last_total_us = total;
+                watcher.psi_has_baseline = true;
+            }
+},
+.err => {
+
+},
+}
         } else {
             if (comptime Environment.isMac) {
                 fd = bun.FD.fromNative(0);
@@ -287,7 +357,7 @@ pub fn install(global: *jsc.JSGlobalObject) void {
         if ((rare.memory_pressure_watcher != null)) {
             return;
         }
-        var watcher = (blk_catch_1: { break :blk_catch_1 ((bun.default_allocator.create(MemoryPressureWatcher)) catch |__ce_1| { _ = &__ce_1; return; }); });
+        var watcher = (blk_catch_2: { break :blk_catch_2 ((bun.default_allocator.create(MemoryPressureWatcher)) catch |__ce_2| { _ = &__ce_2; return; }); });
         _ = &watcher;
         watcher.* = MemoryPressureWatcher{  };
         if (comptime Environment.isWindows) {
@@ -302,7 +372,7 @@ pub fn install(global: *jsc.JSGlobalObject) void {
                 _ = bun.default_allocator.destroy(watcher);
                 return;
             }
-            const thread = (blk_catch_2: { break :blk_catch_2 ((std.Thread.spawn(.{ .stack_size = (64 * 1024) }, winThreadMain, .{ vm, notify, shutdown })) catch |__ce_2| { _ = &__ce_2; _ = CloseHandle(shutdown);
+            const thread = (blk_catch_3: { break :blk_catch_3 ((std.Thread.spawn(.{ .stack_size = (64 * 1024) }, winThreadMain, .{ vm, notify, shutdown })) catch |__ce_3| { _ = &__ce_3; _ = CloseHandle(shutdown);
             _ = CloseHandle(notify);
             _ = bun.default_allocator.destroy(watcher);
             return; }); });
@@ -359,4 +429,19 @@ pub export fn Bun__MemoryPressure__emit(global: *jsc.JSGlobalObject, lvl: i32) c
 
 pub export fn Bun__MemoryPressure__isInstalled(global: *jsc.JSGlobalObject) callconv(.c) bool {
         return (global.bunVM().rareData().memory_pressure_watcher != null);
+}
+
+pub export fn Bun__MemoryPressure__psiTriggerPtr() callconv(.c) [*]const u8 {
+        return TRIGGER.ptr;
+}
+
+pub export fn Bun__MemoryPressure__psiTriggerLen() callconv(.c) usize {
+        return TRIGGER.len;
+}
+
+pub export fn Bun__MemoryPressure__psiShouldEmit(last_total: *u64, has_baseline: *bool, ptr: [*]const u8, len: usize) callconv(.c) bool {
+        return shouldEmitPsi(last_total, has_baseline, (blk: {
+        break :blk ptr[0..len];
+
+}));
 }

@@ -193,6 +193,116 @@ pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) !void {
                 if ((p.lexer.token != .t_equals_greater_than)) {
                     return error.Backtrack;
                 }
+                if (p.in_ternary_yes) {
+                    const arrow_lexer = p.lexer;
+                    defer {
+                    _ = p.lexer.restore((&arrow_lexer));
+                    }
+                    _ = try p.lexer.next();
+                    if ((p.lexer.token == .t_open_brace)) {
+                        var brace_depth: usize = 0;
+                        _ = &brace_depth;
+                        while (true) {
+                            switch (p.lexer.token) {
+.t_open_brace => {
+brace_depth = (brace_depth + 1);
+},
+.t_close_brace => {
+brace_depth = (brace_depth - 1);
+                            if ((brace_depth == 0)) {
+                                _ = try p.lexer.next();
+                                break;
+                            }
+},
+.t_end_of_file => {
+return error.Backtrack;
+},
+else => {
+
+},
+}
+                            _ = try p.lexer.next();
+                        }
+                        if ((p.lexer.token != .t_colon)) {
+                            return error.Backtrack;
+                        }
+                    } else {
+                        var paren_depth: usize = 0;
+                        _ = &paren_depth;
+                        var bracket_depth: usize = 0;
+                        _ = &bracket_depth;
+                        var brace_depth: usize = 0;
+                        _ = &brace_depth;
+                        var ternary_depth: usize = 0;
+                        _ = &ternary_depth;
+                        var found_colon = false;
+                        _ = &found_colon;
+                        scan: while (true) {
+                            switch (p.lexer.token) {
+.t_open_paren => {
+paren_depth = (paren_depth + 1);
+},
+.t_close_paren => {
+if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                break :scan;
+                            }
+                            if ((paren_depth > 0)) {
+                                paren_depth = (paren_depth - 1);
+                            }
+},
+.t_open_bracket => {
+bracket_depth = (bracket_depth + 1);
+},
+.t_close_bracket => {
+if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                break :scan;
+                            }
+                            if ((bracket_depth > 0)) {
+                                bracket_depth = (bracket_depth - 1);
+                            }
+},
+.t_open_brace => {
+brace_depth = (brace_depth + 1);
+},
+.t_close_brace => {
+if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                break :scan;
+                            }
+                            if ((brace_depth > 0)) {
+                                brace_depth = (brace_depth - 1);
+                            }
+},
+.t_question => {
+if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                ternary_depth = (ternary_depth + 1);
+                            }
+},
+.t_colon => {
+if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                if ((ternary_depth > 0)) {
+                                    ternary_depth = (ternary_depth - 1);
+                                } else {
+                                    found_colon = true;
+                                    break :scan;
+                                }
+                            }
+},
+.t_comma, .t_semicolon, .t_end_of_file => {
+if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                break :scan;
+                            }
+},
+else => {
+
+},
+}
+                            _ = try p.lexer.next();
+                        }
+                        if ((!found_colon)) {
+                            return error.Backtrack;
+                        }
+                    }
+                }
         }
     };
 }

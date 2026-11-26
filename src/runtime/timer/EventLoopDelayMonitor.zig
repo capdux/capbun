@@ -11,17 +11,17 @@ pub const EventLoopDelayMonitor = @This();
 
 histogram: HistogramWeak = HistogramWeak.init(),
 event_loop_timer: jsc.API.Timer.EventLoopTimer = .{ .next = .epoch, .tag = .EventLoopDelayMonitor },
-resolution_ms: i32 = 10,
+resolution_ms: i64 = 10,
 last_fire_ns: u64 = 0,
 enabled: bool = false,
 
-pub fn enable(self: *EventLoopDelayMonitor, vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) void {
+pub fn enable(self: *EventLoopDelayMonitor, vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i64) void {
         _ = self.disable();
         self.histogram = HistogramWeak.createPassive(histogram, vm.global);
         self.resolution_ms = resolution_ms;
         self.enabled = true;
         const now = bun.timespec.now(.force_real_time);
-        self.event_loop_timer.next = now.addMs(@intCast(resolution_ms));
+        self.event_loop_timer.next = now.addMs(resolution_ms);
         _ = vm.timer.insert((&self.event_loop_timer));
 }
 
@@ -54,7 +54,7 @@ pub fn onFire(self: *EventLoopDelayMonitor, vm: *VirtualMachine, now: *const bun
             _ = &histogram;
             const now_ns = now.ns();
             if ((self.last_fire_ns > 0)) {
-                const expected_ns = (@as(u64, @intCast(self.resolution_ms)) * 1000000);
+                const expected_ns = (@as(u64, @intCast(self.resolution_ms)) *| 1000000);
                 const actual_ns = (now_ns - self.last_fire_ns);
                 if ((actual_ns > expected_ns)) {
                     const delay_ns = @as(i64, @intCast((actual_ns - expected_ns)));
@@ -62,7 +62,7 @@ pub fn onFire(self: *EventLoopDelayMonitor, vm: *VirtualMachine, now: *const bun
                 }
             }
             self.last_fire_ns = now_ns;
-            self.event_loop_timer.next = now.addMs(@intCast(self.resolution_ms));
+            self.event_loop_timer.next = now.addMs(self.resolution_ms);
             _ = vm.timer.insert((&self.event_loop_timer));
         } else {
             _ = self.disable();
@@ -74,7 +74,7 @@ const VirtualMachine = jsc.VirtualMachine;
 
 extern "c" fn JSNodePerformanceHooksHistogram_recordDelay(histogram: jsc.JSValue, delay_ns: i64) callconv(.c) void;
 
-pub export fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) callconv(.c) void {
+pub export fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i64) callconv(.c) void {
         _ = vm.timer.event_loop_delay.enable(vm, histogram, resolution_ms);
 }
 

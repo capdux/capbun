@@ -291,7 +291,7 @@ const s3 = bun.S3;
 const ZigURL = bun.URL;
 pub export const fetch_error_no_args = "fetch() expects a string but received no arguments.";
 pub export const fetch_error_blank_url = "fetch() URL must not be a blank string.";
-pub export const fetch_error_unexpected_body = "fetch() request with GET/HEAD/OPTIONS method cannot have body.";
+pub export const fetch_error_unexpected_body = "fetch() request with GET/HEAD method cannot have body.";
 pub export const fetch_error_proxy_unix = "fetch() cannot use a proxy with a unix socket.";
 pub const fetch_type_error_strings: JSTypeErrorEnum = brk: {
     var errors = JSTypeErrorEnum.initUndefined();
@@ -959,6 +959,13 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         }
         if (globalThis.hasException()) {
             return JSValue.zero;
+        }
+        if (signal) |sig| {
+            _ = &sig;
+            if (sig.aborted()) {
+                const reason = sig.jsReason(globalThis);
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, reason);
+            }
         }
         var has_body = false;
         _ = &has_body;

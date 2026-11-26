@@ -72,6 +72,15 @@ struct NodeSqliteSessionRecord : public WTF::RefCounted<NodeSqliteSessionRecord>
     bool inUse { false };
 };
 
+struct NodeSqliteStmtRecord : public WTF::RefCounted<NodeSqliteStmtRecord> {
+    explicit NodeSqliteStmtRecord(sqlite3_stmt* s)
+        : stmt(s)
+    {
+    }
+    sqlite3_stmt* stmt { nullptr };
+    bool wrapperGone { false };
+};
+
 struct DatabaseSyncOpenConfiguration {
     bool readOnly = false;
     bool enableForeignKeyConstraints = true;
@@ -153,17 +162,12 @@ public:
     {
         m_sessions.removeFirstMatching([&](auto& r) { return r.ptr() == record; });
     }
-    // Free every tracked sqlite3_session* and mark its record dbGone.
-    // Called from closeInternal() and from deserialize() after a successful
-    // schema swap — Session wrappers observe "the database freed my handle"
-    // through the shared record, never by touching this cell.
     void deleteTrackedSessions();
-    // ~JSNodeSqliteSession() cannot call into SQLite (the sweep can run
-    // mid-sqlite3_step) — it just flags the record. The next BusyScope taken
-    // on this connection (every DatabaseSync, StatementSync, iterator, and
-    // tag-store entry point) frees any orphaned handles; close() and
-    // teardown sweep unconditionally via deleteTrackedSessions().
     void sweepOrphanedSessions();
+
+    void trackStatement(Ref<NodeSqliteStmtRecord>&& record) { m_statements.append(WTF::move(record)); }
+    void finalizeTrackedStatements();
+    void sweepOrphanedStatements();
 
     // setAuthorizer(cb) callback and the lazily-created limits wrapper.
     // Kept as GC-traced fields on the DatabaseSync cell rather than a
@@ -207,10 +211,11 @@ public:
         {
             if (db) {
                 // Every connection entry point takes a BusyScope, so this is
-                // where orphaned sessions get their deferred sweep — before
+                // where orphaned sessions/statements get their deferred sweep — before
                 // the depth bump so re-entrant calls from UDF/authorizer
                 // callbacks are skipped by the m_busyDepth guard.
                 db->sweepOrphanedSessions();
+                db->sweepOrphanedStatements();
                 ++db->m_busyDepth;
             }
         }
@@ -248,6 +253,7 @@ private:
     // records (not JS objects) so close() can sweep regardless of GC
     // ordering.
     WTF::Vector<Ref<NodeSqliteSessionRecord>> m_sessions;
+    WTF::Vector<Ref<NodeSqliteStmtRecord>> m_statements;
     // GC-traced roots for function()/aggregate() callbacks; mutated and
     // visited under cellLock() because visitChildren runs concurrently.
     WTF::Vector<JSC::WriteBarrier<JSC::Unknown>> m_registeredCallbacks;
@@ -351,7 +357,7 @@ public:
     static void destroy(JSC::JSCell* cell) { static_cast<JSStatementSync*>(cell)->~JSStatementSync(); }
     ~JSStatementSync();
 
-    sqlite3_stmt* statement() const { return m_stmt; }
+    sqlite3_stmt* statement() const { return m_record ? m_record->stmt : nullptr; }
     sqlite3* connection() const;
     JSDatabaseSync* database() const { return m_database.get(); }
     // A statement is considered finalized either when it has been
@@ -428,7 +434,7 @@ private:
     }
     void finishCreation(JSC::VM& vm, JSDatabaseSync* db, sqlite3_stmt* stmt);
 
-    sqlite3_stmt* m_stmt = nullptr;
+    RefPtr<NodeSqliteStmtRecord> m_record;
     JSC::WriteBarrier<JSC::Structure> m_rowStructure;
     WTF::Vector<int8_t> m_columnOffsets;
     // sqlite3_stmt native heap footprint reported to JSC's GC so

@@ -135,17 +135,21 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSFetchHeadersDOMConstru
 
     if (argument0.value() && !argument0.value().isUndefined()) {
         if (auto* existingJsFetchHeaders = dynamicDowncast<JSFetchHeaders>(argument0.value())) {
+            JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<FetchHeaders>(lexicalGlobalObject, callFrame);
+            RETURN_IF_EXCEPTION(throwScope, {});
             auto newHeaders = FetchHeaders::create(existingJsFetchHeaders->wrapped());
             auto jsValue = toJSNewlyCreated<IDLInterface<FetchHeaders>>(*lexicalGlobalObject, *castedThis->globalObject(), throwScope, WTF::move(newHeaders));
             if constexpr (IsExceptionOr<decltype(jsValue)>)
                 RETURN_IF_EXCEPTION(throwScope, {});
-            setSubclassStructureIfNeeded<FetchHeaders>(lexicalGlobalObject, callFrame, asObject(jsValue));
-            RETURN_IF_EXCEPTION(throwScope, {});
+            if (subclassStructure)
+                asObject(jsValue)->setStructure(vm, subclassStructure);
             return JSValue::encode(jsValue);
         }
         init = std::optional<Converter<IDLUnion<IDLSequence<IDLSequence<IDLDOMString>>, IDLRecord<IDLDOMString, IDLDOMString>>>::ReturnType>(convert<IDLUnion<IDLSequence<IDLSequence<IDLDOMString>>, IDLRecord<IDLDOMString, IDLDOMString>>>(*lexicalGlobalObject, argument0.value()));
     }
 
+    RETURN_IF_EXCEPTION(throwScope, {});
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<FetchHeaders>(lexicalGlobalObject, callFrame);
     RETURN_IF_EXCEPTION(throwScope, {});
     auto object = FetchHeaders::create(WTF::move(init));
     if constexpr (IsExceptionOr<decltype(object)>)
@@ -154,8 +158,8 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSFetchHeadersDOMConstru
     auto jsValue = toJSNewlyCreated<IDLInterface<FetchHeaders>>(*lexicalGlobalObject, *castedThis->globalObject(), throwScope, WTF::move(object));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
-    setSubclassStructureIfNeeded<FetchHeaders>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (subclassStructure)
+        asObject(jsValue)->setStructure(vm, subclassStructure);
 
     if (argument0.value())
         uncheckedDowncast<JSFetchHeaders>(jsValue)->computeMemoryCost();

@@ -2233,7 +2233,7 @@ class Http2Stream extends Duplex {
 
   get state() {
     const session = this[bunHTTP2Session];
-    if (session && !session.destroyed) {
+    if (session && !session.destroyed && typeof this.#id === "number") {
       return session[bunHTTP2Native]?.getStreamState(this.#id) ?? {};
     }
     // node reports an empty object once the stream's session has been destroyed.
@@ -3880,10 +3880,12 @@ class ServerHttp2Session extends Http2Session {
   }
 
   get remoteSettings() {
-    return this.#remoteSettings;
+    if (this.connecting || this.destroyed) return {};
+    return this.#remoteSettings ?? {};
   }
 
   get localSettings() {
+    if (this.connecting || this.destroyed) return {};
     return this.#localSettings;
   }
 
@@ -4575,10 +4577,12 @@ class ClientHttp2Session extends Http2Session {
   }
 
   get remoteSettings() {
-    return this.#remoteSettings;
+    if (this.connecting || this.destroyed) return {};
+    return this.#remoteSettings ?? {};
   }
 
   get localSettings() {
+    if (this.connecting || this.destroyed) return {};
     return this.#localSettings;
   }
 

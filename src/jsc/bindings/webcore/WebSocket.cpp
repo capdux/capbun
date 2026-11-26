@@ -54,6 +54,9 @@
 // #include "ResourceLoadObserver.h"
 // #include "ScriptController.h"
 #include "ScriptExecutionContext.h"
+#include <JavaScriptCore/InternalFieldTuple.h>
+#include <JavaScriptCore/StrongInlines.h>
+#include <wtf/Scope.h>
 // #include "SecurityOrigin.h"
 // #include "SocketProvider.h"
 // #include "ThreadableWebSocketChannel.h"
@@ -191,6 +194,32 @@ WebSocket::WebSocket(ScriptExecutionContext& context)
     m_state = CONNECTING;
     m_hasPendingActivity.store(true);
     m_rejectUnauthorized = Bun__getTLSRejectUnauthorizedValue() != 0;
+    if (auto* globalObject = context.jsGlobalObject()) {
+        JSC::JSValue asyncContext = globalObject->m_asyncContextData.get()->getInternalField(0);
+        if (!asyncContext.isUndefined()) {
+            m_asyncContext.set(globalObject->vm(), asyncContext);
+        }
+    }
+}
+
+void WebSocket::dispatchEvent(Event& event)
+{
+    if (m_asyncContext) {
+        if (auto* context = scriptExecutionContext()) {
+            if (auto* globalObject = context->jsGlobalObject()) {
+                auto& vm = globalObject->vm();
+                auto* internalFieldTuple = globalObject->m_asyncContextData.get();
+                JSC::JSValue prev = internalFieldTuple->getInternalField(0);
+                internalFieldTuple->putInternalField(vm, 0, m_asyncContext.get());
+                auto scopeExit = WTF::makeScopeExit([&] {
+                    internalFieldTuple->putInternalField(vm, 0, prev);
+                });
+                EventTargetWithInlineData::dispatchEvent(event);
+                return;
+            }
+        }
+    }
+    EventTargetWithInlineData::dispatchEvent(event);
 }
 
 WebSocket::~WebSocket()

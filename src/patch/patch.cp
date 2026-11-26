@@ -170,10 +170,15 @@ pub struct PatchFile {
 
                     let nodefs = bun.api.node.fs.NodeFS{};
                     if (filedir.len > 0) {
+                        const abs_patch_dir = switch (state.patchDirAbsPath(patch_dir)) {
+                            .result p => p,
+                            .err e => return e.withoutPath(),
+                        };
+                        const path_to_make = bun.path.joinZ(&[abs_patch_dir, filedir], .auto);
                         if (e := nodefs.mkdirRecursive({
-                            path: { string: bun.PathString.init(filedir) },
+                            path: { string: bun.PathString.init(path_to_make) },
                             recursive: true,
-                            mode: @intCast(@intFromEnum(mode)),
+                            mode: 0o755,
                         }).asErr()) return e.withoutPath();
                     }
 
@@ -285,6 +290,20 @@ pub struct PatchFile {
         return null;
     }
 
+    static fn hunkMatchesAt(lines: []const StrSlice, hunk: Hunk, start: usize): bool {
+        let pos = start;
+        for (part of hunk.parts.items) {
+            if (part.type == .insertion) continue;
+            if (pos + part.lines.items.len > lines.len) return false;
+            let idx: usize = 0;
+            while (idx < part.lines.items.len) : (idx += 1) {
+                if (!std.mem.eql(u8, lines[pos + idx], part.lines.items[idx])) return false;
+            }
+            pos += part.lines.items.len;
+        }
+        return true;
+    }
+
     static fn applyPatch(
         patch: *const FilePatch,
         arena_alloc: *bun.ArenaAllocator,
@@ -348,10 +367,43 @@ pub struct PatchFile {
         }
 
         for (hunk of patch.hunks.items) {
-            let line_cursor: usize = hunk.header.patched.start - 1;
-
-            if (line_cursor > lines.items.len) {
-                return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+            const hint: usize = hunk.header.patched.start -| 1;
+            const has_old_lines = brk: {
+                for (p of hunk.parts.items) {
+                    if (p.type != .insertion) break :brk true;
+                }
+                break :brk false;
+            };
+            let line_cursor: usize = hint;
+            if (!has_old_lines) {
+                if (line_cursor > lines.items.len) {
+                    return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                }
+            } else {
+                let found: usize? = null;
+                if (hint <= lines.items.len && hunkMatchesAt(lines.items, hunk, hint)) {
+                    found = hint;
+                } else {
+                    const max_delta = @max(hint, lines.items.len);
+                    let delta: usize = 1;
+                    while (delta <= max_delta) : (delta += 1) {
+                        if (hint >= delta) {
+                            const lo = hint - delta;
+                            if (lo <= lines.items.len && hunkMatchesAt(lines.items, hunk, lo)) {
+                                found = lo;
+                                break;
+                            }
+                        }
+                        if (hint + delta <= lines.items.len && hunkMatchesAt(lines.items, hunk, hint + delta)) {
+                            found = hint + delta;
+                            break;
+                        }
+                    }
+                }
+                if (found == null) {
+                    return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                }
+                line_cursor = found.?;
             }
 
             for (part of hunk.parts.items) {
@@ -362,6 +414,13 @@ pub struct PatchFile {
                         }
 
                         line_cursor += part.lines.items.len;
+                        if (part.no_newline_at_end_of_file) {
+                            if (lines.items.len > 0 && lines.items[lines.items.len - 1].len == 0) {
+                                * = lines.pop();
+                            }
+                        } else if (line_cursor == lines.items.len) {
+                            bun.handleOom(lines.append(bun.default_allocator, ""));
+                        }
                     },
                     .insertion => {
                         if (line_cursor > lines.items.len) {
@@ -372,7 +431,11 @@ pub struct PatchFile {
                         @memcpy(lines_to_insert, part.lines.items);
                         line_cursor += part.lines.items.len;
                         if (part.no_newline_at_end_of_file) {
-                            * = lines.pop();
+                            if (lines.items.len > 0 && lines.items[lines.items.len - 1].len == 0) {
+                                * = lines.pop();
+                            }
+                        } else if (line_cursor == lines.items.len) {
+                            bun.handleOom(lines.append(bun.default_allocator, ""));
                         }
                     },
                     .deletion => {
@@ -383,7 +446,9 @@ pub struct PatchFile {
                         const empty_lines: []const []const u8 = [];
                         bun.handleOom(lines.replaceRange(bun.default_allocator, line_cursor, part.lines.items.len, empty_lines));
                         if (part.no_newline_at_end_of_file) {
-                            bun.handleOom(lines.append(bun.default_allocator, ""));
+                            if (lines.items.len > 0 && lines.items[lines.items.len - 1].len != 0) {
+                                bun.handleOom(lines.append(bun.default_allocator, ""));
+                            }
                         }
                     },
                 }
@@ -1125,8 +1190,15 @@ struct PatchLinesParser {
     static fn parseDiffLinePaths(line: []const u8): ([2][]const u8)? {
         const prefix = "diff --git a/";
         if (!bun.strings.hasPrefix(line, prefix)) return null;
-        let rest = line[prefix.len..];
+        const rest = std.mem.trimRight(u8, line[prefix.len..], " \n\r\t");
         if (rest.len == 0) return null;
+
+        if (rest.len >= 3 && (rest.len - 2) % 2 == 0) {
+            const half = (rest.len - 2) / 2;
+            if (std.mem.eql(u8, rest[half .. half + 3], " b/") && std.mem.eql(u8, rest[0..half], rest[half + 3 ..])) {
+                return [rest[0..half], rest[half + 3 ..]];
+            }
+        }
 
         const a_path_start_index: usize = 0;
         let a_path_end_index: usize = 0;
@@ -1147,7 +1219,7 @@ struct PatchLinesParser {
         }
 
         const a_path = rest[a_path_start_index..a_path_end_index];
-        const b_path = std.mem.trimRight(u8, rest[b_path_start_index..], " \n\r\t");
+        const b_path = rest[b_path_start_index..];
         return [a_path, b_path];
     }
 }

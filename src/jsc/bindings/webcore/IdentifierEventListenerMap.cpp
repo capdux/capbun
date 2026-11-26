@@ -64,8 +64,6 @@ bool IdentifierEventListenerMap::add(const JSC::Identifier& eventType, Ref<Event
     Locker locker { m_lock };
 
     if (auto* listeners = find(eventType)) {
-        if (findListener(*listeners, listener) != notFound)
-            return false; // Duplicate listener.
         listeners->append(SimpleRegisteredEventListener::create(WTF::move(listener), once));
         return true;
     }
@@ -79,8 +77,6 @@ bool IdentifierEventListenerMap::prepend(const JSC::Identifier& eventType, Ref<E
     Locker locker { m_lock };
 
     if (auto* listeners = find(eventType)) {
-        if (findListener(*listeners, listener) != notFound)
-            return false; // Duplicate listener.
         listeners->insert(0, SimpleRegisteredEventListener::create(WTF::move(listener), once));
         return true;
     }
@@ -91,13 +87,15 @@ bool IdentifierEventListenerMap::prepend(const JSC::Identifier& eventType, Ref<E
 
 static bool removeListenerFromVector(SimpleEventListenerVector& listeners, EventListener& listener)
 {
-    size_t indexOfRemovedListener = findListener(listeners, listener);
-    if (indexOfRemovedListener == notFound) [[unlikely]]
-        return false;
-
-    listeners[indexOfRemovedListener]->markAsRemoved();
-    listeners.removeAt(indexOfRemovedListener);
-    return true;
+    for (size_t i = listeners.size(); i-- > 0;) {
+        auto& registeredListener = listeners[i];
+        if (registeredListener->callback() == listener) {
+            registeredListener->markAsRemoved();
+            listeners.removeAt(i);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool IdentifierEventListenerMap::remove(const JSC::Identifier& eventType, EventListener& listener)
@@ -110,6 +108,29 @@ bool IdentifierEventListenerMap::remove(const JSC::Identifier& eventType, EventL
             if (m_entries[i].second.isEmpty())
                 m_entries.removeAt(i);
             return wasRemoved;
+        }
+    }
+
+    return false;
+}
+
+bool IdentifierEventListenerMap::removeRegistered(const JSC::Identifier& eventType, SimpleRegisteredEventListener& target)
+{
+    Locker locker { m_lock };
+
+    for (unsigned i = 0; i < m_entries.size(); ++i) {
+        if (m_entries[i].first == eventType) {
+            auto& listeners = m_entries[i].second;
+            for (size_t j = 0; j < listeners.size(); ++j) {
+                if (listeners[j].get() == &target) {
+                    listeners[j]->markAsRemoved();
+                    listeners.removeAt(j);
+                    if (listeners.isEmpty())
+                        m_entries.removeAt(i);
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

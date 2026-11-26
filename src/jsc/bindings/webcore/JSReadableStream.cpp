@@ -270,6 +270,7 @@ void JSReadableStreamPrototype::finishCreation(VM& vm)
     reifyStaticProperties(vm, JSReadableStream::info(), JSReadableStreamPrototypeTableValues, *this);
     this->putDirectBuiltinFunction(vm, globalObject(), vm.propertyNames->asyncIteratorSymbol, readableStreamLazyAsyncIteratorCodeGenerator(vm), JSC::PropertyAttribute::DontDelete | 0);
     this->putDirectBuiltinFunction(vm, globalObject(), vm.propertyNames->builtinNames().valuesPublicName(), readableStreamValuesCodeGenerator(vm), JSC::PropertyAttribute::DontDelete | 0);
+    this->putDirectBuiltinFunction(vm, globalObject(), clientData->builtinNames().inspectCustomPublicName(), streamInternalsInspectReadableStreamCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

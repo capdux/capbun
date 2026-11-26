@@ -31,7 +31,7 @@ export function initializeCompressionStream(this, format) {
 
   const kDefaultHighWaterMark = 65536;
   const collectAll = highWaterMark === Infinity;
-  const outChunkSize = collectAll ? kDefaultHighWaterMark : Math.max(64, Math.min(highWaterMark, kDefaultHighWaterMark));
+  const outChunkSize = collectAll ? kDefaultHighWaterMark : Math.max(64, highWaterMark);
 
   const isBrotli = format === "brotli";
   const isZstd = format === "zstd";
@@ -172,22 +172,22 @@ export function initializeCompressionStream(this, format) {
     closedCapability.reject.$call(undefined, e);
   };
 
-  $putByIdDirectPrivate(this, "readable", $getByIdDirectPrivate(transform, "readable"));
-  $putByIdDirectPrivate(this, "writable", writable);
+  $putByIdDirectPrivate(this, "compressionStreamReadable", $getByIdDirectPrivate(transform, "readable"));
+  $putByIdDirectPrivate(this, "compressionStreamWritable", writable);
 
   return this;
 }
 
 $getter;
 export function readable(this) {
-  const r = $getByIdDirectPrivate(this, "readable");
+  const r = $getByIdDirectPrivate(this, "compressionStreamReadable");
   if (!r) throw $makeGetterTypeError("CompressionStream", "readable");
   return r;
 }
 
 $getter;
 export function writable(this) {
-  const w = $getByIdDirectPrivate(this, "writable");
+  const w = $getByIdDirectPrivate(this, "compressionStreamWritable");
   if (!w) throw $makeGetterTypeError("CompressionStream", "writable");
   return w;
 }

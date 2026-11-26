@@ -64,6 +64,29 @@ CookieMap::CookieMap(Vector<KeyValuePair<String, String>>&& cookies)
 {
 }
 
+static String decodeCookieComponent(StringView view)
+{
+    if (view.find('%') == notFound)
+        return view.toString();
+
+    Bun::UTF8View utf8View(view);
+    auto bytes = utf8View.bytes();
+    if (view.containsOnlyASCII())
+        return Bun::decodeURIComponentSIMD(bytes);
+
+    Vector<char> decoded;
+    decoded.reserveInitialCapacity(bytes.size());
+    for (size_t i = 0; i < bytes.size(); ++i) {
+        if (bytes[i] == '%' && i + 2 < bytes.size() && isASCIIHexDigit(bytes[i + 1]) && isASCIIHexDigit(bytes[i + 2])) {
+            decoded.append(static_cast<char>((toASCIIHexValue(bytes[i + 1]) << 4) | toASCIIHexValue(bytes[i + 2])));
+            i += 2;
+        } else {
+            decoded.append(static_cast<char>(bytes[i]));
+        }
+    }
+    return String::fromUTF8(std::span<const char>(decoded.span().data(), decoded.size()));
+}
+
 ExceptionOr<Ref<CookieMap>> CookieMap::create(std::variant<Vector<Vector<String>>, HashMap<String, String>, String>&& variant, bool throwOnInvalidCookieString)
 {
     auto visitor = WTF::makeVisitor(
@@ -113,16 +136,10 @@ ExceptionOr<Ref<CookieMap>> CookieMap::create(std::variant<Vector<Vector<String>
                 }
 
                 if (hasAnyPercentEncoded) {
-                    Bun::UTF8View utf8View(nameView);
-                    name = Bun::decodeURIComponentSIMD(utf8View.bytes());
+                    name = decodeCookieComponent(nameView);
+                    value = decodeCookieComponent(valueView);
                 } else {
                     name = nameView.toString();
-                }
-
-                if (hasAnyPercentEncoded) {
-                    Bun::UTF8View utf8View(valueView);
-                    value = Bun::decodeURIComponentSIMD(utf8View.bytes());
-                } else {
                     value = valueView.toString();
                 }
 

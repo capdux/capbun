@@ -1142,6 +1142,30 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 return JSValue.false;
             }
 
+            {
+                let sec_ws_version_owned = ZigString.Slice.empty;
+                const _guard_ws_ver_owned = DeinitGuard<ZigString.Slice>{ ptr: unsafe { &sec_ws_version_owned } };
+                let sec_ws_version: []const u8 = "";
+                if (head := request.getFetchHeaders()) {
+                    if (ver := head.fastGet(.SecWebSocketVersion)) {
+                        sec_ws_version_owned = bun.handleOom(ver.toSliceClone(bun.default_allocator));
+                        sec_ws_version = sec_ws_version_owned.slice();
+                    }
+                }
+                if (sec_ws_version.len == 0) {
+                    if (req := upgrader.req) {
+                        sec_ws_version = req.header("sec-websocket-version") ?? "";
+                    }
+                }
+                if (sec_ws_version.len > 0 && !std.mem.eql(u8, sec_ws_version, "13")) {
+                    resp.writeStatus("426 Upgrade Required");
+                    resp.writeHeader("Sec-WebSocket-Version", "13");
+                    resp.writeHeaderInt("Content-Length", 0);
+                    resp.endWithoutBody(resp.shouldCloseConnection());
+                    return JSValue.false;
+                }
+            }
+
             if (sec_websocket_protocol.len > 0) {
                 sec_websocket_protocol.markUTF8();
             }
@@ -1279,7 +1303,6 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             resp.clearOnWritable();
             resp.clearTimeout();
 
-            upgrader.reclaimPromiseCell();
             upgrader.deref();
 
             * = resp.upgrade(

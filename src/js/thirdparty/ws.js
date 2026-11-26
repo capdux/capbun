@@ -497,7 +497,7 @@ class BunWebSocket extends EventEmitter {
       return;
     }
 
-    if (typeof cb === "function") cb();
+    if (typeof cb === "function") cb(null);
   }
 
   pong(data, mask, cb) {
@@ -527,7 +527,7 @@ class BunWebSocket extends EventEmitter {
       return;
     }
 
-    if (typeof cb === "function") cb();
+    if (typeof cb === "function") cb(null);
   }
 
   pause() {
@@ -893,7 +893,7 @@ class BunWebSocketMocked extends EventEmitter {
       this.#bufferedAmount -= chunk.length;
       this.#enquedMessages.shift();
 
-      if (typeof cb === "function") queueMicrotask(cb);
+      if (typeof cb === "function") queueMicrotask(() => cb(null));
     }
   }
 
@@ -920,7 +920,7 @@ class BunWebSocketMocked extends EventEmitter {
       return;
     }
 
-    if (typeof cb === "function") cb();
+    if (typeof cb === "function") cb(null);
   }
 
   pong(data, mask, cb) {
@@ -946,7 +946,7 @@ class BunWebSocketMocked extends EventEmitter {
       return;
     }
 
-    if (typeof cb === "function") cb();
+    if (typeof cb === "function") cb(null);
   }
 
   send(data, opts, cb) {
@@ -966,14 +966,24 @@ class BunWebSocketMocked extends EventEmitter {
       const written = this.#ws.send(data, compress);
       if (written === 0) {
         // dropped
+        if (typeof cb === "function") {
+          const snap = require("node:async_hooks").AsyncLocalStorage.snapshot();
+          const origCb = cb;
+          cb = err => snap(origCb, err);
+        }
         this.#enquedMessages.push([data, compress, cb]);
         this.#bufferedAmount += data.length;
         return;
       }
 
-      if (typeof cb === "function") process.nextTick(cb);
+      if (typeof cb === "function") process.nextTick(cb, null);
     } else if (this.#state === ReadyState_CONNECTING) {
       // not connected yet
+      if (typeof cb === "function") {
+        const snap = require("node:async_hooks").AsyncLocalStorage.snapshot();
+        const origCb = cb;
+        cb = err => snap(origCb, err);
+      }
       this.#enquedMessages.push([data, opts?.compress, cb]);
       this.#bufferedAmount += data.length;
     }

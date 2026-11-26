@@ -207,7 +207,7 @@ DEFINE_NATIVE_MODULE(NodeBuffer)
 
     put(JSC::Identifier::fromString(vm, "transcode"_s), transcode);
 
-    auto* resolveObjectURL = JSC::JSFunction::create(vm, globalObject, 1, "resolveObjectURL"_s, jsFunctionResolveObjectURL, ImplementationVisibility::Public, NoIntrinsic, jsFunctionResolveObjectURL);
+    auto* resolveObjectURL = JSC::JSFunction::create(vm, globalObject, 1, "resolveObjectURL"_s, jsFunctionResolveObjectURL, ImplementationVisibility::Public, NoIntrinsic);
 
     put(JSC::Identifier::fromString(vm, "resolveObjectURL"_s), resolveObjectURL);
 

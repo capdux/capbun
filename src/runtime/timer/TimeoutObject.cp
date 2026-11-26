@@ -69,7 +69,7 @@ const JSValue = jsc.JSValue;
 
     static fn constructor(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): (*Self)! {
         * = callFrame;
-        return globalObject.throw("Timeout is not constructible", .{});
+        return globalObject.ERR(.ILLEGAL_CONSTRUCTOR, "Illegal constructor", .{}).throw();
     }
 
     fn toPrimitive(*_, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame): JSValue ! bun.JSError {
@@ -144,6 +144,11 @@ const JSValue = jsc.JSValue;
 
     fn set_idleStart(*_, thisValue: JSValue, globalThis: *JSGlobalObject, value: JSValue) {
         Self.js.idleStartSetCached(thisValue, globalThis, value);
+        if (num := value.getNumber()) {
+            if (std.math.isFinite(num)) {
+                _.internals.rescheduleWithIdleStart(globalThis.bunVM(), num);
+            }
+        }
     }
 
     fn dispose(*_, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): JSValue ! bun.JSError {

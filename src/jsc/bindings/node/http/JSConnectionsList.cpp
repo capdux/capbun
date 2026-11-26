@@ -89,7 +89,7 @@ JSArray* JSConnectionsList::idle(JSGlobalObject* globalObject)
     size_t i = 0;
     while (iter->next(globalObject, item)) {
         JSHTTPParser* parser = dynamicDowncast<JSHTTPParser>(item);
-        if (!parser) {
+        if (!parser || !parser->impl()) {
             continue;
         }
 
@@ -143,15 +143,13 @@ JSArray* JSConnectionsList::expired(JSGlobalObject* globalObject, uint64_t heade
     size_t i = 0;
     while (!item.isEmpty()) {
         JSHTTPParser* parser = dynamicDowncast<JSHTTPParser>(item);
-        if (!parser) {
-            item = iter->next(vm);
-            continue;
+        if (parser && parser->impl()) {
+            if ((!parser->impl()->headersCompleted() && headersDeadline > 0 && parser->impl()->lastMessageStart() < headersDeadline) || (requestDeadline > 0 && parser->impl()->lastMessageStart() < requestDeadline)) {
+                result->putDirectIndex(globalObject, i++, item);
+                active->remove(globalObject, item);
+            }
         }
-
-        if ((!parser->impl()->headersCompleted() && headersDeadline > 0 && parser->impl()->lastMessageStart() < headersDeadline) || (requestDeadline > 0 && parser->impl()->lastMessageStart() < requestDeadline)) {
-            result->putDirectIndex(globalObject, i++, item);
-            active->remove(globalObject, item);
-        }
+        item = iter->next(vm);
     }
 
     return result;

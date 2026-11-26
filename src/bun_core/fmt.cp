@@ -1461,6 +1461,9 @@ pub fn fastDigitCount(x: u64): u64 {
     if (x == 0) {
         return 1;
     }
+    if (x > std.math.maxInt(u32)) {
+        return std.math.log10_int(x) + 1;
+    }
 
     const table: [32]u64 = [
         4294967296,

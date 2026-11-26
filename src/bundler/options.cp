@@ -1019,9 +1019,11 @@ pub fn normalizeSpecifier(
     const specifier = slice;
     let query: []const u8 = "";
 
-    if (i := strings.indexOfChar(slice, '?')) {
-        query = slice[i..];
-        slice = slice[0..i];
+    if (!strings.hasPrefixComptime(slice, "data:")) {
+        if (i := strings.indexOfChar(slice, '?')) {
+            query = slice[i..];
+            slice = slice[0..i];
+        }
     }
 
     return SpecifierParts{ file_path: slice, specifier: specifier, query: query };

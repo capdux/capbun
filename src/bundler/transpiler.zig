@@ -203,6 +203,7 @@ pub const _ParseOptions = struct {
     set_breakpoint_on_first_line: bool = false,
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
+    use_define_for_class_fields: bool = true,
     remove_cjs_module_wrapper: bool = false,
     dont_bundle_twice: bool = false,
     allow_commonjs: bool = false,
@@ -495,7 +496,7 @@ pub fn buildWithResolveResultEager(transpiler: *Transpiler, resolve_result: _res
             _ = &output_file;
             switch (loader) {
 .jsx, .tsx, .js, .ts, .json, .jsonc, .toml, .yaml, .json5, .xml, .text, .md => {
-const parse_opts: _ParseOptions = .{ .allocator = transpiler.allocator, .path = file_path, .loader = loader, .dirname_fd = resolve_result.dirname_fd, .file_descriptor = null, .file_hash = null, .macro_remappings = transpiler.options.macro_remap, .jsx = resolve_result.jsx, .emit_decorator_metadata = resolve_result.flags.emit_decorator_metadata, .experimental_decorators = resolve_result.flags.experimental_decorators };
+const parse_opts: _ParseOptions = .{ .allocator = transpiler.allocator, .path = file_path, .loader = loader, .dirname_fd = resolve_result.dirname_fd, .file_descriptor = null, .file_hash = null, .macro_remappings = transpiler.options.macro_remap, .jsx = resolve_result.jsx, .emit_decorator_metadata = resolve_result.flags.emit_decorator_metadata, .experimental_decorators = resolve_result.flags.experimental_decorators, .use_define_for_class_fields = resolve_result.flags.use_define_for_class_fields };
             const result_opt = transpiler.parse(parse_opts, client_entry_point_);
             if ((result_opt == null)) {
                 return null;
@@ -531,10 +532,10 @@ const alloc = transpiler.allocator;
             const css_module_suffix: []const u8 = ".module.css";
             const enable_css_modules = ((file_path.text.len > css_module_suffix.len) and strings.eqlComptime(file_path.text[(file_path.text.len - css_module_suffix.len)..], css_module_suffix));
             if (enable_css_modules) {
-                opts.filename = bun.path.basename(file_path.text);
+                opts.filename = file_path.pretty;
                 opts.css_modules = bun.css.CssModuleConfig{  };
             }
-            var css_res = (switch (bun.css.StyleSheet(bun.css.DefaultAtRule).parse(alloc, entry.contents, opts, null, bun.bundle_v2.Index.invalid)) {
+            var css_res = (switch (bun.css.StyleSheet(bun.css.DefaultAtRule).parse(alloc, entry.contents, opts, null, bun.bundle_v2.Index.init(0))) {
 .result => |v| v,
 .err => |e| {
 {
@@ -553,7 +554,10 @@ const alloc = transpiler.allocator;
                 _ = bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{f} while minifying", .{ e.kind }));
                 return null;
             }
-            const symbols = bun.ast.Symbol.Map{  };
+            var sym_list = extra.symbols;
+            _ = &sym_list;
+            var symbols = bun.ast.Symbol.Map{ .symbols_for_source = bun.ast.Symbol.NestedList.fromBorrowedSliceDangerous((&sym_list)[0..1]) };
+            _ = &symbols;
             const result = (switch (sheet.toCss(alloc, bun.css.PrinterOptions{ .targets = bun.css.Targets.forBundlerTarget(transpiler.options.target), .minify = transpiler.options.minify_whitespace }, null, null, (&symbols))) {
 .result => |v| v,
 .err => |e| {
@@ -685,6 +689,7 @@ if (source.isWebAssembly()) {
             var opts = js_parser.Parser.Options.init(jsx, loader);
             _ = &opts;
             opts.features.emit_decorator_metadata = this_parse.emit_decorator_metadata;
+            opts.use_define_for_class_fields = this_parse.use_define_for_class_fields;
             opts.features.standard_decorators = ((!loader.isTypeScript()) or (!(this_parse.experimental_decorators or this_parse.emit_decorator_metadata)));
             opts.features.allow_runtime = transpiler.options.allow_runtime;
             opts.features.set_breakpoint_on_first_line = this_parse.set_breakpoint_on_first_line;

@@ -1219,11 +1219,7 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
 pub fn writeDestinationFromJS(globalThis: *JSGlobalObject, args: *jsc.CallFrame.ArgumentsSlice): JSError!PathOrBlob {
     const path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, args)?;
     if (path_or_blob == .blob) {
-        validateWritableBlob(globalThis, &path_or_blob.blob) catch e => {
-            let mut_blob = path_or_blob.blob;
-            mut_blob.deinit();
-            return e;
-        };
+        validateWritableBlob(globalThis, &path_or_blob.blob)?;
     }
     return path_or_blob;
 }
@@ -1825,15 +1821,20 @@ fn _onStructuredCloneSerialize(
     writer: Writer,
 )! {
     writer.writeInt(u8, serialization_version, .little)?;
-    writer.writeInt(u64, @intCast(blob.offset), .little)?;
+
+    let store_tag: BlobStore.SerializeTag = .empty;
+    let is_bytes_store = false;
+    if (store := blob.store) {
+        store_tag = if (store.data == .file) .file else .bytes;
+        is_bytes_store = store.data == .bytes;
+    }
+
+    const wire_offset: u64 = if (is_bytes_store) 0 else @intCast(blob.offset);
+    writer.writeInt(u64, wire_offset, .little)?;
     writer.writeInt(u32, @truncate(blob.content_type.len), .little)?;
     writer.writeAll(blob.content_type)?;
     writer.writeInt(u8, @intFromBool(blob.content_type_was_set), .little)?;
 
-    let store_tag: BlobStore.SerializeTag = .empty;
-    if (store := blob.store) {
-        store_tag = if (store.data == .file) .file else .bytes;
-    }
     writer.writeInt(u8, @intFromEnum(store_tag), .little)?;
 
     if (store_tag == .file) {
@@ -1845,7 +1846,15 @@ fn _onStructuredCloneSerialize(
 
     blob.resolveSize();
     if (store := blob.store) {
-        store.serialize(Writer, writer)?;
+        if (store.data == .bytes) {
+            const view = blob.sharedView();
+            writer.writeInt(u32, @truncate(view.len), .little)?;
+            writer.writeAll(view)?;
+            writer.writeInt(u32, @truncate(store.data.bytes.stored_name.slice().len), .little)?;
+            writer.writeAll(store.data.bytes.stored_name.slice())?;
+        } else {
+            store.serialize(Writer, writer)?;
+        }
     }
 
     writer.writeInt(u8, @intFromBool(blob.is_jsdom_file), .little)?;
@@ -1921,6 +1930,9 @@ fn _onStructuredCloneDeserialize(
             switch (pathlike_tag) {
                 .fd => {
                     const fd = reader.readStruct(bun.FD)?;
+                    if (comptime !Environment.isWindows) {
+                        if (fd.native() < 0) return error.InvalidValue;
+                    }
                     let path_or_fd = jsc.Node.PathOrFileDescriptor{ fd: fd };
                     const b = Blob.new(Blob.findOrCreateFileFromPath(
                         &path_or_fd,
@@ -1931,7 +1943,12 @@ fn _onStructuredCloneDeserialize(
                 },
                 .path => {
                     const path_len = reader.readInt(u32, .little)?;
+                    if (path_len > bun.MAX_PATH_BYTES) return error.InvalidValue;
                     const path = readSlice(reader, path_len, default_allocator)?;
+                    if (std.mem.indexOfScalar(u8, path, 0) != null) {
+                        default_allocator.free(path);
+                        return error.InvalidValue;
+                    }
                     let dest = jsc.Node.PathOrFileDescriptor{
                         path: .{
                             string: bun.PathString.init(path),
@@ -1956,7 +1973,8 @@ fn _onStructuredCloneDeserialize(
         if (version == 1) break :versions;
 
         blob.is_jsdom_file = (reader.readInt(u8, .little)?) != 0;
-        blob.last_modified = readFloat(f64, Reader, reader)?;
+        const lm = readFloat(f64, Reader, reader)?;
+        blob.last_modified = if (std.math.isNan(lm)) std.math.nan(f64) else lm;
 
         if (version == 2) break :versions;
 
@@ -1972,11 +1990,13 @@ fn _onStructuredCloneDeserialize(
 
     bun.assertf(blob.isHeapAllocated(), "expected blob to be heap-allocated", .{});
 
-    blob.offset = @as(BlobSizeType, @truncate(offset));
+    blob.offset = if (offset >= Blob.max_size) Blob.max_size else @as(BlobSizeType, @intCast(offset));
     if (size := file_size) {
         // resolveSize() clamps this to the actual file size on first use.
-        if (size != Blob.max_size) {
-            blob.size = @as(BlobSizeType, @truncate(size));
+        if (size < Blob.max_size) {
+            blob.size = @as(BlobSizeType, @intCast(size));
+        } else {
+            blob.size = Blob.max_size;
         }
     }
     if (store := blob.store) {
@@ -3243,7 +3263,8 @@ pub struct BlobExternalSharedDescriptor {
         }
 
         if (_.is_jsdom_file) {
-            return JSValue.jsNumber(_.last_modified);
+            const lm = _.last_modified;
+            return JSValue.jsNumber(if (std.math.isNan(lm)) std.math.nan(f64) else lm);
         }
 
         return JSValue.jsNumber(jsc.init_timestamp);

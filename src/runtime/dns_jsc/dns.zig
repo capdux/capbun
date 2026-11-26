@@ -632,10 +632,21 @@ pub fn onCaresComplete(self: *GetHostByAddrInfoRequest, err_: ?c_ares.Error, tim
                     return;
                 }
             }
+            const untracked_resolver: ?*Resolver = (if ((!self.cache.pending_cache)) self.head.resolver else null);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                if ((res.untracked_requests > 0)) {
+                    res.untracked_requests = (res.untracked_requests - 1);
+                }
+            }
             var head = self.head;
             _ = &head;
             _ = bun.default_allocator.destroy(self);
             _ = head.processResolve(err_, timeout, result);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                _ = res.requestCompleted();
+            }
     }
     const request_type = @This();
     const log = Output.scoped(@This(), .visible);
@@ -764,10 +775,21 @@ pub fn onCaresComplete(self: *GetNameInfoRequest, err_: ?c_ares.Error, timeout: 
                     return;
                 }
             }
+            const untracked_resolver: ?*Resolver = (if ((!self.cache.pending_cache)) self.resolver_for_caching else null);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                if ((res.untracked_requests > 0)) {
+                    res.untracked_requests = (res.untracked_requests - 1);
+                }
+            }
             var head = self.head;
             _ = &head;
             _ = bun.default_allocator.destroy(self);
             _ = head.processResolve(err_, timeout, result);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                _ = res.requestCompleted();
+            }
     }
     const request_type = @This();
     const log = Output.scoped(@This(), .visible);
@@ -971,10 +993,21 @@ pub fn onCaresComplete(self: *GetAddrInfoRequest, err_: ?c_ares.Error, timeout: 
                     return;
                 }
             }
+            const untracked_resolver: ?*Resolver = (if ((!self.cache.pending_cache)) self.head.resolver else null);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                if ((res.untracked_requests > 0)) {
+                    res.untracked_requests = (res.untracked_requests - 1);
+                }
+            }
             var head = self.head;
             _ = &head;
             _ = bun.default_allocator.destroy(self);
             _ = head.processGetAddrInfo(err_, timeout, result);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                _ = res.requestCompleted();
+            }
     }
 
 pub fn onLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t) void {
@@ -1899,6 +1932,7 @@ pub const Resolver = struct {
     vm: *jsc.VirtualMachine,
     polls: PollsMap,
     options: c_ares.ChannelOptions = .{},
+    untracked_requests: usize = 0,
     event_loop_timer: EventLoopTimer = .{ .next = .epoch, .tag = .DNSResolver },
     pending_host_cache_cares: PendingCache,
     pending_host_cache_native: PendingCache,
@@ -1955,12 +1989,17 @@ pub fn checkTimeouts(self: *Resolver, now: *const timespec, vm: *jsc.VirtualMach
                 _ = &channel;
                 if (self.anyRequestsPending()) {
                     _ = c_ares.ares_process_fd(channel, c_ares.ARES_SOCKET_BAD, c_ares.ARES_SOCKET_BAD);
-                    _ = self.addTimer(now);
+                    if (self.anyRequestsPending()) {
+                        _ = self.addTimer(now);
+                    }
                 }
             }
     }
 
 pub fn anyRequestsPending(self: *Resolver) bool {
+            if ((self.untracked_requests > 0)) {
+                return true;
+            }
             inline for (@typeInfo(Resolver).@"struct".fields) |field| {
                 if (comptime std.mem.startsWith(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "pending_")) {
                     const set = (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)).used);
@@ -2557,6 +2596,9 @@ return globalThis.throwValue(try err.toJSWithSyscallAndHostname(globalThis, "get
             _ = &request;
             const promise = request.tail.promise.value();
             _ = channel.getHostByAddr(ip, GetHostByAddrInfoRequest, request, GetHostByAddrInfoRequest.onCaresComplete);
+            if ((!request.cache.pending_cache)) {
+                self.untracked_requests = (self.untracked_requests + 1);
+            }
             _ = self.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -2886,6 +2928,9 @@ pub fn doResolveCAres(self: *Resolver, comptime cares_type: type, comptime type_
             _ = &request;
             const promise = request.tail.promise.value();
             _ = channel.resolve(name, type_name, ResolveInfoRequest(cares_type, type_name), request, cares_type, ResolveInfoRequest(cares_type, type_name).onCaresComplete);
+            if ((!request.cache.pending_cache)) {
+                self.untracked_requests = (self.untracked_requests + 1);
+            }
             _ = self.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -2920,6 +2965,9 @@ pub fn c_aresLookupWithNormalizedName(self: *Resolver, query: GetAddrInfo, globa
             _ = &request;
             const promise = request.tail.promise.value();
             _ = channel.getAddrInfo((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name), query.port, (&hints_buf), GetAddrInfoRequest, request, GetAddrInfoRequest.onCaresComplete);
+            if ((!request.cache.pending_cache)) {
+                self.untracked_requests = (self.untracked_requests + 1);
+            }
             _ = self.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -3206,6 +3254,9 @@ pub fn globalLookupService(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
             break :blk @ptrCast((&sa));
 
 }), GetNameInfoRequest, request, GetNameInfoRequest.onCaresComplete);
+            if ((!request.cache.pending_cache)) {
+                resolver.untracked_requests = (resolver.untracked_requests + 1);
+            }
             _ = resolver.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -3243,6 +3294,41 @@ pub fn getRuntimeDefaultResultOrderOption(globalThis: *jsc.JSGlobalObject, _: *j
     const NameInfoPendingCache = bun.HiveArray(GetNameInfoRequest.PendingCacheKey, 32);
     pub const CacheHit = ResolverCacheHit;
     pub const ChannelResult = ResolverChannelResult;
+};
+
+pub const TestingAPIs = struct {
+
+pub fn dnsGetaddrinfoError(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const arguments = callframe.arguments();
+            if ((arguments.len < 2)) {
+                return globalThis.throwNotEnoughArguments("dnsGetaddrinfoError", 2, arguments.len);
+            }
+            var code_slice = (blk_catch_33: { break :blk_catch_33 ((arguments[0].toSlice(globalThis, bun.default_allocator)) catch |e| { _ = &e; return e; }); });
+            _ = &code_slice;
+            var _code_guard = DeinitGuard(*jsc.ZigString.Slice){ .val = (&code_slice) };
+            _ = &_code_guard;
+            var ___code_guard_moved = false; _ = &___code_guard_moved;
+            defer if (!___code_guard_moved) { ___code_guard_moved = true; const __T = @TypeOf(_code_guard); if (@typeInfo(__T) == .optional) { if (_code_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _code_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _code_guard; _drop_val.__cp_deinit(); } };
+            var host_slice = (blk_catch_34: { break :blk_catch_34 ((arguments[1].toSlice(globalThis, bun.default_allocator)) catch |e| { _ = &e; return e; }); });
+            _ = &host_slice;
+            var _host_guard = DeinitGuard(*jsc.ZigString.Slice){ .val = (&host_slice) };
+            _ = &_host_guard;
+            var ___host_guard_moved = false; _ = &___host_guard_moved;
+            defer if (!___host_guard_moved) { ___host_guard_moved = true; const __T = @TypeOf(_host_guard); if (@typeInfo(__T) == .optional) { if (_host_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _host_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _host_guard; _drop_val.__cp_deinit(); } };
+            const code_str = code_slice.slice();
+            const is_again = bun.strings.eqlComptime(code_str, "EAI_AGAIN");
+            if (((!is_again) and (!bun.strings.eqlComptime(code_str, "EAI_NONAME")))) {
+                return globalThis.throwInvalidArguments("Unknown EAI code: {s}", .{ code_str });
+            }
+            const err: c_ares.Error = (if (is_again) (c_ares.Error.initEAI((if (comptime bun.Environment.isWindows) bun.c.libuv.UV_EAI_AGAIN else @intFromEnum(std.posix.system.EAI.AGAIN)))).? else (c_ares.Error.initEAI((if (comptime bun.Environment.isWindows) bun.c.libuv.UV_EAI_NONAME else @intFromEnum(std.posix.system.EAI.NONAME)))).?);
+            const err_code: [:0]const u8 = (if ((err == .EAI_AGAIN)) "EAI_AGAIN" else "ENOTFOUND");
+            const hostname = host_slice.slice();
+            const sys_err = jsc.SystemError{ .errno = @intFromEnum(err), .code = bun.String.static(err_code), .message = bun.handleOom(bun.String.createFormat("getaddrinfo {s} {s}", .{ err_code, hostname })), .syscall = bun.String.static("getaddrinfo"), .hostname = bun.String.cloneUTF8(hostname) };
+            const instance = sys_err.toErrorInstance(globalThis);
+            const dns_name = (blk_catch_35: { break :blk_catch_35 ((bun.String.static("DNSException").toJS(globalThis)) catch |e| { _ = &e; return e; }); });
+            _ = instance.put(globalThis, "name", dns_name);
+            return instance;
+    }
 };
 
 pub const GetAddrInfoAsyncCallback = *const fn (i32, ?*std.c.addrinfo, ?*anyopaque) callconv(.c) void;
@@ -3373,10 +3459,21 @@ pub fn onCaresComplete(self: *@This(), err_: ?c_ares.Error, timeout: i32, result
                     return;
                 }
             }
+            const untracked_resolver: ?*Resolver = (if ((!self.cache.pending_cache)) self.head.resolver else null);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                if ((res.untracked_requests > 0)) {
+                    res.untracked_requests = (res.untracked_requests - 1);
+                }
+            }
             var head = self.head;
             _ = &head;
             _ = bun.default_allocator.destroy(self);
             _ = head.processResolve(err_, timeout, result);
+            if (untracked_resolver) |res| {
+                _ = &res;
+                _ = res.requestCompleted();
+            }
     }
     const request_type = @This();
     const log = Output.scoped(.ResolveInfoRequest, .hidden);

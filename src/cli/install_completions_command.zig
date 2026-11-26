@@ -286,6 +286,25 @@ if (bun.env_var.XDG_CONFIG_HOME.get()) |config_dir| {
             completions_dir = "/etc/fish/completions";
             break :found (blk_catch_21: { break :blk_catch_21 ((std.fs.openDirAbsolute("/etc/fish/completions", .{})) catch |__ce_21| { _ = &__ce_21; break :outer; }); });
 };
+            if (bun.env_var.XDG_CONFIG_HOME.get()) |config_dir| {
+                _ = &config_dir;
+                _ = outer: {
+                const paths: [2][]const u8 = .{ config_dir, "./fish/completions" };
+                completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
+                _ = (blk_catch_22: { break :blk_catch_22 ((bun.makePath(std.fs.cwd(), completions_dir)) catch |__ce_22| { _ = &__ce_22; break :outer; }); });
+                break :found (blk_catch_23: { break :blk_catch_23 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_23| { _ = &__ce_23; break :outer; }); });
+};
+            } else {
+                if (bun.env_var.HOME.get()) |home_dir| {
+                    _ = &home_dir;
+                    _ = outer: {
+                    const paths: [2][]const u8 = .{ home_dir, "./.config/fish/completions" };
+                    completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
+                    _ = (blk_catch_24: { break :blk_catch_24 ((bun.makePath(std.fs.cwd(), completions_dir)) catch |__ce_24| { _ = &__ce_24; break :outer; }); });
+                    break :found (blk_catch_25: { break :blk_catch_25 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_25| { _ = &__ce_25; break :outer; }); });
+};
+                }
+            }
 },
 .zsh => {
 if (bun.env_var.fpath.get()) |fpath| {
@@ -294,7 +313,7 @@ if (bun.env_var.fpath.get()) |fpath| {
                 _ = &splitter;
                 while (splitter.next()) |dir| {
                     completions_dir = dir;
-                    break :found (blk_catch_22: { break :blk_catch_22 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_22| { _ = &__ce_22; continue; }); });
+                    break :found (blk_catch_26: { break :blk_catch_26 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_26| { _ = &__ce_26; continue; }); });
                 }
             }
             if (bun.env_var.XDG_DATA_HOME.get()) |data_dir| {
@@ -302,14 +321,14 @@ if (bun.env_var.fpath.get()) |fpath| {
                 _ = outer: {
                 const paths: [2][]const u8 = .{ data_dir, "./zsh-completions" };
                 completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                break :found (blk_catch_23: { break :blk_catch_23 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_23| { _ = &__ce_23; break :outer; }); });
+                break :found (blk_catch_27: { break :blk_catch_27 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_27| { _ = &__ce_27; break :outer; }); });
 };
             }
             if (bun.env_var.BUN_INSTALL.get()) |home_dir| {
                 _ = &home_dir;
                 _ = outer: {
                 completions_dir = home_dir;
-                break :found (blk_catch_24: { break :blk_catch_24 ((std.fs.openDirAbsolute(home_dir, .{})) catch |__ce_24| { _ = &__ce_24; break :outer; }); });
+                break :found (blk_catch_28: { break :blk_catch_28 ((std.fs.openDirAbsolute(home_dir, .{})) catch |__ce_28| { _ = &__ce_28; break :outer; }); });
 };
             }
             if (bun.env_var.HOME.get()) |home_dir| {
@@ -318,14 +337,14 @@ if (bun.env_var.fpath.get()) |fpath| {
                     _ = outer: {
                     const paths: [2][]const u8 = .{ home_dir, "./.oh-my-zsh/completions" };
                     completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                    break :found (blk_catch_25: { break :blk_catch_25 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_25| { _ = &__ce_25; break :outer; }); });
+                    break :found (blk_catch_29: { break :blk_catch_29 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_29| { _ = &__ce_29; break :outer; }); });
 };
                 }
                 {
                     _ = outer: {
                     const paths: [2][]const u8 = .{ home_dir, "./.bun" };
                     completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                    break :found (blk_catch_26: { break :blk_catch_26 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_26| { _ = &__ce_26; break :outer; }); });
+                    break :found (blk_catch_30: { break :blk_catch_30 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_30| { _ = &__ce_30; break :outer; }); });
 };
                 }
             }
@@ -333,7 +352,7 @@ if (bun.env_var.fpath.get()) |fpath| {
             for (cp_iter_slice(dirs_to_try)) |dir| {
                 _ = &dir;
                 completions_dir = dir;
-                break :found (blk_catch_27: { break :blk_catch_27 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_27| { _ = &__ce_27; continue; }); });
+                break :found (blk_catch_31: { break :blk_catch_31 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_31| { _ = &__ce_31; continue; }); });
             }
 },
 .bash => {
@@ -342,7 +361,7 @@ if (bun.env_var.XDG_DATA_HOME.get()) |data_dir| {
                 _ = outer: {
                 const paths: [2][]const u8 = .{ data_dir, "./bash-completion/completions" };
                 completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                break :found (blk_catch_28: { break :blk_catch_28 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_28| { _ = &__ce_28; break :outer; }); });
+                break :found (blk_catch_32: { break :blk_catch_32 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_32| { _ = &__ce_32; break :outer; }); });
 };
             }
             if (bun.env_var.XDG_CONFIG_HOME.get()) |config_dir| {
@@ -350,7 +369,7 @@ if (bun.env_var.XDG_DATA_HOME.get()) |data_dir| {
                 _ = outer: {
                 const paths: [2][]const u8 = .{ config_dir, "./bash-completion/completions" };
                 completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                break :found (blk_catch_29: { break :blk_catch_29 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_29| { _ = &__ce_29; break :outer; }); });
+                break :found (blk_catch_33: { break :blk_catch_33 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_33| { _ = &__ce_33; break :outer; }); });
 };
             }
             if (bun.env_var.HOME.get()) |home_dir| {
@@ -359,14 +378,14 @@ if (bun.env_var.XDG_DATA_HOME.get()) |data_dir| {
                     _ = outer: {
                     const paths: [2][]const u8 = .{ home_dir, "./.oh-my-bash/custom/completions" };
                     completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                    break :found (blk_catch_30: { break :blk_catch_30 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_30| { _ = &__ce_30; break :outer; }); });
+                    break :found (blk_catch_34: { break :blk_catch_34 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_34| { _ = &__ce_34; break :outer; }); });
 };
                 }
                 {
                     _ = outer: {
                     const paths: [2][]const u8 = .{ home_dir, "./.bash_completion.d" };
                     completions_dir = resolve_path.joinAbsString(cwd, (&paths), .auto);
-                    break :found (blk_catch_31: { break :blk_catch_31 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_31| { _ = &__ce_31; break :outer; }); });
+                    break :found (blk_catch_35: { break :blk_catch_35 ((std.fs.openDirAbsolute(completions_dir, .{})) catch |__ce_35| { _ = &__ce_35; break :outer; }); });
 };
                 }
             }
@@ -374,7 +393,7 @@ if (bun.env_var.XDG_DATA_HOME.get()) |data_dir| {
             for (cp_iter_slice(dirs_to_try)) |dir| {
                 _ = &dir;
                 completions_dir = dir;
-                break :found (blk_catch_32: { break :blk_catch_32 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_32| { _ = &__ce_32; continue; }); });
+                break :found (blk_catch_36: { break :blk_catch_36 ((std.fs.openDirAbsolute(dir, .{})) catch |__ce_36| { _ = &__ce_36; continue; }); });
             }
 },
 .unknown, .pwsh => {
@@ -396,11 +415,11 @@ _ = unreachable;
 .unknown, .pwsh => unreachable,
 });
             _ = bun.assert((completions_dir.len > 0));
-            var output_file = (blk_catch_33: { break :blk_catch_33 ((output_dir.createFileZ(filename, .{ .truncate = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Could not open {s} for writing: {s}", .{ filename, @errorName(e) });
-            break :blk_catch_33 Global.exit(fail_exit_code); }); });
+            var output_file = (blk_catch_37: { break :blk_catch_37 ((output_dir.createFileZ(filename, .{ .truncate = true })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Could not open {s} for writing: {s}", .{ filename, @errorName(e) });
+            break :blk_catch_37 Global.exit(fail_exit_code); }); });
             _ = &output_file;
-            _ = (blk_catch_34: { break :blk_catch_34 ((output_file.writeAll(shell.completions())) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Could not write to {s}: {s}", .{ filename, @errorName(e) });
-            break :blk_catch_34 Global.exit(fail_exit_code); }); });
+            _ = (blk_catch_38: { break :blk_catch_38 ((output_file.writeAll(shell.completions())) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>error:<r> Could not write to {s}: {s}", .{ filename, @errorName(e) });
+            break :blk_catch_38 Global.exit(fail_exit_code); }); });
             var output_file_guard = CloseGuard(std.fs.File){ .val = output_file };
             _ = &output_file_guard;
             var __output_file_guard_moved = false; _ = &__output_file_guard_moved;
@@ -421,7 +440,7 @@ _ = unreachable;
                     _ = bun.copy(u8, zshrc_filepath[zdot_dir.len..], "/.zshrc");
                     zshrc_filepath[cp_cast_int(usize, (zdot_dir.len + "/.zshrc".len))] = 0;
                     const filepath = zshrc_filepath[0..(zdot_dir.len + "/.zshrc".len) :0];
-                    break :zshrc (blk_catch_36: { break :blk_catch_36 ((std.fs.openFileAbsoluteZ(filepath, .{ .mode = .read_write })) catch |__ce_36| { _ = &__ce_36; break :first; }); });
+                    break :zshrc (blk_catch_40: { break :blk_catch_40 ((std.fs.openFileAbsoluteZ(filepath, .{ .mode = .read_write })) catch |__ce_40| { _ = &__ce_40; break :first; }); });
                 }
 };
                 _ = second: {
@@ -431,7 +450,7 @@ _ = unreachable;
                     _ = bun.copy(u8, zshrc_filepath[zdot_dir.len..], "/.zshrc");
                     zshrc_filepath[cp_cast_int(usize, (zdot_dir.len + "/.zshrc".len))] = 0;
                     const filepath = zshrc_filepath[0..(zdot_dir.len + "/.zshrc".len) :0];
-                    break :zshrc (blk_catch_37: { break :blk_catch_37 ((std.fs.openFileAbsoluteZ(filepath, .{ .mode = .read_write })) catch |__ce_37| { _ = &__ce_37; break :second; }); });
+                    break :zshrc (blk_catch_41: { break :blk_catch_41 ((std.fs.openFileAbsoluteZ(filepath, .{ .mode = .read_write })) catch |__ce_41| { _ = &__ce_41; break :second; }); });
                 }
 };
                 _ = third: {
@@ -441,7 +460,7 @@ _ = unreachable;
                     _ = bun.copy(u8, zshrc_filepath[zdot_dir.len..], "/.zshenv");
                     zshrc_filepath[cp_cast_int(usize, (zdot_dir.len + "/.zshenv".len))] = 0;
                     const filepath = zshrc_filepath[0..(zdot_dir.len + "/.zshenv".len) :0];
-                    break :zshrc (blk_catch_38: { break :blk_catch_38 ((std.fs.openFileAbsoluteZ(filepath, .{ .mode = .read_write })) catch |__ce_38| { _ = &__ce_38; break :third; }); });
+                    break :zshrc (blk_catch_42: { break :blk_catch_42 ((std.fs.openFileAbsoluteZ(filepath, .{ .mode = .read_write })) catch |__ce_42| { _ = &__ce_42; break :third; }); });
                 }
 };
                 break :brk true;
@@ -451,23 +470,23 @@ _ = unreachable;
                 _ = &dot_zshrc_guard;
                 var __dot_zshrc_guard_moved = false; _ = &__dot_zshrc_guard_moved;
                 defer if (!__dot_zshrc_guard_moved) { __dot_zshrc_guard_moved = true; const __T = @TypeOf(dot_zshrc_guard); if (@typeInfo(__T) == .optional) { if (dot_zshrc_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dot_zshrc_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dot_zshrc_guard; _drop_val.__cp_deinit(); } };
-                const input_size = @max((blk_catch_39: { break :blk_catch_39 ((dot_zshrc.getEndPos()) catch |__ce_39| { _ = &__ce_39; break :brk true; }); }), (64 * 1024));
-                var buf = (blk_catch_40: { break :blk_catch_40 ((allocator.alloc(u8, ((input_size + (completions_path.len * 4)) + 96))) catch |__ce_40| { _ = &__ce_40; break :brk true; }); });
+                const input_size = @max((blk_catch_43: { break :blk_catch_43 ((dot_zshrc.getEndPos()) catch |__ce_43| { _ = &__ce_43; break :brk true; }); }), (64 * 1024));
+                var buf = (blk_catch_44: { break :blk_catch_44 ((allocator.alloc(u8, ((input_size + (completions_path.len * 4)) + 96))) catch |__ce_44| { _ = &__ce_44; break :brk true; }); });
                 _ = &buf;
                 defer {
                 _ = allocator.free(buf);
                 }
-                const read = (blk_catch_41: { break :blk_catch_41 ((dot_zshrc_guard.val.preadAll(buf, 0)) catch |__ce_41| { _ = &__ce_41; break :brk true; }); });
+                const read = (blk_catch_45: { break :blk_catch_45 ((dot_zshrc_guard.val.preadAll(buf, 0)) catch |__ce_45| { _ = &__ce_45; break :brk true; }); });
                 if (comptime Environment.isWindows) {
                     _ = try dot_zshrc_guard.val.seekTo(0);
                 }
                 const contents = buf[0..read];
-                if ((strings.contains(contents, completions_path) or strings.contains(contents, "# bun completions\n"))) {
+                if ((((strings.contains(contents, completions_path) or strings.contains(contents, "# bun completions")) or strings.contains(contents, ".bun/_bun")) or strings.contains(contents, "$BUN_INSTALL/_bun"))) {
                     break :brk false;
                 }
                 const remaining = buf[read..];
                 const extra = ((std.fmt.bufPrint(remaining, "\n# bun completions\n[ -s \"{s}\" ] && source \"{s}\"\n", .{ completions_path, completions_path })) catch unreachable);
-                _ = (blk_catch_43: { break :blk_catch_43 ((dot_zshrc_guard.val.pwriteAll(extra, read)) catch |__ce_43| { _ = &__ce_43; break :brk true; }); });
+                _ = (blk_catch_47: { break :blk_catch_47 ((dot_zshrc_guard.val.pwriteAll(extra, read)) catch |__ce_47| { _ = &__ce_47; break :brk true; }); });
                 _ = Output.prettyErrorln("<r><d>Enabled loading bun's completions in .zshrc<r>", .{});
                 break :brk false;
 };

@@ -191,6 +191,26 @@ pub struct ImportRule {
         };
     }
 
+    fn conditionsWithSrcAndDstImportRecords(allocator: std.mem.Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): ImportConditions {
+        let new_layer: ImportLayer? = null;
+        if (l := _.layer) {
+            if (layer := l.v) {
+                new_layer = ImportLayer{ .v = layer.cloneWithImportRecords(allocator, dst) };
+            } else {
+                new_layer = ImportLayer{ .v = null };
+            }
+        }
+        let new_supp: SupportsCondition? = null;
+        if (*supp := _.supports) {
+            new_supp = supp.cloneWithImportRecords(allocator, dst);
+        }
+        return ImportConditions{
+            .layer = new_layer,
+            .supports = new_supp,
+            .media = _.media.cloneWithSrcAndDstImportRecords(allocator, src, dst),
+        };
+    }
+
     fn hasConditions(): bool {
         return _.layer != null || _.supports != null || _.media.media_queries.items.len > 0;
     }
@@ -248,7 +268,8 @@ pub struct ImportRule {
     }
 
     fn deepClone(allocator: std.mem.Allocator): This {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const self_val = _;
+        return css.implementDeepClone(@This(), &self_val, allocator);
     }
 }
 

@@ -1474,10 +1474,10 @@ client.hot_reload_deferred = true;
             return;
 },
 .rejected => {
-_ = (if ((client.pending_internal_promise_reported_at != client.hot_reload_counter)) ({
-            client.hot_reload_deferred = true;
-            return;
-}) else null);
+if ((client.pending_internal_promise_reported_at != client.hot_reload_counter)) {
+                client.hot_reload_deferred = true;
+                return;
+            }
 },
 .fulfilled => {
 
@@ -2222,7 +2222,7 @@ pub fn normalizeSource(source: []const u8) []const u8 {
 }
 
 pub fn resolveMaybeNeedsTrailingSlash(res: *ErrorableString, global: *JSGlobalObject, specifier: bun.String, source: bun.String, query_string: ?*bun.String, is_esm: bool, comptime is_a_file_path: bool, is_user_require_resolve: bool) bun.JSError!void {
-        if ((is_a_file_path and (specifier.length() > (comptime @as(u32, @intFromFloat(@trunc((@as(f64, @floatFromInt(bun.MAX_PATH_BYTES)) * 1.5)))))))) {
+        if (((is_a_file_path and (!specifier.hasPrefixComptime("data:"))) and (specifier.length() > (comptime @as(u32, @intFromFloat(@trunc((@as(f64, @floatFromInt(bun.MAX_PATH_BYTES)) * 1.5)))))))) {
             const specifier_utf8 = specifier.toUTF8(bun.default_allocator);
             var _spec_utf8_guard = DeinitGuard(@TypeOf(specifier_utf8)){ .val = specifier_utf8 };
             _ = &_spec_utf8_guard;

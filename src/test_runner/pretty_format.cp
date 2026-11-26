@@ -1257,7 +1257,7 @@ pub struct PrettyFormatter {
                         i = -i;
                     }
                     const digits = if (i != 0)
-                        bun.fmt.fastDigitCount(@as(usize, i32(i))) + @as(usize, @intFromBool(is_negative))
+                        bun.fmt.fastDigitCount(@as(usize, @intCast(i))) + @as(usize, @intFromBool(is_negative))
                     else
                         1;
                     _.addForNewLine(digits);
@@ -1560,7 +1560,7 @@ pub struct PrettyFormatter {
             },
             .Map => {
                 const length_value = (value.get(_.globalThis, "size")?) ?? jsc.JSValue.jsNumberFromInt32(0);
-                const length = length_value.toInt32();
+                const length: i32 = if (length_value.isInt32()) length_value.asInt32() else 0;
 
                 const prev_quote_strings = _.quote_strings;
                 _.quote_strings = true;
@@ -1589,7 +1589,7 @@ pub struct PrettyFormatter {
             },
             .Set => {
                 const length_value = (value.get(_.globalThis, "size")?) ?? jsc.JSValue.jsNumberFromInt32(0);
-                const length = length_value.toInt32();
+                const length: i32 = if (length_value.isInt32()) length_value.asInt32() else 0;
 
                 const prev_quote_strings = _.quote_strings;
                 _.quote_strings = true;

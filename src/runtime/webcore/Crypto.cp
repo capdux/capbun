@@ -186,7 +186,7 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         break :brk jsc.Node.Encoding.hex;
     };
 
-    const timestamp: u64 = brk: {
+    const ts_res = brk: {
         const timestamp_value: JSValue = if (!encoding_value.isUndefined() && arguments.len > 1)
             arguments[1]
         else if (arguments.len == 1 && encoding_value.isUndefined())
@@ -197,17 +197,21 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
         if (!timestamp_value.isUndefined()) {
             if (timestamp_value.isDate()) {
                 const date = timestamp_value.getUnixTimestamp();
-                break :brk @intFromFloat(@max(0, date));
+                if (std.math.isNan(date) || date < 0.0 || date > 281474976710655.0) {
+                    return globalThis.ERR(.OUT_OF_RANGE, "The value of \"timestamp\" is out of range. It must be >= 0 and <= 281474976710655.", .{}).throw();
+                }
+                break :brk .{ @as(u64, @intFromFloat(date)), true };
             }
-            break :brk @intCast(globalThis.validateIntegerRange(timestamp_value, i64, 0, .{ .min = 0, .field_name = "timestamp" })?);
+            const validated = globalThis.validateIntegerRange(timestamp_value, i64, 0, .{ .min = 0, .max = 281474976710655, .field_name = "timestamp" })?;
+            break :brk .{ @as(u64, @intCast(validated)), true };
         }
 
-        break :brk @intCast(@max(0, time.milliTimestamp()));
+        break :brk .{ @as(u64, @intCast(@max(0, time.milliTimestamp()))), false };
     };
 
     const entropy = globalThis.bunVM().rareData().entropySlice(8);
 
-    const uuid = UUID7.init(timestamp, &entropy[0..8].*);
+    const uuid = UUID7.initWithExplicit(ts_res[0], &entropy[0..8].*, ts_res[1]);
 
     if (encoding == .hex) {
         const pair = BunString.createUninitialized(.latin1, 36);

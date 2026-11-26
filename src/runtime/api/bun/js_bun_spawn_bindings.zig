@@ -1215,7 +1215,7 @@ pub fn throwCommandNotFound(globalThis: *jsc.JSGlobalObject, command: []const u8
 }
 
 pub fn appendEnvpFromJS(globalThis: *jsc.JSGlobalObject, object: *jsc.JSObject, envp: *std.array_list.Managed(NullableStringZ), PATH: *[]const u8) bun.JSError!void {
-        var object_iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true }).init(globalThis, object);
+        var object_iter = try jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true, .include_symbols = false }).init(globalThis, object);
         _ = &object_iter;
         var _guard_object_iter = DeinitGuard(@TypeOf(object_iter)){ .ptr = (blk: {
         break :blk (&object_iter);

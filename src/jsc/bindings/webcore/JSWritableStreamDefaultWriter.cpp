@@ -124,6 +124,7 @@ void JSWritableStreamDefaultWriterPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSWritableStreamDefaultWriter::info(), JSWritableStreamDefaultWriterPrototypeTableValues, *this);
+    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectWritableStreamDefaultWriterCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

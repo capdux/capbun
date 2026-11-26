@@ -1223,7 +1223,7 @@ const int = value.toInt64();
                 if (is_negative) {
                     i = (-i);
                 }
-                const digits = (if ((i != 0)) (bun.fmt.fastDigitCount((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(is_negative))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(is_negative))) else cp_cast_int(usize, @intFromBool(is_negative)))) else 1);
+                const digits = (if ((i != 0)) (bun.fmt.fastDigitCount(@as(usize, @intCast(i))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(is_negative))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(is_negative))) else cp_cast_int(usize, @intFromBool(is_negative)))) else 1);
                 _ = self.addForNewLine(digits);
             } else {
                 _ = self.addForNewLine(std.fmt.count("{d}", .{ .int = int }));
@@ -1516,7 +1516,7 @@ const fmt: []const u8 = "[this.globalThis]";
 },
 .Map => {
 const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSValue.jsNumberFromInt32(0)));
-            const length = length_value.toInt32();
+            const length: i32 = (if (length_value.isInt32()) length_value.asInt32() else 0);
             const prev_quote_strings = self.quote_strings;
             self.quote_strings = true;
             defer {
@@ -1547,7 +1547,7 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
 },
 .Set => {
 const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSValue.jsNumberFromInt32(0)));
-            const length = length_value.toInt32();
+            const length: i32 = (if (length_value.isInt32()) length_value.asInt32() else 0);
             const prev_quote_strings = self.quote_strings;
             self.quote_strings = true;
             defer {

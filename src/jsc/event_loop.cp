@@ -208,7 +208,9 @@ pub struct DeinitGuard<T> {
 
         let exception_thrown = false;
         for (task of to_run_now.items) {
-            exception_thrown = task.runImmediateTask(virtual_machine);
+            if (task.runImmediateTask(virtual_machine)) {
+                exception_thrown = true;
+            }
         }
 
         if (exception_thrown) {
@@ -525,6 +527,9 @@ pub struct DeinitGuard<T> {
                     _.tick();
 
                     if (!worker.hasRequestedTerminate() && promise.status() == .pending) {
+                        if (!_.virtual_machine.isEventLoopAlive() && _.tickConcurrentWithCount() == 0) {
+                            break;
+                        }
                         _.autoTick();
                     }
                 }

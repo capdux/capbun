@@ -16,6 +16,7 @@ extern fn tj3SetCroppingRegion(h: tjhandle, r: CropRegion): c_int ;
 extern fn tj3GetScalingFactors(n: *c_int): ([*]const ScalingFactor)?;
 pub extern fn tj3Free(ptr: *!?) ;
 extern fn tj3GetErrorStr(h: tjhandle): [*:0]const u8 ;
+pub extern fn tj3GetErrorCode(h: tjhandle): c_int ;
 // ICC profile transport: the APP2 ICC_PROFILE marker carries the source's
 // colour space (sRGB implicit when absent; Display-P3 / Adobe RGB / Jpegli
 // XYB / … explicit when present). tj3GetICCProfile reads the decoded
@@ -40,7 +41,9 @@ pub const TJPARAM_JPEGWIDTH = 5;
 pub const TJPARAM_JPEGHEIGHT = 6;
 const TJPARAM_COLORSPACE = 8;
 const TJPARAM_PROGRESSIVE = 12;
+const TJPARAM_LOSSLESS = 15;
 const TJPARAM_MAXPIXELS = 24;
+pub const TJERR_WARNING: c_int = 0;
 /// `2` = save only APP2/ICC_PROFILE markers (enough for colour management,
 /// skips the rest). Must be set BEFORE `tj3DecompressHeader` so the marker
 /// parser keeps the profile around for `tj3GetICCProfile`.
@@ -81,7 +84,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     // the profile out after header parse. Must be set PRE-header — the
     // marker buffer is discarded if we set this after.
     * = tj3Set(h, TJPARAM_SAVEMARKERS, 2);
-    if (tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
+    if (tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0 && tj3GetErrorCode(h) != TJERR_WARNING) return error.DecodeFailed;
     const rw = tj3Get(h, TJPARAM_JPEGWIDTH);
     const rh = tj3Get(h, TJPARAM_JPEGHEIGHT);
     // tj3Get returns -1 on error; treat any non-positive dim as a decode
@@ -92,6 +95,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     codecs.guard(src_w, src_h, max_pixels)?;
     const cs = tj3Get(h, TJPARAM_COLORSPACE);
     const cmyk = cs == TJCS_CMYK || cs == TJCS_YCCK;
+    const is_lossless = tj3Get(h, TJPARAM_LOSSLESS) != 0;
 
     let w = src_w;
     let ht = src_h;
@@ -100,7 +104,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     // decode time goes, so this is roughly (8/M)² faster AND the RGBA
     // buffer shrinks by the same factor — both speed and RSS win in one
     // place. The subsequent resize pass takes it the rest of the way.
-    if (hint.target_w != 0 && hint.target_h != 0 &&
+    // Lossless (SOF3) streams ignore scaling factors and refuse cropping regions.
+    if (!is_lossless && hint.target_w != 0 && hint.target_h != 0 &&
         (hint.target_w < src_w || hint.target_h < src_h))
     {
         let n: c_int = 0;
@@ -129,10 +134,12 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     // Hardening against hostile mid-decode swap (tj3DecompressHeader -> tj3Decompress8):
     // bind write region with TJPARAM_MAXPIXELS, pitch, and croppingRegion.
     * = tj3Set(h, TJPARAM_MAXPIXELS, std.math.cast(c_int, src_w * src_h) ?? std.math.maxInt(c_int));
-    * = tj3SetCroppingRegion(h, { x: 0, y: 0, w: @intCast(w), h: @intCast(ht) });
+    if (!is_lossless) {
+        * = tj3SetCroppingRegion(h, { x: 0, y: 0, w: @intCast(w), h: @intCast(ht) });
+    }
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * ht * 4)?;
     const out_guard = SliceFreeGuard{ slice: out };
-    if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), if (cmyk) TJPF_CMYK else TJPF_RGBA) != 0)
+    if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), if (cmyk) TJPF_CMYK else TJPF_RGBA) != 0 && tj3GetErrorCode(h) != TJERR_WARNING)
         return error.DecodeFailed;
     if (tj3Get(h, TJPARAM_JPEGWIDTH) != rw || tj3Get(h, TJPARAM_JPEGHEIGHT) != rh)
         return error.DecodeFailed;

@@ -86,6 +86,19 @@ template<> AddEventListenerOptions convertDictionary<AddEventListenerOptions>(JS
         result.signal = convert<IDLInterface<AbortSignal>>(lexicalGlobalObject, signalValue);
         RETURN_IF_EXCEPTION(throwScope, {});
     }
+    JSValue resistStopPropagationValue;
+    if (isNullOrUndefined)
+        resistStopPropagationValue = jsUndefined();
+    else {
+        auto symbolUid = vm.symbolRegistry().symbolForKey("nodejs.internal.kResistStopPropagation"_s);
+        resistStopPropagationValue = object->get(&lexicalGlobalObject, Identifier::fromUid(WTF::move(symbolUid)));
+        RETURN_IF_EXCEPTION(throwScope, {});
+    }
+    if (!resistStopPropagationValue.isUndefined()) {
+        result.resistStopPropagation = convert<IDLBoolean>(lexicalGlobalObject, resistStopPropagationValue);
+        RETURN_IF_EXCEPTION(throwScope, {});
+    } else
+        result.resistStopPropagation = false;
     return result;
 }
 

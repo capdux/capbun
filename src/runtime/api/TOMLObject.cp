@@ -493,7 +493,13 @@ pub fn parse(
         if (e == error.StackOverflow) {
             return globalThis.throwStackOverflow();
         }
-        return globalThis.throwValue((log.toJS(globalThis, default_allocator, "Failed to parse toml"))?);
+        let first_msg: (*const logger.Msg)? = if (log.msgs.items.len > 0) unsafe { &log.msgs.items[0] } else null;
+        for (i of 0..log.msgs.items.len) {
+            const m = unsafe { &log.msgs.items[i] };
+            if (m.kind == .@"err") { first_msg = m; break; }
+        }
+        if (msg := first_msg) return globalThis.throwValue(globalThis.createSyntaxErrorInstance("TOML Parse error: {s}", { msg.data.text }));
+        return globalThis.throwValue(globalThis.createSyntaxErrorInstance("TOML Parse error: Unable to parse TOML string", {}));
     };
 
     // for now...

@@ -508,6 +508,13 @@ public:
         webSocketContext->getExt()->maxLifetime = behavior.maxLifetime;
         webSocketContext->getExt()->compression = behavior.compression;
 
+        for (us_socket_group_t *g : webSocketGroups) {
+            auto *existingContext = (WebSocketContext<SSL, true, UserData> *) us_socket_group_ext(g);
+            if (existingContext) {
+                existingContext->getExt()->maxPayloadLength = behavior.maxPayloadLength;
+            }
+        }
+
         /* Calculate idleTimeoutComponents */
         webSocketContext->getExt()->calculateIdleTimeoutComponents(behavior.idleTimeout);
 

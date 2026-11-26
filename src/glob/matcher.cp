@@ -31,7 +31,7 @@ struct State {
     wildcard: Wildcard = Wildcard{},
     globstar: Wildcard = Wildcard{},
 
-    brace_depth: u8 = 0,
+    brace_depth: u32 = 0,
 
     inline fn backtrack(*_) {
         _.path_index = _.wildcard.path_index;
@@ -62,7 +62,7 @@ struct State {
 struct Wildcard {
     glob_index: u32 = 0,
     path_index: u32 = 0,
-    brace_depth: u8 = 0,
+    brace_depth: u32 = 0,
 }
 
 pub fn match(glob: []const u8, path: []const u8): MatchResult {
@@ -271,23 +271,27 @@ fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *B
 
     while (state.glob_index < glob.len) {
         switch (glob[state.glob_index]) {
-            '{' => if (!in_brackets) {
-                brace_depth += 1;
-                if (brace_depth == 1) {
-                    branch_index = state.glob_index + 1;
+            '{' => {
+                if (!in_brackets) {
+                    brace_depth += 1;
+                    if (brace_depth == 1) {
+                        branch_index = state.glob_index + 1;
+                    }
                 }
             },
-            '}' => if (!in_brackets) {
-                brace_depth -= 1;
-                if (brace_depth == 0) {
-                    if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
-                        return true;
+            '}' => {
+                if (!in_brackets) {
+                    brace_depth -= 1;
+                    if (brace_depth == 0) {
+                        if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
+                            return true;
+                        }
+                        break;
                     }
-                    break;
                 }
             },
             ',' => {
-                if (brace_depth == 1) {
+                if (!in_brackets && brace_depth == 1) {
                     if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
                         return true;
                     }

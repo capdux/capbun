@@ -614,7 +614,10 @@ if (FilesContext.cloneErrorString(archive)) |e| {
                 const pathname = entry.pathnameUtf8();
                 if (self.glob_patterns) |patterns| {
                     _ = &patterns;
-                    if ((!matchGlobPatterns(patterns, pathname))) {
+                    var glob_norm_buf: [bun.MAX_PATH_BYTES]u8 = undefined;
+                    _ = &glob_norm_buf;
+                    const norm_path = normalizeArchiveGlobPath(pathname, (&glob_norm_buf));
+                    if ((!matchGlobPatterns(patterns, norm_path))) {
                         continue;
                     }
                 }
@@ -642,6 +645,9 @@ if (FilesContext.cloneErrorString(archive)) |e| {
                             break;
                         }
                         total_read = (total_read + @as(usize, @intCast(read)));
+                    }
+                    if ((total_read < size)) {
+                        _ = @memset(data_guard.slice[total_read..], 0);
                     }
                 }
                 var path_copy = OwnedBytes{ .slice = try bun.default_allocator.dupe(u8, pathname) };
@@ -679,7 +685,7 @@ const map = jsc.JSMap.create(globalThis);
                 (entry.*).data = &.{};
                 blob_ptr.is_jsdom_file = true;
                 (if (@typeInfo(@TypeOf(blob_ptr)) == .@"enum" or @typeInfo(@TypeOf(blob_ptr)) == .@"union") @tagName(blob_ptr) else blob_ptr.name) = bun.String.cloneUTF8((entry.*).path);
-                blob_ptr.last_modified = @floatFromInt(((entry.*).mtime * 1000));
+                blob_ptr.last_modified = (@as(f64, @floatFromInt((entry.*).mtime)) * 1000.0);
                 _ = try map_ptr.set(globalThis, try (if (@typeInfo(@TypeOf(blob_ptr)) == .@"enum" or @typeInfo(@TypeOf(blob_ptr)) == .@"union") @tagName(blob_ptr) else blob_ptr.name).toJS(globalThis), blob_ptr.toJS(globalThis));
             }
             return PromiseResult{ .resolve = map };
@@ -876,7 +882,7 @@ pub fn configureArchiveReader(archive: *libarchive.lib.Archive) void {
         _ = archive.readSupportFormatTar();
         _ = archive.readSupportFormatGnutar();
         _ = archive.readSupportFilterGzip();
-        _ = archive.readSetOptions("read_concatenated_archives");
+        _ = archive.readSetOptions("read_concatenated_archives,hdrcharset=UTF-8");
 }
 
 pub fn countFilesInArchive(data: []const u8) u32 {
@@ -893,10 +899,21 @@ pub fn countFilesInArchive(data: []const u8) u32 {
         _ = &count;
         var entry_buf: [1]*libarchive.lib.Archive.Entry = .{ undefined };
         _ = &entry_buf;
-        while ((archive.readNextHeader((blk: {
-        break :blk (&entry_buf);
+        while (true) {
+            switch (archive.readNextHeader((blk: {
+            break :blk (&entry_buf);
 
-})) == .ok)) {
+}))) {
+.eof, .failed, .fatal => {
+break;
+},
+.retry => {
+_ = continue;
+},
+.ok, .warn => {
+
+},
+}
             const entry = entry_buf[0];
             if ((entry.filetype() == @intFromEnum(libarchive.lib.FileType.regular))) {
                 count = (count + 1);
@@ -974,6 +991,35 @@ pub fn isSafePath(pathname: []const u8) bool {
         return true;
 }
 
+pub fn normalizeArchiveGlobPath(pathname: []const u8, buf: []u8) []const u8 {
+        var i: usize = 0;
+        _ = &i;
+        while (((((i + 1) < pathname.len) and (pathname[@as(usize, @intCast(i))] == 46)) and (pathname[@as(usize, @intCast((i + 1)))] == 47))) {
+            i = (i + 2);
+            while (((i < pathname.len) and (pathname[@as(usize, @intCast(i))] == 47))) {
+                i = (i + 1);
+            }
+        }
+        var out_len: usize = 0;
+        _ = &out_len;
+        var prev_slash = false;
+        _ = &prev_slash;
+        while (((i < pathname.len) and (out_len < buf.len))) : (i = (i + 1)) {
+            const c = pathname[@as(usize, @intCast(i))];
+            if ((c == 47)) {
+                if (prev_slash) {
+                    continue;
+                }
+                prev_slash = true;
+            } else {
+                prev_slash = false;
+            }
+            buf[cp_cast_int(usize, out_len)] = c;
+            out_len = (out_len + 1);
+        }
+        return buf[0..out_len];
+}
+
 pub fn matchGlobPatterns(patterns: []const []const u8, pathname: []const u8) bool {
         var has_positive_patterns = false;
         _ = &has_positive_patterns;
@@ -1022,6 +1068,12 @@ pub fn extractToDiskFiltered(file_buffer: []const u8, root: []const u8, glob_pat
         const dir_fd = dir_guard.fd;
         var count: u32 = 0;
         _ = &count;
+        var use_pwrite = bun.Environment.isPosix;
+        _ = &use_pwrite;
+        var use_lseek = true;
+        _ = &use_lseek;
+        var glob_norm_buf: [bun.MAX_PATH_BYTES]u8 = undefined;
+        _ = &glob_norm_buf;
         var entry_buf: [1]*lib.Archive.Entry = .{ undefined };
         _ = &entry_buf;
         while (true) {
@@ -1049,7 +1101,8 @@ return error.ReadError;
             }
             if (glob_patterns) |patterns| {
                 _ = &patterns;
-                if ((!matchGlobPatterns(patterns, pathname))) {
+                const norm_path = normalizeArchiveGlobPath(pathname, (&glob_norm_buf));
+                if ((!matchGlobPatterns(patterns, norm_path))) {
                     continue;
                 }
             }
@@ -1072,40 +1125,27 @@ const size: usize = @as(usize, @intCast(@max(entry.size(), 0)));
             var write_success = true;
             _ = &write_success;
             if ((size > 0)) {
-                var remaining = size;
-                _ = &remaining;
-                const BUF_SIZE = (64 * 1024);
-                var buf: [BUF_SIZE]u8 = undefined;
-                _ = &buf;
-                while ((remaining > 0)) {
-                    const to_read = @min(remaining, buf.len);
-                    const read = archive.readData(buf[0..to_read]);
-                    if ((read < 0)) {
-                        _ = file_fd.close();
-                        _ = dir_fd.unlinkat(pathname);
-                        return error.ReadError;
-                    }
-                    if ((read == 0)) {
-                        write_success = false;
-                        break;
-                    }
-                    const bytes_read: usize = @as(usize, @intCast(read));
-                    var written: usize = 0;
-                    _ = &written;
-                    while ((written < bytes_read)) {
-                        const w = (blk_catch_13: { break :blk_catch_13 ((file_fd.write(buf[written..bytes_read]).unwrap()) catch |__ce_13| { _ = &__ce_13; write_success = false;
-                        break; }); });
-                        if ((w == 0)) {
-                            write_success = false;
-                            break;
-                        }
-                        written = (written + w);
-                    }
-                    if ((!write_success)) {
-                        break;
-                    }
-                    remaining = (remaining - bytes_read);
-                }
+                const fd_res = (blk: {
+                break :blk archive.readDataIntoFd(file_fd, @as(*bool, @ptrCast(@alignCast(&(use_pwrite)))), @as(*bool, @ptrCast(@alignCast(&(use_lseek)))));
+
+});
+                switch (fd_res) {
+.ok, .eof => {
+switch (bun.sys.ftruncate(file_fd, @intCast(size))) {
+.err => {
+write_success = false;
+},
+.result => {
+
+},
+}
+},
+else => {
+_ = file_fd.close();
+                _ = dir_fd.unlinkat(pathname);
+                return error.ReadError;
+},
+}
             }
             _ = file_fd.close();
             if (write_success) {
@@ -1120,14 +1160,14 @@ const link_target = entry.symlink();
                 continue;
             }
             if (bun.Environment.isPosix) {
-                _ = (blk_catch_14: { break :blk_catch_14 ((bun.sys.symlinkat(link_target, dir_fd, pathname).unwrap()) catch |e| { _ = &e; break :blk_catch_14 (switch (e) {
+                _ = (blk_catch_13: { break :blk_catch_13 ((bun.sys.symlinkat(link_target, dir_fd, pathname).unwrap()) catch |e| { _ = &e; break :blk_catch_13 (switch (e) {
 error.EPERM, error.ENOENT => {
 {
                     if (std.fs.path.dirname(pathname)) |parent| {
                         _ = &parent;
-                        _ = (blk_catch_15: { break :blk_catch_15 ((dir_fd.makePath(u8, parent)) catch |__ce_15| { _ = &__ce_15;  }); });
+                        _ = (blk_catch_14: { break :blk_catch_14 ((dir_fd.makePath(u8, parent)) catch |__ce_14| { _ = &__ce_14;  }); });
                     }
-                    _ = (blk_catch_16: { break :blk_catch_16 ((bun.sys.symlinkat(link_target, dir_fd, pathname).unwrap()) catch |__ce_16| { _ = &__ce_16; continue; }); });
+                    _ = (blk_catch_15: { break :blk_catch_15 ((bun.sys.symlinkat(link_target, dir_fd, pathname).unwrap()) catch |__ce_15| { _ = &__ce_15; continue; }); });
                 }
 },
 else => continue,
@@ -1320,6 +1360,7 @@ pub fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue)
         if ((archive.writeSetFormatPaxRestricted() != .ok)) {
             return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
         }
+        _ = archive.writeSetOptions("hdrcharset=UTF-8");
         if (((blk: {
         break :blk lib.archive_write_open2(@ptrCast(archive), @ptrCast((&growing_buffer_guard.buf)), (&lib.GrowingBuffer.openCallback), (&lib.GrowingBuffer.writeCallback), (&lib.GrowingBuffer.closeCallback), null);
 
@@ -1374,7 +1415,7 @@ pub fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue)
         if ((archive.writeClose() != .ok)) {
             return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveCloseError", .{});
         }
-        const owned = (blk_catch_17: { break :blk_catch_17 ((growing_buffer_guard.buf.toOwnedSlice()) catch |__ce_17| { _ = &__ce_17; return globalThis.throwInvalidArguments("Failed to create tarball: OutOfMemory", .{}); }); });
+        const owned = (blk_catch_16: { break :blk_catch_16 ((growing_buffer_guard.buf.toOwnedSlice()) catch |__ce_16| { _ = &__ce_16; return globalThis.throwInvalidArguments("Failed to create tarball: OutOfMemory", .{}); }); });
         growing_buffer_guard.armed = false;
         return owned;
 }
@@ -1401,11 +1442,11 @@ pub fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_na
             if ((str_guard.slice.len == 0)) {
                 return null;
             }
-            var pattern = OwnedBytes{ .slice = (blk_catch_18: { break :blk_catch_18 ((allocator.dupe(u8, str_guard.slice.slice())) catch |__ce_18| { _ = &__ce_18; return error.OutOfMemory; }); }) };
+            var pattern = OwnedBytes{ .slice = (blk_catch_17: { break :blk_catch_17 ((allocator.dupe(u8, str_guard.slice.slice())) catch |__ce_17| { _ = &__ce_17; return error.OutOfMemory; }); }) };
             _ = &pattern;
             var __pattern_moved = false; _ = &__pattern_moved;
             defer if (!__pattern_moved) { __pattern_moved = true; const __T = @TypeOf(pattern); if (@typeInfo(__T) == .optional) { if (pattern) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pattern.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pattern; _drop_val.__cp_deinit(); } };
-            var patterns = (blk_catch_19: { break :blk_catch_19 ((allocator.alloc(string, 1)) catch |__ce_19| { _ = &__ce_19; return error.OutOfMemory; }); });
+            var patterns = (blk_catch_18: { break :blk_catch_18 ((allocator.alloc(string, 1)) catch |__ce_18| { _ = &__ce_18; return error.OutOfMemory; }); });
             _ = &patterns;
             patterns[cp_cast_int(usize, 0)] = pattern.take();
             return patterns;
@@ -1415,7 +1456,7 @@ pub fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_na
             if ((len == 0)) {
                 return null;
             }
-            var patterns_guard = PatternListGuard{ .list = (blk_catch_20: { break :blk_catch_20 ((std.ArrayList(string).initCapacity(allocator, @as(usize, @intCast(len)))) catch |__ce_20| { _ = &__ce_20; return error.OutOfMemory; }); }) };
+            var patterns_guard = PatternListGuard{ .list = (blk_catch_19: { break :blk_catch_19 ((std.ArrayList(string).initCapacity(allocator, @as(usize, @intCast(len)))) catch |__ce_19| { _ = &__ce_19; return error.OutOfMemory; }); }) };
             _ = &patterns_guard;
             var __patterns_guard_moved = false; _ = &__patterns_guard_moved;
             defer if (!__patterns_guard_moved) { __patterns_guard_moved = true; const __T = @TypeOf(patterns_guard); if (@typeInfo(__T) == .optional) { if (patterns_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { patterns_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = patterns_guard; _drop_val.__cp_deinit(); } };
@@ -1433,7 +1474,7 @@ pub fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_na
                 if ((str_guard.slice.len == 0)) {
                     continue;
                 }
-                var pattern = (blk_catch_21: { break :blk_catch_21 ((allocator.dupe(u8, str_guard.slice.slice())) catch |__ce_21| { _ = &__ce_21; return error.OutOfMemory; }); });
+                var pattern = (blk_catch_20: { break :blk_catch_20 ((allocator.dupe(u8, str_guard.slice.slice())) catch |__ce_20| { _ = &__ce_20; return error.OutOfMemory; }); });
                 _ = &pattern;
                 var __pattern_moved = false; _ = &__pattern_moved;
                 defer if (!__pattern_moved) { __pattern_moved = true; const __T = @TypeOf(pattern); if (@typeInfo(__T) == .optional) { if (pattern) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { pattern.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = pattern; _drop_val.__cp_deinit(); } };
@@ -1442,7 +1483,7 @@ pub fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_na
             if ((patterns_guard.list.items.len == 0)) {
                 return null;
             }
-            const slice = (blk_catch_22: { break :blk_catch_22 ((patterns_guard.list.toOwnedSlice(allocator)) catch |__ce_22| { _ = &__ce_22; return error.OutOfMemory; }); });
+            const slice = (blk_catch_21: { break :blk_catch_21 ((patterns_guard.list.toOwnedSlice(allocator)) catch |__ce_21| { _ = &__ce_21; return error.OutOfMemory; }); });
             patterns_guard.armed = false;
             return slice;
         }

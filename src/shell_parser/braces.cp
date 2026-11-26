@@ -128,9 +128,7 @@ pub struct Parser {
 
     fn parseExpansion(*_): !AST.Expansion {
         let variants = std.array_list.Managed(AST.Group).init(_.alloc);
-        const close_eof: [2]Token.Tag = [ .close, .eof ];
-        while (!_.match_any(&close_eof)) {
-            if (_.matchTok(.eof)) break;
+        while (!_.matchTok(.eof)) {
             let group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), _.alloc);
             const group_alloc = group_alloc_.get();
             let group = std.array_list.Managed(AST.Atom).init(group_alloc);

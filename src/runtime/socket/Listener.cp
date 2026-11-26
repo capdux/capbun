@@ -77,7 +77,7 @@ struct ListenerCloseGuard {
     ~init() {
         switch (_.listener) {
             .uws => |socket| socket.close(),
-            .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
+            .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined),
             .none => {},
         }
     }
@@ -298,7 +298,7 @@ struct NamedPipeCtxErrGuard {
                 _.unlinkUnixSocketPath();
                 socket.close();
             },
-            .namedPipe namedPipe => if (Environment.isWindows) namedPipe.closePipeAndDeinit(),
+            .namedPipe namedPipe => if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined),
             .none => {},
         }
         const release_fn = Listener.release;
@@ -733,8 +733,22 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
     const port = socket_config.port;
     if (port != null) {
         const hn = hostname_or_unix.slice();
-        if (!bun.dns.isValidHostname(hn)) {
-            return globalObject.throwValue(@import("../dns_jsc/cares_jsc.zig").notAHostnameError(globalObject, hn));
+        const valid_hn = if (hn.len >= 2 && hn[0] == '[' && hn[hn.len - 1] == ']')
+            (std.net.Address.parseIp(hn[1 .. hn.len - 1], 0) catch null) != null
+        else
+            bun.dns.isValidHostname(hn);
+        if (!valid_hn) {
+            let promise = jsc.JSPromise.create(globalObject);
+            const promise_val = promise.asValue(globalObject);
+            let handlers_ptr = bun.new(Handlers, handlers.*);
+            handlers_ptr.promise.set(globalObject, promise_val);
+            handlers_ptr.protect();
+            const host_copy = bun.handleOom(bun.default_allocator.dupe(u8, hn));
+            let t = bun.new(InvalidHostTask, .{ .handlers = handlers_ptr, .hostname = host_copy, .globalObject = globalObject, .task = undefined });
+            t.task = jsc.AnyTask.New(InvalidHostTask, InvalidHostTask.run).init(t);
+            vm.enqueueTask(jsc.Task.init(&t.task));
+            _guard_handlers.armed = false;
+            return promise_val;
         }
     }
     const ssl = if (socket_config.ssl != null) &socket_config.ssl.? else null;
@@ -1203,3 +1217,23 @@ pub struct _WindowsNamedPipeListeningContextImpl {
 }
 
 pub const WindowsNamedPipeListeningContext = if (Environment.isWindows) _WindowsNamedPipeListeningContextImpl else _EmptyNamedPipeContext;
+
+pub struct InvalidHostTask {
+    handlers: *Handlers,
+    hostname: []const u8,
+    globalObject: *jsc.JSGlobalObject,
+    task: jsc.AnyTask,
+
+    pub fn run(*_) {
+        const err_val = @import("../dns_jsc/cares_jsc.zig").notAHostnameError(_.globalObject, _.hostname);
+        if (_.handlers.onConnectError != .zero) {
+            * = _.handlers.onConnectError.call(_.globalObject, .js_undefined, &.{ .js_undefined, err_val }) catch e =>
+                _.globalObject.reportActiveExceptionAsUnhandled(e);
+        }
+        * = _.handlers.rejectPromise(err_val) catch {};
+        bun.default_allocator.free(_.hostname);
+        _.handlers.deinit();
+        bun.destroy(_.handlers);
+        bun.destroy(_);
+    }
+}

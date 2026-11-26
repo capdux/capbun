@@ -56,8 +56,8 @@ pub struct TOML {
         };
     }
 
-    inline fn source(_: *const TOML): *const logger.Source! {
-        return &_.lexer.source;
+    inline fn source(*_): *const logger.Source! {
+        return unsafe { &_.lexer.source };
     }
 
     fn e(*_, t: auto, loc: logger.Loc): Expr {
@@ -230,7 +230,15 @@ pub struct TOML {
             _.lexer.next()?;
         }
 
+        if (_.lexer.has_newline_before) {
+            _.lexer.addError(_.lexer.start, "Unexpected newline before '='", {});
+            return error.SyntaxError;
+        }
         _.lexer.expectAssignment()?;
+        if (_.lexer.has_newline_before) {
+            _.lexer.addError(_.lexer.start, "Missing value after '='; values must be on the same line", {});
+            return error.SyntaxError;
+        }
         if (!is_array) {
             obj.setRope(rope, _.allocator, _.parseValue()?) catch err_val => {
                 if (err_val == error.Clobber) {
@@ -253,8 +261,6 @@ pub struct TOML {
         }
 
         const loc = _.lexer.loc();
-
-        _.lexer.allow_double_bracket = true;
 
         switch (_.lexer.token) {
             .t_false => {

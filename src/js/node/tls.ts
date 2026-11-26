@@ -449,6 +449,10 @@ var InternalSecureContext = class SecureContext {
             ["string", "null", "undefined"],
             options.privateKeyIdentifier,
           );
+        if (options.key) {
+          throw $ERR_INVALID_ARG_VALUE("options.privateKeyIdentifier", options.privateKeyIdentifier);
+        }
+        throw $ERR_CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED();
       }
     }
     // The native handle (SSL_CTX wrapper) is what's memoised — not this JS
@@ -813,6 +817,15 @@ function Server(options, secureConnectionListener): void {
         validateCiphers(options.ciphers);
 
         this.ciphers = options.ciphers;
+      }
+
+      if (
+        options.key ||
+        options.cert ||
+        options.ca ||
+        !$isUndefinedOrNull(options.privateKeyIdentifier)
+      ) {
+        createSecureContext(options);
       }
     }
   };

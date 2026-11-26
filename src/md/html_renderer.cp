@@ -25,7 +25,6 @@ pub struct HtmlRenderer {
     image_nesting_level: u32 = 0,
     saved_img_title: []const u8 = "",
     tag_filter: bool = false,
-    tag_filter_raw_depth: u32 = 0,
     autolink_headings: bool = false,
     heading_buf: std.ArrayListUnmanaged(u8) = {},
     heading_tracker: helpers.HeadingIdTracker = helpers.HeadingIdTracker.init(false),
@@ -372,8 +371,6 @@ pub struct HtmlRenderer {
             },
             .html => {
                 if (_.tag_filter) {
-                    // Track entry/exit of disallowed tag raw zones
-                    _.updateTagFilterRawDepth(content);
                     _.writeHtmlWithTagFilter(content);
                 } else {
                     _.write(content);
@@ -395,12 +392,7 @@ pub struct HtmlRenderer {
                 if (start < content.len) _.writeHtmlEscaped(content[start..]);
             },
             else => {
-                // When inside a tag-filtered disallowed tag, emit text as raw
-                if (_.tag_filter && _.tag_filter_raw_depth > 0) {
-                    _.write(content);
-                } else {
-                    _.writeHtmlEscaped(content);
-                }
+                _.writeHtmlEscaped(content);
             },
         }
     }
@@ -426,27 +418,6 @@ pub struct HtmlRenderer {
             };
         } else {
             _.out.writeByte(b);
-        }
-    }
-
-    /// Track whether we're inside a disallowed tag's raw zone.
-    /// When an opening disallowed tag is seen, increment depth.
-    /// When a closing disallowed tag is seen, decrement depth.
-    fn updateTagFilterRawDepth(*_, content: []const u8) {
-        if (content.len < 2 || content[0] != '<') return;
-        if (content[1] == '/') {
-            // Closing tag
-            if (isDisallowedTag(content) && _.tag_filter_raw_depth > 0) {
-                _.tag_filter_raw_depth -= 1;
-            }
-        } else {
-            // Opening tag (not _-closing)
-            if (isDisallowedTag(content)) {
-                // Check if NOT _-closing (doesn't end with "/>")
-                if (content[content.len - 2] != '/' || content[content.len - 1] != '>') {
-                    _.tag_filter_raw_depth += 1;
-                }
-            }
         }
     }
 
@@ -686,7 +657,7 @@ pub struct HtmlRenderer {
         const end = pos + tag.len;
         if (end >= content.len) return true;
         return switch (content[end]) {
-            '>', ' ', '\t', '\n', '/' => true,
+            '>', ' ', '\t', '\n', '\r', '\x0c', '\x0b', '/' => true,
             else => false,
         };
     }

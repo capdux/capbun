@@ -32,7 +32,45 @@ using namespace WebCore;
 
 namespace Bun {
 
-static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalObject, JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSObject* errorObject, JSC::JSArray* callSites)
+static WTF::String describeThrownValue(JSC::VM& vm, JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSValue thrown)
+{
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    if (!thrown.isObject())
+        return "<error>"_s;
+
+    JSObject* obj = thrown.getObject();
+    JSValue nameVal = obj->get(lexicalGlobalObject, vm.propertyNames->name);
+    if (scope.exception()) {
+        (void)scope.tryClearException();
+        return "<error>"_s;
+    }
+    WTF::String name = nameVal.isUndefined() ? "Error"_s : nameVal.toWTFString(lexicalGlobalObject);
+    if (scope.exception()) {
+        (void)scope.tryClearException();
+        return "<error>"_s;
+    }
+
+    JSValue msgVal = obj->get(lexicalGlobalObject, vm.propertyNames->message);
+    if (scope.exception()) {
+        (void)scope.tryClearException();
+        return "<error>"_s;
+    }
+    WTF::String msg = msgVal.isUndefined() ? emptyString() : msgVal.toWTFString(lexicalGlobalObject);
+    if (scope.exception()) {
+        (void)scope.tryClearException();
+        return "<error>"_s;
+    }
+
+    if (!name.isEmpty() && !msg.isEmpty())
+        return makeString("<error: "_s, name, ": "_s, msg, ">"_s);
+    if (!name.isEmpty())
+        return makeString("<error: "_s, name, ">"_s);
+    if (!msg.isEmpty())
+        return makeString("<error: "_s, msg, ">"_s);
+    return "<error>"_s;
+}
+
+static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalObject, JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSObject* errorObject, JSC::JSArray* callSites, bool describeNameThrow)
 {
     auto scope = DECLARE_THROW_SCOPE(vm);
 
@@ -41,21 +79,43 @@ static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalO
 
     WTF::StringBuilder sb;
 
-    auto errorMessage = errorObject->getIfPropertyExists(lexicalGlobalObject, vm.propertyNames->message);
-    RETURN_IF_EXCEPTION(scope, {});
-    if (errorMessage) {
-        auto* str = errorMessage.toString(lexicalGlobalObject);
-        RETURN_IF_EXCEPTION(scope, {});
-        if (str->length() > 0) {
-            auto value = str->view(lexicalGlobalObject);
-            RETURN_IF_EXCEPTION(scope, {});
-            sb.append("Error: "_s);
-            sb.append(value.data);
-        } else {
-            sb.append("Error"_s);
-        }
+    WTF::String nameString;
+    bool hasErrorHeader = false;
+    JSValue errorName = errorObject->get(lexicalGlobalObject, vm.propertyNames->name);
+    if (scope.exception()) {
+        if (!describeNameThrow)
+            return {};
+        JSValue thrown = scope.exception()->value();
+        (void)scope.tryClearException();
+        sb.append(describeThrownValue(vm, lexicalGlobalObject, thrown));
+        hasErrorHeader = true;
     } else {
-        sb.append("Error"_s);
+        nameString = errorName.isUndefined() ? "Error"_s : errorName.toWTFString(lexicalGlobalObject);
+        if (scope.exception()) {
+            if (!describeNameThrow)
+                return {};
+            JSValue thrown = scope.exception()->value();
+            (void)scope.tryClearException();
+            sb.append(describeThrownValue(vm, lexicalGlobalObject, thrown));
+            hasErrorHeader = true;
+        }
+    }
+
+    JSValue errorMessage = errorObject->get(lexicalGlobalObject, vm.propertyNames->message);
+    RETURN_IF_EXCEPTION(scope, {});
+    WTF::String messageString = errorMessage.isUndefined() ? emptyString() : errorMessage.toWTFString(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(scope, {});
+
+    if (!hasErrorHeader) {
+        if (!nameString.isEmpty() && !messageString.isEmpty()) {
+            sb.append(nameString);
+            sb.append(": "_s);
+            sb.append(messageString);
+        } else if (!nameString.isEmpty()) {
+            sb.append(nameString);
+        } else if (!messageString.isEmpty()) {
+            sb.append(messageString);
+        }
     }
 
     for (size_t i = 0; i < framesCount; i++) {
@@ -84,12 +144,12 @@ static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalO
 static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalObject, JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSObject* errorObject, JSC::JSArray* callSites, JSValue prepareStackTrace)
 {
     auto scope = DECLARE_THROW_SCOPE(vm);
-    auto stackStringValue = formatStackTraceToJSValue(vm, globalObject, lexicalGlobalObject, errorObject, callSites);
+    bool hasCallback = prepareStackTrace && prepareStackTrace.isObject() && JSC::getCallData(prepareStackTrace).type != JSC::CallData::Type::None;
+    auto stackStringValue = formatStackTraceToJSValue(vm, globalObject, lexicalGlobalObject, errorObject, callSites, hasCallback);
     RETURN_IF_EXCEPTION(scope, {});
 
-    if (prepareStackTrace && prepareStackTrace.isObject()) {
+    if (hasCallback) {
         JSC::CallData prepareStackTraceCallData = JSC::getCallData(prepareStackTrace);
-
         if (prepareStackTraceCallData.type != JSC::CallData::Type::None) {
             // In Node, if you console.log(error.stack) inside Error.prepareStackTrace
             // it will display the stack as a formatted string, so we have to do the same.
@@ -449,8 +509,8 @@ static JSValue computeErrorInfoWithPrepareStackTrace(JSC::VM& vm, Zig::GlobalObj
 
     for (int i = 0; i < n; i++) {
         ZigStackFrame& frame = remappedFrames[i];
-        auto& stackFrame = stackFrames.at(i);
-        sourceURLs[i] = Zig::sourceURL(vm, stackFrame);
+        auto& stackFrame = stackTrace.at(i);
+        sourceURLs[i] = stackFrame.sourceURL()->value(lexicalGlobalObject).data;
         didRemap[i] = false;
         frame.position.line_zero_based = -1;
         frame.position.column_zero_based = -1;
@@ -462,13 +522,10 @@ static JSValue computeErrorInfoWithPrepareStackTrace(JSC::VM& vm, Zig::GlobalObj
         // global object.
         JSGlobalObject* globalObjectForFrame = lexicalGlobalObject;
 
-        if (stackFrame.hasLineAndColumnInfo()) {
-            auto* callee = stackFrame.callee();
+        if (auto* callee = stackFrame.callee()) {
             // https://github.com/oven-sh/bun/issues/17698
-            if (callee) {
-                if (auto* object = callee->getObject()) {
-                    globalObjectForFrame = object->globalObject();
-                }
+            if (auto* object = callee->getObject()) {
+                globalObjectForFrame = object->globalObject();
             }
         }
 
@@ -664,7 +721,7 @@ JSC::JSValue computeErrorInfoWrapperToJSValue(JSC::VM& vm, Vector<StackFrame>& s
     line_in = line.oneBasedInt();
     column_in = column.oneBasedInt();
 
-    return result;
+    return result ? result : jsUndefined();
 }
 
 JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncAppendStackTrace, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame* callFrame))

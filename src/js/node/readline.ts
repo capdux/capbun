@@ -73,7 +73,9 @@ const RegExpPrototypeExec = RegExp.prototype.exec;
 const StringFromCharCode = String.fromCharCode;
 const StringPrototypeCharCodeAt = String.prototype.charCodeAt;
 const StringPrototypeCodePointAt = String.prototype.codePointAt;
+const StringPrototypeIncludes = String.prototype.includes;
 const StringPrototypeSlice = String.prototype.slice;
+const StringPrototypeSplit = String.prototype.split;
 const StringPrototypeToLowerCase = String.prototype.toLowerCase;
 const StringPrototypeEndsWith = String.prototype.endsWith;
 const StringPrototypeRepeat = String.prototype.repeat;
@@ -97,7 +99,19 @@ const ObjectCreate = Object.create;
  * Returns the number of columns required to display the given string.
  */
 var getStringWidth = function getStringWidth(str, removeControlChars = true) {
-  return internalGetStringWidth(str, removeControlChars);
+  if (removeControlChars && typeof str === "string") {
+    str = stripVTControlCharacters(str);
+  }
+  const opts = removeControlChars ? undefined : { countAnsiEscapeCodes: true };
+  if (typeof str === "string" && StringPrototypeIncludes.$call(str, "\u200D")) {
+    var width = 0;
+    var parts = StringPrototypeSplit.$call(str, "\u200D");
+    for (var i = 0; i < parts.length; i++) {
+      width += internalGetStringWidth(parts[i], opts);
+    }
+    return width;
+  }
+  return internalGetStringWidth(str, opts);
 };
 
 const stripANSI = Bun.stripANSI;

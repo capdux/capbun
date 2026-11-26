@@ -6,6 +6,7 @@ const { promisify } = require("internal/promisify");
 const { validateString, validateOneOf } = require("internal/validators");
 const { MIMEType, MIMEParams } = require("internal/util/mime");
 const { deprecate } = require("internal/util/deprecate");
+const { kResistStopPropagation } = require("internal/shared");
 
 const internalErrorName = $newZigFunction("node_util_binding.zig", "internalErrorName", 1);
 const parseEnv = $newZigFunction("node_util_binding.zig", "parseEnv", 1);
@@ -251,13 +252,13 @@ function aborted(signal: AbortSignal, resource: object) {
   }
 
   const { promise, resolve } = $newPromiseCapability(Promise);
-  const unregisterToken = onAbortedCallback.bind(undefined, resolve);
+  const unregisterToken = () => onAbortedCallback(resolve);
   signal.addEventListener(
     "abort",
     // Do not leak the current scope into the listener.
     // Instead, create a new function.
     unregisterToken,
-    { once: true },
+    { once: true, [kResistStopPropagation]: true },
   );
 
   if (!lazyAbortedRegistry) {

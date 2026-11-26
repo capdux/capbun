@@ -310,3 +310,22 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 3. **发布同版本号 CP-Bun 流程**
    - 完成 `cp-vX.Y.Z-sync` 打标后，运行 `bun bd -p 'Bun.version'` 验证链接与启动；
    - 分域回归核心测试集（`xml`、`yaml`、`sqlite`、`http2`、`tls`、`webcrypto`、`diagnostics_channel`、`bundler`、`install`），修复残余回归后执行最终 `git commit` 与版本标签发布。
+
+
+---
+
+## 十五、 全仓测试大扫测、集中修正与单次构建提速规范（2026-11-26 固化）
+
+为彻底消除「修 1~2 个小模块就执行一次 `bun bd` 重编」造成的分钟级链接等待浪费，全仓测试收敛严格采用**「大扫测 → 集中修正 → 单次构建回归 → 原子提交推送」**三段式流水线：
+
+1. **阶段 1：大扫测与失败归档（零构建、只读批量）**
+   - 直接复用当前 `./build/debug/bun-debug`，运行 `python3 scripts/scan_tests.py`（强制 `BUN_DEBUG_QUIET_LOGS=1`、`--timeout=5000`、单分片 `timeout 45` 防卡死，并自动跳过 `test/cli/lint`、`test/cli/format`、`test/cli/check` 等未引入独立 Rust crate 目录）。
+   - 将全仓待测目录的 `(fail)`、`panic`、`AddressSanitizer`、`Ran X tests` 汇总输出至 `temp/test_scan_report.txt`，按源码子系统聚类。
+
+2. **阶段 2：多路大包集中修正（严禁中途 `bun bd`）**
+   - **禁止一错一改**：主智能体 + **2 路互斥子智能体**同时认领大包（每路同时修复 **3~5 个子目录 / 20~50 项失败**），集中修改 `.cp` / `.cpp` / `.ts`。
+   - 修复期子智能体**严禁运行 `bun bd` 或 `bun bd test`**；修改 `.cp` 后仅用 `python3 scripts/cpc_brief.py -n 8` 通过 4 项硬门禁；若跨多个 `.cp` 文件需确认符号引用，统一跑轻量 `bun run zig:check`（仅类型校验、不触发 LLVM/链接）。
+
+3. **阶段 3：单次集中构建 + 批量回归 + 状态账本与提交推送**
+   - 待本大轮 2 路子智能体 + 主智能体修改全部就位后，由主智能体**仅执行唯一 1 次 `bun bd -p 'Bun.version'`** 生成最新 Debug 二进制。
+   - 用单条批处理循环（`BUN_DEBUG_QUIET_LOGS=1 timeout 45 ./build/debug/bun-debug test --timeout=10000`）一次性验收本轮全部修改过的目录，实时更新 **`test/stats.md`**（记录已全绿、已修待编、在修与待修队列，重启后优先读取以避免重复测试），随后执行原子 `git commit && git push origin main`，无缝进入下一大轮或最终 `build:release` 发布。

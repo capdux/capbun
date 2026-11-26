@@ -802,7 +802,9 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
                             _ = ((stmts.ensureUnusedCapacity(to_add)) catch unreachable);
                             var class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
                             _ = &class_body;
-                            _ = ((class_body.ensureUnusedCapacity(to_add)) catch unreachable);
+                            if (p.options.use_define_for_class_fields) {
+                                _ = ((class_body.ensureUnusedCapacity(to_add)) catch unreachable);
+                            }
                             var j: usize = 0;
                             _ = &j;
                             for (cp_iter_slice(constructor.func.args)) |arg| {
@@ -815,12 +817,14 @@ const arg_symbol = p.symbols.items[@as(usize, @intCast(id.ref.innerIndex()))];
                                     const arg_ident = p.newExpr(E.Identifier{ .@"ref" = id.ref }, arg.binding.loc);
                                     const insert_idx: usize = (if ((super_index != null)) ((j + super_index.?) + 1) else j);
                                     _ = ((stmts.insert(insert_idx, Stmt.assign(p.newExpr(E.Dot{ .target = p.newExpr(E.This, arg.binding.loc), .name = name, .name_loc = arg.binding.loc }, arg.binding.loc), arg_ident))) catch unreachable);
-                                    class_body.items.len = (class_body.items.len + 1);
-                                    _ = bun.copy(G.Property, class_body.items[(j + 1)..], class_body.items[j..(class_body.items.len - 1)]);
-                                    const field_symbol_ref = (blk_catch_35: { break :blk_catch_35 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_35| { _ = &__ce_35; break :blk_catch_35 id.ref; }); });
-                                    field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
-                                    const field_ident = p.newExpr(E.Identifier{ .@"ref" = field_symbol_ref }, arg.binding.loc);
-                                    class_body.items[cp_cast_int(usize, j)] = G.Property{ .key = field_ident };
+                                    if (p.options.use_define_for_class_fields) {
+                                        class_body.items.len = (class_body.items.len + 1);
+                                        _ = bun.copy(G.Property, class_body.items[(j + 1)..], class_body.items[j..(class_body.items.len - 1)]);
+                                        const field_symbol_ref = (blk_catch_35: { break :blk_catch_35 ((p.declareSymbol(.other, arg.binding.loc, name)) catch |__ce_35| { _ = &__ce_35; break :blk_catch_35 id.ref; }); });
+                                        field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
+                                        const field_ident = p.newExpr(E.Identifier{ .@"ref" = field_symbol_ref }, arg.binding.loc);
+                                        class_body.items[cp_cast_int(usize, j)] = G.Property{ .key = field_ident };
+                                    }
                                     j = (j + 1);
 },
 else => {
@@ -829,8 +833,116 @@ else => {
 }
                                 }
                             }
-                            cls.properties = class_body.items;
+                            if (p.options.use_define_for_class_fields) {
+                                cls.properties = class_body.items;
+                            }
                             constructor.func.body.stmts = stmts.items;
+                        }
+                    }
+                    if ((!p.options.use_define_for_class_fields)) {
+                        var has_computed_non_literal = false;
+                        _ = &has_computed_non_literal;
+                        var lower_count: usize = 0;
+                        _ = &lower_count;
+                        var init_count: usize = 0;
+                        _ = &init_count;
+                        for (cp_iter_slice(cls.properties)) |prop| {
+                            _ = &prop;
+                            if ((((prop.kind == .normal) and (!prop.flags.contains(.is_static))) and (!(cls.should_lower_standard_decorators and (prop.ts_decorators.len > 0))))) {
+                                if (prop.key) |key_expr| {
+                                    _ = &key_expr;
+                                    if ((key_expr.data != .e_private_identifier)) {
+                                        if ((((prop.flags.contains(.is_computed) and (key_expr.data != .e_string)) and (key_expr.data != .e_number)) and (key_expr.data != .e_big_int))) {
+                                            has_computed_non_literal = true;
+                                            break;
+                                        }
+                                        lower_count = (lower_count + 1);
+                                        if ((prop.initializer != null)) {
+                                            init_count = (init_count + 1);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (((!has_computed_non_literal) and (lower_count > 0))) {
+                            if (((init_count > 0) and (constructor_function == null))) {
+                                var args_slice: []G.Arg = ((p.allocator.alloc(G.Arg, 0)) catch unreachable);
+                                _ = &args_slice;
+                                var body_stmts = std.array_list.Managed(Stmt).init(p.allocator);
+                                _ = &body_stmts;
+                                if ((cls.@"extends" != null)) {
+                                    const args_ref = ((p.newSymbol(.other, "args")) catch unreachable);
+                                    _ = ((p.recordDeclaredSymbol(args_ref)) catch unreachable);
+                                    var args_arr = ((p.allocator.alloc(G.Arg, 1)) catch unreachable);
+                                    _ = &args_arr;
+                                    args_arr[cp_cast_int(usize, 0)] = G.Arg{ .binding = p.b(B.Identifier{ .@"ref" = args_ref }, cls.class_keyword.loc) };
+                                    args_slice = args_arr;
+                                    var super_args = ((p.allocator.alloc(Expr, 1)) catch unreachable);
+                                    _ = &super_args;
+                                    super_args[cp_cast_int(usize, 0)] = p.newExpr(E.Spread{ .value = p.newExpr(E.Identifier{ .@"ref" = args_ref }, cls.class_keyword.loc) }, cls.class_keyword.loc);
+                                    _ = ((body_stmts.append(p.s(S.SExpr{ .value = p.newExpr(E.Call{ .target = p.newExpr(E.Super, cls.class_keyword.loc), .args = ExprNodeList.fromOwnedSlice(super_args) }, cls.class_keyword.loc) }, cls.class_keyword.loc))) catch unreachable);
+                                }
+                                const ctor_func = p.newExpr(E.Function{ .func = .{ .args = args_slice, .body = .{ .loc = cls.class_keyword.loc, .stmts = body_stmts.items } } }, cls.class_keyword.loc);
+                                _ = ctor_func.data.e_function.func.flags.setPresent(.has_rest_arg, (cls.@"extends" != null));
+                                constructor_function = ctor_func.data.e_function;
+                                var class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
+                                _ = &class_body;
+                                _ = ((class_body.append(G.Property{ .kind = .normal, .key = p.newExpr(E.String{ .data = "constructor" }, cls.class_keyword.loc), .value = ctor_func })) catch unreachable);
+                                cls.properties = class_body.items;
+                            }
+                            var new_props = ((std.array_list.Managed(G.Property).initCapacity(p.allocator, (cls.properties.len - lower_count))) catch unreachable);
+                            _ = &new_props;
+                            var assign_stmts = ((std.array_list.Managed(Stmt).initCapacity(p.allocator, init_count)) catch unreachable);
+                            _ = &assign_stmts;
+                            for (cp_iter_slice(cls.properties)) |prop| {
+                                _ = &prop;
+                                if ((((prop.kind == .normal) and (!prop.flags.contains(.is_static))) and (!(cls.should_lower_standard_decorators and (prop.ts_decorators.len > 0))))) {
+                                    if (prop.key) |key_expr| {
+                                        _ = &key_expr;
+                                        if ((key_expr.data != .e_private_identifier)) {
+                                            if (prop.initializer) |init_val| {
+                                                _ = &init_val;
+                                                const this_expr = p.newExpr(E.This, key_expr.loc);
+                                                const lhs = (if (prop.flags.contains(.is_computed)) p.newExpr(E.Index{ .target = this_expr, .index = key_expr }, key_expr.loc) else (if ((key_expr.data == .e_string)) p.newExpr(E.Dot{ .target = this_expr, .name = key_expr.data.e_string.slice(p.allocator), .name_loc = key_expr.loc }, key_expr.loc) else (if (((key_expr.data == .e_number) or (key_expr.data == .e_big_int))) p.newExpr(E.Index{ .target = this_expr, .index = key_expr }, key_expr.loc) else p.newExpr(E.Dot{ .target = this_expr, .name = p.loadNameFromRef(key_expr.data.e_identifier.ref), .name_loc = key_expr.loc }, key_expr.loc))));
+                                                _ = ((assign_stmts.append(Stmt.assign(lhs, init_val))) catch unreachable);
+                                            }
+                                            continue;
+                                        }
+                                    }
+                                }
+                                _ = ((new_props.append(prop)) catch unreachable);
+                            }
+                            cls.properties = new_props.items;
+                            if ((assign_stmts.items.len > 0)) {
+                                if (constructor_function) |ctor| {
+                                    _ = &ctor;
+                                    var insert_at: usize = 0;
+                                    _ = &insert_at;
+                                    if ((cls.@"extends" != null)) {
+                                        var si: usize = 0;
+                                        _ = &si;
+                                        for (cp_iter_slice(ctor.func.body.stmts)) |stmt| {
+                                            _ = &stmt;
+                                            if ((((stmt.data == .s_expr) and ((if (@typeInfo(@TypeOf(stmt.data.s_expr)) == .@"enum") @intFromEnum(stmt.data.s_expr) else stmt.data.s_expr.value).data == .e_call)) and ((if (@typeInfo(@TypeOf(stmt.data.s_expr)) == .@"enum") @intFromEnum(stmt.data.s_expr) else stmt.data.s_expr.value).data.e_call.target.data == .e_super))) {
+                                                insert_at = (si + 1);
+                                                break;
+                                            }
+                                            si = (si + 1);
+                                        }
+                                    }
+                                    var param_prop_count: usize = 0;
+                                    _ = &param_prop_count;
+                                    for (cp_iter_slice(ctor.func.args)) |arg| {
+                                        _ = &arg;
+                                        param_prop_count = (param_prop_count + @intFromBool((arg.is_typescript_ctor_field and (arg.binding.data == .b_identifier))));
+                                    }
+                                    insert_at = @min((insert_at + param_prop_count), ctor.func.body.stmts.len);
+                                    var stmts = std.array_list.Managed(Stmt).fromOwnedSlice(p.allocator, ctor.func.body.stmts);
+                                    _ = &stmts;
+                                    _ = ((stmts.insertSlice(insert_at, assign_stmts.items)) catch unreachable);
+                                    ctor.func.body.stmts = stmts.items;
+                                }
+                            }
                         }
                     }
                 }
@@ -881,8 +993,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_11 = stmts.items.len;
-                        while (i < __end_11) : (i += 1) {
+                        const __end_15 = stmts.items.len;
+                        while (i < __end_15) : (i += 1) {
                             const stmt = (&stmts.items[@as(usize, @intCast(i))]);
                             if ((stmt.data == .s_enum)) {
                                 const old_scopes_in_order = p.scope_order_to_visit;
@@ -918,8 +1030,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 {
                     var stmt_idx: i32 = 0;
                     _ = &stmt_idx;
-                    const __end_12 = stmts.items.len;
-                    while (stmt_idx < __end_12) : (stmt_idx += 1) {
+                    const __end_16 = stmts.items.len;
+                    while (stmt_idx < __end_16) : (stmt_idx += 1) {
                         const stmt = (&stmts.items[@as(usize, @intCast(stmt_idx))]);
                         const list = list_getter: {
                         switch (stmt.data) {
@@ -988,7 +1100,7 @@ const name_ref = (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@Ty
                             if (p.hoisted_ref_for_sloppy_mode_block_fn.get(name_ref)) |hoisted_ref| {
                                 _ = &hoisted_ref;
                                 _ = p.recordUsage(name_ref);
-                                _ = (blk_catch_38: { break :blk_catch_38 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_38 bun.handleOom(e); }); });
+                                _ = (blk_catch_50: { break :blk_catch_50 ((var_decls.append(.{ .binding = p.b(B.Identifier{ .@"ref" = hoisted_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc), .value = p.newExpr(E.Identifier{ .@"ref" = name_ref }, (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name).?.loc) })) catch |e| { _ = &e; break :blk_catch_50 bun.handleOom(e); }); });
                             }
                         }
                         (if (@typeInfo(@TypeOf(data.func)) == .@"enum" or @typeInfo(@TypeOf(data.func)) == .@"union") @tagName(data.func) else data.func.name) = null;
@@ -1075,8 +1187,8 @@ _ = ((non_fn_stmts.append(stmt)) catch unreachable);
                     {
                         var stmt_i: i32 = 0;
                         _ = &stmt_i;
-                        const __end_18 = items.len;
-                        while (stmt_i < __end_18) : (stmt_i += 1) {
+                        const __end_22 = items.len;
+                        while (stmt_i < __end_22) : (stmt_i += 1) {
                             const stmt = (&items[@as(usize, @intCast(stmt_i))]);
                             switch (stmt.data) {
 .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => {
@@ -1197,7 +1309,7 @@ if ((output.items.len > 0)) {
                     var prev_stmt = (&output.items[@as(usize, @intCast((output.items.len - 1)))]);
                     _ = &prev_stmt;
                     if (((prev_stmt.data == .s_local) and local.canMergeWith(prev_stmt.data.s_local))) {
-                        _ = (blk_catch_43: { break :blk_catch_43 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_43 bun.handleOom(e); }); });
+                        _ = (blk_catch_55: { break :blk_catch_55 ((prev_stmt.data.s_local.decls.appendSlice(p.allocator, local.decls.slice())) catch |e| { _ = &e; break :blk_catch_55 bun.handleOom(e); }); });
                         continue;
                     }
                 }

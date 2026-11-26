@@ -1908,10 +1908,12 @@ pub fn normalizeSpecifier(jsc_vm: *bun.jsc.VirtualMachine, slice_: []const u8) S
         const specifier = slice;
         var query: []const u8 = "";
         _ = &query;
-        if (strings.indexOfChar(slice, 63)) |i| {
-            _ = &i;
-            query = slice[i..];
-            slice = slice[0..i];
+        if ((!strings.hasPrefixComptime(slice, "data:"))) {
+            if (strings.indexOfChar(slice, 63)) |i| {
+                _ = &i;
+                query = slice[i..];
+                slice = slice[0..i];
+            }
         }
         return SpecifierParts{ .file_path = slice, .specifier = specifier, .query = query };
 }

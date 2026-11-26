@@ -1804,7 +1804,7 @@ private:
                 if (!startObjectInternal(obj)) // handle duplicates
                     return true;
 
-                if (arrayBuffer->isShared() && m_context == SerializationContext::WorkerPostMessage) {
+                if (arrayBuffer->isShared() && (m_context == SerializationContext::WorkerPostMessage || (m_context == SerializationContext::Default && m_forStorage == SerializationForStorage::No))) {
                     // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
                     if (!JSC::Options::useSharedArrayBuffer()) {
                         code = SerializationReturnCode::DataCloneError;

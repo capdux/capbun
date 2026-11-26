@@ -367,7 +367,14 @@ const filepath = bun.PathString.init(bun.handleOom(arena_alloc.allocator().dupeZ
                 var nodefs = bun.api.node.fs.NodeFS{  };
                 _ = &nodefs;
                 if ((filedir.len > 0)) {
-                    if (nodefs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(filedir) }, .recursive = true, .mode = @intCast(@intFromEnum(mode)) }).asErr()) |e| {
+                    const abs_patch_dir = (switch (state.patchDirAbsPath(patch_dir)) {
+.result => |p| p,
+.err => |e| {
+return e.withoutPath();
+},
+});
+                    const path_to_make = bun.path.joinZ((&.{ abs_patch_dir, filedir }), .auto);
+                    if (nodefs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(path_to_make) }, .recursive = true, .mode = 493 }).asErr()) |e| {
                         _ = &e;
                         return e.withoutPath();
                     }
@@ -495,6 +502,29 @@ return e.withoutPath();
             return null;
     }
 
+pub fn hunkMatchesAt(lines: []const StrSlice, hunk: Hunk, start: usize) bool {
+            var pos = start;
+            _ = &pos;
+            for (hunk.parts.items) |part| {
+                _ = &part;
+                if ((part.type == .insertion)) {
+                    continue;
+                }
+                if (((pos + part.lines.items.len) > lines.len)) {
+                    return false;
+                }
+                var idx: usize = 0;
+                _ = &idx;
+                while ((idx < part.lines.items.len)) : (idx = (idx + 1)) {
+                    if ((!std.mem.eql(u8, lines[@as(usize, @intCast((pos + idx)))], part.lines.items[@as(usize, @intCast(idx))]))) {
+                        return false;
+                    }
+                }
+                pos = (pos + part.lines.items.len);
+            }
+            return true;
+    }
+
 pub fn applyPatch(patch: *const FilePatch, arena_alloc: *bun.ArenaAllocator, patch_dir: bun.FD, state: *ApplyState) bun.sys.Maybe(void) {
             const file_path: [:0]const u8 = bun.handleOom(arena_alloc.allocator().dupeZ(u8, patch.path));
             const stat = (switch ((if (bun.Environment.isPosix) bun.sys.fstatat(patch_dir, file_path) else bun.sys.stat((switch (state.patchDirAbsPath(patch_dir)) {
@@ -566,10 +596,49 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
             }
             for (patch.hunks.items) |hunk| {
                 _ = &hunk;
-                var line_cursor: usize = (hunk.header.patched.start - 1);
+                const hint: usize = (hunk.header.patched.start -| 1);
+                const has_old_lines = brk: {
+                for (hunk.parts.items) |p| {
+                    _ = &p;
+                    if ((p.type != .insertion)) {
+                        break :brk true;
+                    }
+                }
+                break :brk false;
+};
+                var line_cursor: usize = hint;
                 _ = &line_cursor;
-                if ((line_cursor > lines.items.len)) {
-                    return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                if ((!has_old_lines)) {
+                    if ((line_cursor > lines.items.len)) {
+                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                    }
+                } else {
+                    var found: ?usize = null;
+                    _ = &found;
+                    if (((hint <= lines.items.len) and hunkMatchesAt(lines.items, hunk, hint))) {
+                        found = hint;
+                    } else {
+                        const max_delta = @max(hint, lines.items.len);
+                        var delta: usize = 1;
+                        _ = &delta;
+                        while ((delta <= max_delta)) : (delta = (delta + 1)) {
+                            if ((hint >= delta)) {
+                                const lo = (hint - delta);
+                                if (((lo <= lines.items.len) and hunkMatchesAt(lines.items, hunk, lo))) {
+                                    found = lo;
+                                    break;
+                                }
+                            }
+                            if ((((hint + delta) <= lines.items.len) and hunkMatchesAt(lines.items, hunk, (hint + delta)))) {
+                                found = (hint + delta);
+                                break;
+                            }
+                        }
+                    }
+                    if ((found == null)) {
+                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                    }
+                    line_cursor = found.?;
                 }
                 for (hunk.parts.items) |part| {
                     _ = &part;
@@ -579,6 +648,15 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
                         return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
                     }
                     line_cursor = (line_cursor + part.lines.items.len);
+                    if (part.no_newline_at_end_of_file) {
+                        if (((lines.items.len > 0) and (lines.items[@as(usize, @intCast((lines.items.len - 1)))].len == 0))) {
+                            _ = lines.pop();
+                        }
+                    } else {
+                        if ((line_cursor == lines.items.len)) {
+                            _ = bun.handleOom(lines.append(bun.default_allocator, ""));
+                        }
+                    }
 },
 .insertion => {
 if ((line_cursor > lines.items.len)) {
@@ -588,7 +666,13 @@ if ((line_cursor > lines.items.len)) {
                     _ = @memcpy(lines_to_insert, part.lines.items);
                     line_cursor = (line_cursor + part.lines.items.len);
                     if (part.no_newline_at_end_of_file) {
-                        _ = lines.pop();
+                        if (((lines.items.len > 0) and (lines.items[@as(usize, @intCast((lines.items.len - 1)))].len == 0))) {
+                            _ = lines.pop();
+                        }
+                    } else {
+                        if ((line_cursor == lines.items.len)) {
+                            _ = bun.handleOom(lines.append(bun.default_allocator, ""));
+                        }
                     }
 },
 .deletion => {
@@ -598,7 +682,9 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
                     const empty_lines: []const []const u8 = &.{};
                     _ = bun.handleOom(lines.replaceRange(bun.default_allocator, line_cursor, part.lines.items.len, empty_lines));
                     if (part.no_newline_at_end_of_file) {
-                        _ = bun.handleOom(lines.append(bun.default_allocator, ""));
+                        if (((lines.items.len > 0) and (lines.items[@as(usize, @intCast((lines.items.len - 1)))].len != 0))) {
+                            _ = bun.handleOom(lines.append(bun.default_allocator, ""));
+                        }
                     }
 },
 }
@@ -1062,8 +1148,8 @@ pub fn parseHunkHeaderLineImpl(text_: []const u8) ParseErr!HunkHeaderPart {
             {
                 var c: i32 = 48;
                 _ = &c;
-                const __end_15 = (57 + 1);
-                while (c < __end_15) : (c += 1) {
+                const __end_17 = (57 + 1);
+                while (c < __end_17) : (c += 1) {
                     _ = set.set(@as(usize, @intCast(c)));
                 }
             }
@@ -1166,24 +1252,24 @@ pub fn parseDiffHashes(line: []const u8) ?[2][]const u8 {
             {
                 var c: i32 = 48;
                 _ = &c;
-                const __end_16 = (57 + 1);
-                while (c < __end_16) : (c += 1) {
+                const __end_18 = (57 + 1);
+                while (c < __end_18) : (c += 1) {
                     _ = bitset.set(@as(usize, @intCast(c)));
                 }
             }
             {
                 var c: i32 = 97;
                 _ = &c;
-                const __end_17 = (122 + 1);
-                while (c < __end_17) : (c += 1) {
+                const __end_19 = (122 + 1);
+                while (c < __end_19) : (c += 1) {
                     _ = bitset.set(@as(usize, @intCast(c)));
                 }
             }
             {
                 var c: i32 = 65;
                 _ = &c;
-                const __end_18 = (90 + 1);
-                while (c < __end_18) : (c += 1) {
+                const __end_20 = (90 + 1);
+                while (c < __end_20) : (c += 1) {
                     _ = bitset.set(@as(usize, @intCast(c)));
                 }
             }
@@ -1227,10 +1313,15 @@ pub fn parseDiffLinePaths(line: []const u8) ?[2][]const u8 {
             if ((!bun.strings.hasPrefix(line, prefix))) {
                 return null;
             }
-            var rest = line[prefix.len..];
-            _ = &rest;
+            const rest = std.mem.trimRight(u8, line[prefix.len..], " \n\r\t");
             if ((rest.len == 0)) {
                 return null;
+            }
+            if (((rest.len >= 3) and (((rest.len - 2) % 2) == 0))) {
+                const half = ((rest.len - 2) / 2);
+                if ((std.mem.eql(u8, rest[half..(half + 3)], " b/") and std.mem.eql(u8, rest[0..half], rest[(half + 3)..]))) {
+                    return .{ rest[0..half], rest[(half + 3)..] };
+                }
             }
             const a_path_start_index: usize = 0;
             var a_path_end_index: usize = 0;
@@ -1254,7 +1345,7 @@ pub fn parseDiffLinePaths(line: []const u8) ?[2][]const u8 {
                 i = (i + 1);
             }
             const a_path = rest[a_path_start_index..a_path_end_index];
-            const b_path = std.mem.trimRight(u8, rest[b_path_start_index..], " \n\r\t");
+            const b_path = rest[b_path_start_index..];
             return .{ a_path, b_path };
     }
     const State = PatchParserState;
@@ -1408,8 +1499,8 @@ pub fn spawnOpts(old_folder: []const u8, new_folder: []const u8, cwd: [:0]const 
         {
             var i: i32 = 1;
             _ = &i;
-            const __end_23 = ARGV.len;
-            while (i < __end_23) : (i += 1) {
+            const __end_25 = ARGV.len;
+            while (i < __end_25) : (i += 1) {
                 argv_buf[cp_cast_int(usize, i)] = ARGV[@as(usize, @intCast(i))];
             }
         }
@@ -1426,8 +1517,8 @@ pub fn spawnOpts(old_folder: []const u8, new_folder: []const u8, cwd: [:0]const 
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_24 = env_arr.len;
-            while (i < __end_24) : (i += 1) {
+            const __end_26 = env_arr.len;
+            while (i < __end_26) : (i += 1) {
                 envp_buf[cp_cast_int(usize, i)] = env_arr[@as(usize, @intCast(i))].ptr;
             }
         }

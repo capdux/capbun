@@ -439,7 +439,9 @@ pub fn startVM(self: *WebWorker) !void {
                 _ = &_guard_args;
                 var ___guard_args_moved = false; _ = &___guard_args_moved;
                 defer if (!___guard_args_moved) { ___guard_args_moved = true; const __T = @TypeOf(_guard_args); if (@typeInfo(__T) == .optional) { if (_guard_args) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_args.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_args; _drop_val.__cp_deinit(); } };
-                transform_options.allow_addons = (!args.flag("--no-addons"));
+                if (args.flag("--no-addons")) {
+                    transform_options.allow_addons = false;
+                }
             }
         }
         self.@"arena" = bun.MimallocArena.init();

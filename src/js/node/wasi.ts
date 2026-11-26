@@ -915,6 +915,53 @@ var require_wasi = __commonJS({
           }
           return stats;
         };
+        const isInsideSandbox = (rootReal, target) => {
+          if (target === rootReal) return true;
+          const prefix = rootReal.endsWith(path.sep) ? rootReal : rootReal + path.sep;
+          return target.startsWith(prefix);
+        };
+        const resolveSandboxPath = (basePath, guestPath, followSymlinks = true) => {
+          if (path.isAbsolute(guestPath)) {
+            throw new types_1.WASIError(constants_1.WASI_ENOTCAPABLE);
+          }
+          const resolved = path.resolve(basePath, guestPath);
+          const realBase = fs.realpathSync(basePath);
+          if (!isInsideSandbox(realBase, resolved)) {
+            throw new types_1.WASIError(constants_1.WASI_ENOTCAPABLE);
+          }
+          if (followSymlinks) {
+            try {
+              const realTarget = fs.realpathSync(resolved);
+              if (!isInsideSandbox(realBase, realTarget)) {
+                throw new types_1.WASIError(constants_1.WASI_ENOTCAPABLE);
+              }
+              return realTarget;
+            } catch (e) {
+              if (e instanceof types_1.WASIError) throw e;
+              if (e?.code === "ENOENT") {
+                try {
+                  const realParent = fs.realpathSync(path.dirname(resolved));
+                  if (!isInsideSandbox(realBase, realParent)) {
+                    throw new types_1.WASIError(constants_1.WASI_ENOTCAPABLE);
+                  }
+                } catch (pe) {
+                  if (pe instanceof types_1.WASIError) throw pe;
+                }
+                return resolved;
+              }
+              throw e;
+            }
+          }
+          try {
+            const realParent = fs.realpathSync(path.dirname(resolved));
+            if (!isInsideSandbox(realBase, realParent)) {
+              throw new types_1.WASIError(constants_1.WASI_ENOTCAPABLE);
+            }
+          } catch (pe) {
+            if (pe instanceof types_1.WASIError) throw pe;
+          }
+          return resolved;
+        };
         const CPUTIME_START = Bun.nanoseconds();
         const timeOrigin = Math.trunc(performance.timeOrigin * 1e6);
         const now = clockId => {
@@ -1038,6 +1085,8 @@ var require_wasi = __commonJS({
           }),
           fd_fdstat_set_rights: wrap((fd, fsRightsBase, fsRightsInheriting) => {
             const stats = CHECK_FD(fd, BigInt(0));
+            fsRightsBase = BigInt.asUintN(64, fsRightsBase);
+            fsRightsInheriting = BigInt.asUintN(64, fsRightsInheriting);
             const nrb = stats.rights.base | fsRightsBase;
             if (nrb > stats.rights.base) {
               return constants_1.WASI_EPERM;
@@ -1178,7 +1227,6 @@ var require_wasi = __commonJS({
                   break outer;
                 }
               }
-              read += r;
             }
             this.view.setUint32(nread, read, true);
             return constants_1.WASI_ESUCCESS;
@@ -1357,7 +1405,7 @@ var require_wasi = __commonJS({
             }
             this.refreshMemory();
             const p = Buffer.from(this.memory.buffer, pathPtr, pathLen).toString();
-            fs.mkdirSync(path.resolve(stats.path, p));
+            fs.mkdirSync(resolveSandboxPath(stats.path, p));
             return constants_1.WASI_ESUCCESS;
           }),
           path_filestat_get: wrap((fd, flags, pathPtr, pathLen, bufPtr) => {
@@ -1367,11 +1415,12 @@ var require_wasi = __commonJS({
             }
             this.refreshMemory();
             const p = Buffer.from(this.memory.buffer, pathPtr, pathLen).toString();
+            const resolved = resolveSandboxPath(stats.path, p, Boolean(flags));
             let rstats;
             if (flags) {
-              rstats = fs.statSync(path.resolve(stats.path, p));
+              rstats = fs.statSync(resolved);
             } else {
-              rstats = fs.lstatSync(path.resolve(stats.path, p));
+              rstats = fs.lstatSync(resolved);
             }
             this.view.setBigUint64(bufPtr, BigInt(rstats.dev), true);
             bufPtr += 8;
@@ -1436,9 +1485,11 @@ var require_wasi = __commonJS({
           }),
           path_open: wrap(
             (dirfd, _dirflags, pathPtr, pathLen, oflags, fsRightsBase, fsRightsInheriting, fsFlags, fdPtr) => {
-              try {
-                CHECK_FD(dirfd, constants_1.WASI_RIGHT_PATH_OPEN);
-                fsRightsBase = BigInt(fsRightsBase);
+              const stats = CHECK_FD(dirfd, constants_1.WASI_RIGHT_PATH_OPEN);
+              if (!stats.path) {
+                return constants_1.WASI_EINVAL;
+              }
+              fsRightsBase = BigInt(fsRightsBase);
                 fsRightsInheriting = BigInt(fsRightsInheriting);
                 const read =
                   (fsRightsBase & (constants_1.WASI_RIGHT_FD_READ | constants_1.WASI_RIGHT_FD_READDIR)) !== BigInt(0);
@@ -1512,17 +1563,7 @@ var require_wasi = __commonJS({
                 if (p.startsWith("proc/")) {
                   throw new types_1.WASIError(constants_1.WASI_EBADF);
                 }
-                const fullUnresolved = path.resolve(p);
-                let full;
-                try {
-                  full = fs.realpathSync(fullUnresolved);
-                } catch (e) {
-                  if (e?.code === "ENOENT") {
-                    full = fullUnresolved;
-                  } else {
-                    throw e;
-                  }
-                }
+                const full = resolveSandboxPath(stats.path, p, true);
                 let isDirectory;
                 if (write) {
                   try {
@@ -1547,9 +1588,6 @@ var require_wasi = __commonJS({
                 });
                 stat(this, newfd);
                 this.view.setUint32(fdPtr, newfd, true);
-              } catch (e) {
-                console.error(e);
-              }
               return constants_1.WASI_ESUCCESS;
             },
           ),
@@ -1606,10 +1644,11 @@ var require_wasi = __commonJS({
             }
             this.refreshMemory();
             const p = Buffer.from(this.memory.buffer, pathPtr, pathLen).toString();
-            fs.unlinkSync(path.resolve(stats.path, p));
+            fs.unlinkSync(resolveSandboxPath(stats.path, p, false));
             return constants_1.WASI_ESUCCESS;
           }),
           poll_oneoff: (sin, sout, nsubscriptions, neventsPtr) => {
+            const pollStartNs = BigInt(Bun.nanoseconds());
             let nevents = 0;
             let name = "";
             let waitTimeNs = BigInt(0);
@@ -1715,7 +1754,7 @@ var require_wasi = __commonJS({
               }
             }
             if (waitTimeNs > 0) {
-              waitTimeNs -= Bun.nanoseconds() - timeOrigin;
+              waitTimeNs -= BigInt(Bun.nanoseconds()) - pollStartNs;
               if (waitTimeNs >= 1e6) {
                 if (this.sleep == null && !warnedAboutSleep) {
                   warnedAboutSleep = true;

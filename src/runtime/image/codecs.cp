@@ -280,7 +280,7 @@ pub fn probe(bytes: []const u8, max_pixels: u64): Error!ProbeResult {
             const handle_opt = jpeg.tj3Init(1);
             if (handle_opt == null) return error.OutOfMemory;
             const handle_guard = Tj3Guard<@TypeOf(handle_opt.?)>{ handle: handle_opt.? };
-            if (jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0) return error.DecodeFailed;
+            if (jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0 && jpeg.tj3GetErrorCode(handle_guard.handle) != jpeg.TJERR_WARNING) return error.DecodeFailed;
             const rw = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGWIDTH);
             const rh = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGHEIGHT);
             if (rw <= 0 || rh <= 0) return error.DecodeFailed;
@@ -301,10 +301,9 @@ pub fn probe(bytes: []const u8, max_pixels: u64): Error!ProbeResult {
             h = ih.height;
         },
         .gif => {
-            // sig(6) · LSD: w(u16le) h(u16le) …
-            if (bytes.len < 10) return error.DecodeFailed;
-            w = std.mem.readInt(u16, bytes[6..8], .little);
-            h = std.mem.readInt(u16, bytes[8..10], .little);
+            const d = gif.probeDimensions(bytes)?;
+            w = d.width;
+            h = d.height;
         },
         .tiff => {
             // IFD walk would be a full TIFF parser; defer to whoever

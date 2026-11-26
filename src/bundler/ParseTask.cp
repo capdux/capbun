@@ -233,6 +233,7 @@ pub const Result = ParseTaskResult;
     module_type: options.ModuleType = .unknown,
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
+    use_define_for_class_fields: bool = true,
     ctx: *BundleV2,
     package_version: string = "",
     package_name: string = "",
@@ -260,6 +261,7 @@ pub const Result = ParseTaskResult;
             module_type: resolve_result.module_type,
             emit_decorator_metadata: resolve_result.flags.emit_decorator_metadata,
             experimental_decorators: resolve_result.flags.experimental_decorators,
+            use_define_for_class_fields: resolve_result.flags.use_define_for_class_fields,
             package_version: pkg_version,
             package_name: pkg_name,
             known_target: ctx.transpiler.options.target,
@@ -706,7 +708,7 @@ fn getAST(
                 strings.eqlComptime(source.path.pretty[source.path.pretty.len - css_module_suffix.len ..], css_module_suffix);
             const parser_options = if (enable_css_modules) init: {
                 let parseropts = bun.css.ParserOptions.default(allocator, &temp_log);
-                parseropts.filename = bun.path.basename(source.path.pretty);
+                parseropts.filename = source.path.pretty;
                 parseropts.css_modules = bun.css.CssModuleConfig{};
                 break :init parseropts;
             } else bun.css.ParserOptions.default(allocator, &temp_log);
@@ -1339,6 +1341,7 @@ fn runWithSourceCode(
     opts.features.minify_keep_names = transpiler.options.keep_names;
     opts.features.minify_whitespace = transpiler.options.minify_whitespace;
     opts.features.emit_decorator_metadata = task.emit_decorator_metadata;
+    opts.use_define_for_class_fields = task.use_define_for_class_fields;
     // emitDecoratorMetadata implies legacy/experimental decorators, as it only
     // makes sense with TypeScript's legacy decorator system (reflect-metadata).
     // TC39 standard decorators have their own metadata mechanism.

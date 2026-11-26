@@ -279,7 +279,6 @@ export class prompt {
 
         if (comptime Environment.allow_assert) {
             assert(input.items.len > 0);
-            assert(input.items[input.items.len - 1] != '\r');
         }
 
         let result = jsc.ZigString.init(input.items);

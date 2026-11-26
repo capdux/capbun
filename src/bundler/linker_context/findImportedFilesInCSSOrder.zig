@@ -150,8 +150,8 @@ pub fn visit(self: *Visitor, source_index: Index, wrapping_conditions: *BabyList
                             _ = &nested_conditions;
                             var nested_import_records = bun.handleOom(wrapping_import_records.clone(self.allocator));
                             _ = &nested_import_records;
-                            _ = bun.handleOom(nested_conditions.append(self.allocator, (rule.*).@"import".conditionsWithImportRecords(self.allocator, (&nested_import_records))));
-                            _ = self.visit(record.source_index, (&nested_conditions), wrapping_import_records);
+                            _ = bun.handleOom(nested_conditions.append(self.allocator, (rule.*).@"import".conditionsWithSrcAndDstImportRecords(self.allocator, (&self.all_import_records[@as(usize, @intCast(source_index.get()))]), (&nested_import_records))));
+                            _ = self.visit(record.source_index, (&nested_conditions), (&nested_import_records));
                             continue;
                         }
                         _ = self.visit(record.source_index, wrapping_conditions, wrapping_import_records);
@@ -182,7 +182,7 @@ pub fn visit(self: *Visitor, source_index: Index, wrapping_conditions: *BabyList
             if (comptime bun.Environment.isDebug) {
                 _ = debug("Push file: {d}={s}", .{ source_index.get(), self.parse_graph.input_files.items(.source)[@as(usize, @intCast(source_index.get()))].path.pretty });
             }
-            _ = (blk_catch_3: { break :blk_catch_3 ((self.order.append(self.allocator, Chunk.CssImportOrder{ .kind = .{ .source_index = source_index }, .conditions = wrapping_conditions.* })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.order.append(self.allocator, Chunk.CssImportOrder{ .kind = .{ .source_index = source_index }, .conditions = wrapping_conditions.*, .condition_import_records = wrapping_import_records.* })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
     }
 };
 

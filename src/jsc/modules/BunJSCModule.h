@@ -682,8 +682,6 @@ JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, Ca
         return JSValue::encode(JSValue {});
     }
 
-    JSC::JSFunction* function = uncheckedDowncast<JSC::JSFunction>(callbackValue);
-
     if (sampleValue.isNumber()) {
         unsigned sampleInterval = sampleValue.toUInt32(globalObject);
         samplingProfiler.setTimingInterval(Seconds::fromMicroseconds(sampleInterval));
@@ -734,11 +732,11 @@ JSC_DEFINE_HOST_FUNCTION(functionRunProfiler, (JSGlobalObject * globalObject, Ca
         return {};
     };
 
-    JSC::CallData callData = JSC::getCallData(function);
+    JSC::CallData callData = JSC::getCallData(callbackValue);
 
     samplingProfiler.noticeCurrentThreadAsJSCExecutionThread();
     samplingProfiler.start();
-    JSValue returnValue = JSC::profiledCall(globalObject, ProfilingReason::API, function, callData, JSC::jsUndefined(), args);
+    JSValue returnValue = JSC::profiledCall(globalObject, ProfilingReason::API, callbackValue, callData, JSC::jsUndefined(), args);
 
     if (returnValue.isEmpty() || throwScope.exception()) {
         return JSValue::encode(reportFailure(vm));

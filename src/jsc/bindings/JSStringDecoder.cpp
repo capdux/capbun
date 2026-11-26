@@ -282,6 +282,7 @@ JSC::JSString* JSStringDecoder::write(JSC::VM& vm, JSC::JSGlobalObject* globalOb
                 RELEASE_AND_RETURN(throwScope, firstHalf);
             offset = m_lastNeed;
             m_lastNeed = 0;
+            m_lastTotal = 0;
             if (offset == length)
                 RELEASE_AND_RETURN(throwScope, firstHalf);
 
@@ -319,7 +320,6 @@ ResetScope::~ResetScope()
 {
     m_decoder->m_lastTotal = 0;
     m_decoder->m_lastNeed = 0;
-    memset(m_decoder->m_lastChar, 0, 4);
 }
 
 JSC::JSString*
@@ -459,9 +459,9 @@ static inline JSC::EncodedJSValue jsStringDecoderPrototypeFunction_textBody(JSC:
     int32_t offset = callFrame->uncheckedArgument(1).toInt32(lexicalGlobalObject);
     RETURN_IF_EXCEPTION(throwScope, JSC::JSValue::encode(JSC::jsUndefined()));
     uint32_t byteLength = view->byteLength();
-    if (offset > byteLength)
+    if (offset < 0 || static_cast<uint32_t>(offset) >= byteLength)
         RELEASE_AND_RETURN(throwScope, JSC::JSValue::encode(JSC::jsEmptyString(vm)));
-    RELEASE_AND_RETURN(throwScope, JSC::JSValue::encode(castedThis->write(vm, lexicalGlobalObject, reinterpret_cast<uint8_t*>(view->vector()) + offset, byteLength - offset)));
+    RELEASE_AND_RETURN(throwScope, JSC::JSValue::encode(castedThis->write(vm, lexicalGlobalObject, reinterpret_cast<uint8_t*>(view->vector()) + offset, byteLength - static_cast<uint32_t>(offset))));
 }
 
 JSC_DEFINE_HOST_FUNCTION(jsStringDecoderPrototypeFunction_write,
@@ -556,15 +556,13 @@ void JSStringDecoderConstructor::finishCreation(VM& vm, JSC::JSGlobalObject* glo
 
 JSStringDecoderConstructor* JSStringDecoderConstructor::create(JSC::VM& vm, JSC::JSGlobalObject* globalObject, JSC::Structure* structure, JSStringDecoderPrototype* prototype)
 {
-    JSStringDecoderConstructor* ptr = new (NotNull, JSC::allocateCell<JSStringDecoderConstructor>(vm)) JSStringDecoderConstructor(vm, structure, construct);
+    JSStringDecoderConstructor* ptr = new (NotNull, JSC::allocateCell<JSStringDecoderConstructor>(vm)) JSStringDecoderConstructor(vm, structure);
     ptr->finishCreation(vm, globalObject, prototype);
     return ptr;
 }
 
-JSC::EncodedJSValue JSStringDecoderConstructor::construct(JSC::JSGlobalObject* lexicalGlobalObject, JSC::CallFrame* callFrame)
+static std::optional<BufferEncodingType> parseStringDecoderEncoding(JSC::JSGlobalObject* lexicalGlobalObject, JSC::ThrowScope& throwScope, JSC::CallFrame* callFrame)
 {
-    auto& vm = JSC::getVM(lexicalGlobalObject);
-    auto throwScope = DECLARE_THROW_SCOPE(vm);
     auto encoding = BufferEncodingType::utf8;
     auto jsEncoding = callFrame->argument(0);
     if (!jsEncoding.isUndefinedOrNull()) {
@@ -573,26 +571,34 @@ JSC::EncodedJSValue JSStringDecoderConstructor::construct(JSC::JSGlobalObject* l
             encoding = opt.value();
         } else {
             auto* encodingString = jsEncoding.toString(lexicalGlobalObject);
-            RETURN_IF_EXCEPTION(throwScope, {});
+            RETURN_IF_EXCEPTION(throwScope, std::nullopt);
             const auto& view = encodingString->view(lexicalGlobalObject);
-            return Bun::ERR::UNKNOWN_ENCODING(throwScope, lexicalGlobalObject, view);
+            Bun::ERR::UNKNOWN_ENCODING(throwScope, lexicalGlobalObject, view);
+            return std::nullopt;
         }
     }
-    JSValue thisValue = callFrame->newTarget();
+    return encoding;
+}
+
+JSC::EncodedJSValue JSStringDecoderConstructor::call(JSC::JSGlobalObject* lexicalGlobalObject, JSC::CallFrame* callFrame)
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto encodingOpt = parseStringDecoderEncoding(lexicalGlobalObject, throwScope, callFrame);
+    if (!encodingOpt.has_value())
+        return {};
+    auto encoding = encodingOpt.value();
+
     auto* globalObject = uncheckedDowncast<Zig::GlobalObject>(lexicalGlobalObject);
-    JSObject* newTarget = asObject(thisValue);
-    auto* constructor = globalObject->JSStringDecoder();
     Structure* structure = globalObject->JSStringDecoderStructure();
+    JSStringDecoder* jsObject = JSStringDecoder::create(vm, lexicalGlobalObject, structure, encoding);
 
-    JSStringDecoder* jsObject = JSStringDecoder::create(
-        vm, lexicalGlobalObject, structure, encoding);
-
-    // StringDecodeer is a Weird one
+    // StringDecoder is a Weird one
     // This is a hack to make express' body-parser work
     // It does something weird with the prototype
     // Not exactly a subclass
     JSValue thisObjValue = callFrame->thisValue().toThis(lexicalGlobalObject, JSC::ECMAMode::strict());
-    if (constructor != newTarget && thisObjValue.isObject()) {
+    if (thisObjValue.isObject()) {
         auto clientData = WebCore::clientData(vm);
         JSObject* thisObject = asObject(thisObjValue);
 
@@ -601,6 +607,28 @@ JSC::EncodedJSValue JSStringDecoderConstructor::construct(JSC::JSGlobalObject* l
         return JSC::JSValue::encode(thisObject);
     }
 
+    return JSC::JSValue::encode(jsObject);
+}
+
+JSC::EncodedJSValue JSStringDecoderConstructor::construct(JSC::JSGlobalObject* lexicalGlobalObject, JSC::CallFrame* callFrame)
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto encodingOpt = parseStringDecoderEncoding(lexicalGlobalObject, throwScope, callFrame);
+    if (!encodingOpt.has_value())
+        return {};
+    auto encoding = encodingOpt.value();
+
+    JSValue newTargetValue = callFrame->newTarget();
+    auto* globalObject = uncheckedDowncast<Zig::GlobalObject>(lexicalGlobalObject);
+    auto* constructor = globalObject->JSStringDecoder();
+    Structure* structure = globalObject->JSStringDecoderStructure();
+    if (newTargetValue.isObject() && newTargetValue.getObject() != constructor) {
+        structure = JSC::InternalFunction::createSubclassStructure(lexicalGlobalObject, newTargetValue.getObject(), structure);
+        RETURN_IF_EXCEPTION(throwScope, {});
+    }
+
+    JSStringDecoder* jsObject = JSStringDecoder::create(vm, lexicalGlobalObject, structure, encoding);
     return JSC::JSValue::encode(jsObject);
 }
 

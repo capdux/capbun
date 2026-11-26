@@ -324,12 +324,21 @@ pub struct Lookup {
                 return null;
 
             const src_name = source_map.external_source_names[index as usize];
+            const base_dir = bun.path.dirname(base_filename, .auto);
+            const needed = base_dir.len + 1 + src_name.len + 2;
 
-            const buf = bun.path_buffer_pool.get();
-            defer bun.path_buffer_pool.put(buf);
+            const pool_buf = bun.path_buffer_pool.get();
+            defer bun.path_buffer_pool.put(pool_buf);
+            let heap_buf: ([]u8)? = null;
+            defer if (hb := heap_buf) bun.default_allocator.free(hb);
+            const buf: []u8 = if (needed > pool_buf.len) blk: {
+                const alloc_buf = bun.default_allocator.alloc(u8, needed) catch return null;
+                heap_buf = alloc_buf;
+                break :blk alloc_buf;
+            } else pool_buf;
             const paths: [1]string = [src_name];
             const normalized = bun.path.joinAbsStringBufZ(
-                bun.path.dirname(base_filename, .auto),
+                base_dir,
                 buf,
                 unsafe { &paths },
                 .loose,

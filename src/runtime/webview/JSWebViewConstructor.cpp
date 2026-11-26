@@ -341,6 +341,10 @@ JSC_DEFINE_HOST_FUNCTION(constructWebView, (JSGlobalObject * globalObject, CallF
     }
 
     if (backend == WebViewBackend::Chrome) {
+        if (!zigGlobalObject->scriptExecutionContext()->isMainThread()) {
+            return Bun::throwError(globalObject, scope, ErrorCode::ERR_INVALID_STATE,
+                "Bun.WebView with backend \"chrome\" is only available on the main thread"_s);
+        }
         Bun__Feature__webview_chrome += 1;
         JSWebView* view = JSWebView::createChrome(globalObject, structure, width, height,
             persistDir, chromePath, chromeArgv, stdoutInherit, stderrInherit, chromeWsUrl,

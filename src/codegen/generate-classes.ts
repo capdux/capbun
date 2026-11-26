@@ -490,12 +490,13 @@ JSC_DECLARE_CUSTOM_GETTER(js${typeName}Constructor);
     }
 
     const symbol = name.slice(2);
+    const symLen = protoFields[name].length ?? 0;
 
     specialSymbols += `
-    this->putDirect(vm, vm.propertyNames->${symbol}Symbol, JSFunction::create(vm, globalObject, 1, String("${symbol}"_s), ${protoSymbolName(
+    this->putDirect(vm, vm.propertyNames->${symbol}Symbol, JSFunction::create(vm, globalObject, ${symLen}, emptyString(), ${protoSymbolName(
       typeName,
       symbol,
-    )}Callback, ImplementationVisibility::Public), PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum | 0);`;
+    )}Callback, ImplementationVisibility::Public), PropertyAttribute::DontEnum | 0);`;
   }
 
   return `

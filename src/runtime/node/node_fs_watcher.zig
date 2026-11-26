@@ -644,7 +644,7 @@ pub fn emitAbort(self: *FSWatcher, e: jsc.JSValue) void {
                     _ = listener.ensureStillAlive();
                     var args: [2]jsc.JSValue = .{ Bun__domEventNameToJS(self.globalThis, .@"error"), (if (e.isEmptyOrUndefinedOrNull()) jsc.CommonAbortReason.UserAbort.toJS(self.globalThis) else e) };
                     _ = &args;
-                    _ = (blk_catch_2: { break :blk_catch_2 ((listener.callWithGlobalThis(self.globalThis, (&args))) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 self.globalThis.clearException(); }); });
+                    _ = (blk_catch_2: { break :blk_catch_2 ((listener.callWithGlobalThis(self.globalThis, (&args))) catch |err_val| { _ = &err_val; break :blk_catch_2 self.globalThis.reportActiveExceptionAsUnhandled(err_val); }); });
                 }
             }
     }

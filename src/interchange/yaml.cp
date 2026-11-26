@@ -2161,6 +2161,11 @@ pub struct Parser<const enc: Encoding> {
         _.pos = Pos.@"from"(@min(_.pos.cast() + n, _.input.len));
     }
 
+    fn isAtCol0(): bool {
+        const p = _.pos.cast();
+        return p == 0 || _.input[p - 1] == '\n' || _.input[p - 1] == '\r';
+    }
+
     fn newline(*_) {
         _.line_indent = .none;
         _.tab_after_indent = false;
@@ -3339,7 +3344,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             '-' => {
-                if (_.line_indent == .none && _.remainStartsWith("---") && _.isAnyOrEofAt(" \t\n\r", 3)) {
+                if (_.isAtCol0() && _.remainStartsWith("---") && _.isAnyOrEofAt(" \t\n\r", 3)) {
                     return ctx.done();
                 }
 
@@ -3356,7 +3361,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             '.' => {
-                if (_.line_indent == .none && _.remainStartsWith("...") && _.isAnyOrEofAt(" \t\n\r", 3)) {
+                if (_.isAtCol0() && _.remainStartsWith("...") && _.isAnyOrEofAt(" \t\n\r", 3)) {
                     return ctx.done();
                 }
 
@@ -3927,7 +3932,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             '-' => {
-                if (_.line_indent == .none && _.remainStartsWith("---") && _.isAnyOrEofAt(" \t\n\r", 3)) {
+                if (_.isAtCol0() && _.remainStartsWith("---") && _.isAnyOrEofAt(" \t\n\r", 3)) {
                     return ctx.done();
                 }
 
@@ -3942,7 +3947,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             '.' => {
-                if (_.line_indent == .none && _.remainStartsWith("...") && _.isAnyOrEofAt(" \t\n\r", 3)) {
+                if (_.isAtCol0() && _.remainStartsWith("...") && _.isAnyOrEofAt(" \t\n\r", 3)) {
                     return ctx.done();
                 }
 
@@ -4016,7 +4021,7 @@ pub struct Parser<const enc: Encoding> {
             0 => return error.UnexpectedCharacter,
 
             '.' => {
-                if (nl && _.line_indent == .none && _.remainStartsWith("...") && _.isSWhiteOrBCharAt(3)) {
+                if (nl && _.isAtCol0() && _.remainStartsWith("...") && _.isSWhiteOrBCharAt(3)) {
                     return error.UnexpectedDocumentEnd;
                 }
                 nl = false;
@@ -4026,7 +4031,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             '-' => {
-                if (nl && _.line_indent == .none && _.remainStartsWith("---") && _.isSWhiteOrBCharAt(3)) {
+                if (nl && _.isAtCol0() && _.remainStartsWith("---") && _.isSWhiteOrBCharAt(3)) {
                     return error.UnexpectedDocumentStart;
                 }
                 nl = false;
@@ -4120,7 +4125,7 @@ pub struct Parser<const enc: Encoding> {
             0 => return error.UnexpectedCharacter,
 
             '.' => {
-                if (nl && _.line_indent == .none && _.remainStartsWith("...") && _.isSWhiteOrBCharAt(3)) {
+                if (nl && _.isAtCol0() && _.remainStartsWith("...") && _.isSWhiteOrBCharAt(3)) {
                     return error.UnexpectedDocumentEnd;
                 }
                 nl = false;
@@ -4130,7 +4135,7 @@ pub struct Parser<const enc: Encoding> {
             },
 
             '-' => {
-                if (nl && _.line_indent == .none && _.remainStartsWith("---") && _.isSWhiteOrBCharAt(3)) {
+                if (nl && _.isAtCol0() && _.remainStartsWith("---") && _.isSWhiteOrBCharAt(3)) {
                     return error.UnexpectedDocumentStart;
                 }
                 nl = false;
@@ -4600,7 +4605,7 @@ pub struct Parser<const enc: Encoding> {
             '-' => {
                 const start = _.pos;
 
-                if (_.line_indent == .none && _.remainStartsWith(enc.literal("---")) && _.isSWhiteOrBCharOrEofAt(3)) {
+                if (_.isAtCol0() && _.remainStartsWith(enc.literal("---")) && _.isSWhiteOrBCharOrEofAt(3)) {
                     _.inc(3);
                     _.token = Token(enc).documentStart({
                         start: start,
@@ -4680,7 +4685,7 @@ pub struct Parser<const enc: Encoding> {
             '.' => {
                 const start = _.pos;
 
-                if (_.line_indent == .none && _.remainStartsWith(enc.literal("...")) && _.isSWhiteOrBCharOrEofAt(3)) {
+                if (_.isAtCol0() && _.remainStartsWith(enc.literal("...")) && _.isSWhiteOrBCharOrEofAt(3)) {
                     _.inc(3);
                     _.token = Token(enc).documentEnd({
                         start: start,
@@ -5244,7 +5249,7 @@ pub struct Parser<const enc: Encoding> {
         if (pos.isLessThan(_.input.len)) {
             return std.mem.indexOfScalar(enc.unit(), values, _.input[pos.cast()]) != null;
         }
-        return false;
+        return true;
     }
 
     fn isEof(): bool {

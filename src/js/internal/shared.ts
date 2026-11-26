@@ -167,7 +167,7 @@ export default {
 
   kHandle: Symbol("kHandle"),
   kAutoDestroyed: Symbol("kAutoDestroyed"),
-  kResistStopPropagation: Symbol("kResistStopPropagation"),
+  kResistStopPropagation: Symbol.for("nodejs.internal.kResistStopPropagation"),
   kWeakHandler: Symbol("kWeak"),
   kGetNativeReadableProto: Symbol("kGetNativeReadableProto"),
   kEmptyObject,

@@ -692,6 +692,19 @@ writeStreamPrototype._writev = function (data, cb) {
   }
 };
 
+writeStreamPrototype._final = function (cb) {
+  const sink = this[kWriteStreamFastPath];
+  if (sink && sink !== true) {
+    this[kWriteStreamFastPath] = null;
+    const end = sink.end();
+    if ($isPromise(end)) {
+      end.then(() => cb(null), cb);
+      return;
+    }
+  }
+  cb(null);
+};
+
 writeStreamPrototype._destroy = function (err, cb) {
   const sink = this[kWriteStreamFastPath];
   if (sink && sink !== true) {

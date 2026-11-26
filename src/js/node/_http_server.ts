@@ -751,6 +751,9 @@ Server.prototype[kRealListen] = function (tls, port, host, socketPath, reusePort
 };
 
 Server.prototype.setTimeout = function (msecs, callback) {
+  if (typeof msecs === "number") {
+    this.timeout = msecs;
+  }
   const server = this[serverSymbol];
   if (server) {
     setServerIdleTimeout(server, Math.ceil(msecs / 1000));

@@ -442,10 +442,7 @@ pub fn doFileWrite(self: *IOWriter) Yield {
 },
 .pending => bun.unreachablePanic("drainBufferedData returning .pending in IOWriter.doFileWrite should not happen", .{}),
 .err => |e| {
-{
-            _ = self.onError(e);
-            return .done;
-        }
+return self.onErrorReturnYield(e);
 },
 });
         if (child.bytelist) |bl| {
@@ -563,6 +560,14 @@ pub fn onClose(self: *IOWriter) void {
 }
 
 pub fn onError(self: *IOWriter, err__: bun.sys.Error) void {
+        _ = self.onErrorImpl(err__, false);
+}
+
+pub fn onErrorReturnYield(self: *IOWriter, err__: bun.sys.Error) Yield {
+        return self.onErrorImpl(err__, true);
+}
+
+pub fn onErrorImpl(self: *IOWriter, err__: bun.sys.Error, return_first_yield: bool) Yield {
         _ = self.setWriting(false);
         const ee = err__.toShellSystemError();
         self.e = ee;
@@ -585,6 +590,10 @@ pub fn onError(self: *IOWriter, err__: bun.sys.Error) void {
         _ = &_seen_guard;
         var ___seen_guard_moved = false; _ = &___seen_guard_moved;
         defer if (!___seen_guard_moved) { ___seen_guard_moved = true; const __T = @TypeOf(_seen_guard); if (@typeInfo(__T) == .optional) { if (_seen_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _seen_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _seen_guard; _drop_val.__cp_deinit(); } };
+        var first_yield: Yield = .done;
+        _ = &first_yield;
+        var has_first = false;
+        _ = &has_first;
         for (cp_iter_slice(self.writers.slice()[self.writer_idx..])) |w| {
             _ = &w;
             if (w.isDead()) {
@@ -623,14 +632,20 @@ pub fn onError(self: *IOWriter, err__: bun.sys.Error) void {
                 _ = &e;
                 _ = (e.*).ref();
             }
-            var err_y = w.ptr.onIOWriterChunk(0, self.e);
-            _ = &err_y;
-            _ = err_y.run();
+            if ((return_first_yield and (!has_first))) {
+                has_first = true;
+                first_yield = Yield{ .on_io_writer_chunk = .{ .child = ptr, .written = 0, .e = self.e } };
+            } else {
+                var err_y = w.ptr.onIOWriterChunk(0, self.e);
+                _ = &err_y;
+                _ = err_y.run();
+            }
         }
         self.total_bytes_written = 0;
         self.writer_idx = 0;
         _ = self.buf.clearRetainingCapacity();
         _ = self.writers.clearRetainingCapacity();
+        return first_yield;
 }
 
 pub fn getBuffer(self: *IOWriter) []const u8 {

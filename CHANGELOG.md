@@ -2452,3 +2452,4 @@
 - `src/libarchive_sys/bindings.cp` (.zig)
 - `scripts/upstream_sync.py`
 - `SESSION.md`, `CHANGELOG.md`
+- **Batch 14–26 (2026-11-26)**: 200+ `.cp`/`.zig`/`.cpp`/`.h`/`.ts` files across `archive`, `md`, `dns`, `events`, `timers`, `util`, `perf_hooks`, `async_hooks`, `process`, `readline`, `bundler/*`, `cookie`, `yaml`, `toml`, `json5`, `jsonc`, `web/*`, `node/buffer`, `node/http2`, `node/tls`, `node/sqlite`, `bun/{http,net,websocket,s3,webview,ffi,sqlite,image,patch,glob,terminal,cron,udp}`, `scripts/scan_tests.py`, `test/stats.md`, `GEMINI.md`

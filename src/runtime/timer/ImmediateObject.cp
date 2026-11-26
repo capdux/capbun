@@ -67,7 +67,7 @@ const VirtualMachine = jsc.VirtualMachine;
 
     static fn constructor(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): (*Self)! {
         * = callFrame;
-        return globalObject.throw("Immediate is not constructible", .{});
+        return globalObject.ERR(.ILLEGAL_CONSTRUCTOR, "Illegal constructor", .{}).throw();
     }
 
     fn runImmediateTask(*_, vm: *VirtualMachine): bool {

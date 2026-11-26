@@ -158,7 +158,7 @@ export default [
       },
       ["@@toPrimitive"]: {
         fn: "toPrimitive",
-        length: 1,
+        length: 0,
         invalidThisBehavior: InvalidThisBehavior.NoOp,
       },
       _destroyed: {
@@ -222,7 +222,7 @@ export default [
       },
       ["@@toPrimitive"]: {
         fn: "toPrimitive",
-        length: 1,
+        length: 0,
         invalidThisBehavior: InvalidThisBehavior.NoOp,
       },
       _destroyed: {

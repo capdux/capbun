@@ -1474,7 +1474,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
         }
         if (arguments_g.val.nextEat()) |opts| {
             _ = &opts;
-            if ((!opts.isUndefinedOrNull())) {
+            if (opts.isObject()) {
                 if (try opts.getTruthy(globalThis, "editor")) |editor_val| {
                     _ = &editor_val;
                     var sliced = try editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator());

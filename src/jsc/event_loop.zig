@@ -258,7 +258,9 @@ pub fn tickImmediateTasks(self: *EventLoop, virtual_machine: *VirtualMachine) vo
         _ = &exception_thrown;
         for (to_run_now.items) |task| {
             _ = &task;
-            exception_thrown = task.runImmediateTask(virtual_machine);
+            if (task.runImmediateTask(virtual_machine)) {
+                exception_thrown = true;
+            }
         }
         if (exception_thrown) {
             _ = self.maybeDrainMicrotasks();
@@ -567,6 +569,9 @@ pub fn waitForPromiseWithTermination(self: *EventLoop, promise: jsc.AnyPromise) 
 while (((!worker.hasRequestedTerminate()) and (promise.status() == .pending))) {
             _ = self.tick();
             if (((!worker.hasRequestedTerminate()) and (promise.status() == .pending))) {
+                if (((!self.virtual_machine.isEventLoopAlive()) and (self.tickConcurrentWithCount() == 0))) {
+                    break;
+                }
                 _ = self.autoTick();
             }
         }

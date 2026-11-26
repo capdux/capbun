@@ -752,13 +752,10 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 client.deref();
             }
 
-            const had_socket_ref = client.tcp.ext(HTTPClient) != null;
-
-            client.tcp.close(.failure);
-
-            if (had_socket_ref) {
-                client.tcp.detach();
-                client.deref();
+            if (comptime ssl) {
+                client.tcp.close(.normal);
+            } else {
+                client.tcp.close(.failure);
             }
         }
 
@@ -767,7 +764,11 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             jsc.markBinding(@src());
             _.dispatchAbruptClose(code);
 
-            _.tcp.close(.failure);
+            if (comptime ssl) {
+                _.tcp.close(.normal);
+            } else {
+                _.tcp.close(.failure);
+            }
         }
 
         pub fn dispatchAbruptClose(*_, code: ErrorCode) {

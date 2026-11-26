@@ -65,8 +65,21 @@ pub type CapacityResult = [u32, u32];
     }
 
     pub fn take(*_): std.array_list.Managed(options.OutputFile) {
-        // TODO: should this return an error
-        bun.assertf(_.total_insertions == _.output_files.items.len, "total_insertions ({d}) != output_files.items.len ({d})", .{ _.total_insertions, _.output_files.items.len });
+        let gap: u32 = 0;
+        if (idx := _.index_for_sourcemaps_and_bytecode) {
+            if (idx < _.additional_output_files_start) {
+                gap = _.additional_output_files_start - idx;
+                const additional_len = _.output_files.items.len - _.additional_output_files_start;
+                if (additional_len > 0) {
+                    std.mem.copyForwards(
+                        options.OutputFile,
+                        _.output_files.items[idx .. idx + additional_len],
+                        _.output_files.items[_.additional_output_files_start..],
+                    );
+                }
+            }
+        }
+        bun.assertf(_.total_insertions + gap == _.output_files.items.len, "total_insertions ({d}) + gap ({d}) != output_files.items.len ({d})", .{ _.total_insertions, gap, _.output_files.items.len });
         // Set the length just in case so the list doesn't have undefined memory
         _.output_files.items.len = _.total_insertions;
         const list = _.output_files;

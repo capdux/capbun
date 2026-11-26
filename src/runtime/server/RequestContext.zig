@@ -740,10 +740,13 @@ pub fn onReject(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!j
     }
 
 pub fn handleReject(ctx: *RequestContext, value: jsc.JSValue) void {
-            if (ctx.isAbortedOrEnded()) {
+            if (((ctx.flags.aborted or (ctx.server == null)) or ctx.server.?.flags.terminated)) {
                 return;
             }
-            const has_responded = ctx.resp.?.hasResponded();
+            if (((ctx.resp == null) and (!ctx.didUpgradeWebSocket()))) {
+                return;
+            }
+            const has_responded = (if ((ctx.resp != null)) ctx.resp.?.hasResponded() else false);
             if ((!has_responded)) {
                 const original_state = ctx.defer_deinit_until_callback_completes;
                 var should_deinit_context = false;
@@ -821,11 +824,14 @@ pub fn renderDefaultError(self: *@This(), arena_allocator: std.mem.Allocator, lo
                     _ = resp.writeHeader("content-type", (if (@typeInfo(@TypeOf(MimeType.html)) == .@"enum") @intFromEnum(MimeType.html) else MimeType.html.value));
                 }
             }
-            const msg = ((std.fmt.allocPrint(arena_allocator, (comptime Output.prettyFmt(fmt, false)), args)) catch unreachable);
             if (comptime (fmt.len > 0)) {
                 _ = Output.prettyErrorln(fmt, args);
             }
             _ = Output.flush();
+            if ((self.resp == null)) {
+                return;
+            }
+            const msg = ((std.fmt.allocPrint(arena_allocator, (comptime Output.prettyFmt(fmt, false)), args)) catch unreachable);
             const bb = bun.handleOom((DevErrorPage{ .message = msg, .cwd = VirtualMachine.get().transpiler.fs.top_level_dir, .exceptions = exceptions, .log = log }).render(self.allocator));
             if (((self.resp == null) or self.resp.?.tryEnd(bb, bb.len, self.shouldCloseConnection()))) {
                 _ = self.allocator.free(bb);
@@ -1733,6 +1739,7 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
                         _ = req_ctx.renderMetadata();
                         _ = App.Response.writeHeader(resp, "transfer-encoding", transfer_encoding_str.slice());
                         _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+                        _ = cancelUnreadBody(response, globalThis);
                         return;
                     }
                 }
@@ -1744,6 +1751,7 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
                     _ = req_ctx.renderMetadata();
                     _ = App.Response.writeHeaderInt(resp, "content-length", len);
                     _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+                    _ = cancelUnreadBody(response, globalThis);
                     return;
                 }
             }
@@ -1793,6 +1801,7 @@ _ = req_ctx.renderMetadata();
                 _ = App.Response.writeHeader(resp, "transfer-encoding", "chunked");
             }
             _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+            _ = cancelUnreadBody(response, globalThis);
 },
 .Used, .Null, .Empty, .Error => {
 _ = req_ctx.renderMetadata();
@@ -1817,7 +1826,10 @@ pub fn onResponse(ctx: *RequestContext, req_ctx: *ThisServer, request_value: JSV
             _ = request_value.ensureStillAlive();
             _ = response_value.ensureStillAlive();
             _ = ctx.drainMicrotasks();
-            if (ctx.isAbortedOrEnded()) {
+            if (((ctx.flags.aborted or (ctx.server == null)) or ctx.server.?.flags.terminated)) {
+                return;
+            }
+            if (((ctx.resp == null) and (!ctx.didUpgradeWebSocket()))) {
                 return;
             }
             if (ctx.resp) |resp| {
@@ -1827,16 +1839,17 @@ pub fn onResponse(ctx: *RequestContext, req_ctx: *ThisServer, request_value: JSV
                     return;
                 }
             }
+            if (response_value.toError()) |err_value| {
+                _ = &err_value;
+                _ = ctx.runErrorHandler(err_value);
+                return;
+            }
             if (ctx.didUpgradeWebSocket()) {
+                _ = discardResponseBody(req_ctx.globalThis, response_value);
                 return;
             }
             if (response_value.isEmptyOrUndefinedOrNull()) {
                 _ = ctx.renderMissingInvalidResponse(response_value);
-                return;
-            }
-            if (response_value.toError()) |err_value| {
-                _ = &err_value;
-                _ = ctx.runErrorHandler(err_value);
                 return;
             }
             if (response_value.as(jsc.WebCore.Response)) |response| {
@@ -2413,7 +2426,10 @@ pub fn runErrorHandlerWithStatusCodeDontCheckResponded(self: *@This(), value: js
                     _ = &_guard_res;
                     var ___guard_res_moved = false; _ = &___guard_res_moved;
                     defer if (!___guard_res_moved) { ___guard_res_moved = true; const __T = @TypeOf(_guard_res); if (@typeInfo(__T) == .optional) { if (_guard_res) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_res.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_res; _drop_val.__cp_deinit(); } };
-                    if ((self.isAbortedOrEnded() or self.didUpgradeWebSocket())) {
+                    if (((self.flags.aborted or (self.server == null)) or self.server.?.flags.terminated)) {
+                        return;
+                    }
+                    if (((self.resp == null) and (!self.didUpgradeWebSocket()))) {
                         return;
                     }
                     if (self.resp) |resp| {
@@ -2436,11 +2452,18 @@ pub fn runErrorHandlerWithStatusCodeDontCheckResponded(self: *@This(), value: js
                             } else {
                                 if (result.as(Response)) |response| {
                                     _ = &response;
+                                    if (self.didUpgradeWebSocket()) {
+                                        _ = discardResponseBody(server.globalThis, result);
+                                        return;
+                                    }
                                     _ = self.render(response);
                                     return;
                                 }
                             }
                         }
+                    }
+                    if (self.didUpgradeWebSocket()) {
+                        return;
                     }
                 }
             }
@@ -2503,7 +2526,7 @@ _ = ctx.finishRunningErrorHandler(err, status);
 
 pub fn runErrorHandlerWithStatusCode(self: *@This(), value: jsc.JSValue, status: u16) void {
             _ = jsc.markBinding(@src());
-            if (((self.resp == null) or self.resp.?.hasResponded())) {
+            if (((!self.didUpgradeWebSocket()) and ((self.resp == null) or self.resp.?.hasResponded()))) {
                 return;
             }
             _ = runErrorHandlerWithStatusCodeDontCheckResponded(self, value, status);

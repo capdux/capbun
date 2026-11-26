@@ -1084,3 +1084,9 @@
 - **`node/fs`**：`BunCommonStrings.h:40` 修正 `OperationWasAborted` 末尾句号 -> 9 项 `AbortSignal` `AbortError` 用例全部通过。
 - **`bun/archive`**：`vendor/libarchive` 修复 gzip CRC32/ISIZE 校验与 `UTF-8` `archive_mstring_get_mbs_l`、`libarchive_sys/bindings.cp` 修复 `pathnameUtf8` 空指针 panic -> **112 pass, 10 fail**（123 tests，gzip CRC32 与 panic 全清零）。
 - **`upstream_sync.py`**：`sync-tests` 同步更新 `package.json` `"version"` 字段。
+
+### 2026-11-26 Batch 14–26 全仓大扫测、集中修正与统一 `bun bd` 回归（`1.4.5-debug`）
+- **流程升级**：写入 `GEMINI.md` 第 15 节、新增 `scripts/scan_tests.py` 与 `test/stats.md`，完成全仓 225 分块 100% 扫测并归档至 `temp/test_scan_*.txt`。
+- **集中修复与回归成果**（3 路并行子智能体 + 主智能体协同，共 200+ 文件修改并通过统一 `bun bd` 编译 `1.4.5-debug`）：
+  - **全绿套件**：`node/events` (91/91)、`node/string_decoder` (143/143)、`node/timers` (30/30)、`bun/memfd-disabled` (2/2)、`bun/json5` (438/438)、`bun/wasm` (7/7)、`bundler/bundler_minify_symbol_for` (9/9)、`web/structured-clone-blob-file` (44/44)、`web/urlpattern` (410/410)。
+  - **高收敛套件**：`bundler/css` (183/184)、`bun/archive` (121/123)、`bun/jsonc` (369/381)、`bun/image` (265/277)、`bun/cookie` (156/178)、`web/url` (134/137)、`web/web-globals` (58/61)、`web/console` (11/12)、`node/perf_hooks` (15/17)、`bun/globals` (19/20)、`node/async_hooks` (仅余 2 项)、`bun/terminal` (仅余 1 项)、`bun/ffi` (仅余 4 项)，并消除 `bun patch --commit` SEGV、`udp` `Invalid binary type` panic、`atan2` 回溯挂死等。

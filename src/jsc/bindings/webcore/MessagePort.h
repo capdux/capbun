@@ -83,6 +83,8 @@ public:
 
     // Called by the pipe on this port's context thread with one dequeued message.
     void dispatchOneMessage(ScriptExecutionContext&, MessageWithMessagePorts&&);
+    void beginDispatch() { ++m_dispatchDepth; }
+    void endDispatch();
 
     // Only here for JSMessagePortCustom's GC optimization; always null.
     MessagePort* locallyEntangledPort() { return nullptr; }
@@ -116,8 +118,9 @@ private:
     bool removeEventListener(const AtomString& eventType, EventListener&, const EventListenerOptions&) final;
 
     void contextDestroyed() final;
+    void closeInternal(bool force);
 
-    bool isEntangled() const { return !m_isDetached; }
+    bool isEntangled() const { return !m_isDetached && !m_closePending; }
 
     // Held for the port's entire lifetime — never nulled — so that the GC
     // thread's hasPendingActivity() can dereference it without racing the
@@ -127,9 +130,11 @@ private:
 
     bool m_started { false };
     bool m_isDetached { false };
+    bool m_closePending { false };
     bool m_hasMessageEventListener { false };
     bool m_hasRef { false };
 
+    uint32_t m_dispatchDepth { 0 };
     uint32_t m_messageEventCount { 0 };
     static void onDidChangeListenerImpl(EventTarget& self, const AtomString& eventType, OnDidChangeListenerKind kind);
 };

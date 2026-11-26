@@ -280,7 +280,7 @@ struct InflationStream {
             inflationStream.avail_out = LARGE_BUFFER_SIZE;
 
             err = ::inflate(&inflationStream, Z_SYNC_FLUSH);
-            if (err == Z_OK && inflationStream.avail_out) {
+            if ((err == Z_OK || err == Z_STREAM_END) && inflationStream.avail_out) {
                 break;
             }
 
@@ -289,14 +289,14 @@ struct InflationStream {
 
         } while (inflationStream.avail_out == 0 && zlibContext->dynamicInflationBuffer.length() <= maxPayloadLength);
 
-        if (reset) {
+        if (reset || err == Z_STREAM_END) {
             inflateReset(&inflationStream);
         }
 
         /* Restore the bytes we used for the tail */
         memcpy(tailLocation, preTailBytes, 4);
 
-        if ((err != Z_BUF_ERROR && err != Z_OK) || zlibContext->dynamicInflationBuffer.length() > maxPayloadLength) {
+        if ((err != Z_BUF_ERROR && err != Z_OK && err != Z_STREAM_END) || zlibContext->dynamicInflationBuffer.length() > maxPayloadLength) {
             return std::nullopt;
         }
 

@@ -32,17 +32,19 @@
 namespace WebCore {
 
 struct AddEventListenerOptions : EventListenerOptions {
-    AddEventListenerOptions(bool capture = false, std::optional<bool> passive = std::nullopt, bool once = false, RefPtr<AbortSignal>&& signal = nullptr)
+    AddEventListenerOptions(bool capture = false, std::optional<bool> passive = std::nullopt, bool once = false, RefPtr<AbortSignal>&& signal = nullptr, bool resistStopPropagation = false)
         : EventListenerOptions(capture)
         , passive(passive)
         , once(once)
         , signal(WTF::move(signal))
+        , resistStopPropagation(resistStopPropagation)
     {
     }
 
     std::optional<bool> passive;
     bool once { false };
     RefPtr<AbortSignal> signal;
+    bool resistStopPropagation { false };
 };
 
 } // namespace WebCore

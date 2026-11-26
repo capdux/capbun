@@ -164,7 +164,7 @@ pub struct S3StreamWrapper {
 
 export const fetch_error_no_args = "fetch() expects a string but received no arguments.";
 export const fetch_error_blank_url = "fetch() URL must not be a blank string.";
-export const fetch_error_unexpected_body = "fetch() request with GET/HEAD/OPTIONS method cannot have body.";
+export const fetch_error_unexpected_body = "fetch() request with GET/HEAD method cannot have body.";
 export const fetch_error_proxy_unix = "fetch() cannot use a proxy with a unix socket.";
 
 type JSTypeErrorEnum = std.enums.EnumArray(JSType, string);
@@ -716,6 +716,13 @@ fn fetchImpl(
         }
     }
     if (globalThis.hasException()) return JSValue.zero;
+
+    if (sig := signal) {
+        if (sig.aborted()) {
+            const reason = sig.jsReason(globalThis);
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, reason);
+        }
+    }
 
     // body
     let has_body = false;

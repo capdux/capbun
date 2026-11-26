@@ -154,6 +154,9 @@ public:
 
 #if OS(WINDOWS)
     UV::TTY* handle;
+#else
+    int currentMode = 0;
+    struct termios origTermios {};
 #endif
 
 private:
@@ -188,6 +191,9 @@ const ClassInfo TTYWrapObject::s_info = {
 JSC::EncodedJSValue Process_functionInternalGetWindowSize(JSC::JSGlobalObject* globalObject, JSC::CallFrame* callFrame);
 
 extern "C" int Bun__ttySetMode(int fd, int mode, int drain);
+#if !OS(WINDOWS)
+extern "C" int Bun__ttySetModeWithSnapshot(int fd, int mode, int drain, int* current_mode, struct termios* orig_termios_ptr);
+#endif
 
 JSC_DEFINE_HOST_FUNCTION(jsTTYSetMode, (JSC::JSGlobalObject * globalObject, CallFrame* callFrame))
 {
@@ -259,7 +265,7 @@ JSC_DEFINE_HOST_FUNCTION(TTYWrap_functionSetMode,
     int err = uv_tty_set_mode(ttyWrap->handle->tty(), mode.toInt32(globalObject));
 #else
     // Nodejs does not throw when ttySetMode fails. An Error event is emitted instead.
-    int err = Bun__ttySetMode(fd, mode.toInt32(globalObject), 1);
+    int err = Bun__ttySetModeWithSnapshot(fd, mode.toInt32(globalObject), 1, &ttyWrap->currentMode, &ttyWrap->origTermios);
 #endif
     return JSValue::encode(jsNumber(err));
 }

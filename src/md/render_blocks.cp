@@ -57,6 +57,8 @@ pub fn processHtmlBlock(*_: *Parser, block_lines: []const VerbatimLine): bun.JSE
 pub fn processTableBlock(*_: *Parser, block_lines: []const VerbatimLine, col_count: u32): Parser.Error!void {
     if (block_lines.len < 2) return;
 
+    * = line_analysis.isTableUnderline(_, block_lines[1].beg);
+
     // First line is header, second is underline, rest are body
     _.enterBlock(.thead, 0, 0)?;
     _.enterBlock(.tr, 0, 0)?;
@@ -159,6 +161,7 @@ pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_co
 
 import bun from "bun";
 import helpers from "./helpers.zig";
+import line_analysis from "./line_analysis.zig";
 import std from "std";
 
 import parser_mod from "./parser.zig";

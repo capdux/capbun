@@ -171,6 +171,9 @@ return globalThis.throwInvalidArguments("Response body has already been used", .
                 var blob = bodyValue.use();
                 _ = &blob;
                 blob.globalThis = globalThis;
+                if ((was_string and (blob.content_type.len == 0))) {
+                    blob.content_type = (if (@typeInfo(@TypeOf(bun.http.MimeType.text)) == .@"enum") @intFromEnum(bun.http.MimeType.text) else bun.http.MimeType.text.value);
+                }
                 _ = bun.assertf((!blob.isHeapAllocated()), "expected blob not to be heap-allocated", .{});
                 bodyValue.* = .{ .Blob = blob.dupe() };
                 break :brk .{ .Blob = blob };
@@ -197,8 +200,14 @@ return globalThis.throwInvalidArguments("Body must be fully buffered before it c
                 headers = (blk_catch_0: { break :blk_catch_0 ((Headers.from(h, bun.default_allocator, .{ .body = (&blob) })) catch |__ce_0| { _ = &__ce_0; _ = blob.detach();
                 return globalThis.throwOutOfMemory(); }); });
             }
-            if ((was_string and (headers.getContentType() == null))) {
-                _ = bun.handleOom(headers.append("Content-Type", bun.http.MimeType.Table.@"text/plain; charset=utf-8".slice()));
+            if ((headers.getContentType() == null)) {
+                const ct = (switch (blob) {
+.Blob => |b| b.content_type,
+else => "",
+});
+                if ((ct.len > 0)) {
+                    _ = bun.handleOom(headers.append("Content-Type", ct));
+                }
             }
             if ((headers.get("etag") == null)) {
                 if ((blob.slice().len > 0)) {
@@ -211,10 +220,8 @@ return globalThis.throwInvalidArguments("Body must be fully buffered before it c
 }
 
 pub fn onHEADRequest(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) void {
-        if ((self.status_code == 200)) {
-            if (self.render304NotModifiedIfNoneMatch(req, resp)) {
-                return;
-            }
+        if (((self.status_code == 200) and (self.render412IfPreconditionFailed(req, resp) or self.render304NotModifiedIfNoneMatch(req, resp)))) {
+            return;
         }
         _ = req.setYield(false);
         _ = self.onHEAD(resp);
@@ -256,10 +263,8 @@ pub fn onRequest(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) voi
 }
 
 pub fn onGET(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) void {
-        if ((self.status_code == 200)) {
-            if (self.render304NotModifiedIfNoneMatch(req, resp)) {
-                return;
-            }
+        if (((self.status_code == 200) and (self.render412IfPreconditionFailed(req, resp) or self.render304NotModifiedIfNoneMatch(req, resp)))) {
+            return;
         }
         _ = req.setYield(false);
         _ = self.on(resp);
@@ -455,6 +460,65 @@ pub fn render304NotModifiedIfNoneMatch(self: *StaticRoute, req: uws.AnyRequest, 
         }
         _ = self.doWriteStatus(304, resp);
         _ = self.doWriteHeaders(resp);
+        _ = resp.endWithoutBody(resp.shouldCloseConnection());
+        _ = self.onResponseComplete(resp);
+        return true;
+}
+
+pub fn ifMatchStrong(etag: []const u8, if_match: []const u8) bool {
+        const trimmed = std.mem.trim(u8, if_match, " \t");
+        if (std.mem.eql(u8, trimmed, "*")) {
+            return (etag.len > 0);
+        }
+        if (((etag.len == 0) or std.mem.startsWith(u8, etag, "W/"))) {
+            return false;
+        }
+        var it = std.mem.splitScalar(u8, trimmed, 44);
+        _ = &it;
+        while (it.next()) |part| {
+            const tag = std.mem.trim(u8, part, " \t");
+            if ((((tag.len > 0) and (!std.mem.startsWith(u8, tag, "W/"))) and std.mem.eql(u8, tag, etag))) {
+                return true;
+            }
+        }
+        return false;
+}
+
+pub fn render412IfPreconditionFailed(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) bool {
+        var failed = false;
+        _ = &failed;
+        if (req.header("if-match")) |if_match| {
+            _ = &if_match;
+            failed = (!StaticRoute.ifMatchStrong(((self.headers.get("etag")) orelse ("")), if_match));
+        } else {
+            if (req.header("if-unmodified-since")) |ius| {
+                _ = &ius;
+                if (self.headers.get("last-modified")) |lm| {
+                    _ = &lm;
+                    var ius_str = bun.String.fromBytes(ius);
+                    _ = &ius_str;
+                    var lm_str = bun.String.fromBytes(lm);
+                    _ = &lm_str;
+                    const g = bun.jsc.VirtualMachine.get().global;
+                    const ius_ms = (blk_catch_2: { break :blk_catch_2 ((bun.String.parseDate((&ius_str), g)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 std.math.nan(f64); }); });
+                    const lm_ms = (blk_catch_3: { break :blk_catch_3 ((bun.String.parseDate((&lm_str), g)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 std.math.nan(f64); }); });
+                    failed = (((!std.math.isNan(ius_ms)) and (!std.math.isNan(lm_ms))) and (ius_ms < lm_ms));
+                }
+            }
+        }
+        if ((!failed)) {
+            return false;
+        }
+        _ = req.setYield(false);
+        _ = self.ref();
+        if (self.server) |server| {
+            _ = &server;
+            _ = server.onPendingRequest();
+            _ = resp.timeout(server.config().idleTimeout);
+        }
+        _ = self.doWriteStatus(412, resp);
+        _ = self.doWriteHeaders(resp);
+        _ = resp.writeHeaderInt("Content-Length", 0);
         _ = resp.endWithoutBody(resp.shouldCloseConnection());
         _ = self.onResponseComplete(resp);
         return true;

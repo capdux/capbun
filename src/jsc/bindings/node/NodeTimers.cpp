@@ -2,6 +2,9 @@
 
 #include "ErrorCode.h"
 #include "headers.h"
+#include "ZigGlobalObject.h"
+#include "InternalModuleRegistry.h"
+#include <JavaScriptCore/GetterSetter.h>
 
 namespace Bun {
 
@@ -230,6 +233,49 @@ JSC_DEFINE_HOST_FUNCTION(functionClearTimeout,
 #endif
 
     return Bun__Timer__clearTimeout(globalObject, JSC::JSValue::encode(timer_or_num));
+}
+
+template<const ASCIILiteral& promisePropName>
+static JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES jsTimerPromisifyCustomGetter(JSC::JSGlobalObject* lexicalGlobalObject, JSC::CallFrame*)
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    auto* zigGlobal = defaultGlobalObject(lexicalGlobalObject);
+    JSValue timersPromises = zigGlobal->internalModuleRegistry()->requireId(zigGlobal, vm, InternalModuleRegistry::NodeTimersPromises);
+    RETURN_IF_EXCEPTION(scope, {});
+    JSValue prop = timersPromises.get(lexicalGlobalObject, Identifier::fromString(vm, promisePropName));
+    RETURN_IF_EXCEPTION(scope, {});
+    return JSValue::encode(prop);
+}
+
+static constexpr ASCIILiteral s_setTimeoutName = "setTimeout"_s;
+static constexpr ASCIILiteral s_setIntervalName = "setInterval"_s;
+static constexpr ASCIILiteral s_setImmediateName = "setImmediate"_s;
+
+template<const ASCIILiteral& name>
+static JSC::JSValue constructTimerFunction(JSC::VM& vm, JSC::JSObject* object, NativeFunction nativeFn)
+{
+    auto* globalObject = object->globalObject();
+    auto* fn = JSC::JSFunction::create(vm, globalObject, 1, String(name), nativeFn, ImplementationVisibility::Public, NoIntrinsic);
+    auto* getter = JSC::JSFunction::create(vm, globalObject, 0, "get [nodejs.util.promisify.custom]"_s, jsTimerPromisifyCustomGetter<name>, ImplementationVisibility::Public, NoIntrinsic);
+    auto sym = JSC::Identifier::fromUid(vm.symbolRegistry().symbolForKey("nodejs.util.promisify.custom"_s));
+    fn->putDirectAccessor(globalObject, sym, JSC::GetterSetter::create(vm, globalObject, getter, nullptr), JSC::PropertyAttribute::Accessor | JSC::PropertyAttribute::DontDelete);
+    return fn;
+}
+
+JSC::JSValue constructSetTimeout(JSC::VM& vm, JSC::JSObject* object)
+{
+    return constructTimerFunction<s_setTimeoutName>(vm, object, functionSetTimeout);
+}
+
+JSC::JSValue constructSetInterval(JSC::VM& vm, JSC::JSObject* object)
+{
+    return constructTimerFunction<s_setIntervalName>(vm, object, functionSetInterval);
+}
+
+JSC::JSValue constructSetImmediate(JSC::VM& vm, JSC::JSObject* object)
+{
+    return constructTimerFunction<s_setImmediateName>(vm, object, functionSetImmediate);
 }
 
 } // namespace Bun

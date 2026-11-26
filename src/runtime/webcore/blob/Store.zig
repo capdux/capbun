@@ -118,8 +118,7 @@ pub const StoreS3UnlinkWrapper = struct {
     store: *Store,
     global: *JSGlobalObject,
 
-pub fn resolve(self: StoreS3UnlinkWrapper, result: S3DeleteResult, opaque_self: ?*anyopaque) !void {
-        _ = self;
+pub fn resolve(result: S3DeleteResult, opaque_self: ?*anyopaque) !void {
             var wrap: *StoreS3UnlinkWrapper = (blk: {
             break :blk @ptrCast(@alignCast(opaque_self.?));
 
@@ -153,8 +152,7 @@ pub const StoreS3ListObjectsWrapper = struct {
     resolvedlistOptions: S3ListObjectsOptions,
     global: *JSGlobalObject,
 
-pub fn resolve(self: StoreS3ListObjectsWrapper, result: S3ListObjectsResult, opaque_self: ?*anyopaque) !void {
-        _ = self;
+pub fn resolve(result: S3ListObjectsResult, opaque_self: ?*anyopaque) !void {
             var wrap: *StoreS3ListObjectsWrapper = (blk: {
             break :blk @ptrCast(@alignCast(opaque_self.?));
 

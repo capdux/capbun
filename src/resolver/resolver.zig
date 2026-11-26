@@ -550,7 +550,7 @@ pub const ResultFlags = packed struct(u8) {
     preserve_unused_imports_ts: bool = false,
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
-    _padding: u1 = 0,
+    use_define_for_class_fields: bool = true,
 };
 
 pub const ResultDebugMeta = struct {
@@ -611,20 +611,24 @@ pub fn path(self: *Result) ?*Path {
             return null;
     }
 
-pub fn pathConst(self: *const Result) ?*const Path {
-            if ((!self.path_pair.primary.is_disabled)) {
-                return (&self.path_pair.primary);
+pub fn pathConst(this_ptr: *const @This()) ?*const Path {
+            if ((!this_ptr.path_pair.primary.is_disabled)) {
+                return (&this_ptr.path_pair.primary);
             }
-            if ((self.path_pair.secondary != null)) {
-                if ((!self.path_pair.secondary.?.is_disabled)) {
-                    return (&self.path_pair.secondary.?);
+            if ((this_ptr.path_pair.secondary != null)) {
+                if ((!this_ptr.path_pair.secondary.?.is_disabled)) {
+                    return (&this_ptr.path_pair.secondary.?);
                 }
             }
             return null;
     }
 
+pub fn pathConstOrNull(self: *Result) ?*const Path {
+            return self.pathConst();
+    }
+
 pub fn isLikelyNodeModule(self: Result) bool {
-            const path_opt = self.pathConst();
+            const path_opt = Result.pathConst((&self));
             if ((path_opt == null)) {
                 return false;
             }
@@ -990,7 +994,7 @@ pub fn resolveAndAutoInstall(r: *ThisResolver, source_dir: []const u8, import_pa
             _ = &_guard_tracer;
             var ___guard_tracer_moved = false; _ = &___guard_tracer_moved;
             defer if (!___guard_tracer_moved) { ___guard_tracer_moved = true; const __T = @TypeOf(_guard_tracer); if (@typeInfo(__T) == .optional) { if (_guard_tracer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_tracer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_tracer; _drop_val.__cp_deinit(); } };
-            const prev_action = (if (Environment.show_crash_trace) bun.crash_handler.current_action else null);
+            const prev_action = (if (Environment.show_crash_trace) bun.crash_handler.current_action else @as(void, undefined));
             if (Environment.show_crash_trace) {
                 bun.crash_handler.current_action = .{ .resolver = .{ .source_dir = source_dir, .import_path = import_path, .kind = kind } };
             }
@@ -1264,6 +1268,10 @@ pub fn finalizeResult(r: *ThisResolver, result: *Result, kind: ast.ImportKind) !
                     result.jsx = tsconfig.mergeJSX(result.jsx);
                     result.flags.emit_decorator_metadata = (result.flags.emit_decorator_metadata or tsconfig.emit_decorator_metadata);
                     result.flags.experimental_decorators = (result.flags.experimental_decorators or tsconfig.experimental_decorators);
+                    if (tsconfig.use_define_for_class_fields) |v| {
+                        _ = &v;
+                        result.flags.use_define_for_class_fields = v;
+                    }
                 }
                 if ((((!kind.isFromCSS()) and (module_type == .unknown)) and ((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).ext.len == 4))) {
                     const mt = ((ModuleTypeMap.getWithLength((if (@typeInfo(@TypeOf(path)) == .@"enum" or @typeInfo(@TypeOf(path)) == .@"union") @tagName(path) else path.name).ext, 4)) orelse (.unknown));
@@ -2688,7 +2696,7 @@ _ = debuglog("Failed to load DirEntry {s}  {s} - {s}", .{ top, @errorName(e.orig
                 const dirfd_result = bun.sys.openDirAtWindowsA(bun.invalid_fd, sentinel, .{ .iterable = true, .no_follow = (!follow_symlinks), .read_only = true });
                 const res = (blk_catch_57: { break :blk_catch_57 ((dirfd_result.unwrap()) catch |e| { _ = &e; break :open_req e; }); });
                 break :open_req res;
-} else null));
+} else @as(void, undefined)));
                 _ = bun.fs.debug("open({s})", .{ sentinel });
                 break :open_dir (blk_catch_58: { break :blk_catch_58 ((open_req) catch |e| { _ = &e; break :blk_catch_58 (switch ((if (comptime @typeInfo(anyerror) == .@"enum" and (@typeInfo(@TypeOf(e)) == .int or @typeInfo(@TypeOf(e)) == .comptime_int)) @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.ENOTDIR, error.IsDir, error.NotDir => {
@@ -3364,10 +3372,10 @@ _ = (blk_catch_73: { break :blk_catch_73 ((r.log.addErrorFmt(null, logger.Loc.Em
                                 return LoadResult{ .path = brk: {
                                 if (query.entry.abs_path.isEmpty()) {
                                     if (((query.entry.dir.len > 0) and (query.entry.dir[@as(usize, @intCast((query.entry.dir.len - 1)))] == std.fs.path.sep))) {
-                                        const parts: [2][]const u8 = .{ query.entry.dir, buffer };
+                                        const parts: [2][]const u8 = .{ query.entry.dir, @as([]const u8, buffer) };
                                         query.entry.abs_path = PathString.init(((r.fs.filename_store.append(@TypeOf(parts), parts)) catch unreachable));
                                     } else {
-                                        const parts: [3][]const u8 = .{ query.entry.dir, std.fs.path.sep_str, buffer };
+                                        const parts: [3][]const u8 = .{ query.entry.dir, std.fs.path.sep_str, @as([]const u8, buffer) };
                                         query.entry.abs_path = PathString.init(((r.fs.filename_store.append(@TypeOf(parts), parts)) catch unreachable));
                                     }
                                 }
@@ -3668,6 +3676,10 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                             if (parent_config.preserve_imports_not_used_as_values) |value| {
                                 _ = &value;
                                 merged_config.preserve_imports_not_used_as_values = value;
+                            }
+                            if (parent_config.use_define_for_class_fields) |value| {
+                                _ = &value;
+                                merged_config.use_define_for_class_fields = value;
                             }
                             if ((parent_config.base_url_for_paths.len > 0)) {
                                 for (merged_config.paths.values()) |v| {

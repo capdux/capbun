@@ -203,6 +203,30 @@ template<typename DOMClass> inline JSC::JSValue wrap(JSC::JSGlobalObject* lexica
     return toJSNewlyCreated(lexicalGlobalObject, globalObject, Ref<DOMClass>(domObject));
 }
 
+template<typename DOMClass> inline JSC::Structure* getSubclassStructureIfNeeded(JSC::JSGlobalObject* lexicalGlobalObject, JSC::CallFrame* callFrame)
+{
+    JSC::JSObject* newTarget = callFrame->newTarget().getObject();
+    JSC::JSObject* constructor = callFrame->jsCallee();
+    if (!newTarget || newTarget == constructor)
+        return nullptr;
+
+    using WrapperClass = typename JSDOMWrapperConverterTraits<DOMClass>::WrapperClass;
+
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+
+    if (!newTarget->isCallable()) [[unlikely]]
+        newTarget = constructor;
+
+    auto* functionGlobalObject = JSC::getFunctionRealm(lexicalGlobalObject, newTarget);
+    RETURN_IF_EXCEPTION(scope, nullptr);
+    auto* newTargetGlobalObject = defaultGlobalObject(functionGlobalObject);
+    auto* baseStructure = getDOMStructure<WrapperClass>(vm, *newTargetGlobalObject);
+    auto* subclassStructure = JSC::InternalFunction::createSubclassStructure(lexicalGlobalObject, newTarget, baseStructure);
+    RETURN_IF_EXCEPTION(scope, nullptr);
+    return subclassStructure;
+}
+
 template<typename DOMClass> inline void setSubclassStructureIfNeeded(JSC::JSGlobalObject* lexicalGlobalObject, JSC::CallFrame* callFrame, JSC::JSObject* jsObject)
 {
     JSC::JSObject* newTarget = callFrame->newTarget().getObject();

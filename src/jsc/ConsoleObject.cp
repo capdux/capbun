@@ -416,10 +416,14 @@ fn messageWithTypeAndLevel_(
         let opts = unsafe { vals[1] };
         if (opts.isObject()) {
             if (depth_prop := opts.get(global, "depth")?) {
-                if (depth_prop.isInt32() || depth_prop.isNumber() || depth_prop.isBigInt())
-                    print_options.max_depth = depth_prop.toU16()
-                else if (depth_prop.isNull())
+                if (depth_prop.isBigInt()) {
+                    const v = depth_prop.toInt64();
+                    print_options.max_depth = @as(u16, @intCast(@min(@max(v, 0), std.math.maxInt(u16))));
+                } else if (depth_prop.isInt32() || depth_prop.isNumber()) {
+                    print_options.max_depth = depth_prop.toU16();
+                } else if (depth_prop.isNull()) {
                     print_options.max_depth = std.math.maxInt(u16);
+                }
             }
             if (colors_prop := opts.get(global, "colors")?) {
                 if (colors_prop.isBoolean())
@@ -589,7 +593,7 @@ pub struct TablePrinter {
         ) catch {}; // TODO:
 
         adapted_writer.new_interface.flush() catch e => switch (e) {
-            error.WriteFailed => if (Environment.ci_assert) bun.assert(false), // VisibleCharacterCounter write cannot fail
+            error.WriteFailed => if (Environment.ci_assert) bun.assert(false) else @as(void, undefined), // VisibleCharacterCounter write cannot fail
         };
 
         return @truncate(width);

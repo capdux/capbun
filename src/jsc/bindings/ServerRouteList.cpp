@@ -216,7 +216,21 @@ JSObject* ServerRouteList::paramsObjectForRoute(JSC::VM& vm, JSC::JSGlobalObject
         auto param = req->getParameter(static_cast<unsigned short>(i));
         if (!param.empty()) {
             const std::span<const uint8_t> paramBytes(reinterpret_cast<const uint8_t*>(param.data()), param.size());
-            args.append(jsString(vm, decodeURIComponentSIMD(paramBytes)));
+            if (WTF::charactersAreAllASCII(paramBytes)) {
+                args.append(jsString(vm, decodeURIComponentSIMD(paramBytes)));
+            } else {
+                Vector<char> decoded;
+                decoded.reserveInitialCapacity(paramBytes.size());
+                for (size_t j = 0; j < paramBytes.size(); ++j) {
+                    if (paramBytes[j] == '%' && j + 2 < paramBytes.size() && isASCIIHexDigit(paramBytes[j + 1]) && isASCIIHexDigit(paramBytes[j + 2])) {
+                        decoded.append(static_cast<char>((toASCIIHexValue(paramBytes[j + 1]) << 4) | toASCIIHexValue(paramBytes[j + 2])));
+                        j += 2;
+                    } else {
+                        decoded.append(static_cast<char>(paramBytes[j]));
+                    }
+                }
+                args.append(jsString(vm, String::fromUTF8(std::span<const char>(decoded.span().data(), decoded.size()))));
+            }
         } else {
             args.append(jsEmptyString(vm));
         }

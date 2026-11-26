@@ -14,7 +14,7 @@ comptime {
 
 /// Caller must check for termination exception
 @export @c fn Bun__drainMicrotasks() {
-    jsc.VirtualMachine.get().eventLoop().tick();
+    jsc.VirtualMachine.get().eventLoop().drainMicrotasks() catch {};
 }
 
 @export @c fn Bun__readOriginTimer(vm: *jsc.VirtualMachine): u64 {

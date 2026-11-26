@@ -482,8 +482,9 @@ pub struct LiveWorkers {
                 let args = args_ro;
                 const _guard_args = DeinitGuard<@TypeOf(args)>{ ptr: &args };
 
-                // override the existing even if it was set
-                transform_options.allow_addons = !args.flag("--no-addons");
+                if (args.flag("--no-addons")) {
+                    transform_options.allow_addons = false;
+                }
             }
 
             // TODO: currently this only checks for --no-addons. I think

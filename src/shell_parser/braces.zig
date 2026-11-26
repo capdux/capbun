@@ -217,11 +217,7 @@ return error.UnexpectedToken;
 pub fn parseExpansion(self: *Parser) !AST.Expansion {
             var variants = std.array_list.Managed(AST.Group).init(self.alloc);
             _ = &variants;
-            const close_eof: [2]Token.Tag = .{ .close, .eof };
-            while ((!self.match_any((&close_eof)))) {
-                if (self.matchTok(.eof)) {
-                    break;
-                }
+            while ((!self.matchTok(.eof))) {
                 var group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), self.alloc);
                 _ = &group_alloc_;
                 const group_alloc = group_alloc_.get();

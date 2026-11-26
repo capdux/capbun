@@ -290,6 +290,12 @@ var _input_guard = FreeGuard(u8){ .slice = input, .allocator = default_allocator
 pub fn toStringComptime(input: []const u8, global: *JSGlobalObject, comptime encoding: Encoding) JSError!JSValue {
         var bun_string = toBunStringComptime(input, encoding);
         _ = &bun_string;
+        if ((bun_string.tag == .Dead)) {
+            if (((input.len > std.math.maxInt(i32)) or ((encoding == .hex) and (input.len > (std.math.maxInt(i32) / 2))))) {
+                return global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than {d} characters", .{ std.math.maxInt(i32) }).throw();
+            }
+            return global.ERR(.MEMORY_ALLOCATION_FAILED, "Failed to allocate memory", .{}).throw();
+        }
         return try bun_string.transferToJS(global);
 }
 

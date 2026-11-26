@@ -324,8 +324,14 @@ pub fn caaReplyToJS(reply: *c_ares.struct_ares_caa_reply, globalThis: *jsc.JSGlo
         _ = obj.put(globalThis, jsc.ZigString.static("critical"), jsc.JSValue.jsNumber(reply.critical));
         const property = reply.property[0..reply.plength];
         const value = (if (@typeInfo(@TypeOf(reply)) == .@"enum") @intFromEnum(reply) else reply.value)[0..reply.length];
-        const property_str = jsc.ZigString.fromUTF8(property);
-        _ = obj.put(globalThis, (&property_str), jsc.ZigString.fromUTF8(value).toJS(globalThis));
+        const js_val = jsc.ZigString.fromUTF8(value).toJS(globalThis);
+        if ((blk_catch_4: { break :blk_catch_4 ((std.fmt.parseInt(u32, property, 10)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 null; }); })) |idx| {
+            _ = &idx;
+            _ = (blk_catch_5: { break :blk_catch_5 ((obj.putIndex(globalThis, idx, js_val)) catch |__ce_5| { _ = &__ce_5;  }); });
+        } else {
+            const property_str = jsc.ZigString.fromUTF8(property);
+            _ = obj.put(globalThis, (&property_str), js_val);
+        }
         return obj;
 }
 
@@ -440,7 +446,7 @@ pub fn txtReplyToJSResponse(reply: *c_ares.struct_ares_txt_reply, parent_allocat
         _ = &i;
         while ((txt != null)) {
             const node = txt.?;
-            const js_item = (blk_catch_4: { break :blk_catch_4 ((node.toJS(globalThis, allocator)) catch |e| { _ = &e; return e; }); });
+            const js_item = (blk_catch_6: { break :blk_catch_6 ((node.toJS(globalThis, allocator)) catch |e| { _ = &e; return e; }); });
             _ = try array.putIndex(globalThis, i, js_item);
             txt = node.next;
             i = (i + 1);
@@ -579,7 +585,7 @@ pub fn anyReplyToJSResponse(reply: *c_ares.struct_any_reply, parent_allocator: s
 }
 
 pub fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, response: jsc.JSValue, comptime lookup_name: []const u8) !void {
-        const transformed = (if (response.isString()) (blk_catch_5: { break :blk_catch_5 ((jsc.JSObject.create(.{ .value = response }, globalThis)) catch |e| { _ = &e; return e; }); }).toJS() else blk: {
+        const transformed = (if (response.isString()) (blk_catch_7: { break :blk_catch_7 ((jsc.JSObject.create(.{ .value = response }, globalThis)) catch |e| { _ = &e; return e; }); }).toJS() else blk: {
         _ = bun.assert(response.isObject());
         break :blk response;
 });
@@ -593,27 +599,27 @@ pub fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u
             upper[cp_cast_int(usize, idx)] = std.ascii.toUpper(lookup_name[@as(usize, @intCast(idx))]);
             idx = (idx + 1);
         }
-        const upper_js = (blk_catch_7: { break :blk_catch_7 ((bun.String.ascii((&upper)).toJS(globalThis)) catch |e| { _ = &e; return e; }); });
+        const upper_js = (blk_catch_9: { break :blk_catch_9 ((bun.String.ascii((&upper)).toJS(globalThis)) catch |e| { _ = &e; return e; }); });
         _ = transformed.put(globalThis, "type", upper_js);
-        _ = (blk_catch_8: { break :blk_catch_8 ((array.putIndex(globalThis, i.*, transformed)) catch |e| { _ = &e; return e; }); });
+        _ = (blk_catch_10: { break :blk_catch_10 ((array.putIndex(globalThis, i.*, transformed)) catch |e| { _ = &e; return e; }); });
         i.* = (i.* + 1);
 }
 
 pub fn anyReplyAppendAll(globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, array: jsc.JSValue, i: *u32, reply: anytype, comptime lookup_name: []const u8) !void {
-        const response: jsc.JSValue = (if (comptime @hasDecl(@TypeOf(reply.*), "toJSForAny")) (blk_catch_9: { break :blk_catch_9 ((reply.toJSForAny(allocator, globalThis, lookup_name)) catch |e| { _ = &e; return e; }); }) else (blk_catch_10: { break :blk_catch_10 ((reply.toJSResponse(allocator, globalThis, lookup_name)) catch |e| { _ = &e; return e; }); }));
+        const response: jsc.JSValue = (if (comptime @hasDecl(@TypeOf(reply.*), "toJSForAny")) (blk_catch_11: { break :blk_catch_11 ((reply.toJSForAny(allocator, globalThis, lookup_name)) catch |e| { _ = &e; return e; }); }) else (blk_catch_12: { break :blk_catch_12 ((reply.toJSResponse(allocator, globalThis, lookup_name)) catch |e| { _ = &e; return e; }); }));
         if (response.isArray()) {
-            var iterator = (blk_catch_11: { break :blk_catch_11 ((response.arrayIterator(globalThis)) catch |e| { _ = &e; return e; }); });
+            var iterator = (blk_catch_13: { break :blk_catch_13 ((response.arrayIterator(globalThis)) catch |e| { _ = &e; return e; }); });
             _ = &iterator;
-            while ((blk_catch_12: { break :blk_catch_12 ((iterator.next()) catch |e| { _ = &e; return e; }); })) |item| {
-                _ = (blk_catch_13: { break :blk_catch_13 ((anyReplyAppend(globalThis, array, i, item, lookup_name)) catch |e| { _ = &e; return e; }); });
+            while ((blk_catch_14: { break :blk_catch_14 ((iterator.next()) catch |e| { _ = &e; return e; }); })) |item| {
+                _ = (blk_catch_15: { break :blk_catch_15 ((anyReplyAppend(globalThis, array, i, item, lookup_name)) catch |e| { _ = &e; return e; }); });
             }
         } else {
-            _ = (blk_catch_14: { break :blk_catch_14 ((anyReplyAppend(globalThis, array, i, response, lookup_name)) catch |e| { _ = &e; return e; }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((anyReplyAppend(globalThis, array, i, response, lookup_name)) catch |e| { _ = &e; return e; }); });
         }
 }
 
 pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator) !jsc.JSValue {
-        const array = (blk_catch_15: { break :blk_catch_15 ((jsc.JSValue.createEmptyArray(globalThis, blk: {
+        const array = (blk_catch_17: { break :blk_catch_17 ((jsc.JSValue.createEmptyArray(globalThis, blk: {
         var len: usize = 0;
         _ = &len;
         inline for (@typeInfo(c_ares.struct_any_reply).@"struct".fields) |field| {
@@ -632,7 +638,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
                 if (@field(reply, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))) |rep| {
                     _ = &rep;
                     const lookup_name = (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)[0..((if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name).len - "_reply".len)];
-                    _ = (blk_catch_16: { break :blk_catch_16 ((anyReplyAppendAll(globalThis, allocator, array, (&i), rep, lookup_name)) catch |e| { _ = &e; return e; }); });
+                    _ = (blk_catch_18: { break :blk_catch_18 ((anyReplyAppendAll(globalThis, allocator, array, (&i), rep, lookup_name)) catch |e| { _ = &e; return e; }); });
                 }
             }
         }
@@ -675,6 +681,7 @@ pub fn caresErrorCode(err_val: c_ares.Error) [:0]const u8 {
 .ECANCELLED => "DNS_ECANCELLED",
 .ESERVICE => "DNS_ESERVICE",
 .ENOSERVER => "DNS_ENOSERVER",
+.EAI_AGAIN => "DNS_EAI_AGAIN",
 });
 }
 
@@ -682,7 +689,7 @@ pub fn errorToJSWithSyscall(err: c_ares.Error, globalThis: *jsc.JSGlobalObject, 
         const err_code = caresErrorCode(err)[4..];
         const sys_err = jsc.SystemError{ .errno = @intFromEnum(err), .code = bun.String.static(err_code), .syscall = bun.String.static(syscall), .message = bun.handleOom(bun.String.createFormat("{s} {s}", .{ syscall, err_code })) };
         const instance = sys_err.toErrorInstance(globalThis);
-        const dns_name = (blk_catch_17: { break :blk_catch_17 ((bun.String.static("DNSException").toJS(globalThis)) catch |e| { _ = &e; return e; }); });
+        const dns_name = (blk_catch_19: { break :blk_catch_19 ((bun.String.static("DNSException").toJS(globalThis)) catch |e| { _ = &e; return e; }); });
         _ = instance.put(globalThis, "name", dns_name);
         return instance;
 }
@@ -692,7 +699,7 @@ pub fn errorToJSWithSyscallAndHostname(err: c_ares.Error, globalThis: *jsc.JSGlo
         const err_code = code_full[4..];
         const sys_err = jsc.SystemError{ .errno = @intFromEnum(err), .code = bun.String.static(code_full), .message = bun.handleOom(bun.String.createFormat("{s} {s} {s}", .{ syscall, err_code, hostname })), .syscall = bun.String.static(syscall), .hostname = bun.String.cloneUTF8(hostname) };
         const instance = sys_err.toErrorInstance(globalThis);
-        const dns_name = (blk_catch_18: { break :blk_catch_18 ((bun.String.static("DNSException").toJS(globalThis)) catch |e| { _ = &e; return e; }); });
+        const dns_name = (blk_catch_20: { break :blk_catch_20 ((bun.String.static("DNSException").toJS(globalThis)) catch |e| { _ = &e; return e; }); });
         _ = instance.put(globalThis, "name", dns_name);
         return instance;
 }
@@ -704,7 +711,7 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
             return globalThis.throwInvalidArguments("canonicalizeIP() expects a string but received no arguments.", .{});
         }
         const INET6_ADDRSTRLEN = (if (comptime bun.Environment.isWindows) 65 else 46);
-        var addr_arg = (blk_catch_19: { break :blk_catch_19 ((arguments[0].toSlice(globalThis, bun.default_allocator)) catch |e| { _ = &e; return e; }); });
+        var addr_arg = (blk_catch_21: { break :blk_catch_21 ((arguments[0].toSlice(globalThis, bun.default_allocator)) catch |e| { _ = &e; return e; }); });
         _ = &addr_arg;
         var _addr_guard = DeinitGuard(jsc.ZigString.Slice){ .ptr = (&addr_arg) };
         _ = &_addr_guard;
@@ -745,5 +752,6 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
 }
 
 pub fn notAHostnameError(globalThis: *jsc.JSGlobalObject, hostname: []const u8) jsc.JSValue {
-        return (blk_catch_20: { break :blk_catch_20 ((errorToJSWithSyscallAndHostname(.ENOTFOUND, globalThis, "getaddrinfo", hostname)) catch |__ce_20| { _ = &__ce_20; return .js_undefined; }); });
+        const sys_err = jsc.SystemError{ .errno = @intFromEnum(c_ares.Error.ENOTFOUND), .code = bun.String.static("ENOTFOUND"), .message = bun.handleOom(bun.String.createFormat("getaddrinfo ENOTFOUND {s}", .{ hostname })), .syscall = bun.String.static("getaddrinfo"), .hostname = bun.String.cloneUTF8(hostname) };
+        return sys_err.toErrorInstance(globalThis);
 }

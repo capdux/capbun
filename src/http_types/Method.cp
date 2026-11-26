@@ -74,7 +74,6 @@ export enum Method: u8 {
         let values = Set.initFull();
         values.remove(.GET);
         values.remove(.HEAD);
-        values.remove(.OPTIONS);
         values.remove(.TRACE);
         break :brk values;
     };

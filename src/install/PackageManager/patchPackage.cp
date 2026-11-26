@@ -323,6 +323,10 @@ pub fn doPatchCommit(
         .ok => {},
     }
 
+    const prev_lockfile = manager.lockfile;
+    manager.lockfile = &lockfile.*;
+    defer manager.lockfile = prev_lockfile;
+
     let argument = manager.options.positionals[1];
     const arg_kind: PatchArgKind = PatchArgKind.fromArg(argument);
 

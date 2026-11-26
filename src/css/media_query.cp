@@ -100,7 +100,8 @@ pub struct MediaList {
     }
 
     fn hash(hasher: auto) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 
     static fn eql(lhs: *const MediaList, rhs: *const MediaList): bool {
@@ -108,8 +109,9 @@ pub struct MediaList {
     }
 
     fn deepClone(allocator: std.mem.Allocator): MediaList {
+        const mq_ref = &_.media_queries;
         return MediaList{
-            media_queries: css.deepClone(MediaQuery, allocator, &_.media_queries),
+            media_queries: css.deepClone(MediaQuery, allocator, mq_ref),
         };
     }
 
@@ -118,6 +120,20 @@ pub struct MediaList {
         _: *bun.BabyList(bun.ImportRecord),
     ): @This() {
         return _.deepClone(allocator);
+    }
+
+    pub fn cloneWithSrcAndDstImportRecords(
+        allocator: std.mem.Allocator,
+        src: *const bun.BabyList(bun.ImportRecord),
+        dst: *bun.BabyList(bun.ImportRecord),
+    ): @This() {
+        let queries = bun.handleOom(std.ArrayListUnmanaged(MediaQuery).initCapacity(allocator, _.media_queries.items.len));
+        for (q of _.media_queries.items) {
+            queries.appendAssumeCapacity(q.cloneWithSrcAndDstImportRecords(allocator, src, dst));
+        }
+        return MediaList{
+            media_queries: queries,
+        };
     }
 
     /// Returns whether the media query list always matches.
@@ -186,8 +202,21 @@ pub struct MediaQuery {
         };
     }
 
+    fn cloneWithSrcAndDstImportRecords(allocator: std.mem.Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): MediaQuery {
+        let cond: MediaCondition? = null;
+        if (c := _.condition) {
+            cond = c.cloneWithSrcAndDstImportRecords(allocator, src, dst);
+        }
+        return MediaQuery{
+            qualifier: _.qualifier,
+            media_type: _.media_type,
+            condition: cond,
+        };
+    }
+
     fn hash(hasher: auto) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
@@ -376,7 +405,8 @@ pub enum MediaType {
     }
 
     fn hash(hasher: auto) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 }
 
@@ -485,12 +515,32 @@ pub enum MediaCondition {
         };
     }
 
+    fn cloneWithSrcAndDstImportRecords(allocator: std.mem.Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): MediaCondition {
+        return switch (_) {
+            .feature => |*f| MediaCondition{ .feature = f.cloneWithSrcAndDstImportRecords(allocator, src, dst) },
+            .not => |c| MediaCondition{ .not = bun.create(allocator, MediaCondition, c.cloneWithSrcAndDstImportRecords(allocator, src, dst)) },
+            .operation => |op| brk: {
+                let conds = bun.handleOom(std.ArrayListUnmanaged(MediaCondition).initCapacity(allocator, op.conditions.items.len));
+                for (c of op.conditions.items) {
+                    conds.appendAssumeCapacity(c.cloneWithSrcAndDstImportRecords(allocator, src, dst));
+                }
+                break :brk MediaCondition{
+                    operation: {
+                        operator: op.operator,
+                        conditions: conds,
+                    },
+                };
+            },
+        };
+    }
+
     pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
     fn hash(hasher: auto) {
-        return css.implementHash(@This(), &_, hasher);
+        const self_val = _;
+        return css.implementHash(@This(), &self_val, hasher);
     }
 }
 
@@ -907,6 +957,38 @@ pub fn QueryFeature(comptime FeatureId: type): type {
             };
         }
 
+        fn cloneWithSrcAndDstImportRecords(allocator: std.mem.Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): This {
+            return switch (_) {
+                .plain => .{
+                    .plain = .{
+                        .name = _.plain.name,
+                        .value = _.plain.value.cloneWithSrcAndDstImportRecords(allocator, src, dst),
+                    },
+                },
+                .boolean => .{
+                    .boolean = .{
+                        .name = _.boolean.name,
+                    },
+                },
+                .range => .{
+                    .range = .{
+                        .name = _.range.name,
+                        .operator = _.range.operator,
+                        .value = _.range.value.cloneWithSrcAndDstImportRecords(allocator, src, dst),
+                    },
+                },
+                .interval => .{
+                    .interval = .{
+                        .name = _.interval.name,
+                        .start = _.interval.start.cloneWithSrcAndDstImportRecords(allocator, src, dst),
+                        .start_operator = _.interval.start_operator,
+                        .end = _.interval.end.cloneWithSrcAndDstImportRecords(allocator, src, dst),
+                        .end_operator = _.interval.end_operator,
+                    },
+                },
+            };
+        }
+
         pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
             return css.implementEql(@This(), lhs, rhs);
         }
@@ -1266,6 +1348,19 @@ pub enum MediaFeatureValue {
             .ratio => |r| MediaFeatureValue{ ratio: r },
             .ident => |i| MediaFeatureValue{ ident: i },
             .env => |e| MediaFeatureValue{ env: e.deepClone(allocator) },
+        };
+    }
+
+    fn cloneWithSrcAndDstImportRecords(allocator: std.mem.Allocator, src: *const bun.BabyList(bun.ImportRecord), dst: *bun.BabyList(bun.ImportRecord)): MediaFeatureValue {
+        return switch (_) {
+            .length => |l| MediaFeatureValue{ length: l.deepClone(allocator) },
+            .number => |n| MediaFeatureValue{ number: n },
+            .integer => |i| MediaFeatureValue{ integer: i },
+            .boolean => |b| MediaFeatureValue{ boolean: b },
+            .resolution => |r| MediaFeatureValue{ resolution: r },
+            .ratio => |r| MediaFeatureValue{ ratio: r },
+            .ident => |i| MediaFeatureValue{ ident: i },
+            .env => |e| MediaFeatureValue{ env: e.cloneWithImportRecords(allocator, src, dst) },
         };
     }
 

@@ -1036,7 +1036,7 @@ pub struct CronJob {
     fn computeNextTimespec(*_): bun.timespec? {
         // Cron occurrences are calendar-based (real epoch); the timer heap is
         // monotonic. Anchor both to real time so fake timers don't half-apply.
-        const now_ms: f64 = @floatFromInt(std.time.milliTimestamp());
+        const now_ms: f64 = @floatFromInt(bun.timespec.now(.force_real_time).ms());
         // The monotonic timer can fire fractionally before the wall-clock target
         // (clock skew / NTP step); floor next() at the prior target so it can't
         // recompute the same minute and double-fire.

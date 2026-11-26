@@ -18,11 +18,11 @@ type HistogramWeak = jsc.Weak(void);
         .next = .epoch,
         .tag = .EventLoopDelayMonitor,
     },
-    resolution_ms: i32 = 10,
+    resolution_ms: i64 = 10,
     last_fire_ns: u64 = 0,
     enabled: bool = false,
 
-    pub fn enable(*_, vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) {
+    pub fn enable(*_, vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i64) {
         _.disable();
         _.histogram = HistogramWeak.createPassive(histogram, vm.global);
         _.resolution_ms = resolution_ms;
@@ -31,7 +31,7 @@ type HistogramWeak = jsc.Weak(void);
 
         // Schedule timer
         const now = bun.timespec.now(.force_real_time);
-        _.event_loop_timer.next = now.addMs(@intCast(resolution_ms));
+        _.event_loop_timer.next = now.addMs(resolution_ms);
         * = vm.timer.insert(&_.event_loop_timer);
     }
 
@@ -59,7 +59,7 @@ type HistogramWeak = jsc.Weak(void);
         if (histogram := _.histogram.get()) {
             const now_ns = now.ns();
             if (_.last_fire_ns > 0) {
-                const expected_ns = @as(u64, @intCast(_.resolution_ms)) * 1_000_000;
+                const expected_ns = @as(u64, @intCast(_.resolution_ms)) *| 1_000_000;
                 const actual_ns = now_ns - _.last_fire_ns;
 
                 if (actual_ns > expected_ns) {
@@ -71,7 +71,7 @@ type HistogramWeak = jsc.Weak(void);
             _.last_fire_ns = now_ns;
 
             // Reschedule
-            _.event_loop_timer.next = now.addMs(@intCast(_.resolution_ms));
+            _.event_loop_timer.next = now.addMs(_.resolution_ms);
             * = vm.timer.insert(&_.event_loop_timer);
         } else {
             _.disable();
@@ -80,7 +80,7 @@ type HistogramWeak = jsc.Weak(void);
 }
 
 // Export functions for C++
-@export @c fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i32) {
+@export @c fn Timer_enableEventLoopDelayMonitoring(vm: *VirtualMachine, histogram: jsc.JSValue, resolution_ms: i64) {
     vm.timer.event_loop_delay.enable(vm, histogram, resolution_ms);
 }
 

@@ -542,12 +542,6 @@ pub struct TranspilerJobInternal {
                 import_record.flags.is_external_without_side_effects = true;
                 continue;
             }
-
-            if (strings.hasPrefixComptime(import_record.path.text, "bun:")) {
-                import_record.path = Fs.Path.init(import_record.path.text["bun:".len..]);
-                import_record.path.namespace = "bun";
-                import_record.flags.is_external_without_side_effects = true;
-            }
         }
 
         if (source_code_printer == null) {

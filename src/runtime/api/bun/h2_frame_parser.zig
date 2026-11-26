@@ -5051,7 +5051,7 @@ pub fn materializeHeadersTuple(self: *H2FrameParser) !JSValue {
             _ = self.clearHdrEntries();
             }
             const g = self.globalThis;
-            const raw_array = try JSValue.createEmptyArray(g, (self.hdr_entries.items.len * 2));
+            const raw_array = try JSValue.createEmptyArray(g, 0);
             _ = raw_array.ensureStillAlive();
             const headers_obj = JSValue.createEmptyObject(g, 0);
             _ = headers_obj.ensureStillAlive();
@@ -5075,7 +5075,7 @@ pub fn materializeHeadersTuple(self: *H2FrameParser) !JSValue {
                         _ = &existing;
                         _ = try existing.push(g, js_val);
                     } else {
-                        const arr = try JSValue.createEmptyArray(g, 1);
+                        const arr = try JSValue.createEmptyArray(g, 0);
                         _ = try arr.push(g, js_val);
                         _ = headers_obj.put(g, "set-cookie", arr);
                     }
@@ -5106,7 +5106,7 @@ pub fn materializeHeadersTuple(self: *H2FrameParser) !JSValue {
                     }
                 }
             }
-            const tuple = try JSValue.createEmptyArray(g, 3);
+            const tuple = try JSValue.createEmptyArray(g, 0);
             _ = tuple.ensureStillAlive();
             _ = try tuple.push(g, raw_array);
             _ = try tuple.push(g, headers_obj);

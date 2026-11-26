@@ -340,6 +340,9 @@ static fn sourceFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue, this_val
             }
             return { owned: out[0..r.count] };
         }
+        if (std.mem.indexOfScalar(u8, s, 0) != null) {
+            return global.ERR(.INVALID_ARG_VALUE, "The argument 'path' must be a string, Uint8Array, or URL without null bytes", .{}).throw();
+        }
         return { path: bun.default_allocator.dupeZ(u8, s)? };
     }
     if (ab := value.asArrayBuffer(global)) {
@@ -551,11 +554,11 @@ fn pinForTask(this_value: jsc.JSValue, _: *jsc.JSGlobalObject): PinTaskError!Pip
             let len: usize = 0;
             return switch (JSC__JSValue__borrowBytesForOffThread(v, &ptr, &len)) {
                 0 => error.Detached,
-                1 => if (len == 0) error.Detached else PipelineTaskInput{ copied: bun.default_allocator.dupe(u8, ptr[0..len])? },
+                1 => if (len == 0) error.Detached else PipelineTaskInput{ copied: bun.default_allocator.dupe(u8, unsafe { ptr[0..len] })? },
                 2 => if (len == 0) blk: {
                     JSC__JSValue__unpinArrayBuffer(v);
                     break :blk error.Detached;
-                } else PipelineTaskInput{ bytes: ptr[0..len], pinned: v },
+                } else PipelineTaskInput{ bytes: unsafe { ptr[0..len] }, pinned: v },
                 else => unreachable,
             };
         },

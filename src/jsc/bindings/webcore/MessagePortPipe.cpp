@@ -126,6 +126,7 @@ void MessagePortPipe::drainAndDispatch(uint8_t side, ScriptExecutionContextIdent
     auto* globalObject = defaultGlobalObject(context->globalObject());
 
     ScriptExecutionContextIdentifier rescheduleCtx = 0;
+    port->beginDispatch();
     while (true) {
         std::optional<MessageWithMessagePorts> message;
         {
@@ -162,6 +163,7 @@ void MessagePortPipe::drainAndDispatch(uint8_t side, ScriptExecutionContextIdent
         if (globalObject->drainMicrotasks())
             break; // termination pending
     }
+    port->endDispatch();
 
     if (rescheduleCtx)
         scheduleDrain(side, rescheduleCtx);
@@ -212,6 +214,13 @@ void MessagePortPipe::detach(uint8_t side)
     // even if a new owner attach()es to a different context before it runs.
     // Messages remain queued for the next owner.
     s.state.fetch_and(~uint64_t(Attached | DrainScheduled), std::memory_order_acq_rel);
+}
+
+void MessagePortPipe::markClosed(uint8_t side)
+{
+    ASSERT(side < 2);
+    Locker locker { m_sides[side].lock };
+    m_sides[side].state.fetch_or(Closed, std::memory_order_acq_rel);
 }
 
 void MessagePortPipe::close(uint8_t side)

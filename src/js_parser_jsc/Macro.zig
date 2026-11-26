@@ -586,7 +586,12 @@ pub fn init(_: std.mem.Allocator, resolver: *Resolver, input_specifier: []const 
         resolver.opts.transform_options = old_transform_options;
         }
         _ = jsc.initialize(false);
-        var _vm = try JavaScript.VirtualMachine.init(.{ .allocator = default_allocator, .args = resolver.opts.transform_options, .log = log, .is_main_thread = false, .env_loader = env });
+        const macro_env_map = bun.handleOom(default_allocator.create(DotEnv.Map));
+        macro_env_map.* = DotEnv.Map.init(default_allocator);
+        const macro_env = bun.handleOom(default_allocator.create(DotEnv.Loader));
+        macro_env.* = DotEnv.Loader.init(macro_env_map, default_allocator);
+        macro_env.quiet = env.quiet;
+        var _vm = try JavaScript.VirtualMachine.init(.{ .allocator = default_allocator, .args = resolver.opts.transform_options, .log = log, .is_main_thread = false, .env_loader = macro_env });
         _ = &_vm;
         _ = _vm.enableMacroMode();
         _ = _vm.eventLoop().ensureWaker();

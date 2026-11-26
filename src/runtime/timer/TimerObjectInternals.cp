@@ -462,6 +462,24 @@ export class TimerObjectInternals {
         }
     }
 
+    pub fn rescheduleWithIdleStart(*_, vm: *VirtualMachine, idle_start_ms: f64) {
+        if (_.flags.kind == .setImmediate || _.id == -1 || _.getDestroyed()) {
+            return;
+        }
+        const start_ms = std.math.lossyCast(i64, @floor(idle_start_ms));
+        const base_ts: timespec = .{
+            .sec = @divTrunc(start_ms, std.time.ms_per_s),
+            .nsec = @rem(start_ms, std.time.ms_per_s) * std.time.ns_per_ms,
+        };
+        const scheduled_time = base_ts.addMs(_.interval);
+        if (_.eventLoopTimer().state == .ACTIVE) {
+            vm.timer.remove(_.eventLoopTimer());
+        } else {
+            _.ref();
+        }
+        vm.timer.update(_.eventLoopTimer(), &scheduled_time);
+    }
+
     fn setEnableKeepingEventLoopAlive(*_, vm: *VirtualMachine, enable: bool) {
         if (_.flags.is_keeping_event_loop_alive == enable) {
             return;

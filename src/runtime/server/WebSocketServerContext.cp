@@ -153,14 +153,14 @@ export @root struct WebSocketServerContext {
         .{ "disable", 0 },
         .{ "shared", uws.SHARED_DECOMPRESSOR },
         .{ "dedicated", uws.DEDICATED_DECOMPRESSOR },
-        .{ "3KB", uws.DEDICATED_COMPRESSOR_3KB },
-        .{ "4KB", uws.DEDICATED_COMPRESSOR_4KB },
-        .{ "8KB", uws.DEDICATED_COMPRESSOR_8KB },
-        .{ "16KB", uws.DEDICATED_COMPRESSOR_16KB },
-        .{ "32KB", uws.DEDICATED_COMPRESSOR_32KB },
-        .{ "64KB", uws.DEDICATED_COMPRESSOR_64KB },
-        .{ "128KB", uws.DEDICATED_COMPRESSOR_128KB },
-        .{ "256KB", uws.DEDICATED_COMPRESSOR_256KB },
+        .{ "3KB", uws.DEDICATED_DECOMPRESSOR_2KB },
+        .{ "4KB", uws.DEDICATED_DECOMPRESSOR_4KB },
+        .{ "8KB", uws.DEDICATED_DECOMPRESSOR_8KB },
+        .{ "16KB", uws.DEDICATED_DECOMPRESSOR_16KB },
+        .{ "32KB", uws.DEDICATED_DECOMPRESSOR_32KB },
+        .{ "64KB", uws.DEDICATED_DECOMPRESSOR_32KB },
+        .{ "128KB", uws.DEDICATED_DECOMPRESSOR_32KB },
+        .{ "256KB", uws.DEDICATED_DECOMPRESSOR_32KB },
     });
 
     pub static fn onCreate(globalObject: *jsc.JSGlobalObject, object: JSValue): bun.JSError!WebSocketServerContext {

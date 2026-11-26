@@ -594,7 +594,7 @@ pub struct FSWatcher {
                 * = listener.callWithGlobalThis(
                     _.globalThis,
                     &args,
-                ) catch _.globalThis.clearException();
+                ) catch err_val => _.globalThis.reportActiveExceptionAsUnhandled(err_val);
             }
         }
     }

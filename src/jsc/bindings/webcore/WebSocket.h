@@ -39,6 +39,7 @@
 #include <wtf/Lock.h>
 #include "FetchHeaders.h"
 #include "WebSocketErrorCode.h"
+#include <JavaScriptCore/Strong.h>
 
 namespace WebCore {
 class JSBlob;
@@ -310,6 +311,7 @@ private:
     explicit WebSocket(ScriptExecutionContext&, const String& url);
 
     EventTargetInterface eventTargetInterface() const final;
+    void dispatchEvent(Event&) final;
 
     void refEventTarget() final { ref(); }
     void derefEventTarget() final { deref(); }
@@ -359,6 +361,7 @@ private:
     bool m_dispatchedErrorEvent { false };
 
     NativeCallbacks m_native;
+    JSC::Strong<JSC::Unknown> m_asyncContext;
     // RefPtr<PendingActivity<WebSocket>> m_pendingActivity;
 };
 

@@ -5,7 +5,7 @@ pub fn toBeWithin(client: *Expect, globalThis: *JSGlobalObject, callFrame: *Call
     const _arguments = callFrame.arguments_old(2);
     const arguments = _arguments.ptr[0.._arguments.len];
 
-    if (arguments.len < 1) {
+    if (arguments.len < 2) {
         return globalThis.throwInvalidArguments("toBeWithin() requires 2 arguments", {});
     }
 

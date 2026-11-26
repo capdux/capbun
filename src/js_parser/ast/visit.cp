@@ -724,7 +724,9 @@ pub fn Visit(
                             let stmts = std.array_list.Managed(Stmt).fromOwnedSlice(p.allocator, constructor.func.body.stmts);
                             stmts.ensureUnusedCapacity(to_add) catch unreachable;
                             let class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
-                            class_body.ensureUnusedCapacity(to_add) catch unreachable;
+                            if (p.options.use_define_for_class_fields) {
+                                class_body.ensureUnusedCapacity(to_add) catch unreachable;
+                            }
                             let j: usize = 0;
 
                             for (arg of constructor.func.args) {
@@ -744,15 +746,17 @@ pub fn Visit(
                                                 }, arg.binding.loc),
                                                 arg_ident,
                                             )) catch unreachable;
-                                            // O(N)
-                                            class_body.items.len += 1;
-                                            bun.copy(G.Property, class_body.items[j + 1 ..], class_body.items[j .. class_body.items.len - 1]);
-                                            // Copy the argument name symbol to prevent the class field declaration from being renamed
-                                            // but not the constructor argument.
-                                            const field_symbol_ref = p.declareSymbol(.other, arg.binding.loc, name) catch id.ref;
-                                            field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
-                                            const field_ident = p.newExpr(E.Identifier{ @"ref": field_symbol_ref }, arg.binding.loc);
-                                            class_body.items[j] = G.Property{ key: field_ident };
+                                            if (p.options.use_define_for_class_fields) {
+                                                // O(N)
+                                                class_body.items.len += 1;
+                                                bun.copy(G.Property, class_body.items[j + 1 ..], class_body.items[j .. class_body.items.len - 1]);
+                                                // Copy the argument name symbol to prevent the class field declaration from being renamed
+                                                // but not the constructor argument.
+                                                const field_symbol_ref = p.declareSymbol(.other, arg.binding.loc, name) catch id.ref;
+                                                field_symbol_ref.getSymbol(p.symbols.items).must_not_be_renamed = true;
+                                                const field_ident = p.newExpr(E.Identifier{ @"ref": field_symbol_ref }, arg.binding.loc);
+                                                class_body.items[j] = G.Property{ key: field_ident };
+                                            }
                                             j += 1;
                                         },
                                         else => {},
@@ -760,8 +764,133 @@ pub fn Visit(
                                 }
                             }
 
-                            cls.properties = class_body.items;
+                            if (p.options.use_define_for_class_fields) {
+                                cls.properties = class_body.items;
+                            }
                             constructor.func.body.stmts = stmts.items;
+                        }
+                    }
+
+                    if (!p.options.use_define_for_class_fields) {
+                        let has_computed_non_literal = false;
+                        let lower_count: usize = 0;
+                        let init_count: usize = 0;
+                        for (prop of cls.properties) {
+                            if (prop.kind == .normal && !prop.flags.contains(.is_static) &&
+                                !(cls.should_lower_standard_decorators && prop.ts_decorators.len > 0))
+                            {
+                                if (key_expr := prop.key) {
+                                    if (key_expr.data != .e_private_identifier) {
+                                        if (prop.flags.contains(.is_computed) &&
+                                            key_expr.data != .e_string && key_expr.data != .e_number && key_expr.data != .e_big_int)
+                                        {
+                                            has_computed_non_literal = true;
+                                            break;
+                                        }
+                                        lower_count += 1;
+                                        if (prop.initializer != null) {
+                                            init_count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!has_computed_non_literal && lower_count > 0) {
+                            if (init_count > 0 && constructor_function == null) {
+                                let args_slice: []G.Arg = p.allocator.alloc(G.Arg, 0) catch unreachable;
+                                let body_stmts = std.array_list.Managed(Stmt).init(p.allocator);
+                                if (cls.@"extends" != null) {
+                                    const args_ref = p.newSymbol(.other, "args") catch unreachable;
+                                    p.recordDeclaredSymbol(args_ref) catch unreachable;
+                                    let args_arr = p.allocator.alloc(G.Arg, 1) catch unreachable;
+                                    args_arr[0] = G.Arg{
+                                        binding: p.b(B.Identifier{ @"ref": args_ref }, cls.class_keyword.loc),
+                                    };
+                                    args_slice = args_arr;
+                                    let super_args = p.allocator.alloc(Expr, 1) catch unreachable;
+                                    super_args[0] = p.newExpr(E.Spread{
+                                        value: p.newExpr(E.Identifier{ @"ref": args_ref }, cls.class_keyword.loc),
+                                    }, cls.class_keyword.loc);
+                                    body_stmts.append(p.s(S.SExpr{
+                                        value: p.newExpr(E.Call{
+                                            target: p.newExpr(E.Super{}, cls.class_keyword.loc),
+                                            args: ExprNodeList.fromOwnedSlice(super_args),
+                                        }, cls.class_keyword.loc),
+                                    }, cls.class_keyword.loc)) catch unreachable;
+                                }
+                                const ctor_func = p.newExpr(E.Function{
+                                    func: {
+                                        args: args_slice,
+                                        body: {
+                                            loc: cls.class_keyword.loc,
+                                            stmts: body_stmts.items,
+                                        },
+                                    },
+                                }, cls.class_keyword.loc);
+                                ctor_func.data.e_function.func.flags.setPresent(.has_rest_arg, cls.@"extends" != null);
+                                constructor_function = ctor_func.data.e_function;
+                                let class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
+                                class_body.append(G.Property{
+                                    kind: .normal,
+                                    key: p.newExpr(E.String{ data: "constructor" }, cls.class_keyword.loc),
+                                    value: ctor_func,
+                                }) catch unreachable;
+                                cls.properties = class_body.items;
+                            }
+
+                            let new_props = std.array_list.Managed(G.Property).initCapacity(p.allocator, cls.properties.len - lower_count) catch unreachable;
+                            let assign_stmts = std.array_list.Managed(Stmt).initCapacity(p.allocator, init_count) catch unreachable;
+                            for (prop of cls.properties) {
+                                if (prop.kind == .normal && !prop.flags.contains(.is_static) &&
+                                    !(cls.should_lower_standard_decorators && prop.ts_decorators.len > 0))
+                                {
+                                    if (key_expr := prop.key) {
+                                        if (key_expr.data != .e_private_identifier) {
+                                            if (init_val := prop.initializer) {
+                                                const this_expr = p.newExpr(E.This{}, key_expr.loc);
+                                                const lhs = if (prop.flags.contains(.is_computed))
+                                                    p.newExpr(E.Index{ target: this_expr, index: key_expr }, key_expr.loc)
+                                                else if (key_expr.data == .e_string)
+                                                    p.newExpr(E.Dot{ target: this_expr, name: key_expr.data.e_string.slice(p.allocator), name_loc: key_expr.loc }, key_expr.loc)
+                                                else if (key_expr.data == .e_number || key_expr.data == .e_big_int)
+                                                    p.newExpr(E.Index{ target: this_expr, index: key_expr }, key_expr.loc)
+                                                else
+                                                    p.newExpr(E.Dot{ target: this_expr, name: p.loadNameFromRef(key_expr.data.e_identifier.ref), name_loc: key_expr.loc }, key_expr.loc);
+                                                assign_stmts.append(Stmt.assign(lhs, init_val)) catch unreachable;
+                                            }
+                                            continue;
+                                        }
+                                    }
+                                }
+                                new_props.append(prop) catch unreachable;
+                            }
+                            cls.properties = new_props.items;
+
+                            if (assign_stmts.items.len > 0) {
+                                if (ctor := constructor_function) {
+                                    let insert_at: usize = 0;
+                                    if (cls.@"extends" != null) {
+                                        let si: usize = 0;
+                                        for (stmt of ctor.func.body.stmts) {
+                                            if (stmt.data == .s_expr && stmt.data.s_expr.value.data == .e_call && stmt.data.s_expr.value.data.e_call.target.data == .e_super) {
+                                                insert_at = si + 1;
+                                                break;
+                                            }
+                                            si += 1;
+                                        }
+                                    }
+                                    // Also after parameter property assignments (`this.x = x;`)
+                                    let param_prop_count: usize = 0;
+                                    for (arg of ctor.func.args) {
+                                        param_prop_count += @intFromBool(arg.is_typescript_ctor_field && arg.binding.data == .b_identifier);
+                                    }
+                                    insert_at = @min(insert_at + param_prop_count, ctor.func.body.stmts.len);
+                                    let stmts = std.array_list.Managed(Stmt).fromOwnedSlice(p.allocator, ctor.func.body.stmts);
+                                    stmts.insertSlice(insert_at, assign_stmts.items) catch unreachable;
+                                    ctor.func.body.stmts = stmts.items;
+                                }
+                            }
                         }
                     }
                 }

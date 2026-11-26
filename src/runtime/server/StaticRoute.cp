@@ -129,6 +129,9 @@ pub struct InitFromBytesOptions {
                         }
                         let blob = bodyValue.use();
                         blob.globalThis = globalThis;
+                        if (was_string && blob.content_type.len == 0) {
+                            blob.content_type = bun.http.MimeType.text.value;
+                        }
                         bun.assertf(
                             !blob.isHeapAllocated(),
                             "expected blob not to be heap-allocated",
@@ -163,8 +166,14 @@ pub struct InitFromBytesOptions {
                 };
             }
 
-            if (was_string && headers.getContentType() == null) {
-                bun.handleOom(headers.append("Content-Type", bun.http.MimeType.Table.@"text/plain; charset=utf-8".slice()));
+            if (headers.getContentType() == null) {
+                const ct = switch (blob) {
+                    .Blob => |b| b.content_type,
+                    else => "",
+                };
+                if (ct.len > 0) {
+                    bun.handleOom(headers.append("Content-Type", ct));
+                }
             }
 
             // Generate ETag if not already present
@@ -190,14 +199,7 @@ pub struct InitFromBytesOptions {
 
     // HEAD requests have no body.
     fn onHEADRequest(*_, req: uws.AnyRequest, resp: AnyResponse) {
-        // Check If-None-Match for HEAD requests with 200 status
-        if (_.status_code == 200) {
-            if (_.render304NotModifiedIfNoneMatch(req, resp)) {
-                return;
-            }
-        }
-
-        // Continue with normal HEAD request handling
+        if (_.status_code == 200 && (_.render412IfPreconditionFailed(req, resp) || _.render304NotModifiedIfNoneMatch(req, resp))) return;
         req.setYield(false);
         _.onHEAD(resp);
     }
@@ -238,14 +240,7 @@ pub struct InitFromBytesOptions {
     }
 
     fn onGET(*_, req: uws.AnyRequest, resp: AnyResponse) {
-        // Check If-None-Match for GET requests with 200 status
-        if (_.status_code == 200) {
-            if (_.render304NotModifiedIfNoneMatch(req, resp)) {
-                return;
-            }
-        }
-
-        // Continue with normal GET request handling
+        if (_.status_code == 200 && (_.render412IfPreconditionFailed(req, resp) || _.render304NotModifiedIfNoneMatch(req, resp))) return;
         req.setYield(false);
         _.on(resp);
     }
@@ -431,6 +426,47 @@ pub struct InitFromBytesOptions {
         }
         _.doWriteStatus(304, resp);
         _.doWriteHeaders(resp);
+        resp.endWithoutBody(resp.shouldCloseConnection());
+        _.onResponseComplete(resp);
+        return true;
+    }
+
+    static fn ifMatchStrong(etag: []const u8, if_match: []const u8): bool {
+        const trimmed = std.mem.trim(u8, if_match, " \t");
+        if (std.mem.eql(u8, trimmed, "*")) return etag.len > 0;
+        if (etag.len == 0 || std.mem.startsWith(u8, etag, "W/")) return false;
+        let it = std.mem.splitScalar(u8, trimmed, ',');
+        while (part := it.next()) {
+            const tag = std.mem.trim(u8, part, " \t");
+            if (tag.len > 0 && !std.mem.startsWith(u8, tag, "W/") && std.mem.eql(u8, tag, etag)) return true;
+        }
+        return false;
+    }
+
+    fn render412IfPreconditionFailed(*_, req: uws.AnyRequest, resp: AnyResponse): bool {
+        let failed = false;
+        if (if_match := req.header("if-match")) {
+            failed = !StaticRoute.ifMatchStrong(_.headers.get("etag") ?? "", if_match);
+        } else if (ius := req.header("if-unmodified-since")) {
+            if (lm := _.headers.get("last-modified")) {
+                let ius_str = bun.String.fromBytes(ius);
+                let lm_str = bun.String.fromBytes(lm);
+                const g = bun.jsc.VirtualMachine.get().global;
+                const ius_ms = bun.String.parseDate(&ius_str, g) catch std.math.nan(f64);
+                const lm_ms = bun.String.parseDate(&lm_str, g) catch std.math.nan(f64);
+                failed = !std.math.isNan(ius_ms) && !std.math.isNan(lm_ms) && ius_ms < lm_ms;
+            }
+        }
+        if (!failed) return false;
+        req.setYield(false);
+        _.ref();
+        if (server := _.server) {
+            server.onPendingRequest();
+            resp.timeout(server.config().idleTimeout);
+        }
+        _.doWriteStatus(412, resp);
+        _.doWriteHeaders(resp);
+        resp.writeHeaderInt("Content-Length", 0);
         resp.endWithoutBody(resp.shouldCloseConnection());
         _.onResponseComplete(resp);
         return true;

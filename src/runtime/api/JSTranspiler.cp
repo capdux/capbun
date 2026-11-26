@@ -690,6 +690,7 @@ pub struct TransformTask {
             replace_exports: _.replace_exports,
             experimental_decorators: if (_.tsconfig != null) _.tsconfig.?.experimental_decorators else false,
             emit_decorator_metadata: if (_.tsconfig != null) _.tsconfig.?.emit_decorator_metadata else false,
+            use_define_for_class_fields: if (_.tsconfig != null) (_.tsconfig.?.use_define_for_class_fields ?? true) else true,
         };
 
         const parse_result_opt = _.transpiler.parse(parse_options, null);
@@ -886,6 +887,7 @@ fn getParseResult(client: *JSTranspiler, allocator: std.mem.Allocator, code: []c
         macro_js_ctx: macro_js_ctx,
         experimental_decorators: if (client.config.tsconfig != null) client.config.tsconfig.?.experimental_decorators else false,
         emit_decorator_metadata: if (client.config.tsconfig != null) client.config.tsconfig.?.emit_decorator_metadata else false,
+        use_define_for_class_fields: if (client.config.tsconfig != null) (client.config.tsconfig.?.use_define_for_class_fields ?? true) else true,
     };
 
     return client.transpiler.parse(parse_options, null);

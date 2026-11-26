@@ -1524,7 +1524,7 @@ pub struct Expect {
 
         if (arg.isString()) {
             const arg_str = arg.toBunString(globalThis)?;
-            const error_value = arg_str.toErrorInstance(globalThis);
+            const error_value = if (arg_str.isEmpty()) ZigString.Empty.toErrorInstance(globalThis) else arg_str.toErrorInstance(globalThis);
             error_value.put(globalThis, ZigString.static("name"), bun.String.init("UnreachableError").toJS(globalThis)?);
             return globalThis.throwValue(error_value);
         }

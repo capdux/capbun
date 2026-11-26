@@ -236,8 +236,13 @@ bool EventEmitter::innerInvokeEventListeners(const Identifier& eventType, Simple
         JSC::EnsureStillAliveScope jsFunctionProtector(jsFunction);
 
         // Do this before invocation to avoid reentrancy issues.
-        if (registeredListener->isOnce())
-            removeListener(eventType, callback);
+        if (registeredListener->isOnce()) {
+            if (auto* data = eventTargetData(); data && data->eventListenerMap.removeRegistered(eventType, *registeredListener)) {
+                eventListenersDidChange();
+                if (this->onDidChangeListener)
+                    this->onDidChangeListener(*this, eventType, false);
+            }
+        }
 
         if (!jsFunction) [[unlikely]]
             continue;

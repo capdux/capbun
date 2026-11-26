@@ -31,7 +31,7 @@ export function initializeDecompressionStream(this, format) {
 
   const kDefaultHighWaterMark = 65536;
   const collectAll = highWaterMark === Infinity;
-  const outChunkSize = collectAll ? kDefaultHighWaterMark : Math.max(64, Math.min(highWaterMark, kDefaultHighWaterMark));
+  const outChunkSize = collectAll ? kDefaultHighWaterMark : Math.max(64, highWaterMark);
 
   const isBrotli = format === "brotli";
   const isZstd = format === "zstd";
@@ -139,6 +139,16 @@ export function initializeDecompressionStream(this, format) {
     }
   }
 
+  function toTypeError(e) {
+    if (e instanceof TypeError) return e;
+    const err = new TypeError(e?.message ?? String(e), { cause: e });
+    if (e && typeof e === "object") {
+      if ("code" in e) err.code = e.code;
+      if ("errno" in e) err.errno = e.errno;
+    }
+    return err;
+  }
+
   const startAlgorithm = () => Promise.$resolve();
   const transformAlgorithm = async chunk => {
     let input;
@@ -155,9 +165,10 @@ export function initializeDecompressionStream(this, format) {
     try {
       await runWrite(flushFlag, input);
     } catch (e) {
+      const err = toTypeError(e);
       closeHandle();
-      closedCapability.reject.$call(undefined, e);
-      throw e;
+      closedCapability.reject.$call(undefined, err);
+      throw err;
     }
   };
   const flushAlgorithm = async () => {
@@ -166,9 +177,10 @@ export function initializeDecompressionStream(this, format) {
       closeHandle();
       closedCapability.resolve.$call();
     } catch (e) {
+      const err = toTypeError(e);
       closeHandle();
-      closedCapability.reject.$call(undefined, e);
-      throw e;
+      closedCapability.reject.$call(undefined, err);
+      throw err;
     }
   };
 
@@ -189,22 +201,22 @@ export function initializeDecompressionStream(this, format) {
     closedCapability.reject.$call(undefined, e);
   };
 
-  $putByIdDirectPrivate(this, "readable", $getByIdDirectPrivate(transform, "readable"));
-  $putByIdDirectPrivate(this, "writable", writable);
+  $putByIdDirectPrivate(this, "decompressionStreamReadable", $getByIdDirectPrivate(transform, "readable"));
+  $putByIdDirectPrivate(this, "decompressionStreamWritable", writable);
 
   return this;
 }
 
 $getter;
 export function readable(this) {
-  const r = $getByIdDirectPrivate(this, "readable");
+  const r = $getByIdDirectPrivate(this, "decompressionStreamReadable");
   if (!r) throw $makeGetterTypeError("DecompressionStream", "readable");
   return r;
 }
 
 $getter;
 export function writable(this) {
-  const w = $getByIdDirectPrivate(this, "writable");
+  const w = $getByIdDirectPrivate(this, "decompressionStreamWritable");
   if (!w) throw $makeGetterTypeError("DecompressionStream", "writable");
   return w;
 }

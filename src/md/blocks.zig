@@ -493,6 +493,9 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                         off = (off + 1);
                     }
                     line.beg = off;
+                    if (((off >= p.size) or helpers.isNewline(p.text[@as(usize, @intCast(off))]))) {
+                        line.type = .blank;
+                    }
                 }
             }
             break;

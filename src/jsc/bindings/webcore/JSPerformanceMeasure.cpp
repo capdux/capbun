@@ -28,14 +28,18 @@
 #include "JSDOMBinding.h"
 #include "JSDOMConstructorNotConstructable.h"
 #include "JSDOMConvertAny.h"
+#include "JSDOMConvertNumbers.h"
+#include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObjectInlines.h"
+#include "JSDOMOperation.h"
 #include "JSDOMWrapperCache.h"
 #include "ScriptExecutionContext.h"
 #include "WebCoreJSClientData.h"
 #include <JavaScriptCore/HeapAnalyzer.h>
 #include <JavaScriptCore/JSCInlines.h>
 #include <JavaScriptCore/JSDestructibleObjectHeapCellType.h>
+#include <JavaScriptCore/ObjectConstructor.h>
 #include <JavaScriptCore/SlotVisitorMacros.h>
 #include <JavaScriptCore/SubspaceInlines.h>
 #include <wtf/GetPtr.h>
@@ -44,6 +48,10 @@
 
 namespace WebCore {
 using namespace JSC;
+
+// Functions
+
+static JSC_DECLARE_HOST_FUNCTION(jsPerformanceMeasurePrototypeFunction_toJSON);
 
 // Attributes
 
@@ -105,6 +113,7 @@ template<> void JSPerformanceMeasureDOMConstructor::initializeProperties(VM& vm,
 static const HashTableValue JSPerformanceMeasurePrototypeTableValues[] = {
     { "constructor"_s, static_cast<unsigned>(PropertyAttribute::DontEnum), NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceMeasureConstructor, 0 } },
     { "detail"_s, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor | JSC::PropertyAttribute::DOMAttribute, NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceMeasure_detail, 0 } },
+    { "toJSON"_s, static_cast<unsigned>(JSC::PropertyAttribute::Function | JSC::PropertyAttribute::DontEnum), NoIntrinsic, { HashTableValue::NativeFunctionType, jsPerformanceMeasurePrototypeFunction_toJSON, 0 } },
 };
 
 const ClassInfo JSPerformanceMeasurePrototype::s_info = { "PerformanceMeasure"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSPerformanceMeasurePrototype) };
@@ -168,6 +177,35 @@ static inline JSValue jsPerformanceMeasure_detailGetter(JSGlobalObject& lexicalG
 JSC_DEFINE_CUSTOM_GETTER(jsPerformanceMeasure_detail, (JSGlobalObject * lexicalGlobalObject, EncodedJSValue thisValue, PropertyName attributeName))
 {
     return IDLAttribute<JSPerformanceMeasure>::get<jsPerformanceMeasure_detailGetter, CastedThisErrorBehavior::Assert>(*lexicalGlobalObject, thisValue, attributeName);
+}
+
+static inline EncodedJSValue jsPerformanceMeasurePrototypeFunction_toJSONBody(JSGlobalObject* lexicalGlobalObject, CallFrame*, JSPerformanceMeasure* castedThis)
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto& impl = castedThis->wrapped();
+    auto* result = constructEmptyObject(lexicalGlobalObject);
+    auto nameValue = toJS<IDLDOMString>(*lexicalGlobalObject, throwScope, impl.name());
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, vm.propertyNames->name, nameValue);
+    auto entryTypeValue = toJS<IDLDOMString>(*lexicalGlobalObject, throwScope, "measure"_s);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "entryType"_s), entryTypeValue);
+    auto startTimeValue = toJS<IDLDouble>(*lexicalGlobalObject, throwScope, impl.startTime());
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "startTime"_s), startTimeValue);
+    auto durationValue = toJS<IDLDouble>(*lexicalGlobalObject, throwScope, impl.duration());
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "duration"_s), durationValue);
+    auto detailValue = jsPerformanceMeasure_detailGetter(*lexicalGlobalObject, *castedThis);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "detail"_s), detailValue);
+    return JSValue::encode(result);
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsPerformanceMeasurePrototypeFunction_toJSON, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
+{
+    return IDLOperation<JSPerformanceMeasure>::call<jsPerformanceMeasurePrototypeFunction_toJSONBody>(*lexicalGlobalObject, *callFrame, "toJSON");
 }
 
 JSC::GCClient::IsoSubspace* JSPerformanceMeasure::subspaceForImpl(JSC::VM& vm)

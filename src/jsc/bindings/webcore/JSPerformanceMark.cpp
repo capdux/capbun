@@ -30,9 +30,11 @@
 #include "JSDOMConvertAny.h"
 #include "JSDOMConvertDictionary.h"
 #include "JSDOMConvertInterface.h"
+#include "JSDOMConvertNumbers.h"
 #include "JSDOMConvertStrings.h"
 #include "JSDOMExceptionHandling.h"
 #include "JSDOMGlobalObjectInlines.h"
+#include "JSDOMOperation.h"
 #include "JSDOMWrapperCache.h"
 #include "JSPerformanceMarkOptions.h"
 #include "ScriptExecutionContext.h"
@@ -40,6 +42,7 @@
 #include <JavaScriptCore/HeapAnalyzer.h>
 #include <JavaScriptCore/JSCInlines.h>
 #include <JavaScriptCore/JSDestructibleObjectHeapCellType.h>
+#include <JavaScriptCore/ObjectConstructor.h>
 #include <JavaScriptCore/SlotVisitorMacros.h>
 #include <JavaScriptCore/SubspaceInlines.h>
 #include <wtf/GetPtr.h>
@@ -48,6 +51,10 @@
 
 namespace WebCore {
 using namespace JSC;
+
+// Functions
+
+static JSC_DECLARE_HOST_FUNCTION(jsPerformanceMarkPrototypeFunction_toJSON);
 
 // Attributes
 
@@ -139,6 +146,7 @@ template<> void JSPerformanceMarkDOMConstructor::initializeProperties(VM& vm, JS
 static const HashTableValue JSPerformanceMarkPrototypeTableValues[] = {
     { "constructor"_s, static_cast<unsigned>(PropertyAttribute::DontEnum), NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceMarkConstructor, 0 } },
     { "detail"_s, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::CustomAccessor | JSC::PropertyAttribute::DOMAttribute, NoIntrinsic, { HashTableValue::GetterSetterType, jsPerformanceMark_detail, 0 } },
+    { "toJSON"_s, static_cast<unsigned>(JSC::PropertyAttribute::Function | JSC::PropertyAttribute::DontEnum), NoIntrinsic, { HashTableValue::NativeFunctionType, jsPerformanceMarkPrototypeFunction_toJSON, 0 } },
 };
 
 const ClassInfo JSPerformanceMarkPrototype::s_info = { "PerformanceMark"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSPerformanceMarkPrototype) };
@@ -202,6 +210,35 @@ static inline JSValue jsPerformanceMark_detailGetter(JSGlobalObject& lexicalGlob
 JSC_DEFINE_CUSTOM_GETTER(jsPerformanceMark_detail, (JSGlobalObject * lexicalGlobalObject, EncodedJSValue thisValue, PropertyName attributeName))
 {
     return IDLAttribute<JSPerformanceMark>::get<jsPerformanceMark_detailGetter, CastedThisErrorBehavior::Assert>(*lexicalGlobalObject, thisValue, attributeName);
+}
+
+static inline EncodedJSValue jsPerformanceMarkPrototypeFunction_toJSONBody(JSGlobalObject* lexicalGlobalObject, CallFrame*, JSPerformanceMark* castedThis)
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto& impl = castedThis->wrapped();
+    auto* result = constructEmptyObject(lexicalGlobalObject);
+    auto nameValue = toJS<IDLDOMString>(*lexicalGlobalObject, throwScope, impl.name());
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, vm.propertyNames->name, nameValue);
+    auto entryTypeValue = toJS<IDLDOMString>(*lexicalGlobalObject, throwScope, "mark"_s);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "entryType"_s), entryTypeValue);
+    auto startTimeValue = toJS<IDLDouble>(*lexicalGlobalObject, throwScope, impl.startTime());
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "startTime"_s), startTimeValue);
+    auto durationValue = toJS<IDLDouble>(*lexicalGlobalObject, throwScope, impl.duration());
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "duration"_s), durationValue);
+    auto detailValue = jsPerformanceMark_detailGetter(*lexicalGlobalObject, *castedThis);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    result->putDirect(vm, Identifier::fromString(vm, "detail"_s), detailValue);
+    return JSValue::encode(result);
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsPerformanceMarkPrototypeFunction_toJSON, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
+{
+    return IDLOperation<JSPerformanceMark>::call<jsPerformanceMarkPrototypeFunction_toJSONBody>(*lexicalGlobalObject, *callFrame, "toJSON");
 }
 
 JSC::GCClient::IsoSubspace* JSPerformanceMark::subspaceForImpl(JSC::VM& vm)

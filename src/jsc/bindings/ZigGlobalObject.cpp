@@ -323,6 +323,7 @@ extern "C" void JSCInitialize(const char* envp[], size_t envc, void (*onCrash)(c
             JSC::Options::heapGrowthMaxIncrease() = 2.0;
             JSC::Options::useAsyncStackTrace() = true;
             JSC::Options::useExplicitResourceManagement() = true;
+            JSC::Options::useTemporal() = true;
             JSC::dangerouslyOverrideJSCBytecodeCacheVersion(getWebKitBytecodeCacheVersion());
 
 #ifdef BUN_DEBUG
@@ -699,7 +700,7 @@ static bool isModuleEvaluated(JSC::AbstractModuleRecord* record)
     if (!record)
         return false;
     if (auto* cyclic = dynamicDowncast<JSC::CyclicModuleRecord>(record))
-        return cyclic->status() == JSC::CyclicModuleRecord::Status::Evaluated && !cyclic->evaluationError();
+        return (cyclic->status() == JSC::CyclicModuleRecord::Status::Evaluated || cyclic->status() == JSC::CyclicModuleRecord::Status::Evaluating) && !cyclic->evaluationError();
     // SyntheticModuleRecord is "evaluated" once linked (it has an environment).
     return record->moduleEnvironmentMayBeNull() != nullptr;
 }
@@ -1121,7 +1122,12 @@ JSC_DEFINE_CUSTOM_GETTER(globalOnMessage,
     (JSC::JSGlobalObject * lexicalGlobalObject, JSC::EncodedJSValue thisValue,
         JSC::PropertyName))
 {
-    Zig::GlobalObject* thisObject = uncheckedDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    auto* thisObject = dynamicDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    if (!thisObject) {
+        thisObject = dynamicDowncast<Zig::GlobalObject>(lexicalGlobalObject);
+        if (!thisObject)
+            return JSValue::encode(JSC::jsUndefined());
+    }
     return JSValue::encode(eventHandlerAttribute(thisObject->eventTarget(), eventNames().messageEvent, thisObject->world()));
 }
 
@@ -1129,7 +1135,12 @@ JSC_DEFINE_CUSTOM_GETTER(globalOnError,
     (JSC::JSGlobalObject * lexicalGlobalObject, JSC::EncodedJSValue thisValue,
         JSC::PropertyName))
 {
-    Zig::GlobalObject* thisObject = uncheckedDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    auto* thisObject = dynamicDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    if (!thisObject) {
+        thisObject = dynamicDowncast<Zig::GlobalObject>(lexicalGlobalObject);
+        if (!thisObject)
+            return JSValue::encode(JSC::jsUndefined());
+    }
     return JSValue::encode(eventHandlerAttribute(thisObject->eventTarget(), eventNames().errorEvent, thisObject->world()));
 }
 
@@ -1139,7 +1150,12 @@ JSC_DEFINE_CUSTOM_SETTER(setGlobalOnMessage,
 {
     auto& vm = JSC::getVM(lexicalGlobalObject);
     JSValue value = JSValue::decode(encodedValue);
-    auto* thisObject = uncheckedDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    auto* thisObject = dynamicDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    if (!thisObject) {
+        thisObject = dynamicDowncast<Zig::GlobalObject>(lexicalGlobalObject);
+        if (!thisObject)
+            return false;
+    }
     setEventHandlerAttribute<JSEventListener>(thisObject->eventTarget(), eventNames().messageEvent, value, *thisObject);
     vm.writeBarrier(thisObject, value);
     ensureStillAliveHere(value);
@@ -1152,11 +1168,41 @@ JSC_DEFINE_CUSTOM_SETTER(setGlobalOnError,
 {
     auto& vm = JSC::getVM(lexicalGlobalObject);
     JSValue value = JSValue::decode(encodedValue);
-    auto* thisObject = uncheckedDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    auto* thisObject = dynamicDowncast<Zig::GlobalObject>(JSValue::decode(thisValue));
+    if (!thisObject) {
+        thisObject = dynamicDowncast<Zig::GlobalObject>(lexicalGlobalObject);
+        if (!thisObject)
+            return false;
+    }
     setEventHandlerAttribute<JSEventListener>(thisObject->eventTarget(), eventNames().errorEvent, value, *thisObject);
     vm.writeBarrier(thisObject, value);
     ensureStillAliveHere(value);
     return true;
+}
+
+JSC_DEFINE_HOST_FUNCTION(navigatorUserAgentGetter, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame*))
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    return JSValue::encode(JSC::jsString(vm, WTF::String::fromUTF8(Bun__userAgent)));
+}
+
+JSC_DEFINE_HOST_FUNCTION(navigatorPlatformGetter, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame*))
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+#if OS(DARWIN)
+    return JSValue::encode(JSC::jsString(vm, String("MacIntel"_s)));
+#elif OS(WINDOWS)
+    return JSValue::encode(JSC::jsString(vm, String("Win32"_s)));
+#elif OS(LINUX)
+    return JSValue::encode(JSC::jsString(vm, String("Linux x86_64"_s)));
+#else
+    return JSValue::encode(JSC::jsEmptyString(vm));
+#endif
+}
+
+JSC_DEFINE_HOST_FUNCTION(navigatorHardwareConcurrencyGetter, (JSC::JSGlobalObject*, JSC::CallFrame*))
+{
+    return JSValue::encode(JSC::jsNumber(WTF::numberOfProcessorCores()));
 }
 
 WebCore::EventTarget& GlobalObject::eventTarget()
@@ -2203,28 +2249,22 @@ void GlobalObject::finishCreation(VM& vm)
 
     m_navigatorObject.initLater(
         [](const Initializer<JSObject>& init) {
-            int cpuCount = WTF::numberOfProcessorCores();
-
-            auto str = WTF::String::fromUTF8(Bun__userAgent);
             JSC::Identifier userAgentIdentifier = JSC::Identifier::fromString(init.vm, "userAgent"_s);
+            JSC::Identifier platformIdentifier = JSC::Identifier::fromString(init.vm, "platform"_s);
             JSC::Identifier hardwareConcurrencyIdentifier = JSC::Identifier::fromString(init.vm, "hardwareConcurrency"_s);
 
             JSC::JSObject* obj = JSC::constructEmptyObject(init.owner, init.owner->objectPrototype(), 4);
-            obj->putDirect(init.vm, userAgentIdentifier, JSC::jsString(init.vm, str));
+            obj->putDirectAccessor(init.owner, userAgentIdentifier,
+                JSC::GetterSetter::create(init.vm, init.owner, JSC::JSFunction::create(init.vm, init.owner, 0, "get userAgent"_s, navigatorUserAgentGetter, ImplementationVisibility::Public), nullptr),
+                JSC::PropertyAttribute::Accessor | 0);
             obj->putDirect(init.vm, init.vm.propertyNames->toStringTagSymbol,
                 jsNontrivialString(init.vm, "Navigator"_s), PropertyAttribute::DontEnum | PropertyAttribute::ReadOnly);
-
-// https://developer.mozilla.org/en-US/docs/Web/API/Navigator/platform
-// https://github.com/oven-sh/bun/issues/4588
-#if OS(DARWIN)
-            obj->putDirect(init.vm, JSC::Identifier::fromString(init.vm, "platform"_s), JSC::jsString(init.vm, String("MacIntel"_s)));
-#elif OS(WINDOWS)
-            obj->putDirect(init.vm, JSC::Identifier::fromString(init.vm, "platform"_s), JSC::jsString(init.vm, String("Win32"_s)));
-#elif OS(LINUX)
-            obj->putDirect(init.vm, JSC::Identifier::fromString(init.vm, "platform"_s), JSC::jsString(init.vm, String("Linux x86_64"_s)));
-#endif
-
-            obj->putDirect(init.vm, hardwareConcurrencyIdentifier, JSC::jsNumber(cpuCount));
+            obj->putDirectAccessor(init.owner, platformIdentifier,
+                JSC::GetterSetter::create(init.vm, init.owner, JSC::JSFunction::create(init.vm, init.owner, 0, "get platform"_s, navigatorPlatformGetter, ImplementationVisibility::Public), nullptr),
+                JSC::PropertyAttribute::Accessor | 0);
+            obj->putDirectAccessor(init.owner, hardwareConcurrencyIdentifier,
+                JSC::GetterSetter::create(init.vm, init.owner, JSC::JSFunction::create(init.vm, init.owner, 0, "get hardwareConcurrency"_s, navigatorHardwareConcurrencyGetter, ImplementationVisibility::Public), nullptr),
+                JSC::PropertyAttribute::Accessor | 0);
             init.set(obj);
         });
 

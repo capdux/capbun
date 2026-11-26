@@ -307,8 +307,10 @@ pub fn constructS3FileWithS3CredentialsAndOptions(
                         let str = file_type.toSlice(globalObject, default_allocator)?;
                         const _guard_str = DeinitGuard<jsc.ZigString.Slice>{ ptr: &str };
                         const slice = str.slice();
-                        if (!strings.isAllASCII(slice)) {
-                            break :inner;
+                        for (c of slice) {
+                            if (c < 0x20 || c >= 0x7f) {
+                                break :inner;
+                            }
                         }
                         blob.content_type_was_set = true;
                         if (entry := globalObject.bunVM().mimeType(str.slice())) {
@@ -352,8 +354,10 @@ pub fn constructS3FileWithS3Credentials(
                         let str = file_type.toSlice(globalObject, default_allocator)?;
                         const _guard_str = DeinitGuard<jsc.ZigString.Slice>{ ptr: &str };
                         const slice = str.slice();
-                        if (!strings.isAllASCII(slice)) {
-                            break :inner;
+                        for (c of slice) {
+                            if (c < 0x20 || c >= 0x7f) {
+                                break :inner;
+                            }
                         }
                         blob.content_type_was_set = true;
                         if (entry := globalObject.bunVM().mimeType(str.slice())) {

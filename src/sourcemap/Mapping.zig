@@ -402,12 +402,27 @@ pub fn getSourceCode(self: Lookup, base_filename: []const u8) ?bun.jsc.ZigString
                 return null;
             }
             const src_name = source_map.external_source_names[@as(usize, @intCast((if (comptime @typeInfo(@TypeOf(index)) == .@"enum") cp_cast_int(usize, @intFromEnum(index)) else cp_cast_int(usize, index))))];
-            const buf = bun.path_buffer_pool.get();
+            const base_dir = bun.path.dirname(base_filename, .auto);
+            const needed = (((base_dir.len + 1) + src_name.len) + 2);
+            const pool_buf = bun.path_buffer_pool.get();
             defer {
-            _ = bun.path_buffer_pool.put(buf);
+            _ = bun.path_buffer_pool.put(pool_buf);
             }
+            var heap_buf: ?[]u8 = null;
+            _ = &heap_buf;
+            defer {
+            if (heap_buf) |hb| {
+                _ = &hb;
+                _ = bun.default_allocator.free(hb);
+            }
+            }
+            const buf: []u8 = (if ((needed > pool_buf.len)) blk: {
+            const alloc_buf = (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.alloc(u8, needed)) catch |__ce_0| { _ = &__ce_0; return null; }); });
+            heap_buf = alloc_buf;
+            break :blk alloc_buf;
+} else pool_buf);
             const paths: [1][]const u8 = .{ src_name };
-            const normalized = bun.path.joinAbsStringBufZ(bun.path.dirname(base_filename, .auto), buf, (blk: {
+            const normalized = bun.path.joinAbsStringBufZ(base_dir, buf, (blk: {
             break :blk (&paths);
 
 }), .loose);
@@ -467,7 +482,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, estimated_mapping_
         defer if (!__mapping_guard_moved) { __mapping_guard_moved = true; const __T = @TypeOf(mapping_guard); if (@typeInfo(__T) == .optional) { if (mapping_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { mapping_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = mapping_guard; _drop_val.__cp_deinit(); } };
         if (estimated_mapping_count) |count| {
             _ = &count;
-            _ = (blk_catch_0: { break :blk_catch_0 ((mapping_guard.list.ensureTotalCapacity(allocator, count)) catch |__ce_0| { _ = &__ce_0; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{} } }; }); });
+            _ = (blk_catch_1: { break :blk_catch_1 ((mapping_guard.list.ensureTotalCapacity(allocator, count)) catch |__ce_1| { _ = &__ce_1; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{} } }; }); });
         }
         var generated = LineColumnOffset{ .lines = bun.Ordinal.start, .columns = bun.Ordinal.start };
         _ = &generated;
@@ -568,7 +583,7 @@ const c = remain[0];
                 if (options.allow_names) {
                     name_index = (name_index + (if (@typeInfo(@TypeOf(name_index_delta)) == .@"enum") @intFromEnum(name_index_delta) else name_index_delta.value));
                     if ((!has_names)) {
-                        _ = (blk_catch_1: { break :blk_catch_1 ((mapping_guard.list.ensureWithNames(allocator)) catch |__ce_1| { _ = &__ce_1; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((bytes.len - remain.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((bytes.len - remain.len))) else cp_cast_int(i32, (bytes.len - remain.len))) } } }; }); });
+                        _ = (blk_catch_2: { break :blk_catch_2 ((mapping_guard.list.ensureWithNames(allocator)) catch |__ce_2| { _ = &__ce_2; return ParseResult{ .fail = .{ .msg = "Out of memory", .err = error.OutOfMemory, .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((bytes.len - remain.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((bytes.len - remain.len))) else cp_cast_int(i32, (bytes.len - remain.len))) } } }; }); });
                     }
                     has_names = true;
                 }
@@ -588,10 +603,10 @@ else => {
 },
 }
             }
-            _ = (blk_catch_2: { break :blk_catch_2 ((mapping_guard.list.append(allocator, (blk: {
+            _ = (blk_catch_3: { break :blk_catch_3 ((mapping_guard.list.append(allocator, (blk: {
             break :blk (&.{ .generated = generated, .original = original, .source_index = source_index, .name_index = name_index });
 
-}))) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+}))) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
         }
         if ((needs_sort and options.sort)) {
             _ = mapping_guard.list.sort();

@@ -216,25 +216,25 @@ JSValue NodeVMSourceTextModule::createModuleRecord(JSGlobalObject* globalObject)
     const Identifier& hostDefinedImportTypeIdentifier = builtinNames.hostDefinedImportTypePublicName();
 
     WTF::Vector<ImportAttributesListNode*, 8> attributesNodes;
-    attributesNodes.reserveInitialCapacity(requests.size());
+    attributesNodes.resize(requests.size());
 
     for (StatementNode* statement = node->statements()->firstStatement(); statement; statement = statement->next()) {
-        // Assumption: module declarations occur here in the same order they occur in `requestedModules`.
         if (statement->isModuleDeclarationNode()) {
             ModuleDeclarationNode* moduleDeclaration = static_cast<ModuleDeclarationNode*>(statement);
             if (moduleDeclaration->isImportDeclarationNode()) {
                 ImportDeclarationNode* importDeclaration = static_cast<ImportDeclarationNode*>(moduleDeclaration);
-                ASSERT_WITH_MESSAGE(attributesNodes.size() < requests.size(), "More attributes nodes than requests");
-                ASSERT_WITH_MESSAGE(importDeclaration->moduleName()->moduleName().string().string() == requests.at(attributesNodes.size()).m_specifier.string(), "Module name mismatch");
-                attributesNodes.append(importDeclaration->attributesList());
-            } else if (moduleDeclaration->hasAttributesList()) {
-                // Necessary to make the indices of `attributesNodes` and `requests` match up
-                attributesNodes.append(nullptr);
+                if (ImportAttributesListNode* attrs = importDeclaration->attributesList()) {
+                    const auto& specifier = importDeclaration->moduleName()->moduleName().string();
+                    for (size_t idx = 0; idx < requests.size(); ++idx) {
+                        if (!attributesNodes[idx] && requests[idx].m_specifier.string() == specifier) {
+                            attributesNodes[idx] = attrs;
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
-
-    ASSERT_WITH_MESSAGE(attributesNodes.size() >= requests.size(), "Attributes node count doesn't match request count (%zu < %zu)", attributesNodes.size(), requests.size());
 
     for (unsigned i = 0; i < requests.size(); ++i) {
         const auto& request = requests[i];

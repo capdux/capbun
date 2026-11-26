@@ -20,6 +20,7 @@
 
 #include "config.h"
 #include "JSDOMURL.h"
+#include "ErrorCode.h"
 
 #include "ActiveDOMObject.h"
 #include "ExtendedDOMClientIsoSubspaces.h"
@@ -162,15 +163,23 @@ template<> EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSDOMURLDOMConstructor::const
     EnsureStillAliveScope argument1 = callFrame->argument(1);
     auto base = argument1.value().isUndefined() ? String() : convert<IDLUSVString>(*lexicalGlobalObject, argument1.value());
     RETURN_IF_EXCEPTION(throwScope, {});
-    auto object = base.isEmpty() ? DOMURL::create(WTF::move(url)) : DOMURL::create(WTF::move(url), WTF::move(base));
-    if constexpr (IsExceptionOr<decltype(object)>)
-        RETURN_IF_EXCEPTION(throwScope, {});
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<DOMURL>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    auto object = argument1.value().isUndefined() ? DOMURL::create(WTF::move(url)) : DOMURL::create(WTF::move(url), WTF::move(base));
+    if (object.hasException()) [[unlikely]] {
+        auto err = Bun::createError(lexicalGlobalObject, Bun::ErrorCode::ERR_INVALID_URL, "Invalid URL"_s);
+        err->putDirect(vm, vm.propertyNames->input, argument0.value());
+        if (!argument1.value().isUndefined())
+            err->putDirect(vm, Identifier::fromString(vm, "base"_s), argument1.value());
+        throwException(lexicalGlobalObject, throwScope, err);
+        return {};
+    }
     static_assert(TypeOrExceptionOrUnderlyingType<decltype(object)>::isRef);
     auto jsValue = toJSNewlyCreated<IDLInterface<DOMURL>>(*lexicalGlobalObject, *castedThis->globalObject(), throwScope, WTF::move(object));
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
-    setSubclassStructureIfNeeded<DOMURL>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (subclassStructure)
+        asObject(jsValue)->setStructure(vm, subclassStructure);
     auto* jsDOMURL = uncheckedDowncast<JSDOMURL>(jsValue.asCell());
     vm.heap.reportExtraMemoryAllocated(jsDOMURL, jsDOMURL->wrapped().memoryCostForGC());
     return JSValue::encode(jsValue);
@@ -229,11 +238,107 @@ static const HashTableValue JSDOMURLPrototypeTableValues[] = {
 
 const ClassInfo JSDOMURLPrototype::s_info = { "URL"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSDOMURLPrototype) };
 
+JSC_DEFINE_HOST_FUNCTION(jsDOMURLPrototype_inspectCustom, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame* callFrame))
+{
+    auto& vm = lexicalGlobalObject->vm();
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    auto* globalObject = defaultGlobalObject(lexicalGlobalObject);
+
+    auto* jsUrl = dynamicDowncast<JSDOMURL>(callFrame->thisValue());
+    if (!jsUrl) {
+        return Bun::ERR::INVALID_THIS(throwScope, lexicalGlobalObject, "URL"_s);
+    }
+
+    JSValue depthValue = callFrame->argument(0);
+    JSValue optionsValue = callFrame->argument(1);
+
+    auto depth = depthValue.toNumber(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    if (depth < 0) {
+        return JSValue::encode(jsNontrivialString(vm, "URL"_s));
+    }
+
+    if (!depthValue.isUndefinedOrNull()) {
+        depthValue = jsNumber(depth - 1);
+    }
+
+    JSObject* options = optionsValue.toObject(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    PropertyNameArrayBuilder optionsArray(vm, PropertyNameMode::StringsAndSymbols, PrivateSymbolMode::Exclude);
+    options->getPropertyNames(lexicalGlobalObject, optionsArray, DontEnumPropertiesMode::Exclude);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
+    JSObject* newOptions = constructEmptyObject(lexicalGlobalObject);
+    for (size_t i = 0; i < optionsArray.size(); i++) {
+        auto name = optionsArray[i];
+        JSValue value = options->get(lexicalGlobalObject, name);
+        RETURN_IF_EXCEPTION(throwScope, {});
+        newOptions->putDirect(vm, name, value, 0);
+        RETURN_IF_EXCEPTION(throwScope, {});
+    }
+
+    PutPropertySlot slot(newOptions);
+    newOptions->put(newOptions, lexicalGlobalObject, Identifier::fromString(vm, "depth"_s), depthValue, slot);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
+    auto& impl = jsUrl->wrapped();
+    JSObject* inputObj = constructEmptyObject(lexicalGlobalObject);
+    inputObj->putDirect(vm, Identifier::fromString(vm, "href"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.href()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "origin"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.origin()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "protocol"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.protocol()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "username"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.username()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "password"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.password()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "host"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.host()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "hostname"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.hostname()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "port"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.port()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "pathname"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.pathname()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    inputObj->putDirect(vm, Identifier::fromString(vm, "search"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.search()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+    JSValue searchParamsValue = jsUrl->m_searchParams.get();
+    if (!searchParamsValue) {
+        searchParamsValue = toJS<IDLInterface<URLSearchParams>>(*lexicalGlobalObject, *jsUrl->globalObject(), throwScope, impl.searchParams());
+        RETURN_IF_EXCEPTION(throwScope, {});
+        jsUrl->m_searchParams.set(vm, jsUrl, searchParamsValue);
+    }
+    inputObj->putDirect(vm, Identifier::fromString(vm, "searchParams"_s), searchParamsValue, 0);
+    inputObj->putDirect(vm, Identifier::fromString(vm, "hash"_s), toJS<IDLUSVString>(*lexicalGlobalObject, throwScope, impl.hash()), 0);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
+    JSFunction* utilInspect = globalObject->utilInspectFunction();
+    RETURN_IF_EXCEPTION(throwScope, {});
+    auto callData = JSC::getCallData(utilInspect);
+    MarkedArgumentBuffer arguments;
+    arguments.append(inputObj);
+    arguments.append(newOptions);
+
+    auto inspectResult = JSC::profiledCall(globalObject, ProfilingReason::API, utilInspect, callData, inputObj, arguments);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
+    auto* inspectString = inspectResult.toString(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
+    auto inspectStringView = inspectString->view(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
+    JSValue result = jsString(vm, makeString("URL "_s, inspectStringView.data));
+    return JSValue::encode(result);
+}
+
 void JSDOMURLPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSDOMURL::info(), JSDOMURLPrototypeTableValues, *this);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
+    putDirectNativeFunction(vm, this->globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsDOMURLPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, JSC::PropertyAttribute::ReadOnly | JSC::PropertyAttribute::DontDelete | 0);
 }
 
 const ClassInfo JSDOMURL::s_info = { "URL"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSDOMURL) };

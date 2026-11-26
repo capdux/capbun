@@ -1336,7 +1336,6 @@ class ChildProcess extends EventEmitter {
     var env = options[kBunEnv] || parseEnvPairs(options.envPairs) || process.env;
 
     const detachedOption = options.detached;
-    this.#encoding = options.encoding || undefined;
     this.#stdioOptions = bunStdio;
     const stdioCount = stdio.length;
     const hasSocketsToEagerlyLoad = stdioCount >= 3;
@@ -1509,6 +1508,10 @@ class ChildProcess extends EventEmitter {
 
   kill(sig?) {
     const signal = sig === 0 ? sig : convertToValidSignal(sig === undefined ? "SIGTERM" : sig);
+
+    if (this.exitCode !== null || this.signalCode !== null) {
+      return false;
+    }
 
     const handle = this.#handle;
     if (handle) {

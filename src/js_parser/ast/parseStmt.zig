@@ -270,7 +270,10 @@ const r = js_lexer.rangeOfIdentifier(p.source, stmt.loc);
             const is_identifier = (p.lexer.token == .t_identifier);
             const name = p.lexer.identifier;
             const expr = try p.parseExpr(.comma);
-            if (((((is_typescript_enabled and is_identifier) and ((p.lexer.token == .t_class) or (opts.ts_decorators != null))) and strings.eqlComptime(name, "abstract")) and (expr.data == .e_identifier))) {
+            if (((opts.ts_decorators != null) and (((((!is_identifier) or (!strings.eqlComptime(name, "abstract"))) or (expr.data != .e_identifier)) or (p.lexer.token != .t_class)) or p.lexer.has_newline_before))) {
+                _ = try p.lexer.expected(.t_class);
+            }
+            if ((((((is_typescript_enabled and is_identifier) and (p.lexer.token == .t_class)) and (!p.lexer.has_newline_before)) and strings.eqlComptime(name, "abstract")) and (expr.data == .e_identifier))) {
                 var stmtOpts = ParseStatementOptions{ .ts_decorators = opts.ts_decorators, .is_name_optional = true };
                 _ = &stmtOpts;
                 const stmt: Stmt = try p.parseClassStmt(p.lexer.loc(), (&stmtOpts));
@@ -1100,13 +1103,15 @@ if ((((!p.lexer.has_newline_before) and (opts.is_module_scope or opts.is_namespa
                         }
 },
 .ts_stmt_interface => {
-var stmtOpts = ParseStatementOptions{ .is_module_scope = opts.is_module_scope };
-                        _ = &stmtOpts;
-                        _ = try p.skipTypeScriptInterfaceStmt((&stmtOpts));
-                        return p.s(S.TypeScript, loc);
+if ((!p.lexer.has_newline_before)) {
+                            var stmtOpts = ParseStatementOptions{ .is_module_scope = opts.is_module_scope };
+                            _ = &stmtOpts;
+                            _ = try p.skipTypeScriptInterfaceStmt((&stmtOpts));
+                            return p.s(S.TypeScript, loc);
+                        }
 },
 .ts_stmt_abstract => {
-if (((p.lexer.token == .t_class) or (opts.ts_decorators != null))) {
+if (((!p.lexer.has_newline_before) and ((p.lexer.token == .t_class) or (opts.ts_decorators != null)))) {
                             return try p.parseClassStmt(p.lexer.loc(), opts);
                         }
 },
@@ -1120,51 +1125,63 @@ if (((opts.is_namespace_scope and opts.is_typescript_declare) and (p.lexer.token
                         }
 },
 .ts_stmt_declare => {
-opts.lexical_decl = .allow_all;
-                        opts.is_typescript_declare = true;
-                        if ((((opts.ts_decorators != null) and (p.lexer.token != .t_class)) and (!p.lexer.isContextualKeyword("abstract")))) {
-                            _ = try p.lexer.expected(.t_class);
-                        }
-                        if (p.lexer.isContextualKeyword("global")) {
-                            _ = try p.lexer.next();
-                            _ = try p.lexer.expect(.t_open_brace);
+if ((!p.lexer.has_newline_before)) {
+                            opts.lexical_decl = .allow_all;
+                            opts.is_typescript_declare = true;
+                            if ((((opts.ts_decorators != null) and (p.lexer.token != .t_class)) and (!p.lexer.isContextualKeyword("abstract")))) {
+                                _ = try p.lexer.expected(.t_class);
+                            }
+                            if (p.lexer.isContextualKeyword("global")) {
+                                _ = try p.lexer.next();
+                                _ = try p.lexer.expect(.t_open_brace);
+                                const scope_index = p.scopes_in_order.items.len;
+                                opts.ts_decorators = null;
+                                _ = try p.parseStmtsUpTo(.t_close_brace, opts);
+                                _ = try p.lexer.next();
+                                _ = p.discardScopesUpTo(scope_index);
+                                return p.s(S.TypeScript, loc);
+                            }
                             const scope_index = p.scopes_in_order.items.len;
-                            opts.ts_decorators = null;
-                            _ = try p.parseStmtsUpTo(.t_close_brace, opts);
-                            _ = try p.lexer.next();
-                            _ = p.discardScopesUpTo(scope_index);
-                            return p.s(S.TypeScript, loc);
-                        }
-                        const scope_index = p.scopes_in_order.items.len;
-                        const stmt = try p.parseStmt(opts);
-                        if (opts.ts_decorators) |decs| {
-                            _ = &decs;
-                            _ = p.discardScopesUpTo(decs.scope_index);
-                        } else {
-                            _ = p.discardScopesUpTo(scope_index);
-                        }
-                        if ((opts.is_namespace_scope and opts.is_export)) {
-                            var decls: G.Decl.List = .{};
-                            _ = &decls;
+                            const stmt = try p.parseStmt(opts);
                             switch (stmt.data) {
+.s_type_script, .s_function, .s_class, .s_enum, .s_local, .s_export_from, .s_export_clause, .s_export_default, .s_export_star => {
+
+},
+else => {
+const r = js_lexer.rangeOfIdentifier(p.source, stmt.loc);
+                            _ = ((p.log.addRangeErrorFmt(p.source, r, p.allocator, "Unexpected \"{s}\"", .{ p.source.textForRange(r) })) catch unreachable);
+                            return error.SyntaxError;
+},
+}
+                            if (opts.ts_decorators) |decs| {
+                                _ = &decs;
+                                _ = p.discardScopesUpTo(decs.scope_index);
+                            } else {
+                                _ = p.discardScopesUpTo(scope_index);
+                            }
+                            if ((opts.is_namespace_scope and opts.is_export)) {
+                                var decls: G.Decl.List = .{};
+                                _ = &decls;
+                                switch (stmt.data) {
 .s_local => |local| {
 var _decls = try ListManaged(G.Decl).initCapacity(p.allocator, local.decls.len);
-                            _ = &_decls;
-                            for (cp_iter_slice(local.decls.slice())) |decl| {
-                                _ = &decl;
-                                _ = try extractDeclsForBinding(decl.binding, (&_decls));
-                            }
-                            decls = .moveFromList((&_decls));
+                                _ = &_decls;
+                                for (cp_iter_slice(local.decls.slice())) |decl| {
+                                    _ = &decl;
+                                    _ = try extractDeclsForBinding(decl.binding, (&_decls));
+                                }
+                                decls = .moveFromList((&_decls));
 },
 else => {
 
 },
 }
-                            if ((decls.len > 0)) {
-                                return p.s(S.Local{ .kind = .k_var, .is_export = true, .decls = decls }, loc);
+                                if ((decls.len > 0)) {
+                                    return p.s(S.Local{ .kind = .k_var, .is_export = true, .decls = decls }, loc);
+                                }
                             }
+                            return p.s(S.TypeScript, loc);
                         }
-                        return p.s(S.TypeScript, loc);
 },
 }
                     }

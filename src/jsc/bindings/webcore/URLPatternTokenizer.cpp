@@ -28,6 +28,7 @@
 
 #include "ExceptionOr.h"
 #include "URLPatternParser.h"
+#include "VectorSizeLimit.h"
 #include <unicode/utf16.h>
 #include <wtf/text/MakeString.h>
 
@@ -67,22 +68,25 @@ void Tokenizer::seekNextCodePoint(size_t index)
 }
 
 // https://urlpattern.spec.whatwg.org/#add-a-token
-void Tokenizer::addToken(TokenType currentType, size_t nextPosition, size_t valuePosition, size_t valueLength)
+ExceptionOr<void> Tokenizer::addToken(TokenType currentType, size_t nextPosition, size_t valuePosition, size_t valueLength)
 {
+    if (m_tokenList.size() >= Bun::maxVectorSize<Token>())
+        return Exception { ExceptionCode::TypeError, "URLPattern constructor: Failed to create URLPattern (from input string)"_s };
     m_tokenList.append(Token { currentType, m_index, m_input.substring(valuePosition, valueLength) });
     m_index = nextPosition;
+    return {};
 }
 
 // https://urlpattern.spec.whatwg.org/#add-a-token-with-default-length
-void Tokenizer::addToken(TokenType currentType, size_t nextPosition, size_t valuePosition)
+ExceptionOr<void> Tokenizer::addToken(TokenType currentType, size_t nextPosition, size_t valuePosition)
 {
-    addToken(currentType, nextPosition, valuePosition, nextPosition - valuePosition);
+    return addToken(currentType, nextPosition, valuePosition, nextPosition - valuePosition);
 }
 
 // https://urlpattern.spec.whatwg.org/#add-a-token-with-default-position-and-length
-void Tokenizer::addToken(TokenType currentType)
+ExceptionOr<void> Tokenizer::addToken(TokenType currentType)
 {
-    addToken(currentType, m_nextIndex, m_index);
+    return addToken(currentType, m_nextIndex, m_index);
 }
 
 // https://urlpattern.spec.whatwg.org/#process-a-tokenizing-error
@@ -93,9 +97,7 @@ ExceptionOr<void> Tokenizer::processTokenizingError(size_t nextPosition, size_t 
 
     ASSERT(m_policy == TokenizePolicy::Lenient);
 
-    addToken(TokenType::InvalidChar, nextPosition, valuePosition);
-
-    return {};
+    return addToken(TokenType::InvalidChar, nextPosition, valuePosition);
 }
 
 Tokenizer::Tokenizer(StringView input, TokenizePolicy tokenizerPolicy)
@@ -116,35 +118,47 @@ ExceptionOr<Vector<Token>> Tokenizer::tokenize()
         seekNextCodePoint(m_index);
 
         if (m_codepoint == '*') {
-            addToken(TokenType::Asterisk);
+            auto addResult = addToken(TokenType::Asterisk);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
         if (m_codepoint == '+' || m_codepoint == '?') {
-            addToken(TokenType::OtherModifier);
+            auto addResult = addToken(TokenType::OtherModifier);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
         if (m_codepoint == '\\') {
             if (m_index == m_input.length() - 1) {
                 maybeException = processTokenizingError(m_nextIndex, m_index, "No character is provided after escape."_s);
+                if (m_policy == TokenizePolicy::Lenient && maybeException.hasException())
+                    return maybeException.releaseException();
                 continue;
             }
 
             auto escapedIndex = m_nextIndex;
             getNextCodePoint();
 
-            addToken(TokenType::EscapedChar, m_nextIndex, escapedIndex);
+            auto addResult = addToken(TokenType::EscapedChar, m_nextIndex, escapedIndex);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
         if (m_codepoint == '{') {
-            addToken(TokenType::Open);
+            auto addResult = addToken(TokenType::Open);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
         if (m_codepoint == '}') {
-            addToken(TokenType::Close);
+            auto addResult = addToken(TokenType::Close);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
@@ -168,7 +182,9 @@ ExceptionOr<Vector<Token>> Tokenizer::tokenize()
                 continue;
             }
 
-            addToken(TokenType::Name, namePosition, nameStart);
+            auto addResult = addToken(TokenType::Name, namePosition, nameStart);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
@@ -258,14 +274,20 @@ ExceptionOr<Vector<Token>> Tokenizer::tokenize()
             if (!regexLength)
                 maybeException = processTokenizingError(regexStart, m_index, "Regex length is zero."_s);
 
-            addToken(TokenType::Regexp, regexPosition, regexStart, regexLength);
+            auto addResult = addToken(TokenType::Regexp, regexPosition, regexStart, regexLength);
+            if (addResult.hasException())
+                return addResult.releaseException();
             continue;
         }
 
-        addToken(TokenType::Char);
+        auto addResult = addToken(TokenType::Char);
+        if (addResult.hasException())
+            return addResult.releaseException();
     }
 
-    addToken(TokenType::End, m_index, m_index);
+    auto endResult = addToken(TokenType::End, m_index, m_index);
+    if (endResult.hasException())
+        return endResult.releaseException();
     return WTF::move(m_tokenList);
 }
 

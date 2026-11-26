@@ -152,16 +152,24 @@ template<> MessageEvent::Init convertDictionary<MessageEvent::Init>(JSGlobalObje
         RETURN_IF_EXCEPTION(throwScope, {});
     }
     if (!portsValue.isUndefined()) {
-        result.ports = convert<IDLSequence<IDLInterface<MessagePort>>>(
-            lexicalGlobalObject,
-            portsValue,
-            [](JSGlobalObject& lexicalGlobalObject, ThrowScope& throwScope) {
-                Bun::ERR::INVALID_ARG_TYPE(throwScope,
-                    &lexicalGlobalObject,
-                    "MessageEvent constructor: Expected every item of eventInitDict.ports to be an instance of MessagePort."_s);
-            },
-            "MessageEvent constructor"_s,
-            "eventInitDict.ports"_s);
+        if (!portsValue.isObject()) {
+            auto str = portsValue.toWTFString(&lexicalGlobalObject);
+            RETURN_IF_EXCEPTION(throwScope, {});
+            throwTypeError(&lexicalGlobalObject, throwScope, makeString("MessageEvent constructor: eventInitDict.ports ("_s, str, ") is not iterable."_s));
+            return {};
+        }
+        size_t index = 0;
+        JSC::forEachInIterable(&lexicalGlobalObject, portsValue, [&](JSC::VM& vm, JSC::JSGlobalObject* globalObject, JSC::JSValue item) {
+            auto* port = JSMessagePort::toWrapped(vm, item);
+            if (!port) {
+                auto str = item.isObject() ? "{}"_s : item.toWTFString(globalObject);
+                if (!throwScope.exception())
+                    throwTypeError(globalObject, throwScope, makeString("MessageEvent constructor: Expected eventInitDict.ports["_s, String::number(index), "] (\""_s, str, "\") to be an instance of MessagePort."_s));
+                return;
+            }
+            result.ports.append(port);
+            ++index;
+        });
         RETURN_IF_EXCEPTION(throwScope, {});
     } else
         result.ports = Converter<IDLSequence<IDLInterface<MessagePort>>>::ReturnType {};
@@ -173,10 +181,14 @@ template<> MessageEvent::Init convertDictionary<MessageEvent::Init>(JSGlobalObje
         RETURN_IF_EXCEPTION(throwScope, {});
     }
     if (!sourceValue.isUndefinedOrNull()) {
-        result.source = convert<IDLNullable<IDLInterface<MessagePort>>>(lexicalGlobalObject, sourceValue, [&sourceValue](JSGlobalObject& lexicalGlobalObject, ThrowScope& throwScope) {
-            Bun::ERR::INVALID_ARG_TYPE(throwScope, &lexicalGlobalObject, "eventInitDict.source"_s, "MessagePort"_s, sourceValue);
-        });
-        RETURN_IF_EXCEPTION(throwScope, {});
+        auto* port = JSMessagePort::toWrapped(vm, sourceValue);
+        if (!port) {
+            auto str = sourceValue.isObject() ? "{}"_s : sourceValue.toWTFString(&lexicalGlobalObject);
+            RETURN_IF_EXCEPTION(throwScope, {});
+            throwTypeError(&lexicalGlobalObject, throwScope, makeString("MessageEvent constructor: Expected eventInitDict.source (\""_s, str, "\") to be an instance of MessagePort."_s));
+            return {};
+        }
+        result.source = port;
     } else {
         result.source = nullptr;
     }

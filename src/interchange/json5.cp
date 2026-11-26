@@ -227,9 +227,12 @@ pub struct JSON5Parser {
             const c = _.peek();
             switch (c) {
                 0 => {
-                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
-                    _.token.data = .eof;
-                    return;
+                    if (_.pos >= _.source.len) {
+                        _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                        _.token.data = .eof;
+                        return;
+                    }
+                    return error.UnexpectedCharacter;
                 },
                 // Whitespace — skip without setting loc
                 '\t', '\n', '\r', ' ', 0x0B, 0x0C => {
@@ -812,7 +815,7 @@ pub struct JSON5Parser {
             if (cont_cp.cp == '\\') {
                 const escaped_cp = _.parseIdentifierUnicodeEscape()?;
                 if (!identifier.isIdentifierPart(escaped_cp)) {
-                    break;
+                    return error.InvalidIdentifier;
                 }
                 appendCodepointToUtf8(&buf, @intCast(escaped_cp))?;
             } else if (identifier.isIdentifierPart(cont_cp.cp)) {

@@ -44,8 +44,11 @@ pub static struct TestingAPIs {
         const line = callframe.argument(1).toInt32();
         const col = callframe.argument(2).toInt32();
         if (line < 0 || col < 0) return bun.jsc.JSValue.@"null";
+        const max_ord: i32 = std.math.maxInt(i32) - 1;
+        const safe_line: i32 = if (line > max_ord) max_ord else line;
+        const safe_col: i32 = if (col > max_ord) max_ord else col;
         const ism = bun.SourceMap.InternalSourceMap{ data: ab.byteSlice().ptr };
-        const mapping_opt = ism.find(.fromZeroBased(line), .fromZeroBased(col));
+        const mapping_opt = ism.find(.fromZeroBased(safe_line), .fromZeroBased(safe_col));
         if (mapping_opt == null) {
             return bun.jsc.JSValue.@"null";
         }

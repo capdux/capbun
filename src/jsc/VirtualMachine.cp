@@ -1093,9 +1093,11 @@ pub fn reload(client: *VirtualMachine, _: (*HotReloader.Task)?) {
                 client.hot_reload_deferred = true;
                 return;
             },
-            .rejected => if (client.pending_internal_promise_reported_at != client.hot_reload_counter) {
-                client.hot_reload_deferred = true;
-                return;
+            .rejected => {
+                if (client.pending_internal_promise_reported_at != client.hot_reload_counter) {
+                    client.hot_reload_deferred = true;
+                    return;
+                }
             },
             .fulfilled => {},
         }
@@ -2209,7 +2211,7 @@ pub fn resolveMaybeNeedsTrailingSlash(
     comptime is_a_file_path: bool,
     is_user_require_resolve: bool,
 ): bun.JSError!void {
-    if (is_a_file_path && specifier.length() > comptime @as(u32, @intFromFloat(@trunc(@as(f64, @floatFromInt(bun.MAX_PATH_BYTES)) * 1.5)))) {
+    if (is_a_file_path && !specifier.hasPrefixComptime("data:") && specifier.length() > comptime @as(u32, @intFromFloat(@trunc(@as(f64, @floatFromInt(bun.MAX_PATH_BYTES)) * 1.5)))) {
         const specifier_utf8 = specifier.toUTF8(bun.default_allocator);
         const _spec_utf8_guard = DeinitGuard<@TypeOf(specifier_utf8)>{ val: specifier_utf8 };
         const source_utf8 = source.toUTF8(bun.default_allocator);

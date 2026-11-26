@@ -546,7 +546,7 @@ _ = ((buf.append(13)) catch unreachable);
 48...55 => {
 const octal_start = ((iter.i + width2) - 2);
                 if (comptime is_json) {
-                    lexer.end = ((start + iter.i) - width2);
+                    lexer.end = (start + iter.i);
                     _ = try lexer.syntaxError();
                 }
                 var is_bad = false;
@@ -628,7 +628,7 @@ value = ((value * 16) | ((c3 + 10) - 97));
 value = ((value * 16) | ((c3 + 10) - 65));
 },
 else => {
-lexer.end = ((start + iter.i) - width3);
+lexer.end = (start + iter.i);
                 return lexer.syntaxError();
 },
 }
@@ -648,7 +648,7 @@ value = ((value * 16) | ((c3 + 10) - 97));
 value = ((value * 16) | ((c3 + 10) - 65));
 },
 else => {
-lexer.end = ((start + iter.i) - width3);
+lexer.end = (start + iter.i);
                 return lexer.syntaxError();
 },
 }
@@ -725,7 +725,7 @@ value = ((value * 16) | ((c3 + 10) - 97));
 value = ((value * 16) | ((c3 + 10) - 65));
 },
 else => {
-lexer.end = ((start + iter.i) - width3);
+lexer.end = (start + iter.i);
                         return lexer.syntaxError();
 },
 }
@@ -742,7 +742,7 @@ lexer.end = ((start + iter.i) - width3);
 },
 13 => {
 if (comptime is_json) {
-                    lexer.end = ((start + iter.i) - width2);
+                    lexer.end = (start + iter.i);
                     _ = try lexer.syntaxError();
                 }
                 const next_i: usize = (iter.i + 1);
@@ -751,7 +751,7 @@ if (comptime is_json) {
 },
 10, 8232, 8233 => {
 if (comptime is_json) {
-                    lexer.end = ((start + iter.i) - width2);
+                    lexer.end = (start + iter.i);
                     _ = try lexer.syntaxError();
                 }
                 continue;
@@ -763,7 +763,7 @@ if (comptime is_json) {
 
 },
 else => {
-lexer.end = ((start + iter.i) - width2);
+lexer.end = (start + iter.i);
                     _ = try lexer.syntaxError();
 },
 }

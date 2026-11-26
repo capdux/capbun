@@ -132,8 +132,12 @@ fn printBytes(
 }
 
 let uuid_v7_lock: bun.Mutex = bun.Mutex{};
-let uuid_v7_last_timestamp: std.atomic.Value(u64) = { raw: 0 };
-let uuid_v7_counter: std.atomic.Value(u32) = { raw: 0 };
+let uuid_v7_last_timestamp: u64 = 0;
+let uuid_v7_counter: u32 = 0;
+let uuid_v7_explicit_base: u64 = 0;
+let uuid_v7_explicit_last: u64 = 0;
+let uuid_v7_explicit_counter: u32 = 0;
+let uuid_v7_explicit_init: bool = false;
 
 struct UnlockGuard<T> {
     ptr: *T!,
@@ -154,27 +158,54 @@ struct DeinitGuard<T> {
 pub struct UUID7 {
     bytes: [16]u8,
 
-    static fn getCount(timestamp: u64): u32 {
+    static fn getTimestampAndCount(timestamp: u64, random: *[8]u8, is_explicit: bool): struct { u64, u32 } {
+        const max_ts: u64 = 281474976710655;
+        const clamped_in = @min(timestamp, max_ts);
+        const seed: u32 = ((random[0] & 0x07) as u32 << 8) | (random[1] as u32);
         uuid_v7_lock.lock();
         const _lock_guard = UnlockGuard<bun.Mutex>{ ptr: unsafe { &uuid_v7_lock } };
-        if (uuid_v7_last_timestamp.swap(timestamp, .monotonic) != timestamp) {
-            uuid_v7_counter.store(0, .monotonic);
-        }
 
-        return uuid_v7_counter.fetchAdd(1, .monotonic) % 4096;
+        const last_ts = if (is_explicit) unsafe { &uuid_v7_explicit_last } else unsafe { &uuid_v7_last_timestamp };
+        const ctr = if (is_explicit) unsafe { &uuid_v7_explicit_counter } else unsafe { &uuid_v7_counter };
+        const reset = if (is_explicit) (!uuid_v7_explicit_init || clamped_in != uuid_v7_explicit_base) else (clamped_in > last_ts.*);
+        if (reset) {
+            if (is_explicit) {
+                uuid_v7_explicit_init = true;
+                uuid_v7_explicit_base = clamped_in;
+            }
+            last_ts.* = clamped_in;
+            ctr.* = seed;
+        } else {
+            ctr.* += 1;
+            if (ctr.* >= 4096) {
+                if (last_ts.* < max_ts) {
+                    last_ts.* += 1;
+                    ctr.* = seed;
+                } else {
+                    ctr.* = 4095;
+                }
+            }
+        }
+        return .{ last_ts.*, ctr.* };
     }
 
-    pub fn init(timestamp: u64, random: *[8]u8): UUID7 {
-        const count = getCount(timestamp);
+    pub static fn init(timestamp: u64, random: *[8]u8): UUID7 {
+        return initWithExplicit(timestamp, random, false);
+    }
+
+    pub static fn initWithExplicit(timestamp: u64, random: *[8]u8, is_explicit: bool): UUID7 {
+        const res = getTimestampAndCount(timestamp, random, is_explicit);
+        const ts = res[0];
+        const count = res[1];
         let bytes: [16]u8 = undefined;
 
         // First 6 bytes: timestamp in big-endian
-        bytes[0] = @truncate(timestamp >> 40);
-        bytes[1] = @truncate(timestamp >> 32);
-        bytes[2] = @truncate(timestamp >> 24);
-        bytes[3] = @truncate(timestamp >> 16);
-        bytes[4] = @truncate(timestamp >> 8);
-        bytes[5] = @truncate(timestamp);
+        bytes[0] = @truncate(ts >> 40);
+        bytes[1] = @truncate(ts >> 32);
+        bytes[2] = @truncate(ts >> 24);
+        bytes[3] = @truncate(ts >> 16);
+        bytes[4] = @truncate(ts >> 8);
+        bytes[5] = @truncate(ts);
 
         // Byte 6: Version 7 in high nibble, top 4 bits of counter in low nibble
         bytes[6] = (@as(u8, 7) << 4) | @as(u8, @truncate((count >> 8) & 0x0F));

@@ -547,6 +547,7 @@ pub fn NewParser_(comptime parser_feature__typescript: bool, comptime parser_fea
     fn_only_data_visit: FnOnlyDataVisit = FnOnlyDataVisit{  },
     allocated_names: List(string) = .{},
     latest_arrow_arg_loc: logger.Loc = logger.Loc.Empty,
+    in_ternary_yes: bool = false,
     forbid_suffix_after_as_loc: logger.Loc = logger.Loc.Empty,
     current_scope: *js_ast.Scope = undefined,
     scopes_for_current_part: List(*js_ast.Scope) = .{},

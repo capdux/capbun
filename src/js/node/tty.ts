@@ -12,6 +12,8 @@ const {
 const { validateInteger } = require("internal/validators");
 const fs = require("internal/fs/streams");
 
+const kRawModeHandle = Symbol("kRawModeHandle");
+
 function ReadStream(fd): void {
   if (!(this instanceof ReadStream)) {
     return new ReadStream(fd);
@@ -83,7 +85,8 @@ Object.defineProperty(ReadStream, "prototype", {
           }
         }
       } else {
-        const err = ttySetMode(this.fd, flag);
+        const handle = (this[kRawModeHandle] ??= new (process.binding("tty_wrap").TTY)(this.fd));
+        const err = handle.setRawMode(flag ? 1 : 0);
         if (err) {
           this.emit("error", new Error("setRawMode failed with errno: " + err));
           return this;

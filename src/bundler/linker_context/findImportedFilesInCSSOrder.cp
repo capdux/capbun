@@ -99,8 +99,8 @@ pub struct Visitor {
                         let nested_import_records = bun.handleOom(wrapping_import_records.clone(_.allocator));
 
                         // Clone these import conditions and append them to the state
-                        bun.handleOom(nested_conditions.append(_.allocator, rule.@"import".conditionsWithImportRecords(_.allocator, &nested_import_records)));
-                        _.visit(record.source_index, &nested_conditions, wrapping_import_records);
+                        bun.handleOom(nested_conditions.append(_.allocator, rule.@"import".conditionsWithSrcAndDstImportRecords(_.allocator, &_.all_import_records[source_index.get()], &nested_import_records)));
+                        _.visit(record.source_index, &nested_conditions, &nested_import_records);
                         continue;
                     }
                     _.visit(record.source_index, wrapping_conditions, wrapping_import_records);
@@ -168,6 +168,7 @@ pub struct Visitor {
         _.order.append(_.allocator, Chunk.CssImportOrder{
             kind: .{ source_index: source_index },
             conditions: wrapping_conditions.*,
+            condition_import_records: wrapping_import_records.*,
         }) catch e => bun.handleOom(e);
     }
 }

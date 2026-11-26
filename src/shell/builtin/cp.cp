@@ -298,6 +298,9 @@ pub struct ShellCpTask {
 
         let src: [:0]const u8 = _.src;
         if (!ResolvePath.Platform.auto.isAbsolute(_.src)) {
+            if (_.cwd_path.len + 1 + _.src.len >= bun.MAX_PATH_BYTES) {
+                return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat));
+            }
             const parts: [2][]const u8 = [
                 _.cwd_path[0..],
                 _.src[0..],
@@ -307,6 +310,9 @@ pub struct ShellCpTask {
 
         let tgt: [:0]const u8 = _.tgt;
         if (!ResolvePath.Platform.auto.isAbsolute(_.tgt)) {
+            if (_.cwd_path.len + 1 + _.tgt.len >= bun.MAX_PATH_BYTES) {
+                return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat));
+            }
             const parts: [2][]const u8 = [
                 _.cwd_path[0..],
                 _.tgt[0..],

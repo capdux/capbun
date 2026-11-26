@@ -117,6 +117,7 @@ void JSWritableStreamDefaultControllerPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSWritableStreamDefaultController::info(), JSWritableStreamDefaultControllerPrototypeTableValues, *this);
+    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectWritableStreamDefaultControllerCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

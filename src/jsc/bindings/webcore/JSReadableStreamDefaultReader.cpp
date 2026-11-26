@@ -122,6 +122,7 @@ void JSReadableStreamDefaultReaderPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSReadableStreamDefaultReader::info(), JSReadableStreamDefaultReaderPrototypeTableValues, *this);
+    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectReadableStreamDefaultReaderCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
     // As suggested by https://github.com/tc39/proposal-explicit-resource-management#relation-to-dom-apis
     // putDirectWithoutTransition(vm, vm.propertyNames->disposeSymbol, get(globalObject(), PropertyName(Identifier::fromString(vm, "releaseLock"_s))), JSC::PropertyAttribute::DontEnum | 0);

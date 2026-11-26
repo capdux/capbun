@@ -34,4 +34,12 @@ pub fn setModeWhen(fd: c_int, mode: Mode, when: SetAttrWhen) c_int {
         }
 }
 
+pub fn setModeWithSnapshot(fd: c_int, mode: Mode, when: SetAttrWhen, current_mode: *i32, orig_termios: *anyopaque) c_int {
+        {
+            return Bun__ttySetModeWithSnapshot(fd, @intFromEnum(mode), @intFromEnum(when), current_mode, orig_termios);
+        }
+}
+
 extern "c" fn Bun__ttySetMode(fd: c_int, mode: c_int, drain: c_int) callconv(.c) c_int;
+
+extern "c" fn Bun__ttySetModeWithSnapshot(fd: c_int, mode: c_int, drain: c_int, current_mode: *i32, orig_termios: *anyopaque) callconv(.c) c_int;

@@ -1104,7 +1104,7 @@ pub fn finalize(self: *CronJob) void {
     }
 
 pub fn computeNextTimespec(self: *CronJob) ?bun.timespec {
-            const now_ms: f64 = @floatFromInt(std.time.milliTimestamp());
+            const now_ms: f64 = @floatFromInt(bun.timespec.now(.force_real_time).ms());
             const from_ms = @max(now_ms, self.last_next_ms);
             const next_ms_opt = (blk_catch_40: { break :blk_catch_40 ((self.parsed.next(self.global, from_ms)) catch |__ce_40| { _ = &__ce_40; return null; }); });
             if ((next_ms_opt == null)) {

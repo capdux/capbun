@@ -797,7 +797,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
     }
 
     if (opts := arguments_g.val.nextEat()) {
-        if (!opts.isUndefinedOrNull()) {
+        if (opts.isObject()) {
             if (editor_val := opts.getTruthy(globalThis, "editor")?) {
                 let sliced = editor_val.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
                 const prev_name = edit.name;

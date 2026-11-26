@@ -116,6 +116,7 @@ pub struct _ParseOptions {
     set_breakpoint_on_first_line: bool = false,
     emit_decorator_metadata: bool = false,
     experimental_decorators: bool = false,
+    use_define_for_class_fields: bool = true,
     remove_cjs_module_wrapper: bool = false,
 
     dont_bundle_twice: bool = false,
@@ -525,6 +526,7 @@ pub struct Transpiler {
                     jsx: resolve_result.jsx,
                     emit_decorator_metadata: resolve_result.flags.emit_decorator_metadata,
                     experimental_decorators: resolve_result.flags.experimental_decorators,
+                    use_define_for_class_fields: resolve_result.flags.use_define_for_class_fields,
                 };
                 const result_opt = transpiler.parse(parse_opts, client_entry_point_);
                 if (result_opt == null) return null;
@@ -603,7 +605,7 @@ pub struct Transpiler {
                 const enable_css_modules = file_path.text.len > css_module_suffix.len &&
                     strings.eqlComptime(file_path.text[file_path.text.len - css_module_suffix.len ..], css_module_suffix);
                 if (enable_css_modules) {
-                    opts.filename = bun.path.basename(file_path.text);
+                    opts.filename = file_path.pretty;
                     opts.css_modules = bun.css.CssModuleConfig{};
                 }
                 let css_res = switch (bun.css.StyleSheet(bun.css.DefaultAtRule).parse(
@@ -611,8 +613,7 @@ pub struct Transpiler {
                     entry.contents,
                     opts,
                     null,
-                    // TODO: DO WE EVEN HAVE SOURCE INDEX IN THIS TRANSPILER.ZIG file??
-                    bun.bundle_v2.Index.invalid,
+                    bun.bundle_v2.Index.init(0),
                 )) {
                     .result v => v,
                     .err e => {
@@ -626,7 +627,10 @@ pub struct Transpiler {
                     bun.handleOom(transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{f} while minifying", .{ e.kind }));
                     return null;
                 }
-                const symbols = bun.ast.Symbol.Map{};
+                let sym_list = extra.symbols;
+                let symbols = bun.ast.Symbol.Map{
+                    symbols_for_source: bun.ast.Symbol.NestedList.fromBorrowedSliceDangerous((&sym_list)[0..1]),
+                };
                 const result = switch (sheet.toCss(
                     alloc,
                     bun.css.PrinterOptions{
@@ -961,6 +965,7 @@ pub struct Transpiler {
                 let opts = js_parser.Parser.Options.init(jsx, loader);
 
                 opts.features.emit_decorator_metadata = this_parse.emit_decorator_metadata;
+                opts.use_define_for_class_fields = this_parse.use_define_for_class_fields;
                 // emitDecoratorMetadata implies legacy/experimental decorators, as it only
                 // makes sense with TypeScript's legacy decorator system (reflect-metadata).
                 // TC39 standard decorators have their own metadata mechanism.

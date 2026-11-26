@@ -36,6 +36,13 @@ const std::string_view ERR_WEBSOCKET_TIMEOUT("WebSocket timed out from inactivit
 const std::string_view ERR_INVALID_TEXT("Received invalid UTF-8");
 const std::string_view ERR_TOO_BIG_MESSAGE_INFLATION("Received too big message, or other inflation error");
 const std::string_view ERR_INVALID_CLOSE_PAYLOAD("Received invalid close payload");
+const std::string_view ERR_UNEXPECTED_RSV1("Received unexpected RSV1 bit");
+const std::string_view ERR_UNEXPECTED_RSV23("Received unexpected RSV2 or RSV3 bit");
+const std::string_view ERR_INVALID_OPCODE("Received invalid opcode");
+const std::string_view ERR_FRAGMENTED_CONTROL("Received fragmented control frame");
+const std::string_view ERR_TOO_BIG_CONTROL("Received too big control frame");
+const std::string_view ERR_INTERLEAVED_MESSAGE("Received new message inside a fragmented message");
+const std::string_view ERR_UNEXPECTED_CONTINUATION("Received unexpected continuation frame");
 
 enum OpCode : unsigned char {
     CONTINUATION = 0,
@@ -278,18 +285,18 @@ protected:
     static inline bool consumeMessage(T payLength, char *&src, unsigned int &length, WebSocketState<isServer> *wState, void *user) {
         if (getOpCode(src)) {
             if (wState->state.opStack == 1 || (!wState->state.lastFin && getOpCode(src) < 2)) {
-                Impl::forceClose(wState, user);
+                Impl::forceClose(wState, user, ERR_INTERLEAVED_MESSAGE, 1002);
                 return true;
             }
             wState->state.opCode[++wState->state.opStack] = (OpCode) getOpCode(src);
         } else if (wState->state.opStack == -1) {
-            Impl::forceClose(wState, user);
+            Impl::forceClose(wState, user, ERR_UNEXPECTED_CONTINUATION, 1002);
             return true;
         }
         wState->state.lastFin = isFin(src);
 
         if (Impl::refusePayloadLength(payLength, wState, user)) {
-            Impl::forceClose(wState, user, ERR_TOO_BIG_MESSAGE);
+            Impl::forceClose(wState, user, ERR_TOO_BIG_MESSAGE, 1009);
             return true;
         }
 
@@ -401,9 +408,24 @@ public:
             while (length >= SHORT_MESSAGE_HEADER) {
 
                 // invalid reserved bits / invalid opcodes / invalid control frames / set compressed frame
-                if ((rsv1(src) && !Impl::setCompressed(wState, user)) || rsv23(src) || (getOpCode(src) > 2 && getOpCode(src) < 8) ||
-                    getOpCode(src) > 10 || (getOpCode(src) > 2 && (!isFin(src) || payloadLength(src) > 125))) {
-                    Impl::forceClose(wState, user);
+                if (rsv23(src)) {
+                    Impl::forceClose(wState, user, ERR_UNEXPECTED_RSV23, 1002);
+                    return;
+                }
+                if ((getOpCode(src) > 2 && getOpCode(src) < 8) || getOpCode(src) > 10) {
+                    Impl::forceClose(wState, user, ERR_INVALID_OPCODE, 1002);
+                    return;
+                }
+                if (getOpCode(src) > 2 && !isFin(src)) {
+                    Impl::forceClose(wState, user, ERR_FRAGMENTED_CONTROL, 1002);
+                    return;
+                }
+                if (getOpCode(src) > 2 && payloadLength(src) > 125) {
+                    Impl::forceClose(wState, user, ERR_TOO_BIG_CONTROL, 1002);
+                    return;
+                }
+                if (rsv1(src) && ((getOpCode(src) != 1 && getOpCode(src) != 2) || !Impl::setCompressed(wState, user))) {
+                    Impl::forceClose(wState, user, ERR_UNEXPECTED_RSV1, 1002);
                     return;
                 }
 

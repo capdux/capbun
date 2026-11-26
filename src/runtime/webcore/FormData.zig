@@ -119,10 +119,10 @@ pub const _Encoding = union(enum) {
     Multipart: []const u8,
 
 pub fn get(content_type: []const u8) ?_Encoding {
-            if ((strings.indexOf(content_type, "application/x-www-form-urlencoded") != null)) {
+            if ((indexOfCaseInsensitiveASCII(content_type, "application/x-www-form-urlencoded") != null)) {
                 return _Encoding{ .URLEncoded = undefined };
             }
-            if ((strings.indexOf(content_type, "multipart/form-data") == null)) {
+            if ((indexOfCaseInsensitiveASCII(content_type, "multipart/form-data") == null)) {
                 return null;
             }
             const boundary = ((FormData.getBoundary(content_type)) orelse { return null; });
@@ -258,7 +258,7 @@ pub fn init(self: *FormData, fields: Map, buffer: []const u8) void {
     }
 
 pub fn getBoundary(content_type: []const u8) ?[]const u8 {
-            const boundary_index = ((strings.indexOf(content_type, "boundary=")) orelse { return null; });
+            const boundary_index = ((indexOfCaseInsensitiveASCII(content_type, "boundary=")) orelse { return null; });
             const boundary_start = (boundary_index + "boundary=".len);
             const begin = content_type[boundary_start..];
             if ((begin.len == 0)) {
@@ -422,10 +422,12 @@ pub fn forEachMultipartEntry(input: []const u8, boundary: []const u8, comptime C
                     var value = (if ((line.len > (colon + 1))) line[(colon + 1)..] else "");
                     _ = &value;
                     if (strings.eqlCaseInsensitiveASCII(key, "content-disposition", true)) {
-                        value = strings.trim(value, " ");
-                        if (strings.hasPrefixComptime(value, "form-data;")) {
-                            value = value["form-data;".len..];
-                            value = strings.trim(value, " ");
+                        value = strings.trim(value, " \t");
+                        if (strings.hasPrefixCaseInsensitive(value, "form-data")) {
+                            const rest = value["form-data".len..];
+                            if (((((rest.len == 0) or (rest[0] == 59)) or (rest[0] == 32)) or (rest[0] == 9))) {
+                                value = strings.trim(rest, " \t;");
+                            }
                         }
                         while (strings.indexOf(value, "=")) |eql_start| {
                             const eql_key = strings.trim(value[0..eql_start], " ;");
@@ -521,3 +523,21 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const AnyPromise = jsc.AnyPromise;
 const log = Output.scoped(.FormData, .visible);
+
+pub fn indexOfCaseInsensitiveASCII(haystack: []const u8, needle: []const u8) ?usize {
+        if ((needle.len == 0)) {
+            return 0;
+        }
+        if ((haystack.len < needle.len)) {
+            return null;
+        }
+        var i: usize = 0;
+        _ = &i;
+        const limit = (haystack.len - needle.len);
+        while ((i <= limit)) : (i = (i + 1)) {
+            if (strings.eqlCaseInsensitiveASCIIICheckLength(haystack[i..(i + needle.len)], needle)) {
+                return i;
+            }
+        }
+        return null;
+}

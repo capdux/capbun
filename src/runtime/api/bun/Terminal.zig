@@ -284,6 +284,9 @@ writer: IOWriter = .{},
 reader: IOReader = IOReader.init(Terminal),
 this_value: jsc.JSRef = jsc.JSRef.empty(),
 flags: Flags = .{},
+tty_mode: i32 = 0,
+orig_termios: Termios = (if (Environment.isPosix) std.mem.zeroes(Termios) else ({
+})),
 
 pub fn initTerminal(globalObject: *jsc.JSGlobalObject, options: *Options, existing_js_value: ?jsc.JSValue) InitError!CreateResult {
         const pty_result = try createPty(options.cols, options.rows);
@@ -487,9 +490,7 @@ pub fn setTermiosFlag(client: *Terminal, globalObject: *jsc.JSGlobalObject, comp
         const clamped = @max(0, @min(num, max_val));
         const int_val: Int = @intFromFloat(clamped);
         @field(termios_data, @tagName(field)) = @bitCast(int_val);
-        if ((!setTermios(client.master_fd, (&termios_data)))) {
-            return globalObject.throw("Failed to set terminal flags", .{});
-        }
+        _ = setTermios(client.master_fd, (&termios_data));
 }
 
 pub fn getInputFlags(client: *Terminal, _: *jsc.JSGlobalObject) JSValue {
@@ -551,7 +552,7 @@ pub fn write(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe: *jsc
         return (switch (write_result) {
 .done => |amt| JSValue.jsNumber(@as(i32, @intCast(amt))),
 .wrote => |amt| JSValue.jsNumber(@as(i32, @intCast(amt))),
-.pending => |amt| JSValue.jsNumber(@as(i32, @intCast((if (Environment.isWindows) bytes.len else amt)))),
+.pending => JSValue.jsNumber(@as(i32, @intCast(bytes.len))),
 .err => |e| globalObject.throwValue(try e.toJS(globalObject)),
 });
 }
@@ -609,7 +610,13 @@ pub fn setRawMode(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe:
         const args = callframe.argumentsAsArray(1);
         const enabled = args[0].toBoolean();
         if (comptime Environment.isPosix) {
-            const tty_result = bun.tty.setModeWhen(self.master_fd.cast(), (if (enabled) .raw else .normal), .now);
+            const tty_result = bun.tty.setModeWithSnapshot(self.master_fd.cast(), (if (enabled) .raw else .normal), .now, (blk: {
+            break :blk (&self.tty_mode);
+
+}), (blk: {
+            break :blk (&self.orig_termios);
+
+}));
             if ((tty_result != 0)) {
                 return globalObject.throw("Failed to set raw mode", .{});
             }
