@@ -32,6 +32,8 @@ using namespace JSC;
     macro(ReadableStreamDefaultController) \
     macro(ReadableStreamDefaultReader) \
     macro(SQL) \
+    macro(TextDecoder) \
+    macro(TextDecoderDecode) \
     macro(TextEncoderStreamEncoder) \
     macro(TransformStream) \
     macro(TransformStreamDefaultController) \
@@ -68,6 +70,8 @@ using namespace JSC;
     macro(closedPromiseCapability) \
     macro(cmd) \
     macro(code) \
+    macro(compressionStreamReadable) \
+    macro(compressionStreamWritable) \
     macro(controlledReadableStream) \
     macro(controller) \
     macro(createCommonJSModule) \
@@ -82,6 +86,8 @@ using namespace JSC;
     macro(data) \
     macro(dataView) \
     macro(decode) \
+    macro(decompressionStreamReadable) \
+    macro(decompressionStreamWritable) \
     macro(dest) \
     macro(dirname) \
     macro(disturbed) \

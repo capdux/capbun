@@ -2919,8 +2919,14 @@ pub struct BlobExternalSharedDescriptor {
         const encoder = blob.getFormDataEncoding() ?? return ZigString.init("Invalid encoding").toErrorInstance(global);
         defer encoder.deinit();
 
-        return bun.FormData.toJS(global, buf, encoder.encoding) catch e =>
-            global.createErrorInstance("FormData encoding failed: {s}", .{@errorName(e)});
+        return bun.FormData.toJS(global, buf, encoder.encoding) catch e => {
+            if (e == error.JSError) {
+                if (exc := global.tryTakeException()) {
+                    return exc.toError() ?? exc;
+                }
+            }
+            return global.createErrorInstance("FormData encoding failed: {s}", .{@errorName(e)});
+        };
     }
 
     static fn toFormData(blob: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSValue ! bun.JSTerminated {

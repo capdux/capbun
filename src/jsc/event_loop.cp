@@ -470,11 +470,13 @@ pub struct DeinitGuard<T> {
 
         while (true) {
             while (_.tickWithCount(ctx) > 0) {
+                if (scope.hasException() || global_vm.hasTerminationRequest()) return;
                 _.tickConcurrent();
                 _.global.handleRejectedPromises();
+                if (scope.hasException() || global_vm.hasTerminationRequest()) return;
             }
             _.drainMicrotasksWithGlobal(global, global_vm) catch return;
-            if (scope.hasException()) return;
+            if (scope.hasException() || global_vm.hasTerminationRequest()) return;
             _.tickConcurrent();
             if (_.tasks.count > 0) continue;
             break;

@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -202,16 +203,33 @@ pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) !void {
                     if ((p.lexer.token == .t_open_brace)) {
                         var brace_depth: usize = 0;
                         _ = &brace_depth;
+                        var template_braces: [32]usize = undefined;
+                        _ = &template_braces;
+                        var template_len: usize = 0;
+                        _ = &template_len;
                         while (true) {
                             switch (p.lexer.token) {
 .t_open_brace => {
 brace_depth = (brace_depth + 1);
 },
+.t_template_head => {
+if ((template_len < template_braces.len)) {
+                                template_braces[cp_cast_int(usize, template_len)] = brace_depth;
+                                template_len = (template_len + 1);
+                            }
+},
 .t_close_brace => {
-brace_depth = (brace_depth - 1);
-                            if ((brace_depth == 0)) {
-                                _ = try p.lexer.next();
-                                break;
+if (((template_len > 0) and (template_braces[@as(usize, @intCast((template_len - 1)))] == brace_depth))) {
+                                _ = try p.lexer.rescanCloseBraceAsTemplateToken();
+                                if ((p.lexer.token != .t_template_middle)) {
+                                    template_len = (template_len - 1);
+                                }
+                            } else {
+                                brace_depth = (brace_depth - 1);
+                                if ((brace_depth == 0)) {
+                                    _ = try p.lexer.next();
+                                    break;
+                                }
                             }
 },
 .t_end_of_file => {
@@ -235,6 +253,10 @@ else => {
                         _ = &brace_depth;
                         var ternary_depth: usize = 0;
                         _ = &ternary_depth;
+                        var template_braces: [32]usize = undefined;
+                        _ = &template_braces;
+                        var template_len: usize = 0;
+                        _ = &template_len;
                         var found_colon = false;
                         _ = &found_colon;
                         scan: while (true) {
@@ -264,12 +286,25 @@ if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
 .t_open_brace => {
 brace_depth = (brace_depth + 1);
 },
-.t_close_brace => {
-if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
-                                break :scan;
+.t_template_head => {
+if ((template_len < template_braces.len)) {
+                                template_braces[cp_cast_int(usize, template_len)] = brace_depth;
+                                template_len = (template_len + 1);
                             }
-                            if ((brace_depth > 0)) {
-                                brace_depth = (brace_depth - 1);
+},
+.t_close_brace => {
+if (((template_len > 0) and (template_braces[@as(usize, @intCast((template_len - 1)))] == brace_depth))) {
+                                _ = try p.lexer.rescanCloseBraceAsTemplateToken();
+                                if ((p.lexer.token != .t_template_middle)) {
+                                    template_len = (template_len - 1);
+                                }
+                            } else {
+                                if ((((paren_depth == 0) and (bracket_depth == 0)) and (brace_depth == 0))) {
+                                    break :scan;
+                                }
+                                if ((brace_depth > 0)) {
+                                    brace_depth = (brace_depth - 1);
+                                }
                             }
 },
 .t_question => {

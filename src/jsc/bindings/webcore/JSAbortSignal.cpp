@@ -406,7 +406,9 @@ void JSAbortSignalOwner::finalize(JSC::Handle<JSC::Unknown> handle, void* contex
 {
     auto* jsAbortSignal = static_cast<JSAbortSignal*>(handle.slot()->asCell());
     auto& world = *static_cast<DOMWrapperWorld*>(context);
-    uncacheWrapper(world, jsAbortSignal->protectedWrapped().ptr(), jsAbortSignal);
+    auto wrapped = jsAbortSignal->protectedWrapped();
+    uncacheWrapper(world, wrapped.ptr(), jsAbortSignal);
+    wrapped->releaseTimeoutIfUnobserved();
 }
 
 #if ENABLE(BINDING_INTEGRITY)

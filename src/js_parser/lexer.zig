@@ -2235,6 +2235,7 @@ if (isWhitespace(lexer.code_point)) {
                     break;
                 }
                 lexer.end = lexer.current;
+                _ = lexer.step();
                 lexer.token = .t_syntax_error;
 },
 }

@@ -582,7 +582,7 @@ struct PosixIoctl {
 
     pub const IOWriter = bun.io.StreamingWriter(Terminal, struct {
         pub const onClose = Terminal.onWriterClose;
-        pub const onWritable = Terminal.onWriterReady;
+        pub const onReady = Terminal.onWriterReady;
         pub const onError = Terminal.onWriterError;
         pub const onWrite = Terminal.onWrite;
     });

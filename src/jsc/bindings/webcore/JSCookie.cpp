@@ -307,6 +307,9 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieDOMConstructor::
     if (!callFrame->thisValue().isObject()) [[unlikely]]
         return throwVMError(lexicalGlobalObject, throwScope, createNotAConstructorError(lexicalGlobalObject, callFrame->jsCallee()));
 
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<Cookie>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
     // Static method: parse(cookieString)
     if (callFrame->argumentCount() == 1 && callFrame->argument(0).isString()) {
         // new Bun.Cookie.parse("foo=bar")
@@ -326,7 +329,10 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieDOMConstructor::
         auto cookie = cookie_exception.releaseReturnValue();
 
         auto* globalObject = castedThis->globalObject();
-        RELEASE_AND_RETURN(throwScope, JSValue::encode(toJS(lexicalGlobalObject, globalObject, WTF::move(cookie))));
+        JSValue jsValue = toJS(lexicalGlobalObject, globalObject, WTF::move(cookie));
+        if (subclassStructure && jsValue.isObject())
+            asObject(jsValue)->setStructure(vm, subclassStructure);
+        RELEASE_AND_RETURN(throwScope, JSValue::encode(jsValue));
     } else if (callFrame->argumentCount() == 1 && callFrame->argument(0).isObject()) {
         // new Bun.Cooke({
         //     name: "name",
@@ -347,7 +353,10 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieDOMConstructor::
         }
         auto cookie = cookie_exception.releaseReturnValue();
         auto* globalObject = castedThis->globalObject();
-        RELEASE_AND_RETURN(throwScope, JSValue::encode(toJS(lexicalGlobalObject, globalObject, WTF::move(cookie))));
+        JSValue jsValue = toJS(lexicalGlobalObject, globalObject, WTF::move(cookie));
+        if (subclassStructure && jsValue.isObject())
+            asObject(jsValue)->setStructure(vm, subclassStructure);
+        RELEASE_AND_RETURN(throwScope, JSValue::encode(jsValue));
     } else if (callFrame->argumentCount() >= 2) {
         // new Bun.Cookie("name", "value", {
         //     domain: "domain",
@@ -383,7 +392,10 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieDOMConstructor::
         auto cookie = cookie_exception.releaseReturnValue();
 
         auto* globalObject = castedThis->globalObject();
-        RELEASE_AND_RETURN(throwScope, JSValue::encode(toJS(lexicalGlobalObject, globalObject, WTF::move(cookie))));
+        JSValue jsValue = toJS(lexicalGlobalObject, globalObject, WTF::move(cookie));
+        if (subclassStructure && jsValue.isObject())
+            asObject(jsValue)->setStructure(vm, subclassStructure);
+        RELEASE_AND_RETURN(throwScope, JSValue::encode(jsValue));
     }
 
     return throwVMError(lexicalGlobalObject, throwScope, createNotEnoughArgumentsError(lexicalGlobalObject));

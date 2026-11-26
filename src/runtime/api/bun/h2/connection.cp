@@ -204,6 +204,13 @@ pub struct Connection {
     last_stream_id: u32 = 0,
     going_away: bool = false,
 
+    reset_burst: u32 = 1000,
+    reset_rate: u32 = 33,
+    reset_tokens: u64 = 1000,
+    reset_last_sec: i64 = 0,
+    reset_initialized: bool = false,
+    made_you_reset_tokens: u32 = 1000,
+
     static fn init(allocator: Allocator, is_server: bool, local: Settings): Connection {
         return Connection{
             allocator: allocator,
@@ -534,6 +541,36 @@ pub struct Connection {
         return false;
     }
 
+    fn chargePeerReset(*_, sink: auto): bool {
+        const now = std.time.timestamp();
+        const burst = @as(u64, @max(1, _.reset_burst));
+        if (!_.reset_initialized) {
+            _.reset_initialized = true;
+            _.reset_tokens = burst;
+            _.reset_last_sec = now;
+        } else if (now > _.reset_last_sec) {
+            const elapsed = @as(u64, @intCast(now - _.reset_last_sec));
+            const rate = @as(u64, @max(1, _.reset_rate));
+            _.reset_tokens = @min(burst, _.reset_tokens +| elapsed *| rate);
+            _.reset_last_sec = now;
+        }
+        if (_.reset_tokens == 0) {
+            _.sendGoAway(sink, .EnhanceYourCalm, "too many stream resets");
+            return true;
+        }
+        _.reset_tokens -= 1;
+        return false;
+    }
+
+    fn chargeServerReset(*_, sink: auto): bool {
+        if (_.made_you_reset_tokens == 0) {
+            _.sendGoAway(sink, .EnhanceYourCalm, "too many stream resets");
+            return true;
+        }
+        _.made_you_reset_tokens -= 1;
+        return false;
+    }
+
     fn handleWindowUpdate(*_, sink: auto, hdr: FrameHeader, payload: []const u8): bool {
         const increment = std.mem.readInt(u32, payload[0..4], .big) & 0x7fff_ffff;
         if (increment == 0) {
@@ -541,11 +578,14 @@ pub struct Connection {
                 _.sendGoAway(sink, .ProtocolError, "WINDOW_UPDATE with 0 increment");
                 return true;
             }
-            _.sendRstStream(sink, hdr.stream_id, .ProtocolError);
+            let was_live = false;
             if (s := _.streams.getPtr(hdr.stream_id)) {
+                was_live = s.state != .Closed;
                 s.state = .Closed;
             }
+            _.sendRstStream(sink, hdr.stream_id, .ProtocolError);
             sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.ProtocolError.asU32());
+            if (was_live && _.chargeServerReset(sink)) return true;
             return false;
         }
         if (hdr.stream_id == 0) {
@@ -555,9 +595,11 @@ pub struct Connection {
             }
         } else if (s := _.streams.getPtr(hdr.stream_id)) {
             if (s.send_window.increase(increment) != null) {
+                const was_live = s.state != .Closed;
                 s.state = .Closed;
                 _.sendRstStream(sink, hdr.stream_id, .FlowControlError);
                 sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.FlowControlError.asU32());
+                if (was_live && _.chargeServerReset(sink)) return true;
                 return false;
             }
         }
@@ -1055,11 +1097,14 @@ pub struct Connection {
 
         switch (decision) {
             .rst => |code| {
-                _.sendRstStream(sink, hdr.stream_id, code);
+                let was_live = false;
                 if (s := _.streams.getPtr(hdr.stream_id)) {
+                    was_live = s.state != .Closed;
                     s.state = .Closed;
                 }
+                _.sendRstStream(sink, hdr.stream_id, code);
                 sink.sinkOnStreamReset(hdr.stream_id, code.asU32());
+                if (was_live && _.chargeServerReset(sink)) return true;
                 return false;
             },
             .deliver => {},
@@ -1084,8 +1129,10 @@ pub struct Connection {
     fn handleRstStream(*_, sink: auto, hdr: FrameHeader, payload: []const u8): bool {
         const code_raw = std.mem.readInt(u32, payload[0..4], .big);
         let on_idle = true;
+        let was_live = false;
         if (s := _.streams.getPtr(hdr.stream_id)) {
             if (s.state != .Idle) {
+                was_live = s.state != .Closed;
                 s.state = .Closed;
                 on_idle = false;
             }
@@ -1106,6 +1153,9 @@ pub struct Connection {
             return true;
         }
         sink.sinkOnStreamReset(hdr.stream_id, code_raw);
+        if (was_live && _.chargePeerReset(sink)) {
+            return true;
+        }
         return false;
     }
 

@@ -63,6 +63,7 @@ pub @value class Lexer {
     line_number: u32 = 0,
     token: TokenType = TokenType.t_end_of_file,
     allow_double_bracket: bool = true,
+    disallow_comment: bool = false,
 
     has_newline_before: bool = false,
 
@@ -227,7 +228,7 @@ pub @value class Lexer {
                     base = 16;
                 },
 
-                '0'...'7', '_' => {
+                '0'..='7', '_' => {
                     base = 8;
                     is_legacy_octal_literal = true;
                 },
@@ -594,6 +595,9 @@ pub @value class Lexer {
                     _.addDefaultError("Unexpected semicolon")?;
                 },
                 '#' => {
+                    if (_.disallow_comment) {
+                        _.addDefaultError("Expected a value but found '#'")?;
+                    }
                     _.step();
 
                     singleLineComment: while (true) {
@@ -656,8 +660,15 @@ pub @value class Lexer {
                     } else {
                         while (true) {
                             switch (_.code_point) {
-                                '\r', '\n', 0x2028, 0x2029 => {
-                                    _.addDefaultError("Unterminated string literal (single-line)")?;
+                                '\r' => {
+                                    _.step();
+                                    if (_.code_point == '\n') {
+                                        _.addDefaultError("Unterminated string; literal strings cannot contain newlines")?;
+                                    }
+                                    _.addDefaultError("Bare carriage return is not allowed; use \\r\\n or \\n")?;
+                                },
+                                '\n', 0x2028, 0x2029 => {
+                                    _.addDefaultError("Unterminated string; literal strings cannot contain newlines")?;
                                 },
                                 -1 => {
                                     _.addDefaultError("Unterminated string literal")?;
@@ -729,8 +740,15 @@ pub @value class Lexer {
                     } else {
                         while (true) {
                             switch (_.code_point) {
-                                '\r', '\n', 0x2028, 0x2029 => {
-                                    _.addDefaultError("Unterminated basic string (single-line)")?;
+                                '\r' => {
+                                    _.step();
+                                    if (_.code_point == '\n') {
+                                        _.addDefaultError("Unterminated string; newlines must be escaped in basic strings")?;
+                                    }
+                                    _.addDefaultError("Bare carriage return is not allowed; use \\r\\n or \\n")?;
+                                },
+                                '\n', 0x2028, 0x2029 => {
+                                    _.addDefaultError("Unterminated string; newlines must be escaped in basic strings")?;
                                 },
                                 -1 => {
                                     _.addDefaultError("Unterminated basic string")?;
@@ -774,11 +792,11 @@ pub @value class Lexer {
                     _.token = TokenType.t_string_literal;
                 },
 
-                '.', '0'...'9' => {
+                '.', '0'..='9' => {
                     _.parseNumericLiteralOrDot()?;
                 },
 
-                '@', 'a'...'z', 'A'...'Z', '$', '_' => {
+                '@', 'a'..='z', 'A'..='Z', '$', '_' => {
                     _.step();
                     while (isIdentifierPart(_.code_point)) {
                         _.step();
@@ -850,7 +868,7 @@ pub @value class Lexer {
                         },
 
                         // legacy octal literals
-                        '0'...'7' => {
+                        '0'..='7' => {
                             const octal_start = (iter.i + width2) - 2;
 
                             // 1-3 digit octal
@@ -871,14 +889,14 @@ pub @value class Lexer {
                             const c3 = iter.c;
 
                             switch (c3) {
-                                '0'...'7' => {
+                                '0'..='7' => {
                                     value = value * 8 + @as(i64, c3 - '0');
                                     restore = iter;
                                     if (!iterator.next(&iter)) return _.syntaxError();
 
                                     const c4 = iter.c;
                                     switch (c4) {
-                                        '0'...'7' => {
+                                        '0'..='7' => {
                                             const temp = value * 8 + @as(i64, c4 - '0');
                                             if (temp < 256) {
                                                 value = temp;
@@ -929,13 +947,13 @@ pub @value class Lexer {
                             c3 = iter.c;
                             width3 = iter.width;
                             switch (c3) {
-                                '0'...'9' => {
+                                '0'..='9' => {
                                     value = value * 16 | (c3 - '0');
                                 },
-                                'a'...'f' => {
+                                'a'..='f' => {
                                     value = value * 16 | (c3 + 10 - 'a');
                                 },
-                                'A'...'F' => {
+                                'A'..='F' => {
                                     value = value * 16 | (c3 + 10 - 'A');
                                 },
                                 else => {
@@ -948,13 +966,13 @@ pub @value class Lexer {
                             c3 = iter.c;
                             width3 = iter.width;
                             switch (c3) {
-                                '0'...'9' => {
+                                '0'..='9' => {
                                     value = value * 16 | (c3 - '0');
                                 },
-                                'a'...'f' => {
+                                'a'..='f' => {
                                     value = value * 16 | (c3 + 10 - 'a');
                                 },
-                                'A'...'F' => {
+                                'A'..='F' => {
                                     value = value * 16 | (c3 + 10 - 'A');
                                 },
                                 else => {
@@ -984,13 +1002,13 @@ pub @value class Lexer {
                                     c3 = iter.c;
 
                                     switch (c3) {
-                                        '0'...'9' => {
+                                        '0'..='9' => {
                                             value = (value *| 16) | @as(i64, c3 - '0');
                                         },
-                                        'a'...'f' => {
+                                        'a'..='f' => {
                                             value = (value *| 16) | @as(i64, c3 + 10 - 'a');
                                         },
-                                        'A'...'F' => {
+                                        'A'..='F' => {
                                             value = (value *| 16) | @as(i64, c3 + 10 - 'A');
                                         },
                                         '}' => {
@@ -1028,13 +1046,13 @@ pub @value class Lexer {
                                 let j: usize = 0;
                                 while (j < 4) : (j += 1) {
                                     switch (c3) {
-                                        '0'...'9' => {
+                                        '0'..='9' => {
                                             value = value * 16 | @as(i64, c3 - '0');
                                         },
-                                        'a'...'f' => {
+                                        'a'..='f' => {
                                             value = value * 16 | @as(i64, c3 + 10 - 'a');
                                         },
-                                        'A'...'F' => {
+                                        'A'..='F' => {
                                             value = value * 16 | @as(i64, c3 + 10 - 'A');
                                         },
                                         else => {
@@ -1051,6 +1069,37 @@ pub @value class Lexer {
                                 }
                             }
 
+                            if ((value >= 0xD800 && value <= 0xDFFF) || value > 0x10FFFF) {
+                                _.addDefaultError("Escaped code point must be a Unicode scalar value")?;
+                            }
+                            iter.c = @as(CodePoint, @truncate(value));
+                        },
+                        'U' => {
+                            let value: i64 = 0;
+                            let j: usize = 0;
+                            while (j < 8) : (j += 1) {
+                                if (!iterator.next(&iter)) return _.syntaxError();
+                                const c3 = iter.c;
+                                const width3 = iter.width;
+                                switch (c3) {
+                                    '0'..='9' => {
+                                        value = value * 16 | @as(i64, c3 - '0');
+                                    },
+                                    'a'..='f' => {
+                                        value = value * 16 | @as(i64, c3 + 10 - 'a');
+                                    },
+                                    'A'..='F' => {
+                                        value = value * 16 | @as(i64, c3 + 10 - 'A');
+                                    },
+                                    else => {
+                                        _.end = start + iter.i - width3;
+                                        return _.syntaxError();
+                                    },
+                                }
+                            }
+                            if ((value >= 0xD800 && value <= 0xDFFF) || value > 0x10FFFF) {
+                                _.addDefaultError("Escaped code point must be a Unicode scalar value")?;
+                            }
                             iter.c = @as(CodePoint, @truncate(value));
                         },
                         '\r' => {
@@ -1084,7 +1133,7 @@ pub @value class Lexer {
 
             switch (iter.c) {
                 -1 => return _.addDefaultError("Unexpected end of file")?,
-                0...127 => {
+                0..=127 => {
                     buf.append(@as(u8, @intCast(iter.c))) catch unreachable;
                 },
                 else => {
@@ -1166,9 +1215,9 @@ pub @value class Lexer {
 
 pub fn isIdentifierPart(code_point: CodePoint) bool {
     return switch (code_point) {
-        '0'...'9',
-        'a'...'z',
-        'A'...'Z',
+        '0'..='9',
+        'a'..='z',
+        'A'..='Z',
         '$',
         '_',
         '-',
@@ -1181,10 +1230,10 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer) bool {
     if (name.len == 0) return false;
 
     switch (name[0]) {
-        'a'...'z',
-        'A'...'Z',
+        'a'..='z',
+        'A'..='Z',
         '$',
-        '1'...'9',
+        '1'..='9',
         '_',
         '-' => {},
         else => return false,
@@ -1193,9 +1242,9 @@ pub fn isLatin1Identifier(comptime Buffer: type, name: Buffer) bool {
     if (name.len > 0) {
         for (c of name[1..]) {
             switch (c) {
-                '0'...'9',
-                'a'...'z',
-                'A'...'Z',
+                '0'..='9',
+                'a'..='z',
+                'A'..='Z',
                 '$',
                 '_',
                 '-' => {},

@@ -3870,7 +3870,7 @@ fn NewPrinter(
                             if (property.flags.contains(.is_spread)) {
                                 p.print("...");
                             } else {
-                                if (property.flags.contains(.is_computed)) {
+                                if (property.flags.contains(.is_computed) || p.propertyKeyMustBeComputed(property.key)) {
                                     p.print("[");
                                     p.printExpr(property.key, .comma, ExprFlag.Set.initEmpty());
                                     p.print("]:");

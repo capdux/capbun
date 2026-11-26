@@ -3212,6 +3212,7 @@ JSC_DEFINE_HOST_FUNCTION(jsStatementSyncIteratorReturn, (JSGlobalObject * global
     // UDF re-entered return()); sqlite3_reset on a running VDBE is misuse.
     if (!self->done() && stmt && !stmt->isFinalized() && !stmt->isStepping()
         && self->capturedGeneration() == stmt->resetGeneration()) {
+        JSDatabaseSync::BusyScope busy { stmt->database() };
         sqlite3_reset(stmt->statement());
     }
     self->setDone();

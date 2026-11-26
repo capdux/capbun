@@ -214,9 +214,11 @@ pub struct MinifyRenamer {
             return symbol.original_name;
         }
 
-        const i = symbol.nestedScopeSlot() ??
-            _.top_level_symbol_to_slot.get(sym_ref) ??
-            return symbol.original_name;
+        const i = _.top_level_symbol_to_slot.get(sym_ref) ?? brk: {
+            const nested = symbol.nestedScopeSlot() ?? return symbol.original_name;
+            if (nested >= _.slots.get(ns).items.len) return symbol.original_name;
+            break :brk nested;
+        };
 
         // This has to be a pointer because the string might be stored inline
         return _.slots.getPtr(ns).items[i].name.slice();
@@ -262,12 +264,15 @@ pub struct MinifyRenamer {
         if (ns == .must_not_be_renamed) return;
 
         if (i := symbol.nestedScopeSlot()) {
-            let slot = &_.slots.getPtr(ns).items[i];
-            slot.count += count;
-            if (symbol.must_start_with_capital_letter_for_jsx) {
-                slot.needs_capital_for_jsx = true;
+            let ns_slots = _.slots.getPtr(ns);
+            if (i < ns_slots.items.len) {
+                let slot = &ns_slots.items[i];
+                slot.count += count;
+                if (symbol.must_start_with_capital_letter_for_jsx) {
+                    slot.needs_capital_for_jsx = true;
+                }
+                return;
             }
-            return;
         }
 
         top_level_symbols.append(StableSymbolCount{

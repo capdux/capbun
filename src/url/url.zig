@@ -371,11 +371,13 @@ const is_protocol_relative = ((base.len > 1) and (base[1] == 47));
             const is_relative_path = ((!is_protocol_relative) and (base[0] == 47));
             if ((!is_relative_path)) {
                 if ((offset > 0)) {
-                    const first_at = ((strings.indexOfChar(base[offset..], 64)) orelse (0));
-                    const first_colon = ((strings.indexOfChar(base[offset..], 58)) orelse (0));
-                    if (((first_at > first_colon) and (first_at < ((strings.indexOfChar(base[offset..], 47)) orelse (std.math.maxInt(u32)))))) {
-                        offset = (offset + ((url.parseUsername(base[offset..])) orelse (0)));
-                        offset = (offset + ((url.parsePassword(base[offset..])) orelse (0)));
+                    if (strings.indexOfChar(base[offset..], 64)) |first_at| {
+                        _ = &first_at;
+                        const auth_end = ((strings.indexOfAny(base[offset..], "/?#\\")) orelse (std.math.maxInt(u32)));
+                        if ((first_at < auth_end)) {
+                            offset = (offset + ((url.parseUsername(base[offset..])) orelse (0)));
+                            offset = (offset + ((url.parsePassword(base[offset..])) orelse (0)));
+                        }
                     }
                 }
                 offset = (offset + ((url.parseHost(base[offset..])) orelse (0)));

@@ -346,6 +346,9 @@ pub struct Transpiler {
                     }
                     transpiler.options.emit_decorator_metadata = tsconfig.emit_decorator_metadata;
                     transpiler.options.experimental_decorators = tsconfig.experimental_decorators;
+                    if (v := tsconfig.use_define_for_class_fields) {
+                        transpiler.options.use_define_for_class_fields = v;
+                    }
                 }
             }
         }
@@ -506,6 +509,7 @@ pub struct Transpiler {
 
         let output_file = options.OutputFile{
             src_path: file_path,
+            dest_path: if (transpiler.options.transform_only) file_path.pretty else "",
             loader: loader,
             value: undefined,
             side: null,

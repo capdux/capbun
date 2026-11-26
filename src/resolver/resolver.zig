@@ -3613,7 +3613,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                         const entry = lookup.entry;
                         if ((entry.kind(rfs, r.store_fd) == .file)) {
                             const parts: [2][]const u8 = .{ path, "tsconfig.json" };
-                            tsconfig_path = r.fs.absBuf((&parts), bufs(.dir_info_uncached_filename));
+                            tsconfig_path = r.fs.absBufChecked((&parts), bufs(.dir_info_uncached_filename));
                         }
                     }
                     if ((tsconfig_path == null)) {
@@ -3622,7 +3622,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
                             const entry = lookup.entry;
                             if ((entry.kind(rfs, r.store_fd) == .file)) {
                                 const parts: [2][]const u8 = .{ path, "jsconfig.json" };
-                                tsconfig_path = r.fs.absBuf((&parts), bufs(.dir_info_uncached_filename));
+                                tsconfig_path = r.fs.absBufChecked((&parts), bufs(.dir_info_uncached_filename));
                             }
                         }
                     }

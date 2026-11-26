@@ -776,7 +776,7 @@ pub fn Visit(
                         let lower_count: usize = 0;
                         let init_count: usize = 0;
                         for (prop of cls.properties) {
-                            if (prop.kind == .normal && !prop.flags.contains(.is_static) &&
+                            if (prop.kind == .normal && !prop.flags.contains(.is_method) && !prop.flags.contains(.is_static) &&
                                 !(cls.should_lower_standard_decorators && prop.ts_decorators.len > 0))
                             {
                                 if (key_expr := prop.key) {
@@ -842,7 +842,7 @@ pub fn Visit(
                             let new_props = std.array_list.Managed(G.Property).initCapacity(p.allocator, cls.properties.len - lower_count) catch unreachable;
                             let assign_stmts = std.array_list.Managed(Stmt).initCapacity(p.allocator, init_count) catch unreachable;
                             for (prop of cls.properties) {
-                                if (prop.kind == .normal && !prop.flags.contains(.is_static) &&
+                                if (prop.kind == .normal && !prop.flags.contains(.is_method) && !prop.flags.contains(.is_static) &&
                                     !(cls.should_lower_standard_decorators && prop.ts_decorators.len > 0))
                                 {
                                     if (key_expr := prop.key) {

@@ -562,7 +562,9 @@ function howMuchToRead(n, state) {
   if ((state[kState] & kObjectMode) !== 0) return 1;
   if (NumberIsNaN(n)) {
     // Only flow one buffer at a time.
-    if ((state[kState] & kFlowing) !== 0 && state.length) return state.buffer[state.bufferIndex].length;
+    if (((state[kState] & kFlowing) !== 0 || (state[kState] & kDecoder) === 0) && state.length) {
+      return state.buffer[state.bufferIndex].length;
+    }
     return state.length;
   }
   if (n <= state.length) return n;

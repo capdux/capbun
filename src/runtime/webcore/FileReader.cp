@@ -464,8 +464,7 @@ pub union(enum) Lazy {
         }
 
         return _.read_inside_on_pull != .temporary &&
-            !(_.buffered.items.len + reader_buffer.items.len >= _.highwater_mark &&
-                !_.reader.flags.pollable);
+            _.buffered.items.len + reader_buffer.items.len < _.highwater_mark;
     }
 
     fn isPulling(): bool {

@@ -56,12 +56,15 @@ public:
 
     // Receiver-thread synchronous pop, for node:worker_threads receiveMessageOnPort.
     std::optional<MessageWithMessagePorts> takeOne(uint8_t side);
+    std::optional<MessageWithMessagePorts> takeOneIfAttached(uint8_t side, ScriptExecutionContextIdentifier expectedCtx, const MessagePort* expectedPort);
 
     // Attach this side to a context + port. Schedules a drain if messages are
     // already queued (e.g. after transfer). Passing a null port is allowed and
     // means "just buffer, don't dispatch" (used before start()).
     void attach(uint8_t side, ScriptExecutionContextIdentifier, ThreadSafeWeakPtr<MessagePort>);
     void detach(uint8_t side);
+    void registerCloseContext(uint8_t side, ScriptExecutionContextIdentifier, ThreadSafeWeakPtr<MessagePort>);
+    void unregisterCloseContext(uint8_t side);
     void markClosed(uint8_t side);
     void close(uint8_t side);
 
@@ -77,12 +80,17 @@ private:
 
     void scheduleDrain(uint8_t side, ScriptExecutionContextIdentifier);
     void drainAndDispatch(uint8_t side, ScriptExecutionContextIdentifier expectedCtx);
+    void schedulePeerClosed(uint8_t side, ScriptExecutionContextIdentifier);
+    void notifyPeerClosed(uint8_t side, ScriptExecutionContextIdentifier expectedCtx);
 
     struct Side {
         WTF::Lock lock;
         WTF::Deque<MessageWithMessagePorts> inbox WTF_GUARDED_BY_LOCK(lock);
         ScriptExecutionContextIdentifier ctxId WTF_GUARDED_BY_LOCK(lock) { 0 };
         ThreadSafeWeakPtr<MessagePort> port WTF_GUARDED_BY_LOCK(lock);
+        ScriptExecutionContextIdentifier closeCtxId WTF_GUARDED_BY_LOCK(lock) { 0 };
+        ThreadSafeWeakPtr<MessagePort> closePort WTF_GUARDED_BY_LOCK(lock);
+        bool peerClosedNotified WTF_GUARDED_BY_LOCK(lock) { false };
         // Packed flags + count. Written only while holding `lock`; read locklessly.
         std::atomic<uint64_t> state { 0 };
     };

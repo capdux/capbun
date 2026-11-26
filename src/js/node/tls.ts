@@ -1,5 +1,5 @@
 // Hardcoded module "node:tls"
-const { isArrayBufferView, isTypedArray } = require("node:util/types");
+const { isArrayBuffer, isArrayBufferView, isTypedArray } = require("node:util/types");
 const net = require("node:net");
 const Duplex = require("internal/streams/duplex");
 const addServerName = $newZigFunction("Listener.zig", "jsAddServerName", 3);
@@ -408,13 +408,16 @@ const NativeSecureContext = $zig("SecureContext.zig", "js.getConstructor");
 // crossing into native so `{ key: false }` etc. doesn't throw
 // ERR_INVALID_ARG_TYPE from the bindgen layer.
 function newNativeSecureContext(options) {
-  if (options && (!options.key || !options.cert || !options.ca)) {
+  if (options && (!options.key || !options.cert || !options.ca || options.ALPNProtocols)) {
     options = {
       ...options,
       key: options.key || null,
       cert: options.cert || null,
       ca: options.ca || null,
     };
+    if (options.ALPNProtocols) {
+      convertALPNProtocols(options.ALPNProtocols, options);
+    }
   }
   return NativeSecureContext.intern(options);
 }
@@ -437,22 +440,27 @@ var InternalSecureContext = class SecureContext {
       if (!$isUndefinedOrNull(options.privateKeyIdentifier)) {
         if ($isUndefinedOrNull(options.privateKeyEngine))
           throw $ERR_INVALID_ARG_VALUE("options.privateKeyEngine", options.privateKeyEngine);
-        if (typeof options.privateKeyEngine !== "string")
-          throw $ERR_INVALID_ARG_TYPE(
-            "options.privateKeyEngine",
-            ["string", "null", "undefined"],
-            options.privateKeyEngine,
-          );
         if (typeof options.privateKeyIdentifier !== "string")
           throw $ERR_INVALID_ARG_TYPE(
             "options.privateKeyIdentifier",
-            ["string", "null", "undefined"],
+            "string or one of null or undefined",
             options.privateKeyIdentifier,
+          );
+        if (typeof options.privateKeyEngine !== "string")
+          throw $ERR_INVALID_ARG_TYPE(
+            "options.privateKeyEngine",
+            "string or one of null or undefined",
+            options.privateKeyEngine,
           );
         if (options.key) {
           throw $ERR_INVALID_ARG_VALUE("options.privateKeyIdentifier", options.privateKeyIdentifier);
         }
         throw $ERR_CRYPTO_CUSTOM_ENGINE_NOT_SUPPORTED();
+      }
+      if (options.pfx !== undefined) {
+        if ((isArrayBuffer(options.pfx) || isArrayBufferView(options.pfx)) && options.pfx.byteLength === 0) {
+          throw new Error("PFX certificate argument is mandatory");
+        }
       }
     }
     // The native handle (SSL_CTX wrapper) is what's memoised — not this JS

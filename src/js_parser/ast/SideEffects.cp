@@ -483,6 +483,11 @@ pub enum SideEffects: u1 {
                     SideEffects.findIdentifiers(decl.binding, &decls);
                 }
 
+                if (decls.items.len == 0) {
+                    decls.deinit();
+                    return false;
+                }
+
                 local.decls = .moveFromList(&decls);
                 return true;
             },

@@ -293,7 +293,7 @@ pub fn writeOutputFilesToDisk(
             else
                 .js;
 
-            if (loader.isJavaScriptLike()) {
+            if (chunk.content == .javascript && loader.isJavaScriptLike()) {
                 jsc.VirtualMachine.is_bundler_thread_for_bytecode_cache = true;
                 jsc.initialize(false);
                 let fdpath: bun.PathBuffer = undefined;

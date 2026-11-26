@@ -118,6 +118,7 @@ pub const Lexer = struct {
     line_number: u32 = 0,
     token: TokenType = TokenType.t_end_of_file,
     allow_double_bracket: bool = true,
+    disallow_comment: bool = false,
     has_newline_before: bool = false,
     should_redact_logs: bool = false,
 
@@ -580,7 +581,10 @@ else => {
                 _ = try self.addDefaultError("Unexpected semicolon");
 },
 '#' => {
-_ = self.step();
+if (self.disallow_comment) {
+                    _ = try self.addDefaultError("Expected a value but found '#'");
+                }
+                _ = self.step();
                 singleLineComment: while (true) {
                     _ = self.step();
                     switch (self.code_point) {
@@ -644,8 +648,15 @@ else => {
                 } else {
                     while (true) {
                         switch (self.code_point) {
-13, 10, 8232, 8233 => {
-_ = try self.addDefaultError("Unterminated string literal (single-line)");
+13 => {
+_ = self.step();
+                        if ((self.code_point == 10)) {
+                            _ = try self.addDefaultError("Unterminated string; literal strings cannot contain newlines");
+                        }
+                        _ = try self.addDefaultError("Bare carriage return is not allowed; use \\r\\n or \\n");
+},
+10, 8232, 8233 => {
+_ = try self.addDefaultError("Unterminated string; literal strings cannot contain newlines");
 },
 -1 => {
 _ = try self.addDefaultError("Unterminated string literal");
@@ -724,8 +735,15 @@ else => {
                 } else {
                     while (true) {
                         switch (self.code_point) {
-13, 10, 8232, 8233 => {
-_ = try self.addDefaultError("Unterminated basic string (single-line)");
+13 => {
+_ = self.step();
+                        if ((self.code_point == 10)) {
+                            _ = try self.addDefaultError("Unterminated string; newlines must be escaped in basic strings");
+                        }
+                        _ = try self.addDefaultError("Bare carriage return is not allowed; use \\r\\n or \\n");
+},
+10, 8232, 8233 => {
+_ = try self.addDefaultError("Unterminated string; newlines must be escaped in basic strings");
 },
 -1 => {
 _ = try self.addDefaultError("Unterminated basic string");
@@ -1034,6 +1052,41 @@ self.end = ((start + iter.i) - width3);
                             width3 = iter.width;
                         }
                     }
+                }
+                if ((((value >= 55296) and (value <= 57343)) or (value > 1114111))) {
+                    _ = try self.addDefaultError("Escaped code point must be a Unicode scalar value");
+                }
+                iter.c = @as(CodePoint, @truncate(value));
+},
+'U' => {
+var value: i64 = 0;
+                _ = &value;
+                var j: usize = 0;
+                _ = &j;
+                while ((j < 8)) : (j = (j + 1)) {
+                    if ((!iterator.next((&iter)))) {
+                        return self.syntaxError();
+                    }
+                    const c3 = iter.c;
+                    const width3 = iter.width;
+                    switch (c3) {
+48...57 => {
+value = ((value * 16) | (if (comptime @typeInfo(@TypeOf((c3 - 48))) == .@"enum") cp_cast_int(i64, @intFromEnum((c3 - 48))) else cp_cast_int(i64, (c3 - 48))));
+},
+97...102 => {
+value = ((value * 16) | (if (comptime @typeInfo(@TypeOf(((c3 + 10) - 97))) == .@"enum") cp_cast_int(i64, @intFromEnum(((c3 + 10) - 97))) else cp_cast_int(i64, ((c3 + 10) - 97))));
+},
+65...70 => {
+value = ((value * 16) | (if (comptime @typeInfo(@TypeOf(((c3 + 10) - 65))) == .@"enum") cp_cast_int(i64, @intFromEnum(((c3 + 10) - 65))) else cp_cast_int(i64, ((c3 + 10) - 65))));
+},
+else => {
+self.end = ((start + iter.i) - width3);
+                    return self.syntaxError();
+},
+}
+                }
+                if ((((value >= 55296) and (value <= 57343)) or (value > 1114111))) {
+                    _ = try self.addDefaultError("Escaped code point must be a Unicode scalar value");
                 }
                 iter.c = @as(CodePoint, @truncate(value));
 },

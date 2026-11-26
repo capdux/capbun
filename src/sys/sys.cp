@@ -433,7 +433,7 @@ pub fn getcwdZ(buf: *bun.PathBuffer): Maybe(ConstByteSliceZ) {
     return if (rc != null)
         Result{ result: rc.?[0..std.mem.len(rc.?) :0] }
     else
-        Result.errnoSysP(@as(c_int, 0), .getcwd, buf).?;
+        Result.errnoSysP(@as(c_int, -1), .getcwd, buf).?;
 }
 
 const syscall_or_c = if (Environment.isLinux) syscall else bun.c;
@@ -1082,8 +1082,8 @@ pub fn normalizePathWindows(
     // headroom wherever we feed it a path that could approach `buf.len`.
     const nt_prefix_headroom = 8;
 
-    const wbuf = if (T != u16) bun.w_path_buffer_pool.get();
-    const _wbuf_guard = if (comptime T != u16) WPathBufGuard{ buf: wbuf };
+    const wbuf = if (T != u16) bun.w_path_buffer_pool.get() else @as(void, undefined);
+    const _wbuf_guard = if (comptime T != u16) WPathBufGuard{ buf: wbuf } else @as(void, undefined);
     // convertUTF8toUTF16InBuffer forwards only `output.ptr` to simdutf, which
     // performs no output bounds checking. UTF-16 output length is always <=
     // UTF-8 input byte length, so `path_.len` is a cheap upper bound; when it
@@ -3205,7 +3205,7 @@ pub fn mmap(
         });
     }
 
-    return .initResult(@as([*]align(page_size_min) u8, rc)[0..length]);
+    return .initResult(unsafe { @as([*]align(page_size_min) u8, rc)[0..length] });
 }
 
 pub fn mmapFile(path: [:0]const u8, flags: std.c.MAP, wanted_size: usize?, offset: usize): Maybe([]align(page_size_min) u8) {

@@ -70,7 +70,7 @@ static WTF::String describeThrownValue(JSC::VM& vm, JSC::JSGlobalObject* lexical
     return "<error>"_s;
 }
 
-static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalObject, JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSObject* errorObject, JSC::JSArray* callSites, bool describeNameThrow)
+static JSValue formatDefaultStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalObject, JSC::JSGlobalObject* lexicalGlobalObject, JSC::JSObject* errorObject, JSC::JSArray* callSites, bool describeNameThrow)
 {
     auto scope = DECLARE_THROW_SCOPE(vm);
 
@@ -145,7 +145,7 @@ static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalO
 {
     auto scope = DECLARE_THROW_SCOPE(vm);
     bool hasCallback = prepareStackTrace && prepareStackTrace.isObject() && JSC::getCallData(prepareStackTrace).type != JSC::CallData::Type::None;
-    auto stackStringValue = formatStackTraceToJSValue(vm, globalObject, lexicalGlobalObject, errorObject, callSites, hasCallback);
+    auto stackStringValue = formatDefaultStackTraceToJSValue(vm, globalObject, lexicalGlobalObject, errorObject, callSites, hasCallback);
     RETURN_IF_EXCEPTION(scope, {});
 
     if (hasCallback) {
@@ -153,7 +153,7 @@ static JSValue formatStackTraceToJSValue(JSC::VM& vm, Zig::GlobalObject* globalO
         if (prepareStackTraceCallData.type != JSC::CallData::Type::None) {
             // In Node, if you console.log(error.stack) inside Error.prepareStackTrace
             // it will display the stack as a formatted string, so we have to do the same.
-            errorObject->putDirect(vm, vm.propertyNames->stack, stackStringValue, 0);
+            errorObject->putDirect(vm, vm.propertyNames->stack, stackStringValue, PropertyAttribute::DontEnum | 0);
 
             JSC::MarkedArgumentBuffer arguments;
             arguments.append(errorObject);
@@ -565,7 +565,7 @@ static JSValue computeErrorInfoWithPrepareStackTrace(JSC::VM& vm, Zig::GlobalObj
     JSArray* callSitesArray = JSC::constructArray(globalObject, globalObject->arrayStructureForIndexingTypeDuringAllocation(JSC::ArrayWithContiguous), callSites);
     RETURN_IF_EXCEPTION(scope, {});
 
-    RELEASE_AND_RETURN(scope, formatStackTraceToJSValue(vm, globalObject, lexicalGlobalObject, errorObject, callSitesArray, prepareStackTrace));
+    RELEASE_AND_RETURN(scope, formatStackTraceToJSValue(vm, globalObject, lexicalGlobalObject, errorObject, callSitesArray, JSC::JSValue(prepareStackTrace)));
 }
 
 static String computeErrorInfoToString(JSC::VM& vm, Vector<StackFrame>& stackTrace, OrdinalNumber& line, OrdinalNumber& column, String& sourceURL)
@@ -738,16 +738,23 @@ JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncAppendStackTrace, (JSC::JSGlobalObj
         return {};
     }
 
+    if (source == destination) {
+        return JSC::JSValue::encode(jsUndefined());
+    }
+
     // A destination that is materialized, or is being formatted right now, never renders frames again.
     if (destination->hasMaterializedErrorInfo()) {
         return JSC::JSValue::encode(jsUndefined());
     }
 
     if (!destination->stackTrace()) {
+        if (!globalObject->stackTraceLimit() || *globalObject->stackTraceLimit() == 0) {
+            return JSC::JSValue::encode(jsUndefined());
+        }
         destination->captureStackTrace(vm, globalObject, 1);
     }
 
-    if (source->stackTrace()) {
+    if (source->stackTrace() && destination->stackTrace()) {
         destination->stackTrace()->appendVector(*source->stackTrace());
         source->stackTrace()->clear();
     }
@@ -815,7 +822,7 @@ JSC_DEFINE_CUSTOM_GETTER(errorInstanceLazyStackCustomGetter, (JSGlobalObject * g
             errorObject->setStackFrames(vm, {});
     }
     RETURN_IF_EXCEPTION(scope, {});
-    errorObject->putDirect(vm, vm.propertyNames->stack, result, 0);
+    errorObject->putDirect(vm, vm.propertyNames->stack, result, PropertyAttribute::DontEnum | 0);
     return JSValue::encode(result);
 }
 
@@ -824,7 +831,7 @@ JSC_DEFINE_CUSTOM_SETTER(errorInstanceLazyStackCustomSetter, (JSGlobalObject * g
     auto& vm = JSC::getVM(globalObject);
     JSValue decodedValue = JSValue::decode(thisValue);
     if (auto* object = decodedValue.getObject()) {
-        object->putDirect(vm, vm.propertyNames->stack, JSValue::decode(value), 0);
+        object->putDirect(vm, vm.propertyNames->stack, JSValue::decode(value), PropertyAttribute::DontEnum | 0);
     }
 
     return true;
@@ -864,7 +871,7 @@ JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncCaptureStackTrace, (JSC::JSGlobalOb
             String sourceURL;
             JSValue result = computeErrorInfoToJSValue(vm, stackTrace, line, column, sourceURL, errorObject, nullptr);
             RETURN_IF_EXCEPTION(scope, {});
-            errorObject->putDirect(vm, vm.propertyNames->stack, result, 0);
+            errorObject->putDirect(vm, vm.propertyNames->stack, result, PropertyAttribute::DontEnum | 0);
         } else {
             // Not yet materialized — safe to install new frames with a lazy getter.
             instance->setStackFrames(vm, WTF::move(stackTrace));
@@ -877,7 +884,7 @@ JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncCaptureStackTrace, (JSC::JSGlobalOb
             }
             RETURN_IF_EXCEPTION(scope, {});
 
-            instance->putDirectCustomAccessor(vm, vm.propertyNames->stack, globalObject->m_lazyStackCustomGetterSetter.get(globalObject), JSC::PropertyAttribute::CustomAccessor | 0);
+            instance->putDirectCustomAccessor(vm, vm.propertyNames->stack, globalObject->m_lazyStackCustomGetterSetter.get(globalObject), JSC::PropertyAttribute::DontEnum | JSC::PropertyAttribute::CustomAccessor | 0);
         }
     } else {
         OrdinalNumber line;
@@ -885,7 +892,7 @@ JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncCaptureStackTrace, (JSC::JSGlobalOb
         String sourceURL;
         JSValue result = computeErrorInfoToJSValue(vm, stackTrace, line, column, sourceURL, errorObject, nullptr);
         RETURN_IF_EXCEPTION(scope, {});
-        errorObject->putDirect(vm, vm.propertyNames->stack, result, 0);
+        errorObject->putDirect(vm, vm.propertyNames->stack, result, PropertyAttribute::DontEnum | 0);
     }
 
     return JSC::JSValue::encode(JSC::jsUndefined());

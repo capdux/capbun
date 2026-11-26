@@ -913,8 +913,15 @@ pub fn getPromptLength(self: *Repl) usize {
 pub fn refreshLine(self: *Repl) void {
         _ = Output.flush();
         const prompt = self.getPrompt();
-        const prompt_len = self.getPromptLength();
         const line = self.line_editor.getLine();
+        if ((!self.is_tty)) {
+            if ((((line.len == 0) and (!self.in_multiline)) and (!self.editor_mode))) {
+                _ = self.write(prompt);
+                _ = Output.flush();
+            }
+            return;
+        }
+        const prompt_len = self.getPromptLength();
         _ = self.write("\r");
         _ = self.write(Cursor.clear_line);
         _ = self.write(prompt);

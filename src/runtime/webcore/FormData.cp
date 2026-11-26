@@ -102,6 +102,12 @@ pub struct _AsyncFormData {
             _.encoding,
         ) catch e => {
             log("AsnycFormData.toJS -> failed ", .{});
+            if (e == error.JSError) {
+                if (exc := global.tryTakeException()) {
+                    promise.reject(global, exc.toError() ?? exc)?;
+                    return;
+                }
+            }
             promise.reject(global, global.createErrorInstance("FormData {s}", .{@errorName(e)}))?;
             return;
         };
@@ -135,7 +141,7 @@ struct _MultipartWrapper {
     globalThis: *JSGlobalObject,
     form: *jsc.DOMFormData,
 
-    fn onEntry(*_, name: Semver.String, field: _Field, buf: []const u8) {
+    fn onEntry(*_, name: Semver.String, field: _Field, buf: []const u8): JSError!void {
         const value_str = field.value;
         let key = jsc.ZigString.initUTF8(name.slice(buf));
 
@@ -178,12 +184,16 @@ struct _MultipartWrapper {
                 }
             }
 
-            _.form.appendBlob(_.globalThis, &key, &blob_guard.val, &filename);
+            if (!_.form.appendBlob(_.globalThis, &key, &blob_guard.val, &filename)) {
+                return _.globalThis.throwOutOfMemory();
+            }
         } else {
             let value = jsc.ZigString.initUTF8(
                 strings.withoutUTF8BOM(value_str),
             );
-            _.form.append(&key, &value);
+            if (!_.form.append(&key, &value)) {
+                return _.globalThis.throwOutOfMemory();
+            }
         }
     }
 }
@@ -329,7 +339,7 @@ export class FormData {
             Semver.String,
             _Field,
             []const u8,
-        ),
+        ): JSError!void,
     ): ! {
         let slice = input;
         let subslicer = Semver.SlicedString.init(input, input);
@@ -455,7 +465,7 @@ export class FormData {
             }
             field.is_file = is_file;
 
-            iterator(ctx, name, field, input);
+            iterator(ctx, name, field, input)?;
         }
     }
 }

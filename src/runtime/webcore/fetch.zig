@@ -960,13 +960,6 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
-        if (signal) |sig| {
-            _ = &sig;
-            if (sig.aborted()) {
-                const reason = sig.jsReason(globalThis);
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, reason);
-            }
-        }
         var has_body = false;
         _ = &has_body;
         if (options_object) |opts| {
@@ -1211,6 +1204,13 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             var err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
             _ = &err;
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+        }
+        if (signal) |sig| {
+            _ = &sig;
+            if (sig.aborted()) {
+                const reason = sig.jsReason(globalThis);
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, reason);
+            }
         }
         if ((((headers == null) and body.hasBody()) and body.hasContentTypeFromUser())) {
             headers = (blk_catch_14: { break :blk_catch_14 ((Headers.from(null, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });

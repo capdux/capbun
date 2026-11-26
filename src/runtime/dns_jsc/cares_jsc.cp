@@ -193,12 +193,8 @@ pub fn caaReplyToJS(reply: *c_ares.struct_ares_caa_reply, globalThis: *jsc.JSGlo
     const property = reply.property[0..reply.plength];
     const value = reply.value[0..reply.length];
     const js_val = jsc.ZigString.fromUTF8(value).toJS(globalThis);
-    if (idx := (std.fmt.parseInt(u32, property, 10) catch null)) {
-        obj.putIndex(globalThis, idx, js_val) catch {};
-    } else {
-        const property_str = jsc.ZigString.fromUTF8(property);
-        obj.put(globalThis, &property_str, js_val);
-    }
+    const key_str = bun.String.borrowUTF8(property);
+    obj.putMayBeIndex(globalThis, &key_str, js_val) catch {};
 
     return obj;
 }

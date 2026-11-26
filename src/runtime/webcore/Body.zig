@@ -1728,7 +1728,13 @@ pub fn getFormData(this_obj: *Type, globalObject: *jsc.JSGlobalObject, callframe
             _ = &_guard_enc;
             var ___guard_enc_moved = false; _ = &___guard_enc_moved;
             defer if (!___guard_enc_moved) { ___guard_enc_moved = true; const __T = @TypeOf(_guard_enc); if (@typeInfo(__T) == .optional) { if (_guard_enc) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_enc.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_enc; _drop_val.__cp_deinit(); } };
-            const js_value = (blk_catch_0: { break :blk_catch_0 ((bun.FormData.toJS(globalObject, blob.slice(), encoder.encoding)) catch |e| { _ = &e; return globalObject.ERR(.FORMDATA_PARSE_ERROR, "FormData parse error {s}", .{ @errorName(e) }).reject(); }); });
+            const js_value = (blk_catch_0: { break :blk_catch_0 ((bun.FormData.toJS(globalObject, blob.slice(), encoder.encoding)) catch |e| { _ = &e; if ((e == error.JSError)) {
+                if (globalObject.tryTakeException()) |exc| {
+                    _ = &exc;
+                    return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, ((exc.toError()) orelse (exc)));
+                }
+            }
+            return globalObject.ERR(.FORMDATA_PARSE_ERROR, "FormData parse error {s}", .{ @errorName(e) }).reject(); }); });
             return jsc.JSPromise.wrapValue(globalObject, js_value);
     }
 

@@ -129,7 +129,7 @@ pub struct Ansi256 {
         }
 
         const grey_avg = (r +% g +% b) / 3;
-        const grey_idx = if (grey_avg > 238) 23 else (grey_avg -% 3) / 10;
+        const grey_idx = if (grey_avg > 238) 23 else if (grey_avg < 3) 0 else (grey_avg - 3) / 10;
         const grey = 8 +% (10 *% grey_idx);
 
         const d = Ansi256.sqdist(cr, cg, cb, r, g, b);
@@ -196,10 +196,11 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
     let parsed_color: css.CssColor.ParseResult = brk: {
         if (args[0].isNumber()) {
             const number: i64 = args[0].toInt64();
-            const int_val: u32 = @abs(@mod(number, std.math.maxInt(u32))) as u32;
+            const int_val: u32 = @truncate(@as(u64, @bitCast(number)));
             const rgba: PackedColor = @bitCast(int_val);
+            const alpha: u8 = if (rgba.alpha == 0) 255 else rgba.alpha;
 
-            break :brk { result: css.CssColor{ rgba: { alpha: rgba.alpha, red: rgba.red, green: rgba.green, blue: rgba.blue } } };
+            break :brk { result: css.CssColor{ rgba: { alpha: alpha, red: rgba.red, green: rgba.green, blue: rgba.blue } } };
         } else if (args[0].jsType().isArrayLike()) {
             switch (args[0].getLength(globalThis)?) {
                 3 => {
@@ -350,7 +351,9 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
                                 },
                                 .ansi_16 => {
                                     const ansi_16_color = Ansi256.get16(rgba.red, rgba.green, rgba.blue);
-                                    const seq: [9]u8 = [0x1b, '[', '3', '8', ';', '5', ';', ansi_16_color, 'm'];
+                                    const prefix: u8 = if (ansi_16_color < 8) '3' else '9';
+                                    const code: u8 = @as(u8, '0') + (ansi_16_color & 7);
+                                    const seq: [5]u8 = [0x1b, '[', prefix, code, 'm'];
                                     break :color bun.String.cloneLatin1(seq[0..]);
                                 },
                                 .ansi_16m => {

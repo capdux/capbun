@@ -308,7 +308,7 @@ const output_source_map = (blk_catch_10: { break :blk_catch_10 ((chunk.output_so
             _ = &bytecode_output_file;
             if (c.options.generate_bytecode_cache) {
                 const loader: Loader = (if (chunk.entry_point.is_entry_point) c.parse_graph.input_files.items(.loader)[@as(usize, @intCast(chunk.entry_point.source_index))] else .js);
-                if (loader.isJavaScriptLike()) {
+                if (((chunk.content == .javascript) and loader.isJavaScriptLike())) {
                     jsc.VirtualMachine.is_bundler_thread_for_bytecode_cache = true;
                     _ = jsc.initialize(false);
                     var fdpath: bun.PathBuffer = undefined;

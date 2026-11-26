@@ -503,10 +503,44 @@ return e.withoutPath();
     }
 
 pub fn hunkMatchesAt(lines: []const StrSlice, hunk: Hunk, start: usize) bool {
+            var new_side_ended = false;
+            _ = &new_side_ended;
+            var old_side_ended = false;
+            _ = &old_side_ended;
             var pos = start;
             _ = &pos;
             for (hunk.parts.items) |part| {
                 _ = &part;
+                switch (part.type) {
+.context => {
+if ((new_side_ended or old_side_ended)) {
+                    return false;
+                }
+},
+.insertion => {
+if (new_side_ended) {
+                    return false;
+                }
+},
+.deletion => {
+if (old_side_ended) {
+                    return false;
+                }
+},
+}
+                if (part.no_newline_at_end_of_file) {
+                    switch (part.type) {
+.context => {
+new_side_ended = true;
+},
+.insertion => {
+new_side_ended = true;
+},
+.deletion => {
+old_side_ended = true;
+},
+}
+                }
                 if ((part.type == .insertion)) {
                     continue;
                 }
@@ -640,6 +674,8 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                     }
                     line_cursor = found.?;
                 }
+                var context_had_no_newline = false;
+                _ = &context_had_no_newline;
                 for (hunk.parts.items) |part| {
                     _ = &part;
                     switch (part.type) {
@@ -649,6 +685,7 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
                     }
                     line_cursor = (line_cursor + part.lines.items.len);
                     if (part.no_newline_at_end_of_file) {
+                        context_had_no_newline = true;
                         if (((lines.items.len > 0) and (lines.items[@as(usize, @intCast((lines.items.len - 1)))].len == 0))) {
                             _ = lines.pop();
                         }
@@ -681,7 +718,7 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
                     }
                     const empty_lines: []const []const u8 = &.{};
                     _ = bun.handleOom(lines.replaceRange(bun.default_allocator, line_cursor, part.lines.items.len, empty_lines));
-                    if (part.no_newline_at_end_of_file) {
+                    if ((part.no_newline_at_end_of_file and (!context_had_no_newline))) {
                         if (((lines.items.len > 0) and (lines.items[@as(usize, @intCast((lines.items.len - 1)))].len != 0))) {
                             _ = bun.handleOom(lines.append(bun.default_allocator, ""));
                         }

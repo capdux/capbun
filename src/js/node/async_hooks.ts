@@ -26,7 +26,7 @@ const setAsyncHooksEnabled = $newCppFunction("NodeAsyncHooks.cpp", "jsSetAsyncHo
 const cleanupLater = $newCppFunction("NodeAsyncHooks.cpp", "jsCleanupLater", 0);
 const { validateFunction, validateString, validateObject } = require("internal/validators");
 
-const ObjectIs = Object.is;
+const ObjectIs = (a: any, b: any) => (a === b ? a !== 0 || 1 / a === 1 / b : a !== a && b !== b);
 
 // Only run during debug
 function assertValidAsyncContextArray(frame: unknown): frame is Map<AsyncLocalStorage, any> | undefined {

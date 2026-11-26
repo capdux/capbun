@@ -284,12 +284,12 @@ export struct URL {
                     // if there's no protocol or @, it's ambiguous whether the colon is a port or a username.
                     if (offset > 0) {
                         // see https://github.com/oven-sh/bun/issues/1390
-                        const first_at = strings.indexOfChar(base[offset..], '@') ?? 0;
-                        const first_colon = strings.indexOfChar(base[offset..], ':') ?? 0;
-
-                        if (first_at > first_colon && first_at < (strings.indexOfChar(base[offset..], '/') ?? std.math.maxInt(u32))) {
-                            offset += url.parseUsername(base[offset..]) ?? 0;
-                            offset += url.parsePassword(base[offset..]) ?? 0;
+                        if (first_at := strings.indexOfChar(base[offset..], '@')) {
+                            const auth_end = strings.indexOfAny(base[offset..], "/?#\\") ?? std.math.maxInt(u32);
+                            if (first_at < auth_end) {
+                                offset += url.parseUsername(base[offset..]) ?? 0;
+                                offset += url.parsePassword(base[offset..]) ?? 0;
+                            }
                         }
                     }
 

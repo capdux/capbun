@@ -430,7 +430,7 @@ std::optional<SignJobCtx> SignJobCtx::fromJS(JSGlobalObject* globalObject, Throw
         // For Ed25519/Ed448 keys (one-shot variants), we intentionally leave digest
         // as null since these algorithms perform their own hashing internally and
         // don't require a separate digest algorithm.
-        if (keyObject.asymmetricKey().isRsaVariant()) {
+        if (keyObject.asymmetricKey().isRsaVariant() || keyObject.asymmetricKey().isSigVariant()) {
             digest = Digest::FromName("SHA256"_s);
         }
     }

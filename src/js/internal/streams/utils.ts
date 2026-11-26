@@ -144,8 +144,15 @@ function isReadableFinished(stream, strict?) {
   return !!(rState.endEmitted || (strict === false && rState.ended === true && rState.length === 0));
 }
 
+const getReadableStreamState = $newCppFunction("ReadableStream.cpp", "jsFunctionReadableStreamState", 1);
+const isReadableStreamDisturbed = $newCppFunction("ReadableStream.cpp", "jsFunctionReadableStreamIsDisturbed", 1);
+const getWritableStreamState = $newCppFunction("ReadableStream.cpp", "jsFunctionWritableStreamState", 1);
+
 function isReadable(stream) {
   if (stream && stream[kIsReadable] != null) return stream[kIsReadable];
+  if (isReadableStream(stream)) {
+    return getReadableStreamState(stream) === $streamReadable;
+  }
   if (typeof stream?.readable !== "boolean") return null;
   if (isDestroyed(stream)) return false;
   return isReadableNodeStream(stream) && stream.readable && !isReadableFinished(stream);
@@ -153,6 +160,9 @@ function isReadable(stream) {
 
 function isWritable(stream) {
   if (stream && stream[kIsWritable] != null) return stream[kIsWritable];
+  if (isWritableStream(stream)) {
+    return getWritableStreamState(stream) === "writable";
+  }
   if (typeof stream?.writable !== "boolean") return null;
   if (isDestroyed(stream)) return false;
   return isWritableNodeStream(stream) && stream.writable && !isWritableEnded(stream);
@@ -257,19 +267,29 @@ function willEmitClose(stream) {
 }
 
 function isDisturbed(stream) {
-  return !!(stream && (stream[kIsDisturbed] ?? (stream.readableDidRead || stream.readableAborted)));
+  if (!stream) return false;
+  if (stream[kIsDisturbed] != null) return !!stream[kIsDisturbed];
+  if (isReadableStream(stream)) return isReadableStreamDisturbed(stream);
+  return !!(stream.readableDidRead || stream.readableAborted);
 }
 
 function isErrored(stream) {
+  if (!stream) return false;
+  if (stream[kIsErrored] != null) return !!stream[kIsErrored];
+  if (isReadableStream(stream)) {
+    return getReadableStreamState(stream) === $streamErrored;
+  }
+  if (isWritableStream(stream)) {
+    const state = getWritableStreamState(stream);
+    return state === "errored" || state === "erroring";
+  }
   return !!(
-    stream &&
-    (stream[kIsErrored] ??
-      stream.readableErrored ??
-      stream.writableErrored ??
-      stream._readableState?.errorEmitted ??
-      stream._writableState?.errorEmitted ??
-      stream._readableState?.errored ??
-      stream._writableState?.errored)
+    stream.readableErrored ??
+    stream.writableErrored ??
+    stream._readableState?.errorEmitted ??
+    stream._writableState?.errorEmitted ??
+    stream._readableState?.errored ??
+    stream._writableState?.errored
   );
 }
 

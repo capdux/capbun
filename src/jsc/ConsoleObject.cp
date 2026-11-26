@@ -2653,6 +2653,11 @@ pub struct Formatter {
                     return;
                 }
 
+                if (_.depth > _.max_depth) {
+                    writer.print(comptime Output.prettyFmt("<r><cyan>[Array ...]<r>", enable_ansi_colors), .{});
+                    return;
+                }
+
                 let was_good_time = _.always_newline_scope ||
                     // heuristic: more than 10, probably should have a newline before it
                     len > 10;

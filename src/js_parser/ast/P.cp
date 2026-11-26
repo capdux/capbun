@@ -6663,6 +6663,13 @@ pub fn NewParser_(
         ): js_ast.Ast! {
             const allocator = p.allocator;
 
+            if (p.module_scope.contains_direct_eval && (wrap_mode != .none || !p.options.bundle)) {
+                let iter = p.module_scope.members.iterator();
+                while (member := iter.next()) {
+                    p.symbols.items[member.value_ptr.ref.innerIndex()].must_not_be_renamed = true;
+                }
+            }
+
             // if (p.options.tree_shaking and p.options.features.trim_unused_imports) {
             //     p.treeShake(&parts, false);
             // }

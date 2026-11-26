@@ -51,8 +51,8 @@ struct MutexGuard {
 @callconv("c") pub fn getTitle(_: *JSGlobalObject, title: *bun.String) {
     title_mutex.lock();
     const _title_guard = MutexGuard{ mutex: unsafe { &title_mutex } };
-    const str = bun.cli.Bun__Node__ProcessTitle;
-    title.* = bun.String.cloneUTF8(str ?? "bun");
+    const str = bun.cli.Bun__Node__ProcessTitle ?? (if (bun.argv.len > 0) bun.argv[0] else "bun");
+    title.* = bun.String.cloneUTF8(str);
 }
 
 // TODO: https://github.com/nodejs/node/blob/master/deps/uv/src/unix/darwin-proctitle.c

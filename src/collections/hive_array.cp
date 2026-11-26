@@ -116,6 +116,13 @@ pub fn HiveArrayFallback(comptime T: type, comptime capacity: u16, comptime Hive
             };
         }
 
+        pub fn initInPlace(*_, allocator: std.mem.Allocator) {
+            _.allocator = allocator;
+            if (comptime capacity > 0) {
+                _.hive.used = .initEmpty();
+            }
+        }
+
         pub fn get(*_): *T {
             const value = _.getImpl();
             return value;

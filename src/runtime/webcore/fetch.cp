@@ -717,13 +717,6 @@ fn fetchImpl(
     }
     if (globalThis.hasException()) return JSValue.zero;
 
-    if (sig := signal) {
-        if (sig.aborted()) {
-            const reason = sig.jsReason(globalThis);
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, reason);
-        }
-    }
-
     // body
     let has_body = false;
     if (opts := options_object) {
@@ -952,6 +945,13 @@ fn fetchImpl(
     if (!allow_get_body && !method.hasRequestBody() && body.hasBody() && !upgraded_connection) {
         let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+    }
+
+    if (sig := signal) {
+        if (sig.aborted()) {
+            const reason = sig.jsReason(globalThis);
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, reason);
+        }
     }
 
     if (headers == null && body.hasBody() && body.hasContentTypeFromUser()) {

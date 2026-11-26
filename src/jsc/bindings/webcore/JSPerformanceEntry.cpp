@@ -289,7 +289,7 @@ JSC_DEFINE_HOST_FUNCTION(jsPerformanceEntryPrototype_inspectCustom, (JSGlobalObj
             auto name = optionsArray[i];
             JSValue value = options->get(lexicalGlobalObject, name);
             RETURN_IF_EXCEPTION(throwScope, {});
-            newOptions->putDirect(vm, name, value, 0);
+            newOptions->putDirectMayBeIndex(lexicalGlobalObject, name, value);
         }
     }
 

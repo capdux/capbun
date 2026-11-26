@@ -509,6 +509,8 @@ bool Worker::dispatchErrorWithValue(Zig::GlobalObject* workerGlobalObject, JSVal
 
 bool Worker::dispatchExit(int32_t exitCode)
 {
+    if (m_terminateRequested.load() && exitCode == 0)
+        exitCode = 1;
     // Runs on the worker thread after its JSC VM has been torn down. Post the
     // close event to the parent; that task additionally releases parent_poll_ref
     // and drops the worker-thread-held ref (both parent-thread-only operations).

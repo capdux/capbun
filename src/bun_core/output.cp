@@ -315,8 +315,6 @@ pub struct Source {
                     enable_color = true;
                 } else if (Source.isNoColor()) {
                     enable_color = false;
-                } else if (Source.isColorTerminal() && (is_stdout_tty || is_stderr_tty)) {
-                    enable_color = true;
                 }
 
                 const use_color_stdout = enable_color ?? is_stdout_tty;

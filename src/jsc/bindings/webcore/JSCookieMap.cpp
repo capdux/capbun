@@ -101,6 +101,9 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieMapDOMConstructo
     auto throwScope = DECLARE_THROW_SCOPE(vm);
     auto* castedThis = uncheckedDowncast<JSCookieMapDOMConstructor>(callFrame->jsCallee());
 
+    JSC::Structure* subclassStructure = getSubclassStructureIfNeeded<CookieMap>(lexicalGlobalObject, callFrame);
+    RETURN_IF_EXCEPTION(throwScope, {});
+
     // Check arguments
     JSValue initValue = callFrame->argument(0);
 
@@ -151,13 +154,14 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieMapDOMConstructo
             }
             init = WTF::move(seqSeq);
         } else {
-            // Handle as record<USVString, USVString>
-            HashMap<String, String> record;
+            // Handle as record<USVString, USVString> while preserving JS property insertion order
+            Vector<Vector<String>> seqSeq;
 
             PropertyNameArrayBuilder propertyNames(vm, PropertyNameMode::Strings, PrivateSymbolMode::Exclude);
             JSObject::getOwnPropertyNames(object, lexicalGlobalObject, propertyNames, DontEnumPropertiesMode::Include);
             RETURN_IF_EXCEPTION(throwScope, {});
 
+            seqSeq.reserveInitialCapacity(propertyNames.size());
             for (const auto& propertyName : propertyNames) {
                 JSValue value = object->get(lexicalGlobalObject, propertyName);
                 RETURN_IF_EXCEPTION(throwScope, {});
@@ -165,9 +169,12 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieMapDOMConstructo
                 auto valueStr = value.toString(lexicalGlobalObject)->value(lexicalGlobalObject);
                 RETURN_IF_EXCEPTION(throwScope, {});
 
-                record.set(propertyName.string(), valueStr);
+                Vector<String> pair;
+                pair.append(propertyName.string());
+                pair.append(valueStr);
+                seqSeq.append(WTF::move(pair));
             }
-            init = WTF::move(record);
+            init = WTF::move(seqSeq);
         }
     } else {
         throwTypeError(lexicalGlobalObject, throwScope, "Invalid initializer type"_s);
@@ -180,8 +187,11 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSCookieMapDOMConstructo
         RELEASE_AND_RETURN(throwScope, {});
     }
     auto result = result_exception.releaseReturnValue();
+    JSValue jsValue = toJSNewlyCreated(lexicalGlobalObject, castedThis->globalObject(), WTF::move(result));
+    if (subclassStructure && jsValue.isObject())
+        asObject(jsValue)->setStructure(vm, subclassStructure);
 
-    RELEASE_AND_RETURN(throwScope, JSValue::encode(toJSNewlyCreated(lexicalGlobalObject, castedThis->globalObject(), WTF::move(result))));
+    RELEASE_AND_RETURN(throwScope, JSValue::encode(jsValue));
 }
 
 JSC_ANNOTATE_HOST_FUNCTION(JSCookieMapDOMConstructorConstruct, JSCookieMapDOMConstructor::construct);

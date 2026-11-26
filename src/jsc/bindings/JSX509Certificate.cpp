@@ -510,7 +510,7 @@ JSString* JSX509Certificate::computeSerialNumber(ncrypto::X509View view, JSGloba
         return jsEmptyString(vm);
     }
 
-    return jsString(vm, String::fromUTF8(std::span(static_cast<const char*>(serial.get()), serial.size())));
+    return jsString(vm, String::fromUTF8(std::span(static_cast<const char*>(serial.get()), serial.size())).convertToASCIIUppercase());
 }
 
 JSString* JSX509Certificate::computeFingerprint(ncrypto::X509View view, JSGlobalObject* globalObject)

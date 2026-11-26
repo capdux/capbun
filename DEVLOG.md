@@ -1924,3 +1924,11 @@
 - Phase 3 第三十批安全性加固要点：`uws.cp:179-182` `BUN__warn__extra_ca_load_failed` 在 `bun.Output.warn` 后补充换行与 `bun.Output.flush()`，消除 `NODE_EXTRA_CA_CERTS` 加载失败时缓冲警告随进程退出丢失的问题。
 
 - Batch 14–26 收敛要点：建立全仓 225 分块扫测账本（`scripts/scan_tests.py` + `test/stats.md`），采用 3 路子智能体 + 主智能体集中修复后单次 `bun bd` 构建回归，清零 `ThreadLock` / `Archive` / `wyhash` / `Invalid binary type` / `atan2` 回溯 / `NodeSqlite` / `h2_frame_parser` 等大量高频崩溃与功能偏差。
+
+## 2026-11-27: Batch 27–39 跨子系统测试收敛与 1.4.5-debug 验收
+- **代表性根因修复**：
+  - `FormatStackTraceForJS.cpp`：新增 `bool describeNameThrow` 重载导致 C++ 重载决议将 `JSObject*` 优先隐式转为 `bool` 而完全跳过 `Error.prepareStackTrace`；重命名为 `formatDefaultStackTraceToJSValue` 并补全 `.stack` 的 `PropertyAttribute::DontEnum` 与 `stackTraceLimit = 10`。
+  - `vendor/libjpeg-turbo/src/turbojpeg.c`：`my_error_exit` 发生致命错误长跳转前未清零 `myerr->warning`，导致先 warn 后 fatal 的 JPEG 被 `tj3GetErrorCode` 误判为仅 warning。
+  - `src/js_parser/ast/skipTypescript.cp`：三元条件内箭头函数返回类型回溯扫描遇模板字面量 `${...}` 内的 `}` 时未调用 `rescanCloseBraceAsTemplateToken()`，导致后续 `:` 与 `)` 被吞进伪模板字面量而误判回溯。
+  - `src/js/internal/streams/readable.ts`：`howMuchToRead(n, state)` 对非 `setEncoding` 的 paused 流在 `read()` 无参时改为逐 chunk 返回，同步修复 `cipher events` 与 `node-stream-uint8array`。
+  - `src/runtime/webcore/FormData.cp` / `Body.cp` / `Blob.cp`：`tryTakeException()` 返回的是 `*JSC::Exception` 包装对象，需通过 `exc.toError() ?? exc` 解包后再用于 `JSPromise` reject，避免触发 `JSPromise::resolve` `!value.inherits<Exception>()` 断言。

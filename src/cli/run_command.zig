@@ -594,9 +594,20 @@ pub fn ls(ctx: Command.Context) !void {
             _ = this_transpiler.configureLinker();
     }
 
+pub fn bunNodeDir(buf: *bun.PathBuffer) [:0]const u8 {
+            if (comptime Environment.isWindows) {
+                _ = @compileError("Do not use RunCommand.bunNodeDir on Windows");
+            }
+            const tmp_dir = (if (comptime Environment.isMac) "/private/tmp" else (if (comptime Environment.isAndroid) "/data/local/tmp" else "/tmp"));
+            const suffix = (if (comptime (!Environment.isDebug)) (if (comptime (Environment.git_sha_short.len > 0)) ("-" ++ Environment.git_sha_short) else "") else "-debug");
+            return ((std.fmt.bufPrintZ(buf, "{s}/bun-node-{d}{s}", .{ tmp_dir, std.c.getuid(), suffix })) catch unreachable);
+    }
+
 pub fn bunNodeFileUtf8(allocator: std.mem.Allocator) ![:0]const u8 {
             if ((!Environment.isWindows)) {
-                return bun_node_dir;
+                var buf: bun.PathBuffer = undefined;
+                _ = &buf;
+                return try allocator.dupeZ(u8, bunNodeDir((&buf)));
             }
             var temp_path_buffer: bun.WPathBuffer = undefined;
             _ = &temp_path_buffer;
@@ -644,23 +655,42 @@ pub fn createFakeTemporaryNodeExecutable(PATH: *std.array_list.Managed(u8), init
                 if ((out_bun_path.len == 0)) {
                     argv0 = bun.argv[0];
                 }
-                if (Environment.isDebug) {
-                    _ = (blk_catch_7: { break :blk_catch_7 ((std.fs.deleteTreeAbsolute(bun_node_dir)) catch |__ce_7| { _ = &__ce_7;  }); });
-                }
-                const paths: [2][:0]const u8 = .{ (bun_node_dir ++ "/node"), (bun_node_dir ++ "/bun") };
+                var node_dir_buf: bun.PathBuffer = undefined;
+                _ = &node_dir_buf;
+                const node_dir = bunNodeDir((&node_dir_buf));
+                var node_path_buf: bun.PathBuffer = undefined;
+                _ = &node_path_buf;
+                var bun_path_buf: bun.PathBuffer = undefined;
+                _ = &bun_path_buf;
+                const node_path = ((std.fmt.bufPrintZ((&node_path_buf), "{s}/node", .{ node_dir })) catch unreachable);
+                const bun_exe_path = ((std.fmt.bufPrintZ((&bun_path_buf), "{s}/bun", .{ node_dir })) catch unreachable);
+                const paths: [2][:0]const u8 = .{ node_path, bun_exe_path };
                 for (cp_iter_slice(paths)) |path| {
                     _ = &path;
                     var retried = false;
                     _ = &retried;
                     while (true) {
                         _ = inner: {
-                        break :inner (blk_catch_8: { break :blk_catch_8 ((std.posix.symlinkZ(argv0, path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
+                        break :inner (blk_catch_10: { break :blk_catch_10 ((std.posix.symlinkZ(argv0, path)) catch |e| { _ = &e; if ((e == error.PathAlreadyExists)) {
+                            if (comptime Environment.isDebug) {
+                                if ((!retried)) {
+                                    var link_buf: bun.PathBuffer = undefined;
+                                    _ = &link_buf;
+                                    const argv0_slice = bun.sliceTo(argv0, 0);
+                                    const existing = (blk_catch_11: { break :blk_catch_11 ((std.posix.readlinkZ(path, (&link_buf))) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 null; }); });
+                                    if (((existing == null) or (!std.mem.eql(u8, existing.?, argv0_slice)))) {
+                                        _ = (blk_catch_12: { break :blk_catch_12 ((std.posix.unlinkZ(path)) catch |__ce_12| { _ = &__ce_12;  }); });
+                                        retried = true;
+                                        continue;
+                                    }
+                                }
+                            }
                             break :inner;
                         }
                         if (retried) {
                             return out_bun_path;
                         }
-                        _ = (blk_catch_9: { break :blk_catch_9 ((std.fs.makeDirAbsoluteZ(bun_node_dir)) catch |__ce_9| { _ = &__ce_9;  }); });
+                        _ = (blk_catch_13: { break :blk_catch_13 ((std.fs.makeDirAbsoluteZ(node_dir)) catch |__ce_13| { _ = &__ce_13;  }); });
                         retried = true;
                         continue; }); });
 
@@ -671,7 +701,8 @@ pub fn createFakeTemporaryNodeExecutable(PATH: *std.array_list.Managed(u8), init
                 if (((PATH.items.len > 0) and (PATH.items[@as(usize, @intCast((PATH.items.len - 1)))] != std.fs.path.delimiter))) {
                     _ = try PATH.append(std.fs.path.delimiter);
                 }
-                _ = try PATH.appendSlice((bun_node_dir ++ .{ std.fs.path.delimiter }));
+                _ = try PATH.appendSlice(node_dir);
+                _ = try PATH.append(std.fs.path.delimiter);
             } else {
                 if (Environment.isWindows) {
                     var target_path_buffer: bun.WPathBuffer = undefined;
@@ -690,13 +721,13 @@ pub fn createFakeTemporaryNodeExecutable(PATH: *std.array_list.Managed(u8), init
                     _ = @memcpy(target_path_buffer[prefix.len..][len..].ptr, (comptime bun.strings.w(dir_name)));
                     const dir_slice = target_path_buffer[0..((prefix.len + len) + dir_name.len)];
                     if (Environment.isDebug) {
-                        const dir_slice_u8 = (blk_catch_10: { break :blk_catch_10 ((std.unicode.utf16LeToUtf8Alloc(bun.default_allocator, dir_slice)) catch |__ce_10| { _ = &__ce_10; @panic("oom"); }); });
+                        const dir_slice_u8 = (blk_catch_14: { break :blk_catch_14 ((std.unicode.utf16LeToUtf8Alloc(bun.default_allocator, dir_slice)) catch |__ce_14| { _ = &__ce_14; @panic("oom"); }); });
                         var _g_dir_slice = FreeGuard(u8){ .alloc = bun.default_allocator, .slice = dir_slice_u8 };
                         _ = &_g_dir_slice;
                         var ___g_dir_slice_moved = false; _ = &___g_dir_slice_moved;
                         defer if (!___g_dir_slice_moved) { ___g_dir_slice_moved = true; const __T = @TypeOf(_g_dir_slice); if (@typeInfo(__T) == .optional) { if (_g_dir_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_dir_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_dir_slice; _drop_val.__cp_deinit(); } };
-                        _ = (blk_catch_11: { break :blk_catch_11 ((std.fs.deleteTreeAbsolute(dir_slice_u8)) catch |__ce_11| { _ = &__ce_11;  }); });
-                        _ = (blk_catch_12: { break :blk_catch_12 ((std.fs.makeDirAbsolute(dir_slice_u8)) catch |__ce_12| { _ = &__ce_12; @panic("huh?"); }); });
+                        _ = (blk_catch_15: { break :blk_catch_15 ((std.fs.deleteTreeAbsolute(dir_slice_u8)) catch |__ce_15| { _ = &__ce_15;  }); });
+                        _ = (blk_catch_16: { break :blk_catch_16 ((std.fs.makeDirAbsolute(dir_slice_u8)) catch |__ce_16| { _ = &__ce_16; @panic("huh?"); }); });
                     }
                     const image_path = bun.windows.exePathW();
                     inline for (.{ "node.exe", "bun.exe" }) |name| {
@@ -715,7 +746,7 @@ else => {
 {
                                 _ = bun.assert((target_path_buffer[@as(usize, @intCast(dir_slice.len))] == 92));
                                 target_path_buffer[cp_cast_int(usize, dir_slice.len)] = 0;
-                                _ = (blk_catch_13: { break :blk_catch_13 ((std.posix.mkdirW(target_path_buffer[0..dir_slice.len :0], 0)) catch |__ce_13| { _ = &__ce_13;  }); });
+                                _ = (blk_catch_17: { break :blk_catch_17 ((std.posix.mkdirW(target_path_buffer[0..dir_slice.len :0], 0)) catch |__ce_17| { _ = &__ce_17;  }); });
                                 target_path_buffer[cp_cast_int(usize, dir_slice.len)] = 92;
                             }
                             if ((bun.windows.CreateHardLinkW((blk: {
@@ -750,15 +781,15 @@ pub fn configureEnvForRun(ctx: Command.Context, this_transpiler: *transpiler.Tra
             this_transpiler.resolver.opts.load_tsconfig_json = true;
             this_transpiler.options.load_tsconfig_json = true;
             _ = this_transpiler.configureLinker();
-            const root_dir_info_opt = (blk_catch_14: { break :blk_catch_14 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |e| { _ = &e; if ((!log_errors)) {
+            const root_dir_info_opt = (blk_catch_18: { break :blk_catch_18 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |e| { _ = &e; if ((!log_errors)) {
                 return error.CouldntReadCurrentDirectory;
             }
-            _ = (blk_catch_15: { break :blk_catch_15 ((ctx.log.print(Output.errorWriter())) catch |__ce_15| { _ = &__ce_15;  }); });
+            _ = (blk_catch_19: { break :blk_catch_19 ((ctx.log.print(Output.errorWriter())) catch |__ce_19| { _ = &__ce_19;  }); });
             _ = Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> loading directory {f}", .{ @errorName(e), bun.fmt.QuotedFormatter{ .text = this_transpiler.fs.top_level_dir } });
             _ = Output.flush();
             return e; }); });
             if ((root_dir_info_opt == null)) {
-                _ = (blk_catch_16: { break :blk_catch_16 ((ctx.log.print(Output.errorWriter())) catch |__ce_16| { _ = &__ce_16;  }); });
+                _ = (blk_catch_20: { break :blk_catch_20 ((ctx.log.print(Output.errorWriter())) catch |__ce_20| { _ = &__ce_20;  }); });
                 _ = Output.prettyErrorln("error loading current directory", .{});
                 _ = Output.flush();
                 return error.CouldntReadCurrentDirectory;
@@ -773,7 +804,7 @@ pub fn configureEnvForRun(ctx: Command.Context, this_transpiler: *transpiler.Tra
                         this_transpiler.options.production = true;
                     }
                 }
-                _ = (blk_catch_17: { break :blk_catch_17 ((this_transpiler.runEnvLoader(true)) catch |__ce_17| { _ = &__ce_17;  }); });
+                _ = (blk_catch_21: { break :blk_catch_21 ((this_transpiler.runEnvLoader(true)) catch |__ce_21| { _ = &__ce_21;  }); });
             }
             _ = ((this_transpiler.env.map.putDefault("npm_config_local_prefix", this_transpiler.fs.top_level_dir)) catch unreachable);
             if (bun.ParentDeathWatchdog.isEnabled()) {
@@ -781,7 +812,7 @@ pub fn configureEnvForRun(ctx: Command.Context, this_transpiler: *transpiler.Tra
             }
             _ = ((this_transpiler.env.map.putDefault("npm_config_user_agent", ((((((("bun/" ++ Global.package_json_version) ++ " npm/? node/v") ++ Environment.reported_nodejs_version) ++ " ") ++ Global.os_name) ++ " ") ++ Global.arch_name))) catch unreachable);
             if ((this_transpiler.env.get("npm_execpath") == null)) {
-                if ((blk_catch_21: { break :blk_catch_21 ((bun.selfExePath()) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); })) |self_exe_path| {
+                if ((blk_catch_25: { break :blk_catch_25 ((bun.selfExePath()) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 null; }); })) |self_exe_path| {
                     _ = &self_exe_path;
                     _ = ((this_transpiler.env.map.putDefault("npm_execpath", self_exe_path)) catch unreachable);
                 }
@@ -830,7 +861,7 @@ pub fn configurePathForRunWithPackageJsonDir(ctx: Command.Context, package_json_
                 return error.FailedToGetTempPath;
             }
             const bun_node_dir_win = bun_node_dir_win_opt.?;
-            const found_node = (blk_catch_26: { break :blk_catch_26 ((this_transpiler.env.loadNodeJSConfig(this_transpiler.fs, (if (force_using_bun) bun_node_exe else ""))) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 false; }); });
+            const found_node = (blk_catch_30: { break :blk_catch_30 ((this_transpiler.env.loadNodeJSConfig(this_transpiler.fs, (if (force_using_bun) bun_node_exe else ""))) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 false; }); });
             var needs_to_force_bun = (force_using_bun or (!found_node));
             _ = &needs_to_force_bun;
             var optional_bun_self_path: []const u8 = "";
@@ -855,7 +886,7 @@ pub fn configurePathForRunWithPackageJsonDir(ctx: Command.Context, package_json_
             var new_path = try std.array_list.Managed(u8).initCapacity(ctx.allocator, new_path_len);
             _ = &new_path;
             if (needs_to_force_bun) {
-                optional_bun_self_path = (blk_catch_27: { break :blk_catch_27 ((createFakeTemporaryNodeExecutable((&new_path), optional_bun_self_path)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                optional_bun_self_path = (blk_catch_31: { break :blk_catch_31 ((createFakeTemporaryNodeExecutable((&new_path), optional_bun_self_path)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
                     _ = bun.outOfMemory();
                 } else {
                     _ = std.debug.panic("unexpected error from createFakeTemporaryNodeExecutable: {s}", .{ @errorName(e) });
@@ -911,7 +942,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
                 }
             }
             const args = ctx.args;
-            var this_transpiler = (blk_catch_28: { break :blk_catch_28 ((transpiler.Transpiler.init(ctx.allocator, ctx.log, args, null)) catch |__ce_28| { _ = &__ce_28; return shell_out; }); });
+            var this_transpiler = (blk_catch_32: { break :blk_catch_32 ((transpiler.Transpiler.init(ctx.allocator, ctx.log, args, null)) catch |__ce_32| { _ = &__ce_32; return shell_out; }); });
             _ = &this_transpiler;
             this_transpiler.options.env.behavior = api.DotEnvBehavior.load_all;
             this_transpiler.options.env.prefix = "";
@@ -926,7 +957,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
             }
             }
             _ = this_transpiler.configureLinker();
-            const root_dir_info_opt = (blk_catch_29: { break :blk_catch_29 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); });
+            const root_dir_info_opt = (blk_catch_33: { break :blk_catch_33 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 null; }); });
             if ((root_dir_info_opt == null)) {
                 return shell_out;
             }
@@ -962,7 +993,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
             if ((((filter == Filter.bin) or (filter == Filter.all)) or (filter == Filter.all_plus_bun_js))) {
                 for (cp_iter_slice(this_transpiler.resolver.binDirs())) |bin_path| {
                     _ = &bin_path;
-                    if ((blk_catch_30: { break :blk_catch_30 ((this_transpiler.resolver.readDirInfo(bin_path)) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 null; }); })) |bin_dir| {
+                    if ((blk_catch_34: { break :blk_catch_34 ((this_transpiler.resolver.readDirInfo(bin_path)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 null; }); })) |bin_dir| {
                         _ = &bin_dir;
                         if (bin_dir.getEntriesConst()) |entries| {
                             _ = &entries;
@@ -990,7 +1021,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
                                     if ((!bun.sys.isExecutableFilePath(slice))) {
                                         continue;
                                     }
-                                    _ = try results.getOrPut((blk_catch_31: { break :blk_catch_31 ((this_transpiler.fs.filename_store.append(@TypeOf(base), base)) catch |__ce_31| { _ = &__ce_31; continue; }); }));
+                                    _ = try results.getOrPut((blk_catch_35: { break :blk_catch_35 ((this_transpiler.fs.filename_store.append(@TypeOf(base), base)) catch |__ce_35| { _ = &__ce_35; continue; }); }));
                                 }
                             }
                         }
@@ -998,7 +1029,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
                 }
             }
             if (((filter == Filter.all_plus_bun_js) or (filter == Filter.bun_js))) {
-                if ((blk_catch_32: { break :blk_catch_32 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 null; }); })) |dir_info| {
+                if ((blk_catch_36: { break :blk_catch_36 ((this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir)) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 null; }); })) |dir_info| {
                     _ = &dir_info;
                     if (dir_info.getEntriesConst()) |entries| {
                         _ = &entries;
@@ -1008,7 +1039,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
                             const value = entry.value_ptr.*;
                             const name = value.base();
                             if ((((((((name[0] != 46) and this_transpiler.options.loader(std.fs.path.extension(name)).canBeRunByBun()) and (!strings.contains(name, ".config"))) and (!strings.contains(name, ".d.ts"))) and (!strings.contains(name, ".d.mts"))) and (!strings.contains(name, ".d.cts"))) and (value.kind((&this_transpiler.fs.fs), true) == .file))) {
-                                _ = try results.getOrPut((blk_catch_33: { break :blk_catch_33 ((this_transpiler.fs.filename_store.append(@TypeOf(name), name)) catch |__ce_33| { _ = &__ce_33; continue; }); }));
+                                _ = try results.getOrPut((blk_catch_37: { break :blk_catch_37 ((this_transpiler.fs.filename_store.append(@TypeOf(name), name)) catch |__ce_37| { _ = &__ce_37; continue; }); }));
                             }
                         }
                     }
@@ -1027,7 +1058,7 @@ pub fn completions(ctx: Command.Context, default_completions: ?[]const []const u
                         _ = &max_description_len;
                         if (this_transpiler.env.get("MAX_DESCRIPTION_LEN")) |max| {
                             _ = &max;
-                            if ((blk_catch_34: { break :blk_catch_34 ((std.fmt.parseInt(usize, max, 10)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 null; }); })) |max_len| {
+                            if ((blk_catch_38: { break :blk_catch_38 ((std.fmt.parseInt(usize, max, 10)) catch |__ce_38| { _ = &__ce_38; break :blk_catch_38 null; }); })) |max_len| {
                                 _ = &max_len;
                                 max_description_len = max_len;
                             }
@@ -1147,7 +1178,7 @@ pub fn prefetchRemoteImages(contents: []const u8, md_opts: bun.md.Options, out_m
             _ = &_g_collector;
             var ___g_collector_moved = false; _ = &___g_collector_moved;
             defer if (!___g_collector_moved) { ___g_collector_moved = true; const __T = @TypeOf(_g_collector); if (@typeInfo(__T) == .optional) { if (_g_collector) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_collector.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_collector; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_35: { break :blk_catch_35 ((bun.md.renderWithRenderer(contents, allocator, md_opts, collector.renderer())) catch |__ce_35| { _ = &__ce_35; return; }); });
+            _ = (blk_catch_39: { break :blk_catch_39 ((bun.md.renderWithRenderer(contents, allocator, md_opts, collector.renderer())) catch |__ce_39| { _ = &__ce_39; return; }); });
             if ((collector.urls.items.len == 0)) {
                 return;
             }
@@ -1168,11 +1199,11 @@ pub fn prefetchRemoteImages(contents: []const u8, md_opts: bun.md.Options, out_m
                 if (((!bun.strings.hasPrefixComptime(u, "http://")) and (!bun.strings.hasPrefixComptime(u, "https://")))) {
                     continue;
                 }
-                const gop = (blk_catch_36: { break :blk_catch_36 ((seen.getOrPut(allocator, u)) catch |__ce_36| { _ = &__ce_36; continue; }); });
+                const gop = (blk_catch_40: { break :blk_catch_40 ((seen.getOrPut(allocator, u)) catch |__ce_40| { _ = &__ce_40; continue; }); });
                 if (gop.found_existing) {
                     continue;
                 }
-                _ = (blk_catch_37: { break :blk_catch_37 ((remote_urls.append(allocator, u)) catch |__ce_37| { _ = &__ce_37; continue; }); });
+                _ = (blk_catch_41: { break :blk_catch_41 ((remote_urls.append(allocator, u)) catch |__ce_41| { _ = &__ce_41; continue; }); });
             }
             if ((remote_urls.items.len == 0)) {
                 return;
@@ -1191,11 +1222,11 @@ pub fn prefetchRemoteImages(contents: []const u8, md_opts: bun.md.Options, out_m
             _ = &batch;
             for (remote_urls.items) |raw_url| {
                 _ = &raw_url;
-                const d = (blk_catch_38: { break :blk_catch_38 ((allocator.create(RemoteImageDownload)) catch |__ce_38| { _ = &__ce_38; continue; }); });
-                d.* = .{ .async_http = undefined, .response_buffer = (blk_catch_39: { break :blk_catch_39 ((bun.MutableString.init(allocator, (8 * 1024))) catch |__ce_39| { _ = &__ce_39; _ = allocator.destroy(d);
+                const d = (blk_catch_42: { break :blk_catch_42 ((allocator.create(RemoteImageDownload)) catch |__ce_42| { _ = &__ce_42; continue; }); });
+                d.* = .{ .async_http = undefined, .response_buffer = (blk_catch_43: { break :blk_catch_43 ((bun.MutableString.init(allocator, (8 * 1024))) catch |__ce_43| { _ = &__ce_43; _ = allocator.destroy(d);
                 continue; }); }), .url = raw_url, .done = (&done_channel) };
                 d.async_http = HTTP.AsyncHTTP.init(allocator, .GET, bun.URL.parse(raw_url), .{}, "", (&d.response_buffer), "", HTTP.HTTPClientResult.Callback.New(*RemoteImageDownload, RemoteImageDownload.onDone).init(d), HTTP.FetchRedirect.follow, .{});
-                _ = (blk_catch_40: { break :blk_catch_40 ((downloads.append(allocator, d)) catch |__ce_40| { _ = &__ce_40; _ = d.response_buffer.deinit();
+                _ = (blk_catch_44: { break :blk_catch_44 ((downloads.append(allocator, d)) catch |__ce_44| { _ = &__ce_44; _ = d.response_buffer.deinit();
                 _ = allocator.destroy(d);
                 continue; }); });
                 _ = d.async_http.schedule(allocator, (&batch));
@@ -1207,7 +1238,7 @@ pub fn prefetchRemoteImages(contents: []const u8, md_opts: bun.md.Options, out_m
             var completed: usize = 0;
             _ = &completed;
             while ((completed < downloads.items.len)) : (completed = (completed + 1)) {
-                _ = (blk_catch_41: { break :blk_catch_41 ((done_channel.readItem()) catch |__ce_41| { _ = &__ce_41; break; }); });
+                _ = (blk_catch_45: { break :blk_catch_45 ((done_channel.readItem()) catch |__ce_45| { _ = &__ce_45; break; }); });
             }
             const tmpdir = bun.fs.FileSystem.RealFS.tmpdirPath();
             for (downloads.items) |d| {
@@ -1231,8 +1262,8 @@ pub fn prefetchRemoteImages(contents: []const u8, md_opts: bun.md.Options, out_m
                 const ext: []const u8 = (if (bun.strings.endsWith(d.url, ".png")) ".png" else (if ((bun.strings.endsWith(d.url, ".jpg") or bun.strings.endsWith(d.url, ".jpeg"))) ".jpg" else (if (bun.strings.endsWith(d.url, ".gif")) ".gif" else (if (bun.strings.endsWith(d.url, ".webp")) ".webp" else ".bin"))));
                 var name_buf: [64]u8 = undefined;
                 _ = &name_buf;
-                const name = (blk_catch_42: { break :blk_catch_42 ((std.fmt.bufPrint((&name_buf), "bun-md-{x}{s}", .{ bun.fastRandom(), ext })) catch |__ce_42| { _ = &__ce_42; continue; }); });
-                const path = (blk_catch_43: { break :blk_catch_43 ((std.fmt.allocPrint(allocator, "{s}/{s}", .{ tmpdir, name })) catch |__ce_43| { _ = &__ce_43; continue; }); });
+                const name = (blk_catch_46: { break :blk_catch_46 ((std.fmt.bufPrint((&name_buf), "bun-md-{x}{s}", .{ bun.fastRandom(), ext })) catch |__ce_46| { _ = &__ce_46; continue; }); });
+                const path = (blk_catch_47: { break :blk_catch_47 ((std.fmt.allocPrint(allocator, "{s}/{s}", .{ tmpdir, name })) catch |__ce_47| { _ = &__ce_47; continue; }); });
                 const fd = (switch (bun.sys.openA(path, ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), 384)) {
 .result => |f| f,
 .err => {
@@ -1250,10 +1281,10 @@ pub fn prefetchRemoteImages(contents: []const u8, md_opts: bun.md.Options, out_m
                     _ = allocator.free(path);
                     continue;
                 }
-                const key = (blk_catch_44: { break :blk_catch_44 ((allocator.dupe(u8, d.url)) catch |__ce_44| { _ = &__ce_44; _ = unlinkStagedPath(path);
+                const key = (blk_catch_48: { break :blk_catch_48 ((allocator.dupe(u8, d.url)) catch |__ce_48| { _ = &__ce_48; _ = unlinkStagedPath(path);
                 _ = allocator.free(path);
                 continue; }); });
-                _ = (blk_catch_45: { break :blk_catch_45 ((out_map.put(allocator, key, path)) catch |__ce_45| { _ = &__ce_45; _ = unlinkStagedPath(path);
+                _ = (blk_catch_49: { break :blk_catch_49 ((out_map.put(allocator, key, path)) catch |__ce_49| { _ = &__ce_49; _ = unlinkStagedPath(path);
                 _ = allocator.free(key);
                 _ = allocator.free(path);
                 continue; }); });
@@ -1281,7 +1312,7 @@ pub fn renderMarkdownFileAndExit(path: []const u8) noreturn {
             const columns: u16 = brk: {
             if (bun.getenvZ("COLUMNS")) |env| {
                 _ = &env;
-                if ((blk_catch_46: { break :blk_catch_46 ((std.fmt.parseInt(u16, env, 10)) catch |__ce_46| { _ = &__ce_46; break :blk_catch_46 null; }); })) |n| {
+                if ((blk_catch_50: { break :blk_catch_50 ((std.fmt.parseInt(u16, env, 10)) catch |__ce_50| { _ = &__ce_50; break :blk_catch_50 null; }); })) |n| {
                     _ = &n;
                     if ((n > 0)) {
                         break :brk n;
@@ -1301,7 +1332,7 @@ pub fn renderMarkdownFileAndExit(path: []const u8) noreturn {
                 }
             } else {
                 if (comptime bun.Environment.isWindows) {
-                    if ((blk_catch_47: { break :blk_catch_47 ((windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 null; }); })) |handle| {
+                    if ((blk_catch_51: { break :blk_catch_51 ((windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 null; }); })) |handle| {
                         _ = &handle;
                         var csbi: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
                         _ = &csbi;
@@ -1341,12 +1372,12 @@ pub fn renderMarkdownFileAndExit(path: []const u8) noreturn {
             const dir = bun.path.dirname(abs_md_path, .auto);
             const image_base_dir = (if ((dir.len > 0)) dir else ".");
             const theme: bun.md.AnsiTheme = .{ .light = bun.md.detectLightBackground(), .columns = columns, .colors = colors, .hyperlinks = (colors and is_tty), .kitty_graphics = kitty_graphics, .remote_image_paths = (if ((remote_map.count() > 0)) (&remote_map) else null), .image_base_dir = image_base_dir };
-            const rendered_opt = (blk_catch_48: { break :blk_catch_48 ((bun.md.renderToAnsi(contents, bun.default_allocator, md_opts, theme)) catch |e| { _ = &e; break :blk_catch_48 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .OutOfMemory)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .StackOverflow)) {  _ = Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", .{});
+            const rendered_opt = (blk_catch_52: { break :blk_catch_52 ((bun.md.renderToAnsi(contents, bun.default_allocator, md_opts, theme)) catch |e| { _ = &e; break :blk_catch_52 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .OutOfMemory)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .StackOverflow)) {  _ = Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", .{});
             _ = Output.flush();
             break :__sw_blk_10 cp_val(Global.exit(1)); } }  unreachable; }); }); });
             if (rendered_opt) |rendered| {
                 _ = &rendered;
-                _ = (blk_catch_49: { break :blk_catch_49 ((Output.writer().writeAll(rendered)) catch |__ce_49| { _ = &__ce_49;  }); });
+                _ = (blk_catch_53: { break :blk_catch_53 ((Output.writer().writeAll(rendered)) catch |__ce_53| { _ = &__ce_53;  }); });
             } else {
                 _ = Output.prettyErrorln("<r><red>error<r>: failed to render markdown", .{});
                 _ = Output.flush();
@@ -1365,10 +1396,10 @@ pub fn _bootAndHandleError(ctx: Command.Context, path: []const u8, loader: ?bun.
                 }
             }
             _ = Global.configureAllocator(.{ .long_running = true });
-            _ = (blk_catch_51: { break :blk_catch_51 ((Run.boot(ctx, (blk_catch_50: { break :blk_catch_50 ((ctx.allocator.dupe(u8, path)) catch |__ce_50| { _ = &__ce_50; return false; }); }), loader)) catch |e| { _ = &e; _ = (blk_catch_52: { break :blk_catch_52 ((ctx.log.print(Output.errorWriter())) catch |__ce_52| { _ = &__ce_52;  }); });
+            _ = (blk_catch_55: { break :blk_catch_55 ((Run.boot(ctx, (blk_catch_54: { break :blk_catch_54 ((ctx.allocator.dupe(u8, path)) catch |__ce_54| { _ = &__ce_54; return false; }); }), loader)) catch |e| { _ = &e; _ = (blk_catch_56: { break :blk_catch_56 ((ctx.log.print(Output.errorWriter())) catch |__ce_56| { _ = &__ce_56;  }); });
             _ = Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> due to error <b>{s}<r>", .{ std.fs.path.basename(path), @errorName(e) });
             _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-            break :blk_catch_51 Global.exit(1); }); });
+            break :blk_catch_55 Global.exit(1); }); });
             return true;
     }
 
@@ -1384,11 +1415,11 @@ pub fn maybeOpenWithBunJS(ctx: Command.Context) bool {
             var file_path = script_name_to_search;
             _ = &file_path;
             {
-                var file = (blk_catch_65: { break :blk_catch_65 ((bun.FD.fromStdFile((blk_catch_55: { break :blk_catch_55 ((brk: {
+                var file = (blk_catch_69: { break :blk_catch_69 ((bun.FD.fromStdFile((blk_catch_59: { break :blk_catch_59 ((brk: {
                 if (std.fs.path.isAbsolute(script_name_to_search)) {
                     var win_resolver = resolve_path.PosixToWinNormalizer{  };
                     _ = &win_resolver;
-                    var resolved = (blk_catch_53: { break :blk_catch_53 ((win_resolver.resolveCWD(script_name_to_search)) catch |__ce_53| { _ = &__ce_53; @panic("Could not resolve path"); }); });
+                    var resolved = (blk_catch_57: { break :blk_catch_57 ((win_resolver.resolveCWD(script_name_to_search)) catch |__ce_57| { _ = &__ce_57; @panic("Could not resolve path"); }); });
                     _ = &resolved;
                     if (comptime Environment.isWindows) {
                         resolved = resolve_path.normalizeString(resolved, false, .windows);
@@ -1405,7 +1436,7 @@ pub fn maybeOpenWithBunJS(ctx: Command.Context) bool {
                     } else {
                         var path_buf_2: bun.PathBuffer = undefined;
                         _ = &path_buf_2;
-                        const cwd = (blk_catch_54: { break :blk_catch_54 ((bun.getcwd((&path_buf_2))) catch |__ce_54| { _ = &__ce_54; return false; }); });
+                        const cwd = (blk_catch_58: { break :blk_catch_58 ((bun.getcwd((&path_buf_2))) catch |__ce_58| { _ = &__ce_58; return false; }); });
                         path_buf_2[cp_cast_int(usize, cwd.len)] = std.fs.path.sep;
                         var parts = .{ script_name_to_search };
                         _ = &parts;
@@ -1418,7 +1449,7 @@ pub fn maybeOpenWithBunJS(ctx: Command.Context) bool {
                         break :brk bun.openFileZ(file_pathZ, .{ .mode = .read_only });
                     }
                 }
-}) catch |__ce_55| { _ = &__ce_55; return false; }); })).makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap()) catch |__ce_65| { _ = &__ce_65; return false; }); });
+}) catch |__ce_59| { _ = &__ce_59; return false; }); })).makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap()) catch |__ce_69| { _ = &__ce_69; return false; }); });
                 _ = &file;
                 var _g_file = CloseGuard(@TypeOf(file)){ .ptr = (&file) };
                 _ = &_g_file;
@@ -1437,11 +1468,11 @@ return false;
                 _ = Global.configureAllocator(.{ .long_running = true });
                 absolute_script_path = brk: {
                 if (comptime (!Environment.isWindows)) {
-                    break :brk (blk_catch_66: { break :blk_catch_66 ((bun.getFdPath(file, (&script_name_buf))) catch |__ce_66| { _ = &__ce_66; return false; }); });
+                    break :brk (blk_catch_70: { break :blk_catch_70 ((bun.getFdPath(file, (&script_name_buf))) catch |__ce_70| { _ = &__ce_70; return false; }); });
                 }
                 var fd_path_buf: bun.PathBuffer = undefined;
                 _ = &fd_path_buf;
-                break :brk (blk_catch_67: { break :blk_catch_67 ((bun.getFdPath(file, (&fd_path_buf))) catch |__ce_67| { _ = &__ce_67; return false; }); });
+                break :brk (blk_catch_71: { break :blk_catch_71 ((bun.getFdPath(file, (&fd_path_buf))) catch |__ce_71| { _ = &__ce_71; return false; }); });
 };
             }
             _ = _bootAndHandleError(ctx, absolute_script_path.?, null);
@@ -1485,7 +1516,7 @@ pub fn exec(ctx: Command.Context, cfg: ExecCfg) !bool {
                 }
             }
             if ((!ctx.debug.loaded_bunfig)) {
-                _ = (blk_catch_68: { break :blk_catch_68 ((bun.cli.Arguments.loadConfigPath(ctx.allocator, true, "bunfig.toml", ctx, .RunCommand)) catch |__ce_68| { _ = &__ce_68;  }); });
+                _ = (blk_catch_72: { break :blk_catch_72 ((bun.cli.Arguments.loadConfigPath(ctx.allocator, true, "bunfig.toml", ctx, .RunCommand)) catch |__ce_72| { _ = &__ce_72;  }); });
             }
             if ((try_fast_run and maybeOpenWithBunJS(ctx))) {
                 return true;
@@ -1521,7 +1552,7 @@ pub fn exec(ctx: Command.Context, cfg: ExecCfg) !bool {
                 defer if (!___g_list_moved) { ___g_list_moved = true; const __T = @TypeOf(_g_list); if (@typeInfo(__T) == .optional) { if (_g_list) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _g_list.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _g_list; _drop_val.__cp_deinit(); } };
                 var file_reader = std.fs.File.stdin().readerStreaming(&.{});
                 _ = &file_reader;
-                _ = (blk_catch_70: { break :blk_catch_70 ((file_reader.interface.streamRemaining((&list.writer))) catch |__ce_70| { _ = &__ce_70; return false; }); });
+                _ = (blk_catch_74: { break :blk_catch_74 ((file_reader.interface.streamRemaining((&list.writer))) catch |__ce_74| { _ = &__ce_74; return false; }); });
                 ctx.runtime_options.eval.script = list.written();
                 const trigger = bun.pathLiteral("/[stdin]");
                 const entry_point_buf_len = (bun.MAX_PATH_BYTES + trigger.len);
@@ -1536,10 +1567,10 @@ pub fn exec(ctx: Command.Context, cfg: ExecCfg) !bool {
                 _ = passthrough_list.appendAssumeCapacity("-");
                 _ = passthrough_list.appendSliceAssumeCapacity(ctx.passthrough);
                 ctx.passthrough = passthrough_list.items;
-                _ = (blk_catch_72: { break :blk_catch_72 ((Run.boot(ctx, (blk_catch_71: { break :blk_catch_71 ((ctx.allocator.dupe(u8, entry_path)) catch |__ce_71| { _ = &__ce_71; return false; }); }), null)) catch |e| { _ = &e; _ = (blk_catch_73: { break :blk_catch_73 ((ctx.log.print(Output.errorWriter())) catch |__ce_73| { _ = &__ce_73;  }); });
+                _ = (blk_catch_76: { break :blk_catch_76 ((Run.boot(ctx, (blk_catch_75: { break :blk_catch_75 ((ctx.allocator.dupe(u8, entry_path)) catch |__ce_75| { _ = &__ce_75; return false; }); }), null)) catch |e| { _ = &e; _ = (blk_catch_77: { break :blk_catch_77 ((ctx.log.print(Output.errorWriter())) catch |__ce_77| { _ = &__ce_77;  }); });
                 _ = Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> due to error <b>{s}<r>", .{ std.fs.path.basename(target_name), @errorName(e) });
                 _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-                break :blk_catch_72 Global.exit(1); }); });
+                break :blk_catch_76 Global.exit(1); }); });
                 _g_list.ptr = null;
                 return true;
             }
@@ -1585,11 +1616,11 @@ pub fn exec(ctx: Command.Context, cfg: ExecCfg) !bool {
             }
             this_transpiler.resolver.opts.preserve_symlinks = (ctx.runtime_options.preserve_symlinks_main or bun.env_var.NODE_PRESERVE_SYMLINKS_MAIN.get());
             const join_parts: [2][]const u8 = .{ "./", target_name };
-            break :brk (blk_catch_75: { break :blk_catch_75 ((this_transpiler.resolver.resolve(this_transpiler.fs.top_level_dir, target_name, .entry_point_run)) catch |__ce_75| { _ = &__ce_75; break :blk_catch_75 this_transpiler.resolver.resolve(this_transpiler.fs.top_level_dir, try std.mem.join(ctx.allocator, "", (&join_parts)), .entry_point_run); }); });
+            break :brk (blk_catch_79: { break :blk_catch_79 ((this_transpiler.resolver.resolve(this_transpiler.fs.top_level_dir, target_name, .entry_point_run)) catch |__ce_79| { _ = &__ce_79; break :blk_catch_79 this_transpiler.resolver.resolve(this_transpiler.fs.top_level_dir, try std.mem.join(ctx.allocator, "", (&join_parts)), .entry_point_run); }); });
 };
             var resolved_to_unrunnable_file: ?UnrunnableFile = null;
             _ = &resolved_to_unrunnable_file;
-            if ((blk_catch_76: { break :blk_catch_76 ((resolution) catch |__ce_76| { _ = &__ce_76; break :blk_catch_76 null; }); })) |resolved| {
+            if ((blk_catch_80: { break :blk_catch_80 ((resolution) catch |__ce_80| { _ = &__ce_80; break :blk_catch_80 null; }); })) |resolved| {
                 _ = &resolved;
                 var resolved_mutable = resolved;
                 _ = &resolved_mutable;
@@ -1706,11 +1737,15 @@ pub fn execAsIfNode(ctx: Command.Context) !void {
             path_buf[cp_cast_int(usize, cwd.len)] = std.fs.path.sep_posix;
             var parts = .{ filename };
             _ = &parts;
-            break :brk resolve_path.joinAbsStringBuf(path_buf[0..(cwd.len + 1)], (&path_buf2), (&parts), .loose);
+            if ((((cwd.len + 1) + filename.len) < path_buf2.len)) {
+                break :brk resolve_path.joinAbsStringBuf(path_buf[0..(cwd.len + 1)], (&path_buf2), (&parts), .loose);
+            }
+            const alloc_buf = try ctx.allocator.alloc(u8, (((cwd.len + 1) + filename.len) + 2));
+            break :brk resolve_path.joinAbsStringBuf(path_buf[0..(cwd.len + 1)], alloc_buf, (&parts), .loose);
 });
-            _ = (blk_catch_77: { break :blk_catch_77 ((Run.boot(ctx, normalized_filename, null)) catch |e| { _ = &e; _ = (blk_catch_78: { break :blk_catch_78 ((ctx.log.print(Output.errorWriter())) catch |__ce_78| { _ = &__ce_78;  }); });
+            _ = (blk_catch_81: { break :blk_catch_81 ((Run.boot(ctx, normalized_filename, null)) catch |e| { _ = &e; _ = (blk_catch_82: { break :blk_catch_82 ((ctx.log.print(Output.errorWriter())) catch |__ce_82| { _ = &__ce_82;  }); });
             _ = Output.err(e, "Failed to run script \"<b>{s}<r>\"", .{ std.fs.path.basename(normalized_filename) });
-            break :blk_catch_77 Global.exit(1); }); });
+            break :blk_catch_81 Global.exit(1); }); });
     }
 
 pub fn @"bun feedback"(ctx: Command.Context) !noreturn {
@@ -1730,11 +1765,6 @@ pub fn @"bun feedback"(ctx: Command.Context) !noreturn {
     const BUN_RUN = std.fmt.comptimePrint("{s} run", .{ BUN_BIN_NAME });
     const BUN_RUN_USING_BUN = std.fmt.comptimePrint("{s} --bun run", .{ BUN_BIN_NAME });
     const log = Output.scoped(.RUN, .visible);
-    pub const bun_node_dir = ((switch (Environment.os) {
-    .windows => @compileError("Do not use RunCommand.bun_node_dir on Windows"),
-    .mac => "/private/tmp",
-    else => (if (Environment.isAndroid) "/data/local/tmp" else "/tmp"),
-    }) ++ (if ((!Environment.isDebug)) ("/bun-node" ++ (if ((Environment.git_sha_short.len > 0)) ("-" ++ Environment.git_sha_short) else "")) else "/bun-node-debug"));
     pub const Filter = _RunFilter;
     const RemoteImageDownload = _RemoteImageDownload;
 };
@@ -1824,7 +1854,7 @@ pub fn tryLaunch(ctx: Command.Context, path_to_use: [:0]u16, env: *DotEnv.Loader
             if (Environment.allow_assert) {
                 _ = bun.assert(std.fs.path.isAbsoluteWindowsWTF16(path_to_use));
             }
-            const handle = (blk_catch_79: { break :blk_catch_79 ((bun.sys.openFileAtWindows(bun.invalid_fd, path_to_use, .{ .access_mask = ((((windows.STANDARD_RIGHTS_READ | windows.FILE_READ_DATA) | windows.FILE_READ_ATTRIBUTES) | windows.FILE_READ_EA) | windows.SYNCHRONIZE), .disposition = windows.FILE_OPEN, .options = (windows.FILE_NON_DIRECTORY_FILE | windows.FILE_SYNCHRONOUS_IO_NONALERT) }).unwrap()) catch |e| { _ = &e; _ = debug("Failed to open bunx file: '{}'", .{ e });
+            const handle = (blk_catch_83: { break :blk_catch_83 ((bun.sys.openFileAtWindows(bun.invalid_fd, path_to_use, .{ .access_mask = ((((windows.STANDARD_RIGHTS_READ | windows.FILE_READ_DATA) | windows.FILE_READ_ATTRIBUTES) | windows.FILE_READ_EA) | windows.SYNCHRONIZE), .disposition = windows.FILE_OPEN, .options = (windows.FILE_NON_DIRECTORY_FILE | windows.FILE_SYNCHRONOUS_IO_NONALERT) }).unwrap()) catch |e| { _ = &e; _ = debug("Failed to open bunx file: '{}'", .{ e });
             return; }); }).cast();
             var i: usize = 0;
             _ = &i;
@@ -1839,7 +1869,7 @@ pub fn tryLaunch(ctx: Command.Context, path_to_use: [:0]u16, env: *DotEnv.Loader
                 }
             }
             ctx.passthrough = passthrough;
-            const env_block = (blk_catch_81: { break :blk_catch_81 ((env.map.writeWindowsEnvBlock(ctx.allocator)) catch |__ce_81| { _ = &__ce_81; return; }); });
+            const env_block = (blk_catch_85: { break :blk_catch_85 ((env.map.writeWindowsEnvBlock(ctx.allocator)) catch |__ce_85| { _ = &__ce_85; return; }); });
             defer {
             _ = ctx.allocator.free(env_block);
             }
@@ -1855,10 +1885,10 @@ pub fn tryLaunch(ctx: Command.Context, path_to_use: [:0]u16, env: *DotEnv.Loader
     }
 
 pub fn directLaunchCallback(wpath: []u16, ctx: Command.Context) void {
-            const utf8 = (blk_catch_82: { break :blk_catch_82 ((bun.strings.convertUTF16toUTF8InBuffer(bun.reinterpretSlice(u8, (&direct_launch_buffer)), wpath)) catch |__ce_82| { _ = &__ce_82; return; }); });
-            _ = (blk_catch_83: { break :blk_catch_83 ((Run.boot(ctx, utf8, null)) catch |e| { _ = &e; _ = (blk_catch_84: { break :blk_catch_84 ((ctx.log.print(Output.errorWriter())) catch |__ce_84| { _ = &__ce_84;  }); });
+            const utf8 = (blk_catch_86: { break :blk_catch_86 ((bun.strings.convertUTF16toUTF8InBuffer(bun.reinterpretSlice(u8, (&direct_launch_buffer)), wpath)) catch |__ce_86| { _ = &__ce_86; return; }); });
+            _ = (blk_catch_87: { break :blk_catch_87 ((Run.boot(ctx, utf8, null)) catch |e| { _ = &e; _ = (blk_catch_88: { break :blk_catch_88 ((ctx.log.print(Output.errorWriter())) catch |__ce_88| { _ = &__ce_88;  }); });
             _ = Output.err(e, "Failed to run bin \"<b>{s}<r>\"", .{ std.fs.path.basename(utf8) });
-            break :blk_catch_83 Global.exit(1); }); });
+            break :blk_catch_87 Global.exit(1); }); });
     }
     const debug = Output.scoped(.BunXFastPath, .visible);
 };

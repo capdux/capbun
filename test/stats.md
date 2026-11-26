@@ -54,6 +54,8 @@
   - `test/js/bun/{binary,bundler,fetch,import-attributes,perf_hooks,sys,windows}`
   - `test/bundler/{bundler_allow_unresolved,bundler_banner,bundler_decorator_metadata,bundler_footer,bundler_regressions,compile-sourcemap-internal,plugin-error-nested-throw,plugin-sync-exception-fallback,transpiler_constant_fold_eqeq}.test.ts`
   - `test/js/node/{buffer-compare-bounds,buffer-concat,buffer-copy-fill-detach,buffer-from-encoding-leak,buffer-indexOf-detach,buffer-inspectmaxbytes}.test.ts` 等 `root1` 23 个文件
+  - **本轮新确认 0 fail 套件**：`test/js/node/buffer/`、`test/js/node/readline/readline.node.test.ts`（`TERM=xterm` 下 81/81）、`test/js/bun/cron/`、`test/js/bun/resolve/`、`test/js/bun/shell/`、`test/js/bun/spawn/`、`test/js/bun/http/`、`test/js/web/streams/`、`test/bundler/transpiler/ts-enum-redecl-panic.test.ts`（6/6）、`test/js/web/console/`（12/12）、`test/js/web/web-globals.test.js`（61/61）、`test/js/web/workers/worker-postmessage-transfer.test.ts`（7/7）、`test/js/node/crypto/crypto.test.ts`（403/403）、`test/js/node/stream/node-stream-uint8array.test.ts`（5/5）、`test/js/node/fs/fs-stats-constructor.test.ts`（7/7）、`test/js/node/dns/`（0 fail）、`test/regression/issue/{28024,11029-crypto-verify-null-algorithm,21274,23183,31002,30963,jsx-template-string-crash,26915}.test.ts`（8 套件全 0 fail）
+  - **本轮高收敛套件（1.4.5-debug 已验证）**：`test/js/bun/cookie/`（168/171）、`test/js/bun/image/`（268/271）、`test/js/bun/udp/`（234/236）、`test/js/node/worker_threads/worker_destruction.test.ts`（4/5）、`test/js/node/path/`（124/125）、`test/js/web/url/`（136/137）、`test/js/web/html/`（176/178）、`test/js/web/workers/message-channel.test.ts`（15/17）、`test/js/web/websocket/websocket-proxy-connect-reply.test.ts`（22/54）、`test/js/bun/repl/`（71/129）、`test/js/bun/jsonc/`（354/375）
 
 ---
 
@@ -115,17 +117,52 @@
     - `src/runtime/socket/udp_socket.cp`（`getBinaryType` 补全全部 14 种 `ArrayBufferBinaryType`）
     - `src/jsc/ConsoleObject.cp`（`console.dir` BigInt `depth` 转换 + L596 `E0133`）
     - `src/jsc/bindings/ZigGlobalObject.cpp`（`isModuleEvaluated` 允许 `Status::Evaluating` 以支持 `require(esm)` 循环依赖；默认开启 `useTemporal()`）
+24. **Batch 27A/B/C（`1bea9e09`, `4ff56393`, `928bb56e` 已完成，`cpc_brief.py` + `zig:check` 全过，待 `bun bd` 构建）**：
+    - `Archive.cp`、`Terminal.cp`、`ConsoleObject.cp`、`JSPerformanceEntry.cpp`、`JSDOMURL.cpp`、`inspect.js`、`writeOutputFilesToDisk.cp`、`JSString.cp`、`transpiler.cp`、`JSONCObject.cp`、`NodeSqlite.cpp`、`udp_socket.cp`、`cares_jsc.cp`、`BunBuiltinNames.h`
+25. **Batch 28A/B（`de2df7ed`, `fb8a2571` 已完成，`cpc_brief.py` + `zig:check` 全过，待 `bun bd` 构建）**：
+    - `tls.ts`、`net.ts`、`socket.cp`、`http2.ts`、`h2_frame_parser.cp`（已裁剪至 `ratio: 1.198`）、`h2/connection.cp`、`prepareCssAstsForChunk.cp`、`js_printer.cp`、`P.cp`、`renamer.cp`、`visit.cp`、`options.cp`、`transpiler.cp`、`ModuleLoader.cp`、`RuntimeTranspilerStore.cp`
+26. **Batch 29A/B（`f75e3d17`, `710b9101` 已完成，`cpc_brief.py` + `zig:check` 全过，待 `bun bd` 构建）**：
+    - `toml.cp`、`toml/lexer.cp`、`patch.cp`、`url.cp`、`list_objects.cp`、`TextEncoder.cp`、`TextCodecCJK.cpp`、`TextDecoderStream.ts`、`JSBroadcastChannel.cpp`、`SerializedScriptValue.cpp`、`web_worker.cp`、`MessagePort.{h,cpp}`
+27. **Batch 30A/B（`0a4750ab`, `6eda4825` 已完成，`cpc_brief.py` + `zig:check` 全过，待 `bun bd` 构建）**：
+    - `NodeFSStatBinding.cpp`、`ProcessObjectInternals.ts`、`FileReader.cp`、`JSHash.cpp`、`CryptoSignJob.cpp`、`JSX509Certificate.cpp`、`node_process.cp`、`html_rewriter.cp`
+28. **Batch 31A/B + 32A（`032ec648`, `6aa8ef86`, `c6922d2a` 已完成，`cpc_brief.py` + `zig:check` 全过，待 `bun bd` 构建）**：
+    - `TextCodecSingleByte.cpp`（16 个单字节编码）、`TextEncodingRegistry.cpp`、`BunBuiltinNames.h`、`ZigGlobalObject.cpp`、`TextDecoderStream.ts`、`MessagePortPipe.{h,cpp}`、`MessagePort.{h,cpp}`、`output.cp`、`Arguments.cp`、`CommandLineArguments.cp`、`sys.cp`、`create_command.cp`、`resolver.cp`、`package_json.cp`、`SideEffects.cp`、`parseProperty.cp`、`lexer.cp`、`RuntimeTranspilerStore.cp`、`h2_frame_parser.cp`
+29. **Batch 34–37（`a598cb71`, `84764e1c`, `c4b5d018`, `3ee71534`, `ce09f3db`, `10a6ed22`, `13ababdc`, `6358eb53` 已完成，`cpc_brief.py` + `zig:check` 全过，待 `bun bd` 构建）**：
+    - **Batch 34A**：`udp_socket.cp`（NUL 截断、`127.1`/`0x7f000001`/`2130706433`、`parsePort`/`throwGetaddrinfoNotFound`）
+    - **Batch 34C**：`run_command.cp`、`pack_command.cp`（`--bun` per-user shim、`PATH_MAX`、`ENOSPC`、`npm_package_*`）
+    - **Batch 35A**：`hive_array.cp`、`server.cp`、`Task.cp`、`event_loop.cp`、`PBKDF2.cp`、`AbortSignal.{h,cpp}`、`JSAbortSignal.cpp`、`JSBuffer.cpp`
+    - **Batch 35B**：`FormatStackTraceForJS.cpp`（修复 `bool` 重载遮蔽 `Error.prepareStackTrace`、`DontEnum`、`appendStackTrace`）、`ZigGlobalObject.cpp`（`stackTraceLimit = 10`）
+    - **Batch 36A**：`web_worker.cp`（`open` 时序前置与 TLA 不阻塞消息）
+    - **Batch 36B**：`repl.cp`（非 TTY 管道模式禁用重绘/回显）
+    - **Batch 37A**：`Worker.cpp`（`terminate()` 退出码 1）、`FetchTasklet.cp`（`deinitWithoutJSC` 防关闭态空指针）、`worker_destruction.test.ts` 超时
+    - **Batch 37B**：`calc.cp`（`parseAtan2` 剩余切片修正）、`color_js.cp`（`ansi-16` SGR 与 `Ansi256` 下溢/数值截断）
+30. **主智能体本轮顺手修复（待 `bun bd` 构建）**：
+    - `JSCookie.cpp` & `JSCookieMap.cpp`（`getSubclassStructureIfNeeded` 子类化 + `CookieMap` 保持对象键插入顺序）
+    - `CookieMap.cpp`（`__Host-`/`__Secure-` 删除时补 `Secure`）
+    - `async_hooks.ts`（内联 `ObjectIs` 防 monkeypatch）
+    - `YAMLObject.cp`（锚点/别名空集合强制换行 `p:\n  &p\n  {}`）
+    - `vendor/libjpeg-turbo/src/turbojpeg.c`（`my_error_exit` 清零 `warning` 标志）
+    - `perf_hooks.ts` & `net.ts`（`"net"` 性能条目派发）
+    - `ServerWebSocket.cp` & `socket.cp`（`setSocketOptions` 支持 `ServerWebSocket`；`Bun.connect` 仅解包合法 IPv6 字面量）
+    - `ReadableStream.ts`（`readableStreamToText` 校验 `$isReadableStreamDisturbed`）
+    - `BunObject.cp`（`openInEditor` 对 `undefined`/`null` 路径判空）
+    - `JSSQLStatement.cpp`（`declaredTypes` 允许执行前访问）
+    - `JSHmac.cpp`（`jsHmacProtoFuncUpdate` 补 `!hmac` 空指针校验）
+    - `skipTypescript.cp`（三元条件内箭头函数返回类型回溯支持模板字面量 `${...}` 重扫）
+    - `fetch.cp`（`GET`+body 校验优先于 `AbortSignal.aborted`）
+    - `WebSocketUpgradeClient.cp`（代理 `CONNECT` 响应支持无 reason-phrase、2xx 与 1xx 循环）
 
 ---
 
 ## 四、正在运行中的并发修复
 
-- **Batch 24B**（`4c8a0c45`）：`test/js/node/{fs,net,child_process,dgram,sqlite}`
-- **Batch 25B**（`d3ef48c3`）：`test/js/bun/{terminal,glob,xml}`
+- **Batch 34B**（`0ce3eb08`）：`test/regression/issue/` 独立回归失败项
+- **Batch 38A**（`cecafc23`）：`node/crypto` `cipher events` 顺序与 `node/stream` 剩余项
+- **Batch 38B**（新派发）：`test/js/web/html/` `FormData` & `URLSearchParams` `USVString` 剩余项
 
 ---
 
 ## 五、待收尾与下一大轮
 
-1. **本大轮收敛编译**：待上述 3 路完成后，主智能体执行 **1 次统一 `bun bd`**，对 Batches 14–25 全部改动做并发批量回归验收并原子提交推送。
-2. **剩余长尾**：`test/js/bun/{terminal,glob,css,xml}` 剩余项、`test/cli` 剩余项与 `test/regression/issue` 剩余独立根因收敛。
+1. **本大轮收敛编译**：待 Batch 34B / 38A / 38B 完成后，主智能体执行 **1 次统一 `bun bd`**，对 Batches 27–38 全部改动做并发批量回归验收并原子提交推送。
+2. **剩余长尾**：`test/js/web/url` `URLContext`（Ada 偏移检查）与待扫测验证的新一轮收敛结果。

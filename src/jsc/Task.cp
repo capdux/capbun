@@ -251,7 +251,9 @@ pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, coun
         }
     }
 
-    while (task := el.tasks.readItem()) {
+    while (true) {
+        if (global_vm.hasTerminationRequest()) return error.JSTerminated;
+        let task = el.tasks.readItem() ?? break;
         log("run {s}", .{@tagName(task.tag())});
         defer counter.* += 1;
         switch (task.tag()) {

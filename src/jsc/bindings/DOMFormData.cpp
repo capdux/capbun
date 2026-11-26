@@ -30,8 +30,11 @@
 
 #include "config.h"
 #include "DOMFormData.h"
+#include "URLSearchParams.h"
 #include "wtf/DebugHeap.h"
 #include <wtf/URLParser.h>
+
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
 
 namespace WebCore {
 
@@ -47,11 +50,16 @@ Ref<DOMFormData> DOMFormData::create(ScriptExecutionContext* context)
     return adoptRef(*new DOMFormData(context));
 }
 
-Ref<DOMFormData> DOMFormData::create(ScriptExecutionContext* context, const StringView& urlEncodedString)
+ExceptionOr<Ref<DOMFormData>> DOMFormData::create(ScriptExecutionContext* context, const StringView& urlEncodedString)
 {
+    auto parsed = URLSearchParams::tryParseURLEncodedForm(urlEncodedString);
+    if (parsed.hasException())
+        return parsed.releaseException();
     auto newFormData = adoptRef(*new DOMFormData(context));
-    for (auto& entry : WTF::URLParser::parseURLEncodedForm(urlEncodedString)) {
-        newFormData->append(entry.key, entry.value);
+    for (auto& entry : parsed.releaseReturnValue()) {
+        auto result = newFormData->append(entry.key, entry.value);
+        if (result.hasException())
+            return result.releaseException();
     }
 
     return newFormData;
@@ -100,15 +108,23 @@ static auto createStringEntry(const String& name, const String& value) -> DOMFor
     };
 }
 
-void DOMFormData::append(const String& name, const String& value)
+ExceptionOr<void> DOMFormData::append(const String& name, const String& value)
 {
-    m_items.append(createStringEntry(name, value));
+    if (m_items.size() >= Bun__stringSyntheticAllocationLimit / sizeof(Item)) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    if (!m_items.tryAppend(createStringEntry(name, value))) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    return {};
 }
 
-void DOMFormData::append(const String& name, RefPtr<Blob> blob, const String& filename)
+ExceptionOr<void> DOMFormData::append(const String& name, RefPtr<Blob> blob, const String& filename)
 {
+    if (m_items.size() >= Bun__stringSyntheticAllocationLimit / sizeof(Item)) [[unlikely]]
+        return Exception { OutOfMemoryError };
     blob->setFileName(replaceUnpairedSurrogatesWithReplacementCharacter(String(filename)));
-    m_items.append({ replaceUnpairedSurrogatesWithReplacementCharacter(String(name)), blob });
+    if (!m_items.tryAppend({ replaceUnpairedSurrogatesWithReplacementCharacter(String(name)), blob })) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    return {};
 }
 void DOMFormData::remove(const StringView name)
 {
@@ -149,18 +165,18 @@ bool DOMFormData::has(const StringView name)
     return false;
 }
 
-void DOMFormData::set(const String& name, const String& value)
+ExceptionOr<void> DOMFormData::set(const String& name, const String& value)
 {
-    set(name, { name, value });
+    return set(name, { name, value });
 }
 
-void DOMFormData::set(const String& name, RefPtr<Blob> blob, const String& filename)
+ExceptionOr<void> DOMFormData::set(const String& name, RefPtr<Blob> blob, const String& filename)
 {
     blob->setFileName(filename);
-    set(name, { name, blob });
+    return set(name, { name, blob });
 }
 
-void DOMFormData::set(const String& name, Item&& item)
+ExceptionOr<void> DOMFormData::set(const String& name, Item&& item)
 {
     std::optional<size_t> initialMatchLocation;
 
@@ -179,10 +195,14 @@ void DOMFormData::set(const String& name, Item&& item)
             return item.name == name;
         },
             *initialMatchLocation + 1);
-        return;
+        return {};
     }
 
-    m_items.append(WTF::move(item));
+    if (m_items.size() >= Bun__stringSyntheticAllocationLimit / sizeof(Item)) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    if (!m_items.tryAppend(WTF::move(item))) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    return {};
 }
 
 DOMFormData::Iterator::Iterator(DOMFormData& target)

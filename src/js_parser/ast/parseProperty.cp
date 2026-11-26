@@ -318,7 +318,7 @@ pub fn ParseProperty(
                                         },
                                     }
                                 }
-                            } else if (p.lexer.token == .t_open_brace && strings.eqlComptime(name, "static")) {
+                            } else if (opts.is_class && p.lexer.token == .t_open_brace && strings.eqlComptime(name, "static")) {
                                 if (opts.ts_decorators.len > 0) {
                                     p.log.addError(
                                         p.source,

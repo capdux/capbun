@@ -150,39 +150,14 @@ Object.setPrototypeOf(PerformanceNodeEntry, PerformanceEntry);
 
 const kObserverCallback = Symbol("kObserverCallback");
 const kObserverTypes = Symbol("kObserverTypes");
+const kNotifyNetSymbol = Symbol.for("bun.perf_hooks.notifyNet");
 const functionObservers = new Set<any>();
+const netObservers = new Set<any>();
 
-const origObserve = PerformanceObserver.prototype.observe;
-PerformanceObserver.prototype.observe = function observe(options: any) {
-  if (options && typeof options === "object") {
-    const types = Array.isArray(options.entryTypes)
-      ? options.entryTypes
-      : typeof options.type === "string"
-        ? [options.type]
-        : null;
-    if (types && types.includes("function")) {
-      this[kObserverTypes] = new Set(types);
-      functionObservers.add(this);
-      const webTypes = types.filter((t: string) => t !== "function");
-      if (webTypes.length === 0) {
-        return;
-      }
-      options = Array.isArray(options.entryTypes) ? { ...options, entryTypes: webTypes } : options;
-    }
-  }
-  return origObserve.$call(this, options);
-};
-
-const origDisconnect = PerformanceObserver.prototype.disconnect;
-PerformanceObserver.prototype.disconnect = function disconnect() {
-  functionObservers.delete(this);
-  return origDisconnect.$call(this);
-};
-
-function notifyFunctionObservers(entry: PerformanceNodeEntry) {
-  if (functionObservers.size === 0) return;
+function notifyObservers(observers: Set<any>, entry: PerformanceNodeEntry) {
+  if (observers.size === 0) return;
   queueMicrotask(() => {
-    for (const observer of functionObservers) {
+    for (const observer of observers) {
       const cb = observer[kObserverCallback];
       if (typeof cb === "function") {
         const list = {
@@ -196,6 +171,49 @@ function notifyFunctionObservers(entry: PerformanceNodeEntry) {
     }
   });
 }
+
+function notifyFunctionObservers(entry: PerformanceNodeEntry) {
+  notifyObservers(functionObservers, entry);
+}
+
+function notifyNetObservers(name: string, startTime: number, duration: number, detail?: any) {
+  if (netObservers.size === 0) return;
+  notifyObservers(netObservers, new PerformanceNodeEntry(name, "net", startTime, duration, detail));
+}
+
+const origObserve = PerformanceObserver.prototype.observe;
+PerformanceObserver.prototype.observe = function observe(options: any) {
+  if (options && typeof options === "object") {
+    const types = Array.isArray(options.entryTypes)
+      ? options.entryTypes
+      : typeof options.type === "string"
+        ? [options.type]
+        : null;
+    if (types && (types.includes("function") || types.includes("net"))) {
+      this[kObserverTypes] = new Set(types);
+      if (types.includes("function")) {
+        functionObservers.add(this);
+      }
+      if (types.includes("net")) {
+        netObservers.add(this);
+        (globalThis as any)[kNotifyNetSymbol] = notifyNetObservers;
+      }
+      const webTypes = types.filter((t: string) => t !== "function" && t !== "net");
+      if (webTypes.length === 0) {
+        return;
+      }
+      options = Array.isArray(options.entryTypes) ? { ...options, entryTypes: webTypes } : options;
+    }
+  }
+  return origObserve.$call(this, options);
+};
+
+const origDisconnect = PerformanceObserver.prototype.disconnect;
+PerformanceObserver.prototype.disconnect = function disconnect() {
+  functionObservers.delete(this);
+  netObservers.delete(this);
+  return origDisconnect.$call(this);
+};
 
 // Intercept PerformanceObserver construction to capture callback for "function" entries
 const OrigPerformanceObserver = PerformanceObserver;

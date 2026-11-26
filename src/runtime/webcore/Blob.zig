@@ -1899,7 +1899,13 @@ pub fn toFormDataWithBytes(blob: *Blob, global: *JSGlobalObject, buf: []u8, comp
         defer {
         _ = encoder.deinit();
         }
-        return (blk_catch_6: { break :blk_catch_6 ((bun.FormData.toJS(global, buf, encoder.encoding)) catch |e| { _ = &e; break :blk_catch_6 global.createErrorInstance("FormData encoding failed: {s}", .{ @errorName(e) }); }); });
+        return (blk_catch_6: { break :blk_catch_6 ((bun.FormData.toJS(global, buf, encoder.encoding)) catch |e| { _ = &e; if ((e == error.JSError)) {
+            if (global.tryTakeException()) |exc| {
+                _ = &exc;
+                return ((exc.toError()) orelse (exc));
+            }
+        }
+        return global.createErrorInstance("FormData encoding failed: {s}", .{ @errorName(e) }); }); });
 }
 
 pub fn toFormData(blob: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) bun.JSTerminated!JSValue {

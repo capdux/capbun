@@ -76,6 +76,12 @@ inline fn websocket(): uws.AnyWebSocket {
     return _.#flags.websocket();
 }
 
+fn fd(): bun.FD {
+    if (_.#flags.closed) return bun.invalid_fd;
+    const sock_ptr: *uws.us_socket_t = unsafe { @ptrCast(_.websocket().raw()) };
+    return sock_ptr.getFd();
+}
+
 pub const js = jsc.Codegen.JSServerWebSocket;
 pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;

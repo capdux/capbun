@@ -65,6 +65,7 @@ export struct S3ListObjectsV2Result {
     key_count: i64? = null;
     max_keys: i64? = null;
     delimiter: string? = null;
+    delimiter_owned: bool = false;
     encoding_type: string? = null;
     is_truncated: bool? = null;
     continuation_token: string? = null;
@@ -74,6 +75,9 @@ export struct S3ListObjectsV2Result {
     contents: Managed(S3ListObjectsContents)? = null;
 
     pub fn deinit(*_) {
+        if (_.delimiter_owned) {
+            if (d := _.delimiter) default_allocator.free(d);
+        }
         if (contents := _.contents) {
             for (*item of contents.items) item.deinit();
             contents.deinit();
@@ -405,7 +409,42 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
                     }
                 } else if (strings.eql(tagName, "Delimiter")) {
                     if (_end := strings.indexOf(xml[i..], "</Delimiter>")) {
-                        result.delimiter = xml[i .. i + _end];
+                        const raw = xml[i .. i + _end];
+                        if (strings.indexOfChar(raw, '&') != null) {
+                            let buf: std.ArrayListUnmanaged(u8) = .{};
+                            let j: usize = 0;
+                            while (j < raw.len) {
+                                if (raw[j] == '&') {
+                                    if (strings.hasPrefixComptime(raw[j..], "&amp;")) {
+                                        buf.append(default_allocator, '&')?;
+                                        j += 5;
+                                        continue;
+                                    } else if (strings.hasPrefixComptime(raw[j..], "&lt;")) {
+                                        buf.append(default_allocator, '<')?;
+                                        j += 4;
+                                        continue;
+                                    } else if (strings.hasPrefixComptime(raw[j..], "&gt;")) {
+                                        buf.append(default_allocator, '>')?;
+                                        j += 4;
+                                        continue;
+                                    } else if (strings.hasPrefixComptime(raw[j..], "&quot;")) {
+                                        buf.append(default_allocator, '"')?;
+                                        j += 6;
+                                        continue;
+                                    } else if (strings.hasPrefixComptime(raw[j..], "&apos;")) {
+                                        buf.append(default_allocator, '\'')?;
+                                        j += 6;
+                                        continue;
+                                    }
+                                }
+                                buf.append(default_allocator, raw[j])?;
+                                j += 1;
+                            }
+                            result.delimiter = buf.toOwnedSlice(default_allocator)?;
+                            result.delimiter_owned = true;
+                        } else {
+                            result.delimiter = raw;
+                        }
                         i = i + _end;
                     }
                 } else if (strings.eql(tagName, "NextContinuationToken")) {

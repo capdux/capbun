@@ -260,7 +260,7 @@ pub fn NewSocket(comptime ssl: bool): type {
                     let sf = std.heap.stackFallback(1024, bun.default_allocator);
                     const alloc = sf.get();
                     const raw = host.host;
-                    const clean = if (raw.len > 1 && raw[0] == '[' && raw[raw.len - 1] == ']') raw[1 .. raw.len - 1] else raw;
+                    const clean = if (raw.len > 2 && raw[0] == '[' && raw[raw.len - 1] == ']' && (std.net.Ip6Address.parse(raw[1 .. raw.len - 1], 0) catch null) != null) raw[1 .. raw.len - 1] else raw;
                     const hostz = bun.handleOom(alloc.dupeZ(u8, clean));
                     const _hostz_guard = FreeSliceGuard<u8>{ alloc: alloc, slice: hostz };
 
@@ -1979,12 +1979,24 @@ pub class DuplexUpgradeContext {
     owned_ctx: (*BoringSSL.SSL_CTX)? = null,
     is_open: bool = false,
     mode: SocketMode = .client,
+    in_callback: u32 = 0,
+    released: bool = false,
+    task_queued: bool = false,
 
     pub const EventState = DuplexUpgradeEventState;
 
     pub const new = bun.TrivialNew(DuplexUpgradeContext);
 
+    fn leaveCallback(*_) {
+        _.in_callback -= 1;
+        if (_.in_callback == 0 && _.released && !_.task_queued) {
+            bun.destroy(_);
+        }
+    }
+
     fn onOpen(*_) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         _.is_open = true;
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
@@ -1994,6 +2006,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onData(*_, decoded_data: []const u8) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
         if (tls := _.tls) {
@@ -2002,6 +2016,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onHandshake(*_, success: bool, ssl_error: uws.us_bun_verify_error_t) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
         if (tls := _.tls) {
@@ -2010,6 +2026,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onEnd(*_) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
         if (tls := _.tls) {
             tls.onEnd(socket);
@@ -2017,6 +2035,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onWritable(*_) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
         if (tls := _.tls) {
@@ -2025,6 +2045,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onError(*_, err_value: jsc.JSValue) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         if (_.is_open) {
             if (tls := _.tls) {
                 tls.handleError(err_value);
@@ -2038,6 +2060,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onTimeout(*_) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
         if (tls := _.tls) {
@@ -2046,6 +2070,8 @@ pub class DuplexUpgradeContext {
     }
 
     fn onClose(*_) {
+        _.in_callback += 1;
+        defer _.leaveCallback();
         const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
         if (tls := _.tls) {
@@ -2067,9 +2093,12 @@ pub class DuplexUpgradeContext {
     }
 
     fn runEvent(*_) {
+        _.task_queued = false;
+        _.in_callback += 1;
+        defer _.leaveCallback();
         switch (_.task_event) {
             .StartTLS => {
-                if (_.tls == null) {
+                if (_.released || _.tls == null) {
                     _.release();
                     return;
                 }
@@ -2099,15 +2128,22 @@ pub class DuplexUpgradeContext {
 
     fn deinitInNextTick(*_) {
         _.task_event = .Close;
-        _.vm.enqueueTask(jsc.Task.init(&_.task));
+        if (!_.task_queued) {
+            _.task_queued = true;
+            _.vm.enqueueTask(jsc.Task.init(&_.task));
+        }
     }
 
     fn startTLS(*_) {
         _.task_event = .StartTLS;
-        _.vm.enqueueTask(jsc.Task.init(&_.task));
+        if (!_.task_queued) {
+            _.task_queued = true;
+            _.vm.enqueueTask(jsc.Task.init(&_.task));
+        }
     }
 
     pub fn release(*_) {
+        _.released = true;
         if (tls := _.tls) {
             _.tls = null;
             tls.deref();
@@ -2121,7 +2157,9 @@ pub class DuplexUpgradeContext {
             BoringSSL.SSL_CTX_free(ctx);
         }
         _.upgrade.deinit();
-        bun.destroy(_);
+        if (_.in_callback == 0 && !_.task_queued) {
+            bun.destroy(_);
+        }
     }
 
     pub fn deinit(*_) {
@@ -2362,16 +2400,19 @@ pub fn jsSetSocketOptions(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
         return global.throwNotEnoughArguments("setSocketOptions", 3, arguments.len);
     }
 
-    const socket_opt = arguments.ptr[0].as(TCPSocket);
-    if (socket_opt == null) {
+    const file_descriptor: bun.FD = blk: {
+        if (socket := arguments.ptr[0].as(TCPSocket)) {
+            break :blk socket.socket.fd();
+        }
+        if (ws := arguments.ptr[0].as(jsc.API.ServerWebSocket)) {
+            break :blk ws.fd();
+        }
         return global.throw("Expected a SocketTCP instance", .{});
-    }
-    const socket = socket_opt.?;
+    };
 
     const is_for_send_buffer = arguments.ptr[1].toInt32() == 1;
     const is_for_recv_buffer = arguments.ptr[1].toInt32() == 2;
     const buffer_size = arguments.ptr[2].toInt32();
-    const file_descriptor = socket.socket.fd();
 
     if (bun.Environment.isPosix) {
         if (is_for_send_buffer) {

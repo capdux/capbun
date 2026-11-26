@@ -53,7 +53,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                         composes: {},
                     };
                     const src_copy = entry.condition_import_records;
-                    wrapRulesWithConditions(&ast, allocator, &entry.conditions, &src_copy, &entry.condition_import_records);
+                    wrapRulesWithConditions(&ast, allocator, c.allocator(), &entry.conditions, &src_copy, &entry.condition_import_records);
                     chunk.content.css.asts[i] = ast;
                 },
                 .external_path => {
@@ -231,6 +231,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                     wrapRulesWithConditions(
                         ast,
                         allocator,
+                        c.graph.allocator,
                         &entry.conditions,
                         &entry.condition_import_records,
                         &c.graph.ast.items(.import_records)[source_index.get()],
@@ -245,6 +246,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
 fn wrapRulesWithConditions(
     ast: *bun.css.BundlerStyleSheet,
     temp_allocator: std.mem.Allocator,
+    dst_import_records_allocator: std.mem.Allocator,
     conditions: *const BabyList(bun.css.ImportConditions),
     src_import_records: *const bun.BabyList(bun.ImportRecord),
     dst_import_records: *bun.BabyList(bun.ImportRecord),
@@ -329,7 +331,7 @@ fn wrapRulesWithConditions(
                 let new_rules = bun.css.BundlerCssRuleList{};
                 new_rules.v.append(temp_allocator, {
                     media: bun.css.BundlerMediaRule{
-                        query: item.media.cloneWithSrcAndDstImportRecords(temp_allocator, src_import_records, dst_import_records),
+                        query: item.media.cloneWithSrcAndDstImportRecords(dst_import_records_allocator, src_import_records, dst_import_records),
                         rules: ast.rules,
                         loc: bun.css.Location.dummy(),
                     },

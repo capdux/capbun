@@ -78,7 +78,7 @@ pub struct Job_ {
 
     pub fn runFromJS(*_): bun.JSError!void {
         const _rel = ReleaseGuard<Job_>{ ptr: unsafe { _ as *Job_! } };
-        if (_.vm.isShuttingDown()) {
+        if (_.vm.isShuttingDown() || _.vm.jsc_vm.hasTerminationRequest()) {
             return;
         }
 

@@ -121,12 +121,13 @@ export function readableStreamToArray(stream: ReadableStream): Promise<unknown[]
 $linkTimeConstant;
 export function readableStreamToText(stream: ReadableStream): Promise<string> {
   if (!$isReadableStream(stream)) throw $ERR_INVALID_ARG_TYPE("stream", "ReadableStream", typeof stream);
+  if ($isReadableStreamLocked(stream)) return Promise.$reject($ERR_INVALID_STATE_TypeError("ReadableStream is locked"));
+  if ($isReadableStreamDisturbed(stream)) return Promise.$reject($ERR_INVALID_STATE_TypeError("ReadableStream has already been used"));
   // this is a direct stream
   var underlyingSource = $getByIdDirectPrivate(stream, "underlyingSource");
   if (underlyingSource != null) {
     return $readableStreamToTextDirect(stream, underlyingSource);
   }
-  if ($isReadableStreamLocked(stream)) return Promise.$reject($ERR_INVALID_STATE_TypeError("ReadableStream is locked"));
 
   const result = $tryUseReadableStreamBufferedFastPath(stream, "text");
 

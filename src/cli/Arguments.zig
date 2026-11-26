@@ -444,6 +444,7 @@ else => 0,
                 ctx.test_options.coverage.enabled = args.flag("--coverage");
             }
             if ((args.options("--coverage-reporter").len > 0)) {
+                ctx.test_options.coverage.enabled = true;
                 ctx.test_options.coverage.reporters = .{ .text = false, .lcov = false };
                 for (cp_iter_slice(args.options("--coverage-reporter"))) |reporter| {
                     _ = &reporter;

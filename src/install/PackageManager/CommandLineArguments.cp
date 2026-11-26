@@ -33,10 +33,9 @@ const platform_specific_backend_label = if (Environment.isMac)
 else
     "Possible values: \"hardlink\" (default), \"symlink\", \"copyfile\"";
 
-const shared_params = [
+const shared_params_no_prod = [
     clap.parseParam("-c, --config <STR>?                   Specify path to config file (bunfig.toml)") catch unreachable,
     clap.parseParam("-y, --yarn                            Write a yarn.lock file (yarn v1)") catch unreachable,
-    clap.parseParam("-p, --production                      Don't install devDependencies") catch unreachable,
     clap.parseParam("-P, --prod") catch unreachable,
     clap.parseParam("--no-save                             Don't update package.json or save a lockfile") catch unreachable,
     clap.parseParam("--save                                Save to package.json (true by default)") catch unreachable,
@@ -71,6 +70,10 @@ const shared_params = [
     clap.parseParam("-h, --help                            Print this help menu") catch unreachable,
 ];
 
+const shared_params = shared_params_no_prod ++ [
+    clap.parseParam("-p, --production                      Don't install devDependencies") catch unreachable,
+];
+
 pub const install_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("-d, --dev                 Add dependency to \"devDependencies\"") catch unreachable,
     clap.parseParam("-D, --development") catch unreachable,
@@ -84,7 +87,8 @@ pub const install_params: []const ParamType = &(shared_params ++ [
     clap.parseParam("<POS> ...                         ") catch unreachable,
 ]);
 
-pub const update_params: []const ParamType = &(shared_params ++ [
+pub const update_params: []const ParamType = &(shared_params_no_prod ++ [
+    clap.parseParam("-p, --production                      Only update dependencies and optionalDependencies (alias: --prod)") catch unreachable,
     clap.parseParam("--latest                              Update packages to their latest versions") catch unreachable,
     clap.parseParam("-i, --interactive                     Show an interactive list of outdated packages to select for update") catch unreachable,
     clap.parseParam("--filter <STR>...                     Update packages for the matching workspaces") catch unreachable,
@@ -725,7 +729,7 @@ pub static fn printHelp(subcommand: Subcommand) {
         .info => {
             const intro_text =
                 \\
-                \\<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\<package\><r><d>[@\<version\>]<r>
+                \\<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\<package\><r><d>[@\<version\>]<r> <blue>[\<property\>...]<r>
                 \\
                 \\  View package metadata from the registry.
                 \\

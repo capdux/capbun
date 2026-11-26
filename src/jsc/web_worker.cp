@@ -617,6 +617,10 @@ pub struct LiveWorkers {
         }
 
         vm.preload = _.preloads;
+        // dispatchOnline fires the parent-side 'open' event and flips the C++
+        // state to Running. Placed before resolving/loading the entry point so
+        // 'open' precedes any synchronous postMessage or entry-resolution error.
+        WebWorker__dispatchOnline(_.cpp_worker, vm.global);
 
         // Resolve the entry point on the worker thread (the parent only stored the
         // raw specifier). The returned slice is BORROWED — every exit from spin()
@@ -658,24 +662,12 @@ pub struct LiveWorkers {
                 vm.exit_handler.exit_code = 1;
                 _.shutdown();
             }
-        } else if (promise.status() == .pending) {
-            if (vm.exit_handler.exit_code == 0) {
-                vm.exit_handler.exit_code = 13;
-            }
-            _.flushLogs(vm);
-            _.shutdown();
         } else {
             * = promise.result(vm.jsc_vm);
         }
 
         _.flushLogs(vm);
         log("[{d}] event loop start", .{ _.execution_context_id });
-        // dispatchOnline fires the parent-side 'open' event and flips the C++
-        // state to Running (which routes postMessage directly instead of
-        // queuing). It is placed after the entry point has loaded so the parent
-        // observes 'online' only once the worker's top-level code has completed;
-        // moving it earlier would change that observable ordering.
-        WebWorker__dispatchOnline(_.cpp_worker, vm.global);
         WebWorker__fireEarlyMessages(_.cpp_worker, vm.global);
         _.setStatus(.running);
 
@@ -991,6 +983,12 @@ pub struct LiveWorkers {
             error_message.* = out;
             return null;
         };
+
+        if (resolved_entry_point.flags.is_external) {
+            bun.handleOom(logger.addErrorFmt(null, bun.logger.Loc.Empty, bun.default_allocator, "Cannot use \"{s}\" as an entry point: it resolves to a builtin module", .{str}));
+            error_message.* = bun.String.static("Cannot use a builtin module as an entry point");
+            return null;
+        }
 
         let maybe_entry_path: (*bun.fs.Path)? = resolved_entry_point.path();
         if (maybe_entry_path == null) {

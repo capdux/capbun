@@ -706,22 +706,30 @@ pub struct RunCommand {
         this_transpiler.configureLinker();
     }
 
-    pub const bun_node_dir = switch (Environment.os) {
+    static fn bunNodeDir(buf: *bun.PathBuffer): [:0]const u8 {
+        if (comptime Environment.isWindows) @compileError("Do not use RunCommand.bunNodeDir on Windows");
         // This path is almost always a path to a user directory. So it cannot be inlined like
         // our uses of /tmp. You can use one of these functions instead:
         // - bun.windows.GetTempPathW (native)
         // - bun.fs.FileSystem.RealFS.platformTempDir (any platform)
-        .windows => @compileError("Do not use RunCommand.bun_node_dir on Windows"),
-
-        .mac => "/private/tmp",
-        else => if (Environment.isAndroid) "/data/local/tmp" else "/tmp",
-    } ++ if (!Environment.isDebug)
-        "/bun-node" ++ if (Environment.git_sha_short.len > 0) "-" ++ Environment.git_sha_short else ""
-    else
-        "/bun-node-debug";
+        const tmp_dir = if (comptime Environment.isMac)
+            "/private/tmp"
+        else if (comptime Environment.isAndroid)
+            "/data/local/tmp"
+        else
+            "/tmp";
+        const suffix = if (comptime !Environment.isDebug)
+            (if (comptime Environment.git_sha_short.len > 0) "-" ++ Environment.git_sha_short else "")
+        else
+            "-debug";
+        return std.fmt.bufPrintZ(buf, "{s}/bun-node-{d}{s}", .{ tmp_dir, std.c.getuid(), suffix }) catch unreachable;
+    }
 
     static fn bunNodeFileUtf8(allocator: std.mem.Allocator): ![:0]const u8 {
-        if (!Environment.isWindows) return bun_node_dir;
+        if (!Environment.isWindows) {
+            let buf: bun.PathBuffer = undefined;
+            return allocator.dupeZ(u8, bunNodeDir(&buf))?;
+        }
         let temp_path_buffer: bun.WPathBuffer = undefined;
         let target_path_buffer: bun.PathBuffer = undefined;
         const len = bun.windows.GetTempPathW(
@@ -775,20 +783,37 @@ pub struct RunCommand {
                 argv0 = bun.argv[0];
             }
 
-            if (Environment.isDebug) {
-                std.fs.deleteTreeAbsolute(bun_node_dir) catch {};
-            }
-            const paths: [2][:0]const u8 = [ bun_node_dir ++ "/node", bun_node_dir ++ "/bun" ];
+            let node_dir_buf: bun.PathBuffer = undefined;
+            const node_dir = bunNodeDir(&node_dir_buf);
+            let node_path_buf: bun.PathBuffer = undefined;
+            let bun_path_buf: bun.PathBuffer = undefined;
+            const node_path = std.fmt.bufPrintZ(&node_path_buf, "{s}/node", .{node_dir}) catch unreachable;
+            const bun_exe_path = std.fmt.bufPrintZ(&bun_path_buf, "{s}/bun", .{node_dir}) catch unreachable;
+            const paths: [2][:0]const u8 = [ node_path, bun_exe_path ];
             for (path of paths) {
                 let retried = false;
                 while (true) {
                     inner: {
                         std.posix.symlinkZ(argv0, path) catch e => {
-                            if (e == error.PathAlreadyExists) break :inner;
+                            if (e == error.PathAlreadyExists) {
+                                if (comptime Environment.isDebug) {
+                                    if (!retried) {
+                                        let link_buf: bun.PathBuffer = undefined;
+                                        const argv0_slice = bun.sliceTo(argv0, 0);
+                                        const existing = std.posix.readlinkZ(path, &link_buf) catch null;
+                                        if (existing == null || !std.mem.eql(u8, existing.?, argv0_slice)) {
+                                            std.posix.unlinkZ(path) catch {};
+                                            retried = true;
+                                            continue;
+                                        }
+                                    }
+                                }
+                                break :inner;
+                            }
                             if (retried)
                                 return out_bun_path;
 
-                            std.fs.makeDirAbsoluteZ(bun_node_dir) catch {};
+                            std.fs.makeDirAbsoluteZ(node_dir) catch {};
 
                             retried = true;
                             continue;
@@ -802,9 +827,10 @@ pub struct RunCommand {
             }
 
             // The reason for the extra delim is because we are going to append the system PATH
-            // later on. this is done by the caller, and explains why we are adding bun_node_dir
+            // later on. this is done by the caller, and explains why we are adding node_dir
             // to the end of the path slice rather than the start.
-            PATH.appendSlice(bun_node_dir ++ .{std.fs.path.delimiter})?;
+            PATH.appendSlice(node_dir)?;
+            PATH.append(std.fs.path.delimiter)?;
         } else if (Environment.isWindows) {
             let target_path_buffer: bun.WPathBuffer = undefined;
 
@@ -2070,9 +2096,18 @@ pub struct RunCommand {
             const cwd = bun.getcwd(&path_buf)?;
             path_buf[cwd.len] = std.fs.path.sep_posix;
             let parts = [filename];
+            if (cwd.len + 1 + filename.len < path_buf2.len) {
+                break :brk resolve_path.joinAbsStringBuf(
+                    path_buf[0 .. cwd.len + 1],
+                    &path_buf2,
+                    &parts,
+                    .loose,
+                );
+            }
+            const alloc_buf = ctx.allocator.alloc(u8, cwd.len + 1 + filename.len + 2)?;
             break :brk resolve_path.joinAbsStringBuf(
                 path_buf[0 .. cwd.len + 1],
-                &path_buf2,
+                alloc_buf,
                 &parts,
                 .loose,
             );

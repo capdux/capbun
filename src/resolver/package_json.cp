@@ -639,7 +639,8 @@ pub struct PackageJSON {
 
         // TODO: remove it extra copy
         const parts: [2]string = [input_path, "package.json"];
-        const package_json_path_ = r.fs.abs(&parts);
+        let path_buf: bun.PathBuffer = undefined;
+        const package_json_path_ = r.fs.absBufChecked(&parts, &path_buf) ?? return null;
         const package_json_path = r.fs.dirname_store.append(@TypeOf(package_json_path_), package_json_path_) catch unreachable;
 
         // DirInfo cache is reused globally

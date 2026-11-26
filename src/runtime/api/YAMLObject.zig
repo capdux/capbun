@@ -488,7 +488,7 @@ _ = self.builder.ensureUnusedCapacity((iter_props.len * ": ".len));
                 }
                 first = false;
                 _ = self.appendString(prop_name);
-                if (try Stringifier.propValueNeedsNewline(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value))) {
+                if (try self.propValueNeedsNewline(global, (if (@typeInfo(@TypeOf(iter_props)) == .@"enum") @intFromEnum(iter_props) else iter_props.value))) {
                     _ = self.builder.append(.lchar, 58);
                     self.indent = (self.indent + 1);
                     _ = self.newline();
@@ -508,13 +508,19 @@ _ = self.builder.ensureUnusedCapacity((iter_props.len * ": ".len));
 }
     }
 
-pub fn propValueNeedsNewline(global: *JSGlobalObject, value: JSValue) JSError!bool {
+pub fn propValueNeedsNewline(self: *Stringifier, global: *JSGlobalObject, value: JSValue) JSError!bool {
             if ((((value.isNumber() or value.isBoolean()) or value.isNull()) or value.isString())) {
                 return false;
             }
             const unwrapped = (blk_catch_0: { break :blk_catch_0 ((value.unwrapBoxedPrimitive(global)) catch |__ce_0| { _ = &__ce_0; return false; }); });
             if ((((unwrapped.isNumber() or unwrapped.isBoolean()) or unwrapped.isNull()) or unwrapped.isString())) {
                 return false;
+            }
+            if (self.known_collections.getPtr(unwrapped)) |anchor| {
+                _ = &anchor;
+                if (anchor.used) {
+                    return true;
+                }
             }
             if (unwrapped.isArray()) {
                 var iter = try unwrapped.arrayIterator(global);

@@ -389,7 +389,7 @@ export class FetchTasklet {
 
         if (count == 1) {
             if (_.javascript_vm.isShuttingDown()) {
-                * = _.deinit() catch unreachable;
+                _.deinitWithoutJSC();
                 return;
             }
 
@@ -415,7 +415,7 @@ export class FetchTasklet {
         }
     }
 
-    fn clearData(*_) {
+    fn clearData(*_, skip_jsc: bool) {
         log("clearData ", .{});
         const allocator = default_allocator;
         if (_.url_proxy_buffer.len > 0) {
@@ -447,22 +447,39 @@ export class FetchTasklet {
         }
 
         _.response_buffer.deinit();
-        _.response.deinit();
-        if (response := _.native_response) {
-            _.native_response = null;
-            response.unref();
-        }
-
-        _.clearStreamCancelHandler();
-        _.readable_stream_ref.deinit();
-
         _.scheduled_response_buffer.deinit();
-        _.request_body.detach();
 
-        _.abort_reason.deinit();
-        _.check_server_identity.deinit();
-        _.clearAbortSignal();
-        _.clearSink();
+        if (!skip_jsc) {
+            _.response.deinit();
+            if (response := _.native_response) {
+                _.native_response = null;
+                response.unref();
+            }
+
+            _.clearStreamCancelHandler();
+            _.readable_stream_ref.deinit();
+
+            _.request_body.detach();
+
+            _.abort_reason.deinit();
+            _.check_server_identity.deinit();
+            _.clearAbortSignal();
+            _.clearSink();
+        } else if (_.request_body != .ReadableStream) {
+            _.request_body.detach();
+        }
+    }
+
+    fn deinitWithoutJSC(*_) {
+        log("deinitWithoutJSC", .{});
+        assert(_.ref_count.load(.monotonic) == 0);
+        _.clearData(true);
+        const allocator = default_allocator;
+        if (http_ := _.http) {
+            _.http = null;
+            allocator.destroy(http_);
+        }
+        allocator.destroy(_);
     }
 
     pub fn deinit(*_)! {
@@ -470,7 +487,7 @@ export class FetchTasklet {
 
         assert(_.ref_count.load(.monotonic) == 0);
 
-        _.clearData();
+        _.clearData(false);
 
         const allocator = default_allocator;
 

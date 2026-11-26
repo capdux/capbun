@@ -690,7 +690,9 @@ pub fn parseMacrosJSON(allocator: std.mem.Allocator, macros: js_ast.Expr, log: *
 pub fn parse(r: *resolver.Resolver, input_path: []const u8, dirname_fd: FD, package_id: ?Install.PackageID, comptime include_scripts_: IncludeScripts, comptime include_dependencies: IncludeDependencies) ?PackageJSON {
             const include_scripts = (include_scripts_ == .include_scripts);
             const parts: [2][]const u8 = .{ input_path, "package.json" };
-            const package_json_path_ = r.fs.abs((&parts));
+            var path_buf: bun.PathBuffer = undefined;
+            _ = &path_buf;
+            const package_json_path_ = ((r.fs.absBufChecked((&parts), (&path_buf))) orelse { return null; });
             const package_json_path = ((r.fs.dirname_store.append(@TypeOf(package_json_path_), package_json_path_)) catch unreachable);
             const allocator = bun.default_allocator;
             var entry_raw = (blk_catch_25: { break :blk_catch_25 ((r.caches.fs.readFileWithAllocator(allocator, r.fs, package_json_path, dirname_fd, false, null)) catch |e| { _ = &e; if ((e != error.IsDir)) {

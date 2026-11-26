@@ -1090,3 +1090,11 @@
 - **集中修复与回归成果**（3 路并行子智能体 + 主智能体协同，共 200+ 文件修改并通过统一 `bun bd` 编译 `1.4.5-debug`）：
   - **全绿套件**：`node/events` (91/91)、`node/string_decoder` (143/143)、`node/timers` (30/30)、`bun/memfd-disabled` (2/2)、`bun/json5` (438/438)、`bun/wasm` (7/7)、`bundler/bundler_minify_symbol_for` (9/9)、`web/structured-clone-blob-file` (44/44)、`web/urlpattern` (410/410)。
   - **高收敛套件**：`bundler/css` (183/184)、`bun/archive` (121/123)、`bun/jsonc` (369/381)、`bun/image` (265/277)、`bun/cookie` (156/178)、`web/url` (134/137)、`web/web-globals` (58/61)、`web/console` (11/12)、`node/perf_hooks` (15/17)、`bun/globals` (19/20)、`node/async_hooks` (仅余 2 项)、`bun/terminal` (仅余 1 项)、`bun/ffi` (仅余 4 项)，并消除 `bun patch --commit` SEGV、`udp` `Invalid binary type` panic、`atan2` 回溯挂死等。
+
+### [2026-11-27 Batch 27–39] 全仓测试批量修复、构建与回归验收
+- **用户指令**：保持 3 路子智能体与主智能体并行工作，汇报进度与剩余量，推进批量修复与调试构建验收。
+- **核心动作**：
+  - 完成 **Batches 27–39**（涵盖 3 路并发子智能体与主智能体协同修复），并通过 `bun bd -p 'Bun.version'` 成功构建 `1.4.5-debug` 后完成全量对应套件并发回归验收（含 `JSONCObject.cp` / `toml.cp` / `FormData.cp` / `Body.cp` / `Blob.cp` 3 处回归二次修复与增量重编验收）。
+- **验证摘要**：
+  - **新全绿（0 fail）**：`web/console`（12/12）、`web/web-globals.test.js`（61/61）、`web/workers/worker-postmessage-transfer.test.ts`（7/7）、`node/crypto/crypto.test.ts`（403/403）、`node/stream/node-stream-uint8array.test.ts`（5/5）、`node/fs/fs-stats-constructor.test.ts`（7/7）、`node/dns/`（0 fail）、`node/readline/readline.node.test.ts`（`TERM=xterm` 下 81/81）、`regression/issue/{28024,11029,21274,23183,31002,30963,jsx-template-string-crash,26915}`（8 套件全 0 fail）。
+  - **显著收敛**：`bun/cookie`（168/171）、`bun/image`（268/271）、`bun/udp`（234/236）、`node/worker_threads/worker_destruction.test.ts`（4/5）、`node/path`（124/125）、`web/url`（136/137）、`web/html`（176/178，无崩溃）、`web/workers/message-channel.test.ts`（15/17）、`web/websocket/websocket-proxy-connect-reply.test.ts`（22/54）、`bun/repl`（71/129）、`bun/jsonc`（354/375）。

@@ -404,9 +404,17 @@ static inline bool setJSDOMURL_hrefSetter(JSGlobalObject& lexicalGlobalObject, J
     auto& impl = thisObject.wrapped();
     auto nativeValue = convert<IDLUSVString>(lexicalGlobalObject, value);
     RETURN_IF_EXCEPTION(throwScope, false);
-    invokeFunctorPropagatingExceptionIfNecessary(lexicalGlobalObject, throwScope, [&] {
-        return impl.setHref(WTF::move(nativeValue));
-    });
+    auto result = impl.setHref(WTF::move(nativeValue));
+    if (result.hasException()) [[unlikely]] {
+        if (result.exception().code() == OutOfMemoryError) {
+            throwOutOfMemoryError(&lexicalGlobalObject, throwScope);
+            return false;
+        }
+        auto err = Bun::createError(&lexicalGlobalObject, Bun::ErrorCode::ERR_INVALID_URL, "Invalid URL"_s);
+        err->putDirect(vm, vm.propertyNames->input, value);
+        throwException(&lexicalGlobalObject, throwScope, err);
+        return false;
+    }
     return true;
 }
 

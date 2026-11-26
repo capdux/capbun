@@ -531,6 +531,7 @@ pub fn spin(self: *WebWorker) void {
             _ = self.shutdown();
         }
         vm.preload = self.preloads;
+        _ = WebWorker__dispatchOnline(self.cpp_worker, vm.global);
         var resolve_error = bun.String.empty;
         _ = &resolve_error;
         var maybe_path = WebWorker.resolveEntryPointSpecifier(vm, self.unresolved_specifier, (&resolve_error), vm.log);
@@ -569,19 +570,10 @@ pub fn spin(self: *WebWorker) void {
                 _ = self.shutdown();
             }
         } else {
-            if ((promise.status() == .pending)) {
-                if ((vm.exit_handler.exit_code == 0)) {
-                    vm.exit_handler.exit_code = 13;
-                }
-                _ = self.flushLogs(vm);
-                _ = self.shutdown();
-            } else {
-                _ = promise.result(vm.jsc_vm);
-            }
+            _ = promise.result(vm.jsc_vm);
         }
         _ = self.flushLogs(vm);
         _ = log("[{d}] event loop start", .{ self.execution_context_id });
-        _ = WebWorker__dispatchOnline(self.cpp_worker, vm.global);
         _ = WebWorker__fireEarlyMessages(self.cpp_worker, vm.global);
         _ = self.setStatus(.running);
         if ((vm.isEventLoopAlive() or (vm.eventLoop().tickConcurrentWithCount() > 0))) {
@@ -818,6 +810,11 @@ pub fn resolveEntryPointSpecifier(parent: *jsc.VirtualMachine, str: []const u8, 
         error_message.* = out;
         return null; }); });
         _ = &resolved_entry_point;
+        if (resolved_entry_point.flags.is_external) {
+            _ = bun.handleOom(logger.addErrorFmt(null, bun.logger.Loc.Empty, bun.default_allocator, "Cannot use \"{s}\" as an entry point: it resolves to a builtin module", .{ str }));
+            error_message.* = bun.String.static("Cannot use a builtin module as an entry point");
+            return null;
+        }
         var maybe_entry_path: ?*bun.fs.Path = resolved_entry_point.path();
         _ = &maybe_entry_path;
         if ((maybe_entry_path == null)) {

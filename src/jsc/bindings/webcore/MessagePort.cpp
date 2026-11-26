@@ -121,11 +121,16 @@ void MessagePort::closeInternal(bool force)
     m_isDetached = true;
     m_closePending = false;
 
+    bool shouldDispatchClose = m_hasCloseEventListener && !m_closeEventDispatched && scriptExecutionContext() && scriptExecutionContext()->globalObject();
+    if (shouldDispatchClose)
+        m_closeEventPending = true;
+
     // m_pipe is held for the port's whole lifetime (the GC thread reads
     // it in hasPendingActivity()); marking our side Closed is sufficient.
     m_pipe->close(m_side);
 
-    removeAllEventListeners();
+    if (!shouldDispatchClose)
+        removeAllEventListeners();
 
     // Release the self-reference taken by jsRef() (set when .onmessage is
     // assigned or .ref() is called from JS). The JS .close() binding calls
@@ -140,6 +145,73 @@ void MessagePort::closeInternal(bool force)
             context->unrefEventLoop();
         deref();
     }
+
+    if (shouldDispatchClose) {
+        if (auto* context = scriptExecutionContext()) {
+            context->postTask([weakThis = ThreadSafeWeakPtr { *this }](ScriptExecutionContext&) {
+                if (RefPtr port = weakThis.get())
+                    port->dispatchCloseEvent();
+            });
+        }
+    }
+}
+
+void MessagePort::flushQueuedMessagesBeforeClose()
+{
+    if (!m_started || m_isDetached || m_closePending)
+        return;
+
+    auto* context = scriptExecutionContext();
+    if (!context || !context->globalObject())
+        return;
+
+    auto* globalObject = defaultGlobalObject(context->globalObject());
+    auto expectedCtx = context->identifier();
+
+    while (!m_isDetached && !m_closePending) {
+        auto message = m_pipe->takeOneIfAttached(m_side, expectedCtx, this);
+        if (!message)
+            break;
+
+        beginDispatch();
+        dispatchOneMessage(*context, WTF::move(*message));
+        endDispatch();
+
+        if (globalObject->drainMicrotasks())
+            break;
+    }
+}
+
+void MessagePort::peerClosed()
+{
+    if (m_isDetached || m_closePending)
+        return;
+
+    flushQueuedMessagesBeforeClose();
+
+    if (m_isDetached || m_closePending)
+        return;
+
+    closeInternal(true);
+}
+
+void MessagePort::dispatchCloseEvent()
+{
+    if (!m_closeEventPending || m_closeEventDispatched)
+        return;
+
+    m_closeEventDispatched = true;
+    m_closeEventPending = false;
+
+    Ref protectedThis { *this };
+    if (auto* context = scriptExecutionContext(); context && context->globalObject() && hasEventListeners(eventNames().closeEvent)) {
+        auto event = Event::create(eventNames().closeEvent, Event::CanBubble::No, Event::IsCancelable::No);
+        EventTarget::dispatchEvent(event);
+    }
+
+    removeAllEventListeners();
+    m_hasMessageEventListener = false;
+    m_hasCloseEventListener = false;
 }
 
 void MessagePort::endDispatch()
@@ -158,6 +230,7 @@ TransferredMessagePort MessagePort::disentangle()
     // there would be nothing to unref.
     removeAllEventListeners();
     m_hasMessageEventListener = false;
+    m_hasCloseEventListener = false;
 
     // Release the self-reference taken by jsRef() on the sending side. After
     // transfer this object is inert (the receiving side gets a fresh
@@ -252,6 +325,8 @@ void MessagePort::contextDestroyed()
     // first — otherwise ~ContextDestructionObserver() would call back into
     // it while it is mid-destruction.
     Ref protectedThis { *this };
+    m_closeEventPending = false;
+    m_closeEventDispatched = true;
     closeInternal(true);
     ContextDestructionObserver::contextDestroyed();
 }
@@ -264,9 +339,11 @@ bool MessagePort::hasPendingActivity() const
     // atomic loads. The plain bool reads can observe stale values but
     // cannot crash — at worst the wrapper is collected one cycle early
     // or late, which is the same tolerance as before this refactor.
+    if (m_closeEventPending)
+        return true;
     if (!scriptExecutionContext() || m_isDetached)
         return false;
-    if (!m_hasMessageEventListener)
+    if (!m_hasMessageEventListener && !m_hasCloseEventListener)
         return false;
 
     uint64_t s = m_pipe->state(m_side);
@@ -332,6 +409,12 @@ bool MessagePort::addEventListener(const AtomString& eventType, Ref<EventListene
     if (eventType == eventNames().messageEvent) {
         start();
         m_hasMessageEventListener = true;
+    } else if (eventType == eventNames().closeEvent) {
+        m_hasCloseEventListener = true;
+        if (isEntangled()) {
+            if (auto* context = scriptExecutionContext())
+                m_pipe->registerCloseContext(m_side, context->identifier(), ThreadSafeWeakPtr<MessagePort> { *this });
+        }
     }
     return EventTarget::addEventListener(eventType, WTF::move(listener), options);
 }
@@ -341,6 +424,11 @@ bool MessagePort::removeEventListener(const AtomString& eventType, EventListener
     auto result = EventTarget::removeEventListener(eventType, listener, options);
     if (!hasEventListeners(eventNames().messageEvent))
         m_hasMessageEventListener = false;
+    if (!hasEventListeners(eventNames().closeEvent)) {
+        m_hasCloseEventListener = false;
+        if (isEntangled())
+            m_pipe->unregisterCloseContext(m_side);
+    }
     return result;
 }
 

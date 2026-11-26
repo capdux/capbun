@@ -33,6 +33,7 @@
 #include "JSDOMConvertSequences.h"
 #include "JSReadableStreamSink.h"
 #include "JSReadableStreamSource.h"
+#include "JSWritableStream.h"
 #include "WebCoreJSClientData.h"
 #include "WebCoreJSBuiltins.h"
 #include "ZigGlobalObject.h"
@@ -263,6 +264,36 @@ JSC_DEFINE_HOST_FUNCTION(jsFunctionTransferToNativeReadableStream, (JSGlobalObje
     readableStream->setTransferred();
     readableStream->setDisturbed(true);
     return JSValue::encode(jsUndefined());
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsFunctionReadableStreamState, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
+{
+    auto* readableStream = dynamicDowncast<JSReadableStream>(callFrame->argument(0));
+    if (!readableStream)
+        return JSValue::encode(jsUndefined());
+    auto& vm = lexicalGlobalObject->vm();
+    auto state = readableStream->getDirect(vm, WebCore::clientData(vm)->builtinNames().statePrivateName());
+    return JSValue::encode(state.isEmpty() ? jsUndefined() : state);
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsFunctionReadableStreamIsDisturbed, (JSGlobalObject*, CallFrame* callFrame))
+{
+    auto* readableStream = dynamicDowncast<JSReadableStream>(callFrame->argument(0));
+    return JSValue::encode(jsBoolean(readableStream && readableStream->disturbed()));
+}
+
+JSC_DEFINE_HOST_FUNCTION(jsFunctionWritableStreamState, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
+{
+    auto* writableStream = dynamicDowncast<JSWritableStream>(callFrame->argument(0));
+    if (!writableStream)
+        return JSValue::encode(jsUndefined());
+    JSValue internalVal = writableStream->wrapped().internalWritableStream();
+    auto* internal = internalVal.getObject();
+    if (!internal)
+        return JSValue::encode(jsUndefined());
+    auto& vm = lexicalGlobalObject->vm();
+    auto state = internal->getDirect(vm, WebCore::clientData(vm)->builtinNames().statePrivateName());
+    return JSValue::encode(state.isEmpty() ? jsUndefined() : state);
 }
 
 } // namespace WebCore

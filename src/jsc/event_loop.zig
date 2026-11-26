@@ -509,11 +509,17 @@ pub fn tick(self: *EventLoop) void {
         const global_vm = ctx.jsc_vm;
         while (true) {
             while ((self.tickWithCount(ctx) > 0)) {
+                if ((scope.hasException() or global_vm.hasTerminationRequest())) {
+                    return;
+                }
                 _ = self.tickConcurrent();
                 _ = self.global.handleRejectedPromises();
+                if ((scope.hasException() or global_vm.hasTerminationRequest())) {
+                    return;
+                }
             }
             _ = (blk_catch_9: { break :blk_catch_9 ((self.drainMicrotasksWithGlobal(global, global_vm)) catch |__ce_9| { _ = &__ce_9; return; }); });
-            if (scope.hasException()) {
+            if ((scope.hasException() or global_vm.hasTerminationRequest())) {
                 return;
             }
             _ = self.tickConcurrent();

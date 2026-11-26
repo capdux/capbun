@@ -61,7 +61,7 @@ class FixedCircularBuffer<T> {
   constructor() {
     this.bottom = 0;
     this.top = 0;
-    this.list = $newArrayWithSize(kSize);
+    this.list = $newArrayWithSize(kSize).fill(undefined);
     this.next = null;
   }
 

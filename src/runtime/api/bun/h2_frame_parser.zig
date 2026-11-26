@@ -1148,6 +1148,8 @@ pub const H2FrameParser = struct {
     hdr_entries: HdrEntryList = .{},
     maxSettings: u32 = 32,
     maxSessionInvalidFrames: u32 = 1000,
+    streamResetBurst: u32 = 1000,
+    streamResetRate: u32 = 33,
 
 pub fn encodeHeaderIntoList(self: *H2FrameParser, encoded_headers: *std.ArrayListUnmanaged(u8), alloc: std.mem.Allocator, name: []const u8, value: []const u8, never_index: bool) !usize {
             const required = (((encoded_headers.items.len + name.len) + value.len) + HPACK_ENTRY_OVERHEAD);
@@ -2951,6 +2953,16 @@ pub fn loadSettingsFromJSValue(self: *H2FrameParser, globalObject: *jsc.JSGlobal
                     }
                 }
             }
+            if (try options.get(globalObject, "enableConnectProtocol")) |enableConnectProtocol| {
+                _ = &enableConnectProtocol;
+                if (enableConnectProtocol.isBoolean()) {
+                    self.localSettings.enableConnectProtocol = (if (enableConnectProtocol.asBoolean()) 1 else 0);
+                } else {
+                    if ((!enableConnectProtocol.isUndefined())) {
+                        return globalObject.ERR(.HTTP2_INVALID_SETTING_VALUE, "Expected enableConnectProtocol to be a boolean", .{}).throw();
+                    }
+                }
+            }
             if (try options.get(globalObject, "customSettings")) |customSettings| {
                 _ = &customSettings;
                 if ((!customSettings.isUndefined())) {
@@ -3024,6 +3036,13 @@ pub fn setLocalWindowSize(self: *H2FrameParser, globalObject: *jsc.JSGlobalObjec
                 self.localSettings.initialWindowSize = windowSizeValue;
             }
             if ((windowSizeValue > oldWindowSize)) {
+                const delta: i64 = (if (comptime @typeInfo(@TypeOf((windowSizeValue - oldWindowSize))) == .@"enum") cp_cast_int(i64, @intFromEnum((windowSizeValue - oldWindowSize))) else cp_cast_int(i64, (windowSizeValue - oldWindowSize)));
+                if (self.engine) |*eng| {
+                    _ = &eng;
+                    _ = (eng.*).recv_window.grow(delta);
+                } else {
+                    self.pending_recv_window_growth = (self.pending_recv_window_growth + delta);
+                }
                 const increment: u31 = @truncate((windowSizeValue - oldWindowSize));
                 _ = self.sendWindowUpdate(0, UInt31WithReserved.init(increment, false));
             }
@@ -4694,6 +4713,24 @@ else => .none,
 });
                         }
                     }
+                    if (try settings_js.get(globalObject, "streamResetBurst")) |reset_burst| {
+                        _ = &reset_burst;
+                        if (reset_burst.isNumber()) {
+                            const val = reset_burst.asNumber();
+                            if ((val >= 0)) {
+                                parser.streamResetBurst = @max(1, @as(u32, @intCast(@min(reset_burst.to(u64), std.math.maxInt(u32)))));
+                            }
+                        }
+                    }
+                    if (try settings_js.get(globalObject, "streamResetRate")) |reset_rate| {
+                        _ = &reset_rate;
+                        if (reset_rate.isNumber()) {
+                            const val = reset_rate.asNumber();
+                            if ((val >= 0)) {
+                                parser.streamResetRate = @max(1, @as(u32, @intCast(@min(reset_rate.to(u64), std.math.maxInt(u32)))));
+                            }
+                        }
+                    }
                 }
             }
             var is_server = false;
@@ -4796,6 +4833,8 @@ pub fn rewriteRead(self: *H2FrameParser, bytes: []const u8) void {
                 (eng.*).max_header_list_pairs = self.maxHeaderListPairs;
                 (eng.*).max_settings = self.maxSettings;
                 (eng.*).max_invalid_frames = self.maxSessionInvalidFrames;
+                (eng.*).reset_burst = self.streamResetBurst;
+                (eng.*).reset_rate = self.streamResetRate;
                 if ((self.pending_recv_window_growth > 0)) {
                     _ = (eng.*).recv_window.grow(self.pending_recv_window_growth);
                     self.pending_recv_window_growth = 0;
@@ -5190,6 +5229,10 @@ pub fn sinkOnStreamReset(self: *H2FrameParser, stream_id: u32, code: u32) void {
                 _ = self.dispatchWith2Extra(.onAborted, stream_ctx, JSValue.js_undefined, JSValue.jsNumber(old_state));
             } else {
                 _ = self.dispatchWithExtra(.onStreamError, stream_ctx, JSValue.jsNumber(code));
+            }
+            if (self.streams.get(stream_id)) |stream| {
+                _ = &stream;
+                _ = stream.freeResources(self, false);
             }
     }
 

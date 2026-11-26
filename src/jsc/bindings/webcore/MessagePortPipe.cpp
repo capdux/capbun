@@ -180,6 +180,20 @@ std::optional<MessageWithMessagePorts> MessagePortPipe::takeOne(uint8_t side)
     return s.inbox.takeFirst();
 }
 
+std::optional<MessageWithMessagePorts> MessagePortPipe::takeOneIfAttached(uint8_t side, ScriptExecutionContextIdentifier expectedCtx, const MessagePort* expectedPort)
+{
+    ASSERT(side < 2);
+    auto& s = m_sides[side];
+    Locker locker { s.lock };
+    if (s.ctxId != expectedCtx || s.port.get() != expectedPort)
+        return std::nullopt;
+    uint64_t st = s.state.load(std::memory_order_relaxed);
+    if (!(st & Attached) || s.inbox.isEmpty())
+        return std::nullopt;
+    s.state.store(st - QueuedOne, std::memory_order_release);
+    return s.inbox.takeFirst();
+}
+
 void MessagePortPipe::attach(uint8_t side, ScriptExecutionContextIdentifier ctxId, ThreadSafeWeakPtr<MessagePort> port)
 {
     ASSERT(side < 2);
@@ -208,12 +222,64 @@ void MessagePortPipe::detach(uint8_t side)
     Locker locker { s.lock };
     s.ctxId = 0;
     s.port = nullptr;
+    s.closeCtxId = 0;
+    s.closePort = nullptr;
+    s.peerClosedNotified = false;
     // Drop Attached and DrainScheduled. A drain task already in flight on
     // the old context can't be recalled, but it captured the old ctxId and
     // drainAndDispatch()'s s.ctxId != expectedCtx check makes it a no-op —
     // even if a new owner attach()es to a different context before it runs.
     // Messages remain queued for the next owner.
     s.state.fetch_and(~uint64_t(Attached | DrainScheduled), std::memory_order_acq_rel);
+}
+
+void MessagePortPipe::registerCloseContext(uint8_t side, ScriptExecutionContextIdentifier ctxId, ThreadSafeWeakPtr<MessagePort> port)
+{
+    ASSERT(side < 2);
+    auto& s = m_sides[side];
+    ScriptExecutionContextIdentifier notifyCtx = 0;
+    {
+        Locker locker { s.lock };
+        s.closeCtxId = ctxId;
+        s.closePort = WTF::move(port);
+        if (!isOtherSideOpen(side) && !s.peerClosedNotified && !(s.state.load(std::memory_order_relaxed) & Closed)) {
+            s.peerClosedNotified = true;
+            notifyCtx = ctxId;
+        }
+    }
+    if (notifyCtx)
+        schedulePeerClosed(side, notifyCtx);
+}
+
+void MessagePortPipe::unregisterCloseContext(uint8_t side)
+{
+    ASSERT(side < 2);
+    auto& s = m_sides[side];
+    Locker locker { s.lock };
+    s.closeCtxId = 0;
+    s.closePort = nullptr;
+}
+
+void MessagePortPipe::schedulePeerClosed(uint8_t side, ScriptExecutionContextIdentifier ctxId)
+{
+    ScriptExecutionContext::postTaskTo(ctxId, [pipe = Ref { *this }, side, ctxId](ScriptExecutionContext&) {
+        pipe->notifyPeerClosed(side, ctxId);
+    });
+}
+
+void MessagePortPipe::notifyPeerClosed(uint8_t side, ScriptExecutionContextIdentifier expectedCtx)
+{
+    ASSERT(side < 2);
+    auto& s = m_sides[side];
+    RefPtr<MessagePort> port;
+    {
+        Locker locker { s.lock };
+        if (s.closeCtxId != expectedCtx)
+            return;
+        port = s.closePort.get();
+    }
+    if (port)
+        port->peerClosed();
 }
 
 void MessagePortPipe::markClosed(uint8_t side)
@@ -245,10 +311,24 @@ void MessagePortPipe::close(uint8_t side)
             Locker locker { s.lock };
             s.ctxId = 0;
             s.port = nullptr;
+            s.closeCtxId = 0;
+            s.closePort = nullptr;
             // Closed is terminal; queued messages are dropped.
             s.state.store(Closed, std::memory_order_release);
             dropped = std::exchange(s.inbox, {});
         }
+
+        ScriptExecutionContextIdentifier peerNotifyCtx = 0;
+        {
+            auto& peer = pipe->m_sides[1 - sd];
+            Locker peerLocker { peer.lock };
+            if (peer.closeCtxId != 0 && !peer.peerClosedNotified && !(peer.state.load(std::memory_order_relaxed) & Closed)) {
+                peer.peerClosedNotified = true;
+                peerNotifyCtx = peer.closeCtxId;
+            }
+        }
+        if (peerNotifyCtx)
+            pipe->schedulePeerClosed(1 - sd, peerNotifyCtx);
 
         // Harvest transferred pipes before `dropped` destructs so their
         // ~TransferredMessagePort sees pipe == nullptr and is a no-op.

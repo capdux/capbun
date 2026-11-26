@@ -348,6 +348,10 @@ pub fn configureLinkerWithAutoJSX(transpiler: *Transpiler, auto_jsx: bool) void 
                         }
                         transpiler.options.emit_decorator_metadata = tsconfig.emit_decorator_metadata;
                         transpiler.options.experimental_decorators = tsconfig.experimental_decorators;
+                        if (tsconfig.use_define_for_class_fields) |v| {
+                            _ = &v;
+                            transpiler.options.use_define_for_class_fields = v;
+                        }
                     }
                 }
             }
@@ -492,7 +496,7 @@ pub fn buildWithResolveResultEager(transpiler: *Transpiler, resolve_result: _res
                 file_path = client_entry_point.source.path;
             }
             file_path.pretty = ((Linker.relative_paths_list.append(string, transpiler.fs.relativeTo(file_path.text))) catch unreachable);
-            var output_file = options.OutputFile{ .src_path = file_path, .loader = loader, .value = undefined, .side = null, .entry_point_index = null, .output_kind = .chunk };
+            var output_file = options.OutputFile{ .src_path = file_path, .dest_path = (if (transpiler.options.transform_only) file_path.pretty else ""), .loader = loader, .value = undefined, .side = null, .entry_point_index = null, .output_kind = .chunk };
             _ = &output_file;
             switch (loader) {
 .jsx, .tsx, .js, .ts, .json, .jsonc, .toml, .yaml, .json5, .xml, .text, .md => {

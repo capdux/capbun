@@ -386,8 +386,10 @@ JSC::EncodedJSValue JSBuffer__bufferFromPointerAndLengthAndDeinit(JSC::JSGlobalO
         uint8Array = JSC::JSUint8Array::create(lexicalGlobalObject, subclassStructure, 0);
     }
 
-    // only JSC::JSUint8Array::create can throw and we control the ArrayBuffer passed in.
-    scope.assertNoException();
+    if (scope.exception()) [[unlikely]] {
+        ASSERT(lexicalGlobalObject->vm().hasPendingTerminationException());
+        return {};
+    }
     ASSERT(uint8Array);
 
     return JSC::JSValue::encode(uint8Array);

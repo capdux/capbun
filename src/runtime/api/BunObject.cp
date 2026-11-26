@@ -792,8 +792,10 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
     let column: string? = null;
 
     if (file_path_ := arguments_g.val.nextEat()) {
-        const slice_val = file_path_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
-        path = slice_val.slice();
+        if (!file_path_.isUndefinedOrNull()) {
+            const slice_val = file_path_.toSlice(globalThis, arguments_g.val.@"arena".allocator())?;
+            path = slice_val.slice();
+        }
     }
 
     if (opts := arguments_g.val.nextEat()) {

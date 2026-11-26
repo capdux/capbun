@@ -62,6 +62,7 @@ pub type _JStringIteratorWrite16Callback = @c fn (iter: *_Iterator, ptr: [*]cons
     fn toSliceClone(*_, global: *JSGlobalObject, allocator: std.mem.Allocator): JSError!ZigString.Slice {
         let str = ZigString.init("");
         _.toZigString(global, &str);
+        if (global.hasException()) return error.JSError;
         return str.toSliceClone(allocator);
     }
 

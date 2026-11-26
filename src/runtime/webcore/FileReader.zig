@@ -371,7 +371,7 @@ pub fn onReadChunk(self: *FileReader, init_buf: []const u8, state: bun.io.ReadSt
                 }
             }
         }
-        return ((self.read_inside_on_pull != .temporary) and (!(((self.buffered.items.len + reader_buffer.items.len) >= self.highwater_mark) and (!self.reader.flags.pollable))));
+        return ((self.read_inside_on_pull != .temporary) and ((self.buffered.items.len + reader_buffer.items.len) < self.highwater_mark));
 }
 
 pub fn isPulling(self: FileReader) bool {

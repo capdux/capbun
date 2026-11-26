@@ -1855,6 +1855,10 @@ const len = try value.getLength(self.globalThis);
                 _ = self.addForNewLine(2);
                 return;
             }
+            if ((self.depth > self.max_depth)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><cyan>[Array ...]<r>", enable_ansi_colors)), .{});
+                return;
+            }
             var was_good_time = (self.always_newline_scope or (len > 10));
             _ = &was_good_time;
             {

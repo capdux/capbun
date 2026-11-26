@@ -522,7 +522,7 @@ pub struct Stringifier {
                     first = false;
 
                     _.appendString(prop_name);
-                    if (Stringifier.propValueNeedsNewline(global, iter_props.value)?) {
+                    if (_.propValueNeedsNewline(global, iter_props.value)?) {
                         _.builder.append(.lchar, ':');
                         _.indent += 1;
                         _.newline();
@@ -542,14 +542,19 @@ pub struct Stringifier {
         }
     }
 
-    /// Does this object property value need a newline? True for non-empty arrays and objects.
-    static fn propValueNeedsNewline(global: *JSGlobalObject, value: JSValue): JSError!bool {
+    /// Does this object property value need a newline? True for non-empty or anchored/aliased arrays and objects.
+    fn propValueNeedsNewline(*_, global: *JSGlobalObject, value: JSValue): JSError!bool {
         if (value.isNumber() || value.isBoolean() || value.isNull() || value.isString()) {
             return false;
         }
         const unwrapped = value.unwrapBoxedPrimitive(global) catch return false;
         if (unwrapped.isNumber() || unwrapped.isBoolean() || unwrapped.isNull() || unwrapped.isString()) {
             return false;
+        }
+        if (anchor := _.known_collections.getPtr(unwrapped)) {
+            if (anchor.used) {
+                return true;
+            }
         }
         if (unwrapped.isArray()) {
             let iter = unwrapped.arrayIterator(global)?;

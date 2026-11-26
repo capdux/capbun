@@ -119,8 +119,11 @@ ExceptionOr<void> DOMURL::setHref(const String& url)
     }
     m_url = WTF::move(completeURL);
     m_searchParamsDirty = false;
-    if (m_searchParams)
-        m_searchParams->updateFromAssociatedURL();
+    if (m_searchParams) {
+        auto result = m_searchParams->updateFromAssociatedURL();
+        if (result.hasException())
+            return result.releaseException();
+    }
     return {};
 }
 
@@ -165,11 +168,15 @@ String DOMURL::createPublicURL(ScriptExecutionContext& scriptExecutionContext, U
     return String();
 }
 
-URLSearchParams& DOMURL::searchParams()
+ExceptionOr<Ref<URLSearchParams>> DOMURL::searchParams()
 {
-    if (!m_searchParams)
-        m_searchParams = URLSearchParams::create(search(), this);
-    return *m_searchParams;
+    if (!m_searchParams) {
+        auto created = URLSearchParams::create(search(), this);
+        if (created.hasException())
+            return created.releaseException();
+        m_searchParams = created.releaseReturnValue();
+    }
+    return Ref { *m_searchParams };
 }
 
 void DOMURL::revokeObjectURL(ScriptExecutionContext& scriptExecutionContext, const String& urlString)

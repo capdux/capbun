@@ -2363,6 +2363,7 @@ fn NewLexer_(
                         }
 
                         lexer.end = lexer.current;
+                        lexer.step();
                         lexer.token = .t_syntax_error;
                     },
                 }

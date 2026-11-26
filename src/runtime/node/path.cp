@@ -225,14 +225,23 @@ pub fn getCwdWindowsU16(buf: []u16): MaybeBuf(u16) {
     return .{ result: buf[0..len] };
 }
 
+inline fn trimCwdTrailingSlash(dir: string): []const u8 {
+    if (Environment.isWindows) return strings.withoutTrailingSlashWindowsPath(dir);
+    let out = dir;
+    while (out.len > 1 && out[out.len - 1] == '/') {
+        out = out[0 .. out.len - 1];
+    }
+    return out;
+}
+
 pub fn getCwdU8(buf: []u8): MaybeBuf(u8) {
-    const cached_cwd = withoutTrailingSlash(bun.fs.FileSystem.instance.top_level_dir);
+    const cached_cwd = trimCwdTrailingSlash(bun.fs.FileSystem.instance.top_level_dir);
     @memcpy(buf[0..cached_cwd.len], cached_cwd);
     return .{ result: buf[0..cached_cwd.len] };
 }
 
 pub fn getCwdU16(buf: []u16): MaybeBuf(u16) {
-    const result = strings.convertUTF8toUTF16InBuffer(&buf, withoutTrailingSlash(bun.fs.FileSystem.instance.top_level_dir));
+    const result = strings.convertUTF8toUTF16InBuffer(&buf, trimCwdTrailingSlash(bun.fs.FileSystem.instance.top_level_dir));
     return .{ result: result };
 }
 
@@ -2602,6 +2611,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
             //     StringPrototypeToLowerCase(resolvedDevice) &&
             //     StringPrototypeCharCodeAt(path, 2) === CHAR_BACKWARD_SLASH)) {
             if (envPath == null ||
+                path.len < 3 ||
                 (path[2] == CHAR_BACKWARD_SLASH &&
                     !eqlIgnoreCaseT(T, path[0..2], resolvedDevice)))
             {

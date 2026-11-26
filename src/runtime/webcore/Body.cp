@@ -1838,6 +1838,11 @@ static fn Mixin(comptime Type: type): type {
                 blob.slice(),
                 encoder.encoding,
             ) catch e => {
+                if (e == error.JSError) {
+                    if (exc := globalObject.tryTakeException()) {
+                        return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, exc.toError() ?? exc);
+                    }
+                }
                 return globalObject.ERR(
                     .FORMDATA_PARSE_ERROR,
                     "FormData parse error {s}",

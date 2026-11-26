@@ -199,7 +199,12 @@ pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, coun
                 }
             }
         }
-        while (el.tasks.readItem()) |task| {
+        while (true) {
+            if (global_vm.hasTerminationRequest()) {
+                return error.JSTerminated;
+            }
+            var task = ((el.tasks.readItem()) orelse break);
+            _ = &task;
             _ = log("run {s}", .{ @tagName(task.tag()) });
             defer {
             counter.* = (counter.* + 1);

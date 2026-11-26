@@ -299,14 +299,26 @@ pub fn getCwdWindowsU16(buf: []u16) MaybeBuf(u16) {
         return .{ .result = buf[0..len] };
 }
 
+pub inline fn trimCwdTrailingSlash(dir: []const u8) []const u8 {
+        if (Environment.isWindows) {
+            return strings.withoutTrailingSlashWindowsPath(dir);
+        }
+        var out = dir;
+        _ = &out;
+        while (((out.len > 1) and (out[@as(usize, @intCast((out.len - 1)))] == 47))) {
+            out = out[0..(out.len - 1)];
+        }
+        return out;
+}
+
 pub fn getCwdU8(buf: []u8) MaybeBuf(u8) {
-        const cached_cwd = withoutTrailingSlash(bun.fs.FileSystem.instance.top_level_dir);
+        const cached_cwd = trimCwdTrailingSlash(bun.fs.FileSystem.instance.top_level_dir);
         _ = @memcpy(buf[0..cached_cwd.len], cached_cwd);
         return .{ .result = buf[0..cached_cwd.len] };
 }
 
 pub fn getCwdU16(buf: []u16) MaybeBuf(u16) {
-        const result = strings.convertUTF8toUTF16InBuffer((&buf), withoutTrailingSlash(bun.fs.FileSystem.instance.top_level_dir));
+        const result = strings.convertUTF8toUTF16InBuffer((&buf), trimCwdTrailingSlash(bun.fs.FileSystem.instance.top_level_dir));
         return .{ .result = result };
 }
 
@@ -2303,7 +2315,7 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                         path = cwdRes.result;
                         envPath = path;
                     }
-                    if (((envPath == null) or ((path[2] == CHAR_BACKWARD_SLASH) and (!eqlIgnoreCaseT(T, path[0..2], resolvedDevice))))) {
+                    if ((((envPath == null) or (path.len < 3)) or ((path[2] == CHAR_BACKWARD_SLASH) and (!eqlIgnoreCaseT(T, path[0..2], resolvedDevice))))) {
                         bufSize = resolvedDeviceLen;
                         _ = bun.memmove(buf2[0..bufSize], resolvedDevice);
                         bufOffset = bufSize;

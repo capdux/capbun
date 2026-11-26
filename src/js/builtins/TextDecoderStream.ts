@@ -25,7 +25,8 @@
 
 export function initializeTextDecoderStream() {
   const label = arguments.length >= 1 ? arguments[0] : "utf-8";
-  const options = arguments.length >= 2 ? arguments[1] : {};
+  const rawOptions = arguments.length >= 2 ? arguments[1] : undefined;
+  const options = rawOptions === undefined || rawOptions === null ? {} : rawOptions;
 
   const startAlgorithm = () => {
     return Promise.$resolve();
@@ -34,7 +35,7 @@ export function initializeTextDecoderStream() {
     const decoder = $getByIdDirectPrivate(this, "textDecoder");
     let buffer;
     try {
-      buffer = decoder.decode(chunk, { stream: true });
+      buffer = $TextDecoderDecode.$call(decoder, chunk, { stream: true });
     } catch (e) {
       return Promise.$reject(e);
     }
@@ -49,7 +50,7 @@ export function initializeTextDecoderStream() {
     const decoder = $getByIdDirectPrivate(this, "textDecoder");
     let buffer;
     try {
-      buffer = decoder.decode(undefined, { stream: false });
+      buffer = $TextDecoderDecode.$call(decoder, undefined, { stream: false });
     } catch (e) {
       return Promise.$reject(e);
     }
@@ -66,7 +67,7 @@ export function initializeTextDecoderStream() {
 
   const fatal = !!options.fatal;
   const ignoreBOM = !!options.ignoreBOM;
-  const decoder = new TextDecoder(label, { fatal, ignoreBOM });
+  const decoder = new $TextDecoder(label, { fatal, ignoreBOM });
 
   $putByIdDirectPrivate(this, "fatal", fatal);
   $putByIdDirectPrivate(this, "ignoreBOM", ignoreBOM);

@@ -162,6 +162,13 @@ pub fn toJS(self: *_AsyncFormData, global: *JSGlobalObject, data: []const u8, pr
                 return;
             }
             const js_value = (blk_catch_0: { break :blk_catch_0 ((FormData.toJS(global, data, self.encoding)) catch |e| { _ = &e; _ = log("AsnycFormData.toJS -> failed ", .{});
+            if ((e == error.JSError)) {
+                if (global.tryTakeException()) |exc| {
+                    _ = &exc;
+                    _ = try promise.reject(global, ((exc.toError()) orelse (exc)));
+                    return;
+                }
+            }
             _ = try promise.reject(global, global.createErrorInstance("FormData {s}", .{ @errorName(e) }));
             return; }); });
             _ = try promise.resolve(global, js_value);
@@ -193,7 +200,7 @@ pub const _MultipartWrapper = struct {
     globalThis: *JSGlobalObject,
     form: *jsc.DOMFormData,
 
-pub fn onEntry(self: *_MultipartWrapper, name: Semver.String, field: _Field, buf: []const u8) void {
+pub fn onEntry(self: *_MultipartWrapper, name: Semver.String, field: _Field, buf: []const u8) JSError!void {
             const value_str = field.value;
             var key = jsc.ZigString.initUTF8(name.slice(buf));
             _ = &key;
@@ -235,11 +242,15 @@ pub fn onEntry(self: *_MultipartWrapper, name: Semver.String, field: _Field, buf
                         blob_guard.val.content_type_allocated = false;
                     }
                 }
-                _ = self.form.appendBlob(self.globalThis, (&key), (&blob_guard.val), (&filename));
+                if ((!self.form.appendBlob(self.globalThis, (&key), (&blob_guard.val), (&filename)))) {
+                    return self.globalThis.throwOutOfMemory();
+                }
             } else {
                 var value = jsc.ZigString.initUTF8(strings.withoutUTF8BOM(value_str));
                 _ = &value;
-                _ = self.form.append((&key), (&value));
+                if ((!self.form.append((&key), (&value)))) {
+                    return self.globalThis.throwOutOfMemory();
+                }
             }
     }
 };
@@ -375,7 +386,7 @@ pub fn toJSFromMultipartData(globalThis: *JSGlobalObject, input: []const u8, bou
             return form_data_value;
     }
 
-pub fn forEachMultipartEntry(input: []const u8, boundary: []const u8, comptime Ctx: type, ctx: Ctx, comptime iterator: *const fn (Ctx, Semver.String, _Field, []const u8) void) !void {
+pub fn forEachMultipartEntry(input: []const u8, boundary: []const u8, comptime Ctx: type, ctx: Ctx, comptime iterator: *const fn (Ctx, Semver.String, _Field, []const u8) JSError!void) !void {
             var slice = input;
             _ = &slice;
             var subslicer = Semver.SlicedString.init(input, input);
@@ -508,7 +519,7 @@ else => {
                     field.filename = .{};
                 }
                 field.is_file = is_file;
-                _ = iterator(ctx, name, field, input);
+                _ = try iterator(ctx, name, field, input);
             }
     }
     pub const Map = ArrayHashMapUnmanaged(Semver.String, _FieldEntry, Semver.String.ArrayHashContext, false);

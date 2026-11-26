@@ -271,13 +271,16 @@ pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator
                 _ = self.lexer.addError(self.lexer.start, "Unexpected newline before '='", .{});
                 return error.SyntaxError;
             }
-            _ = try self.lexer.expectAssignment();
+            self.lexer.disallow_comment = true;
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.lexer.expectAssignment()) catch |err_val| { _ = &err_val; self.lexer.disallow_comment = false;
+            return err_val; }); });
+            self.lexer.disallow_comment = false;
             if (self.lexer.has_newline_before) {
                 _ = self.lexer.addError(self.lexer.start, "Missing value after '='; values must be on the same line", .{});
                 return error.SyntaxError;
             }
             if ((!is_array)) {
-                _ = (blk_catch_3: { break :blk_catch_3 ((obj.setRope(rope, self.allocator, try self.parseValue())) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
+                _ = (blk_catch_4: { break :blk_catch_4 ((obj.setRope(rope, self.allocator, try self.parseValue())) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
                     const loc = rope.head.loc;
                     _ = bun.assert((loc.start > 0));
                     const start: u32 = @intCast(loc.start);
@@ -295,6 +298,7 @@ pub fn parseValue(self: *TOML) !Expr {
                 _ = try bun.throwStackOverflow();
             }
             const loc = self.lexer.loc();
+            self.lexer.allow_double_bracket = true;
             switch (self.lexer.token) {
 .t_false => {
 _ = try self.lexer.next();

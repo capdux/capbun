@@ -1041,28 +1041,52 @@ pub fn handleProxyResponse(self: *@This(), socket: Socket, data: []const u8) voi
                 _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, data));
                 body = self.body.items;
             }
-            const is_first = (self.body.items.len == 0);
-            const http_200: []const u8 = "HTTP/1.1 200 ";
-            const http_200_alt: []const u8 = "HTTP/1.0 200 ";
-            if ((is_first and (body.len > http_200.len))) {
-                if (((!strings.hasPrefixComptime(body, http_200)) and (!strings.hasPrefixComptime(body, http_200_alt)))) {
-                    _ = self.terminate(ErrorCode.proxy_connect_failed);
+            const MAX_RESPONSE_HEADER_BYTES: usize = 17408;
+            var remain = body;
+            _ = &remain;
+            var response: PicoHTTP.Response = undefined;
+            _ = &response;
+            while (true) {
+                response = (blk_catch_12: { break :blk_catch_12 ((PicoHTTP.Response.parse(remain, (&self.headers_buf))) catch |e| { _ = &e; if ((e == error.Malformed_HTTP_Response)) {
+                    _ = self.terminate(ErrorCode.invalid_response);
                     return;
-                }
-            }
-            const response = (blk_catch_12: { break :blk_catch_12 ((PicoHTTP.Response.parse(body, (&self.headers_buf))) catch |e| { _ = &e; if ((e == error.Malformed_HTTP_Response)) {
-                _ = self.terminate(ErrorCode.invalid_response);
-                return;
-            } else {
-                if ((e == error.ShortRead)) {
-                    if ((self.body.items.len == 0)) {
-                        _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, data));
+                } else {
+                    if ((e == error.ShortRead)) {
+                        if (((self.read_length + remain.len) > MAX_RESPONSE_HEADER_BYTES)) {
+                            _ = self.terminate(ErrorCode.headers_too_large);
+                            return;
+                        }
+                        if ((self.body.items.len == 0)) {
+                            _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, remain));
+                        } else {
+                            if ((remain.ptr != self.body.items.ptr)) {
+                                const offset = (@intFromPtr(remain.ptr) - @intFromPtr(self.body.items.ptr));
+                                _ = std.mem.copyForwards(u8, self.body.items[0..remain.len], remain);
+                                self.body.items.len = remain.len;
+                                _ = &offset;
+                            }
+                        }
+                        return;
                     }
+                }
+                return; }); });
+                const consumed: usize = @intCast(response.bytes_read);
+                if (((self.read_length + consumed) > MAX_RESPONSE_HEADER_BYTES)) {
+                    _ = self.terminate(ErrorCode.headers_too_large);
                     return;
                 }
+                self.read_length = (self.read_length + consumed);
+                remain = remain[consumed..];
+                if ((((response.status_code >= 100) and (response.status_code < 200)) and (response.status_code != 101))) {
+                    if ((remain.len == 0)) {
+                        _ = self.body.clearRetainingCapacity();
+                        return;
+                    }
+                    continue;
+                }
+                break;
             }
-            return; }); });
-            if ((response.status_code != 200)) {
+            if (((response.status_code < 200) or (response.status_code >= 300))) {
                 if ((response.status_code == 407)) {
                     _ = self.terminate(ErrorCode.proxy_authentication_required);
                 } else {
@@ -1071,8 +1095,8 @@ pub fn handleProxyResponse(self: *@This(), socket: Socket, data: []const u8) voi
                 return;
             }
             _ = log("Proxy tunnel established", .{});
+            const remain_buf = remain;
             _ = self.body.clearRetainingCapacity();
-            const remain_buf = body[@as(usize, @intCast(response.bytes_read))..];
             if (self.proxy) |*p| {
                 _ = &p;
                 if ((p.*).isTargetHttps()) {

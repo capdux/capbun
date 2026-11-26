@@ -1129,7 +1129,7 @@ pub fn Calc(comptime V: type): type {
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) This?,
         ): Result(Angle) {
             const Ctx = @TypeOf(ctx);
-            const rem = input.sliceFrom(input.position());
+            const rem = input.input.tokenizer.src[input.position()..];
             if (!hasTopLevelComma(rem)) {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
             }

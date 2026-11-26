@@ -970,30 +970,51 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 body = _.body.items;
             }
 
-            const is_first = _.body.items.len == 0;
-            const http_200 = "HTTP/1.1 200 ";
-            const http_200_alt = "HTTP/1.0 200 ";
-            if (is_first && body.len > http_200.len) {
-                if (!strings.hasPrefixComptime(body, http_200) && !strings.hasPrefixComptime(body, http_200_alt)) {
-                    _.terminate(ErrorCode.proxy_connect_failed);
-                    return;
-                }
-            }
-
-            const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
-                if (e == error.Malformed_HTTP_Response) {
-                    _.terminate(ErrorCode.invalid_response);
-                    return;
-                } else if (e == error.ShortRead) {
-                    if (_.body.items.len == 0) {
-                        bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
+            const MAX_RESPONSE_HEADER_BYTES: usize = 17408;
+            let remain = body;
+            let response: PicoHTTP.Response = undefined;
+            while (true) {
+                response = PicoHTTP.Response.parse(remain, &_.headers_buf) catch e => {
+                    if (e == error.Malformed_HTTP_Response) {
+                        _.terminate(ErrorCode.invalid_response);
+                        return;
+                    } else if (e == error.ShortRead) {
+                        if (_.read_length + remain.len > MAX_RESPONSE_HEADER_BYTES) {
+                            _.terminate(ErrorCode.headers_too_large);
+                            return;
+                        }
+                        if (_.body.items.len == 0) {
+                            bun.handleOom(_.body.appendSlice(bun.default_allocator, remain));
+                        } else if (remain.ptr != _.body.items.ptr) {
+                            const offset = @intFromPtr(remain.ptr) - @intFromPtr(_.body.items.ptr);
+                            std.mem.copyForwards(u8, _.body.items[0..remain.len], remain);
+                            _.body.items.len = remain.len;
+                            * = offset;
+                        }
+                        return;
                     }
                     return;
-                }
-                return;
-            };
+                };
 
-            if (response.status_code != 200) {
+                const consumed: usize = @intCast(response.bytes_read);
+                if (_.read_length + consumed > MAX_RESPONSE_HEADER_BYTES) {
+                    _.terminate(ErrorCode.headers_too_large);
+                    return;
+                }
+                _.read_length += consumed;
+                remain = remain[consumed..];
+
+                if (response.status_code >= 100 && response.status_code < 200 && response.status_code != 101) {
+                    if (remain.len == 0) {
+                        _.body.clearRetainingCapacity();
+                        return;
+                    }
+                    continue;
+                }
+                break;
+            }
+
+            if (response.status_code < 200 || response.status_code >= 300) {
                 if (response.status_code == 407) {
                     _.terminate(ErrorCode.proxy_authentication_required);
                 } else {
@@ -1004,9 +1025,8 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
             log("Proxy tunnel established", .{});
 
+            const remain_buf = remain;
             _.body.clearRetainingCapacity();
-
-            const remain_buf = body[@as(usize, @intCast(response.bytes_read))..];
 
             if (*p := _.proxy) {
                 if (p.isTargetHttps()) {

@@ -12,8 +12,8 @@ const ZigString = jsc.ZigString;
     fn WebCore__DOMFormData__createFromURLQuery(arg0: *JSGlobalObject, arg1: *ZigString): JSValue;
     fn WebCore__DOMFormData__toQueryString(arg0: *DOMFormData, arg1: *!, arg2: *const fn (arg0: *!, *ZigString) callconv(.c) void);
     fn WebCore__DOMFormData__fromJS(JSValue0: JSValue): (*DOMFormData)?;
-    fn WebCore__DOMFormData__append(arg0: *DOMFormData, arg1: *ZigString, arg2: *ZigString);
-    fn WebCore__DOMFormData__appendBlob(arg0: *DOMFormData, arg1: *JSGlobalObject, arg2: *ZigString, arg3: *!, arg4: *ZigString);
+    fn WebCore__DOMFormData__append(arg0: *DOMFormData, arg1: *ZigString, arg2: *ZigString): bool;
+    fn WebCore__DOMFormData__appendBlob(arg0: *DOMFormData, arg1: *JSGlobalObject, arg2: *ZigString, arg3: *!, arg4: *ZigString): bool;
     fn WebCore__DOMFormData__count(arg0: *DOMFormData): usize;
     fn DOMFormData__forEach(
         arg0: *DOMFormData,
@@ -41,10 +41,13 @@ fn ToQueryStringWrapper(comptime Ctx: type, comptime callback: auto): type {
     };
 }
 
+type ZigStringPtr = *ZigString;
+type BlobPtr = *jsc.WebCore.Blob;
+
 fn ForEachWrap(comptime Context: type, comptime callback_wrapper: auto): type {
     return struct {
         @callconv("c")
-        fn forEachWrapper(
+        static fn forEachWrapper(
             ctx_ptr: *!?,
             name_: *ZigString,
             value_ptr: *!,
@@ -53,11 +56,11 @@ fn ForEachWrap(comptime Context: type, comptime callback_wrapper: auto): type {
         ) {
             const ctx_ = bun.cast(*Context, ctx_ptr.?);
             const value = if (is_blob == 0)
-                TopFormDataEntry{ string: bun.cast(*ZigString, value_ptr).* }
+                TopFormDataEntry{ string: bun.cast(ZigStringPtr, value_ptr).* }
             else
                 TopFormDataEntry{
                     file: {
-                        blob: bun.cast(*jsc.WebCore.Blob, value_ptr),
+                        blob: bun.cast(BlobPtr, value_ptr),
                         filename: if (f := filename) f.* else ZigString.Empty,
                     },
                 };
@@ -101,8 +104,8 @@ fn ForEachWrap(comptime Context: type, comptime callback_wrapper: auto): type {
         *_,
         name_: *ZigString,
         value_: *ZigString,
-    ) {
-        WebCore__DOMFormData__append(_, name_, value_);
+    ): bool {
+        return WebCore__DOMFormData__append(_, name_, value_);
     }
 
     fn appendBlob(
@@ -111,7 +114,7 @@ fn ForEachWrap(comptime Context: type, comptime callback_wrapper: auto): type {
         name_: *ZigString,
         blob: *!,
         filename_: *ZigString,
-    ) {
+    ): bool {
         return WebCore__DOMFormData__appendBlob(_, global, name_, blob, filename_);
     }
 

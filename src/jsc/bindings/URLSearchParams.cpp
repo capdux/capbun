@@ -28,14 +28,114 @@
 #include <wtf/URLParser.h>
 #include "helpers.h"
 #include "JSURLSearchParams.h"
+#include "JSDOMExceptionHandling.h"
+#include <wtf/ASCIICType.h>
+
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
 
 namespace WebCore {
 
+static ExceptionOr<String> tryFormURLDecodeSegment(StringView segment)
+{
+    if (segment.isEmpty())
+        return String { emptyString() };
+
+    if (segment.containsOnlyASCII() && !segment.contains('+') && !segment.contains('%')) {
+        if (segment.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]]
+            return Exception { OutOfMemoryError };
+        return segment.toString();
+    }
+
+    const size_t maxDecodedBytes = Bun__stringSyntheticAllocationLimit / 2;
+    size_t decodedUTF8Len = 0;
+    if (segment.is8Bit()) {
+        auto span = segment.span8();
+        for (size_t i = 0; i < span.size(); ++i) {
+            auto c = span[i];
+            if (c == '%' && i + 2 < span.size() && isASCIIHexDigit(span[i + 1]) && isASCIIHexDigit(span[i + 2])) {
+                decodedUTF8Len += 1;
+                i += 2;
+            } else if (c < 0x80) {
+                decodedUTF8Len += 1;
+            } else {
+                decodedUTF8Len += 2;
+            }
+            if (decodedUTF8Len > maxDecodedBytes) [[unlikely]]
+                return Exception { OutOfMemoryError };
+        }
+    } else {
+        auto span = segment.span16();
+        for (size_t i = 0; i < span.size(); ++i) {
+            char16_t c = span[i];
+            if (c == '%' && i + 2 < span.size() && isASCIIHexDigit(span[i + 1]) && isASCIIHexDigit(span[i + 2])) {
+                decodedUTF8Len += 1;
+                i += 2;
+            } else if (c < 0x80) {
+                decodedUTF8Len += 1;
+            } else if (c < 0x800) {
+                decodedUTF8Len += 2;
+            } else if (U16_IS_LEAD(c) && i + 1 < span.size() && U16_IS_TRAIL(span[i + 1])) {
+                decodedUTF8Len += 4;
+                i += 1;
+            } else {
+                decodedUTF8Len += 3;
+            }
+            if (decodedUTF8Len > maxDecodedBytes) [[unlikely]]
+                return Exception { OutOfMemoryError };
+        }
+    }
+
+    auto decoded = WTF::URLParser::formURLDecode(segment);
+    if (!decoded || decoded->length() > Bun__stringSyntheticAllocationLimit) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    return WTF::move(*decoded);
+}
+
+ExceptionOr<Vector<KeyValuePair<String, String>>> URLSearchParams::tryParseURLEncodedForm(StringView input)
+{
+    Vector<KeyValuePair<String, String>> result;
+    const size_t maxPairs = Bun__stringSyntheticAllocationLimit / sizeof(KeyValuePair<String, String>);
+
+    size_t start = 0;
+    while (start <= input.length()) {
+        auto ampIndex = input.find('&', start);
+        size_t end = ampIndex == WTF::notFound ? input.length() : ampIndex;
+        if (end > start) {
+            auto segment = input.substring(start, end - start);
+            auto equalIndex = segment.find('=');
+            StringView rawName = equalIndex == WTF::notFound ? segment : segment.left(equalIndex);
+            StringView rawValue = equalIndex == WTF::notFound ? StringView() : segment.substring(equalIndex + 1);
+
+            auto name = tryFormURLDecodeSegment(rawName);
+            if (name.hasException())
+                return name.releaseException();
+            auto value = tryFormURLDecodeSegment(rawValue);
+            if (value.hasException())
+                return value.releaseException();
+
+            if (result.size() >= maxPairs) [[unlikely]]
+                return Exception { OutOfMemoryError };
+            if (!result.tryAppend({ name.releaseReturnValue(), value.releaseReturnValue() })) [[unlikely]]
+                return Exception { OutOfMemoryError };
+        }
+        if (ampIndex == WTF::notFound)
+            break;
+        start = ampIndex + 1;
+    }
+
+    return result;
+}
+
 extern "C" JSC::EncodedJSValue URLSearchParams__create(JSDOMGlobalObject* globalObject, const ZigString* input)
 {
+    auto scope = DECLARE_THROW_SCOPE(globalObject->vm());
     String str = Zig::toString(*input);
     auto result = URLSearchParams::create(str, nullptr);
-    return JSC::JSValue::encode(WebCore::toJSNewlyCreated(globalObject, globalObject, WTF::move(result)));
+    if (result.hasException()) [[unlikely]] {
+        propagateException(*globalObject, scope, result.releaseException());
+        return JSC::JSValue::encode(JSC::JSValue());
+    }
+    return JSC::JSValue::encode(WebCore::toJSNewlyCreated(globalObject, globalObject, result.releaseReturnValue()));
 }
 
 extern "C" WebCore::URLSearchParams* URLSearchParams__fromJS(JSC::EncodedJSValue value)
@@ -53,9 +153,9 @@ extern "C" void URLSearchParams__toString(WebCore::URLSearchParams* urlSearchPar
     callback(ctx, &zig);
 }
 
-URLSearchParams::URLSearchParams(const String& init, DOMURL* associatedURL)
+URLSearchParams::URLSearchParams(Vector<KeyValuePair<String, String>>&& pairs, DOMURL* associatedURL)
     : m_associatedURL(associatedURL)
-    , m_pairs(init.startsWith('?') ? WTF::URLParser::parseURLEncodedForm(StringView(init).substring(1)) : WTF::URLParser::parseURLEncodedForm(init))
+    , m_pairs(WTF::move(pairs))
 {
 }
 
@@ -66,16 +166,32 @@ URLSearchParams::URLSearchParams(const Vector<KeyValuePair<String, String>>& pai
 
 URLSearchParams::~URLSearchParams() = default;
 
+ExceptionOr<Ref<URLSearchParams>> URLSearchParams::create(const String& string, DOMURL* associatedURL)
+{
+    auto parsed = tryParseURLEncodedForm(string.startsWith('?') ? StringView(string).substring(1) : StringView(string));
+    if (parsed.hasException())
+        return parsed.releaseException();
+    return adoptRef(*new URLSearchParams(parsed.releaseReturnValue(), associatedURL));
+}
+
 ExceptionOr<Ref<URLSearchParams>> URLSearchParams::create(std::variant<Vector<Vector<String>>, Vector<KeyValuePair<String, String>>, String>&& variant)
 {
+    const size_t maxPairs = Bun__stringSyntheticAllocationLimit / sizeof(KeyValuePair<String, String>);
     auto visitor = WTF::makeVisitor([&](const Vector<Vector<String>>& vector) -> ExceptionOr<Ref<URLSearchParams>> {
+        if (vector.size() > maxPairs) [[unlikely]]
+            return Exception { OutOfMemoryError };
         Vector<KeyValuePair<String, String>> pairs;
+        if (!pairs.tryReserveInitialCapacity(vector.size())) [[unlikely]]
+            return Exception { OutOfMemoryError };
         for (const auto& pair : vector) {
             if (pair.size() != 2)
                 return Exception { TypeError };
-            pairs.append({pair[0], pair[1]});
+            pairs.unsafeAppendWithoutCapacityCheck({ pair[0], pair[1] });
         }
-        return adoptRef(*new URLSearchParams(WTF::move(pairs))); }, [&](const Vector<KeyValuePair<String, String>>& pairs) -> ExceptionOr<Ref<URLSearchParams>> { return adoptRef(*new URLSearchParams(pairs)); }, [&](const String& string) -> ExceptionOr<Ref<URLSearchParams>> { return adoptRef(*new URLSearchParams(string, nullptr)); });
+        return adoptRef(*new URLSearchParams(WTF::move(pairs), nullptr)); }, [&](const Vector<KeyValuePair<String, String>>& pairs) -> ExceptionOr<Ref<URLSearchParams>> {
+        if (pairs.size() > maxPairs) [[unlikely]]
+            return Exception { OutOfMemoryError };
+        return adoptRef(*new URLSearchParams(pairs)); }, [&](const String& string) -> ExceptionOr<Ref<URLSearchParams>> { return URLSearchParams::create(string, nullptr); });
     return std::visit(visitor, variant);
 }
 
@@ -106,7 +222,7 @@ void URLSearchParams::sort()
     needsSorting = false;
 }
 
-void URLSearchParams::set(const String& name, const String& value)
+ExceptionOr<void> URLSearchParams::set(const String& name, const String& value)
 {
     for (auto& pair : m_pairs) {
         if (pair.key != name)
@@ -124,18 +240,26 @@ void URLSearchParams::set(const String& name, const String& value)
         });
         updateURL();
         needsSorting = true;
-        return;
+        return {};
     }
-    m_pairs.append({ name, value });
+    if (m_pairs.size() >= Bun__stringSyntheticAllocationLimit / sizeof(KeyValuePair<String, String>)) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    if (!m_pairs.tryAppend({ name, value })) [[unlikely]]
+        return Exception { OutOfMemoryError };
     needsSorting = true;
     updateURL();
+    return {};
 }
 
-void URLSearchParams::append(const String& name, const String& value)
+ExceptionOr<void> URLSearchParams::append(const String& name, const String& value)
 {
-    m_pairs.append({ name, value });
+    if (m_pairs.size() >= Bun__stringSyntheticAllocationLimit / sizeof(KeyValuePair<String, String>)) [[unlikely]]
+        return Exception { OutOfMemoryError };
+    if (!m_pairs.tryAppend({ name, value })) [[unlikely]]
+        return Exception { OutOfMemoryError };
     updateURL();
     needsSorting = true;
+    return {};
 }
 
 Vector<String> URLSearchParams::getAll(const StringView name) const
@@ -170,11 +294,16 @@ void URLSearchParams::updateURL()
         m_associatedURL->markSearchParamsDirty();
 }
 
-void URLSearchParams::updateFromAssociatedURL()
+ExceptionOr<void> URLSearchParams::updateFromAssociatedURL()
 {
     ASSERT(m_associatedURL);
+    m_pairs.clear();
     String search = m_associatedURL->search();
-    m_pairs = search.startsWith('?') ? WTF::URLParser::parseURLEncodedForm(StringView(search).substring(1)) : WTF::URLParser::parseURLEncodedForm(search);
+    auto parsed = tryParseURLEncodedForm(search.startsWith('?') ? StringView(search).substring(1) : StringView(search));
+    if (parsed.hasException())
+        return parsed.releaseException();
+    m_pairs = parsed.releaseReturnValue();
+    return {};
 }
 
 std::optional<KeyValuePair<String, String>> URLSearchParams::Iterator::next()

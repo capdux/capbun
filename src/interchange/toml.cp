@@ -234,7 +234,12 @@ pub struct TOML {
             _.lexer.addError(_.lexer.start, "Unexpected newline before '='", {});
             return error.SyntaxError;
         }
-        _.lexer.expectAssignment()?;
+        _.lexer.disallow_comment = true;
+        _.lexer.expectAssignment() catch err_val => {
+            _.lexer.disallow_comment = false;
+            return err_val;
+        };
+        _.lexer.disallow_comment = false;
         if (_.lexer.has_newline_before) {
             _.lexer.addError(_.lexer.start, "Missing value after '='; values must be on the same line", {});
             return error.SyntaxError;
@@ -261,6 +266,8 @@ pub struct TOML {
         }
 
         const loc = _.lexer.loc();
+
+        _.lexer.allow_double_bracket = true;
 
         switch (_.lexer.token) {
             .t_false => {

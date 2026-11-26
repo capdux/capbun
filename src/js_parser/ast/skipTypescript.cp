@@ -141,14 +141,29 @@ pub struct BacktrackingImpl<P> {
             p.lexer.next()?;
             if (p.lexer.token == .t_open_brace) {
                 let brace_depth: usize = 0;
+                let template_braces: [32]usize = undefined;
+                let template_len: usize = 0;
                 while (true) {
                     switch (p.lexer.token) {
                         .t_open_brace => brace_depth += 1,
+                        .t_template_head => {
+                            if (template_len < template_braces.len) {
+                                template_braces[template_len] = brace_depth;
+                                template_len += 1;
+                            }
+                        },
                         .t_close_brace => {
-                            brace_depth -= 1;
-                            if (brace_depth == 0) {
-                                p.lexer.next()?;
-                                break;
+                            if (template_len > 0 && template_braces[template_len - 1] == brace_depth) {
+                                p.lexer.rescanCloseBraceAsTemplateToken()?;
+                                if (p.lexer.token != .t_template_middle) {
+                                    template_len -= 1;
+                                }
+                            } else {
+                                brace_depth -= 1;
+                                if (brace_depth == 0) {
+                                    p.lexer.next()?;
+                                    break;
+                                }
                             }
                         },
                         .t_end_of_file => return error.Backtrack,
@@ -164,6 +179,8 @@ pub struct BacktrackingImpl<P> {
                 let bracket_depth: usize = 0;
                 let brace_depth: usize = 0;
                 let ternary_depth: usize = 0;
+                let template_braces: [32]usize = undefined;
+                let template_len: usize = 0;
                 let found_colon = false;
                 scan: while (true) {
                     switch (p.lexer.token) {
@@ -178,9 +195,22 @@ pub struct BacktrackingImpl<P> {
                             if (bracket_depth > 0) bracket_depth -= 1;
                         },
                         .t_open_brace => brace_depth += 1,
+                        .t_template_head => {
+                            if (template_len < template_braces.len) {
+                                template_braces[template_len] = brace_depth;
+                                template_len += 1;
+                            }
+                        },
                         .t_close_brace => {
-                            if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) break :scan;
-                            if (brace_depth > 0) brace_depth -= 1;
+                            if (template_len > 0 && template_braces[template_len - 1] == brace_depth) {
+                                p.lexer.rescanCloseBraceAsTemplateToken()?;
+                                if (p.lexer.token != .t_template_middle) {
+                                    template_len -= 1;
+                                }
+                            } else {
+                                if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) break :scan;
+                                if (brace_depth > 0) brace_depth -= 1;
+                            }
                         },
                         .t_question => {
                             if (paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {

@@ -880,7 +880,7 @@ pub fn getcwdZ(buf: *bun.PathBuffer) Maybe(ConstByteSliceZ) {
         break :blk @ptrCast(std.c.getcwd(buf, bun.MAX_PATH_BYTES));
 
 });
-        return (if ((rc != null)) Result{ .result = rc.?[0..std.mem.len(rc.?) :0] } else (Result.errnoSysP((if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(c_int, @intFromEnum(0)) else cp_cast_int(c_int, 0)), .getcwd, buf)).?);
+        return (if ((rc != null)) Result{ .result = rc.?[0..std.mem.len(rc.?) :0] } else (Result.errnoSysP((if (comptime @typeInfo(@TypeOf(-1)) == .@"enum") cp_cast_int(c_int, @intFromEnum(-1)) else cp_cast_int(c_int, -1)), .getcwd, buf)).?);
 }
 
 pub fn fchown(fd: bun.FD, uid: jsc.Node.uid_t, gid: jsc.Node.gid_t) Maybe(void) {
@@ -1391,8 +1391,8 @@ pub fn normalizePathWindows(comptime T: type, dir_fd: bun.FD, path_: []const T, 
         }
         const name_too_long: Maybe(ConstU16SliceZ) = .{ .err = .{ .errno = @intFromEnum(E.NAMETOOLONG), .syscall = .open } };
         const nt_prefix_headroom: i32 = 8;
-        const wbuf = (if ((T != u16)) bun.w_path_buffer_pool.get() else null);
-        var _wbuf_guard = (if (comptime (T != u16)) WPathBufGuard{ .buf = wbuf } else null);
+        const wbuf = (if ((T != u16)) bun.w_path_buffer_pool.get() else @as(void, undefined));
+        var _wbuf_guard = (if (comptime (T != u16)) WPathBufGuard{ .buf = wbuf } else @as(void, undefined));
         _ = &_wbuf_guard;
         var ___wbuf_guard_moved = false; _ = &___wbuf_guard_moved;
         defer if (!___wbuf_guard_moved) { ___wbuf_guard_moved = true; const __T = @TypeOf(_wbuf_guard); if (@typeInfo(__T) == .optional) { if (_wbuf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _wbuf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _wbuf_guard; _drop_val.__cp_deinit(); } };
@@ -2944,7 +2944,10 @@ pub fn mmap(ptr: ?[*]align(page_size_min) u8, length: usize, prot: u32, flags: s
 
 }))))))), .syscall = .mmap });
         }
-        return .initResult(@as([*]align(page_size_min) u8, @ptrCast(@alignCast(rc)))[0..length]);
+        return .initResult((blk: {
+        break :blk @as([*]align(page_size_min) u8, @ptrCast(@alignCast(rc)))[0..length];
+
+}));
 }
 
 pub fn mmapFile(path: [:0]const u8, flags: std.c.MAP, wanted_size: ?usize, offset: usize) Maybe([]align(page_size_min) u8) {

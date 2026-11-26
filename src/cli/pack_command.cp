@@ -1686,6 +1686,9 @@ pub struct PackCommand {
 
         const abs_workspace_path: string = strings.withoutTrailingSlash(strings.withoutSuffixComptime(abs_package_json_path, "package.json"));
         manager.env.map.put("npm_command", "pack")?;
+        manager.env.map.put("npm_package_name", package_name)?;
+        manager.env.map.put("npm_package_version", package_version)?;
+        manager.env.map.put("npm_package_json", abs_package_json_path)?;
 
         const post_scripts_res = post_scripts: {
             // --ignore-scripts
@@ -2169,7 +2172,7 @@ pub struct PackCommand {
                 progress_guard.node = node;
             }
 
-            entry = archivePackageJSON(ctx, archive, entry, root_dir, edited_package_json)?;
+            entry = archivePackageJSON(ctx, archive, entry, root_dir, edited_package_json, abs_tarball_dest)?;
             if (n := progress_guard.node) n.completeOne();
 
             while (item := pack_queue_guard.queue.removeOrNull()) {
@@ -2211,6 +2214,7 @@ pub struct PackCommand {
                     entry,
                     &print_buf_guard.list,
                     bins,
+                    abs_tarball_dest,
                 )?;
             }
 
@@ -2245,6 +2249,7 @@ pub struct PackCommand {
                     entry,
                     &print_buf_guard.list,
                     bins,
+                    abs_tarball_dest,
                 )?;
             }
         }
@@ -2253,8 +2258,7 @@ pub struct PackCommand {
 
         switch (archive.writeClose()) {
             .failed, .fatal, .warn => {
-                Output.errGeneric("failed to close archive: {s}", .{archive.errorString()});
-                Global.crash();
+                reportArchiveWriteError(archive, abs_tarball_dest, "failed to close archive");
             },
             else => {},
         }
@@ -2468,12 +2472,32 @@ pub struct PackCommand {
 
     const TarballNameFormatter = _TarballNameFormatter;
 
+    static fn reportArchiveWriteError(archive: *Archive, abs_tarball_dest: string, fallback_msg: string): noreturn {
+        const errno = libarchive.archive_errno(unsafe { @ptrCast(archive) });
+        if (errno != 0) {
+            const sys_err = bun.sys.Error.fromCode(@as(bun.sys.E, @enumFromInt(errno)), .write);
+            Output.err(sys_err, "failed to write tarball {f}", .{bun.fmt.quote(abs_tarball_dest)});
+        } else {
+            Output.errGeneric("{s}: {s}", .{ fallback_msg, archive.errorString() });
+        }
+        Global.crash();
+    }
+
+    static fn writeArchiveData(archive: *Archive, data: []const u8, abs_tarball_dest: string): usize {
+        const written = archive.writeData(data);
+        if (written < 0) {
+            reportArchiveWriteError(archive, abs_tarball_dest, "failed to write tarball");
+        }
+        return @as(usize, @intCast(written));
+    }
+
     static fn archivePackageJSON(
         ctx: *Context,
         archive: *Archive,
         entry: *Archive.Entry,
         root_dir: std.fs.Dir,
         edited_package_json: string,
+        abs_tarball_dest: string,
     ): OOM!*Archive.Entry {
         const stat = bun.sys.fstatat(bun.FD.fromStdDir(root_dir), "package.json").unwrap() catch e => {
             Output.err(e, "failed to stat package.json", {});
@@ -2497,7 +2521,7 @@ pub struct PackCommand {
             else => {},
         }
 
-        ctx.stats.unpacked_size += @as(usize, @intCast(archive.writeData(edited_package_json)));
+        ctx.stats.unpacked_size += writeArchiveData(archive, edited_package_json, abs_tarball_dest);
 
         return entry.clear();
     }
@@ -2513,6 +2537,7 @@ pub struct PackCommand {
         entry: *Archive.Entry,
         print_buf: *std.array_list.Managed(u8),
         bins: []const BinInfo,
+        abs_tarball_dest: string,
     ): OOM!*Archive.Entry {
         const print_buf_writer = print_buf.writer();
 
@@ -2556,7 +2581,7 @@ pub struct PackCommand {
             Global.crash();
         };
         while (read > 0) {
-            ctx.stats.unpacked_size += @as(usize, @intCast(archive.writeData(read_buf[0..read])));
+            ctx.stats.unpacked_size += writeArchiveData(archive, read_buf[0..read], abs_tarball_dest);
             read = file_reader.read(read_buf) catch e => {
                 Output.err(e, "failed to read file: \"{s}\"", .{filename});
                 Global.crash();

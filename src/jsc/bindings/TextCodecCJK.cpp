@@ -238,9 +238,10 @@ String TextCodecCJK::eucJPDecode(std::span<const uint8_t> bytes, bool flush, boo
                 m_lead = byte;
                 return SawError::No;
             }
+            bool jis0212 = std::exchange(m_jis0212, false);
             if (lead >= 0xA1 && lead <= 0xFE && byte >= 0xA1 && byte <= 0xFE) {
                 uint16_t pointer = (lead - 0xA1) * 94 + byte - 0xA1;
-                if (auto codePoint = std::exchange(m_jis0212, false) ? codePointJIS0212(pointer) : codePointJIS0208(pointer)) {
+                if (auto codePoint = jis0212 ? codePointJIS0212(pointer) : codePointJIS0208(pointer)) {
                     result.append(*codePoint);
                     return SawError::No;
                 }
@@ -430,7 +431,7 @@ String TextCodecCJK::iso2022JPDecode(std::span<const uint8_t> bytes, bool flush,
             return result.toString();
         }
     }
-    if (m_iso2022JPSecondPrependedByte && byteParser(*std::exchange(m_iso2022JPSecondPrependedByte, std::nullopt), result) == SawError::Yes && stopOnError) {
+    if (m_iso2022JPSecondPrependedByte && byteParser(*std::exchange(m_iso2022JPSecondPrependedByte, std::nullopt), result) == SawError::Yes) {
         sawError = true;
         result.append(replacementCharacter);
         if (stopOnError) {
@@ -455,7 +456,7 @@ String TextCodecCJK::iso2022JPDecode(std::span<const uint8_t> bytes, bool flush,
                 return result.toString();
             }
         }
-        if (m_iso2022JPSecondPrependedByte && byteParser(*std::exchange(m_iso2022JPSecondPrependedByte, std::nullopt), result) == SawError::Yes && stopOnError) {
+        if (m_iso2022JPSecondPrependedByte && byteParser(*std::exchange(m_iso2022JPSecondPrependedByte, std::nullopt), result) == SawError::Yes) {
             sawError = true;
             result.append(replacementCharacter);
             if (stopOnError) {
@@ -482,9 +483,11 @@ String TextCodecCJK::iso2022JPDecode(std::span<const uint8_t> bytes, bool flush,
         case ISO2022JPDecoderState::Escape:
             sawError = true;
             result.append(replacementCharacter);
+            m_iso2022JPDecoderState = m_iso2022JPDecoderOutputState;
             if (m_lead) {
                 ASSERT(isASCII(m_lead));
-                result.append(std::exchange(m_lead, 0x00));
+                if (byteParser(std::exchange(m_lead, 0x00), result) == SawError::Yes)
+                    result.append(replacementCharacter);
             }
             break;
         }
@@ -1150,8 +1153,11 @@ String TextCodecCJK::big5Decode(std::span<const uint8_t> bytes, bool flush, bool
                 else {
                     if (auto codePoint = findFirstInSortedPairs(big5(), pointer))
                         result.append(*codePoint);
-                    else
+                    else {
+                        if (isASCII(byte))
+                            m_prependedByte = byte;
                         return SawError::Yes;
+                    }
                 }
                 return SawError::No;
             }

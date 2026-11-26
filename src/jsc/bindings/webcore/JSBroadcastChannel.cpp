@@ -126,7 +126,10 @@ template<> JSC::EncodedJSValue JSC_HOST_CALL_ATTRIBUTES JSBroadcastChannelDOMCon
     if constexpr (IsExceptionOr<decltype(object)>)
         RETURN_IF_EXCEPTION(throwScope, {});
     setSubclassStructureIfNeeded<BroadcastChannel>(lexicalGlobalObject, callFrame, asObject(jsValue));
-    RETURN_IF_EXCEPTION(throwScope, {});
+    if (throwScope.exception()) [[unlikely]] {
+        static_cast<JSBroadcastChannel*>(asObject(jsValue))->wrapped().close();
+        return {};
+    }
     return JSValue::encode(jsValue);
 }
 JSC_ANNOTATE_HOST_FUNCTION(JSBroadcastChannelDOMConstructorConstruct, JSBroadcastChannelDOMConstructor::construct);

@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { bunEnv, bunExe, bunRun } from "harness";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { bunEnv, bunExe, bunRun, isDebug } from "harness";
 import { join } from "path";
+
+setDefaultTimeout(isDebug ? 60_000 : 10_000);
 
 describe("Worker destruction", () => {
   const method = ["Bun.connect", "Bun.listen", "fetch"];

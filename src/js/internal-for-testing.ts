@@ -345,3 +345,7 @@ export const dnsGetaddrinfoError: (code: string, hostname: string) => Error = $n
   "TestingAPIs.dnsGetaddrinfoError",
   2,
 );
+
+export const exposedInternals = {
+  "internal/fixed_queue": require("internal/fixed_queue").FixedQueue,
+};

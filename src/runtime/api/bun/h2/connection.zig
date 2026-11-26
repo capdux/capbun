@@ -111,6 +111,12 @@ pub const Connection = struct {
     preface_received: usize = 0,
     last_stream_id: u32 = 0,
     going_away: bool = false,
+    reset_burst: u32 = 1000,
+    reset_rate: u32 = 33,
+    reset_tokens: u64 = 1000,
+    reset_last_sec: i64 = 0,
+    reset_initialized: bool = false,
+    made_you_reset_tokens: u32 = 1000,
 
 pub fn init(allocator: Allocator, is_server: bool, local: Settings) Connection {
             return Connection{ .allocator = allocator, .is_server = is_server, .local_settings = local, .remote_settings = Settings.initDefault(), .send_window = SendWindow.initDefault(), .recv_window = RecvWindow.initDefault(), .hpack_coder = hpack.Coder.init(local.header_table_size) };
@@ -445,6 +451,38 @@ pub fn handleGoAway(self: *Connection, sink: anytype, payload: []const u8) bool 
             return false;
     }
 
+pub fn chargePeerReset(self: *Connection, sink: anytype) bool {
+            const now = std.time.timestamp();
+            const burst = (if (comptime @typeInfo(@TypeOf(@max(1, self.reset_burst))) == .@"enum") cp_cast_int(u64, @intFromEnum(@max(1, self.reset_burst))) else cp_cast_int(u64, @max(1, self.reset_burst)));
+            if ((!self.reset_initialized)) {
+                self.reset_initialized = true;
+                self.reset_tokens = burst;
+                self.reset_last_sec = now;
+            } else {
+                if ((now > self.reset_last_sec)) {
+                    const elapsed = @as(u64, @intCast((now - self.reset_last_sec)));
+                    const rate = (if (comptime @typeInfo(@TypeOf(@max(1, self.reset_rate))) == .@"enum") cp_cast_int(u64, @intFromEnum(@max(1, self.reset_rate))) else cp_cast_int(u64, @max(1, self.reset_rate)));
+                    self.reset_tokens = @min(burst, (self.reset_tokens +| (elapsed *| rate)));
+                    self.reset_last_sec = now;
+                }
+            }
+            if ((self.reset_tokens == 0)) {
+                _ = self.sendGoAway(sink, .EnhanceYourCalm, "too many stream resets");
+                return true;
+            }
+            self.reset_tokens = (self.reset_tokens - 1);
+            return false;
+    }
+
+pub fn chargeServerReset(self: *Connection, sink: anytype) bool {
+            if ((self.made_you_reset_tokens == 0)) {
+                _ = self.sendGoAway(sink, .EnhanceYourCalm, "too many stream resets");
+                return true;
+            }
+            self.made_you_reset_tokens = (self.made_you_reset_tokens - 1);
+            return false;
+    }
+
 pub fn handleWindowUpdate(self: *Connection, sink: anytype, hdr: FrameHeader, payload: []const u8) bool {
             const increment = (std.mem.readInt(u32, payload[0..4], .big) & 2147483647);
             if ((increment == 0)) {
@@ -452,12 +490,18 @@ pub fn handleWindowUpdate(self: *Connection, sink: anytype, hdr: FrameHeader, pa
                     _ = self.sendGoAway(sink, .ProtocolError, "WINDOW_UPDATE with 0 increment");
                     return true;
                 }
-                _ = self.sendRstStream(sink, hdr.stream_id, .ProtocolError);
+                var was_live = false;
+                _ = &was_live;
                 if (self.streams.getPtr(hdr.stream_id)) |s| {
                     _ = &s;
+                    was_live = (s.state != .Closed);
                     s.state = .Closed;
                 }
+                _ = self.sendRstStream(sink, hdr.stream_id, .ProtocolError);
                 _ = sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.ProtocolError.asU32());
+                if ((was_live and self.chargeServerReset(sink))) {
+                    return true;
+                }
                 return false;
             }
             if ((hdr.stream_id == 0)) {
@@ -469,9 +513,13 @@ pub fn handleWindowUpdate(self: *Connection, sink: anytype, hdr: FrameHeader, pa
                 if (self.streams.getPtr(hdr.stream_id)) |s| {
                     _ = &s;
                     if ((s.send_window.increase(increment) != null)) {
+                        const was_live = (s.state != .Closed);
                         s.state = .Closed;
                         _ = self.sendRstStream(sink, hdr.stream_id, .FlowControlError);
                         _ = sink.sinkOnStreamReset(hdr.stream_id, ErrorCode.FlowControlError.asU32());
+                        if ((was_live and self.chargeServerReset(sink))) {
+                            return true;
+                        }
                         return false;
                     }
                 }
@@ -1010,12 +1058,18 @@ pub fn handleData(self: *Connection, sink: anytype, hdr: FrameHeader, payload: [
             }
             switch (decision) {
 .rst => |code| {
-_ = self.sendRstStream(sink, hdr.stream_id, code);
+var was_live = false;
+            _ = &was_live;
             if (self.streams.getPtr(hdr.stream_id)) |s| {
                 _ = &s;
+                was_live = (s.state != .Closed);
                 s.state = .Closed;
             }
+            _ = self.sendRstStream(sink, hdr.stream_id, code);
             _ = sink.sinkOnStreamReset(hdr.stream_id, code.asU32());
+            if ((was_live and self.chargeServerReset(sink))) {
+                return true;
+            }
             return false;
 },
 .deliver => {
@@ -1043,9 +1097,12 @@ pub fn handleRstStream(self: *Connection, sink: anytype, hdr: FrameHeader, paylo
             const code_raw = std.mem.readInt(u32, payload[0..4], .big);
             var on_idle = true;
             _ = &on_idle;
+            var was_live = false;
+            _ = &was_live;
             if (self.streams.getPtr(hdr.stream_id)) |s| {
                 _ = &s;
                 if ((s.state != .Idle)) {
+                    was_live = (s.state != .Closed);
                     s.state = .Closed;
                     on_idle = false;
                 }
@@ -1067,6 +1124,9 @@ pub fn handleRstStream(self: *Connection, sink: anytype, hdr: FrameHeader, paylo
                 return true;
             }
             _ = sink.sinkOnStreamReset(hdr.stream_id, code_raw);
+            if ((was_live and self.chargePeerReset(sink))) {
+                return true;
+            }
             return false;
     }
 

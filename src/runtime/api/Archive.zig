@@ -1402,7 +1402,8 @@ pub fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue)
             _ = entry.setFiletype(@intFromEnum(lib.FileType.regular));
             _ = entry.setPerm(420);
             _ = entry.setMtime(now_secs, 0);
-            if ((archive.writeHeader(entry) != .ok)) {
+            const header_res = archive.writeHeader(entry);
+            if (((header_res != .ok) and (header_res != .warn))) {
                 return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveHeaderError", .{});
             }
             if ((archive.writeData(data) < 0)) {

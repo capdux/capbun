@@ -2052,22 +2052,18 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             });
 
             if (RequestContext.pool == null) {
-                RequestContext.pool = bun.create(
-                    server.allocator,
-                    RequestContext.RequestContextStackAllocator,
-                    RequestContext.RequestContextStackAllocator.init(bun.typedAllocator(RequestContext)),
-                );
+                const pool = bun.handleOom(server.allocator.create(RequestContext.RequestContextStackAllocator));
+                pool.initInPlace(bun.typedAllocator(RequestContext));
+                RequestContext.pool = pool;
             }
 
             server.request_pool_allocator = RequestContext.pool.?;
 
             if (comptime has_h3) {
                 if (H3RequestContext.pool == null) {
-                    H3RequestContext.pool = bun.create(
-                        server.allocator,
-                        H3RequestContext.RequestContextStackAllocator,
-                        H3RequestContext.RequestContextStackAllocator.init(bun.typedAllocator(H3RequestContext)),
-                    );
+                    const pool = bun.handleOom(server.allocator.create(H3RequestContext.RequestContextStackAllocator));
+                    pool.initInPlace(bun.typedAllocator(H3RequestContext));
+                    H3RequestContext.pool = pool;
                 }
                 server.h3_request_pool_allocator = H3RequestContext.pool.?;
             }

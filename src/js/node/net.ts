@@ -84,7 +84,11 @@ const kSocketClass = Symbol("kSocketClass");
 const kConnectReq = Symbol("kConnectReq");
 
 function endNT(socket, callback, err) {
-  socket.$end();
+  if (typeof socket.$end === "function") {
+    socket.$end();
+  } else if (typeof socket.end === "function") {
+    socket.end();
+  }
   callback(err);
 }
 function emitCloseNT(self, hasError) {
@@ -236,6 +240,13 @@ const SocketHandlers: SocketHandler = {
       // this is already emmited on non-TLS socket and on TLS socket is emmited secureConnect after handshake
       self.emit("connect", self);
       self.emit("ready");
+      const notifyNet = (globalThis as any)[Symbol.for("bun.perf_hooks.notifyNet")];
+      if (typeof notifyNet === "function") {
+        notifyNet("connect", performance.now(), 0, {
+          host: self.remoteAddress,
+          port: self.remotePort,
+        });
+      }
     }
 
     SocketHandlers.drain(socket);

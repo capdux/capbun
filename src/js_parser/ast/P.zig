@@ -4822,6 +4822,13 @@ pub fn getReactRefreshHookSignalInit(p: *P, ctx: *ReactRefresh.HookContext, func
 
 pub fn toAST(p: *P, parts: *ListManaged(js_ast.Part), exports_kind: js_ast.ExportsKind, wrap_mode: WrapMode, hashbang: []const u8) !js_ast.Ast {
             const allocator = p.allocator;
+            if ((p.module_scope.contains_direct_eval and ((wrap_mode != .none) or (!p.options.bundle)))) {
+                var iter = p.module_scope.members.iterator();
+                _ = &iter;
+                while (iter.next()) |member| {
+                    p.symbols.items[@as(usize, @intCast(member.value_ptr.ref.innerIndex()))].must_not_be_renamed = true;
+                }
+            }
             const bundling = p.options.bundle;
             var parts_end: usize = (if (comptime @typeInfo(@TypeOf(@intFromBool(bundling))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(bundling))) else cp_cast_int(usize, @intFromBool(bundling)));
             _ = &parts_end;

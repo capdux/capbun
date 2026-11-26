@@ -340,7 +340,7 @@ if (((opts.is_class and is_typescript_enabled) and (((js_lexer.PropertyModifierK
 }
                         }
                     } else {
-                        if (((p.lexer.token == .t_open_brace) and strings.eqlComptime(name, "static"))) {
+                        if (((opts.is_class and (p.lexer.token == .t_open_brace)) and strings.eqlComptime(name, "static"))) {
                             if ((opts.ts_decorators.len > 0)) {
                                 _ = ((p.log.addError(p.source, opts.ts_decorators[0].loc, "Decorators are not valid here")) catch unreachable);
                                 return error.SyntaxError;

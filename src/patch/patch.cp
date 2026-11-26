@@ -291,8 +291,28 @@ pub struct PatchFile {
     }
 
     static fn hunkMatchesAt(lines: []const StrSlice, hunk: Hunk, start: usize): bool {
+        let new_side_ended = false;
+        let old_side_ended = false;
         let pos = start;
         for (part of hunk.parts.items) {
+            switch (part.type) {
+                .context => {
+                    if (new_side_ended || old_side_ended) return false;
+                },
+                .insertion => {
+                    if (new_side_ended) return false;
+                },
+                .deletion => {
+                    if (old_side_ended) return false;
+                },
+            }
+            if (part.no_newline_at_end_of_file) {
+                switch (part.type) {
+                    .context => new_side_ended = true,
+                    .insertion => new_side_ended = true,
+                    .deletion => old_side_ended = true,
+                }
+            }
             if (part.type == .insertion) continue;
             if (pos + part.lines.items.len > lines.len) return false;
             let idx: usize = 0;
@@ -406,6 +426,7 @@ pub struct PatchFile {
                 line_cursor = found.?;
             }
 
+            let context_had_no_newline = false;
             for (part of hunk.parts.items) {
                 switch (part.type) {
                     .context => {
@@ -415,6 +436,7 @@ pub struct PatchFile {
 
                         line_cursor += part.lines.items.len;
                         if (part.no_newline_at_end_of_file) {
+                            context_had_no_newline = true;
                             if (lines.items.len > 0 && lines.items[lines.items.len - 1].len == 0) {
                                 * = lines.pop();
                             }
@@ -445,7 +467,7 @@ pub struct PatchFile {
 
                         const empty_lines: []const []const u8 = [];
                         bun.handleOom(lines.replaceRange(bun.default_allocator, line_cursor, part.lines.items.len, empty_lines));
-                        if (part.no_newline_at_end_of_file) {
+                        if (part.no_newline_at_end_of_file && !context_had_no_newline) {
                             if (lines.items.len > 0 && lines.items[lines.items.len - 1].len != 0) {
                                 bun.handleOom(lines.append(bun.default_allocator, ""));
                             }

@@ -6501,6 +6501,11 @@ ExceptionOr<Ref<SerializedScriptValue>> SerializedScriptValue::create(JSGlobalOb
     if (scope.exception() || code != SerializationReturnCode::SuccessfullyCompleted) [[unlikely]]
         RELEASE_AND_RETURN(scope, exceptionForSerializationFailure(code));
 
+    for (auto& port : messagePorts) {
+        if (port->isDetached())
+            RELEASE_AND_RETURN(scope, (Exception { DataCloneError, "MessagePort in transfer list is already detached"_s }));
+    }
+
     auto arrayBufferContentsArray = transferArrayBuffers(vm, arrayBuffers);
     if (arrayBufferContentsArray.hasException()) {
         RELEASE_AND_RETURN(scope, arrayBufferContentsArray.releaseException());

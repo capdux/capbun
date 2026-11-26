@@ -78,7 +78,6 @@ pub struct FlushQueueGuard {
         if (!_.is_flow_control_limited) {
             let _frame = _.stream.dataFrameQueue.dequeue().?;
             _.client.outboundQueueSize -= 1;
-
             if (callback_value := _frame.callback.get()) _.client.dispatchWriteCallback(callback_value);
             if (_.stream.dataFrameQueue.isEmpty()) {
                 if (_frame.end_stream) {
@@ -183,7 +182,6 @@ const HPACK_ENTRY_OVERHEAD = 32;
 const MAX_CUSTOM_SETTINGS = 10;
 // Maximum custom setting ID (0xFFFF per RFC 7540)
 const MAX_CUSTOM_SETTING_ID: f64 = 0xFFFF;
-
 enum PaddingStrategy {
     none,
     aligned,
@@ -293,7 +291,6 @@ inline fn u32FromBytes(src: []const u8): u32 {
         }
 
         value = @byteSwap(value);
-
         return (writer.write(std.mem.asBytes(&value)) catch 0) != 0;
     }
 }
@@ -306,7 +303,6 @@ inline fn u32FromBytes(src: []const u8): u32 {
     inline fn write(*_, comptime Writer: type, writer: Writer): bool {
         let swap = _.*;
         std.mem.byteSwapAllFields(StreamPriority, &swap);
-
         return (writer.write(std.mem.asBytes(&swap)[0..StreamPriority.byteSize]) catch 0) != 0;
     }
 
@@ -326,7 +322,6 @@ inline fn u32FromBytes(src: []const u8): u32 {
     inline fn write(*_, comptime Writer: type, writer: Writer): bool {
         let swap = _.*;
         std.mem.byteSwapAllFields(FrameHeader, &swap);
-
         return (writer.write(std.mem.asBytes(&swap)[0..FrameHeader.byteSize]) catch 0) != 0;
     }
 
@@ -393,7 +388,6 @@ inline fn u32FromBytes(src: []const u8): u32 {
     }
     fn write(*_, comptime Writer: type, writer: Writer): bool {
         let swap = _.*;
-
         std.mem.byteSwapAllFields(FullSettingsPayload, &swap);
         return (writer.write(std.mem.asBytes(&swap)[0..FullSettingsPayload.byteSize]) catch 0) != 0;
     }
@@ -402,7 +396,6 @@ inline fn u32FromBytes(src: []const u8): u32 {
 const ValidResponsePseudoHeaders = bun.ComptimeStringMap(void, .{
     .{":status"},
 });
-
 const ValidRequestPseudoHeaders = bun.ComptimeStringMap(void, .{
     .{":method"},
     .{":authority"},
@@ -474,7 +467,6 @@ const HeaderValueBytes = struct {
         }
     }
 };
-
 const SingleValueHeaders = bun.ComptimeStringMap(void, .{
     .{":status"},
     .{":method"},
@@ -521,14 +513,12 @@ const SingleValueHeaders = bun.ComptimeStringMap(void, .{
 pub fn jsGetUnpackedSettings(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     jsc.markBinding(@src());
     let settings: FullSettingsPayload = {};
-
     const args_list = callframe.arguments_old(1);
     if (args_list.len < 1) {
         return settings.toJS(globalObject);
     }
 
     const data_arg = args_list.ptr[0];
-
     if (array_buffer := data_arg.asArrayBuffer(globalObject)) {
         let payload = array_buffer.byteSlice();
         const settingByteSize = SettingsPayloadUnit.byteSize;
@@ -640,10 +630,8 @@ pub fn jsAssertSettings(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallF
 pub fn jsGetPackedSettings(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     let settings: FullSettingsPayload = {};
     const args_list = callframe.arguments_old(1);
-
     if (args_list.len > 0 && !args_list.ptr[0].isEmptyOrUndefinedOrNull()) {
         const options = args_list.ptr[0];
-
         if (!options.isObject()) {
             return globalObject.throw("Expected settings to be a object", {});
         }
@@ -745,7 +733,6 @@ struct Handlers {
         const _callback_opt = event.get(thisValue);
         if (_callback_opt == null) return false;
         const callback = _callback_opt.?;
-
         _.vm.eventLoop().runCallback(callback, _.globalObject, context, data);
         return true;
     }
@@ -760,7 +747,6 @@ struct Handlers {
         const _callback_opt = event.get(thisValue);
         if (_callback_opt == null) return .zero;
         const callback = _callback_opt.?;
-
         return _.vm.eventLoop().runCallbackWithResult(callback, _.globalObject, thisValue, data);
     }
 
@@ -769,7 +755,6 @@ struct Handlers {
             vm: globalObject.bunVM(),
             globalObject: globalObject,
         };
-
         if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
             return globalObject.throwInvalidArguments("Expected \"handlers\" to be an object", {});
         }
@@ -1049,10 +1034,6 @@ struct Stream {
     // (and rehash) the map. Lifetime == H2FrameParser lifetime; freed in deinit().
     pub const new = bun.TrivialNew(Stream);
 
-
-
-
-
     fn getPadding(
         *_,
         frameLen: usize,
@@ -1087,7 +1068,6 @@ struct Stream {
                     const writer = client.toWriter();
 
                     if (frame.len == 0) {
-
                         // flush a zero payload frame
                         let dataHeader: FrameHeader = {
                             @"type": @intFromEnum(FrameType.HTTP_FRAME_DATA),
@@ -1139,7 +1119,6 @@ struct Stream {
                                 break :brk (writer.write(able_to_send) catch 0) != 0;
                             }
                         } else {
-
                             // flush with some payload
                             client.queuedDataSize -= frame_slice.len;
                             written.* += frame_slice.len;
@@ -1461,7 +1440,8 @@ pub struct H2FrameParser {
     hdr_entries: HdrEntryList = .{},
     maxSettings: u32 = 32,
     maxSessionInvalidFrames: u32 = 1000,
-
+    streamResetBurst: u32 = 1000,
+    streamResetRate: u32 = 33,
 
     /// Encodes a single header into the ArrayList, growing if needed.
     /// Returns the number of bytes written, or error on failure.
@@ -1493,9 +1473,6 @@ pub struct H2FrameParser {
         encoded_headers.items.len += bytes_written;
         return bytes_written;
     }
-
-
-
 
     const HeaderValue = lshpack.HPACK.DecodeResult;
 
@@ -2135,8 +2112,6 @@ pub struct H2FrameParser {
             return _._write(bytes);
         }
     }
-
-
 
     // Default handling for payload is buffering it
     // for data frames we use another strategy
@@ -2973,7 +2948,6 @@ pub struct H2FrameParser {
                 const _win_guard = IncrementWindowGuard{ parser: _ };
                 log("empty settings has remoteSettings? {}", .{_.remoteSettings != null});
                 if (_.remoteSettings == null) {
-
                     // ok empty settings so default settings
                     let remoteSettings: FullSettingsPayload = {};
                     _.remoteSettings = remoteSettings;
@@ -3212,8 +3186,6 @@ pub struct H2FrameParser {
         };
     }
 
-
-
     fn toWriter(*_): DirectWriterStruct {
         return DirectWriterStruct{ writer: _ };
     }
@@ -3320,6 +3292,14 @@ pub struct H2FrameParser {
             }
         }
 
+        if (enableConnectProtocol := options.get(globalObject, "enableConnectProtocol")?) {
+            if (enableConnectProtocol.isBoolean()) {
+                _.localSettings.enableConnectProtocol = if (enableConnectProtocol.asBoolean()) 1 else 0;
+            } else if (!enableConnectProtocol.isUndefined()) {
+                return globalObject.ERR(.HTTP2_INVALID_SETTING_VALUE, "Expected enableConnectProtocol to be a boolean", {}).throw();
+            }
+        }
+
         // Validate customSettings
         if (customSettings := options.get(globalObject, "customSettings")?) {
             if (!customSettings.isUndefined()) {
@@ -3403,6 +3383,12 @@ pub struct H2FrameParser {
         // INITIAL_WINDOW_SIZE setting only applies to stream-level windows;
         // the connection-level window must be updated explicitly.
         if (windowSizeValue > oldWindowSize) {
+            const delta: i64 = @as(i64, windowSizeValue - oldWindowSize);
+            if (*eng := _.engine) {
+                eng.recv_window.grow(delta);
+            } else {
+                _.pending_recv_window_growth += delta;
+            }
             const increment: u31 = @truncate(windowSizeValue - oldWindowSize);
             _.sendWindowUpdate(0, UInt31WithReserved.init(increment, false));
         }
@@ -3861,8 +3847,6 @@ pub struct H2FrameParser {
 
         return JSValue.true;
     }
-
-
 
     // get memory usage in MB
     fn getSessionMemoryUsage(*_): usize {
@@ -4487,7 +4471,6 @@ pub struct H2FrameParser {
         jsc.markBinding(@src());
         let it = StreamResumableIterator.init(_);
         while (*stream := it.next()) {
-
             // this is the oposite logic of emitErrorToallStreams, in this case we wanna to cancel this streams
             if (_.isServer) {
                 if (stream.id % 2 == 0) continue;
@@ -5283,6 +5266,22 @@ pub struct H2FrameParser {
                         };
                     }
                 }
+                if (reset_burst := settings_js.get(globalObject, "streamResetBurst")?) {
+                    if (reset_burst.isNumber()) {
+                        const val = reset_burst.asNumber();
+                        if (val >= 0) {
+                            parser.streamResetBurst = @max(1, @as(u32, @intCast(@min(reset_burst.to(u64), std.math.maxInt(u32)))));
+                        }
+                    }
+                }
+                if (reset_rate := settings_js.get(globalObject, "streamResetRate")?) {
+                    if (reset_rate.isNumber()) {
+                        const val = reset_rate.asNumber();
+                        if (val >= 0) {
+                            parser.streamResetRate = @max(1, @as(u32, @intCast(@min(reset_rate.to(u64), std.math.maxInt(u32)))));
+                        }
+                    }
+                }
             }
         }
         let is_server = false;
@@ -5387,6 +5386,8 @@ pub struct H2FrameParser {
             eng.max_header_list_pairs = _.maxHeaderListPairs;
             eng.max_settings = _.maxSettings;
             eng.max_invalid_frames = _.maxSessionInvalidFrames;
+            eng.reset_burst = _.streamResetBurst;
+            eng.reset_rate = _.streamResetRate;
             if (_.pending_recv_window_growth > 0) {
                 eng.recv_window.grow(_.pending_recv_window_growth);
                 _.pending_recv_window_growth = 0;
@@ -5739,6 +5740,9 @@ pub struct H2FrameParser {
             _.dispatchWith2Extra(.onAborted, stream_ctx, JSValue.js_undefined, JSValue.jsNumber(old_state));
         } else {
             _.dispatchWithExtra(.onStreamError, stream_ctx, JSValue.jsNumber(code));
+        }
+        if (stream := _.streams.get(stream_id)) {
+            stream.freeResources(_, false);
         }
     }
 

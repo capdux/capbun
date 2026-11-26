@@ -971,10 +971,17 @@ pub fn extractInfo(ctx: Command.Context) !ExtractInfoResult {
             const template = brk: {
             var positional = positionals[0];
             _ = &positional;
+            if ((positional.len >= bun.MAX_PATH_BYTES)) {
+                _ = Output.errGeneric("template name too long", .{});
+                _ = Global.exit(1);
+            }
             _ = outer: {
             var parts: [2][]const u8 = .{ filesystem.top_level_dir, positional };
             _ = &parts;
-            const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+            const outdir_path = ((filesystem.absBufChecked((&parts), (&home_dir_buf))) orelse break :outer);
+            if ((outdir_path.len >= home_dir_buf.len)) {
+                break :outer;
+            }
             home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
             const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
             if (bun.path.hasAnyIllegalChars(outdir_path_)) {
@@ -1002,7 +1009,10 @@ pub fn extractInfo(ctx: Command.Context) !ExtractInfoResult {
                     _ = &home_dir;
                     var parts: [2][]const u8 = .{ home_dir, positional };
                     _ = &parts;
-                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+                    const outdir_path = ((filesystem.absBufChecked((&parts), (&home_dir_buf))) orelse break :outer);
+                    if ((outdir_path.len >= home_dir_buf.len)) {
+                        break :outer;
+                    }
                     home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
                     const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                     if (bun.path.hasAnyIllegalChars(outdir_path_)) {
@@ -1017,7 +1027,10 @@ pub fn extractInfo(ctx: Command.Context) !ExtractInfoResult {
                 _ = outer: {
                 var parts: [3][]const u8 = .{ filesystem.top_level_dir, BUN_CREATE_DIR, positional };
                 _ = &parts;
-                const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+                const outdir_path = ((filesystem.absBufChecked((&parts), (&home_dir_buf))) orelse break :outer);
+                if ((outdir_path.len >= home_dir_buf.len)) {
+                    break :outer;
+                }
                 home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
                 const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                 if (bun.path.hasAnyIllegalChars(outdir_path_)) {
@@ -1033,7 +1046,10 @@ pub fn extractInfo(ctx: Command.Context) !ExtractInfoResult {
                     _ = &home_dir;
                     var parts: [3][]const u8 = .{ home_dir, BUN_CREATE_DIR, positional };
                     _ = &parts;
-                    const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
+                    const outdir_path = ((filesystem.absBufChecked((&parts), (&home_dir_buf))) orelse break :outer);
+                    if ((outdir_path.len >= home_dir_buf.len)) {
+                        break :outer;
+                    }
                     home_dir_buf[cp_cast_int(usize, outdir_path.len)] = 0;
                     const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                     if (bun.path.hasAnyIllegalChars(outdir_path_)) {

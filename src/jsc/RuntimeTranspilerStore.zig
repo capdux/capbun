@@ -353,7 +353,7 @@ else => {
 .package_json_type_module => .esm,
 else => .unknown,
 });
-            var parse_options = Transpiler.ParseOptions{ .allocator = allocator, .path = path, .loader = loader, .dirname_fd = .invalid, .file_descriptor = null, .file_fd_ptr = (&input_file_fd), .file_hash = hash, .macro_remappings = macro_remappings, .jsx = transpiler.options.jsx, .emit_decorator_metadata = transpiler.options.emit_decorator_metadata, .experimental_decorators = transpiler.options.experimental_decorators, .virtual_source = null, .dont_bundle_twice = true, .allow_commonjs = true, .inject_jest_globals = transpiler.options.rewrite_jest_for_tests, .set_breakpoint_on_first_line = ((((vm.debugger != null) and vm.debugger.?.set_breakpoint_on_first_line) and is_main) and setBreakPointOnFirstLine()), .runtime_transpiler_cache = (if ((!jsc.RuntimeTranspilerCache.is_disabled)) (&cache) else null), .remove_cjs_module_wrapper = (is_main and (vm.module_loader.eval_source != null)), .module_type = module_type, .allow_bytecode_cache = true };
+            var parse_options = Transpiler.ParseOptions{ .allocator = allocator, .path = path, .loader = loader, .dirname_fd = .invalid, .file_descriptor = null, .file_fd_ptr = (&input_file_fd), .file_hash = hash, .macro_remappings = macro_remappings, .jsx = transpiler.options.jsx, .emit_decorator_metadata = transpiler.options.emit_decorator_metadata, .experimental_decorators = transpiler.options.experimental_decorators, .use_define_for_class_fields = transpiler.options.use_define_for_class_fields, .virtual_source = null, .dont_bundle_twice = true, .allow_commonjs = true, .inject_jest_globals = transpiler.options.rewrite_jest_for_tests, .set_breakpoint_on_first_line = ((((vm.debugger != null) and vm.debugger.?.set_breakpoint_on_first_line) and is_main) and setBreakPointOnFirstLine()), .runtime_transpiler_cache = (if ((!jsc.RuntimeTranspilerCache.is_disabled)) (&cache) else null), .remove_cjs_module_wrapper = (is_main and (vm.module_loader.eval_source != null)), .module_type = module_type, .allow_bytecode_cache = true };
             _ = &parse_options;
             defer {
             {
@@ -466,6 +466,10 @@ if ((ownership == .watcher)) {
             }
             const is_commonjs_module = (parse_result.ast.has_commonjs_export_names or (parse_result.ast.exports_kind == .cjs));
             const module_info: ?*analyze_transpiled_module.ModuleInfo = (if (((vm.useIsolationSourceProviderCache() and (!is_commonjs_module)) and loader.isJavaScriptLike())) (blk_catch_2: { break :blk_catch_2 ((analyze_transpiled_module.ModuleInfo.create(bun.default_allocator, loader.isTypeScript())) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); }) else null);
+            if (module_info) |mi| {
+                _ = &mi;
+                mi.flags.has_tla = (!parse_result.ast.top_level_await_keyword.isEmpty());
+            }
             {
                 var mapper = vm.sourceMapHandler((&printer));
                 _ = &mapper;

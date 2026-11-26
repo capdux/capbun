@@ -1055,8 +1055,17 @@ fn refreshLine(*_) {
     Output.flush();
 
     const prompt = _.getPrompt();
-    const prompt_len = _.getPromptLength();
     const line = _.line_editor.getLine();
+
+    if (!_.is_tty) {
+        if (line.len == 0 && !_.in_multiline && !_.editor_mode) {
+            _.write(prompt);
+            Output.flush();
+        }
+        return;
+    }
+
+    const prompt_len = _.getPromptLength();
 
     // Move to beginning of line
     _.write("\r");

@@ -168,6 +168,17 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const AddrInfoGuard = struct {
+    addrinfo: *std.c.addrinfo,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *AddrInfoGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = std.c.freeaddrinfo(self.addrinfo);
+    }
+};
+
 pub const UDPSocketHandlerEntry = struct {
     name: []const u8,
     gc_field: []const u8,
@@ -211,13 +222,11 @@ pub fn fromJS(globalThis: *JSGlobalObject, options: JSValue, thisValue: JSValue)
             }
             var parsed_port: u16 = 0;
             _ = &parsed_port;
-            if (try options.getTruthy(globalThis, "port")) |value| {
+            if (try options.get(globalThis, "port")) |value| {
                 _ = &value;
-                const number = try value.coerceToInt32(globalThis);
-                if (((number < 0) or (number > 65535))) {
-                    return globalThis.throwInvalidArguments("Expected \"port\" to be an integer between 0 and 65535", .{});
+                if ((!value.isUndefinedOrNull())) {
+                    parsed_port = try parsePort(globalThis, value, 0, "port");
                 }
-                parsed_port = @intCast(number);
             }
             var parsed_flags: i32 = 0;
             _ = &parsed_flags;
@@ -280,17 +289,13 @@ pub fn fromJS(globalThis: *JSGlobalObject, options: JSValue, thisValue: JSValue)
                 if ((!connect_host_js.isString())) {
                     return globalThis.throwInvalidArguments("Expected \"connect.hostname\" to be a string", .{});
                 }
-                const connect_port_opt = try connect.getTruthy(globalThis, "port");
-                if ((connect_port_opt == null)) {
-                    return globalThis.throwInvalidArguments("Expected \"connect.port\" to be an integer", .{});
-                }
-                const connect_port_js = connect_port_opt.?;
-                const connect_port = try connect_port_js.coerceToInt32(globalThis);
-                if (((connect_port < 1) or (connect_port > 65535))) {
+                const connect_port_opt = try connect.get(globalThis, "port");
+                if (((connect_port_opt == null) or connect_port_opt.?.isUndefinedOrNull())) {
                     return globalThis.throwInvalidArguments("Expected \"connect.port\" to be an integer between 1 and 65535", .{});
                 }
+                const connect_port = try parsePort(globalThis, connect_port_opt.?, 1, "connect.port");
                 const connect_host = try connect_host_js.toBunString(globalThis);
-                config.connect = .{ .port = @as(u16, @intCast(connect_port)), .address = connect_host };
+                config.connect = .{ .port = connect_port, .address = connect_host };
             }
             _guard_config.armed = false;
             return config;
@@ -376,6 +381,10 @@ pub fn udpSocket(globalThis: *JSGlobalObject, options: JSValue) bun.JSError!JSVa
             _ = &_guard_hostname_z;
             var ___guard_hostname_z_moved = false; _ = &___guard_hostname_z_moved;
             defer if (!___guard_hostname_z_moved) { ___guard_hostname_z_moved = true; const __T = @TypeOf(_guard_hostname_z); if (@typeInfo(__T) == .optional) { if (_guard_hostname_z) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_hostname_z.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_hostname_z; _drop_val.__cp_deinit(); } };
+            if ((!bun.dns.isValidHostname(hostname_slice.slice()))) {
+                this_ptr.closed = true;
+                return throwGetaddrinfoNotFound(globalThis, hostname_slice.slice());
+            }
             if (uws.udp.Socket.create(this_ptr.loop, onData, onDrain, onClose, onRecvError, hostname_z, this_ptr.config.port, this_ptr.config.flags, (&err_code), this_ptr)) |sock| {
                 _ = &sock;
                 this_ptr.socket = sock;
@@ -403,6 +412,9 @@ pub fn udpSocket(globalThis: *JSGlobalObject, options: JSValue) bun.JSError!JSVa
                 _ = &_guard_address_z;
                 var ___guard_address_z_moved = false; _ = &___guard_address_z_moved;
                 defer if (!___guard_address_z_moved) { ___guard_address_z_moved = true; const __T = @TypeOf(_guard_address_z); if (@typeInfo(__T) == .optional) { if (_guard_address_z) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_address_z.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_address_z; _drop_val.__cp_deinit(); } };
+                if ((!bun.dns.isValidHostname(address_slice.slice()))) {
+                    return throwGetaddrinfoNotFound(globalThis, address_slice.slice());
+                }
                 const ret = this_ptr.socket.?.connect(address_z, (connect.*).port);
                 if ((ret != 0)) {
                     if (bun.sys.Maybe(void).errnoSys(ret, .connect)) |*sys_err| {
@@ -489,19 +501,23 @@ pub fn setMembership(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *
             }
             var addr = std.mem.zeroes(std.posix.sockaddr.storage);
             _ = &addr;
-            if ((!try parseAddr(self, globalThis, .jsNumber(0), arguments[0], (&addr)))) {
+            if ((!try parseAddr(self, globalThis, 0, arguments[0], (&addr)))) {
                 return globalThis.throwValue(try (bun.sys.Maybe(void).errnoSys(@as(i32, @intCast(@intFromEnum(std.posix.E.INVAL))), .setsockopt)).?.toJS(globalThis));
             }
             var iface = std.mem.zeroes(std.posix.sockaddr.storage);
             _ = &iface;
-            const socket_opt = self.socket;
-            if ((socket_opt == null)) {
+            var has_iface = false;
+            _ = &has_iface;
+            if ((arguments.len > 1)) {
+                has_iface = try parseAddr(self, globalThis, 0, arguments[1], (&iface));
+            }
+            if (self.closed) {
                 return globalThis.throw("Socket is closed", .{});
             }
-            const socket = socket_opt.?;
+            const socket = ((self.socket) orelse { return globalThis.throw("Socket is closed", .{}); });
             var res: c_int = 0;
             _ = &res;
-            if (((arguments.len > 1) and try parseAddr(self, globalThis, .jsNumber(0), arguments[1], (&iface)))) {
+            if (has_iface) {
                 if ((addr.family != iface.family)) {
                     return globalThis.throwInvalidArguments("Family mismatch between address and interface", .{});
                 }
@@ -534,12 +550,12 @@ pub fn setSourceSpecificMembership(self: *UDPSocket, globalThis: *JSGlobalObject
             }
             var source_addr: std.posix.sockaddr.storage = undefined;
             _ = &source_addr;
-            if ((!try parseAddr(self, globalThis, .jsNumber(0), arguments[0], (&source_addr)))) {
+            if ((!try parseAddr(self, globalThis, 0, arguments[0], (&source_addr)))) {
                 return globalThis.throwValue(try (bun.sys.Maybe(void).errnoSys(@as(i32, @intCast(@intFromEnum(std.posix.E.INVAL))), .setsockopt)).?.toJS(globalThis));
             }
             var group_addr: std.posix.sockaddr.storage = undefined;
             _ = &group_addr;
-            if ((!try parseAddr(self, globalThis, .jsNumber(0), arguments[1], (&group_addr)))) {
+            if ((!try parseAddr(self, globalThis, 0, arguments[1], (&group_addr)))) {
                 return globalThis.throwValue(try (bun.sys.Maybe(void).errnoSys(@as(i32, @intCast(@intFromEnum(std.posix.E.INVAL))), .setsockopt)).?.toJS(globalThis));
             }
             if ((source_addr.family != group_addr.family)) {
@@ -547,14 +563,18 @@ pub fn setSourceSpecificMembership(self: *UDPSocket, globalThis: *JSGlobalObject
             }
             var iface: std.posix.sockaddr.storage = undefined;
             _ = &iface;
-            const socket_opt = self.socket;
-            if ((socket_opt == null)) {
+            var has_iface = false;
+            _ = &has_iface;
+            if ((arguments.len > 2)) {
+                has_iface = try parseAddr(self, globalThis, 0, arguments[2], (&iface));
+            }
+            if (self.closed) {
                 return globalThis.throw("Socket is closed", .{});
             }
-            const socket = socket_opt.?;
+            const socket = ((self.socket) orelse { return globalThis.throw("Socket is closed", .{}); });
             var res: c_int = 0;
             _ = &res;
-            if (((arguments.len > 2) and try parseAddr(self, globalThis, .jsNumber(0), arguments[2], (&iface)))) {
+            if (has_iface) {
                 if ((source_addr.family != iface.family)) {
                     return globalThis.throwInvalidArguments("Family mismatch among source, group and interface addresses", .{});
                 }
@@ -587,7 +607,7 @@ pub fn setMulticastInterface(self: *UDPSocket, globalThis: *JSGlobalObject, call
             }
             var addr: std.posix.sockaddr.storage = undefined;
             _ = &addr;
-            if ((!try parseAddr(self, globalThis, .jsNumber(0), arguments[0], (&addr)))) {
+            if ((!try parseAddr(self, globalThis, 0, arguments[0], (&addr)))) {
                 return JSValue.false;
             }
             const socket_opt = self.socket;
@@ -720,7 +740,8 @@ pub fn sendManyImpl(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *C
                     continue;
                 }
                 if (((i % 3) == 2)) {
-                    if ((!try parseAddr(self, globalThis, packet_port, val, (&addrs[@as(usize, @intCast(slice_idx))])))) {
+                    const port = try parsePort(globalThis, packet_port, 1, "port");
+                    if ((!try parseAddr(self, globalThis, port, val, (&addrs[@as(usize, @intCast(slice_idx))])))) {
                         return globalThis.throwInvalidArguments("Invalid address", .{});
                     }
                     addr_ptrs[cp_cast_int(usize, slice_idx)] = (&addrs[@as(usize, @intCast(slice_idx))]);
@@ -793,7 +814,8 @@ pub fn send(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame
             _ = &addr_ptr;
             if (dst) |dest| {
                 _ = &dest;
-                if ((!try parseAddr(self, globalThis, dest.port, dest.address, (&addr)))) {
+                const port = try parsePort(globalThis, dest.port, 1, "port");
+                if ((!try parseAddr(self, globalThis, port, dest.address, (&addr)))) {
                     return globalThis.throwInvalidArguments("Invalid address", .{});
                 }
                 addr_ptr = bun.cast(ConstOpaquePtr, (&addr));
@@ -997,7 +1019,7 @@ pub fn jsConnect(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun
             if ((!connect_port_js.isNumber())) {
                 return globalThis.throwInvalidArguments("Expected \"port\" to be an integer", .{});
             }
-            const connect_port = connect_port_js.asInt32();
+            const connect_port = connect_port_js.toInt32();
             const port: u16 = (if (((connect_port < 1) or (connect_port > 65535))) 0 else @as(u16, @intCast(connect_port)));
             if (this_socket.socket) |socket| {
                 _ = &socket;
@@ -1052,6 +1074,19 @@ const JSValue = jsc.JSValue;
 const SocketAddress = jsc.API.SocketAddress;
 const log = Output.scoped(.UdpSocket, .visible);
 const INET6_ADDRSTRLEN = (if (bun.Environment.isWindows) 65 else 46);
+
+pub fn parsePort(globalThis: *JSGlobalObject, value: JSValue, comptime min_port: u16, comptime name: []const u8) bun.JSError!u16 {
+        const num = try value.toNumber(globalThis);
+        if (((((!std.math.isFinite(num)) or (@trunc(num) != num)) or (num < @as(f64, @floatFromInt(min_port)))) or (num > 65535.0))) {
+            return globalThis.throwInvalidArguments("Expected \"{s}\" to be an integer between {d} and 65535", .{ name, min_port });
+        }
+        return @intFromFloat(num);
+}
+
+pub fn throwGetaddrinfoNotFound(globalThis: *JSGlobalObject, hostname: []const u8) bun.JSError!JSValue {
+        const sys_err = jsc.SystemError{ .errno = @intFromEnum(bun.c_ares.Error.ENOTFOUND), .code = bun.String.static("ENOTFOUND"), .message = bun.handleOom(bun.String.createFormat("getaddrinfo ENOTFOUND {s}", .{ hostname })), .syscall = bun.String.static("getaddrinfo"), .hostname = bun.String.cloneUTF8(hostname) };
+        return globalThis.throwValue(sys_err.toErrorInstance(globalThis));
+}
 
 extern "c" fn ntohs(nshort: u16) callconv(.c) u16;
 
@@ -1192,8 +1227,9 @@ pub fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_in
             _ = &_guard_loop_alive;
             var ___guard_loop_alive_moved = false; _ = &___guard_loop_alive_moved;
             defer if (!___guard_loop_alive_moved) { ___guard_loop_alive_moved = true; const __T = @TypeOf(_guard_loop_alive); if (@typeInfo(__T) == .optional) { if (_guard_loop_alive) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_loop_alive.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_loop_alive; _drop_val.__cp_deinit(); } };
-            const flags = jsc.JSValue.createEmptyObject(globalThis, 1);
+            const flags = jsc.JSValue.createEmptyObject(globalThis, 2);
             _ = flags.put(globalThis, jsc.ZigString.static("truncated"), .jsBoolean(truncated));
+            _ = flags.put(globalThis, jsc.ZigString.static("ipv6"), .jsBoolean((peer.family == std.posix.AF.INET6)));
             const js_payload = (blk_catch_3: { break :blk_catch_3 ((udpSocket.config.binary_type.toJS(slice, globalThis)) catch |__ce_3| { _ = &__ce_3; return; }); });
             const js_hostname = (blk_catch_4: { break :blk_catch_4 ((hostname_string.transferToJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return; }); });
             const data_args: [5]JSValue = .{ thisValue, js_payload, .jsNumber(port), js_hostname, flags };
@@ -1208,9 +1244,7 @@ pub fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_in
         }
 }
 
-pub fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port_val: JSValue, address_val: JSValue, storage: *std.posix.sockaddr.storage) bun.JSError!bool {
-        const number = try port_val.coerceToInt32(globalThis);
-        const port: u16 = (if (((number < 1) or (number > 65535))) 0 else @intCast(number));
+pub fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port: u16, address_val: JSValue, storage: *std.posix.sockaddr.storage) bun.JSError!bool {
         const str = try address_val.toBunString(globalThis);
         var _guard_str = DerefGuard(bun.String){ .val = str };
         _ = &_guard_str;
@@ -1222,6 +1256,9 @@ pub fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port_val: JSValue, 
         _ = &_guard_address_slice;
         var ___guard_address_slice_moved = false; _ = &___guard_address_slice_moved;
         defer if (!___guard_address_slice_moved) { ___guard_address_slice_moved = true; const __T = @TypeOf(_guard_address_slice); if (@typeInfo(__T) == .optional) { if (_guard_address_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_address_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_address_slice; _drop_val.__cp_deinit(); } };
+        if ((std.mem.indexOfScalar(u8, address_slice, 0) != null)) {
+            return false;
+        }
         var addr4: *std.posix.sockaddr.in = bun.cast(SockaddrInPtr, storage);
         _ = &addr4;
         if ((inet_pton(std.posix.AF.INET, address_slice.ptr, (&addr4.addr)) == 1)) {
@@ -1231,9 +1268,12 @@ pub fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port_val: JSValue, 
             var addr6: *std.posix.sockaddr.in6 = bun.cast(SockaddrIn6Ptr, storage);
             _ = &addr6;
             addr6.scope_id = 0;
+            var had_percent = false;
+            _ = &had_percent;
             if (str.indexOfAsciiChar(37)) |percent| {
                 _ = &percent;
                 if (((percent + 1) < str.length())) {
+                    had_percent = true;
                     var iface_id: u32 = 0;
                     _ = &iface_id;
                     if (comptime bun.Environment.isWindows) {
@@ -1261,7 +1301,44 @@ pub fn parseAddr(_: *UDPSocket, globalThis: *JSGlobalObject, port_val: JSValue, 
                 addr6.port = htons(@truncate(port));
                 addr6.family = std.posix.AF.INET6;
             } else {
-                return false;
+                if (comptime (!bun.Environment.isWindows)) {
+                    if (had_percent) {
+                        return false;
+                    }
+                    var hints = std.mem.zeroes(std.c.addrinfo);
+                    _ = &hints;
+                    hints.flags = .{ .NUMERICHOST = true };
+                    var res: ?*std.c.addrinfo = null;
+                    _ = &res;
+                    if ((@intFromEnum(std.c.getaddrinfo(address_slice.ptr, null, (&hints), (&res))) == 0)) {
+                        if (res) |info| {
+                            _ = &info;
+                            var _guard_res = AddrInfoGuard{ .addrinfo = info };
+                            _ = &_guard_res;
+                            var ___guard_res_moved = false; _ = &___guard_res_moved;
+                            defer if (!___guard_res_moved) { ___guard_res_moved = true; const __T = @TypeOf(_guard_res); if (@typeInfo(__T) == .optional) { if (_guard_res) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_res.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_res; _drop_val.__cp_deinit(); } };
+                            if (info.addr) |addr_ptr| {
+                                _ = &addr_ptr;
+                                if ((info.family == std.posix.AF.INET)) {
+                                    const src4: *std.posix.sockaddr.in = bun.cast(SockaddrInPtr, addr_ptr);
+                                    addr4.* = src4.*;
+                                    addr4.port = htons(@truncate(port));
+                                    return true;
+                                } else {
+                                    if ((info.family == std.posix.AF.INET6)) {
+                                        const src6: *std.posix.sockaddr.in6 = bun.cast(SockaddrIn6Ptr, addr_ptr);
+                                        addr6.* = src6.*;
+                                        addr6.port = htons(@truncate(port));
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                } else {
+                    return false;
+                }
             }
         }
         return true;

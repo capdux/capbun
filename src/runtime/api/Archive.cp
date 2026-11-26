@@ -1039,7 +1039,8 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
         entry.setPerm(0o644);
         entry.setMtime(now_secs, 0);
 
-        if (archive.writeHeader(entry) != .ok) {
+        const header_res = archive.writeHeader(entry);
+        if (header_res != .ok && header_res != .warn) {
             return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveHeaderError", .{});
         }
         if (archive.writeData(data) < 0) {

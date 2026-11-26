@@ -56,7 +56,7 @@ public:
     }
     ExceptionOr<void> setHref(const String&);
 
-    URLSearchParams& searchParams();
+    ExceptionOr<Ref<URLSearchParams>> searchParams();
     void markSearchParamsDirty() { m_searchParamsDirty = true; }
 
     const String& toJSON() const

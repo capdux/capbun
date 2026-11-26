@@ -157,7 +157,7 @@ pub fn get(r: u32, g: u32, b: u32) u32 {
                 return (((16 +% (36 *% qr)) +% (6 *% qg)) +% qb);
             }
             const grey_avg = (((r +% g) +% b) / 3);
-            const grey_idx = (if ((grey_avg > 238)) 23 else ((grey_avg -% 3) / 10));
+            const grey_idx = (if ((grey_avg > 238)) 23 else (if ((grey_avg < 3)) 0 else ((grey_avg - 3) / 10)));
             const grey = (8 +% (10 *% grey_idx));
             const d = Ansi256.sqdist(cr, cg, cb, r, g, b);
             const idx = (if ((Ansi256.sqdist(grey, grey, grey, r, g, b) < d)) (232 +% grey_idx) else (((16 +% (36 *% qr)) +% (6 *% qg)) +% qb));
@@ -256,9 +256,10 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
         var parsed_color: css.CssColor.ParseResult = brk: {
         if (args[0].isNumber()) {
             const number: i64 = args[0].toInt64();
-            const int_val: u32 = (if (comptime @typeInfo(@TypeOf(@abs(@mod(number, std.math.maxInt(u32))))) == .@"enum") cp_cast_int(u32, @intFromEnum(@abs(@mod(number, std.math.maxInt(u32))))) else cp_cast_int(u32, @abs(@mod(number, std.math.maxInt(u32)))));
+            const int_val: u32 = @truncate(@as(u64, @bitCast(number)));
             const rgba: PackedColor = @bitCast(int_val);
-            break :brk .{ .result = css.CssColor{ .rgba = .{ .alpha = rgba.alpha, .red = rgba.red, .green = rgba.green, .blue = rgba.blue } } };
+            const alpha: u8 = (if ((rgba.alpha == 0)) 255 else rgba.alpha);
+            break :brk .{ .result = css.CssColor{ .rgba = .{ .alpha = alpha, .red = rgba.red, .green = rgba.green, .blue = rgba.blue } } };
         } else {
             if (args[0].jsType().isArrayLike()) {
                 switch (try args[0].getLength(globalThis)) {
@@ -398,7 +399,9 @@ break :color bun.String.createFormat("rgba({d}, {d}, {d}, {d})", .{ rgba.red, rg
 },
 .ansi_16 => {
 const ansi_16_color = Ansi256.get16(rgba.red, rgba.green, rgba.blue);
-            const seq: [9]u8 = .{ 27, 91, 51, 56, 59, 53, 59, ansi_16_color, 109 };
+            const prefix: u8 = (if ((ansi_16_color < 8)) 51 else 57);
+            const code: u8 = ((if (comptime @typeInfo(@TypeOf(48)) == .@"enum") cp_cast_int(u8, @intFromEnum(48)) else cp_cast_int(u8, 48)) + (ansi_16_color & 7));
+            const seq: [5]u8 = .{ 27, 91, prefix, code, 109 };
             break :color bun.String.cloneLatin1(seq[0..]);
 },
 .ansi_16m => {

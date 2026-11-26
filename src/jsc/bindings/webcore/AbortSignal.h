@@ -132,6 +132,7 @@ public:
     size_t memoryCost() const;
 
     AbortSignalTimeout getTimeout() const { return m_timeout; }
+    void releaseTimeoutIfUnobserved();
 
 private:
     enum class Aborted : bool {

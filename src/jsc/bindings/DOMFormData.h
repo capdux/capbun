@@ -31,6 +31,7 @@
 #pragma once
 
 #include "ContextDestructionObserver.h"
+#include "ExceptionOr.h"
 #include <variant>
 #include <wtf/RefCounted.h>
 #include <wtf/text/WTFString.h>
@@ -58,19 +59,19 @@ public:
 
     // static Ref<DOMFormData> create(ScriptExecutionContext*, const PAL::TextEncoding&);
     static Ref<DOMFormData> create(ScriptExecutionContext*);
-    static Ref<DOMFormData> create(ScriptExecutionContext*, const StringView& urlEncodedString);
+    static ExceptionOr<Ref<DOMFormData>> create(ScriptExecutionContext*, const StringView& urlEncodedString);
 
     const Vector<Item>& items() const { return m_items; }
     // const PAL::TextEncoding& encoding() const { return m_encoding; }
 
-    void append(const String& name, const String& value);
-    void append(const String& name, RefPtr<Blob>, const String& filename = {});
+    ExceptionOr<void> append(const String& name, const String& value);
+    ExceptionOr<void> append(const String& name, RefPtr<Blob>, const String& filename = {});
     void remove(const StringView name);
     std::optional<FormDataEntryValue> get(const StringView name);
     Vector<FormDataEntryValue> getAll(const StringView name);
     bool has(const StringView name);
-    void set(const String& name, const String& value);
-    void set(const String& name, RefPtr<Blob>, const String& filename = {});
+    ExceptionOr<void> set(const String& name, const String& value);
+    ExceptionOr<void> set(const String& name, RefPtr<Blob>, const String& filename = {});
     Ref<DOMFormData> clone() const;
 
     size_t count() const { return m_items.size(); }
@@ -94,7 +95,7 @@ private:
     // explicit DOMFormData(ScriptExecutionContext*, const PAL::TextEncoding& = PAL::UTF8Encoding());
     explicit DOMFormData(ScriptExecutionContext*);
 
-    void set(const String& name, Item&&);
+    ExceptionOr<void> set(const String& name, Item&&);
 
     // PAL::TextEncoding m_encoding;
     Vector<Item> m_items;

@@ -217,25 +217,10 @@ export function getStdinStream(
 
   async function internalRead(stream) {
     $debug("internalRead();");
+    let value;
     try {
       $assert(reader);
-      const { value } = await reader.read();
-
-      if (value) {
-        stream.push(value);
-
-        if (shouldDisown) disown();
-      } else {
-        if (!stream_endEmitted) {
-          stream_endEmitted = true;
-          stream.emit("end");
-        }
-        if (!stream_destroyed) {
-          stream_destroyed = true;
-          stream.destroy();
-          disown();
-        }
-      }
+      ({ value } = await reader.read());
     } catch (err) {
       if (err?.code === "ERR_STREAM_RELEASE_LOCK") {
         // The stream was unref()ed. It may be ref()ed again in the future,
@@ -245,11 +230,43 @@ export function getStdinStream(
         return;
       }
       stream.destroy(err);
+      return;
+    }
+
+    if (value) {
+      process.nextTick(() => {
+        let threw = true;
+        try {
+          stream.push(value);
+          threw = false;
+        } finally {
+          if (shouldDisown) {
+            disown();
+          } else if (threw && !stream.isPaused() && !stream_destroyed && !stream_endEmitted) {
+            stream.read(0);
+          }
+        }
+      });
+    } else {
+      process.nextTick(() => {
+        if (!stream_endEmitted) {
+          stream_endEmitted = true;
+          stream.push(null);
+        }
+        if (!stream_destroyed) {
+          stream_destroyed = true;
+          disown();
+        }
+      });
     }
   }
 
   function triggerRead(_size) {
     $debug("_read();", reader);
+
+    if (!reader && !forceUnref && !shouldDisown && !stream_endEmitted && !stream_destroyed) {
+      own();
+    }
 
     if (reader && !shouldDisown) {
       internalRead(this);

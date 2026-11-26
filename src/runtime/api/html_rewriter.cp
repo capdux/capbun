@@ -265,7 +265,7 @@ pub struct BufferOutputSinkImpl {
     tmp_sync_error: (*jsc.JSValue)? = null,
 
     // const log = bun.Output.scoped(.BufferOutputSink, .visible);
-    static fn init(context: *LOLHTMLContext, global: *JSGlobalObject, original: *Response, builder: *LOLHTML.HTMLRewriter.Builder): jsc.JSValue ! bun.JSError {
+    static fn init(context: *LOLHTMLContext, global: *JSGlobalObject, original: *Response, builder: *LOLHTML.HTMLRewriter.Builder, throw_on_sync_error: bool): jsc.JSValue ! bun.JSError {
         let sink = bun.new(BufferOutputSinkImpl, {
             ref_count: .init(),
             global: global,
@@ -371,6 +371,13 @@ pub struct BufferOutputSinkImpl {
 
         // sync error occurs
         if (sink_error != .zero) {
+            if (!throw_on_sync_error) {
+                sink_error.ensureStillAlive();
+                result.getBodyValue().toErrorInstance({ JSValue: jsc.Strong.Optional.create(sink_error, global) }, global) catch {};
+                sink_error.unprotect();
+                response_js_value.ensureStillAlive();
+                return response_js_value;
+            }
             sink_error.ensureStillAlive();
             sink_error.unprotect();
 
@@ -414,9 +421,11 @@ pub struct BufferOutputSinkImpl {
         }
 
         if (ret_err := BufferOutputSinkImpl.runOutputSink(sink, bytes, is_async)) {
-            ret_err.ensureStillAlive();
-            ret_err.protect();
-            sink.tmp_sync_error.?.* = ret_err;
+            if (sink.tmp_sync_error.?.* == .zero) {
+                ret_err.ensureStillAlive();
+                ret_err.protect();
+                sink.tmp_sync_error.?.* = ret_err;
+            }
         } else {}
     }
 
@@ -658,10 +667,10 @@ pub struct HTMLRewriter {
         _.builder.deinit();
     }
 
-    fn beginTransform(*_, global: *JSGlobalObject, response: *Response): JSValue ! bun.JSError {
+    fn beginTransform(*_, global: *JSGlobalObject, response: *Response, throw_on_sync_error: bool): JSValue ! bun.JSError {
         const new_context = _.context;
         new_context.ref();
-        return BufferOutputSinkImpl.init(new_context, global, response, _.builder);
+        return BufferOutputSinkImpl.init(new_context, global, response, _.builder, throw_on_sync_error);
     }
 
     fn transform_(*_, global: *JSGlobalObject, response_value: jsc.JSValue): JSValue ! bun.JSError {
@@ -670,7 +679,7 @@ pub struct HTMLRewriter {
             if (body_value.* == .Used) {
                 return global.throwInvalidArguments("Response body already used", {});
             }
-            const out = _.beginTransform(global, response)?;
+            const out = _.beginTransform(global, response, false)?;
             // Check if the returned value is an error and throw it properly
             if (e := out.toError()) {
                 return global.throwValue(e);
@@ -698,7 +707,7 @@ pub struct HTMLRewriter {
                     false,
                 ));
                 const _guard_resp = FinalizeGuard<Response>{ ptr: resp };
-                const out_response_value = _.beginTransform(global, resp)?;
+                const out_response_value = _.beginTransform(global, resp, true)?;
                 // Check if the returned value is an error and throw it properly
                 if (e := out_response_value.toError()) {
                     return global.throwValue(e);
@@ -1043,6 +1052,10 @@ fn HandlerCallback(
 
             if (!result.isUndefinedOrNull()) {
                 if (result.isError() || result.isAggregateError(handler.global)) {
+                    if (err_ptr := handler.global.bunVM().unhandled_pending_rejection_to_capture) {
+                        err_ptr.* = result;
+                        result.protect();
+                    }
                     return true;
                 }
 

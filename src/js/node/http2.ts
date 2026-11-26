@@ -2365,8 +2365,11 @@ class Http2Stream extends Duplex {
     // RST code 8 not emitted as an error as its used by clients to signify
     // abort and is already covered by aborted event, also allows more
     // seamless compatibility with http1
-    if (err == null && rstCode !== NGHTTP2_NO_ERROR && rstCode !== NGHTTP2_CANCEL)
+    if (this[kNeverAnnounced]) {
+      err = null;
+    } else if (err == null && rstCode !== NGHTTP2_NO_ERROR && rstCode !== NGHTTP2_CANCEL) {
       err = $ERR_HTTP2_STREAM_ERROR(nameForErrorCode[rstCode] || rstCode);
+    }
 
     this[bunHTTP2Session] = null;
     // This notifies the session that this stream has been destroyed and
@@ -3475,6 +3478,7 @@ class ServerHttp2Session extends Http2Session {
       self.#connections++;
       if (stream_id % 2 === 1) self.#peerInitiatedStreams++;
       const stream = new ServerHttp2Stream(stream_id, self, null);
+      stream[kNeverAnnounced] = true;
       // Returned to the native caller, which stores it as the stream context — no
       // setStreamContext host call needed.
       return stream;
@@ -3526,7 +3530,13 @@ class ServerHttp2Session extends Http2Session {
         markStreamClosed(stream);
         self.#connections--;
         if (stream.id % 2 === 1) self.#peerInitiatedStreams--;
-        stream.destroy();
+        if (stream.readable && stream._readableState && !stream._readableState.endEmitted) {
+          stream.once("end", () => {
+            if (!stream.destroyed) stream.destroy();
+          });
+        } else {
+          stream.destroy();
+        }
         if (self.#connections === 0 && self.#closed) {
           self.destroy();
         }
@@ -3589,6 +3599,7 @@ class ServerHttp2Session extends Http2Session {
         // and wrote it back AFTER the emit, we'd clobber any bits set by the
         // user handler — in particular, losing WantTrailer/FinalCalled breaks
         // any later `sendTrailers()` with ERR_HTTP2_TRAILERS_NOT_READY.
+        stream[kNeverAnnounced] = false;
         stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded;
         if (onServerStreamCreatedChannel.hasSubscribers) {
           onServerStreamCreatedChannel.publish({ stream, headers });
@@ -3881,7 +3892,7 @@ class ServerHttp2Session extends Http2Session {
 
   get remoteSettings() {
     if (this.connecting || this.destroyed) return {};
-    return this.#remoteSettings ?? {};
+    return this.#remoteSettings ?? getDefaultSettings();
   }
 
   get localSettings() {
@@ -4326,7 +4337,8 @@ class ClientHttp2Session extends Http2Session {
           // 'response' handler that mutates stream state would otherwise be
           // clobbered by a stale read-modify-write (see the server-side note
           // at the stream handler above).
-          stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded;
+          stream[kNeverAnnounced] = false;
+        stream[bunHTTP2StreamStatus] |= StreamState.StreamResponded;
           if (header_status === 421) {
             // 421 Misdirected Request
             removeOriginFromSet(self, stream);
@@ -4578,7 +4590,7 @@ class ClientHttp2Session extends Http2Session {
 
   get remoteSettings() {
     if (this.connecting || this.destroyed) return {};
-    return this.#remoteSettings ?? {};
+    return this.#remoteSettings ?? getDefaultSettings();
   }
 
   get localSettings() {

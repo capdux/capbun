@@ -1548,6 +1548,9 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
             break :__sw_blk_26 cp_val(Global.crash()); }  unreachable; }); }); });
             const abs_workspace_path: []const u8 = strings.withoutTrailingSlash(strings.withoutSuffixComptime(abs_package_json_path, "package.json"));
             _ = try manager.env.map.put("npm_command", "pack");
+            _ = try manager.env.map.put("npm_package_name", package_name);
+            _ = try manager.env.map.put("npm_package_version", package_version);
+            _ = try manager.env.map.put("npm_package_json", abs_package_json_path);
             const post_scripts_res = post_scripts: {
             if ((!manager.options.do.run_scripts)) {
                 break :post_scripts .{ null, null, null, false };
@@ -1920,7 +1923,7 @@ else => {
                     node.unit = .files;
                     progress_guard.node = node;
                 }
-                entry = try archivePackageJSON(ctx, archive, entry, root_dir, edited_package_json);
+                entry = try archivePackageJSON(ctx, archive, entry, root_dir, edited_package_json, abs_tarball_dest);
                 if (progress_guard.node) |n| {
                     _ = &n;
                     _ = n.completeOne();
@@ -1946,7 +1949,7 @@ else => {
                     const stat = (blk_catch_41: { break :blk_catch_41 ((bun.sys.sys_uv.fstat(fd).unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat file: \"{s}\"", .{ item.path });
                     break :blk_catch_41 Global.crash(); }); });
                     _ = try pack_list_guard.list.append(ctx.allocator, .{ .subpath = item.path, .size = @as(usize, @intCast(stat.size)) });
-                    entry = try addArchiveEntry(ctx, fd, stat, item.path, (&read_buf), file_reader, archive, entry, (&print_buf_guard.list), bins);
+                    entry = try addArchiveEntry(ctx, fd, stat, item.path, (&read_buf), file_reader, archive, entry, (&print_buf_guard.list), bins, abs_tarball_dest);
                 }
                 while (bundled_pack_queue_guard.queue.removeOrNull()) |item| {
                     var step_guard = ProgressStepGuard{ .node = progress_guard.node };
@@ -1966,14 +1969,13 @@ else => {
                     const file = file_guard.file;
                     const stat = (blk_catch_43: { break :blk_catch_43 ((file.stat().unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat file: \"{f}\"", .{ file.handle });
                     break :blk_catch_43 Global.crash(); }); });
-                    entry = try addArchiveEntry(ctx, file.handle, stat, item.path, (&read_buf), file_reader, archive, entry, (&print_buf_guard.list), bins);
+                    entry = try addArchiveEntry(ctx, file.handle, stat, item.path, (&read_buf), file_reader, archive, entry, (&print_buf_guard.list), bins, abs_tarball_dest);
                 }
             }
             _ = entry.free();
             switch (archive.writeClose()) {
 .failed, .fatal, .warn => {
-_ = Output.errGeneric("failed to close archive: {s}", .{ archive.errorString() });
-            _ = Global.crash();
+_ = reportArchiveWriteError(archive, abs_tarball_dest, "failed to close archive");
 },
 else => {
 
@@ -2080,7 +2082,29 @@ pub fn fmtTarballFilename(package_name: []const u8, package_version: []const u8,
             return .{ .package_name = package_name, .package_version = package_version, .style = style };
     }
 
-pub fn archivePackageJSON(ctx: *Context, archive: *Archive, entry: *Archive.Entry, root_dir: std.fs.Dir, edited_package_json: []const u8) OOM!*Archive.Entry {
+pub fn reportArchiveWriteError(archive: *Archive, abs_tarball_dest: []const u8, fallback_msg: []const u8) noreturn {
+            const errno = libarchive.archive_errno((blk: {
+            break :blk @ptrCast(archive);
+
+}));
+            if ((errno != 0)) {
+                const sys_err = bun.sys.Error.fromCode(@as(bun.sys.E, @enumFromInt(errno)), .write);
+                _ = Output.err(sys_err, "failed to write tarball {f}", .{ bun.fmt.quote(abs_tarball_dest) });
+            } else {
+                _ = Output.errGeneric("{s}: {s}", .{ fallback_msg, archive.errorString() });
+            }
+            _ = Global.crash();
+    }
+
+pub fn writeArchiveData(archive: *Archive, data: []const u8, abs_tarball_dest: []const u8) usize {
+            const written = archive.writeData(data);
+            if ((written < 0)) {
+                _ = reportArchiveWriteError(archive, abs_tarball_dest, "failed to write tarball");
+            }
+            return @as(usize, @intCast(written));
+    }
+
+pub fn archivePackageJSON(ctx: *Context, archive: *Archive, entry: *Archive.Entry, root_dir: std.fs.Dir, edited_package_json: []const u8, abs_tarball_dest: []const u8) OOM!*Archive.Entry {
             const stat = (blk_catch_51: { break :blk_catch_51 ((bun.sys.fstatat(bun.FD.fromStdDir(root_dir), "package.json").unwrap()) catch |e| { _ = &e; _ = Output.err(e, "failed to stat package.json", .{});
             break :blk_catch_51 Global.crash(); }); });
             _ = entry.setPathname((package_prefix ++ "package.json"));
@@ -2097,11 +2121,11 @@ else => {
 
 },
 }
-            ctx.stats.unpacked_size = (ctx.stats.unpacked_size + @as(usize, @intCast(archive.writeData(edited_package_json))));
+            ctx.stats.unpacked_size = (ctx.stats.unpacked_size + writeArchiveData(archive, edited_package_json, abs_tarball_dest));
             return entry.clear();
     }
 
-pub fn addArchiveEntry(ctx: *Context, file: FD, stat: bun.Stat, filename: stringZ, read_buf: []u8, file_reader: *BufferedFileReader, archive: *Archive, entry: *Archive.Entry, print_buf: *std.array_list.Managed(u8), bins: []const BinInfo) OOM!*Archive.Entry {
+pub fn addArchiveEntry(ctx: *Context, file: FD, stat: bun.Stat, filename: stringZ, read_buf: []u8, file_reader: *BufferedFileReader, archive: *Archive, entry: *Archive.Entry, print_buf: *std.array_list.Managed(u8), bins: []const BinInfo, abs_tarball_dest: []const u8) OOM!*Archive.Entry {
             const print_buf_writer = print_buf.writer();
             _ = try print_buf_writer.print("{s}{s}\x00", .{ package_prefix, filename });
             const pathname = print_buf.items[0..(package_prefix.len + filename.len) :0];
@@ -2134,7 +2158,7 @@ else => {
             break :blk_catch_52 Global.crash(); }); });
             _ = &read;
             while ((read > 0)) {
-                ctx.stats.unpacked_size = (ctx.stats.unpacked_size + @as(usize, @intCast(archive.writeData(read_buf[0..read]))));
+                ctx.stats.unpacked_size = (ctx.stats.unpacked_size + writeArchiveData(archive, read_buf[0..read], abs_tarball_dest));
                 read = (blk_catch_53: { break :blk_catch_53 ((file_reader.read(read_buf)) catch |e| { _ = &e; _ = Output.err(e, "failed to read file: \"{s}\"", .{ filename });
                 break :blk_catch_53 Global.crash(); }); });
             }

@@ -126,6 +126,7 @@ pub const S3ListObjectsV2Result = struct {
     key_count: ?i64 = null,
     max_keys: ?i64 = null,
     delimiter: ?[]const u8 = null,
+    delimiter_owned: bool = false,
     encoding_type: ?[]const u8 = null,
     is_truncated: ?bool = null,
     continuation_token: ?[]const u8 = null,
@@ -135,6 +136,12 @@ pub const S3ListObjectsV2Result = struct {
     contents: ?Managed(S3ListObjectsContents) = null,
 
 pub fn deinit(self: *S3ListObjectsV2Result) void {
+            if (self.delimiter_owned) {
+                if (self.delimiter) |d| {
+                    _ = &d;
+                    _ = default_allocator.free(d);
+                }
+            }
             if (self.contents) |contents| {
                 _ = &contents;
                 for (contents.items) |*item| {
@@ -517,7 +524,52 @@ pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
                             if (strings.eql(tagName, "Delimiter")) {
                                 if (strings.indexOf(xml[i..], "</Delimiter>")) |_end| {
                                     _ = &_end;
-                                    result.delimiter = xml[i..(i + _end)];
+                                    const raw = xml[i..(i + _end)];
+                                    if ((strings.indexOfChar(raw, 38) != null)) {
+                                        var buf: std.ArrayListUnmanaged(u8) = .{};
+                                        _ = &buf;
+                                        var j: usize = 0;
+                                        _ = &j;
+                                        while ((j < raw.len)) {
+                                            if ((raw[@as(usize, @intCast(j))] == 38)) {
+                                                if (strings.hasPrefixComptime(raw[j..], "&amp;")) {
+                                                    _ = try buf.append(default_allocator, 38);
+                                                    j = (j + 5);
+                                                    continue;
+                                                } else {
+                                                    if (strings.hasPrefixComptime(raw[j..], "&lt;")) {
+                                                        _ = try buf.append(default_allocator, 60);
+                                                        j = (j + 4);
+                                                        continue;
+                                                    } else {
+                                                        if (strings.hasPrefixComptime(raw[j..], "&gt;")) {
+                                                            _ = try buf.append(default_allocator, 62);
+                                                            j = (j + 4);
+                                                            continue;
+                                                        } else {
+                                                            if (strings.hasPrefixComptime(raw[j..], "&quot;")) {
+                                                                _ = try buf.append(default_allocator, 34);
+                                                                j = (j + 6);
+                                                                continue;
+                                                            } else {
+                                                                if (strings.hasPrefixComptime(raw[j..], "&apos;")) {
+                                                                    _ = try buf.append(default_allocator, 39);
+                                                                    j = (j + 6);
+                                                                    continue;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            _ = try buf.append(default_allocator, raw[@as(usize, @intCast(j))]);
+                                            j = (j + 1);
+                                        }
+                                        result.delimiter = try buf.toOwnedSlice(default_allocator);
+                                        result.delimiter_owned = true;
+                                    } else {
+                                        result.delimiter = raw;
+                                    }
                                     i = (i + _end);
                                 }
                             } else {

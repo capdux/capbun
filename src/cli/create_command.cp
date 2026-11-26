@@ -1690,10 +1690,15 @@ pub struct CreateCommand {
         // var unsupported_packages = UnsupportedPackages{};
         const template = brk: {
             let positional = positionals[0];
+            if (positional.len >= bun.MAX_PATH_BYTES) {
+                Output.errGeneric("template name too long", .{});
+                Global.exit(1);
+            }
 
             outer: {
                 let parts: [2]string = [ filesystem.top_level_dir, positional ];
-                const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
+                const outdir_path = filesystem.absBufChecked(&parts, &home_dir_buf) ?? break :outer;
+                if (outdir_path.len >= home_dir_buf.len) break :outer;
                 home_dir_buf[outdir_path.len] = 0;
                 const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                 if (bun.path.hasAnyIllegalChars(outdir_path_)) break :outer;
@@ -1718,7 +1723,8 @@ pub struct CreateCommand {
                 outer: {
                     if (home_dir := env_loader.map.get("BUN_CREATE_DIR")) {
                         let parts: [2]string = [ home_dir, positional ];
-                        const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
+                        const outdir_path = filesystem.absBufChecked(&parts, &home_dir_buf) ?? break :outer;
+                        if (outdir_path.len >= home_dir_buf.len) break :outer;
                         home_dir_buf[outdir_path.len] = 0;
                         const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                         if (bun.path.hasAnyIllegalChars(outdir_path_)) break :outer;
@@ -1731,7 +1737,8 @@ pub struct CreateCommand {
 
                 outer: {
                     let parts: [3]string = [ filesystem.top_level_dir, BUN_CREATE_DIR, positional ];
-                    const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
+                    const outdir_path = filesystem.absBufChecked(&parts, &home_dir_buf) ?? break :outer;
+                    if (outdir_path.len >= home_dir_buf.len) break :outer;
                     home_dir_buf[outdir_path.len] = 0;
                     const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                     if (bun.path.hasAnyIllegalChars(outdir_path_)) break :outer;
@@ -1744,7 +1751,8 @@ pub struct CreateCommand {
                 outer: {
                     if (home_dir := env_loader.map.get("HOME")) {
                         let parts: [3]string = [ home_dir, BUN_CREATE_DIR, positional ];
-                        const outdir_path = filesystem.absBuf(&parts, &home_dir_buf);
+                        const outdir_path = filesystem.absBufChecked(&parts, &home_dir_buf) ?? break :outer;
+                        if (outdir_path.len >= home_dir_buf.len) break :outer;
                         home_dir_buf[outdir_path.len] = 0;
                         const outdir_path_ = home_dir_buf[0..outdir_path.len :0];
                         if (bun.path.hasAnyIllegalChars(outdir_path_)) break :outer;

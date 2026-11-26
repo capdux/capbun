@@ -327,10 +327,6 @@ pub fn setInit(stdout: Source.StreamType, stderr: Source.StreamType) void {
                     } else {
                         if (Source.isNoColor()) {
                             enable_color = false;
-                        } else {
-                            if ((Source.isColorTerminal() and (is_stdout_tty or is_stderr_tty))) {
-                                enable_color = true;
-                            }
                         }
                     }
                     const use_color_stdout = ((enable_color) orelse (is_stdout_tty));

@@ -566,6 +566,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         }
 
         if (args.options("--coverage-reporter").len > 0) {
+            ctx.test_options.coverage.enabled = true;
             ctx.test_options.coverage.reporters = { text: false, lcov: false };
             for (reporter of args.options("--coverage-reporter")) {
                 if (bun.strings.eqlComptime(reporter, "text")) {

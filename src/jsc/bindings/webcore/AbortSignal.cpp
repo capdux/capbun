@@ -157,7 +157,15 @@ void AbortSignal::cancelTimer()
 void AbortSignal::markAborted(JSC::JSValue reason)
 {
     applyFlags(static_cast<uint8_t>(AbortSignalFlags::Aborted) | static_cast<uint8_t>(AbortSignalFlags::IsFiringEventListeners));
-    m_sourceSignals.clear();
+    if (isDependent()) {
+        for (Ref sourceSignal : std::exchange(m_sourceSignals, {})) {
+            sourceSignal->m_dependentSignals.remove(*this);
+            if (!sourceSignal->wrapper())
+                sourceSignal->releaseTimeoutIfUnobserved();
+        }
+    } else {
+        m_sourceSignals.clear();
+    }
 
     ASSERT(reason);
     if (auto* context = scriptExecutionContext())
@@ -279,6 +287,29 @@ void AbortSignal::signalFollow(AbortSignal& signal)
     });
 }
 
+void AbortSignal::releaseTimeoutIfUnobserved()
+{
+    if (!m_timeout || aborted() || hasAbortEventListener())
+        return;
+    if (!m_native_callbacks.isEmpty() || !m_algorithms.isEmpty() || hasPendingActivity())
+        return;
+    if (!m_dependentSignals.isEmptyIgnoringNullReferences())
+        return;
+
+    bool shouldDeref = false;
+    {
+        Locker locker { m_abortAlgorithmsLock };
+        if (m_abortAlgorithms.isEmpty()) {
+            cancelTimer();
+            shouldDeref = true;
+        }
+    }
+    // Release the extra ref after the lock is released, since deref()
+    // may destroy `this` (and m_abortAlgorithmsLock with it).
+    if (shouldDeref)
+        deref(); // balances the ref() in AbortSignal::timeout()
+}
+
 void AbortSignal::eventListenersDidChange()
 {
     bool hasListeners = hasEventListeners(eventNames().abortEvent) or !m_native_callbacks.isEmpty();
@@ -289,22 +320,8 @@ void AbortSignal::eventListenersDidChange()
     // to notify when the timer fires.  Cancel the timer and release the extra
     // ref that timeout() took to keep the signal alive, so the C++ object can
     // be destroyed normally.
-    if (!hasListeners && m_timeout && !aborted()
-        && m_algorithms.isEmpty() && !hasPendingActivity()
-        && m_dependentSignals.isEmptyIgnoringNullReferences()) {
-        bool shouldDeref = false;
-        {
-            Locker locker { m_abortAlgorithmsLock };
-            if (m_abortAlgorithms.isEmpty()) {
-                cancelTimer();
-                shouldDeref = true;
-            }
-        }
-        // Release the extra ref after the lock is released, since deref()
-        // may destroy `this` (and m_abortAlgorithmsLock with it).
-        if (shouldDeref)
-            deref(); // balances the ref() in AbortSignal::timeout()
-    }
+    if (!hasListeners)
+        releaseTimeoutIfUnobserved();
 }
 
 uint32_t AbortSignal::addAbortAlgorithmToSignal(AbortSignal& signal, Ref<AbortAlgorithm>&& algorithm)

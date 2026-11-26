@@ -266,16 +266,19 @@ pub export fn TextEncoder__encodeInto16(input_ptr: ?[*]const u16, input_len: usi
         var result: strings.EncodeIntoResult = strings.copyUTF16IntoUTF8(output, input);
         _ = &result;
         if (((output.len >= 3) and ((result.read == 0) or (result.written == 0)))) {
-            const z0: u8 = 239;
-            const z1: u8 = 191;
-            const z2: u8 = 189;
-            const replacement_char: [3]u8 = .{ z0, z1, z2 };
-            _ = @memcpy((blk: {
-            break :blk buf_ptr.?[0..replacement_char.len];
+            const is_surrogate_pair = (((((input.len >= 2) and (input[0] >= 55296)) and (input[0] <= 56319)) and (input[1] >= 56320)) and (input[1] <= 57343));
+            if ((!is_surrogate_pair)) {
+                const z0: u8 = 239;
+                const z1: u8 = 191;
+                const z2: u8 = 189;
+                const replacement_char: [3]u8 = .{ z0, z1, z2 };
+                _ = @memcpy((blk: {
+                break :blk buf_ptr.?[0..replacement_char.len];
 
 }), (&replacement_char));
-            result.read = 1;
-            result.written = 3;
+                result.read = 1;
+                result.written = 3;
+            }
         }
         const sized: [2]u32 = .{ result.read, result.written };
         return @bitCast(sized);

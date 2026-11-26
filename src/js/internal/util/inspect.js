@@ -338,6 +338,156 @@ function isURL(value) {
   return typeof value.href === "string" && value instanceof URL;
 }
 
+const kURLContextSymbol = Symbol("context");
+const kURLSchemeTypes = {
+  __proto__: null,
+  "http:": 0,
+  "https:": 2,
+  "ws:": 3,
+  "ftp:": 4,
+  "wss:": 5,
+  "file:": 6,
+};
+
+class URLContext {
+  constructor(url) {
+    const href = url.href;
+    const protocol = url.protocol;
+    const username = url.username;
+    const password = url.password;
+    const hostname = url.hostname;
+    const port = url.port;
+    const pathname = url.pathname;
+    const search = url.search;
+    const hash = url.hash;
+
+    const protocol_end = protocol.length;
+    let username_end, host_start, host_end, pathname_start;
+
+    if (StringPrototypeStartsWith(href, "//", protocol_end)) {
+      const pos = protocol_end + 2;
+      username_end = pos + username.length;
+      if (username !== "" || password !== "") {
+        host_start = username_end + (password !== "" ? 1 + password.length : 0);
+        host_end = host_start + 1 + hostname.length;
+      } else if (href[pos] === "@") {
+        host_start = pos;
+        host_end = pos + 1 + hostname.length;
+      } else {
+        host_start = pos;
+        host_end = pos + hostname.length;
+      }
+      pathname_start = host_end + (port !== "" ? 1 + port.length : 0);
+    } else {
+      username_end = protocol_end;
+      host_start = protocol_end;
+      host_end = protocol_end;
+      pathname_start = protocol_end;
+      if (
+        StringPrototypeStartsWith(href, "/.", pathname_start) &&
+        pathname.length > 0 &&
+        pathname[0] === "/" &&
+        StringPrototypeStartsWith(href, pathname, pathname_start + 2)
+      ) {
+        pathname_start += 2;
+      }
+    }
+
+    let afterPath = pathname_start + pathname.length;
+    let search_start = 4294967295;
+    if (search !== "") {
+      search_start = afterPath;
+      afterPath += search.length;
+    } else if (afterPath < href.length && href[afterPath] === "?") {
+      search_start = afterPath;
+      afterPath += 1;
+    }
+
+    let hash_start = 4294967295;
+    if (hash !== "") {
+      hash_start = afterPath;
+    } else if (afterPath < href.length && href[afterPath] === "#") {
+      hash_start = afterPath;
+    }
+
+    this.href = href;
+    this.protocol_end = protocol_end;
+    this.username_end = username_end;
+    this.host_start = host_start;
+    this.host_end = host_end;
+    this.pathname_start = pathname_start;
+    this.search_start = search_start;
+    this.hash_start = hash_start;
+    this.port = port !== "" ? NumberParseInt(port, 10) : 4294967295;
+    this.scheme_type = kURLSchemeTypes[protocol] ?? 1;
+
+    ObjectDefineProperty(this, "hasPort", {
+      __proto__: null,
+      get() {
+        return this.port !== 4294967295;
+      },
+      enumerable: false,
+      configurable: true,
+    });
+    ObjectDefineProperty(this, "hasSearch", {
+      __proto__: null,
+      get() {
+        return this.search_start !== 4294967295;
+      },
+      enumerable: false,
+      configurable: true,
+    });
+    ObjectDefineProperty(this, "hasHash", {
+      __proto__: null,
+      get() {
+        return this.hash_start !== 4294967295;
+      },
+      enumerable: false,
+      configurable: true,
+    });
+  }
+}
+
+function formatURL(value, ctx, recurseTimes) {
+  const urlObj = {
+    href: value.href,
+    origin: value.origin,
+    protocol: value.protocol,
+    username: value.username,
+    password: value.password,
+    host: value.host,
+    hostname: value.hostname,
+    port: value.port,
+    pathname: value.pathname,
+    search: value.search,
+    searchParams: value.searchParams,
+    hash: value.hash,
+  };
+  const urlKeys = [
+    "href",
+    "origin",
+    "protocol",
+    "username",
+    "password",
+    "host",
+    "hostname",
+    "port",
+    "pathname",
+    "search",
+    "searchParams",
+    "hash",
+  ];
+  if (ctx.showHidden) {
+    urlObj[kURLContextSymbol] = new URLContext(value);
+    ArrayPrototypePush.$call(urlKeys, kURLContextSymbol);
+  }
+  const output = [];
+  for (let i = 0; i < urlKeys.length; i++) {
+    ArrayPrototypePush.$call(output, formatProperty(ctx, urlObj, recurseTimes, urlKeys[i], kObjectType));
+  }
+  return output;
+}
+
 const builtInObjects = new SafeSet(
   ArrayPrototypeFilter(
     ObjectGetOwnPropertyNames(globalThis),
@@ -1376,11 +1526,20 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
       if (keys.length === 0 && protoProps === undefined) {
         return base;
       }
-    } else if (isURL(value) && !(recurseTimes > ctx.depth && ctx.depth !== null)) {
-      base = value.href;
-      if (keys.length === 0 && protoProps === undefined) {
-        return base;
+    } else if (isURL(value)) {
+      const prefix = getPrefix(constructor, tag, "URL");
+      if (recurseTimes > ctx.depth && ctx.depth !== null) {
+        return `${prefix}{}`;
       }
+      formatter = FunctionPrototypeBind(formatURL, null, value);
+      braces = [`${prefix}{`, "}"];
+      protoProps = undefined;
+    } else if (value instanceof URLSearchParams) {
+      const size = value.size;
+      const prefix = getPrefix(constructor, tag, "URLSearchParams");
+      formatter = FunctionPrototypeBind(formatMap, null, value);
+      if (size === 0 && keys.length === 0 && protoProps === undefined) return `${prefix}{}`;
+      braces = [`${prefix}{`, "}"];
     } else {
       if (keys.length === 0 && protoProps === undefined) {
         if (isExternal(value)) {

@@ -3818,7 +3818,7 @@ _ = p.print("{");
                     if ((property.*).flags.contains(.is_spread)) {
                         _ = p.print("...");
                     } else {
-                        if ((property.*).flags.contains(.is_computed)) {
+                        if (((property.*).flags.contains(.is_computed) or p.propertyKeyMustBeComputed((property.*).key))) {
                             _ = p.print("[");
                             _ = p.printExpr((property.*).key, .comma, ExprFlag.Set.initEmpty());
                             _ = p.print("]:");

@@ -212,10 +212,15 @@ class RopeStringEncoder {
     const input = unsafe { input_ptr.?[0..input_len] };
     let result: strings.EncodeIntoResult = strings.copyUTF16IntoUTF8(output, input);
     if (output.len >= 3 && (result.read == 0 || result.written == 0)) {
-        const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
-        @memcpy(unsafe { buf_ptr.?[0..replacement_char.len] }, &replacement_char);
-        result.read = 1;
-        result.written = 3;
+        const is_surrogate_pair = input.len >= 2 &&
+            input[0] >= 0xD800 && input[0] <= 0xDBFF &&
+            input[1] >= 0xDC00 && input[1] <= 0xDFFF;
+        if (!is_surrogate_pair) {
+            const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
+            @memcpy(unsafe { buf_ptr.?[0..replacement_char.len] }, &replacement_char);
+            result.read = 1;
+            result.written = 3;
+        }
     }
     const sized: [2]u32 = .{ result.read, result.written };
     return @bitCast(sized);

@@ -85,6 +85,7 @@ public:
     void dispatchOneMessage(ScriptExecutionContext&, MessageWithMessagePorts&&);
     void beginDispatch() { ++m_dispatchDepth; }
     void endDispatch();
+    void peerClosed();
 
     // Only here for JSMessagePortCustom's GC optimization; always null.
     MessagePort* locallyEntangledPort() { return nullptr; }
@@ -119,6 +120,8 @@ private:
 
     void contextDestroyed() final;
     void closeInternal(bool force);
+    void flushQueuedMessagesBeforeClose();
+    void dispatchCloseEvent();
 
     bool isEntangled() const { return !m_isDetached && !m_closePending; }
 
@@ -131,7 +134,10 @@ private:
     bool m_started { false };
     bool m_isDetached { false };
     bool m_closePending { false };
+    bool m_closeEventPending { false };
+    bool m_closeEventDispatched { false };
     bool m_hasMessageEventListener { false };
+    bool m_hasCloseEventListener { false };
     bool m_hasRef { false };
 
     uint32_t m_dispatchDepth { 0 };

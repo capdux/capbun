@@ -151,6 +151,17 @@ pub inline fn websocket(self: ServerWebSocket) uws.AnyWebSocket {
         return self.#flags.websocket();
 }
 
+pub fn fd(self: ServerWebSocket) bun.FD {
+        if (self.#flags.closed) {
+            return bun.invalid_fd;
+        }
+        const sock_ptr: *uws.us_socket_t = (blk: {
+        break :blk @ptrCast(self.websocket().raw());
+
+});
+        return sock_ptr.getFd();
+}
+
 pub fn init(handler: *WebSocketServer.Handler, data_value: jsc.JSValue, signal: ?*bun.webcore.AbortSignal) *ServerWebSocket {
         const globalObject = handler.globalObject;
         const ws_obj = ServerWebSocket.@"new"(.{ .#handler = handler, .#signal = signal });

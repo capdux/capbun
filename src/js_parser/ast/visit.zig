@@ -848,7 +848,7 @@ else => {
                         _ = &init_count;
                         for (cp_iter_slice(cls.properties)) |prop| {
                             _ = &prop;
-                            if ((((prop.kind == .normal) and (!prop.flags.contains(.is_static))) and (!(cls.should_lower_standard_decorators and (prop.ts_decorators.len > 0))))) {
+                            if (((((prop.kind == .normal) and (!prop.flags.contains(.is_method))) and (!prop.flags.contains(.is_static))) and (!(cls.should_lower_standard_decorators and (prop.ts_decorators.len > 0))))) {
                                 if (prop.key) |key_expr| {
                                     _ = &key_expr;
                                     if ((key_expr.data != .e_private_identifier)) {
@@ -896,7 +896,7 @@ else => {
                             _ = &assign_stmts;
                             for (cp_iter_slice(cls.properties)) |prop| {
                                 _ = &prop;
-                                if ((((prop.kind == .normal) and (!prop.flags.contains(.is_static))) and (!(cls.should_lower_standard_decorators and (prop.ts_decorators.len > 0))))) {
+                                if (((((prop.kind == .normal) and (!prop.flags.contains(.is_method))) and (!prop.flags.contains(.is_static))) and (!(cls.should_lower_standard_decorators and (prop.ts_decorators.len > 0))))) {
                                     if (prop.key) |key_expr| {
                                         _ = &key_expr;
                                         if ((key_expr.data != .e_private_identifier)) {

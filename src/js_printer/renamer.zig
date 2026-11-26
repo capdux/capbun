@@ -294,7 +294,13 @@ pub fn nameForSymbol(self: *MinifyRenamer, _ref: Ref) []const u8 {
             if ((ns == .must_not_be_renamed)) {
                 return symbol.original_name;
             }
-            const i = ((symbol.nestedScopeSlot()) orelse (((self.top_level_symbol_to_slot.get(sym_ref)) orelse { return symbol.original_name; })));
+            const i = ((self.top_level_symbol_to_slot.get(sym_ref)) orelse (brk: {
+            const nested = ((symbol.nestedScopeSlot()) orelse { return symbol.original_name; });
+            if ((nested >= self.slots.get(ns).items.len)) {
+                return symbol.original_name;
+            }
+            break :brk nested;
+}));
             return (if (@typeInfo(@TypeOf(self.slots.getPtr(ns).items[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(self.slots.getPtr(ns).items[@as(usize, @intCast(i))])) == .@"union") @tagName(self.slots.getPtr(ns).items[@as(usize, @intCast(i))]) else self.slots.getPtr(ns).items[@as(usize, @intCast(i))].name).slice();
     }
 
@@ -332,13 +338,17 @@ pub fn accumulateSymbolUseCount(self: *MinifyRenamer, top_level_symbols: *Stable
             }
             if (symbol.nestedScopeSlot()) |i| {
                 _ = &i;
-                var slot = (&self.slots.getPtr(ns).items[@as(usize, @intCast(i))]);
-                _ = &slot;
-                slot.count = (slot.count + count);
-                if (symbol.must_start_with_capital_letter_for_jsx) {
-                    slot.needs_capital_for_jsx = true;
+                var ns_slots = self.slots.getPtr(ns);
+                _ = &ns_slots;
+                if ((i < ns_slots.items.len)) {
+                    var slot = (&ns_slots.items[@as(usize, @intCast(i))]);
+                    _ = &slot;
+                    slot.count = (slot.count + count);
+                    if (symbol.must_start_with_capital_letter_for_jsx) {
+                        slot.needs_capital_for_jsx = true;
+                    }
+                    return;
                 }
-                return;
             }
             _ = try top_level_symbols.append(StableSymbolCount{ .stable_source_index = stable_source_indices[@as(usize, @intCast(sym_ref.sourceIndex()))], .ref = sym_ref, .count = count });
     }
