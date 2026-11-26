@@ -912,8 +912,13 @@ pub struct JSFrameworkRouter {
         let path = path_value.toSlice(global, bun.default_allocator)?;
         const _guard_path = DeinitGuard<@TypeOf(path)>{ ptr: &path };
 
+        const path_slice = path.slice();
+        if (path_slice.len == 0 || path_slice[0] != '/') {
+            return JSValue.jsNull();
+        }
+
         let params_out: MatchedParams = undefined;
-        if (index := jsfr.router.matchSlow(path.slice(), &params_out)) {
+        if (index := jsfr.router.matchSlow(path_slice, &params_out)) {
             let sfb = std.heap.stackFallback(4096, bun.default_allocator);
             const alloc = sfb.get();
 
@@ -1435,7 +1440,11 @@ fn scanInner(
                     if (p := t.style.parse(rel_path, ext, &log, t.allow_layouts, arena_state.allocator()) catch null) {
                         parsed_opt = p;
                     } else {
-                        log.cursor_at += @as(u32, @intCast(t.abs_root.len - _.root.len));
+                        if (t.abs_root.len > _.root.len) {
+                            log.cursor_at += @as(u32, @intCast(t.abs_root.len - _.root.len - 1));
+                        } else if (t.abs_root.len == _.root.len && log.cursor_at > 0) {
+                            log.cursor_at -= 1;
+                        }
                         ctx.vtable.onRouterSyntaxError(ctx.opaque_ctx, full_rel_path, log)?;
                         continue :outer;
                     }

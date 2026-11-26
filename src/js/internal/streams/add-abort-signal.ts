@@ -33,7 +33,11 @@ function addAbortSignalNoValidate(signal, stream) {
         stream.destroy($makeAbortError(undefined, { cause: signal.reason }));
       }
     : () => {
-        stream[kControllerErrorFunction]($makeAbortError(undefined, { cause: signal.reason }));
+        if (stream[kControllerErrorFunction]) {
+          stream[kControllerErrorFunction]($makeAbortError(undefined, { cause: signal.reason }));
+        } else if (typeof stream.abort === "function") {
+          stream.abort($makeAbortError(undefined, { cause: signal.reason }))?.catch(() => {});
+        }
       };
   if (signal.aborted) {
     onAbort();

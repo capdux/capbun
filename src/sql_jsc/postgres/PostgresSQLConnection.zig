@@ -1386,6 +1386,7 @@ pub fn refAndClose(self: *PostgresSQLConnection, js_reason: ?jsc.JSValue) void {
         if ((!self.socket.isClosed())) {
             if ((self.status == .failed)) {
                 _ = self.socket.terminate();
+                _ = self.poll_ref.unref(self.vm);
             } else {
                 _ = self.poll_ref.ref(self.vm);
                 _ = self.socket.close();

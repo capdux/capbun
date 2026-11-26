@@ -786,9 +786,13 @@ pub fn match(jsfr: *JSFrameworkRouter, global: *JSGlobalObject, callframe: *jsc.
             _ = &_guard_path;
             var ___guard_path_moved = false; _ = &___guard_path_moved;
             defer if (!___guard_path_moved) { ___guard_path_moved = true; const __T = @TypeOf(_guard_path); if (@typeInfo(__T) == .optional) { if (_guard_path) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_path.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_path; _drop_val.__cp_deinit(); } };
+            const path_slice = path.slice();
+            if (((path_slice.len == 0) or (path_slice[0] != 47))) {
+                return JSValue.jsNull();
+            }
             var params_out: MatchedParams = undefined;
             _ = &params_out;
-            if (jsfr.router.matchSlow(path.slice(), (&params_out))) |index| {
+            if (jsfr.router.matchSlow(path_slice, (&params_out))) |index| {
                 _ = &index;
                 var sfb = std.heap.stackFallback(4096, bun.default_allocator);
                 _ = &sfb;
@@ -1252,7 +1256,13 @@ const ext = std.fs.path.extension(base);
                     _ = &p;
                     parsed_opt = p;
                 } else {
-                    log.cursor_at = (log.cursor_at + @as(u32, @intCast((t.abs_root.len - self.root.len))));
+                    if ((t.abs_root.len > self.root.len)) {
+                        log.cursor_at = (log.cursor_at + @as(u32, @intCast(((t.abs_root.len - self.root.len) - 1))));
+                    } else {
+                        if (((t.abs_root.len == self.root.len) and (log.cursor_at > 0))) {
+                            log.cursor_at = (log.cursor_at - 1);
+                        }
+                    }
                     _ = try ctx.vtable.onRouterSyntaxError(ctx.opaque_ctx, full_rel_path, log);
                     continue :outer;
                 }

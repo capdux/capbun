@@ -1034,3 +1034,9 @@
 - **`cli/test`**：`pretty_format.cp` 增加 `bun.StackCheck` 深度递归栈溢出防护，`expect.cp` 透传 `RangeError` -> 深度嵌套数组/对象/JSX/matcher 及 `--todo`/`--bail`/`--timeout` 全部通过。
 - **`cli/run/require-cache.test.ts`**：`ZigGlobalObject.cpp` `functionEsmRegistryDelete` 禁止删除未求值完成的 ESM entry -> 4 项 loading 期间 `delete require.cache[esm]` 全部通过。
 - **缺口确认**：`test/cli/lint`、`test/cli/format`、`test/cli/check` 对应上游独立 Rust `oxlint`/`oxfmt`/`tsgo` crate（与 `scripts/upstream_sync.py` `SKIP_CRATES` 一致，当前 CP-Bun 不包含这些 crate）。
+
+### 2026-11-26 Batch 6 测试修复与验证（`http2` / `sql` / `web/streams` / `bake`）
+- **`http2/h2-conformance.test.ts`**：`h2_frame_parser.cp` 新增 RFC 9113 §8.1 (`content-length`) 与 §8.3.1 (伪头/hop-by-hop) 校验，`http2.ts` `streamHeaders` 兼容双签名 -> 4 项合法请求全部通过派发。
+- **`sql/sql-close-pending-connection.test.ts`**：`postgres.ts`/`mysql.ts` 修复 `if (timeout !== undefined)`，`PostgresSQLConnection.cp` `refAndClose` 补 `poll_ref.unref` -> `postgres` 4 项 pending close/timeout 全部通过。
+- **`web/streams`**：`CompressionStream.ts`/`DecompressionStream.ts`/`zlib.ts`/`end-of-stream.ts`/`add-abort-signal.ts` 切换为 `$createTransformStream` + `node:zlib` 直驱并修复 `"readable"`/`"writable"` 私有槽位 -> `zstd` 多帧、`ArrayBuffer` chunks、`bounded output`（`gzip`/`deflate`/`deflate-raw`/`zstd`）全部通过。
+- **`bake`**：`bake.cp` 与 `FrameworkRouter.cp` 修复 `getOptionalString` `comptime`、`SplitBundlerOptions` `DeinitGuard`、`match` 空路径、`cursor_at` 偏移 -> `index out of bounds: index 0, len 0` panic 消除。

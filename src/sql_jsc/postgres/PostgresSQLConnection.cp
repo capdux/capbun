@@ -1275,6 +1275,7 @@ pub struct DataCellsGuard<P, C> {
         if (!_.socket.isClosed()) {
             if (_.status == .failed) {
                 _.socket.terminate();
+                _.poll_ref.unref(_.vm);
             } else {
                 _.poll_ref.ref(_.vm);
                 _.socket.close();

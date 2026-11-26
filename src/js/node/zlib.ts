@@ -128,6 +128,10 @@ function zlibOnError(message, errno, code) {
   const error = new Error(message);
   error.errno = errno;
   error.code = code;
+  if (self._webStreamCallback) {
+    self._webStreamCallback(error, 0, 0);
+    return;
+  }
   self.destroy(error);
   self[kError] = error;
 }
@@ -424,6 +428,11 @@ function processCallback() {
   const handle = this;
   const self = this[owner_symbol];
   const state = self._writeState;
+
+  if (self._webStreamCallback) {
+    self._webStreamCallback(null, state[0], state[1]);
+    return;
+  }
 
   if (self.destroyed) {
     this.buffer = null;

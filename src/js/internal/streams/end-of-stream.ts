@@ -268,7 +268,10 @@ function eosWeb(stream, options, callback) {
       process.nextTick(() => callback.$apply(stream, args));
     }
   };
-  PromisePrototypeThen.$call(stream[kIsClosedPromise].promise, resolverFn, resolverFn);
+  const closedPromise = stream[kIsClosedPromise]?.promise;
+  if (closedPromise) {
+    PromisePrototypeThen.$call(closedPromise, resolverFn, resolverFn);
+  }
   return nop;
 }
 

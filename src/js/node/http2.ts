@@ -3546,8 +3546,17 @@ class ServerHttp2Session extends Http2Session {
       flags: number,
     ) {
       if (!self || typeof stream !== "object" || self.closed || stream.closed) return;
-      let rawheaders = headersTuple[0];
-      let headers = headersTuple[1];
+      let rawheaders: string[];
+      let headers: Record<string, any>;
+      if (headersTuple.length === 0 || typeof headersTuple[0] === "string") {
+        rawheaders = headersTuple as unknown as string[];
+        const sensitive = arguments[2] as string[] | undefined;
+        headers = toHeaderObject(rawheaders, sensitive || []);
+        flags = arguments[3] as number;
+      } else {
+        rawheaders = headersTuple[0];
+        headers = headersTuple[1];
+      }
       if (self.#strictFieldWhitespaceValidation) {
         // stripInvalidWhitespaceFields returns its input by identity when nothing was
         // stripped (the common case) — only then can the native-built object be reused.
@@ -4279,8 +4288,17 @@ class ClientHttp2Session extends Http2Session {
       flags: number,
     ) {
       if (!self || typeof stream !== "object" || stream.rstCode) return;
-      let rawheaders = headersTuple[0];
-      let headers = headersTuple[1];
+      let rawheaders: string[];
+      let headers: Record<string, any>;
+      if (headersTuple.length === 0 || typeof headersTuple[0] === "string") {
+        rawheaders = headersTuple as unknown as string[];
+        const sensitive = arguments[2] as string[] | undefined;
+        headers = toHeaderObject(rawheaders, sensitive || []);
+        flags = arguments[3] as number;
+      } else {
+        rawheaders = headersTuple[0];
+        headers = headersTuple[1];
+      }
       if (self.#strictFieldWhitespaceValidation) {
         // stripInvalidWhitespaceFields returns its input by identity when nothing was
         // stripped (the common case) — only then can the native-built object be reused.

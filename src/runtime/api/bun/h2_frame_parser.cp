@@ -1019,6 +1019,9 @@ struct Stream {
     closeAfterDrain: bool = false,
     endAfterHeaders: bool = false,
     isWaitingMoreHeaders: bool = false,
+    hasReceivedHeaders: bool = false,
+    expectedContentLength: u64? = null,
+    receivedContentLength: u64 = 0,
     headerBlockSize: usize = 0,
     headerBlockCount: usize = 0,
     headerBlockBuffer: std.ArrayListUnmanaged(u8) = .{},
@@ -2208,6 +2211,18 @@ pub struct H2FrameParser {
 
         let sensitiveHeaders: JSValue = .js_undefined;
         let malformed = false;
+        const is_trailer = stream.hasReceivedHeaders;
+        let saw_regular = false;
+        let has_method = false;
+        let is_connect = false;
+        let has_scheme = false;
+        let has_path = false;
+        let path_empty = false;
+        let has_authority = false;
+        let has_protocol = false;
+        let has_host = false;
+        let expected_cl: u64? = null;
+        let cl_count: u8 = 0;
 
         while (true) {
             const header = _.decode(payload[offset..]) catch break;
@@ -2245,10 +2260,64 @@ pub struct H2FrameParser {
                 return _.streams.get(stream_id);
             }
 
+            const is_pseudo = header.name.len > 0 && header.name[0] == ':';
+            if (is_pseudo) {
+                if (is_trailer || saw_regular) {
+                    malformed = true;
+                } else if (_.isServer) {
+                    if (strings.eqlComptime(header.name, ":method")) {
+                        if (has_method) malformed = true;
+                        has_method = true;
+                        is_connect = strings.eqlComptime(header.value, "CONNECT");
+                    } else if (strings.eqlComptime(header.name, ":scheme")) {
+                        if (has_scheme) malformed = true;
+                        has_scheme = true;
+                    } else if (strings.eqlComptime(header.name, ":path")) {
+                        if (has_path) malformed = true;
+                        has_path = true;
+                        if (header.value.len == 0) path_empty = true;
+                    } else if (strings.eqlComptime(header.name, ":authority")) {
+                        if (has_authority) malformed = true;
+                        has_authority = true;
+                    } else if (strings.eqlComptime(header.name, ":protocol")) {
+                        if (has_protocol) malformed = true;
+                        has_protocol = true;
+                    }
+                }
+            } else {
+                saw_regular = true;
+                if (_.isServer) {
+                    if (strings.eqlComptime(header.name, "host")) {
+                        has_host = true;
+                    } else if (strings.eqlComptime(header.name, "connection") ||
+                        strings.eqlComptime(header.name, "keep-alive") ||
+                        strings.eqlComptime(header.name, "proxy-connection") ||
+                        strings.eqlComptime(header.name, "transfer-encoding") ||
+                        strings.eqlComptime(header.name, "upgrade"))
+                    {
+                        malformed = true;
+                    } else if (strings.eqlComptime(header.name, "te")) {
+                        if (!strings.eqlComptime(header.value, "trailers")) malformed = true;
+                    } else if (!is_trailer && strings.eqlComptime(header.name, "content-length")) {
+                        if (cl_count > 0 || header.value.len == 0) {
+                            malformed = true;
+                        } else {
+                            const parsed = std.fmt.parseInt(u64, header.value, 10) catch null;
+                            if (p := parsed) {
+                                expected_cl = p;
+                                cl_count += 1;
+                            } else {
+                                malformed = true;
+                            }
+                        }
+                    }
+                }
+            }
+
             if (malformed ||
                 isMalformedFieldName(header.name) ||
                 isMalformedFieldValue(header.value) ||
-                (header.name.len > 0 && header.name[0] == ':' && !(if (_.isServer) ValidRequestPseudoHeaders.has(header.name) else ValidResponsePseudoHeaders.has(header.name))))
+                (is_pseudo && !(if (_.isServer) ValidRequestPseudoHeaders.has(header.name) else ValidResponsePseudoHeaders.has(header.name))))
             {
                 malformed = true;
             } else if (js_header_name := getHTTP2CommonString(globalObject, header.well_know)) {
@@ -2285,10 +2354,40 @@ pub struct H2FrameParser {
             }
         }
 
+        if (_.isServer && !is_trailer && !malformed) {
+            if (!has_method) {
+                malformed = true;
+            } else if (is_connect) {
+                if (has_protocol) {
+                    if (!_.localSettings.enableConnectProtocol || !has_scheme || !has_path || path_empty || !has_authority) {
+                        malformed = true;
+                    }
+                } else {
+                    if (has_scheme || has_path || !has_authority) {
+                        malformed = true;
+                    }
+                }
+            } else {
+                if (has_protocol || !has_scheme || !has_path || path_empty || (!has_authority && !has_host)) {
+                    malformed = true;
+                }
+            }
+            if (!malformed) {
+                if (exp := expected_cl) {
+                    if ((flags & @intFromEnum(HeadersFrameFlags.END_STREAM)) != 0 && exp != 0) {
+                        malformed = true;
+                    } else {
+                        stream.expectedContentLength = exp;
+                    }
+                }
+            }
+        }
+
         if (malformed) {
             _.endStream(stream, ErrorCode.PROTOCOL_ERROR);
             return _.streams.get(stream_id);
         }
+        stream.hasReceivedHeaders = true;
 
         _.dispatchWith3Extra(.onStreamHeaders, stream.getIdentifier(), headers, sensitiveHeaders, jsc.JSValue.jsNumber(flags));
         return _.streams.get(stream_id);
@@ -2384,6 +2483,13 @@ pub struct H2FrameParser {
             });
 
             if (payload.len > 0) {
+                stream.receivedContentLength += payload.len;
+                if (exp := stream.expectedContentLength) {
+                    if (stream.receivedContentLength > exp) {
+                        _.endStream(stream, ErrorCode.PROTOCOL_ERROR);
+                        return end;
+                    }
+                }
                 // no padding, just emit the data
                 const chunk = _.handlers.binary_type.toJS(payload, _.handlers.globalObject) catch .zero; // TODO: properly propagate exception upwards
                 _.dispatchWithExtra(.onStreamData, stream.getIdentifier(), chunk);
@@ -2397,6 +2503,12 @@ pub struct H2FrameParser {
                 if (_stream_v := _.streams.get(frame.streamIdentifier)) { stream = _stream_v; } else return end;
             }
             if ((frame.flags & @intFromEnum(DataFrameFlags.END_STREAM)) != 0) {
+                if (exp := stream.expectedContentLength) {
+                    if (stream.receivedContentLength != exp) {
+                        _.endStream(stream, ErrorCode.PROTOCOL_ERROR);
+                        return end;
+                    }
+                }
                 const identifier = stream.getIdentifier();
                 identifier.ensureStillAlive();
 

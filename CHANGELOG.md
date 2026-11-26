@@ -2398,3 +2398,10 @@
 - `src/css/css_parser.cp` (.zig), `src/css/values/url.cp` (.zig), `src/css/values/image.cp` (.zig), `src/css/properties/css_modules.cp` (.zig), `src/css/printer.cp` (.zig)
 - `src/test_runner/pretty_format.cp` (.zig), `src/test_runner/expect.cp` (.zig), `src/jsc/bindings/ZigGlobalObject.cpp`
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 6 测试收敛提交
+- `src/runtime/api/bun/h2_frame_parser.cp` (.zig), `src/js/node/http2.ts`
+- `src/js/internal/sql/postgres.ts`, `src/js/internal/sql/mysql.ts`, `src/sql_jsc/postgres/PostgresSQLConnection.cp` (.zig)
+- `src/js/builtins/CompressionStream.ts`, `src/js/builtins/DecompressionStream.ts`, `src/js/node/zlib.ts`, `src/js/internal/streams/end-of-stream.ts`, `src/js/internal/streams/add-abort-signal.ts`
+- `src/bake/bake.cp` (.zig), `src/bake/FrameworkRouter.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`

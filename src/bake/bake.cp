@@ -74,6 +74,7 @@ pub struct UserOptions {
         let allocations = StringRefList.empty;
         let _g_allocs = FreeGuard<@TypeOf(allocations)>{ ptr: unsafe { &allocations } };
         let bundler_options = SplitBundlerOptions.empty;
+        let _g_bundler = DeinitGuard<SplitBundlerOptions>{ ptr: unsafe { &bundler_options } };
 
         if (!config.isObject()) {
             // Allow users to do `export default { app: 'react' }` for convenience
@@ -149,6 +150,7 @@ pub struct UserOptions {
         }
 
         const duped_root = alloc.dupeZ(u8, root)?;
+        _g_bundler.ptr = null;
         _g_allocs.ptr = null;
         _g_arena.ptr = null;
         return UserOptions{
@@ -183,6 +185,10 @@ pub struct SplitBundlerOptions {
     client: BuildConfigSubset = BuildConfigSubset{},
     server: BuildConfigSubset = BuildConfigSubset{},
     ssr: BuildConfigSubset = BuildConfigSubset{},
+
+    fn deinit(*_) {
+        if (p := _.plugin) p.deinit();
+    }
 
     pub const empty: SplitBundlerOptions = SplitBundlerOptions{
         plugin: null,
@@ -490,7 +496,12 @@ pub struct Framework {
             had_errors.* = true;
             return;
         };
-        path.* = result.path().?.text;
+        if (p := result.path()) {
+            path.* = p.text;
+        } else {
+            bun.Output.err(error.ModuleNotFound, "Failed to resolve '{s}' for framework ({s})", .{ path.*, desc });
+            had_errors.* = true;
+        }
     }
 
     static inline fn resolveOrNull(r: *bun.resolver.Resolver, path: []const u8): ([]const u8)? {
@@ -880,9 +891,9 @@ fn frameworkFromJS(
             const default_ignore: [2][]const u8 = [ ".git", "node_modules" ];
             const ignore_dirs: []const []const u8 = if (exts_js := fsr_opts.get(global, "ignoreDirs")?) dirs_blk: {
                 if (exts_js.isArray()) {
-                    let it_2 = fsr_array.arrayIterator(global)?;
+                    let it_2 = exts_js.arrayIterator(global)?;
                     let i_2: usize = 0;
-                    let dirs = arena.alloc([]const u8, fsr_len)?;
+                    let dirs = arena.alloc([]const u8, exts_js.getLength(global)?)?;
                     while (array_item := it_2.next()?) : (i_2 += 1) {
                         dirs[i_2] = refs.track(array_item.toSlice(global, arena)?);
                     }
@@ -927,17 +938,15 @@ fn frameworkFromJS(
 fn getOptionalString(
     target: JSValue,
     global: *jsc.JSGlobalObject,
-    property: []const u8,
+    comptime property: []const u8,
     allocations: *StringRefList,
     arena_alloc: Allocator,
 ): ([]const u8)?! {
-    const maybe_value = (target.get(global, property))?;
-    if (maybe_value == null) return null;
-    const value = maybe_value.?;
-    if (value.isUndefinedOrNull())
-        return null;
-    const str = (value.toBunString(global))?;
-    return allocations.track(str.toUTF8(arena_alloc));
+    * = arena_alloc;
+    if (slice := target.getOptional(global, property, ZigString.Slice)?) {
+        return allocations.track(slice);
+    }
+    return null;
 }
 
 pub struct HmrRuntime {
