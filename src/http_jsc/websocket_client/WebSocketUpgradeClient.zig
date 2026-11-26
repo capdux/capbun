@@ -344,6 +344,31 @@ const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
 const empty_zig_slices: [0]ZigSlice = undefined;
 const empty_byte_slices: []const []const u8 = &.{};
 
+pub fn parseWindowBits(value: []const u8) ?u8 {
+        if ((value.len == 0)) {
+            return null;
+        }
+        const unquoted = (if ((((value.len >= 2) and (value[0] == 34)) and (value[@as(usize, @intCast((value.len - 1)))] == 34))) value[1..(value.len - 1)] else value);
+        if (((unquoted.len == 0) or (unquoted.len > 2))) {
+            return null;
+        }
+        if (((unquoted[0] < 49) or (unquoted[0] > 57))) {
+            return null;
+        }
+        var i: usize = 1;
+        _ = &i;
+        while ((i < unquoted.len)) : (i = (i + 1)) {
+            if (((unquoted[@as(usize, @intCast(i))] < 48) or (unquoted[@as(usize, @intCast(i))] > 57))) {
+                return null;
+            }
+        }
+        const bits = (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseInt(u8, unquoted, 10)) catch |__ce_0| { _ = &__ce_0; return null; }); });
+        if (((bits < DeflateParams.MIN_WINDOW_BITS) or (bits > DeflateParams.MAX_WINDOW_BITS))) {
+            return null;
+        }
+        return bits;
+}
+
 pub fn buildConnectRequest(target_host: []const u8, target_port: u16, proxy_authorization: ?[]const u8, proxy_headers: ?Headers) std.mem.Allocator.Error![]u8 {
         const allocator = bun.default_allocator;
         var buf = std.array_list.Managed(u8).init(allocator);
@@ -442,12 +467,12 @@ pub fn buildRequestBody(vm: *jsc.VirtualMachine, pathname: []const u8, is_https:
             _ = &k_slice;
             var decoded_buf: [24]u8 = undefined;
             _ = &decoded_buf;
-            const decoded_len = (blk_catch_0: { break :blk_catch_0 ((std.base64.standard.Decoder.calcSizeForSlice(k_slice)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 0; }); });
+            const decoded_len = (blk_catch_1: { break :blk_catch_1 ((std.base64.standard.Decoder.calcSizeForSlice(k_slice)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 0; }); });
             if ((decoded_len == 16)) {
                 var decode_ok = true;
                 _ = &decode_ok;
-                _ = (blk_catch_1: { break :blk_catch_1 ((std.base64.standard.Decoder.decode((&decoded_buf), k_slice)) catch |__ce_1| { _ = &__ce_1; decode_ok = false;
-                break :blk_catch_1 {}; }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((std.base64.standard.Decoder.decode((&decoded_buf), k_slice)) catch |__ce_2| { _ = &__ce_2; decode_ok = false;
+                break :blk_catch_2 {}; }); });
                 if (decode_ok) {
                     break :blk k_slice;
                 }
@@ -498,7 +523,7 @@ pub fn buildRequestBody(vm: *jsc.VirtualMachine, pathname: []const u8, is_https:
 
 pub fn parseSSLConfig(globalThis: *jsc.JSGlobalObject, tls_value: jsc.JSValue) callconv(.c) ?*SSLConfig {
         const vm = globalThis.bunVM();
-        const config_opt = (blk_catch_2: { break :blk_catch_2 ((SSLConfig.fromJS(vm, globalThis, tls_value)) catch |__ce_2| { _ = &__ce_2; return null; }); });
+        const config_opt = (blk_catch_3: { break :blk_catch_3 ((SSLConfig.fromJS(vm, globalThis, tls_value)) catch |__ce_3| { _ = &__ce_3; return null; }); });
         if (config_opt) |config| {
             _ = &config;
             var config_ptr = bun.handleOom(bun.default_allocator.create(SSLConfig));
@@ -944,33 +969,65 @@ pub fn handleData(self: *@This(), socket: Socket, data: []const u8) void {
                     return;
                 }
             }
+            _ = self.handleUpgradeResponseData(data);
+    }
+
+pub fn handleUpgradeResponseData(self: *@This(), data: []const u8) void {
+            const MAX_RESPONSE_HEADER_BYTES: usize = 17408;
             var body = data;
             _ = &body;
             if ((self.body.items.len > 0)) {
                 _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, data));
                 body = self.body.items;
             }
-            const is_first = (self.body.items.len == 0);
-            const http_101: []const u8 = "HTTP/1.1 101 ";
-            if ((is_first and (body.len > http_101.len))) {
-                if ((!strings.hasPrefixComptime(body, http_101))) {
-                    _ = self.terminate(ErrorCode.expected_101_status_code);
+            var consumed: usize = 0;
+            _ = &consumed;
+            while (true) {
+                const http_prefix: []const u8 = "HTTP/1.1 ";
+                const check_len = @min(body.len, http_prefix.len);
+                if ((!std.mem.eql(u8, body[0..check_len], http_prefix[0..check_len]))) {
+                    _ = self.terminate(ErrorCode.invalid_response);
                     return;
                 }
-            }
-            const response = (blk_catch_11: { break :blk_catch_11 ((PicoHTTP.Response.parse(body, (&self.headers_buf))) catch |e| { _ = &e; if ((e == error.Malformed_HTTP_Response)) {
-                _ = self.terminate(ErrorCode.invalid_response);
-                return;
-            } else {
-                if ((e == error.ShortRead)) {
-                    if ((self.body.items.len == 0)) {
-                        _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, data));
+                const response = (blk_catch_11: { break :blk_catch_11 ((PicoHTTP.Response.parse(body, (&self.headers_buf))) catch |e| { _ = &e; if ((e == error.Malformed_HTTP_Response)) {
+                    _ = self.terminate(ErrorCode.invalid_response);
+                    return;
+                } else {
+                    if ((e == error.ShortRead)) {
+                        if (((self.read_length + body.len) > MAX_RESPONSE_HEADER_BYTES)) {
+                            _ = self.terminate(ErrorCode.headers_too_large);
+                            return;
+                        }
+                        if ((self.body.items.len == 0)) {
+                            _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, body));
+                        } else {
+                            if ((consumed > 0)) {
+                                _ = std.mem.copyForwards(u8, self.body.items[0..body.len], body);
+                                self.body.items.len = body.len;
+                            }
+                        }
+                        return;
                     }
+                }
+                return; }); });
+                const bytes_read = @as(usize, @intCast(response.bytes_read));
+                if (((self.read_length + bytes_read) > MAX_RESPONSE_HEADER_BYTES)) {
+                    _ = self.terminate(ErrorCode.headers_too_large);
                     return;
                 }
+                self.read_length = (self.read_length + bytes_read);
+                if ((((response.status_code >= 100) and (response.status_code < 200)) and (response.status_code != 101))) {
+                    consumed = (consumed + bytes_read);
+                    body = body[bytes_read..];
+                    if ((body.len == 0)) {
+                        _ = self.body.clearRetainingCapacity();
+                        return;
+                    }
+                    continue;
+                }
+                _ = self.processResponse(response, body[bytes_read..]);
+                return;
             }
-            return; }); });
-            _ = self.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
     }
 
 pub fn handleProxyResponse(self: *@This(), socket: Socket, data: []const u8) void {
@@ -1088,33 +1145,7 @@ pub fn onProxyTLSHandshakeComplete(self: *@This()) void {
 
 pub fn handleDecryptedData(self: *@This(), data: []const u8) void {
             _ = log("handleDecryptedData: {} bytes", .{ data.len });
-            var body = data;
-            _ = &body;
-            if ((self.body.items.len > 0)) {
-                _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, data));
-                body = self.body.items;
-            }
-            const is_first = (self.body.items.len == 0);
-            const http_101: []const u8 = "HTTP/1.1 101 ";
-            if ((is_first and (body.len > http_101.len))) {
-                if ((!strings.hasPrefixComptime(body, http_101))) {
-                    _ = self.terminate(ErrorCode.expected_101_status_code);
-                    return;
-                }
-            }
-            const response = (blk_catch_16: { break :blk_catch_16 ((PicoHTTP.Response.parse(body, (&self.headers_buf))) catch |e| { _ = &e; if ((e == error.Malformed_HTTP_Response)) {
-                _ = self.terminate(ErrorCode.invalid_response);
-                return;
-            } else {
-                if ((e == error.ShortRead)) {
-                    if ((self.body.items.len == 0)) {
-                        _ = bun.handleOom(self.body.appendSlice(bun.default_allocator, data));
-                    }
-                    return;
-                }
-            }
-            return; }); });
-            _ = self.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
+            _ = self.handleUpgradeResponseData(data);
     }
 
 pub fn handleEnd(self: *@This(), _: Socket) void {
@@ -1131,6 +1162,8 @@ pub fn processResponse(self: *@This(), response: PicoHTTP.Response, remain_buf: 
             _ = &websocket_accept_header;
             var protocol_header_seen = false;
             _ = &protocol_header_seen;
+            var extension_header_seen = false;
+            _ = &extension_header_seen;
             var deflate_result = DeflateNegotiationResult{  };
             _ = &deflate_result;
             if ((response.status_code != 101)) {
@@ -1203,58 +1236,94 @@ if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" 
 },
 24 => {
 if (strings.eqlCaseInsensitiveASCII((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name), "Sec-WebSocket-Extensions", false)) {
-                    if ((!self.offered_permessage_deflate)) {
+                    if (((!self.offered_permessage_deflate) or extension_header_seen)) {
                         _ = self.terminate(ErrorCode.invalid_response);
                         return;
                     }
-                    var it = std.mem.splitScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 44);
-                    _ = &it;
-                    while (it.next()) |ext_str| {
-                        var ext_it = std.mem.splitScalar(u8, std.mem.trim(u8, ext_str, " \t"), 59);
-                        _ = &ext_it;
-                        const ext_name = std.mem.trim(u8, ((ext_it.next()) orelse ("")), " \t");
-                        if (strings.eqlComptime(ext_name, "permessage-deflate")) {
-                            deflate_result.enabled = true;
-                            while (ext_it.next()) |param_str| {
-                                var param_it = std.mem.splitScalar(u8, std.mem.trim(u8, param_str, " \t"), 61);
-                                _ = &param_it;
-                                const key = std.mem.trim(u8, ((param_it.next()) orelse ("")), " \t");
-                                const value = std.mem.trim(u8, ((param_it.next()) orelse ("")), " \t");
-                                if (strings.eqlComptime(key, "server_no_context_takeover")) {
-                                    deflate_result.params.server_no_context_takeover = 1;
+                    extension_header_seen = true;
+                    if ((std.mem.indexOfScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 44) != null)) {
+                        _ = self.terminate(ErrorCode.invalid_response);
+                        return;
+                    }
+                    var ext_it = std.mem.splitScalar(u8, (if (@typeInfo(@TypeOf(header)) == .@"enum") @intFromEnum(header) else header.value), 59);
+                    _ = &ext_it;
+                    const ext_name = std.mem.trim(u8, ((ext_it.next()) orelse ("")), " \t");
+                    if ((!strings.eqlComptime(ext_name, "permessage-deflate"))) {
+                        _ = self.terminate(ErrorCode.invalid_response);
+                        return;
+                    }
+                    deflate_result.enabled = true;
+                    var seen_server_no_context_takeover = false;
+                    _ = &seen_server_no_context_takeover;
+                    var seen_client_no_context_takeover = false;
+                    _ = &seen_client_no_context_takeover;
+                    var seen_server_max_window_bits = false;
+                    _ = &seen_server_max_window_bits;
+                    var seen_client_max_window_bits = false;
+                    _ = &seen_client_max_window_bits;
+                    while (ext_it.next()) |param_str| {
+                        const trimmed_param = std.mem.trim(u8, param_str, " \t");
+                        if ((trimmed_param.len == 0)) {
+                            _ = self.terminate(ErrorCode.invalid_response);
+                            return;
+                        }
+                        if (std.mem.indexOfScalar(u8, trimmed_param, 61)) |eq_idx| {
+                            _ = &eq_idx;
+                            const key = std.mem.trim(u8, trimmed_param[0..eq_idx], " \t");
+                            const value = std.mem.trim(u8, trimmed_param[(eq_idx + 1)..], " \t");
+                            if (strings.eqlComptime(key, "server_max_window_bits")) {
+                                if (seen_server_max_window_bits) {
+                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    return;
+                                }
+                                seen_server_max_window_bits = true;
+                                if (parseWindowBits(value)) |bits| {
+                                    _ = &bits;
+                                    deflate_result.params.server_max_window_bits = bits;
                                 } else {
-                                    if (strings.eqlComptime(key, "client_no_context_takeover")) {
-                                        deflate_result.params.client_no_context_takeover = 1;
-                                    } else {
-                                        if (strings.eqlComptime(key, "server_max_window_bits")) {
-                                            if ((value.len > 0)) {
-                                                const trimmed_value = (if ((((value.len >= 2) and (value[0] == 34)) and (value[@as(usize, @intCast((value.len - 1)))] == 34))) value[1..(value.len - 1)] else value);
-                                                if ((blk_catch_17: { break :blk_catch_17 ((std.fmt.parseInt(u8, trimmed_value, 10)) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 null; }); })) |bits| {
-                                                    _ = &bits;
-                                                    if (((bits >= DeflateParams.MIN_WINDOW_BITS) and (bits <= DeflateParams.MAX_WINDOW_BITS))) {
-                                                        deflate_result.params.server_max_window_bits = bits;
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            if (strings.eqlComptime(key, "client_max_window_bits")) {
-                                                if ((value.len > 0)) {
-                                                    const trimmed_value = (if ((((value.len >= 2) and (value[0] == 34)) and (value[@as(usize, @intCast((value.len - 1)))] == 34))) value[1..(value.len - 1)] else value);
-                                                    if ((blk_catch_18: { break :blk_catch_18 ((std.fmt.parseInt(u8, trimmed_value, 10)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 null; }); })) |bits| {
-                                                        _ = &bits;
-                                                        if (((bits >= DeflateParams.MIN_WINDOW_BITS) and (bits <= DeflateParams.MAX_WINDOW_BITS))) {
-                                                            deflate_result.params.client_max_window_bits = bits;
-                                                        }
-                                                    }
-                                                } else {
-                                                    deflate_result.params.client_max_window_bits = 15;
-                                                }
-                                            }
-                                        }
+                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    return;
+                                }
+                            } else {
+                                if (strings.eqlComptime(key, "client_max_window_bits")) {
+                                    if (seen_client_max_window_bits) {
+                                        _ = self.terminate(ErrorCode.invalid_response);
+                                        return;
                                     }
+                                    seen_client_max_window_bits = true;
+                                    if (parseWindowBits(value)) |bits| {
+                                        _ = &bits;
+                                        deflate_result.params.client_max_window_bits = bits;
+                                    } else {
+                                        _ = self.terminate(ErrorCode.invalid_response);
+                                        return;
+                                    }
+                                } else {
+                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    return;
                                 }
                             }
-                            break;
+                        } else {
+                            if (strings.eqlComptime(trimmed_param, "server_no_context_takeover")) {
+                                if (seen_server_no_context_takeover) {
+                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    return;
+                                }
+                                seen_server_no_context_takeover = true;
+                                deflate_result.params.server_no_context_takeover = 1;
+                            } else {
+                                if (strings.eqlComptime(trimmed_param, "client_no_context_takeover")) {
+                                    if (seen_client_no_context_takeover) {
+                                        _ = self.terminate(ErrorCode.invalid_response);
+                                        return;
+                                    }
+                                    seen_client_no_context_takeover = true;
+                                    deflate_result.params.client_no_context_takeover = 1;
+                                } else {
+                                    _ = self.terminate(ErrorCode.invalid_response);
+                                    return;
+                                }
+                            }
                         }
                     }
                 }
@@ -1292,7 +1361,7 @@ else => {
             var overflow: []u8 = empty_u8[0..0];
             _ = &overflow;
             if ((overflow_len > 0)) {
-                overflow = (blk_catch_19: { break :blk_catch_19 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 bun.outOfMemory(); }); });
+                overflow = (blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 bun.outOfMemory(); }); });
                 _ = @memcpy(overflow, remain_buf);
             }
             var _guard_overflow = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = (if ((overflow_len > 0)) overflow else null) };
@@ -1393,7 +1462,7 @@ pub fn handleWritable(self: *@This(), socket: Socket) void {
                     _ = &_guard_deref;
                     var ___guard_deref_moved = false; _ = &___guard_deref_moved;
                     defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
-                    const wrote = (blk_catch_20: { break :blk_catch_20 ((tunnel.write(self.to_send)) catch |__ce_20| { _ = &__ce_20; _ = self.terminate(ErrorCode.failed_to_write);
+                    const wrote = (blk_catch_17: { break :blk_catch_17 ((tunnel.write(self.to_send)) catch |__ce_17| { _ = &__ce_17; _ = self.terminate(ErrorCode.failed_to_write);
                     return; }); });
                     self.to_send = self.to_send[@min(wrote, self.to_send.len)..];
                     return;

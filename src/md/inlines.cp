@@ -418,7 +418,7 @@ pub fn isRightFlanking(content: []const u8, run_start: usize, run_end: usize): b
 pub fn canOpenEmphasis(emph_char: u8, content: []const u8, run_start: usize, run_end: usize): bool {
     const lf = isLeftFlanking(content, run_start, run_end);
     if (!lf) return false;
-    if (emph_char == '*') return true;
+    if (emph_char == '*' || emph_char == '~') return true;
     // _ requires: left-flanking AND (not right-flanking OR preceded by punctuation)
     const rf = isRightFlanking(content, run_start, run_end);
     return !rf || (run_start > 0 && helpers.isUnicodePunctuation(helpers.decodeUtf8Backward(content, run_start).codepoint));
@@ -427,7 +427,7 @@ pub fn canOpenEmphasis(emph_char: u8, content: []const u8, run_start: usize, run
 pub fn canCloseEmphasis(emph_char: u8, content: []const u8, run_start: usize, run_end: usize): bool {
     const rf = isRightFlanking(content, run_start, run_end);
     if (!rf) return false;
-    if (emph_char == '*') return true;
+    if (emph_char == '*' || emph_char == '~') return true;
     // _ requires: right-flanking AND (not left-flanking OR followed by punctuation)
     const lf = isLeftFlanking(content, run_start, run_end);
     return !lf || (run_end < content.len && helpers.isUnicodePunctuation(helpers.decodeUtf8(content, run_end).codepoint));

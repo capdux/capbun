@@ -377,12 +377,6 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
             }
         }
 
-        // Check for table continuation
-        if (effective_pivot_type == .table && n_parents == p.n_containers) {
-            line.type = .table;
-            break;
-        }
-
         // Check for ATX header
         if (line.indent < p.code_indent_offset && off < p.size && p.text[off] == '#') {
             const atx_result = p.isAtxHeaderLine(off);
@@ -428,8 +422,8 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
         if (off < p.size && p.text[off] == '<' && !p.flags.no_html_blocks) {
             p.html_block_type = p.isHtmlBlockStartCondition(off);
 
-            // Type 7 can't interrupt paragraph
-            if (p.html_block_type == 7 && effective_pivot_type == .text)
+            // Type 7 can't interrupt paragraph or table
+            if (p.html_block_type == 7 && (effective_pivot_type == .text || effective_pivot_type == .table))
                 p.html_block_type = 0;
 
             if (p.html_block_type > 0) {
@@ -442,8 +436,15 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
             }
         }
 
+        // Check for table continuation (after block-level structures that break a table)
+        if (effective_pivot_type == .table && n_parents == p.n_containers) {
+            line.type = .table;
+            break;
+        }
+
         // Check for table underline
         if (p.flags.tables && effective_pivot_type == .text &&
+            line.indent < p.code_indent_offset &&
             off < p.size && (p.text[off] == '|' || p.text[off] == '-' || p.text[off] == ':') &&
             n_parents == p.n_containers)
         {
@@ -486,7 +487,7 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                 task_container.is_task = true;
                 task_container.task_mark_off = @intCast(tmp + 1);
                 off = @intCast(tmp + 3);
-                while (off < p.size && helpers.isWhitespace(p.text[off]))
+                while (off < p.size && helpers.isBlank(p.text[off]))
                     off += 1;
                 line.beg = off;
             }

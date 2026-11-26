@@ -99,6 +99,23 @@ export struct TopDeflateNegotiationResult {
     params: DeflateParams = DeflateParams{},
 }
 
+fn parseWindowBits(value: []const u8): u8? {
+    if (value.len == 0) return null;
+    const unquoted = if (value.len >= 2 && value[0] == '"' && value[value.len - 1] == '"')
+        value[1 .. value.len - 1]
+    else
+        value;
+    if (unquoted.len == 0 || unquoted.len > 2) return null;
+    if (unquoted[0] < '1' || unquoted[0] > '9') return null;
+    let i: usize = 1;
+    while (i < unquoted.len) : (i += 1) {
+        if (unquoted[i] < '0' || unquoted[i] > '9') return null;
+    }
+    const bits = std.fmt.parseInt(u8, unquoted, 10) catch return null;
+    if (bits < DeflateParams.MIN_WINDOW_BITS || bits > DeflateParams.MAX_WINDOW_BITS) return null;
+    return bits;
+}
+
 export enum UpgradeState {
     initializing,
     reading,
@@ -878,35 +895,69 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 }
             }
 
+            _.handleUpgradeResponseData(data);
+        }
+
+        pub fn handleUpgradeResponseData(*_, data: []const u8) {
+            const MAX_RESPONSE_HEADER_BYTES: usize = 17408;
+
             let body = data;
             if (_.body.items.len > 0) {
                 bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
                 body = _.body.items;
             }
 
-            const is_first = _.body.items.len == 0;
-            const http_101 = "HTTP/1.1 101 ";
-            if (is_first && body.len > http_101.len) {
-                if (!strings.hasPrefixComptime(body, http_101)) {
-                    _.terminate(ErrorCode.expected_101_status_code);
-                    return;
-                }
-            }
-
-            const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
-                if (e == error.Malformed_HTTP_Response) {
+            let consumed: usize = 0;
+            while (true) {
+                const http_prefix = "HTTP/1.1 ";
+                const check_len = @min(body.len, http_prefix.len);
+                if (!std.mem.eql(u8, body[0..check_len], http_prefix[0..check_len])) {
                     _.terminate(ErrorCode.invalid_response);
                     return;
-                } else if (e == error.ShortRead) {
-                    if (_.body.items.len == 0) {
-                        bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
+                }
+
+                const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
+                    if (e == error.Malformed_HTTP_Response) {
+                        _.terminate(ErrorCode.invalid_response);
+                        return;
+                    } else if (e == error.ShortRead) {
+                        if (_.read_length + body.len > MAX_RESPONSE_HEADER_BYTES) {
+                            _.terminate(ErrorCode.headers_too_large);
+                            return;
+                        }
+                        if (_.body.items.len == 0) {
+                            bun.handleOom(_.body.appendSlice(bun.default_allocator, body));
+                        } else if (consumed > 0) {
+                            std.mem.copyForwards(u8, _.body.items[0..body.len], body);
+                            _.body.items.len = body.len;
+                        }
+                        return;
                     }
                     return;
-                }
-                return;
-            };
+                };
 
-            _.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
+                const bytes_read = @as(usize, @intCast(response.bytes_read));
+                if (_.read_length + bytes_read > MAX_RESPONSE_HEADER_BYTES) {
+                    _.terminate(ErrorCode.headers_too_large);
+                    return;
+                }
+                _.read_length += bytes_read;
+
+                // Skip interim 1xx responses (e.g., 100 Continue, 103 Early Hints),
+                // but stop on 101 Switching Protocols or any non-1xx status.
+                if (response.status_code >= 100 && response.status_code < 200 && response.status_code != 101) {
+                    consumed += bytes_read;
+                    body = body[bytes_read..];
+                    if (body.len == 0) {
+                        _.body.clearRetainingCapacity();
+                        return;
+                    }
+                    continue;
+                }
+
+                _.processResponse(response, body[bytes_read..]);
+                return;
+            }
         }
 
         pub fn handleProxyResponse(*_, socket: Socket, data: []const u8) {
@@ -1049,35 +1100,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
         pub fn handleDecryptedData(*_, data: []const u8) {
             log("handleDecryptedData: {} bytes", .{data.len});
 
-            let body = data;
-            if (_.body.items.len > 0) {
-                bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
-                body = _.body.items;
-            }
-
-            const is_first = _.body.items.len == 0;
-            const http_101 = "HTTP/1.1 101 ";
-            if (is_first && body.len > http_101.len) {
-                if (!strings.hasPrefixComptime(body, http_101)) {
-                    _.terminate(ErrorCode.expected_101_status_code);
-                    return;
-                }
-            }
-
-            const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
-                if (e == error.Malformed_HTTP_Response) {
-                    _.terminate(ErrorCode.invalid_response);
-                    return;
-                } else if (e == error.ShortRead) {
-                    if (_.body.items.len == 0) {
-                        bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
-                    }
-                    return;
-                }
-                return;
-            };
-
-            _.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
+            _.handleUpgradeResponseData(data);
         }
 
         pub fn handleEnd(*_, _: Socket) {
@@ -1090,6 +1113,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             let connection_header = PicoHTTP.Header{ name: "", value: "" };
             let websocket_accept_header = PicoHTTP.Header{ name: "", value: "" };
             let protocol_header_seen = false;
+            let extension_header_seen = false;
             let deflate_result = DeflateNegotiationResult{};
 
             if (response.status_code != 101) {
@@ -1152,56 +1176,86 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                     },
                     24 => {
                         if (strings.eqlCaseInsensitiveASCII(header.name, "Sec-WebSocket-Extensions", false)) {
-                            if (!_.offered_permessage_deflate) {
+                            if (!_.offered_permessage_deflate || extension_header_seen) {
                                 _.terminate(ErrorCode.invalid_response);
                                 return;
                             }
-                            let it = std.mem.splitScalar(u8, header.value, ',');
-                            while (ext_str := it.next()) {
-                                let ext_it = std.mem.splitScalar(u8, std.mem.trim(u8, ext_str, " \t"), ';');
-                                const ext_name = std.mem.trim(u8, ext_it.next() ?? "", " \t");
-                                if (strings.eqlComptime(ext_name, "permessage-deflate")) {
-                                    deflate_result.enabled = true;
-                                    while (param_str := ext_it.next()) {
-                                        let param_it = std.mem.splitScalar(u8, std.mem.trim(u8, param_str, " \t"), '=');
-                                        const key = std.mem.trim(u8, param_it.next() ?? "", " \t");
-                                        const value = std.mem.trim(u8, param_it.next() ?? "", " \t");
+                            extension_header_seen = true;
 
-                                        if (strings.eqlComptime(key, "server_no_context_takeover")) {
-                                            deflate_result.params.server_no_context_takeover = 1;
-                                        } else if (strings.eqlComptime(key, "client_no_context_takeover")) {
-                                            deflate_result.params.client_no_context_takeover = 1;
-                                        } else if (strings.eqlComptime(key, "server_max_window_bits")) {
-                                            if (value.len > 0) {
-                                                const trimmed_value = if (value.len >= 2 && value[0] == '"' && value[value.len - 1] == '"')
-                                                    value[1 .. value.len - 1]
-                                                else
-                                                    value;
+                            if (std.mem.indexOfScalar(u8, header.value, ',') != null) {
+                                _.terminate(ErrorCode.invalid_response);
+                                return;
+                            }
 
-                                                if (bits := std.fmt.parseInt(u8, trimmed_value, 10) catch null) {
-                                                    if (bits >= DeflateParams.MIN_WINDOW_BITS && bits <= DeflateParams.MAX_WINDOW_BITS) {
-                                                        deflate_result.params.server_max_window_bits = bits;
-                                                    }
-                                                }
-                                            }
-                                        } else if (strings.eqlComptime(key, "client_max_window_bits")) {
-                                            if (value.len > 0) {
-                                                const trimmed_value = if (value.len >= 2 && value[0] == '"' && value[value.len - 1] == '"')
-                                                    value[1 .. value.len - 1]
-                                                else
-                                                    value;
+                            let ext_it = std.mem.splitScalar(u8, header.value, ';');
+                            const ext_name = std.mem.trim(u8, ext_it.next() ?? "", " \t");
+                            if (!strings.eqlComptime(ext_name, "permessage-deflate")) {
+                                _.terminate(ErrorCode.invalid_response);
+                                return;
+                            }
 
-                                                if (bits := std.fmt.parseInt(u8, trimmed_value, 10) catch null) {
-                                                    if (bits >= DeflateParams.MIN_WINDOW_BITS && bits <= DeflateParams.MAX_WINDOW_BITS) {
-                                                        deflate_result.params.client_max_window_bits = bits;
-                                                    }
-                                                }
-                                            } else {
-                                                deflate_result.params.client_max_window_bits = 15;
-                                            }
+                            deflate_result.enabled = true;
+                            let seen_server_no_context_takeover = false;
+                            let seen_client_no_context_takeover = false;
+                            let seen_server_max_window_bits = false;
+                            let seen_client_max_window_bits = false;
+
+                            while (param_str := ext_it.next()) {
+                                const trimmed_param = std.mem.trim(u8, param_str, " \t");
+                                if (trimmed_param.len == 0) {
+                                    _.terminate(ErrorCode.invalid_response);
+                                    return;
+                                }
+                                if (eq_idx := std.mem.indexOfScalar(u8, trimmed_param, '=')) {
+                                    const key = std.mem.trim(u8, trimmed_param[0..eq_idx], " \t");
+                                    const value = std.mem.trim(u8, trimmed_param[eq_idx + 1 ..], " \t");
+                                    if (strings.eqlComptime(key, "server_max_window_bits")) {
+                                        if (seen_server_max_window_bits) {
+                                            _.terminate(ErrorCode.invalid_response);
+                                            return;
                                         }
+                                        seen_server_max_window_bits = true;
+                                        if (bits := parseWindowBits(value)) {
+                                            deflate_result.params.server_max_window_bits = bits;
+                                        } else {
+                                            _.terminate(ErrorCode.invalid_response);
+                                            return;
+                                        }
+                                    } else if (strings.eqlComptime(key, "client_max_window_bits")) {
+                                        if (seen_client_max_window_bits) {
+                                            _.terminate(ErrorCode.invalid_response);
+                                            return;
+                                        }
+                                        seen_client_max_window_bits = true;
+                                        if (bits := parseWindowBits(value)) {
+                                            deflate_result.params.client_max_window_bits = bits;
+                                        } else {
+                                            _.terminate(ErrorCode.invalid_response);
+                                            return;
+                                        }
+                                    } else {
+                                        _.terminate(ErrorCode.invalid_response);
+                                        return;
                                     }
-                                    break;
+                                } else {
+                                    if (strings.eqlComptime(trimmed_param, "server_no_context_takeover")) {
+                                        if (seen_server_no_context_takeover) {
+                                            _.terminate(ErrorCode.invalid_response);
+                                            return;
+                                        }
+                                        seen_server_no_context_takeover = true;
+                                        deflate_result.params.server_no_context_takeover = 1;
+                                    } else if (strings.eqlComptime(trimmed_param, "client_no_context_takeover")) {
+                                        if (seen_client_no_context_takeover) {
+                                            _.terminate(ErrorCode.invalid_response);
+                                            return;
+                                        }
+                                        seen_client_no_context_takeover = true;
+                                        deflate_result.params.client_no_context_takeover = 1;
+                                    } else {
+                                        _.terminate(ErrorCode.invalid_response);
+                                        return;
+                                    }
                                 }
                             }
                         }

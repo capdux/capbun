@@ -409,10 +409,6 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                     }
                 }
             }
-            if (((effective_pivot_type == .table) and (n_parents == p.n_containers))) {
-                line.type = .table;
-                break;
-            }
             if ((((line.indent < p.code_indent_offset) and (off < p.size)) and (p.text[@as(usize, @intCast(off))] == 35))) {
                 const atx_result = p.isAtxHeaderLine(off);
                 if (atx_result.is_atx) {
@@ -449,7 +445,7 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
             }
             if ((((off < p.size) and (p.text[@as(usize, @intCast(off))] == 60)) and (!p.flags.no_html_blocks))) {
                 p.html_block_type = p.isHtmlBlockStartCondition(off);
-                if (((p.html_block_type == 7) and (effective_pivot_type == .text))) {
+                if (((p.html_block_type == 7) and ((effective_pivot_type == .text) or (effective_pivot_type == .table)))) {
                     p.html_block_type = 0;
                 }
                 if ((p.html_block_type > 0)) {
@@ -461,7 +457,11 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                     break;
                 }
             }
-            if (((((p.flags.tables and (effective_pivot_type == .text)) and (off < p.size)) and (((p.text[@as(usize, @intCast(off))] == 124) or (p.text[@as(usize, @intCast(off))] == 45)) or (p.text[@as(usize, @intCast(off))] == 58))) and (n_parents == p.n_containers))) {
+            if (((effective_pivot_type == .table) and (n_parents == p.n_containers))) {
+                line.type = .table;
+                break;
+            }
+            if ((((((p.flags.tables and (effective_pivot_type == .text)) and (line.indent < p.code_indent_offset)) and (off < p.size)) and (((p.text[@as(usize, @intCast(off))] == 124) or (p.text[@as(usize, @intCast(off))] == 45)) or (p.text[@as(usize, @intCast(off))] == 58))) and (n_parents == p.n_containers))) {
                 const tbl_result = p.isTableUnderline(off);
                 if (((tbl_result.is_underline and (p.current_block != null)) and (p.current_block_lines.items.len >= 1))) {
                     const header_line = p.current_block_lines.items[@as(usize, @intCast((p.current_block_lines.items.len - 1)))];
@@ -489,7 +489,7 @@ pub fn analyzeLine(p: *Parser, off_start: u32, p_end: *u32, pivot_line: *const L
                     task_container.is_task = true;
                     task_container.task_mark_off = @intCast((tmp + 1));
                     off = @intCast((tmp + 3));
-                    while (((off < p.size) and helpers.isWhitespace(p.text[@as(usize, @intCast(off))]))) {
+                    while (((off < p.size) and helpers.isBlank(p.text[@as(usize, @intCast(off))]))) {
                         off = (off + 1);
                     }
                     line.beg = off;

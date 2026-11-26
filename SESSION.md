@@ -1064,3 +1064,9 @@
 - **`bun/spawn`**：`js_bun_spawn_bindings.cp` 增加 `argv0`/`cwd` null-byte 校验，`exec_command.cp` 清理 `NODE_CHANNEL_FD` -> **0 fail**（原 6 项全清零）。
 - **`bun/archive`**：`libarchive.cp` 与 `Archive.cp` 修复 `entry.perm() & 0o777`、超长路径跳过、`readNextHeader` `.failed/.fatal` 与 `readClose()` 校验 -> 收敛至 2 fail。
 - **`node/net` & `worker_threads`**：`net.ts` 补 `SocketHandlers2.close` 取消回调，`web_worker.cp` 补 `.pending` 退出码 13 分支。
+
+### 2026-11-26 Batch 11 测试修复与验证（`node/os` / `node/child_process` / `bun/md` / `web/websocket`）
+- **`node/os`**：`JSFFIFunction.cpp:161` 将 constructor 参数从硬编码 `FFIFunction` 修正为 `nativeConstructor` -> **59 pass, 0 fail**（100% 通过）。
+- **`node/child_process`**：验证 `child-process-exec.test.ts` 在 `--timeout=20000` 下 **11 pass, 0 fail**。
+- **`bun/md`**：`blocks.cp`, `inlines.cp`, `line_analysis.cp` 修复表格打断、缩进分隔行、`isBlank` 任务列表、`~` 删除线与单列带冒号分隔行 -> 原 10 项中 9 项通过。
+- **`web/websocket`**：`WebSocketUpgradeClient.cp` 实现 `100 Continue` 循环与 `Sec-WebSocket-Extensions` `permessage-deflate` 严格校验 -> `interim responses` 6 项全绿，4 项基础扩展拒绝通过。

@@ -319,6 +319,7 @@ pub fn isTableUnderline(p: *Parser, off: u32): TableUnderlineResult {
     let pos = off;
     let col_count: u32 = 0;
     let had_pipe = false;
+    let had_colon = false;
 
     // Skip leading pipe
     if (pos < p.size && p.text[pos] == '|') {
@@ -342,6 +343,7 @@ pub fn isTableUnderline(p: *Parser, off: u32): TableUnderlineResult {
 
         const has_right_colon = pos < p.size && p.text[pos] == ':';
         if (has_right_colon) pos += 1;
+        if (has_left_colon || has_right_colon) had_colon = true;
 
         // Determine alignment
         if (col_count < types.TABLE_MAXCOLCOUNT) {
@@ -373,7 +375,7 @@ pub fn isTableUnderline(p: *Parser, off: u32): TableUnderlineResult {
         }
     }
 
-    if (col_count == 0 || (!had_pipe && col_count < 2))
+    if (col_count == 0 || (!had_pipe && !had_colon && col_count < 2))
         return { is_underline: false, col_count: 0 };
 
     p.table_col_count = col_count;

@@ -2431,3 +2431,9 @@
 - `src/runtime/api/bun/js_bun_spawn_bindings.cp` (.zig), `src/cli/exec_command.cp` (.zig), `src/libarchive/libarchive.cp` (.zig), `src/runtime/api/Archive.cp` (.zig)
 - `src/jsc/web_worker.cp` (.zig)
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 11 测试收敛提交
+- `src/jsc/bindings/JSFFIFunction.cpp`
+- `src/md/blocks.cp` (.zig), `src/md/inlines.cp` (.zig), `src/md/line_analysis.cp` (.zig)
+- `src/http_jsc/websocket_client/WebSocketUpgradeClient.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`

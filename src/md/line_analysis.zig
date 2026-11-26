@@ -82,7 +82,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const helpers = @import("./helpers.zig");
 pub const parser_mod = @import("./parser.zig");
@@ -451,6 +451,8 @@ pub fn isTableUnderline(p: *Parser, off: u32) TableUnderlineResult {
         _ = &col_count;
         var had_pipe = false;
         _ = &had_pipe;
+        var had_colon = false;
+        _ = &had_colon;
         if (((pos < p.size) and (p.text[@as(usize, @intCast(pos))] == 124))) {
             had_pipe = true;
             pos = (pos + 1);
@@ -476,6 +478,9 @@ pub fn isTableUnderline(p: *Parser, off: u32) TableUnderlineResult {
             if (has_right_colon) {
                 pos = (pos + 1);
             }
+            if ((has_left_colon or has_right_colon)) {
+                had_colon = true;
+            }
             if ((col_count < types.TABLE_MAXCOLCOUNT)) {
                 p.table_alignments[cp_cast_int(usize, col_count)] = (if ((has_left_colon and has_right_colon)) .center else (if (has_left_colon) .left else (if (has_right_colon) .right else .default)));
             }
@@ -500,7 +505,7 @@ pub fn isTableUnderline(p: *Parser, off: u32) TableUnderlineResult {
                 }
             }
         }
-        if (((col_count == 0) or ((!had_pipe) and (col_count < 2)))) {
+        if (((col_count == 0) or (((!had_pipe) and (!had_colon)) and (col_count < 2)))) {
             return .{ .is_underline = false, .col_count = 0 };
         }
         p.table_col_count = col_count;
