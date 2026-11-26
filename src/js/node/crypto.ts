@@ -368,10 +368,14 @@ function validateArgon2(algorithm, parameters) {
     throw $ERR_OUT_OF_RANGE("parameters.nonce.byteLength", ">= 8 && <= 4294967295", nonce.byteLength);
   }
 
-  const parallelism = validateInteger(parameters.parallelism, "parameters.parallelism", 1, 16777215);
-  const tagLength = validateInteger(parameters.tagLength, "parameters.tagLength", 4, 4294967295);
-  const memory = validateInteger(parameters.memory, "parameters.memory", 8 * parallelism, 4294967295);
-  const passes = validateInteger(parameters.passes, "parameters.passes", 1, 4294967295);
+  const parallelism = parameters.parallelism;
+  validateInteger(parallelism, "parameters.parallelism", 1, 16777215);
+  const tagLength = parameters.tagLength;
+  validateInteger(tagLength, "parameters.tagLength", 4, 4294967295);
+  const memory = parameters.memory;
+  validateInteger(memory, "parameters.memory", 8 * parallelism, 4294967295);
+  const passes = parameters.passes;
+  validateInteger(passes, "parameters.passes", 1, 4294967295);
 
   const secret =
     parameters.secret !== undefined ? getArgon2InputBuffer(parameters.secret, "parameters.secret") : undefined;

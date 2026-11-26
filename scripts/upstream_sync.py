@@ -79,11 +79,20 @@ def cmd_plan(args):
 
 
 def cmd_sync_tests(args):
+    import json, re
     ref = args.ref_repo
     run(["git", "-C", ref, "checkout", args.to_ref])
     subprocess.run(["rsync", "-a", "--delete", f"{ref}/test/", "test/"], check=True)
     subprocess.run(["rsync", "-a", "--delete", f"{ref}/packages/bun-types/", "packages/bun-types/"], check=True)
-    print(f"Synced test/ and packages/bun-types/ to {args.to_ref}")
+    with open(f"{ref}/package.json") as f:
+        upstream_ver = json.load(f)["version"]
+    with open("package.json") as f:
+        local_pkg = f.read()
+    updated_pkg = re.sub(r'("version"\s*:\s*")[^"]+(")', rf'\g<1>{upstream_ver}\2', local_pkg, count=1)
+    if updated_pkg != local_pkg:
+        with open("package.json", "w") as f:
+            f.write(updated_pkg)
+    print(f"Synced test/, packages/bun-types/, and package.json version={upstream_ver} to {args.to_ref}")
 
 
 def cmd_verify(args):

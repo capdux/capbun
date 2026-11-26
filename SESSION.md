@@ -1078,3 +1078,9 @@
   - `argon2.test.ts`：新增纯 CP 模块 `src/runtime/crypto/Argon2.cp`（基于 `std.crypto.pwhash.argon2.kdf`）与 `node_crypto_binding.cp`/`crypto.ts` 绑定，消除 `asInt52` panic -> **16 pass, 20 fail**（Ran 36 tests）。
 - **`node/stream`**：`Body.cp` `ValueBufferer` `.Blob, .File` 改为返回 `error.UnsupportedStreamType` -> 消除 `reached unreachable code` panic，完整跑通 52 项。
 - **`node/inspector`**：`inspector.ts` 修复 `close()` no-op、`waitForDebugger()` `ERR_INSPECTOR_NOT_ACTIVE`、`connectToMainThread()` `ERR_INSPECTOR_NOT_WORKER` -> **40 pass, 36 fail**（Ran 76 tests）。
+
+### 2026-11-26 Batch 13 测试修复与验证（`node/crypto/argon2` / `node/fs` / `bun/archive`）
+- **`node/crypto/argon2.test.ts`**：`src/js/node/crypto.ts` 修复 `validateInteger` 返回 `undefined` 覆盖 4 个整数参数的 bug -> **36 pass, 0 fail**（100% 通过）。
+- **`node/fs`**：`BunCommonStrings.h:40` 修正 `OperationWasAborted` 末尾句号 -> 9 项 `AbortSignal` `AbortError` 用例全部通过。
+- **`bun/archive`**：`vendor/libarchive` 修复 gzip CRC32/ISIZE 校验与 `UTF-8` `archive_mstring_get_mbs_l`、`libarchive_sys/bindings.cp` 修复 `pathnameUtf8` 空指针 panic -> **112 pass, 10 fail**（123 tests，gzip CRC32 与 panic 全清零）。
+- **`upstream_sync.py`**：`sync-tests` 同步更新 `package.json` `"version"` 字段。

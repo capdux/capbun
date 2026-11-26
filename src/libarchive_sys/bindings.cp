@@ -432,7 +432,13 @@ pub @opaque struct ArchiveEntry {
         unsafe { return bun.sliceTo(archive_entry_pathname(_), 0); }
     }
     pub fn pathnameUtf8(*_): [:0]const u8 {
-        unsafe { return bun.sliceTo(archive_entry_pathname_utf8(_), 0); }
+        unsafe {
+            const p = archive_entry_pathname_utf8(_);
+            if (p != null) return bun.sliceTo(p, 0);
+            const fallback = archive_entry_pathname(_);
+            if (fallback != null) return bun.sliceTo(fallback, 0);
+            return "";
+        }
     }
     pub fn pathnameW(*_): [:0]const u16 {
         unsafe { return bun.sliceTo(archive_entry_pathname_w(_), 0); }

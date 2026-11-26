@@ -37,7 +37,7 @@
     macro(httpOPTIONS, "OPTIONS") \
     macro(OperationFailed, "The operation failed.") \
     macro(OperationTimedOut, "The operation timed out.") \
-    macro(OperationWasAborted, "The operation was aborted.") \
+    macro(OperationWasAborted, "The operation was aborted") \
     macro(httpPATCH, "PATCH") \
     macro(httpPOST, "POST") \
     macro(httpPROPFIND, "PROPFIND") \

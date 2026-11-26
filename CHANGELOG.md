@@ -2444,3 +2444,11 @@
 - `src/jsc/bindings/node/crypto/JSKeyObject.{h,cpp}`, `JSCipher.{h,cpp}`, `JSHash.{h,cpp}`, `JSHmac.{h,cpp}`
 - `src/runtime/webcore/Body.cp` (.zig), `src/js/node/inspector.ts`
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 13 测试收敛提交
+- `src/js/node/crypto.ts`
+- `src/jsc/bindings/BunCommonStrings.h`
+- `vendor/libarchive/libarchive/archive_read_support_filter_gzip.c`, `vendor/libarchive/libarchive/archive_string.c`
+- `src/libarchive_sys/bindings.cp` (.zig)
+- `scripts/upstream_sync.py`
+- `SESSION.md`, `CHANGELOG.md`
