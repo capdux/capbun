@@ -1052,3 +1052,8 @@
 - **`sql/postgres`**：`postgres.ts` `#onClose` 清除 `canBeConnected`，`PostgresSQLConnection.cp`/`MySQLConnection.cp` 改用 `socket.terminate()`，`libusockets.h`/`openssl.c`/`us_socket_t.cp`/`socket.cp` 支持 `upgradeTLS({ isServer, initialData })` -> `mid-reconnect` 通过。
 - **`node/http2`**：`h2_frame_parser.cp` 修复 `handleReceivedStreamID` `stream.setContext`、`SETTINGS` ACK 队列与 `PUSH_PROMISE`；`h2/connection.cp` 补全 RFC 9113 §8.3.1 伪头与 §8.1 `content-length` 校验 -> 39 pass, 83 fail (Ran 122 tests)。
 - **`node/tls`**：`uws.cp` 修正 `NODE_EXTRA_CA_CERTS` 告警格式，`net.ts`/`openssl.c` 透传 `requestCert` 与 `ERR_SSL_PEER_DID_NOT_RETURN_A_CERTIFICATE` -> 42 pass, 30 fail (Ran 74 tests)。
+
+### 2026-11-26 Batch 9 测试修复与验证（`bundler/resolver` / `config/bunfig` / `js/workerd`）
+- **`bundler/resolver`**：`types.cp` `FileSystemFlags.w` 补全 `| O.TRUNC` -> **16 pass, 0 fail**（100% 通过）。
+- **`config/bunfig`**：`Arguments.cp` 新增 `joinConfigPath` / `unreadableConfig` 与 `MAX_PATH_BYTES` / `ENAMETOOLONG` 边界校验 -> **33 pass, 15 fail**（从 25 fail 收敛，所有 `ENAMETOOLONG` 通过）。
+- **`js/workerd`**：`html_rewriter.cp` 修复 `createLOLHTMLError` `unprotect` 泄漏、`EndTagHandler` 释放与 `is_async` `unhandledRejectionScope` 捕获。

@@ -318,17 +318,19 @@ pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_pa
     loadBunfig(allocator, auto_loaded, config_path, ctx, cmd)?;
 }
 
+fn unreadableConfig(auto_loaded: bool, e: bun.sys.Error, config_path: []const u8)! {
+    if (auto_loaded) return;
+    Output.prettyErrorln("{f}\nwhile reading config \"{s}\"", .{
+        e,
+        config_path,
+    });
+    Global.exit(1);
+}
+
 fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag)! {
     const source = switch (bun.sys.File.toSource(config_path, allocator, { convert_bom: true })) {
         .result => |s| s,
-        .err => |e| {
-            if (auto_loaded) return;
-            Output.prettyErrorln("{f}\nwhile reading config \"{s}\"", .{
-                e,
-                config_path,
-            });
-            Global.exit(1);
-        },
+        .err => |e| return unreadableConfig(auto_loaded, e, config_path),
     };
     js_ast.Stmt.Data.Store.create();
     js_ast.Expr.Data.Store.create();
@@ -343,15 +345,23 @@ fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]
     Bunfig.parse(allocator, &source, ctx, cmd)?;
 }
 
-fn getHomeConfigPath(buf: *bun.PathBuffer): [:0]const u8? {
-    let paths: [1]string = [".bunfig.toml"];
+/// Returns `null` when `dir/path` does not fit: nothing could be opened at such a path anyway.
+fn joinConfigPath(dir: []const u8, path: []const u8, buf: *bun.PathBuffer): ([:0]const u8)? {
+    let parts: [1]string = [path];
+    if (joined := resolve_path.joinAbsStringBufChecked(dir, buf[0 .. buf.len - 1], &parts, .auto)) {
+        buf[joined.len] = 0;
+        return buf[0..joined.len :0];
+    }
+    return null;
+}
 
+fn getHomeConfigPath(buf: *bun.PathBuffer): [:0]const u8? {
     if (data_dir := bun.env_var.XDG_CONFIG_HOME.get()) {
-        return resolve_path.joinAbsStringBufZ(data_dir, buf, &paths, .auto);
+        return joinConfigPath(data_dir, ".bunfig.toml", buf);
     }
 
     if (home_dir := bun.env_var.HOME.get()) {
-        return resolve_path.joinAbsStringBufZ(home_dir, buf, &paths, .auto);
+        return joinConfigPath(home_dir, ".bunfig.toml", buf);
     }
 
     return null;
@@ -403,11 +413,13 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: string?, ctx:
     if (config_path_.len == 0) {
         return;
     }
-    let config_path: [:0]u8 = undefined;
+    let config_path_opt: ([:0]const u8)? = null;
     if (config_path_[0] == '/') {
-        @memcpy(config_buf[0..config_path_.len], config_path_);
-        config_buf[config_path_.len] = 0;
-        config_path = config_buf[0..config_path_.len :0];
+        if (config_path_.len < config_buf.len) {
+            @memcpy(config_buf[0..config_path_.len], config_path_);
+            config_buf[config_path_.len] = 0;
+            config_path_opt = config_buf[0..config_path_.len :0];
+        }
     } else {
         if (ctx.args.absolute_working_dir == null) {
             let secondbuf: bun.PathBuffer = undefined;
@@ -416,16 +428,17 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: string?, ctx:
             ctx.args.absolute_working_dir = allocator.dupeZ(u8, cwd)?;
         }
 
-        let parts: [2]string = [ ctx.args.absolute_working_dir.?, config_path_ ];
-        config_path_ = resolve_path.joinAbsStringBuf(
-            ctx.args.absolute_working_dir.?,
-            &config_buf,
-            &parts,
-            .auto,
-        );
-        config_buf[config_path_.len] = 0;
-        config_path = config_buf[0..config_path_.len :0];
+        config_path_opt = joinConfigPath(ctx.args.absolute_working_dir.?, config_path_, &config_buf);
     }
+
+    if (config_path_opt == null) {
+        return unreadableConfig(
+            auto_loaded,
+            bun.sys.Error.fromCode(.NAMETOOLONG, .open).withPath(config_path_),
+            config_path_,
+        );
+    }
+    const config_path = config_path_opt.?;
 
     loadConfigPath(allocator, auto_loaded, config_path, ctx, comptime cmd) catch e => {
         if (ctx.log.hasAny()) {

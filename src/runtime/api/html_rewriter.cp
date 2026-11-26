@@ -429,9 +429,34 @@ pub struct BufferOutputSinkImpl {
         const global = sink.global;
         const response = sink.response;
 
+        let async_err: jsc.JSValue = .zero;
+        let vm = global.bunVM();
+        let scope = if (is_async) vm.unhandledRejectionScope() else undefined;
+        const prev_capture = if (is_async) vm.unhandled_pending_rejection_to_capture else null;
+        if (is_async) {
+            vm.unhandled_pending_rejection_to_capture = &async_err;
+            vm.onUnhandledRejection = &jsc.VirtualMachine.onQuietUnhandledRejectionHandlerCaptureValue;
+        }
+        defer if (is_async) {
+            if (async_err != .zero) {
+                async_err.ensureStillAlive();
+                async_err.unprotect();
+            }
+            vm.unhandled_pending_rejection_to_capture = prev_capture;
+            scope.apply(vm);
+        }
+
         sink.rewriter.?.write(bytes) catch {
             if (is_async) {
-                response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
+                if (async_err != .zero) {
+                    const err_val = async_err;
+                    async_err = .zero;
+                    err_val.ensureStillAlive();
+                    response.getBodyValue().toErrorInstance({ JSValue: jsc.Strong.Optional.create(err_val, global) }, global) catch {};
+                    err_val.unprotect();
+                } else {
+                    response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
+                }
                 return null;
             } else {
                 return createLOLHTMLError(global);
@@ -440,7 +465,15 @@ pub struct BufferOutputSinkImpl {
 
         sink.rewriter.?.end() catch {
             if (is_async) {
-                response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
+                if (async_err != .zero) {
+                    const err_val = async_err;
+                    async_err = .zero;
+                    err_val.ensureStillAlive();
+                    response.getBodyValue().toErrorInstance({ JSValue: jsc.Strong.Optional.create(err_val, global) }, global) catch {};
+                    err_val.unprotect();
+                } else {
+                    response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
+                }
                 return null;
             } else {
                 return createLOLHTMLError(global);
@@ -955,6 +988,9 @@ fn HandlerCallback(
 
             let wrapper = ZigType.init(value);
             wrapper.ref();
+            if (comptime @hasField(ZigType, "end_tag_handlers") and @hasField(HandlerType, "end_tag_handlers")) {
+                wrapper.end_tag_handlers = &handler.end_tag_handlers;
+            }
 
             // When using RefCount, we don't check the count value directly
             // as it's an opaque type now
@@ -1031,6 +1067,7 @@ struct ElementHandler {
     onTextCallback: JSValue? = null,
     thisObject: JSValue,
     global: *JSGlobalObject,
+    end_tag_handlers: std.ArrayListUnmanaged(*EndTagHandler) = {},
 
     static fn init(global: *JSGlobalObject, thisObject: JSValue): !ElementHandler {
         let handler = ElementHandler{
@@ -1091,6 +1128,15 @@ struct ElementHandler {
     fn deinit(*_) {
         _.unprotectCallbacks();
         _.thisObject.unprotect();
+        for (eth of _.end_tag_handlers.items) {
+            if (cb := eth.callback) {
+                cb.unprotect();
+                eth.callback = null;
+            }
+            bun.default_allocator.destroy(eth);
+        }
+        _.end_tag_handlers.deinit(bun.default_allocator);
+        _.end_tag_handlers = {};
     }
 
     fn onElement(*_, value: *LOLHTML.Element): bool {
@@ -1144,6 +1190,8 @@ fn createLOLHTMLError(global: *JSGlobalObject): JSValue {
             // it's a promise rejection
             const result = err_ptr.*;
             err_ptr.* = .zero;
+            result.ensureStillAlive();
+            result.unprotect();
             return result;
         }
     }
@@ -1554,13 +1602,20 @@ pub struct EndTagHandler {
     callback: JSValue?,
     global: *JSGlobalObject,
 
-    pub const onEndTag = HandlerCallback(
-        EndTagHandler,
-        EndTag,
-        LOLHTML.EndTag,
-        "end_tag",
-        "callback",
-    );
+    fn onEndTag(*_, value: *LOLHTML.EndTag): bool {
+        const failed = HandlerCallback(
+            EndTagHandler,
+            EndTag,
+            LOLHTML.EndTag,
+            "end_tag",
+            "callback",
+        )(_, value);
+        if (cb := _.callback) {
+            cb.unprotect();
+            _.callback = null;
+        }
+        return failed;
+    }
 
     pub const onEndTagHandler = LOLHTML.DirectiveHandler(LOLHTML.EndTag, EndTagHandler, onEndTag);
 }
@@ -1769,6 +1824,7 @@ pub struct Element {
     /// handler returns so that JS cannot dereference the freed lol-html
     /// attribute buffer.
     attribute_iterators: std.ArrayListUnmanaged(*AttributeIterator) = {},
+    end_tag_handlers: (*std.ArrayListUnmanaged(*EndTagHandler))? = null,
 
     pub const js = jsc.Codegen.JSElement;
     pub const toJS = js.toJS;
@@ -1805,6 +1861,7 @@ pub struct Element {
     /// it out here along with any iterators we handed to JS.
     fn invalidate(*_) {
         _.element = null;
+        _.end_tag_handlers = null;
         _.detachAttributeIterators();
         _.attribute_iterators.clearAndFree(bun.default_allocator);
     }
@@ -1829,7 +1886,14 @@ pub struct Element {
         const end_tag_handler = bun.handleOom(bun.default_allocator.create(EndTag.Handler));
         end_tag_handler.* = { global: globalObject, callback: function };
 
+        if (list := _.end_tag_handlers) {
+            bun.handleOom(list.append(bun.default_allocator, end_tag_handler));
+        }
+
         _.element.?.onEndTag(EndTag.Handler.onEndTagHandler, end_tag_handler) catch {
+            if (list := _.end_tag_handlers) {
+                * = list.pop();
+            }
             bun.default_allocator.destroy(end_tag_handler);
             const e = createLOLHTMLError(globalObject);
             return globalObject.throwValue(e);

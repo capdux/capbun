@@ -1139,7 +1139,7 @@ pub enum FileSystemFlags: c_int {
     /// This doesn't turn fs.open() or fsPromises.open() into a synchronous blocking call. If synchronous operation is desired, something like fs.openSync() should be used.
     // @"rs+" = bun.O.RDWR,
     /// Open file for writing. The file is created (if it does not exist) or truncated (if it exists).
-    w = O.WRONLY | O.CREAT,
+    w = O.WRONLY | O.CREAT | O.TRUNC,
     /// Like 'w' but fails if the path exists.
     // @"wx" = bun.O.WRONLY | bun.O.TRUNC,
     // ///  Open file for reading and writing. The file is created (if it does not exist) or truncated (if it exists).

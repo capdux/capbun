@@ -2419,3 +2419,9 @@
 - `src/js/internal/sql/postgres.ts`, `src/sql_jsc/postgres/PostgresSQLConnection.cp` (.zig), `src/sql_jsc/mysql/MySQLConnection.cp` (.zig)
 - `packages/bun-usockets/src/libusockets.h`, `packages/bun-usockets/src/crypto/openssl.c`, `src/uws_sys/us_socket_t.cp` (.zig), `src/runtime/socket/socket.cp` (.zig), `src/uws/uws.cp` (.zig), `src/js/node/net.ts`
 - `SESSION.md`, `CHANGELOG.md`
+
+## 2026-11-26 Batch 9 测试收敛提交
+- `src/runtime/node/types.cp` (.zig)
+- `src/runtime/api/html_rewriter.cp` (.zig)
+- `src/cli/Arguments.cp` (.zig)
+- `SESSION.md`, `CHANGELOG.md`

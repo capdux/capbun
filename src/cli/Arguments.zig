@@ -229,17 +229,19 @@ pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_pa
         _ = try loadBunfig(allocator, auto_loaded, config_path, ctx, cmd);
 }
 
+pub fn unreadableConfig(auto_loaded: bool, e: bun.sys.Error, config_path: []const u8) !void {
+        if (auto_loaded) {
+            return;
+        }
+        _ = Output.prettyErrorln("{f}\nwhile reading config \"{s}\"", .{ e, config_path });
+        _ = Global.exit(1);
+}
+
 pub fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag) !void {
         const source = (switch (bun.sys.File.toSource(config_path, allocator, .{ .convert_bom = true })) {
 .result => |s| s,
 .err => |e| {
-{
-            if (auto_loaded) {
-                return;
-            }
-            _ = Output.prettyErrorln("{f}\nwhile reading config \"{s}\"", .{ e, config_path });
-            _ = Global.exit(1);
-        }
+return unreadableConfig(auto_loaded, e, config_path);
 },
 });
         _ = js_ast.Stmt.Data.Store.create();
@@ -260,16 +262,25 @@ pub fn loadBunfig(allocator: std.mem.Allocator, auto_loaded: bool, config_path: 
         _ = try Bunfig.parse(allocator, (&source), ctx, cmd);
 }
 
+pub fn joinConfigPath(dir: []const u8, path: []const u8, buf: *bun.PathBuffer) ?[:0]const u8 {
+        var parts: [1][]const u8 = .{ path };
+        _ = &parts;
+        if (resolve_path.joinAbsStringBufChecked(dir, buf[0..(buf.len - 1)], (&parts), .auto)) |joined| {
+            _ = &joined;
+            buf[cp_cast_int(usize, joined.len)] = 0;
+            return buf[0..joined.len :0];
+        }
+        return null;
+}
+
 pub fn getHomeConfigPath(buf: *bun.PathBuffer) ?[:0]const u8 {
-        var paths: [1][]const u8 = .{ ".bunfig.toml" };
-        _ = &paths;
         if (bun.env_var.XDG_CONFIG_HOME.get()) |data_dir| {
             _ = &data_dir;
-            return resolve_path.joinAbsStringBufZ(data_dir, buf, (&paths), .auto);
+            return joinConfigPath(data_dir, ".bunfig.toml", buf);
         }
         if (bun.env_var.HOME.get()) |home_dir| {
             _ = &home_dir;
-            return resolve_path.joinAbsStringBufZ(home_dir, buf, (&paths), .auto);
+            return joinConfigPath(home_dir, ".bunfig.toml", buf);
         }
         return null;
 }
@@ -312,12 +323,14 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
         if ((config_path_.len == 0)) {
             return;
         }
-        var config_path: [:0]u8 = undefined;
-        _ = &config_path;
+        var config_path_opt: ?[:0]const u8 = null;
+        _ = &config_path_opt;
         if ((config_path_[0] == 47)) {
-            _ = @memcpy(config_buf[0..config_path_.len], config_path_);
-            config_buf[cp_cast_int(usize, config_path_.len)] = 0;
-            config_path = config_buf[0..config_path_.len :0];
+            if ((config_path_.len < config_buf.len)) {
+                _ = @memcpy(config_buf[0..config_path_.len], config_path_);
+                config_buf[cp_cast_int(usize, config_path_.len)] = 0;
+                config_path_opt = config_buf[0..config_path_.len :0];
+            }
         } else {
             if ((ctx.args.absolute_working_dir == null)) {
                 var secondbuf: bun.PathBuffer = undefined;
@@ -325,12 +338,12 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: ?[]const u8, 
                 const cwd = (blk_catch_183: { break :blk_catch_183 ((bun.getcwd((&secondbuf))) catch |__ce_183| { _ = &__ce_183; return; }); });
                 ctx.args.absolute_working_dir = try allocator.dupeZ(u8, cwd);
             }
-            var parts: [2][]const u8 = .{ ctx.args.absolute_working_dir.?, config_path_ };
-            _ = &parts;
-            config_path_ = resolve_path.joinAbsStringBuf(ctx.args.absolute_working_dir.?, (&config_buf), (&parts), .auto);
-            config_buf[cp_cast_int(usize, config_path_.len)] = 0;
-            config_path = config_buf[0..config_path_.len :0];
+            config_path_opt = joinConfigPath(ctx.args.absolute_working_dir.?, config_path_, (&config_buf));
         }
+        if ((config_path_opt == null)) {
+            return unreadableConfig(auto_loaded, bun.sys.Error.fromCode(.NAMETOOLONG, .open).withPath(config_path_), config_path_);
+        }
+        const config_path = config_path_opt.?;
         _ = (blk_catch_184: { break :blk_catch_184 ((loadConfigPath(allocator, auto_loaded, config_path, ctx, (comptime cmd))) catch |e| { _ = &e; if (ctx.log.hasAny()) {
             _ = (blk_catch_185: { break :blk_catch_185 ((ctx.log.print(Output.errorWriter())) catch |__ce_185| { _ = &__ce_185;  }); });
         }

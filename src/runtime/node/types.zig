@@ -249,7 +249,7 @@ pub const FileModeKind = enum {
 pub const FileSystemFlags = enum(c_int) {
     a = ((O.APPEND | O.WRONLY) | O.CREAT),
     r = O.RDONLY,
-    w = (O.WRONLY | O.CREAT),
+    w = ((O.WRONLY | O.CREAT) | O.TRUNC),
     _,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
