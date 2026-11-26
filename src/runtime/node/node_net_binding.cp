@@ -84,7 +84,7 @@ pub fn newDetachedSocket(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             // policy in JS, so a hostname mismatch is never enforced natively.
             flags: .{ .defers_server_identity = true },
         });
-        return socket.getThisValue(globalThis);
+        return socket.getWeakThisValue(globalThis);
     } else {
         const socket = bun.api.TLSSocket.new({
             socket: .detached,
@@ -93,7 +93,7 @@ pub fn newDetachedSocket(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
             handlers: null,
             flags: .{ .defers_server_identity = true },
         });
-        return socket.getThisValue(globalThis);
+        return socket.getWeakThisValue(globalThis);
     }
 }
 

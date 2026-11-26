@@ -489,6 +489,15 @@ extern "C" BunString Bun__ErrorCode__determineSpecificType(JSC::JSGlobalObject* 
     return Bun::toStringRef(builder.toString());
 }
 
+extern "C" void Bun__ErrorCode__throwInvalidArgumentTypeValue(JSC::JSGlobalObject* globalObject, const uint8_t* argNamePtr, size_t argNameLen, const uint8_t* typeNamePtr, size_t typeNameLen, EncodedJSValue value)
+{
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    auto argName = WTF::String::fromUTF8({ argNamePtr, argNameLen });
+    auto typeName = WTF::String::fromUTF8({ typeNamePtr, typeNameLen });
+    Bun::ERR::INVALID_ARG_TYPE(scope, globalObject, argName, typeName, JSValue::decode(value));
+}
+
 namespace Message {
 
 void addList(WTF::StringBuilder& result, WTF::Vector<WTF::String>& types)

@@ -128,6 +128,17 @@ var FakeSocket = class Socket extends Duplex {
     this._httpMessage?.destroy?.();
     return super.destroy();
   }
+
+  destroySoon() {
+    if (this.writable) {
+      this.end();
+    }
+    if (this.writableFinished) {
+      this.destroy();
+    } else {
+      this.once("finish", this.destroy);
+    }
+  }
 };
 
 Object.defineProperty(FakeSocket, "name", { value: "Socket" });

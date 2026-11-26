@@ -431,7 +431,7 @@ _ = unreachable;
 },
 .hsl => {
 {
-            const hsl = (blk: {
+            const hsl_raw = (blk: {
             break :blk (switch (result.*) {
 .float => |float_ptr| (switch (float_ptr.*) {
 .hsl => |hsl_val| hsl_val,
@@ -445,12 +445,13 @@ else => break :formatted,
 });
 
 });
-            break :color bun.String.createFormat("hsl({d}, {d}, {d})", .{ hsl.h, hsl.s, hsl.l });
+            const hsl = hsl_raw.resolveMissing();
+            break :color bun.String.createFormat("hsl({d}, {d}%, {d}%)", .{ hsl.h, (hsl.s * 100.0), (hsl.l * 100.0) });
         }
 },
 .lab => {
 {
-            const lab = (blk: {
+            const lab_raw = (blk: {
             break :blk (switch (result.*) {
 .float => |float_ptr| (switch (float_ptr.*) {
 inline else => |*val| val.into(.LAB),
@@ -464,7 +465,8 @@ else => break :formatted,
 });
 
 });
-            break :color bun.String.createFormat("lab({d}, {d}, {d})", .{ lab.l, lab.a, lab.b });
+            const lab = lab_raw.resolveMissing();
+            break :color bun.String.createFormat("lab({d}% {d} {d})", .{ (lab.l * 100.0), lab.a, lab.b });
         }
 },
 });

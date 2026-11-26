@@ -246,11 +246,69 @@ pub fn errorUnlessFakeTimers(globalObject: *jsc.JSGlobalObject) bun.JSError!void
 pub fn setFakeTimerMarker(globalObject: *jsc.JSGlobalObject, enabled: bool) void {
         const globalThis_value = globalObject.toJSValue();
         const setTimeout_fn = (((blk_catch_0: { break :blk_catch_0 ((globalThis_value.getOwnTruthy(globalObject, "setTimeout")) catch |__ce_0| { _ = &__ce_0; return; }); })) orelse { return; });
+        if ((!setTimeout_fn.isObject())) {
+            return;
+        }
         if (enabled) {
+            const object_ctor = (((blk_catch_1: { break :blk_catch_1 ((globalThis_value.get(globalObject, "Object")) catch |__ce_1| { _ = &__ce_1; return; }); })) orelse { return; });
+            const is_extensible_fn = (((blk_catch_2: { break :blk_catch_2 ((object_ctor.get(globalObject, "isExtensible")) catch |__ce_2| { _ = &__ce_2; return; }); })) orelse { return; });
+            if (is_extensible_fn.isCallable()) {
+                const res = (blk_catch_3: { break :blk_catch_3 ((is_extensible_fn.call(globalObject, object_ctor, (&.{ setTimeout_fn }))) catch |__ce_3| { _ = &__ce_3; _ = globalObject.clearException();
+                return; }); });
+                if ((!res.toBoolean())) {
+                    return;
+                }
+            }
             _ = setTimeout_fn.put(globalObject, "clock", .true);
         } else {
             _ = setTimeout_fn.deleteProperty(globalObject, "clock");
         }
+}
+
+pub fn jsSetSystemTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const args = callframe.argumentsAsArray(1);
+        const argument0 = (if ((args.len > 0)) args[0] else .js_undefined);
+        var js_time: ?f64 = null;
+        _ = &js_time;
+        if (argument0.isDate()) {
+            const ts = argument0.getUnixTimestamp();
+            if (std.math.isNan(ts)) {
+                return callframe.this();
+            }
+            js_time = ts;
+        } else {
+            if (argument0.isNumber()) {
+                const ts = argument0.asNumber();
+                if ((ts >= 0)) {
+                    js_time = ts;
+                }
+            }
+        }
+        if (js_time) |ts| {
+            _ = &ts;
+            if (current_time.getTimespecNow()) |offset| {
+                _ = &offset;
+                _ = current_time.set(globalObject, .{ .offset = (&offset), .js = ts });
+            } else {
+                _ = bun.cpp.JSMock__setOverridenDateNow(globalObject, ts);
+            }
+        } else {
+            if (current_time.getTimespecNow()) |offset| {
+                _ = &offset;
+                const real_now = bun.cpp.JSMock__getCurrentUnixTimeMs();
+                const timespec_ms: f64 = @floatFromInt(offset.ms());
+                _ = current_time.offset_lock.lock();
+                {
+                    var _guard_lock = UnlockGuard(std.Thread.RwLock){ .lock = (&current_time.offset_lock) };
+                    _ = &_guard_lock;
+                    var ___guard_lock_moved = false; _ = &___guard_lock_moved;
+                    defer if (!___guard_lock_moved) { ___guard_lock_moved = true; const __T = @TypeOf(_guard_lock); if (@typeInfo(__T) == .optional) { if (_guard_lock) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_lock.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_lock; _drop_val.__cp_deinit(); } };
+                    current_time.date_now_offset = (@floor(real_now) - timespec_ms);
+                }
+            }
+            _ = bun.cpp.JSMock__setOverridenDateNow(globalObject, -1);
+        }
+        return callframe.this();
 }
 
 pub fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {

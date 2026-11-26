@@ -359,7 +359,7 @@ const handle_opt = jpeg.tj3Init(1);
         _ = &handle_guard;
         var __handle_guard_moved = false; _ = &__handle_guard_moved;
         defer if (!__handle_guard_moved) { __handle_guard_moved = true; const __T = @TypeOf(handle_guard); if (@typeInfo(__T) == .optional) { if (handle_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { handle_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = handle_guard; _drop_val.__cp_deinit(); } };
-        if (((jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0) and (jpeg.tj3GetErrorCode(handle_guard.handle) != jpeg.TJERR_WARNING))) {
+        if ((jpeg.tj3DecompressHeader(handle_guard.handle, bytes.ptr, bytes.len) != 0)) {
             return error.DecodeFailed;
         }
         const rw = jpeg.tj3Get(handle_guard.handle, jpeg.TJPARAM_JPEGWIDTH);

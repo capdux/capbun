@@ -25,11 +25,7 @@ pub fn toSatisfy(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallF
     const value = value_opt.?;
     value.ensureStillAlive();
 
-    const result = predicate.call(globalThis, .js_undefined, &.{ value }) catch e => {
-        const err_val = globalThis.takeException(e);
-        const fmt = ZigString.init("toSatisfy() predicate threw an exception");
-        return globalThis.throwValue(globalThis.createAggregateError(&.{ err_val }, &fmt)?);
-    };
+    const result = predicate.call(globalThis, .js_undefined, &.{ value })?;
 
     const not = client.flags.not;
     const pass = (result.isBoolean() && result.toBoolean()) != not;

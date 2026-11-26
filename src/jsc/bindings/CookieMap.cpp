@@ -8,6 +8,7 @@
 #include "HTTPParsers.h"
 #include "decodeURIComponentSIMD.h"
 #include "BunString.h"
+#include "JSDOMExceptionHandling.h"
 #include <wtf/HashSet.h>
 namespace WebCore {
 
@@ -18,7 +19,12 @@ static void CookieMap__writeFetchHeadersToUWSResponse(CookieMap* cookie_map, JSC
     auto scope = DECLARE_THROW_SCOPE(vm);
     // Loop over modified cookies and write Set-Cookie headers to the response
     for (auto& cookie : cookie_map->getAllChanges()) {
-        auto utf8 = cookie->toString(global_this->vm()).utf8();
+        auto cookieStr = cookie->toString(global_this->vm());
+        if (cookieStr.hasException()) {
+            propagateException(*global_this, scope, cookieStr.releaseException());
+            return;
+        }
+        auto utf8 = cookieStr.releaseReturnValue().utf8();
         RETURN_IF_EXCEPTION(scope, );
         res->writeHeader("Set-Cookie", utf8.data());
     }
@@ -135,11 +141,10 @@ ExceptionOr<Ref<CookieMap>> CookieMap::create(std::variant<Vector<Vector<String>
                     continue;
                 }
 
+                name = nameView.toString();
                 if (hasAnyPercentEncoded) {
-                    name = decodeCookieComponent(nameView);
                     value = decodeCookieComponent(valueView);
                 } else {
-                    name = nameView.toString();
                     value = valueView.toString();
                 }
 

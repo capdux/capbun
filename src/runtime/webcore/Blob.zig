@@ -3933,7 +3933,31 @@ _ = destination_blob.detach();
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err_ref.toJS(globalThis));
 },
 .Locked => {
-if (destination_blob.isS3()) {
+if (((response.getBodyReadableStream(globalThis)) orelse (bodyValue.Locked.readable.get(globalThis)))) |readable| {
+                _ = &readable;
+                if (readable.isDisturbed(globalThis)) {
+                    _ = destination_blob.detach();
+                    return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                }
+                if (destination_blob.isS3()) {
+                    const s3 = (&destination_blob.store.?.data.s3);
+                    var aws_options = try s3.getCredentialsWithOptions(options.extra_options, globalThis);
+                    _ = &aws_options;
+                    var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
+                    _ = &_guard_aws;
+                    var ___guard_aws_moved = false; _ = &___guard_aws_moved;
+                    defer if (!___guard_aws_moved) { ___guard_aws_moved = true; const __T = @TypeOf(_guard_aws); if (@typeInfo(__T) == .optional) { if (_guard_aws) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_aws.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_aws; _drop_val.__cp_deinit(); } };
+                    var proxy_url: ?[]const u8 = null;
+                    _ = &proxy_url;
+                    if (globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) |p| {
+                        _ = &p;
+                        proxy_url = p.href;
+                    }
+                    return S3.uploadStream((if ((options.extra_options != null)) aws_options.credentials.dupe() else s3.getCredentials()), s3.path(), readable, globalThis, aws_options.options, aws_options.acl, aws_options.storage_class, destination_blob.contentTypeOrMimeType(), aws_options.content_disposition, aws_options.content_encoding, proxy_url, aws_options.request_payer, null, undefined);
+                }
+                return destination_blob.pipeReadableStreamToBlob(globalThis, readable, options.extra_options);
+            }
+            if (destination_blob.isS3()) {
                 const s3 = (&destination_blob.store.?.data.s3);
                 var aws_options = try s3.getCredentialsWithOptions(options.extra_options, globalThis);
                 _ = &aws_options;
@@ -3980,7 +4004,31 @@ _ = destination_blob.detach();
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err_ref.toJS(globalThis));
 },
 .Locked => |locked| {
-if (destination_blob.isS3()) {
+if (((request.getBodyReadableStream(globalThis)) orelse (locked.readable.get(globalThis)))) |readable| {
+                _ = &readable;
+                if (readable.isDisturbed(globalThis)) {
+                    _ = destination_blob.detach();
+                    return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                }
+                if (destination_blob.isS3()) {
+                    const s3 = (&destination_blob.store.?.data.s3);
+                    var aws_options = try s3.getCredentialsWithOptions(options.extra_options, globalThis);
+                    _ = &aws_options;
+                    var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
+                    _ = &_guard_aws;
+                    var ___guard_aws_moved = false; _ = &___guard_aws_moved;
+                    defer if (!___guard_aws_moved) { ___guard_aws_moved = true; const __T = @TypeOf(_guard_aws); if (@typeInfo(__T) == .optional) { if (_guard_aws) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_aws.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_aws; _drop_val.__cp_deinit(); } };
+                    var proxy_url: ?[]const u8 = null;
+                    _ = &proxy_url;
+                    if (globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) |p| {
+                        _ = &p;
+                        proxy_url = p.href;
+                    }
+                    return S3.uploadStream((if ((options.extra_options != null)) aws_options.credentials.dupe() else s3.getCredentials()), s3.path(), readable, globalThis, aws_options.options, aws_options.acl, aws_options.storage_class, destination_blob.contentTypeOrMimeType(), aws_options.content_disposition, aws_options.content_encoding, proxy_url, aws_options.request_payer, null, undefined);
+                }
+                return destination_blob.pipeReadableStreamToBlob(globalThis, readable, options.extra_options);
+            }
+            if (destination_blob.isS3()) {
                 const s3 = (&destination_blob.store.?.data.s3);
                 var aws_options = try s3.getCredentialsWithOptions(options.extra_options, globalThis);
                 _ = &aws_options;
@@ -4018,6 +4066,14 @@ if (destination_blob.isS3()) {
             _ = &archive;
             _ = archive.store.ref();
             break :brk Blob.initWithStore(archive.store, globalThis);
+        }
+        if (try jsc.WebCore.ReadableStream.fromJS(data, globalThis)) |readable| {
+            _ = &readable;
+            if (readable.isDisturbed(globalThis)) {
+                _ = destination_blob.detach();
+                return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+            }
+            return destination_blob.pipeReadableStreamToBlob(globalThis, readable, options.extra_options);
         }
         break :brk try Blob.get(globalThis, data, false, false);
 };

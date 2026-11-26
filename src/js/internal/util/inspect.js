@@ -1316,7 +1316,7 @@ function formatValue(ctx, value, recurseTimes, typedArray) {
 
   // Provide a hook for user-specified inspect functions.
   // Check that value is an object with an inspect function on it.
-  if (ctx.customInspect) {
+  if (ctx.customInspect && !(ctx.showHidden && isURL(value))) {
     const maybeCustom = value[customInspectSymbol];
     if (
       typeof maybeCustom === "function" &&

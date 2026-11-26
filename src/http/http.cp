@@ -3161,7 +3161,7 @@ export @root @value struct HTTPClient {
                 return ShouldContinue.continue_streaming;
             }
 
-            if (_.method.hasBody() && (content_length == null || content_length.? > 0 || !_.state.flags.allow_keepalive || _.state.transfer_encoding == .chunked || is_server_sent_events)) {
+            if (_.method.hasBody() && (content_length == null || content_length.? > 0 || _.state.transfer_encoding == .chunked || is_server_sent_events)) {
                 return ShouldContinue.continue_streaming;
             } else {
                 return ShouldContinue.finished;

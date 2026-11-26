@@ -22,7 +22,7 @@ export default [
 
       decode: {
         fn: "decode",
-        length: 1,
+        length: 0,
 
         DOMJIT: {
           returns: "JSString",

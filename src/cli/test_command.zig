@@ -998,7 +998,7 @@ _ = (if (Output.is_github_action) blk: {
                 _ = Output.printError("::error title=error: Test \"{s}\" timed out after {d}ms::\n", .{ display_label, test_entry.timeout });
                 break :blk Output.flush();
 
-} else null);
+} else @as(void, undefined));
 },
 else => {
 
@@ -1607,7 +1607,7 @@ pub fn printCodeCoverage(_: *CommandLineReporter, vm: *jsc.VirtualMachine, opts:
                 _ = bun.default_allocator.free(lcov_buffered_writer.new_interface.buffer);
             }
             }
-            const lcov_writer = (if (comptime reporters.lcov) (&lcov_buffered_writer.new_interface) else null);
+            const lcov_writer = (if (comptime reporters.lcov) (&lcov_buffered_writer.new_interface) else @as(void, undefined));
             var _guard_lcov = LcovErrGuard(@TypeOf(lcov_file), @TypeOf(lcov_name)){ .armed = (comptime reporters.lcov), .file = lcov_file, .name = lcov_name };
             _ = &_guard_lcov;
             var ___guard_lcov_moved = false; _ = &___guard_lcov_moved;
@@ -1850,7 +1850,7 @@ pub fn exec(ctx: Command.Context) !void {
                     vm.is_shutting_down = true;
                     break :blk vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
 
-} else null)); } }  unreachable; }); }); });
+} else @as(void, undefined))); } }  unreachable; }); }); });
                 }
             } else {
                 const empty_filters: [0][]const u8 = undefined;
@@ -1890,11 +1890,57 @@ pub fn exec(ctx: Command.Context) !void {
                 vm.is_shutting_down = true;
                 break :__sw_blk_18 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
             }
-            const all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
+            var all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
+            _ = &all_test_files;
             var _guard_test_files = FreeGuard(@TypeOf(all_test_files)){ .allocator = ctx.allocator, .slice = all_test_files };
             _ = &_guard_test_files;
             var ___guard_test_files_moved = false; _ = &___guard_test_files_moved;
             defer if (!___guard_test_files_moved) { ___guard_test_files_moved = true; const __T = @TypeOf(_guard_test_files); if (@typeInfo(__T) == .optional) { if (_guard_test_files) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_test_files.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_test_files; _drop_val.__cp_deinit(); } };
+            if (((scanner.filter_names.len > 1) and (all_test_files.len > 1))) {
+                const OrderedFilterItem = struct {
+    path: PathString,
+    filter_idx: usize,
+    orig_idx: usize,
+
+pub fn lessThan(_: void, a: @This(), b: @This()) bool {
+            if ((a.filter_idx != b.filter_idx)) {
+                return (a.filter_idx < b.filter_idx);
+            }
+            return (a.orig_idx < b.orig_idx);
+    }
+};
+                var ordered = bun.handleOom(ctx.allocator.alloc(OrderedFilterItem, all_test_files.len));
+                _ = &ordered;
+                defer {
+                _ = ctx.allocator.free(ordered);
+                }
+                var orig_i: usize = 0;
+                _ = &orig_i;
+                while ((orig_i < all_test_files.len)) : (orig_i = (orig_i + 1)) {
+                    const path = all_test_files[@as(usize, @intCast(orig_i))];
+                    const abs_path = path.slice();
+                    const rel_path = bun.path.relative(scanner.fs.top_level_dir, abs_path);
+                    var matched_idx: usize = scanner.filter_names.len;
+                    _ = &matched_idx;
+                    var fi: usize = 0;
+                    _ = &fi;
+                    while ((fi < scanner.filter_names.len)) : (fi = (fi + 1)) {
+                        const f = scanner.filter_names[@as(usize, @intCast(fi))];
+                        if ((strings.startsWith(abs_path, f) or strings.contains(rel_path, f))) {
+                            matched_idx = fi;
+                            break;
+                        }
+                    }
+                    ordered[cp_cast_int(usize, orig_i)] = OrderedFilterItem{ .path = path, .filter_idx = matched_idx, .orig_idx = orig_i };
+                }
+                const empty_order_ctx: void = undefined;
+                _ = std.sort.pdq(OrderedFilterItem, ordered, empty_order_ctx, OrderedFilterItem.lessThan);
+                var oi: usize = 0;
+                _ = &oi;
+                while ((oi < all_test_files.len)) : (oi = (oi + 1)) {
+                    all_test_files[cp_cast_int(usize, oi)] = ordered[@as(usize, @intCast(oi))].path;
+                }
+            }
             const search_count = scanner.search_count;
             var pass_with_no_tests_from_filter = false;
             _ = &pass_with_no_tests_from_filter;

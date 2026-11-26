@@ -834,7 +834,7 @@ pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
 pub const IOWriter = bun.io.StreamingWriter(Terminal, struct {
     pub const onClose = Terminal.onWriterClose;
-    pub const onReady = Terminal.onWriterReady;
+    pub const onWritable = Terminal.onWriterReady;
     pub const onError = Terminal.onWriterError;
     pub const onWrite = Terminal.onWrite;
 });

@@ -377,7 +377,7 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
                             }
                         },
                         .hsl => {
-                            const hsl = unsafe {
+                            const hsl_raw = unsafe {
                                 switch (result.*) {
                                     .float => |float_ptr| switch (float_ptr.*) {
                                         .hsl => |hsl_val| hsl_val,
@@ -390,11 +390,12 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
                                     else => break :formatted,
                                 }
                             };
+                            const hsl = hsl_raw.resolveMissing();
 
-                            break :color bun.String.createFormat("hsl({d}, {d}, {d})", [hsl.h, hsl.s, hsl.l]);
+                            break :color bun.String.createFormat("hsl({d}, {d}%, {d}%)", [hsl.h, hsl.s * 100.0, hsl.l * 100.0]);
                         },
                         .lab => {
-                            const lab = unsafe {
+                            const lab_raw = unsafe {
                                 switch (result.*) {
                                     .float => |float_ptr| switch (float_ptr.*) {
                                         inline else => |*val| val.into(.LAB),
@@ -407,8 +408,9 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
                                     else => break :formatted,
                                 }
                             };
+                            const lab = lab_raw.resolveMissing();
 
-                            break :color bun.String.createFormat("lab({d}, {d}, {d})", [lab.l, lab.a, lab.b]);
+                            break :color bun.String.createFormat("lab({d}% {d} {d})", [lab.l * 100.0, lab.a, lab.b]);
                         },
                     }
                 } catch e => bun.handleOom(e);

@@ -394,7 +394,7 @@ extern "C" void ReadableStream__detach(JSC::EncodedJSValue possibleReadableStrea
     if (value.isEmpty() || !value.isCell())
         return;
 
-    auto* readableStream = static_cast<WebCore::JSReadableStream*>(value.asCell());
+    auto* readableStream = dynamicDowncast<WebCore::JSReadableStream>(value);
     if (!readableStream) [[unlikely]]
         return;
     readableStream->setNativePtr(globalObject->vm(), jsNumber(-1));

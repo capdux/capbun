@@ -265,7 +265,7 @@ pub union(enum) Stdio {
         };
     }
 
-    static fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, is_sync: bool): bun.JSError!void {
+    static fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, owned_readable_stream: jsc.WebCore.ReadableStream?, is_sync: bool): bun.JSError!void {
         body.toBlobIfPossible();
 
         if (blob := body.tryUseAsAnyBlob()) {
@@ -294,8 +294,13 @@ pub union(enum) Stdio {
                     2 => return globalThis.throwInvalidArguments("ReadableStream cannot be used for stderr yet. For now, do .stderr", .{}),
                     else => unreachable,
                 }
-                const stream_value = body.toReadableStream(globalThis)?;
-                const stream = (jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)?) ?? return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{});
+                const stream = brk: {
+                    if (owned := owned_readable_stream) {
+                        break :brk owned;
+                    }
+                    const stream_value = body.toReadableStream(globalThis)?;
+                    break :brk (jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)?) ?? return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{});
+                };
                 if (stream.isDisturbed(globalThis)) {
                     return globalThis.ERR(.BODY_ALREADY_USED, "ReadableStream has already been used", .{}).throw();
                 }
@@ -369,9 +374,9 @@ pub union(enum) Stdio {
         } else if (blob := value.as(jsc.WebCore.Blob)) {
             return out_stdio.extractBlob(globalThis, { Blob: blob.dupe() }, i);
         } else if (req := value.as(jsc.WebCore.Request)) {
-            return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), is_sync);
+            return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), req.getBodyReadableStream(globalThis), is_sync);
         } else if (res := value.as(jsc.WebCore.Response)) {
-            return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), is_sync);
+            return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), res.getBodyReadableStream(globalThis), is_sync);
         }
 
         if (stream_ := jsc.WebCore.ReadableStream.fromJS(value, globalThis)?) {
@@ -431,10 +436,10 @@ pub union(enum) Stdio {
                             switch (tag) {
                                 .std_in => if (i == 1 || i == 2) {
                                     return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
-                                },
+                                } else @as(void, undefined),
                                 .std_out, .std_err => if (i == 0) {
                                     return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
-                                },
+                                } else @as(void, undefined),
                             }
                         }
                         stdio.* = { fd: store.data.file.pathlike.fd };

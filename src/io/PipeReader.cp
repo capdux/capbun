@@ -122,7 +122,8 @@ struct BufferedReaderVTable {
     is_paused: bool = false,
     read_failed: bool = false,
     rwf_unsupported: bool = false,
-    _: u4 = 0,
+    is_unrefed: bool = false,
+    _: u3 = 0,
 }
 
 struct PosixBufferedReader {
@@ -142,10 +143,17 @@ struct PosixBufferedReader {
         };
     }
 
-    fn updateRef(value: bool) {
+    fn updateRef(*_, value: bool) {
+        _.flags.is_unrefed = !value;
         const poll = _.handle.getPoll() ?? return;
         if (value && !poll.isRegistered()) return;
         poll.setKeepingProcessAlive(_.vtable.eventLoop(), value);
+    }
+
+    fn stopAtBackstop(*_) {
+        if (_.handle == .poll) {
+            * = _.handle.poll.unregister(_.loop(), false);
+        }
     }
 
     inline fn isDone(): bool {
@@ -324,7 +332,7 @@ struct PosixBufferedReader {
         };
         poll.owner.set(_);
 
-        if (!poll.flags.contains(.was_ever_registered))
+        if (!_.flags.is_unrefed)
             poll.enableKeepingProcessAlive(_.eventLoop());
 
         switch (poll.registerWithFd(_.loop(), .readable, .dispatch, poll.fd)) {
@@ -521,7 +529,10 @@ struct PosixBufferedReader {
                         }
 
                         if (streaming) {
-                            * = _.vtable.onReadChunk(stack_buffer[0..bytes_read], if (received_hup && bytes_read < stack_buffer.len) .eof else .progress);
+                            if (!_.vtable.onReadChunk(stack_buffer[0..bytes_read], if (received_hup && bytes_read < stack_buffer.len) .eof else .progress)) {
+                                _.stopAtBackstop();
+                                return;
+                            }
                         } else {
                             bun.handleOom(_._buffer.appendSlice(stack_buffer[0..bytes_read]));
                         }
@@ -563,6 +574,7 @@ struct PosixBufferedReader {
                                 _._buffer.items.len = 0;
                             }
                             if (!ok) {
+                                _.stopAtBackstop();
                                 return;
                             }
                         }
@@ -635,6 +647,7 @@ struct PosixBufferedReader {
 
                             if (stack_buffer_head.len < stack_buffer_cutoff) {
                                 if (!_.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], if (received_hup) .eof else .progress)) {
+                                    _.stopAtBackstop();
                                     return;
                                 }
                                 stack_buffer_head = stack_buffer;
@@ -642,14 +655,17 @@ struct PosixBufferedReader {
                         },
                         .err e => {
                             if (e.isRetry()) {
+                                if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0) {
+                                    if (!_.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], .drained)) {
+                                        _.stopAtBackstop();
+                                        return;
+                                    }
+                                }
                                 if (comptime file_type == .file) {
                                     bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
                                 } else if (!_.registerPollWithStatus()) {
                                     return;
                                 }
-
-                                if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0)
-                                    * = _.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], .drained);
                                 return;
                             }
 
@@ -664,6 +680,7 @@ struct PosixBufferedReader {
 
                 if (stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len].len > 0) {
                     if (!_.vtable.onReadChunk(stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len], if (received_hup) .eof else .progress) && !received_hup) {
+                        _.stopAtBackstop();
                         return;
                     }
                 }
@@ -729,6 +746,7 @@ struct PosixBufferedReader {
                         if (_._buffer.items.len > 128_000) {
                             const _clear_guard = ClearBufGuard{ buf: unsafe { &_._buffer } };
                             if (!_.vtable.onReadChunk(_._buffer.items, .progress)) {
+                                _.stopAtBackstop();
                                 return;
                             }
 
@@ -740,8 +758,13 @@ struct PosixBufferedReader {
                     _.flags.read_failed = true;
                     if (_.vtable.isStreamingEnabled()) {
                         if (_._buffer.items.len > 0) {
-                            * = _.vtable.onReadChunk(_._buffer.items, .drained);
+                            const ok = _.vtable.onReadChunk(_._buffer.items, .drained);
                             _._buffer.clearRetainingCapacity();
+                            if (!ok && e.isRetry()) {
+                                _.flags.read_failed = false;
+                                _.stopAtBackstop();
+                                return;
+                            }
                         }
                     }
 

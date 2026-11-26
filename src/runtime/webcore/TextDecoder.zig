@@ -109,6 +109,20 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const OptFreeSliceGuard = struct {
+    slice: *?[]u8,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *OptFreeSliceGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.slice.*) |s| {
+                _ = &s;
+                _ = default_allocator.free(s);
+            }
+    }
+};
+
 pub fn DerefGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -253,10 +267,27 @@ pub fn decode(self: *TextDecoder, globalThis: *JSGlobalObject, callframe: *jsc.C
         }
         var input_slice: []const u8 = "";
         _ = &input_slice;
+        var shared_copy: ?[]u8 = null;
+        _ = &shared_copy;
+        var _shared_guard = OptFreeSliceGuard{ .slice = (blk: {
+        break :blk (&shared_copy);
+
+}) };
+        _ = &_shared_guard;
+        var ___shared_guard_moved = false; _ = &___shared_guard_moved;
+        defer if (!___shared_guard_moved) { ___shared_guard_moved = true; const __T = @TypeOf(_shared_guard); if (@typeInfo(__T) == .optional) { if (_shared_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _shared_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _shared_guard; _drop_val.__cp_deinit(); } };
+        _ = (&_shared_guard);
         if (((arguments.len > 0) and (!arguments[0].isUndefined()))) {
             if (arguments[0].asArrayBuffer(globalThis)) |array_buffer| {
                 _ = &array_buffer;
-                input_slice = array_buffer.slice();
+                const raw_slice = array_buffer.slice();
+                if ((array_buffer.shared and (raw_slice.len > 0))) {
+                    const copy = (blk_catch_0: { break :blk_catch_0 ((default_allocator.dupe(u8, raw_slice)) catch |__ce_0| { _ = &__ce_0; return error.OutOfMemory; }); });
+                    shared_copy = copy;
+                    input_slice = copy;
+                } else {
+                    input_slice = raw_slice;
+                }
             } else {
                 return globalThis.throwInvalidArguments("TextDecoder.decode expects an ArrayBuffer or TypedArray", .{});
             }
@@ -342,7 +373,7 @@ var input = buffer_slice;
             }
         }
         var maybe_decode_result = (if (self.fatal) blk: {
-        break :blk (blk_catch_0: { break :blk_catch_0 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush)) catch |e| { _ = &e; if (alloc_buf) |buf| {
+        break :blk (blk_catch_1: { break :blk_catch_1 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush)) catch |e| { _ = &e; if (alloc_buf) |buf| {
             _ = &buf;
             _ = default_allocator.free(buf);
         }
@@ -354,7 +385,7 @@ var input = buffer_slice;
         return globalThis.throwOutOfMemory(); }); });
 
 } else blk: {
-        break :blk (blk_catch_1: { break :blk_catch_1 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush)) catch |e| { _ = &e; if (alloc_buf) |buf| {
+        break :blk (blk_catch_2: { break :blk_catch_2 ((strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush)) catch |e| { _ = &e; if (alloc_buf) |buf| {
             _ = &buf;
             _ = default_allocator.free(buf);
         }

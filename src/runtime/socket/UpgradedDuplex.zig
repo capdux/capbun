@@ -125,6 +125,7 @@ onEndCallback: jsc.Strong.Optional = .empty,
 onWritableCallback: jsc.Strong.Optional = .empty,
 onCloseCallback: jsc.Strong.Optional = .empty,
 transport_eof: bool = false,
+closed: bool = false,
 event_loop_timer: EventLoopTimer = .{ .next = .epoch, .tag = .UpgradedDuplex },
 current_timeout: u32 = 0,
 
@@ -146,6 +147,10 @@ pub fn onHandshake(self: *UpgradedDuplex, handshake_success: bool, ssl_error: uw
 
 pub fn onClose(self: *UpgradedDuplex) void {
         _ = log("onClose", .{});
+        if (self.closed) {
+            return;
+        }
+        self.closed = true;
         var _release_guard = ReleaseGuard(UpgradedDuplex){ .ptr = self };
         _ = &_release_guard;
         var ___release_guard_moved = false; _ = &___release_guard_moved;
@@ -240,9 +245,7 @@ pub fn onEnd(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
             _ = &ctx;
             const req = bun.cast(*UpgradedDuplex, ctx);
             req.transport_eof = true;
-            if ((req.wrapper != null)) {
-                _ = req.handlers.onEnd(req.handlers.ctx);
-            }
+            _ = req.handlers.onEnd(req.handlers.ctx);
         }
         return jsc.JSValue.js_undefined;
 }
@@ -273,6 +276,8 @@ pub fn onCloseJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
             if (req.wrapper) |*wrapper| {
                 _ = &wrapper;
                 _ = (wrapper.*).shutdown(true);
+            } else {
+                _ = req.onClose();
             }
         }
         return jsc.JSValue.js_undefined;
@@ -397,6 +402,8 @@ pub fn close(self: *UpgradedDuplex) void {
         if (self.wrapper) |*wrapper| {
             _ = &wrapper;
             _ = (wrapper.*).shutdown(true);
+        } else {
+            _ = self.onClose();
         }
 }
 
@@ -404,6 +411,8 @@ pub fn shutdown(self: *UpgradedDuplex) void {
         if (self.wrapper) |*wrapper| {
             _ = &wrapper;
             _ = (wrapper.*).shutdown(false);
+        } else {
+            _ = self.onClose();
         }
 }
 

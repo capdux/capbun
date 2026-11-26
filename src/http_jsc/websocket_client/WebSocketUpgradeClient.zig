@@ -840,6 +840,22 @@ pub fn fail(self: *@This(), code: ErrorCode) void {
             }
     }
 
+pub fn failWithReason(self: *@This(), code: ErrorCode, msg: []const u8) void {
+            _ = log("onFail: {s}: {s}", .{ @tagName(code), msg });
+            _ = jsc.markBinding(@src());
+            if (self.outgoing_websocket) |ws| {
+                _ = &ws;
+                self.outgoing_websocket = null;
+                _ = ws.didAbruptCloseWithReason(code, msg);
+                _ = self.deref();
+            }
+            if (comptime ssl) {
+                _ = self.tcp.close(.normal);
+            } else {
+                _ = self.tcp.close(.failure);
+            }
+    }
+
 pub fn dispatchAbruptClose(self: *@This(), code: ErrorCode) void {
             if (self.outgoing_websocket) |ws| {
                 _ = &ws;
@@ -860,6 +876,10 @@ pub fn handleClose(self: *@This(), _: Socket, _: c_int, _: ?*anyopaque) void {
 
 pub fn terminate(self: *@This(), code: ErrorCode) void {
             _ = self.fail(code);
+    }
+
+pub fn terminateWithReason(self: *@This(), code: ErrorCode, msg: []const u8) void {
+            _ = self.failWithReason(code, msg);
     }
 
 pub fn handleHandshake(self: *@This(), socket: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
@@ -1087,11 +1107,12 @@ pub fn handleProxyResponse(self: *@This(), socket: Socket, data: []const u8) voi
                 break;
             }
             if (((response.status_code < 200) or (response.status_code >= 300))) {
-                if ((response.status_code == 407)) {
-                    _ = self.terminate(ErrorCode.proxy_authentication_required);
-                } else {
-                    _ = self.terminate(ErrorCode.proxy_connect_failed);
-                }
+                const code = (if ((response.status_code == 407)) ErrorCode.proxy_authentication_required else ErrorCode.proxy_connect_failed);
+                const prefix = (if ((response.status_code == 407)) "Proxy authentication required" else "Proxy connection failed");
+                var msg_buf: [256]u8 = undefined;
+                _ = &msg_buf;
+                const msg = (if ((response.status.len > 0)) (blk_catch_13: { break :blk_catch_13 ((std.fmt.bufPrint((&msg_buf), "{s}: {d} {s}", .{ prefix, response.status_code, response.status })) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 prefix; }); }) else (blk_catch_14: { break :blk_catch_14 ((std.fmt.bufPrint((&msg_buf), "{s}: {d}", .{ prefix, response.status_code })) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 prefix; }); }));
+                _ = self.terminateWithReason(code, msg);
                 return;
             }
             _ = log("Proxy tunnel established", .{});
@@ -1127,13 +1148,13 @@ pub fn startProxyTLSHandshake(self: *@This(), socket: Socket, initial_data: []co
             if (self.proxy) |*p| {
                 _ = &p;
                 const reject_unauthorized = (if ((self.outgoing_websocket != null)) self.outgoing_websocket.?.rejectUnauthorized() else true);
-                const tunnel = (blk_catch_13: { break :blk_catch_13 ((WebSocketProxyTunnel.init(ssl, self, socket, (p.*).getTargetHost(), reject_unauthorized)) catch |__ce_13| { _ = &__ce_13; _ = self.terminate(ErrorCode.proxy_tunnel_failed);
+                const tunnel = (blk_catch_15: { break :blk_catch_15 ((WebSocketProxyTunnel.init(ssl, self, socket, (p.*).getTargetHost(), reject_unauthorized)) catch |__ce_15| { _ = &__ce_15; _ = self.terminate(ErrorCode.proxy_tunnel_failed);
                 return; }); });
                 const ssl_options: SSLConfig = (if ((self.ssl_config != null)) (blk: {
                 break :blk (self.ssl_config.?).*;
 
 }) else SSLConfig{ .reject_unauthorized = 0, .request_cert = 1 });
-                _ = (blk_catch_14: { break :blk_catch_14 ((tunnel.start(ssl_options, initial_data)) catch |__ce_14| { _ = &__ce_14; _ = tunnel.deref();
+                _ = (blk_catch_16: { break :blk_catch_16 ((tunnel.start(ssl_options, initial_data)) catch |__ce_16| { _ = &__ce_16; _ = tunnel.deref();
                 _ = self.terminate(ErrorCode.proxy_tunnel_failed);
                 return; }); });
                 _ = (p.*).setTunnel(tunnel);
@@ -1159,7 +1180,7 @@ pub fn onProxyTLSHandshakeComplete(self: *@This()) void {
                 }
                 if ((p.*).getTunnel()) |tunnel| {
                     _ = &tunnel;
-                    const wrote = (blk_catch_15: { break :blk_catch_15 ((tunnel.write(self.input_body_buf)) catch |__ce_15| { _ = &__ce_15; _ = self.terminate(ErrorCode.failed_to_write);
+                    const wrote = (blk_catch_17: { break :blk_catch_17 ((tunnel.write(self.input_body_buf)) catch |__ce_17| { _ = &__ce_17; _ = self.terminate(ErrorCode.failed_to_write);
                     return; }); });
                     self.to_send = self.input_body_buf[wrote..];
                 } else {
@@ -1388,7 +1409,7 @@ else => {
             var overflow: []u8 = empty_u8[0..0];
             _ = &overflow;
             if ((overflow_len > 0)) {
-                overflow = (blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 bun.outOfMemory(); }); });
+                overflow = (blk_catch_18: { break :blk_catch_18 ((bun.default_allocator.alloc(u8, overflow_len)) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 bun.outOfMemory(); }); });
                 _ = @memcpy(overflow, remain_buf);
             }
             var _guard_overflow = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = (if ((overflow_len > 0)) overflow else null) };
@@ -1489,7 +1510,7 @@ pub fn handleWritable(self: *@This(), socket: Socket) void {
                     _ = &_guard_deref;
                     var ___guard_deref_moved = false; _ = &___guard_deref_moved;
                     defer if (!___guard_deref_moved) { ___guard_deref_moved = true; const __T = @TypeOf(_guard_deref); if (@typeInfo(__T) == .optional) { if (_guard_deref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_deref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_deref; _drop_val.__cp_deinit(); } };
-                    const wrote = (blk_catch_17: { break :blk_catch_17 ((tunnel.write(self.to_send)) catch |__ce_17| { _ = &__ce_17; _ = self.terminate(ErrorCode.failed_to_write);
+                    const wrote = (blk_catch_19: { break :blk_catch_19 ((tunnel.write(self.to_send)) catch |__ce_19| { _ = &__ce_19; _ = self.terminate(ErrorCode.failed_to_write);
                     return; }); });
                     self.to_send = self.to_send[@min(wrote, self.to_send.len)..];
                     return;

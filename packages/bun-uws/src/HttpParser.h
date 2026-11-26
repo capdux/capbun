@@ -295,6 +295,15 @@ namespace uWS
                         return te;
                     }
 
+                    if (lastTokenLen == 0) {
+                        for (size_t i = 0; i < value.length(); i++) {
+                            if (value[i] != ' ' && value[i] != '\t') {
+                                te.invalid = true;
+                                return te;
+                            }
+                        }
+                    }
+
                     te.has = lastTokenLen > 0;
 
                     // Check if the last token is "chunked"
@@ -882,9 +891,12 @@ namespace uWS
              * must be rejected to prevent request smuggling. The bloom filter short-circuits
              * the common "no Content-Length" case. */
             std::string_view contentLengthString;
+            bool sawContentLength = false;
+            bool sawTEAfterCL = false;
             if (req->bf.mightHave("content-length")) {
                 for (HttpRequest::Header *h = req->headers; (++h)->key.length(); ) {
                     if (h->key.length() == 14 && !strncmp(h->key.data(), "content-length", 14)) {
+                        sawContentLength = true;
                         if (contentLengthString.data() == nullptr) {
                             if (h->value.length() == 0) {
                                 return HttpParserResult::error(HTTP_ERROR_400_BAD_REQUEST, HTTP_PARSER_ERROR_INVALID_CONTENT_LENGTH);
@@ -894,6 +906,8 @@ namespace uWS
                                    strncmp(h->value.data(), contentLengthString.data(), contentLengthString.length())) {
                             return HttpParserResult::error(HTTP_ERROR_400_BAD_REQUEST, HTTP_PARSER_ERROR_INVALID_CONTENT_LENGTH);
                         }
+                    } else if (sawContentLength && h->key.length() == 17 && !strncmp(h->key.data(), "transfer-encoding", 17)) {
+                        sawTEAfterCL = true;
                     }
                 }
             }
@@ -902,7 +916,7 @@ namespace uWS
             /* Check Transfer-Encoding header validity and conflicts */
             HttpRequest::TransferEncoding transferEncoding = req->getTransferEncoding();
 
-            transferEncoding.invalid = transferEncoding.invalid || (transferEncoding.has && (contentLengthStringLen || !transferEncoding.chunked));
+            transferEncoding.invalid = transferEncoding.invalid || (useStrictMethodValidation && sawTEAfterCL) || (transferEncoding.has && (contentLengthStringLen || !transferEncoding.chunked));
 
             if (transferEncoding.invalid) [[unlikely]] {
                 /* Invalid Transfer-Encoding (multiple headers or chunked not last - request smuggling attempt) */

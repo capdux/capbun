@@ -450,7 +450,10 @@ static void populateStackTrace(JSC::VM& vm, const WTF::Vector<JSC::StackFrame>& 
             // A call with flags set to OnlySourceLines always follows a call with flags set to OnlyPosition,
             // so jsc_stack_frame_index is always a valid value here.
             ASSERT(frame.jsc_stack_frame_index >= 0);
-            ASSERT(static_cast<size_t>(frame.jsc_stack_frame_index) < frames.size());
+            if (static_cast<size_t>(frame.jsc_stack_frame_index) >= frames.size()) {
+                trace.frames_len = i;
+                break;
+            }
             populateStackFrame(vm, trace, frames[frame.jsc_stack_frame_index], frame, i == 0, &trace.referenced_source_provider, globalObject, flags, finalizerSafety);
         }
     }

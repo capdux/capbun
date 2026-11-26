@@ -422,13 +422,17 @@ function ClientRequest(input, options, cb) {
           this[kClearTimeout]();
           handleResponse = undefined;
 
+          const isHTTPS = response.url.startsWith("https:");
           const prevIsHTTPS = getIsNextIncomingMessageHTTPS();
-          setIsNextIncomingMessageHTTPS(response.url.startsWith("https:"));
+          setIsNextIncomingMessageHTTPS(isHTTPS);
           var res = (this.res = new IncomingMessage(response, {
             [typeSymbol]: NodeHTTPIncomingRequestType.FetchResponse,
             [reqSymbol]: this,
           }));
           setIsNextIncomingMessageHTTPS(prevIsHTTPS);
+          if (isHTTPS && res.socket) {
+            res.socket.authorized = this[kTls]?.rejectUnauthorized !== false;
+          }
           res.req = this;
           res.setTimeout = clientResponseSetTimeout;
           process.nextTick(
@@ -854,6 +858,7 @@ function ClientRequest(input, options, cb) {
   this[kParser] = null;
   this[kMaxHeadersCount] = null;
   this[kReusedSocket] = false;
+  this.reusedSocket = false;
   this[kHost] = host;
   this[kProtocol] = protocol;
 
@@ -1000,7 +1005,6 @@ const ClientRequestPrototype = {
     } else {
       this[kTimeoutTimer] = setTimeout(() => {
         this[kTimeoutTimer] = undefined;
-        this[kAbortController]?.abort();
         this.emit("timeout");
       }, msecs).unref();
 

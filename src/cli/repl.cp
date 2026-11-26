@@ -109,6 +109,7 @@ struct Cursor {
     const clear_line = CSI ++ "2K";
     const clear_to_end = CSI ++ "0K";
     const clear_to_start = CSI ++ "1K";
+    const clear_below = CSI ++ "J";
     const clear_screen = CSI ++ "2J";
     const clear_scrollback = CSI ++ "3J";
 }
@@ -753,7 +754,13 @@ is_tty: bool = false,
 use_colors: bool = false,
 terminal_width: u16 = 80,
 terminal_height: u16 = 24,
+prev_cursor_row: usize = 0,
+cursor_on_empty_wrap_row: bool = false,
 ctrl_c_pressed: bool = false,
+
+// Inline ghost suggestion
+suggestion_buf: [256]u8 = std.mem.zeroes([256]u8),
+suggestion_len: usize = 0,
 
 // Buffered stdin
 stdin_buf: [256]u8 = std.mem.zeroes([256]u8),
@@ -820,10 +827,7 @@ fn setupTerminal(*_) {
     _.use_colors = !bun.env_var.NO_COLOR.get();
 
     // Get terminal size
-    if (Output.terminal_size.col > 0) {
-        _.terminal_width = Output.terminal_size.col;
-        _.terminal_height = Output.terminal_size.row;
-    }
+    _.updateTerminalSize();
 
     // Enable raw mode
     if (Environment.isPosix) {
@@ -1014,7 +1018,15 @@ fn readKey(*_): Key? {
         while (i < seq_len) : (i += 1) {
             const next_opt = _.readByte();
             if (next_opt == null) return .unknown;
-            utf8_buf[i] = next_opt.?;
+            const next_byte = next_opt.?;
+            if ((next_byte & 0xC0) != 0x80) {
+                if (_.stdin_buf_start > 0) {
+                    _.stdin_buf_start -= 1;
+                    _.stdin_buf[_.stdin_buf_start] = next_byte;
+                }
+                return .unknown;
+            }
+            utf8_buf[i] = next_byte;
         }
         const cp = std.unicode.utf8Decode(utf8_buf[0..seq_len]) catch return .unknown;
         return Key{ char: cp };
@@ -1050,7 +1062,186 @@ fn getPromptLength(*_): usize {
     return 2; // "> " or "\u{276f} "
 }
 
+fn updateTerminalSize(*_) {
+    if (comptime Environment.isPosix) {
+        let size: std.posix.winsize = undefined;
+        if (std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, unsafe { @intFromPtr(&size) }) == 0) {
+            if (size.col > 0) _.terminal_width = size.col;
+            if (size.row > 0) _.terminal_height = size.row;
+            return;
+        }
+    } else if (comptime Environment.isWindows) {
+        const windows = std.os.windows;
+        if (handle := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE) catch null) {
+            let csbi: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
+            if (windows.kernel32.GetConsoleScreenBufferInfo(handle, &csbi) != windows.FALSE) {
+                const w = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+                const h = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+                if (w > 0) _.terminal_width = @as(u16, @intCast(w));
+                if (h > 0) _.terminal_height = @as(u16, @intCast(h));
+                return;
+            }
+        }
+    }
+    if (Output.terminal_size.col > 0) {
+        _.terminal_width = Output.terminal_size.col;
+        _.terminal_height = Output.terminal_size.row;
+    }
+}
+
+static fn codepointWidth(cp: u21): usize {
+    if (cp < 0x20) return 0;
+    if (cp < 0x7F) return 1;
+    if (cp < 0xA0) return 0;
+    if ((cp >= 0x1100 && cp <= 0x115F) ||
+        (cp >= 0x2329 && cp <= 0x232A) ||
+        (cp >= 0x2E80 && cp <= 0xA4CF && cp != 0x303F) ||
+        (cp >= 0xAC00 && cp <= 0xD7A3) ||
+        (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFE10 && cp <= 0xFE19) ||
+        (cp >= 0xFE30 && cp <= 0xFE6F) ||
+        (cp >= 0xFF00 && cp <= 0xFF60) ||
+        (cp >= 0xFFE0 && cp <= 0xFFE6) ||
+        (cp >= 0x1F300 && cp <= 0x1F9FF) ||
+        (cp >= 0x20000 && cp <= 0x2FFFD) ||
+        (cp >= 0x30000 && cp <= 0x3FFFD))
+    {
+        return 2;
+    }
+    return 1;
+}
+
+static fn advanceDisplayPos(row: *usize, col: *usize, text: []const u8, term_width: usize) {
+    let i: usize = 0;
+    while (i < text.len) {
+        const seq_len = std.unicode.utf8ByteSequenceLength(text[i]) catch {
+            if (col.* + 1 > term_width) {
+                row.* += 1;
+                col.* = 0;
+            }
+            col.* += 1;
+            i += 1;
+            continue;
+        };
+        if (i + seq_len > text.len) break;
+        const cp = std.unicode.utf8Decode(text[i .. i + seq_len]) catch 0xFFFD;
+        const w = codepointWidth(cp);
+        if (w > 0) {
+            if (col.* + w > term_width) {
+                row.* += 1;
+                col.* = 0;
+            }
+            col.* += w;
+        }
+        i += seq_len;
+    }
+}
+
+fn computeSuggestion(*_, line: []const u8) {
+    _.suggestion_len = 0;
+    if (_.global == null) return;
+    const global = _.global.?;
+
+    let word_start: usize = line.len;
+    while (word_start > 0) {
+        const c = line[word_start - 1];
+        if (!std.ascii.isAlphanumeric(c) && c != '_' && c != '$') break;
+        word_start -= 1;
+    }
+    const prefix = line[word_start..];
+
+    let target: jsc.JSValue = .js_undefined;
+    let is_member = false;
+    if (word_start > 0 && line[word_start - 1] == '.') {
+        is_member = true;
+        let expr_start: usize = word_start - 1;
+        while (expr_start > 0) {
+            const c = line[expr_start - 1];
+            if (!std.ascii.isAlphanumeric(c) && c != '_' && c != '$' && c != '.') break;
+            expr_start -= 1;
+        }
+        const target_expr = line[expr_start .. word_start - 1];
+        if (target_expr.len == 0 || target_expr[0] == '.' || target_expr[target_expr.len - 1] == '.') return;
+
+        let exception: jsc.JSValue = .js_undefined;
+        const eval_res = Bun__REPL__evaluate(
+            global,
+            target_expr.ptr,
+            target_expr.len,
+            "[repl]".ptr,
+            "[repl]".len,
+            &exception,
+        );
+        if (!exception.isUndefined() && !exception.isNull()) return;
+        if (eval_res.isUndefined() || eval_res.isNull()) return;
+        target = eval_res;
+    } else if (prefix.len == 0) {
+        return;
+    }
+
+    const completions = Bun__REPL__getCompletions(
+        global,
+        target,
+        prefix.ptr,
+        prefix.len,
+    );
+    if (!completions.isUndefined() && completions.isArray()) {
+        const len = completions.getLength(global) catch brk: {
+            global.clearException();
+            break :brk 0;
+        };
+        let i: u32 = 0;
+        while (i < @as(u32, @truncate(len))) : (i += 1) {
+            const item = completions.getIndex(global, i) catch brk: {
+                global.clearException();
+                break :brk .js_undefined;
+            };
+            if (item.isString()) {
+                let slice = item.toSlice(global, _.allocator) catch {
+                    global.clearException();
+                    continue;
+                };
+                const _guard_slice = DeinitGuard<jsc.ZigString.Slice>{ ptr: &slice };
+                const name = slice.slice();
+                if (name.len > prefix.len && strings.startsWith(name, prefix)) {
+                    const suffix = name[prefix.len..];
+                    if (suffix.len <= _.suggestion_buf.len) {
+                        @memcpy(_.suggestion_buf[0..suffix.len], suffix);
+                        _.suggestion_len = suffix.len;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!is_member && prefix.len > 0) {
+        const js_keywords: [42]string = [
+            "async", "await", "break", "case", "catch", "class", "const", "continue",
+            "debugger", "default", "delete", "do", "else", "export", "extends", "false",
+            "finally", "for", "function", "if", "import", "in", "instanceof", "let",
+            "new", "null", "of", "return", "static", "super", "switch", "this",
+            "throw", "true", "try", "typeof", "undefined", "var", "void", "while",
+            "with", "yield",
+        ];
+        for (kw of js_keywords) {
+            if (kw.len > prefix.len && strings.startsWith(kw, prefix)) {
+                const suffix = kw[prefix.len..];
+                if (suffix.len <= _.suggestion_buf.len) {
+                    @memcpy(_.suggestion_buf[0..suffix.len], suffix);
+                    _.suggestion_len = suffix.len;
+                    return;
+                }
+            }
+        }
+    }
+}
+
 fn refreshLine(*_) {
+    _.refreshLineWithSuggestion(true);
+}
+
+fn refreshLineWithSuggestion(*_, show_suggestion: bool) {
     // Flush any buffered output (e.g., from console.log in JS) before drawing prompt
     Output.flush();
 
@@ -1065,11 +1256,18 @@ fn refreshLine(*_) {
         return;
     }
 
+    _.updateTerminalSize();
+    const term_width: usize = if (_.terminal_width > 0) @as(usize, _.terminal_width) else 80;
     const prompt_len = _.getPromptLength();
 
-    // Move to beginning of line
+    // Move back to the prompt's start row and clear from cursor to end of screen
+    if (_.prev_cursor_row > 0) {
+        let up_buf: [16]u8 = undefined;
+        const up_seq = std.fmt.bufPrint(&up_buf, CSI ++ "{d}A", .{_.prev_cursor_row}) catch "";
+        _.write(up_seq);
+    }
     _.write("\r");
-    _.write(Cursor.clear_line);
+    _.write(Cursor.clear_below);
 
     // Write prompt
     _.write(prompt);
@@ -1081,20 +1279,65 @@ fn refreshLine(*_) {
         _.write(line);
     }
 
-    // Position cursor
-    if (Output.terminal_size.col > 0) {
-        _.terminal_width = Output.terminal_size.col;
+    // Compute and render inline ghost suggestion
+    if (show_suggestion && _.use_colors && !_.in_multiline && !_.editor_mode && _.line_editor.cursor == line.len && line.len > 0 && line[0] != '.') {
+        _.computeSuggestion(line);
+    } else {
+        _.suggestion_len = 0;
     }
-    const cursor_pos = prompt_len + _.line_editor.cursor;
-    if (cursor_pos < _.terminal_width) {
+
+    const suggestion = _.suggestion_buf[0.._.suggestion_len];
+    if (suggestion.len > 0) {
+        _.write(Color.dim);
+        _.write(suggestion);
+        _.write(Color.reset);
+    }
+
+    // Compute cursor and end display positions
+    let cursor_row: usize = 0;
+    let cursor_col: usize = prompt_len;
+    const cursor_byte = @min(_.line_editor.cursor, line.len);
+    advanceDisplayPos(&cursor_row, &cursor_col, line[0..cursor_byte], term_width);
+
+    let end_row: usize = cursor_row;
+    let end_col: usize = cursor_col;
+    advanceDisplayPos(&end_row, &end_col, line[cursor_byte..], term_width);
+    if (suggestion.len > 0) {
+        advanceDisplayPos(&end_row, &end_col, suggestion, term_width);
+    }
+
+    // Force wrap when the rendered content fills the row exactly
+    if (end_col == term_width && term_width > 0) {
+        _.write("\r\n");
+        end_row += 1;
+        end_col = 0;
+        if (cursor_row == end_row - 1 && cursor_col == term_width) {
+            cursor_row = end_row;
+            cursor_col = 0;
+            _.cursor_on_empty_wrap_row = suggestion.len == 0;
+        } else {
+            _.cursor_on_empty_wrap_row = false;
+        }
+    } else {
+        _.cursor_on_empty_wrap_row = false;
+    }
+
+    // Move cursor from (end_row, end_col) to (cursor_row, cursor_col)
+    if (end_row > cursor_row) {
+        let up_buf: [16]u8 = undefined;
+        const up_seq = std.fmt.bufPrint(&up_buf, CSI ++ "{d}A", .{end_row - cursor_row}) catch "";
+        _.write(up_seq);
+    }
+    if (end_row > cursor_row || end_col != cursor_col) {
         _.write("\r");
-        if (cursor_pos > 0) {
-            let buf: [16]u8 = undefined;
-            const seq = std.fmt.bufPrint(&buf, CSI ++ "{d}C", .{cursor_pos}) catch return;
-            _.write(seq);
+        if (cursor_col > 0) {
+            let col_buf: [16]u8 = undefined;
+            const col_seq = std.fmt.bufPrint(&col_buf, CSI ++ "{d}C", .{cursor_col}) catch "";
+            _.write(col_seq);
         }
     }
 
+    _.prev_cursor_row = cursor_row;
     Output.flush();
 }
 
@@ -1836,6 +2079,8 @@ fn runWithVM(*_, vm: (*jsc.VirtualMachine)?)! {
             .ctrl_l => {
                 _.write(Cursor.clear_screen);
                 _.write(Cursor.home);
+                _.prev_cursor_row = 0;
+                _.cursor_on_empty_wrap_row = false;
                 _.refreshLine();
             },
             .ctrl_a => {
@@ -1851,7 +2096,12 @@ fn runWithVM(*_, vm: (*jsc.VirtualMachine)?)! {
                 _.refreshLine();
             },
             .ctrl_f, .arrow_right => {
-                _.line_editor.moveRight();
+                if (_.suggestion_len > 0 && _.line_editor.cursor == _.line_editor.buffer.items.len) {
+                    _.line_editor.insertSlice(_.suggestion_buf[0.._.suggestion_len]) catch {};
+                    _.suggestion_len = 0;
+                } else {
+                    _.line_editor.moveRight();
+                }
                 _.refreshLine();
             },
             .alt_b, .alt_left => {
@@ -1910,7 +2160,12 @@ fn runWithVM(*_, vm: (*jsc.VirtualMachine)?)! {
                 _.refreshLine();
             },
             .end => {
-                _.line_editor.moveToEnd();
+                if (_.suggestion_len > 0 && _.line_editor.cursor == _.line_editor.buffer.items.len) {
+                    _.line_editor.insertSlice(_.suggestion_buf[0.._.suggestion_len]) catch {};
+                    _.suggestion_len = 0;
+                } else {
+                    _.line_editor.moveToEnd();
+                }
                 _.refreshLine();
             },
             .char c => {
@@ -1925,7 +2180,14 @@ fn runWithVM(*_, vm: (*jsc.VirtualMachine)?)! {
 }
 
 fn handleEnter(*_)! {
-    _.print("\n", {});
+    if (_.suggestion_len > 0) {
+        _.refreshLineWithSuggestion(false);
+    }
+    if (!_.cursor_on_empty_wrap_row) {
+        _.print("\n", {});
+    }
+    _.prev_cursor_row = 0;
+    _.cursor_on_empty_wrap_row = false;
 
     const line = _.line_editor.getLine();
 
@@ -2040,10 +2302,20 @@ fn handleCtrlC(*_) {
         _.print("\n{s}(press Ctrl+C again to exit, or Ctrl+D){s}\n", .{ Color.dim, Color.reset });
     }
     _.history.resetPosition();
+    _.prev_cursor_row = 0;
+    _.cursor_on_empty_wrap_row = false;
+    _.suggestion_len = 0;
     _.refreshLine();
 }
 
 fn handleTab(*_) {
+    if (_.suggestion_len > 0) {
+        _.line_editor.insertSlice(_.suggestion_buf[0.._.suggestion_len]) catch {};
+        _.suggestion_len = 0;
+        _.refreshLine();
+        return;
+    }
+
     const line = _.line_editor.getLine();
 
     // Complete REPL commands

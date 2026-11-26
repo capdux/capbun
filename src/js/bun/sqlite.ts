@@ -11,6 +11,16 @@ const toStringTag = Symbol.toStringTag;
 const isArray = Array.isArray;
 const isTypedArray = ArrayBuffer.isView;
 
+function validateNoNullBytes(value: unknown, name: string) {
+  if (typeof value === "string" && value.includes("\0")) {
+    const err = new TypeError(
+      `The argument '${name}' must be a string without null bytes. Received ${JSON.stringify(value)}`,
+    ) as TypeError & { code: string };
+    err.code = "ERR_INVALID_ARG_VALUE";
+    throw err;
+  }
+}
+
 const { 0: SQL, 1: internalFieldTuple }: { 0: CppSQL; 1: TODO } = $cpp(
   "JSSQLStatement.cpp",
   "createJSSQLStatementConstructor",
@@ -376,6 +386,7 @@ class Database implements SqliteTypes.Database {
       throw new TypeError(`Expected 'filename' to be a string, got '${typeof filenameGiven}'`);
     }
 
+    validateNoNullBytes(filenameGiven, "filename");
     var filename = typeof filenameGiven === "string" ? filenameGiven.trim() : ":memory:";
     var flags = constants.SQLITE_OPEN_READWRITE | constants.SQLITE_OPEN_CREATE;
     if (typeof options === "object" && options) {
@@ -438,10 +449,13 @@ class Database implements SqliteTypes.Database {
   }
 
   loadExtension(name, entryPoint) {
+    validateNoNullBytes(name, "extension");
+    validateNoNullBytes(entryPoint, "entryPoint");
     return SQL.loadExtension(this.#handle, name, entryPoint);
   }
 
   serialize(optionalName?: string) {
+    validateNoNullBytes(optionalName, "name");
     return SQL.serialize(this.#handle, optionalName || "main");
   }
 
@@ -476,6 +490,7 @@ class Database implements SqliteTypes.Database {
   }
 
   static setCustomSQLite(path) {
+    validateNoNullBytes(path, "path");
     return SQL.setCustomSQLite(path);
   }
 
@@ -486,6 +501,7 @@ class Database implements SqliteTypes.Database {
       return SQL.fcntl(handle, null, arguments[0], arguments[1]);
     }
 
+    validateNoNullBytes(arguments[0], "zDbName");
     return SQL.fcntl(handle, ...arguments);
   }
 

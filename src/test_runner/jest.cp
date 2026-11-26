@@ -268,7 +268,7 @@ pub struct Jest {
     }
 
     static fn createMockObjects(globalObject: *JSGlobalObject, module: JSValue) {
-        const setSystemTime = jsc.JSFunction.create(globalObject, "setSystemTime", JSMock__jsSetSystemTime, 0, .{});
+        const setSystemTime = jsc.JSFunction.create(globalObject, "setSystemTime", jsc.toJSHostFn(bun_test.FakeTimers.jsSetSystemTime), 0, .{});
         module.put(globalObject, "setSystemTime", setSystemTime);
 
         const mockFn = jsc.JSFunction.create(globalObject, "fn", JSMock__jsMockFn, 1, .{});

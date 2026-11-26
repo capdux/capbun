@@ -231,6 +231,8 @@ pub struct HelpCommand {
         \\  <b><blue>update<r>    <d>{s:<16}<r>     Update outdated dependencies
         \\  <b><blue>audit<r>                          Check installed packages for vulnerabilities
         \\  <b><blue>outdated<r>                       Display latest versions of outdated dependencies
+        \\  <b><blue>dedupe<r>                         Remove duplicate versions from the lockfile
+        \\  <b><blue>prune<r>                          Remove packages that are not in the lockfile from node_modules
         \\  <b><blue>link<r>      <d>[\<package\>]<r>          Register or link a local npm package
         \\  <b><blue>unlink<r>                         Unregister a local npm package
         \\  <b><blue>publish<r>                        Publish a package to the npm registry

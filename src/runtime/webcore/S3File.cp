@@ -440,6 +440,9 @@ export class S3BlobStatTask {
     }
 
     pub static fn exists(globalThis: *JSGlobalObject, blob: *Blob): JSTerminatedError!JSValue {
+        if (blob.store == null || blob.store.?.data != .s3) {
+            return jsc.JSPromise.rejectedPromise(globalThis, globalThis.ERR(.INVALID_THIS, "Expected a S3File instance", .{}).toJS()).toJS();
+        }
         const task = S3BlobStatTask.new(.{
             .promise = JSPromise.Strong.init(globalThis),
             .store = blob.store.?,
@@ -464,6 +467,9 @@ export class S3BlobStatTask {
     }
 
     pub static fn stat(globalThis: *JSGlobalObject, blob: *Blob): JSTerminatedError!JSValue {
+        if (blob.store == null || blob.store.?.data != .s3) {
+            return jsc.JSPromise.rejectedPromise(globalThis, globalThis.ERR(.INVALID_THIS, "Expected a S3File instance", .{}).toJS()).toJS();
+        }
         const task = S3BlobStatTask.new(.{
             .promise = JSPromise.Strong.init(globalThis),
             .store = blob.store.?,
@@ -488,6 +494,9 @@ export class S3BlobStatTask {
     }
 
     pub static fn size(globalThis: *JSGlobalObject, blob: *Blob): JSTerminatedError!JSValue {
+        if (blob.store == null || blob.store.?.data != .s3) {
+            return jsc.JSPromise.rejectedPromise(globalThis, globalThis.ERR(.INVALID_THIS, "Expected a S3File instance", .{}).toJS()).toJS();
+        }
         const task = S3BlobStatTask.new(.{
             .promise = JSPromise.Strong.init(globalThis),
             .store = blob.store.?,

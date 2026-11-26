@@ -74,9 +74,10 @@ ExceptionOr<void> MessagePort::postMessage(JSC::JSGlobalObject& state, JSC::JSVa
 
     Vector<TransferredMessagePort> transferredPorts;
     if (!ports.isEmpty()) {
-        // A port may not be posted through itself or its own entangled peer.
+        // A port may not be posted through itself. Posting its own entangled
+        // peer detaches the peer and loses the channel without throwing (Node compat).
         for (auto& port : ports) {
-            if (port->pipe() == m_pipe.ptr())
+            if (port.get() == this)
                 return Exception { DataCloneError };
         }
         auto disentangled = MessagePort::disentanglePorts(WTF::move(ports));

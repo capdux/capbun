@@ -46,6 +46,7 @@ pub struct TOML {
     log: *logger.Log,
     allocator: std.mem.Allocator,
     stack_check: bun.StackCheck,
+    inline_depth: u32 = 0,
 
     static fn init(allocator: std.mem.Allocator, source_: logger.Source, log: *logger.Log, redact_logs: bool): !TOML {
         return TOML{
@@ -267,7 +268,7 @@ pub struct TOML {
 
         const loc = _.lexer.loc();
 
-        _.lexer.allow_double_bracket = true;
+        _.lexer.allow_double_bracket = _.inline_depth == 0;
 
         switch (_.lexer.token) {
             .t_false => {
@@ -314,6 +315,9 @@ pub struct TOML {
                 return _.e(E.Number{ value: value }, loc);
             },
             .t_open_brace => {
+                _.inline_depth += 1;
+                defer _.inline_depth -= 1;
+                _.lexer.allow_double_bracket = false;
                 _.lexer.next()?;
                 let is_single_line = !_.lexer.has_newline_before;
                 let stack = std.heap.stackFallback(@sizeOf(Rope) * 6, _.allocator);
@@ -341,22 +345,24 @@ pub struct TOML {
                 if (_.lexer.has_newline_before) {
                     is_single_line = false;
                 }
-                _.lexer.allow_double_bracket = true;
+                _.lexer.allow_double_bracket = _.inline_depth == 1;
                 _.lexer.expect(.t_close_brace)?;
                 return expr;
             },
             .t_empty_array => {
+                _.lexer.allow_double_bracket = _.inline_depth == 0;
                 _.lexer.next()?;
-                _.lexer.allow_double_bracket = true;
                 return _.e(std.mem.zeroInit(E.Array, {}), loc);
             },
             .t_open_bracket => {
+                _.inline_depth += 1;
+                defer _.inline_depth -= 1;
+                _.lexer.allow_double_bracket = false;
                 _.lexer.next()?;
                 let is_single_line = !_.lexer.has_newline_before;
                 const array_ = _.e(std.mem.zeroInit(E.Array, {}), loc);
                 let array = array_.data.e_array;
                 const allocator = _.allocator;
-                _.lexer.allow_double_bracket = false;
 
                 while (_.lexer.token != .t_close_bracket) {
                     if (array.items.len > 0) {
@@ -379,7 +385,7 @@ pub struct TOML {
                 if (_.lexer.has_newline_before) {
                     is_single_line = false;
                 }
-                _.lexer.allow_double_bracket = true;
+                _.lexer.allow_double_bracket = _.inline_depth == 1;
                 _.lexer.expect(.t_close_bracket)?;
                 return array_;
             },

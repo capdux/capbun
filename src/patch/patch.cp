@@ -108,6 +108,24 @@ struct ApplyState {
     }
 }
 
+pub struct HunkApplyError {
+    hunk_number: usize,
+    path: []const u8,
+    expected_line: u32,
+}
+
+pub enum ApplyError {
+    sys: bun.sys.Error,
+    hunk_does_not_apply: HunkApplyError,
+
+    pub fn format(writer: *std.Io.Writer!): !void {
+        switch (_) {
+            .sys e => return e.format(writer),
+            .hunk_does_not_apply h => return writer.print("hunk #{d} does not apply to {s} (expected at line {d})", [h.hunk_number, h.path, h.expected_line]),
+        }
+    }
+}
+
 pub struct PatchFile {
     parts: List(PatchFilePart) = {},
 
@@ -116,7 +134,7 @@ pub struct PatchFile {
         _.parts.deinit(allocator);
     }
 
-    pub fn apply(allocator: Allocator, patch_dir: bun.FD): bun.sys.Error? {
+    pub fn apply(allocator: Allocator, patch_dir: bun.FD): ApplyError? {
         let state: ApplyState = {};
         let sfb = std.heap.stackFallback(1024, allocator);
         let arena_alloc = bun.ArenaAllocator.init(sfb.get());
@@ -129,12 +147,12 @@ pub struct PatchFile {
                     const pathz = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_deletion.path));
 
                     if (e := bun.sys.unlinkat(patch_dir, pathz).asErr()) {
-                        return e.withoutPath();
+                        return { sys: e.withoutPath() };
                     }
                 },
                 .file_rename => {
                     if (!isSafePatchPath(part.file_rename.from_path) || !isSafePatchPath(part.file_rename.to_path)) {
-                        return bun.sys.Error.fromCode(.INVAL, .rename);
+                        return { sys: bun.sys.Error.fromCode(.INVAL, .rename) };
                     }
                     const from_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.from_path));
                     const to_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.to_path));
@@ -142,10 +160,10 @@ pub struct PatchFile {
                     if (todir := std.fs.path.dirname(to_path)) {
                         const abs_patch_dir = switch (state.patchDirAbsPath(patch_dir)) {
                             .result p => p,
-                            .err e => return e.withoutPath(),
+                            .err e => return { sys: e.withoutPath() },
                         };
                         if (abs_patch_dir.len + 1 + todir.len >= bun.MAX_PATH_BYTES - 2) {
-                            return bun.sys.Error.fromCode(.NAMETOOLONG, .mkdir);
+                            return { sys: bun.sys.Error.fromCode(.NAMETOOLONG, .mkdir) };
                         }
                         const path_to_make = bun.path.joinZ(&[
                             abs_patch_dir,
@@ -156,11 +174,11 @@ pub struct PatchFile {
                             path: { string: bun.PathString.init(path_to_make) },
                             recursive: true,
                             mode: 0o755,
-                        }).asErr()) return e.withoutPath();
+                        }).asErr()) return { sys: e.withoutPath() };
                     }
 
                     if (e := bun.sys.renameat(patch_dir, from_path, patch_dir, to_path).asErr()) {
-                        return e.withoutPath();
+                        return { sys: e.withoutPath() };
                     }
                 },
                 .file_creation => {
@@ -172,14 +190,14 @@ pub struct PatchFile {
                     if (filedir.len > 0) {
                         const abs_patch_dir = switch (state.patchDirAbsPath(patch_dir)) {
                             .result p => p,
-                            .err e => return e.withoutPath(),
+                            .err e => return { sys: e.withoutPath() },
                         };
                         const path_to_make = bun.path.joinZ(&[abs_patch_dir, filedir], .auto);
                         if (e := nodefs.mkdirRecursive({
                             path: { string: bun.PathString.init(path_to_make) },
                             recursive: true,
                             mode: 0o755,
-                        }).asErr()) return e.withoutPath();
+                        }).asErr()) return { sys: e.withoutPath() };
                     }
 
                     const newfile_fd = switch (bun.sys.openat(
@@ -189,7 +207,7 @@ pub struct PatchFile {
                         mode.toBunMode(),
                     )) {
                         .result fd => fd,
-                        .err e => return e.withoutPath(),
+                        .err e => return { sys: e.withoutPath() },
                     };
                     const newfile_fd_guard = CloseGuard<bun.FD>{ val: newfile_fd };
 
@@ -242,45 +260,45 @@ pub struct PatchFile {
                     while (written < file_contents.len) {
                         switch (bun.sys.write(newfile_fd, file_contents[written..])) {
                             .result bytes => written += bytes,
-                            .err e => return e.withoutPath(),
+                            .err e => return { sys: e.withoutPath() },
                         }
                     }
                 },
                 .file_patch => {
                     if (!isSafePatchPath(part.file_patch.path)) {
-                        return bun.sys.Error.fromCode(.INVAL, .open);
+                        return { sys: bun.sys.Error.fromCode(.INVAL, .open) };
                     }
                     // TODO: should we compute the hash of the original file and check it against the on in the patch?
-                    if (e := applyPatch(part.file_patch, &arena_alloc, patch_dir, &state).asErr()) {
-                        return e.withoutPath();
+                    if (e := applyPatch(part.file_patch, &arena_alloc, patch_dir, &state)) {
+                        return e;
                     }
                 },
                 .file_mode_change => {
                     if (!isSafePatchPath(part.file_mode_change.path)) {
-                        return bun.sys.Error.fromCode(.INVAL, .fchmodat);
+                        return { sys: bun.sys.Error.fromCode(.INVAL, .fchmodat) };
                     }
                     const newmode = part.file_mode_change.new_mode;
                     const filepath = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_mode_change.path));
                     if (comptime bun.Environment.isPosix) {
                         if (e := bun.sys.fchmodat(patch_dir, filepath, newmode.toBunMode(), 0).asErr()) {
-                            return e.withoutPath();
+                            return { sys: e.withoutPath() };
                         }
                     }
 
                     if (comptime bun.Environment.isWindows) {
                         const absfilepath = switch (state.patchDirAbsPath(patch_dir)) {
                             .result p => p,
-                            .err e => return e.withoutPath(),
+                            .err e => return { sys: e.withoutPath() },
                         };
                         let buf: bun.PathBuffer = undefined;
                         const joined_absfilepath = bun.path.joinZBuf(&buf, &[absfilepath, filepath], .auto);
                         const fd = switch (bun.sys.open(joined_absfilepath, bun.O.RDWR, 0)) {
-                            .err e => return e.withoutPath(),
+                            .err e => return { sys: e.withoutPath() },
                             .result f => f,
                         };
                         const fd_guard = CloseGuard<bun.FD>{ val: fd };
                         if (e := bun.sys.fchmod(fd, newmode.toBunMode()).asErr()) {
-                            return e.withoutPath();
+                            return { sys: e.withoutPath() };
                         }
                     }
                 },
@@ -329,7 +347,7 @@ pub struct PatchFile {
         arena_alloc: *bun.ArenaAllocator,
         patch_dir: bun.FD,
         state: *ApplyState,
-    ): bun.sys.Maybe(void) {
+    ): ApplyError? {
         const file_path: [:0]const u8 = bun.handleOom(arena_alloc.allocator().dupeZ(u8, patch.path));
 
         const stat = switch (if (bun.Environment.isPosix)
@@ -338,17 +356,18 @@ pub struct PatchFile {
             bun.sys.stat(
                 switch (state.patchDirAbsPath(patch_dir)) {
                     .result p => bun.path.joinZ(&[p, file_path], .auto),
-                    .err e => return { err: e },
+                    .err e => return { sys: e },
                 },
             )) {
-            .err e => return { err: e.withPath(file_path) },
+            .err e => return { sys: e.withPath(file_path) },
             .result s => s,
         };
 
         const use_arena: bool = stat.size <= PAGE_SIZE;
         const file_alloc = if (use_arena) arena_alloc.allocator() else bun.default_allocator;
-        const filebuf = patch_dir.stdDir().readFileAlloc(file_alloc, file_path, 1024 * 1024 * 1024 * 4) catch return { err: bun.sys.Error.fromCode(.INVAL, .read).withPath(file_path) };
+        const filebuf = patch_dir.stdDir().readFileAlloc(file_alloc, file_path, 1024 * 1024 * 1024 * 4) catch return { sys: bun.sys.Error.fromCode(.INVAL, .read).withPath(file_path) };
         const filebuf_guard = FreeGuard<u8>{ alloc: file_alloc, slice: filebuf };
+        const is_crlf = std.mem.indexOf(u8, filebuf, "\r\n") != null;
 
         let file_line_count: usize = 0;
         const lines_count = brk: {
@@ -381,12 +400,15 @@ pub struct PatchFile {
             let iter = std.mem.splitScalar(u8, filebuf, '\n');
             let i: usize = 0;
             while (line := iter.next()) : (i += 1) {
-                bun.handleOom(lines.append(bun.default_allocator, line));
+                const clean_line = if (is_crlf && line.len > 0 && line[line.len - 1] == '\r') line[0 .. line.len - 1] else line;
+                bun.handleOom(lines.append(bun.default_allocator, clean_line));
             }
             bun.debugAssert(i == file_line_count);
         }
 
+        let hunk_num: usize = 1;
         for (hunk of patch.hunks.items) {
+            defer hunk_num += 1;
             const hint: usize = hunk.header.patched.start -| 1;
             const has_old_lines = brk: {
                 for (p of hunk.parts.items) {
@@ -397,7 +419,7 @@ pub struct PatchFile {
             let line_cursor: usize = hint;
             if (!has_old_lines) {
                 if (line_cursor > lines.items.len) {
-                    return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                    return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
                 }
             } else {
                 let found: usize? = null;
@@ -405,7 +427,7 @@ pub struct PatchFile {
                     found = hint;
                 } else {
                     const max_delta = @max(hint, lines.items.len);
-                    let delta: usize = 1;
+                    let delta: usize = if (hint > lines.items.len) hint - lines.items.len else 1;
                     while (delta <= max_delta) : (delta += 1) {
                         if (hint >= delta) {
                             const lo = hint - delta;
@@ -421,7 +443,7 @@ pub struct PatchFile {
                     }
                 }
                 if (found == null) {
-                    return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                    return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
                 }
                 line_cursor = found.?;
             }
@@ -431,7 +453,7 @@ pub struct PatchFile {
                 switch (part.type) {
                     .context => {
                         if (line_cursor + part.lines.items.len > lines.items.len) {
-                            return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                            return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
                         }
 
                         line_cursor += part.lines.items.len;
@@ -446,7 +468,7 @@ pub struct PatchFile {
                     },
                     .insertion => {
                         if (line_cursor > lines.items.len) {
-                            return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                            return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
                         }
 
                         const lines_to_insert = bun.handleOom(lines.addManyAt(bun.default_allocator, line_cursor, part.lines.items.len));
@@ -462,7 +484,7 @@ pub struct PatchFile {
                     },
                     .deletion => {
                         if (line_cursor + part.lines.items.len > lines.items.len) {
-                            return { err: bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                            return { hunk_does_not_apply: .{ hunk_number: hunk_num, path: patch.path, expected_line: hunk.header.original.start } };
                         }
 
                         const empty_lines: []const []const u8 = [];
@@ -483,23 +505,24 @@ pub struct PatchFile {
             bun.O.CREAT | bun.O.WRONLY | bun.O.TRUNC,
             stat.mode as bun.Mode,
         )) {
-            .err e => return { err: e.withPath(file_path) },
+            .err e => return { sys: e.withPath(file_path) },
             .result fd => fd,
         };
         const file_fd_guard = CloseGuard<bun.FD>{ val: file_fd };
 
-        const contents = bun.handleOom(std.mem.join(bun.default_allocator, "\n", lines.items));
+        const join_sep = if (is_crlf) "\r\n" else "\n";
+        const contents = bun.handleOom(std.mem.join(bun.default_allocator, join_sep, lines.items));
         const contents_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: contents };
 
         let written: usize = 0;
         while (written < contents.len) {
             written += switch (bun.sys.write(file_fd, contents[written..])) {
                 .result w => w,
-                .err e => return { err: e.withPath(file_path) },
+                .err e => return { sys: e.withPath(file_path) },
             };
         }
 
-        return .success;
+        return null;
     }
 }
 
@@ -1215,8 +1238,8 @@ struct PatchLinesParser {
         const rest = std.mem.trimRight(u8, line[prefix.len..], " \n\r\t");
         if (rest.len == 0) return null;
 
-        if (rest.len >= 3 && (rest.len - 2) % 2 == 0) {
-            const half = (rest.len - 2) / 2;
+        if (rest.len >= 3 && (rest.len - 3) % 2 == 0) {
+            const half = (rest.len - 3) / 2;
             if (std.mem.eql(u8, rest[half .. half + 3], " b/") && std.mem.eql(u8, rest[0..half], rest[half + 3 ..])) {
                 return [rest[0..half], rest[half + 3 ..]];
             }

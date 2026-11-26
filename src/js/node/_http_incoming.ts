@@ -124,11 +124,13 @@ function IncomingMessage(req, options = defaultIncomingOpts) {
     this.rawHeaders = arguments[4];
     this[kHandle] = arguments[5];
     this[noBodySymbol] = !arguments[6];
-    this[fakeSocketSymbol] = arguments[7];
+    this.socket = arguments[7];
     Readable.$call(this);
 
-    // If there's a body, pay attention to pause/resume events
-    if (arguments[6]) {
+    if (this[noBodySymbol]) {
+      emitEOFIncomingMessage(this);
+    } else {
+      // If there's a body, pay attention to pause/resume events
       this.on("pause", onIncomingMessagePauseNodeHTTPResponse);
       this.on("resume", onIncomingMessageResumeNodeHTTPResponse);
     }
@@ -148,11 +150,13 @@ function IncomingMessage(req, options = defaultIncomingOpts) {
       if (!assignHeaders(this, req)) {
         this[fakeSocketSymbol] = req;
       }
+      this.socket = new FakeSocket(this);
     } else {
       // Node defaults url and method to null.
       this.url = "";
       this.method = null;
       this.rawHeaders = [];
+      this.socket = req;
     }
 
     this[noBodySymbol] =
@@ -349,7 +353,7 @@ const IncomingMessagePrototype = {
     this[abortedSymbol] = value;
   },
   get connection() {
-    return (this[fakeSocketSymbol] ??= new FakeSocket(this));
+    return this.socket;
   },
   get statusCode() {
     return this[statusCodeSymbol];
@@ -405,12 +409,6 @@ const IncomingMessagePrototype = {
       if (typeof callback === "function") this.once("timeout", callback);
     }
     return this;
-  },
-  get socket() {
-    return (this[fakeSocketSymbol] ??= new FakeSocket(this));
-  },
-  set socket(value) {
-    this[fakeSocketSymbol] = value;
   },
 } satisfies typeof import("node:http").IncomingMessage.prototype;
 IncomingMessage.prototype = IncomingMessagePrototype;

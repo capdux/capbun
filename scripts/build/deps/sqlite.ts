@@ -50,6 +50,7 @@ export const sqlite: Dependency = {
       SQLITE_ENABLE_GEOPOLY: 1,
       SQLITE_ENABLE_RBU: 1,
       SQLITE_ENABLE_PERCENTILE: 1,
+      SQLITE_DEFAULT_MEMSTATUS: 0,
     },
     cflags: [
       "-Wno-incompatible-pointer-types-discards-qualifiers",

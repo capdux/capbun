@@ -1259,6 +1259,10 @@ pub fn handleRejectStream(sink: *@This(), e: JSValue, is_async: bool) void {
                 sink.js_sink = null;
                 _ = wrapper.sink.destroy();
             }
+            if (sink.readable_stream_ref.get(sink.global)) |stream| {
+                _ = &stream;
+                _ = stream.cancel(sink.global);
+            }
             var strong_ref = jsc.Strong.Optional.create(e, sink.global);
             _ = &strong_ref;
             var _guard_sref = DeinitGuard(jsc.Strong.Optional){ .ptr = (&strong_ref) };
@@ -1269,6 +1273,10 @@ pub fn handleRejectStream(sink: *@This(), e: JSValue, is_async: bool) void {
     }
 
 pub fn handleResolveStream(sink: *@This(), is_async: bool) void {
+            if (sink.readable_stream_ref.get(sink.global)) |stream| {
+                _ = &stream;
+                _ = stream.done(sink.global);
+            }
             if (sink.js_sink) |wrapper| {
                 _ = &wrapper;
                 const bytes = wrapper.sink.bytes.slice();
@@ -1309,29 +1317,22 @@ pub fn createJSSink(sink: *@This(), stream: jsc.WebCore.ReadableStream) !void {
                 if (assignment_result.asAnyPromise()) |promise| {
                     _ = &promise;
                     switch (promise.status()) {
-.Pending => {
+.pending => {
 const cell = bun.api.NativePromiseContext.create(globalThis, sink);
                     _ = (blk_catch_2: { break :blk_catch_2 ((assignment_result.thenWithValue(globalThis, cell, onResolveStream, onRejectStream)) catch |__ce_2| { _ = &__ce_2;  }); });
 },
-.Fulfilled => {
-var _guard_sv = UnprotectGuard{ .val = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value) };
-                    _ = &_guard_sv;
-                    var ___guard_sv_moved = false; _ = &___guard_sv_moved;
-                    defer if (!___guard_sv_moved) { ___guard_sv_moved = true; const __T = @TypeOf(_guard_sv); if (@typeInfo(__T) == .optional) { if (_guard_sv) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_sv.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_sv; _drop_val.__cp_deinit(); } };
-                    _ = sink.handleResolveStream(false);
+.fulfilled => {
+_ = sink.handleResolveStream(false);
 },
-.Rejected => {
-var _guard_sv = UnprotectGuard{ .val = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value) };
-                    _ = &_guard_sv;
-                    var ___guard_sv_moved = false; _ = &___guard_sv_moved;
-                    defer if (!___guard_sv_moved) { ___guard_sv_moved = true; const __T = @TypeOf(_guard_sv); if (@typeInfo(__T) == .optional) { if (_guard_sv) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_sv.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_sv; _drop_val.__cp_deinit(); } };
-                    _ = sink.handleRejectStream(promise.result(globalThis.vm()), false);
+.rejected => {
+_ = sink.handleRejectStream(promise.result(globalThis.vm()), false);
 },
 }
                     return;
                 }
+                return error.PipeFailed;
             }
-            return error.PipeFailed;
+            _ = sink.handleResolveStream(false);
     }
 
 pub fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, owned_readable_stream: ?jsc.WebCore.ReadableStream) !void {
@@ -1364,11 +1365,8 @@ pub fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, own
 .Invalid => {
 return error.InvalidStream;
 },
-.Blob, .File => {
-return error.UnsupportedStreamType;
-},
-.JavaScript, .Direct => {
-return error.UnsupportedStreamType;
+.Blob, .File, .JavaScript, .Direct => {
+return sink.createJSSink(stream);
 },
 .Bytes => |bs| {
 _ = assert((bs.pipe.ctx == null));

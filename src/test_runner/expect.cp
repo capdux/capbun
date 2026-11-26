@@ -402,6 +402,21 @@ pub struct Expect {
         return processPromise(_.custom_label, _.flags, globalThis, value, matcher_name, matcher_params, false);
     }
 
+    static fn noopPromiseCallback(_: *JSGlobalObject, _: *CallFrame): bun.JSError!JSValue {
+        return .js_undefined;
+    }
+
+    static fn callThenIfPending(globalThis: *JSGlobalObject, promise_value: JSValue, promise: jsc.AnyPromise): bun.JSError!void {
+        if (promise.status() != .pending) return;
+        if (!promise_value.isObject()) return;
+        if (then_fn := promise_value.get(globalThis, "then")?) {
+            if (then_fn.isCallable()) {
+                const noop = jsc.JSFunction.create(globalThis, "", jsc.toJSHostFn(noopPromiseCallback), 0, .{});
+                * = then_fn.call(globalThis, promise_value, &.{ noop, noop })?;
+            }
+        }
+    }
+
     /// Processes the async flags (resolves/rejects), waiting for the async value if needed.
     /// If no flags, returns the original value
     /// If either flag is set, waits for the result, and returns either it as a JSValue, or null if the expectation failed (in which case if silent is false, also throws a js exception)
@@ -412,6 +427,7 @@ pub struct Expect {
                     let promise = p;
                     const vm = globalThis.vm();
                     promise.setHandled(vm);
+                    callThenIfPending(globalThis, value, promise)?;
 
                     globalThis.bunVM().waitForPromise(promise);
 
@@ -841,6 +857,8 @@ pub struct Expect {
 
         if (p := return_value.asAnyPromise()) {
             let promise = p;
+            promise.setHandled(globalThis.vm());
+            callThenIfPending(globalThis, return_value, promise)?;
             vm.waitForPromise(promise);
             scope.apply(vm);
             switch (promise.unwrap(globalThis.vm(), .mark_handled)) {
@@ -1302,6 +1320,7 @@ pub struct Expect {
             let promise = promise_val;
             const vm = globalThis.vm();
             promise.setHandled(vm);
+            callThenIfPending(globalThis, result, promise)?;
 
             globalThis.bunVM().waitForPromise(promise);
 

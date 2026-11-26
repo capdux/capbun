@@ -52,6 +52,7 @@ const http_exports = {
     return getMaxHTTPHeaderSize();
   },
   set maxHeaderSize(value) {
+    validateInteger(value, "maxHeaderSize", 1);
     setMaxHTTPHeaderSize(value);
   },
   validateHeaderName,

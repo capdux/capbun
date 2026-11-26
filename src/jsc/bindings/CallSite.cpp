@@ -45,6 +45,7 @@ void CallSite::finishCreation(VM& vm, JSC::JSGlobalObject* globalObject, JSCStac
         m_thisValue.set(vm, this, JSC::jsUndefined());
         m_function.set(vm, this, JSC::jsUndefined());
         m_flags |= static_cast<unsigned int>(Flags::IsStrict);
+        m_flags |= static_cast<unsigned int>(Flags::IsToplevel);
     } else {
         if (callFrame && callFrame->thisValue()) {
             // We know that we're not in strict mode
@@ -53,7 +54,56 @@ void CallSite::finishCreation(VM& vm, JSC::JSGlobalObject* globalObject, JSCStac
             m_thisValue.set(vm, this, JSC::jsUndefined());
         }
 
-        m_function.set(vm, this, stackFrame.callee());
+        auto isThisToplevel = [&]() -> bool {
+            JSC::JSValue tv = m_thisValue.get();
+            if (tv.isUndefinedOrNull())
+                return true;
+            JSC::JSObject* thisObj = tv.getObject();
+            return thisObj && thisObj->isGlobalObject();
+        };
+
+        bool isToplevel = false;
+        bool hasComputedToplevel = false;
+        JSC::JSValue calleeVal = stackFrame.callee();
+        JSC::JSValue exposedFunction = JSC::jsUndefined();
+
+        if (calleeVal) {
+            if (JSC::JSObject* fn = calleeVal.getObject()) {
+                if (JSC::JSFunction* function = dynamicDowncast<JSC::JSFunction>(fn)) {
+                    if (function->inherits<JSC::JSBoundFunction>()) {
+                        isToplevel = false;
+                        hasComputedToplevel = true;
+                        exposedFunction = calleeVal;
+                    } else if (function->isHostFunction()) {
+                        isToplevel = isThisToplevel();
+                        hasComputedToplevel = true;
+                    } else if (auto* executable = function->jsExecutable()) {
+                        isToplevel = executable->isProgramExecutable() || executable->isModuleProgramExecutable();
+                        hasComputedToplevel = true;
+                        if (codeBlock && !stackFrame.isWasmFrame() && !function->isBuiltinFunction()) {
+                            if (auto* fnExec = dynamicDowncast<JSC::FunctionExecutable>(codeBlock->ownerExecutable())) {
+                                if (!JSC::isGeneratorOrAsyncFunctionBodyParseMode(fnExec->parseMode())
+                                    && fnExec->implementationVisibility() == JSC::ImplementationVisibility::Public) {
+                                    exposedFunction = calleeVal;
+                                }
+                            }
+                        }
+                    }
+                } else if (dynamicDowncast<JSC::InternalFunction>(fn)) {
+                    isToplevel = true;
+                    hasComputedToplevel = true;
+                }
+            }
+        }
+
+        if (!hasComputedToplevel) {
+            isToplevel = isThisToplevel();
+        }
+        if (isToplevel) {
+            m_flags |= static_cast<unsigned int>(Flags::IsToplevel);
+        }
+
+        m_function.set(vm, this, exposedFunction);
     }
 
     m_functionName.set(vm, this, stackFrame.functionName());

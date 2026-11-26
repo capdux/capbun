@@ -937,6 +937,10 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         }
 
         if (user_agent := args.option("--user-agent")) {
+            if (std.mem.indexOfAny(u8, user_agent, "\r\n\x00") != null) {
+                Output.errGeneric("Invalid value for --user-agent: must not contain a newline or NUL byte", .{});
+                Global.exit(1);
+            }
             bun.http.overridden_default_user_agent = user_agent;
         }
 

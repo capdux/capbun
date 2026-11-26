@@ -133,6 +133,9 @@ pub enum ArrayBufferBinaryType: u4 {
             .Uint8Array => return ArrayBuffer.create(globalThis, bytes, .Uint8Array),
             .Uint8ClampedArray, .Uint16Array, .Uint32Array, .Int8Array, .Int16Array, .Int32Array, .Float16Array, .Float32Array, .Float64Array, .BigInt64Array, .BigUint64Array => {
                 const buffer = ArrayBuffer.create(globalThis, bytes, .ArrayBuffer)?;
+                if (_ == .Float16Array) {
+                    return bun.jsc.fromJSHostCall(globalThis, @src(), Bun__makeTypedArrayWithArrayBuffer, .{ globalThis, _.toTypedArrayType(), buffer });
+                }
                 return jsc.JSValue.c(jsc.C.JSObjectMakeTypedArrayWithArrayBuffer(globalThis, _.toTypedArrayType().toC(), buffer.asObjectRef(), null));
             },
         }
@@ -203,6 +206,7 @@ extern fn Bun__createArrayBufferForCopy(globalObject: *jsc.JSGlobalObject, ptr: 
 extern fn JSArrayBuffer__fromDefaultAllocator(globalThis: *jsc.JSGlobalObject, ptr: [*]u8, len: usize): jsc.JSValue;
 extern fn Bun__makeArrayBufferWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, ptr: *!?, len: usize, deallocator: jsc.C.JSTypedArrayBytesDeallocator, deallocatorContext: *!?): jsc.JSValue;
 extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, arrayType: ArrayBufferTypedArrayType, ptr: *!?, len: usize, deallocator: jsc.C.JSTypedArrayBytesDeallocator, deallocatorContext: *!?): jsc.JSValue;
+extern fn Bun__makeTypedArrayWithArrayBuffer(globalObject: *jsc.JSGlobalObject, arrayType: ArrayBufferTypedArrayType, buffer: jsc.JSValue): jsc.JSValue;
 
 @c pub struct ArrayBuffer {
     ptr: ([*]u8)? = null,

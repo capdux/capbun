@@ -76,6 +76,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
     onWritableCallback: jsc.Strong.Optional = .empty,
     onCloseCallback: jsc.Strong.Optional = .empty,
     transport_eof: bool = false,
+    closed: bool = false,
     event_loop_timer: EventLoopTimer = .{
         .next = .epoch,
         .tag = .UpgradedDuplex,
@@ -104,6 +105,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
 
     fn onClose(_: *UpgradedDuplex) {
         log("onClose", .{});
+        if (_.closed) return;
+        _.closed = true;
         const _release_guard = ReleaseGuard<UpgradedDuplex>{ ptr: _ };
 
         _.handlers.onClose(_.handlers.ctx);
@@ -202,9 +205,7 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         if (ctx := jsc.host_fn.getFunctionData(function)) {
             const req = bun.cast(*UpgradedDuplex, ctx);
             req.transport_eof = true;
-            if (req.wrapper != null) {
-                req.handlers.onEnd(req.handlers.ctx);
-            }
+            req.handlers.onEnd(req.handlers.ctx);
         }
         return jsc.JSValue.js_undefined;
     }
@@ -239,6 +240,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
             const req = bun.cast(*UpgradedDuplex, ctx);
             if (*wrapper := req.wrapper) {
                 * = wrapper.shutdown(true);
+            } else {
+                req.onClose();
             }
         }
         return jsc.JSValue.js_undefined;
@@ -403,12 +406,16 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
     pub fn close(_: *UpgradedDuplex) {
         if (*wrapper := _.wrapper) {
             * = wrapper.shutdown(true);
+        } else {
+            _.onClose();
         }
     }
 
     pub fn shutdown(_: *UpgradedDuplex) {
         if (*wrapper := _.wrapper) {
             * = wrapper.shutdown(false);
+        } else {
+            _.onClose();
         }
     }
 

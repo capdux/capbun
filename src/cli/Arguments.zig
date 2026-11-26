@@ -763,6 +763,10 @@ else => 0,
             }
             if (args.option("--user-agent")) |user_agent| {
                 _ = &user_agent;
+                if ((std.mem.indexOfAny(u8, user_agent, "\r\n\x00") != null)) {
+                    _ = Output.errGeneric("Invalid value for --user-agent: must not contain a newline or NUL byte", .{});
+                    _ = Global.exit(1);
+                }
                 bun.http.overridden_default_user_agent = user_agent;
             }
             ctx.debug.offline_mode_setting = (if (args.flag("--prefer-offline")) Bunfig.OfflineMode.offline else (if (args.flag("--prefer-latest")) Bunfig.OfflineMode.latest else Bunfig.OfflineMode.online));

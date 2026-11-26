@@ -2276,19 +2276,19 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                             break :brk deviceRootKey[0..3 :0];
                         }
                         bufSize = 1;
-                        buf2[cp_cast_int(usize, 0)] = asT(T, 61);
+                        buf[cp_cast_int(usize, 0)] = asT(T, 61);
                         bufOffset = bufSize;
                         bufSize = (bufSize + resolvedDeviceLen);
-                        _ = bun.memmove(buf2[bufOffset..bufSize], resolvedDevice);
+                        _ = bun.memmove(buf[bufOffset..bufSize], resolvedDevice);
                         if ((T == u16)) {
-                            buf2[cp_cast_int(usize, bufSize)] = asT(T, 0);
-                            const slice: [:0]const T = buf2[0..bufSize :0];
+                            buf[cp_cast_int(usize, bufSize)] = asT(T, 0);
+                            const slice: [:0]const T = buf[0..bufSize :0];
                             break :brk (blk: {
                             break :blk @as([*:0]const u16, @alignCast(@ptrCast(slice.ptr)));
 
 });
                         } else {
-                            bufSize = ((std.unicode.wtf8ToWtf16Le((&u16Buf), buf2[0..bufSize])) catch unreachable);
+                            bufSize = ((std.unicode.wtf8ToWtf16Le((&u16Buf), buf[0..bufSize])) catch unreachable);
                             u16Buf[cp_cast_int(usize, bufSize)] = 0;
                             break :brk u16Buf[0..bufSize :0];
                         }
@@ -2297,18 +2297,18 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                             _ = &r;
                             if ((T == u16)) {
                                 bufSize = r.len;
-                                _ = bun.memmove(buf2[0..bufSize], r);
+                                _ = bun.memmove(buf[0..bufSize], r);
                             } else {
-                                bufSize = std.unicode.wtf16LeToWtf8(buf2, r);
+                                bufSize = std.unicode.wtf16LeToWtf8(buf, r);
                             }
-                            envPath = buf2[0..bufSize];
+                            envPath = buf[0..bufSize];
                         }
                     }
                     if (envPath) |_envPath| {
                         _ = &_envPath;
                         path = _envPath;
                     } else {
-                        const cwdRes = getCwdT(T, (&tmpBuf));
+                        const cwdRes = getCwdT(T, buf);
                         if ((cwdRes == .err)) {
                             return .{ .err = cwdRes.err };
                         }
@@ -2317,11 +2317,11 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                     }
                     if ((((envPath == null) or (path.len < 3)) or ((path[2] == CHAR_BACKWARD_SLASH) and (!eqlIgnoreCaseT(T, path[0..2], resolvedDevice))))) {
                         bufSize = resolvedDeviceLen;
-                        _ = bun.memmove(buf2[0..bufSize], resolvedDevice);
+                        _ = bun.memmove(buf[0..bufSize], resolvedDevice);
                         bufOffset = bufSize;
                         bufSize = (bufSize + 1);
-                        buf2[cp_cast_int(usize, bufOffset)] = asT(T, CHAR_BACKWARD_SLASH);
-                        path = buf2[0..bufSize];
+                        buf[cp_cast_int(usize, bufOffset)] = asT(T, CHAR_BACKWARD_SLASH);
+                        path = buf[0..bufSize];
                     }
                 }
             }

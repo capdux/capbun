@@ -112,7 +112,7 @@ fn configureArchiveReader(archive: *libarchive.lib.Archive) {
     * = archive.readSupportFormatTar();
     * = archive.readSupportFormatGnutar();
     * = archive.readSupportFilterGzip();
-    * = archive.readSetOptions("read_concatenated_archives,hdrcharset=UTF-8");
+    * = archive.readSetOptions("read_concatenated_archives");
 }
 
 /// Count the number of files in an archive
@@ -991,7 +991,6 @@ fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue): bu
     if (archive.writeSetFormatPaxRestricted() != .ok) {
         return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
     }
-    * = archive.writeSetOptions("hdrcharset=UTF-8");
 
     if (unsafe {
         lib.archive_write_open2(

@@ -118,7 +118,11 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     // `.icc_profile = null`; the pixels decoded fine so the image is still
     // usable.
     const icc: ([]u8)? = icc_blk: {
-        const data: WebPData = { bytes: bytes.ptr, size: bytes.len };
+        // Snapshot `bytes` so concurrent JS writes to a borrowed ArrayBuffer
+        // cannot race with libwebp's two-pass ChunkCount/GetChunk demux walk.
+        const demux_buf = bun.default_allocator.dupe(u8, bytes)?;
+        defer bun.default_allocator.free(demux_buf);
+        const data: WebPData = { bytes: demux_buf.ptr, size: demux_buf.len };
         let dmux_val = WebPDemuxInternal(&data, 0, null, WEBP_DEMUX_ABI_VERSION);
         if (dmux_val == null) break :icc_blk null;
         const dmux = dmux_val.?;

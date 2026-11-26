@@ -90,12 +90,13 @@ pub struct TestingAPIs {
         const _g_args = DeinitGuard<ApplyArgs>{ ptr: &args };
 
         if (err := args.patchfile.apply(bun.default_allocator, args.dirfd)) {
-            return globalThis.throwValue(err.toJS(globalThis)?);
+            switch (err) {
+                .sys e => return globalThis.throwValue(e.toJS(globalThis)?),
+                .hunk_does_not_apply h => return globalThis.throw("hunk #{d} does not apply to {s} (expected at line {d})", [h.hunk_number, h.path, h.expected_line]),
+            }
         }
-
         return jsc.JSValue.true;
     }
-
     /// Used in JS tests, see `internal-for-testing.ts` and patch tests.
     pub static fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): jsc.JSValue ! bun.JSError {
         const arguments_ = callframe.arguments_old(2);

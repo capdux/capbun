@@ -937,7 +937,8 @@ pub fn unregisterWithFd(self: *FilePoll, loop: *Loop, fd: bun.FD, force_unregist
             defer {
             _ = self.deactivate(loop);
             }
-            if ((!((((self.flags.contains(.poll_readable) or self.flags.contains(.poll_writable)) or self.flags.contains(.poll_process)) or self.flags.contains(.poll_machport)) or self.flags.contains(.poll_memory_pressure)))) {
+            const is_polled = ((((self.flags.contains(.poll_readable) or self.flags.contains(.poll_writable)) or self.flags.contains(.poll_process)) or self.flags.contains(.poll_machport)) or self.flags.contains(.poll_memory_pressure));
+            if (((!is_polled) and (!(force_unregister and self.flags.contains(.needs_rearm))))) {
                 return .success;
             }
             _ = bun.assert((fd != invalid_fd));
@@ -958,6 +959,9 @@ pub fn unregisterWithFd(self: *FilePoll, loop: *Loop, fd: bun.FD, force_unregist
             }
             if (self.flags.contains(.poll_memory_pressure)) {
                 break :brk .memory_pressure;
+            }
+            if ((force_unregister and self.flags.contains(.needs_rearm))) {
+                break :brk .readable;
             }
             return .success;
 };

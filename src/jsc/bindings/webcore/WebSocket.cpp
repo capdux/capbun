@@ -1734,7 +1734,7 @@ void WebSocket::didConnect(us_socket_t* socket, char* bufferedData, size_t buffe
     this->didConnect();
 }
 
-void WebSocket::didFailWithErrorCode(Bun::WebSocketErrorCode code)
+void WebSocket::didFailWithErrorCode(Bun::WebSocketErrorCode code, const WTF::String& overrideReason)
 {
     // from new WebSocket() -> connect()
 
@@ -1815,7 +1815,7 @@ void WebSocket::didFailWithErrorCode(Bun::WebSocketErrorCode code)
         break;
     }
     case Bun::WebSocketErrorCode::headers_too_large: {
-        didReceiveClose(CleanStatus::NotClean, 1007, "Headers too large"_s, true);
+        didReceiveClose(CleanStatus::NotClean, 1007, "Response headers too large"_s, true);
         break;
     }
     case Bun::WebSocketErrorCode::ended: {
@@ -1880,11 +1880,11 @@ void WebSocket::didFailWithErrorCode(Bun::WebSocketErrorCode code)
         break;
     }
     case Bun::WebSocketErrorCode::proxy_connect_failed: {
-        didReceiveClose(CleanStatus::NotClean, 1006, "Proxy connection failed"_s, true);
+        didReceiveClose(CleanStatus::NotClean, 1006, overrideReason.isEmpty() ? "Proxy connection failed"_s : overrideReason, true);
         break;
     }
     case Bun::WebSocketErrorCode::proxy_authentication_required: {
-        didReceiveClose(CleanStatus::NotClean, 1006, "Proxy authentication required"_s, true);
+        didReceiveClose(CleanStatus::NotClean, 1006, overrideReason.isEmpty() ? "Proxy authentication required"_s : overrideReason, true);
         break;
     }
     case Bun::WebSocketErrorCode::proxy_connection_refused: {
@@ -1972,6 +1972,10 @@ extern "C" void WebSocket__didConnectWithTunnel(WebCore::WebSocket* webSocket, v
 extern "C" void WebSocket__didAbruptClose(WebCore::WebSocket* webSocket, Bun::WebSocketErrorCode errorCode)
 {
     webSocket->didFailWithErrorCode(errorCode);
+}
+extern "C" void WebSocket__didAbruptCloseWithReason(WebCore::WebSocket* webSocket, Bun::WebSocketErrorCode errorCode, const uint8_t* reasonPtr, size_t reasonLen)
+{
+    webSocket->didFailWithErrorCode(errorCode, WTF::String::fromUTF8({ reasonPtr, reasonLen }));
 }
 extern "C" void WebSocket__didClose(WebCore::WebSocket* webSocket, uint16_t errorCode, BunString* reason)
 {

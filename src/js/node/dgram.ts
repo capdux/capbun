@@ -712,7 +712,7 @@ Socket.prototype.close = function (callback) {
 };
 
 Socket.prototype[SymbolAsyncDispose] = async function () {
-  if (!this[kStateSymbol].handle.socket) {
+  if (!this[kStateSymbol].handle?.socket) {
     return;
   }
   const { promise, resolve, reject } = $newPromiseCapability(Promise);

@@ -4856,8 +4856,6 @@ class ClientHttp2Session extends Http2Session {
     if (this.#closed && !this.#connected && !this.#parser) {
       return;
     }
-    cancelPendingPings(this.#pingCallbacks);
-    this.#pingCallbacks = null;
     if (error === undefined) {
       // node's signature is destroy(error = NGHTTP2_NO_ERROR, code): the defaulted error is a
       // number and replaces code, so destroy(undefined, code) is destroy(). An explicit code only
@@ -4866,7 +4864,11 @@ class ClientHttp2Session extends Http2Session {
     } else if (typeof error === "number") {
       code = error;
       error = code !== constants.NGHTTP2_NO_ERROR ? $ERR_HTTP2_SESSION_ERROR(code) : undefined;
+    } else if (code !== undefined && typeof code !== "number") {
+      throw new TypeError("Expected errorCode to be a number");
     }
+    cancelPendingPings(this.#pingCallbacks);
+    this.#pingCallbacks = null;
     if (code === undefined && error != null) {
       code = constants.NGHTTP2_INTERNAL_ERROR;
     }

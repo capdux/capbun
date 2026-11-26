@@ -5484,30 +5484,18 @@ pub struct H2FrameParser {
         _.dispatchWith2Extra(.onError, code_js, JSValue.jsNumber(_.lastStreamID), JSValue.js_undefined);
     }
 
-    fn settingsToJS(s: *const h2.Settings, globalObject: *jsc.JSGlobalObject): JSValue {
-        let payload = FullSettingsPayload{
-            headerTableSize: s.header_table_size,
-            enablePush: s.enable_push,
-            maxConcurrentStreams: s.max_concurrent_streams,
-            initialWindowSize: s.initial_window_size,
-            maxFrameSize: s.max_frame_size,
-            maxHeaderListSize: s.max_header_list_size,
-            enableConnectProtocol: s.enable_connect_protocol,
-        };
-        std.mem.byteSwapAllFields(FullSettingsPayload, &payload);
-        const bytes = std.mem.asBytes(&payload)[0..FullSettingsPayload.byteSize];
-        const bt: BinaryType = .Buffer;
-        return bt.toJS(bytes, globalObject) catch JSValue.js_undefined;
+    fn settingsFromH2(s: *const h2.Settings): FullSettingsPayload {
+        return FullSettingsPayload{ headerTableSize: s.header_table_size, enablePush: s.enable_push, maxConcurrentStreams: s.max_concurrent_streams, initialWindowSize: s.initial_window_size, maxFrameSize: s.max_frame_size, maxHeaderListSize: s.max_header_list_size, enableConnectProtocol: s.enable_connect_protocol };
     }
 
     fn sinkOnLocalSettings(*_, s: *const h2.Settings) {
         _.outstandingSettings -|= 1;
-        const js_val = settingsToJS(s, _.globalThis);
-        _.dispatch(.onLocalSettings, js_val);
+        _.localSettings = settingsFromH2(s);
+        _.dispatch(.onLocalSettings, _.localSettings.toJS(_.globalThis));
     }
 
     fn sinkOnRemoteSettings(*_, s: *const h2.Settings) {
-        _.remoteSettings = FullSettingsPayload{ headerTableSize: s.header_table_size, enablePush: s.enable_push, maxConcurrentStreams: s.max_concurrent_streams, initialWindowSize: s.initial_window_size, maxFrameSize: s.max_frame_size, maxHeaderListSize: s.max_header_list_size, enableConnectProtocol: s.enable_connect_protocol };
+        _.remoteSettings = settingsFromH2(s);
         let window_grew = false;
         let it = _.streams.valueIterator();
         while (item := it.next()) {
@@ -5518,8 +5506,7 @@ pub struct H2FrameParser {
             }
         }
         if (window_grew) * = _.flush();
-        const js_val = settingsToJS(s, _.globalThis);
-        _.dispatch(.onRemoteSettings, js_val);
+        _.dispatch(.onRemoteSettings, _.remoteSettings.?.toJS(_.globalThis));
     }
 
     fn sinkOnPing(*_, payload: []const u8, is_ack: bool) {
@@ -5640,7 +5627,13 @@ pub struct H2FrameParser {
                 sensitive_array.push(g, js_name)?;
             }
 
-            if (std.mem.eql(u8, entry.name, "set-cookie")) {
+            if (std.mem.eql(u8, entry.name, ":status")) {
+                const existing = headers_obj.getOwn(g, ":status")?;
+                if (existing == null) {
+                    const status_num = std.fmt.parseInt(i32, entry.value, 10) catch 0;
+                    headers_obj.put(g, ":status", JSValue.jsNumber(status_num));
+                }
+            } else if (std.mem.eql(u8, entry.name, "set-cookie")) {
                 if (existing := headers_obj.getOwn(g, "set-cookie")?) {
                     existing.push(g, js_val)?;
                 } else {

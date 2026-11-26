@@ -1580,6 +1580,36 @@ extern "C" JSC::EncodedJSValue Bun__makeTypedArrayWithBytesNoCopy(JSC::JSGlobalO
         RELEASE_AND_RETURN(scope, JSValue::encode(JS##type##Array::create(globalObject, globalObject->typedArrayStructure(Type##type, isResizableOrGrowableShared), WTF::move(buffer), offset, length)));
 #undef JSC_TYPED_ARRAY_CHECK
         FOR_EACH_TYPED_ARRAY_TYPE_EXCLUDING_DATA_VIEW(JSC_TYPED_ARRAY_FACTORY)
+#undef JSC_TYPED_ARRAY_FACTORY
+    case NotTypedArray:
+    case TypeDataView:
+        ASSERT_NOT_REACHED();
+    }
+
+    return {};
+}
+
+extern "C" JSC::EncodedJSValue Bun__makeTypedArrayWithArrayBuffer(JSC::JSGlobalObject* globalObject, TypedArrayType ty, JSC::EncodedJSValue arrayBufferValue)
+{
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    auto* jsArrayBuffer = dynamicDowncast<JSC::JSArrayBuffer>(JSC::JSValue::decode(arrayBufferValue));
+    if (!jsArrayBuffer || !jsArrayBuffer->impl()) {
+        throwTypeError(globalObject, scope, "Expected ArrayBuffer"_s);
+        return {};
+    }
+
+    RefPtr<JSC::ArrayBuffer> buffer = jsArrayBuffer->impl();
+    unsigned elementByteSize = elementSize(ty);
+    size_t length = buffer->byteLength() / elementByteSize;
+    bool isResizableOrGrowableShared = buffer->isResizableOrGrowableShared();
+
+    switch (ty) {
+#define JSC_TYPED_ARRAY_FACTORY(type) \
+    case Type##type:                  \
+        RELEASE_AND_RETURN(scope, JSValue::encode(JSC::JS##type##Array::create(globalObject, globalObject->typedArrayStructure(Type##type, isResizableOrGrowableShared), WTF::move(buffer), 0, length)));
+        FOR_EACH_TYPED_ARRAY_TYPE_EXCLUDING_DATA_VIEW(JSC_TYPED_ARRAY_FACTORY)
+#undef JSC_TYPED_ARRAY_FACTORY
     case NotTypedArray:
     case TypeDataView:
         ASSERT_NOT_REACHED();

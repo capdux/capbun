@@ -882,7 +882,7 @@ pub fn configureArchiveReader(archive: *libarchive.lib.Archive) void {
         _ = archive.readSupportFormatTar();
         _ = archive.readSupportFormatGnutar();
         _ = archive.readSupportFilterGzip();
-        _ = archive.readSetOptions("read_concatenated_archives,hdrcharset=UTF-8");
+        _ = archive.readSetOptions("read_concatenated_archives");
 }
 
 pub fn countFilesInArchive(data: []const u8) u32 {
@@ -1360,7 +1360,6 @@ pub fn buildTarballFromObject(globalThis: *jsc.JSGlobalObject, obj: jsc.JSValue)
         if ((archive.writeSetFormatPaxRestricted() != .ok)) {
             return globalThis.throwInvalidArguments("Failed to create tarball: ArchiveFormatError", .{});
         }
-        _ = archive.writeSetOptions("hdrcharset=UTF-8");
         if (((blk: {
         break :blk lib.archive_write_open2(@ptrCast(archive), @ptrCast((&growing_buffer_guard.buf)), (&lib.GrowingBuffer.openCallback), (&lib.GrowingBuffer.writeCallback), (&lib.GrowingBuffer.closeCallback), null);
 

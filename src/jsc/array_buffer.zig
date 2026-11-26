@@ -159,6 +159,9 @@ return ArrayBuffer.create(globalThis, bytes, .Uint8Array);
 },
 .Uint8ClampedArray, .Uint16Array, .Uint32Array, .Int8Array, .Int16Array, .Int32Array, .Float16Array, .Float32Array, .Float64Array, .BigInt64Array, .BigUint64Array => {
 const buffer = try ArrayBuffer.create(globalThis, bytes, .ArrayBuffer);
+            if ((self == .Float16Array)) {
+                return bun.jsc.fromJSHostCall(globalThis, @src(), Bun__makeTypedArrayWithArrayBuffer, .{ globalThis, self.toTypedArrayType(), buffer });
+            }
             return jsc.JSValue.c(jsc.C.JSObjectMakeTypedArrayWithArrayBuffer(globalThis, self.toTypedArrayType().toC(), buffer.asObjectRef(), null));
 },
 }
@@ -644,6 +647,8 @@ extern "c" fn JSArrayBuffer__fromDefaultAllocator(globalThis: *jsc.JSGlobalObjec
 extern "c" fn Bun__makeArrayBufferWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, ptr: ?*anyopaque, len: usize, deallocator: jsc.C.JSTypedArrayBytesDeallocator, deallocatorContext: ?*anyopaque) callconv(.c) jsc.JSValue;
 
 extern "c" fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, arrayType: ArrayBufferTypedArrayType, ptr: ?*anyopaque, len: usize, deallocator: jsc.C.JSTypedArrayBytesDeallocator, deallocatorContext: ?*anyopaque) callconv(.c) jsc.JSValue;
+
+extern "c" fn Bun__makeTypedArrayWithArrayBuffer(globalObject: *jsc.JSGlobalObject, arrayType: ArrayBufferTypedArrayType, buffer: jsc.JSValue) callconv(.c) jsc.JSValue;
 
 pub export fn MarkedArrayBuffer_deallocator(bytes_: *anyopaque, _: *anyopaque) callconv(.c) void {
         const mimalloc = bun.mimalloc;

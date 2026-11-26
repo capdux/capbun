@@ -897,10 +897,10 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionCall, (JSGlobalObject * lexicalGlobalObje
     }
 
     unsigned int returnValueIndex = 0;
-    auto setReturnValue = [&](JSC::JSValue value) -> void {
+    auto setReturnValue = [&](JSC::JSValue value) -> bool {
         if (auto* returnValuesArray = fn->returnValues.get()) {
             returnValuesArray->push(globalObject, value);
-            RETURN_IF_EXCEPTION(scope, void());
+            RETURN_IF_EXCEPTION(scope, false);
             returnValueIndex = returnValuesArray->length() - 1;
         } else {
             JSC::ObjectInitializationScope object(vm);
@@ -911,6 +911,7 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionCall, (JSGlobalObject * lexicalGlobalObje
             returnValuesArray->initializeIndex(object, 0, value);
             fn->returnValues.set(vm, fn, returnValuesArray);
         }
+        return true;
     };
 
     if (auto* impl = tryJSDynamicCast<JSMockImplementation*, Unknown>(fn->implementation)) {
@@ -931,7 +932,9 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionCall, (JSGlobalObject * lexicalGlobalObje
                 return {};
             }
 
-            setReturnValue(createMockResult(vm, globalObject, "incomplete"_s, jsUndefined()));
+            if (!setReturnValue(createMockResult(vm, globalObject, "incomplete"_s, jsUndefined()))) {
+                return {};
+            }
 
             auto topExceptionScope = DECLARE_TOP_EXCEPTION_SCOPE(vm);
 
@@ -960,17 +963,23 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionCall, (JSGlobalObject * lexicalGlobalObje
         }
         case JSMockImplementation::Kind::ReturnValue: {
             JSValue returnValue = impl->underlyingValue.get();
-            setReturnValue(createMockResult(vm, globalObject, "return"_s, returnValue));
+            if (!setReturnValue(createMockResult(vm, globalObject, "return"_s, returnValue))) {
+                return {};
+            }
             return JSValue::encode(returnValue);
         }
         case JSMockImplementation::Kind::ReturnThis: {
-            setReturnValue(createMockResult(vm, globalObject, "return"_s, thisValue));
+            if (!setReturnValue(createMockResult(vm, globalObject, "return"_s, thisValue))) {
+                return {};
+            }
             return JSValue::encode(thisValue);
         }
         case JSMockImplementation::Kind::RejectedValue: {
             JSValue rejectedPromise = JSC::JSPromise::rejectedPromise(globalObject, impl->underlyingValue.get());
             RETURN_IF_EXCEPTION(scope, {});
-            setReturnValue(createMockResult(vm, globalObject, "return"_s, rejectedPromise));
+            if (!setReturnValue(createMockResult(vm, globalObject, "return"_s, rejectedPromise))) {
+                return {};
+            }
             return JSValue::encode(rejectedPromise);
         }
         default: {
@@ -979,7 +988,9 @@ JSC_DEFINE_HOST_FUNCTION(jsMockFunctionCall, (JSGlobalObject * lexicalGlobalObje
         }
     }
 
-    setReturnValue(createMockResult(vm, globalObject, "return"_s, jsUndefined()));
+    if (!setReturnValue(createMockResult(vm, globalObject, "return"_s, jsUndefined()))) {
+        return {};
+    }
     return JSValue::encode(jsUndefined());
 }
 

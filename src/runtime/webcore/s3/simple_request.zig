@@ -447,7 +447,11 @@ switch (response.status_code) {
 200 => {
 if (self.result.body) |body| {
                 _ = &body;
-                const success = (blk_catch_1: { break :blk_catch_1 ((ListObjects.parseS3ListObjectsResult(body.slice())) catch |__ce_1| { _ = &__ce_1; _ = try self.errorWithBody(.failure);
+                const success = (blk_catch_1: { break :blk_catch_1 ((ListObjects.parseS3ListObjectsResult(body.slice())) catch |e| { _ = &e; if ((e == error.InvalidResponse)) {
+                    _ = try self.callback.fail("InvalidResponse", "The S3 response could not be parsed as valid XML.", self.callback_context);
+                    return;
+                }
+                _ = try self.errorWithBody(.failure);
                 return; }); });
                 _ = try cb(.{ .success = success }, self.callback_context);
             } else {
@@ -507,7 +511,17 @@ if ((!try self.failIfContainsError(response.status_code))) {
 
 pub fn httpCallback(self: *S3HttpSimpleTask, async_http: *bun.http.AsyncHTTP, result: bun.http.HTTPClientResult) void {
             const is_done = (!result.has_more);
+            const prev_metadata = self.result.metadata;
             self.result = result;
+            if ((self.result.metadata == null)) {
+                self.result.metadata = prev_metadata;
+            } else {
+                if ((prev_metadata != null)) {
+                    var old_meta = prev_metadata.?;
+                    _ = &old_meta;
+                    _ = old_meta.deinit(bun.default_allocator);
+                }
+            }
             self.http = async_http.*;
             self.response_buffer = async_http.response_buffer.*;
             if (is_done) {

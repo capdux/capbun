@@ -153,9 +153,19 @@ fn errorUnlessFakeTimers(globalObject: *jsc.JSGlobalObject): bun.JSError!void {
 fn setFakeTimerMarker(globalObject: *jsc.JSGlobalObject, enabled: bool) {
     const globalThis_value = globalObject.toJSValue();
     const setTimeout_fn = (globalThis_value.getOwnTruthy(globalObject, "setTimeout") catch return) ?? return;
+    if (!setTimeout_fn.isObject()) return;
     // testing-library/react checks Object.hasOwnProperty.call(setTimeout, 'clock')
     // to detect if fake timers are enabled.
     if (enabled) {
+        const object_ctor = (globalThis_value.get(globalObject, "Object") catch return) ?? return;
+        const is_extensible_fn = (object_ctor.get(globalObject, "isExtensible") catch return) ?? return;
+        if (is_extensible_fn.isCallable()) {
+            const res = is_extensible_fn.call(globalObject, object_ctor, &.{ setTimeout_fn }) catch {
+                globalObject.clearException();
+                return;
+            };
+            if (!res.toBoolean()) return;
+        }
         // Set setTimeout.clock = true when enabling fake timers.
         setTimeout_fn.put(globalObject, "clock", .true);
     } else {
@@ -163,6 +173,46 @@ fn setFakeTimerMarker(globalObject: *jsc.JSGlobalObject, enabled: bool) {
         // This ensures hasOwnProperty returns false, matching Jest/Sinon behavior.
         * = setTimeout_fn.deleteProperty(globalObject, "clock");
     }
+}
+
+pub fn jsSetSystemTime(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    const args = callframe.argumentsAsArray(1);
+    const argument0 = if (args.len > 0) args[0] else .js_undefined;
+
+    let js_time: f64? = null;
+    if (argument0.isDate()) {
+        const ts = argument0.getUnixTimestamp();
+        if (std.math.isNan(ts)) {
+            return callframe.this();
+        }
+        js_time = ts;
+    } else if (argument0.isNumber()) {
+        const ts = argument0.asNumber();
+        if (ts >= 0) {
+            js_time = ts;
+        }
+    }
+
+    if (ts := js_time) {
+        if (offset := current_time.getTimespecNow()) {
+            current_time.set(globalObject, .{ .offset = &offset, .js = ts });
+        } else {
+            bun.cpp.JSMock__setOverridenDateNow(globalObject, ts);
+        }
+    } else {
+        if (offset := current_time.getTimespecNow()) {
+            const real_now = bun.cpp.JSMock__getCurrentUnixTimeMs();
+            const timespec_ms: f64 = @floatFromInt(offset.ms());
+            current_time.offset_lock.lock();
+            {
+                const _guard_lock = UnlockGuard<std.Thread.RwLock>{ lock: &current_time.offset_lock };
+                current_time.date_now_offset = @floor(real_now) - timespec_ms;
+            }
+        }
+        bun.cpp.JSMock__setOverridenDateNow(globalObject, -1);
+    }
+
+    return callframe.this();
 }
 
 fn useFakeTimers(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {

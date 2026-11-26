@@ -4949,24 +4949,19 @@ pub fn sinkOnTooManyInvalidFrames(self: *H2FrameParser) void {
             _ = self.dispatchWith2Extra(.onError, code_js, JSValue.jsNumber(self.lastStreamID), JSValue.js_undefined);
     }
 
-pub fn settingsToJS(self: H2FrameParser, s: *const h2.Settings, globalObject: *jsc.JSGlobalObject) JSValue {
+pub fn settingsFromH2(self: H2FrameParser, s: *const h2.Settings) FullSettingsPayload {
         _ = self;
-            var payload = FullSettingsPayload{ .headerTableSize = s.header_table_size, .enablePush = s.enable_push, .maxConcurrentStreams = s.max_concurrent_streams, .initialWindowSize = s.initial_window_size, .maxFrameSize = s.max_frame_size, .maxHeaderListSize = s.max_header_list_size, .enableConnectProtocol = s.enable_connect_protocol };
-            _ = &payload;
-            _ = std.mem.byteSwapAllFields(FullSettingsPayload, (&payload));
-            const bytes = std.mem.asBytes((&payload))[0..FullSettingsPayload.byteSize];
-            const bt: BinaryType = .Buffer;
-            return (blk_catch_64: { break :blk_catch_64 ((bt.toJS(bytes, globalObject)) catch |__ce_64| { _ = &__ce_64; break :blk_catch_64 JSValue.js_undefined; }); });
+            return FullSettingsPayload{ .headerTableSize = s.header_table_size, .enablePush = s.enable_push, .maxConcurrentStreams = s.max_concurrent_streams, .initialWindowSize = s.initial_window_size, .maxFrameSize = s.max_frame_size, .maxHeaderListSize = s.max_header_list_size, .enableConnectProtocol = s.enable_connect_protocol };
     }
 
 pub fn sinkOnLocalSettings(self: *H2FrameParser, s: *const h2.Settings) void {
             self.outstandingSettings = (self.outstandingSettings -| 1);
-            const js_val = self.settingsToJS(s, self.globalThis);
-            _ = self.dispatch(.onLocalSettings, js_val);
+            self.localSettings = self.settingsFromH2(s);
+            _ = self.dispatch(.onLocalSettings, self.localSettings.toJS(self.globalThis));
     }
 
 pub fn sinkOnRemoteSettings(self: *H2FrameParser, s: *const h2.Settings) void {
-            self.remoteSettings = FullSettingsPayload{ .headerTableSize = s.header_table_size, .enablePush = s.enable_push, .maxConcurrentStreams = s.max_concurrent_streams, .initialWindowSize = s.initial_window_size, .maxFrameSize = s.max_frame_size, .maxHeaderListSize = s.max_header_list_size, .enableConnectProtocol = s.enable_connect_protocol };
+            self.remoteSettings = self.settingsFromH2(s);
             var window_grew = false;
             _ = &window_grew;
             var it = self.streams.valueIterator();
@@ -4981,20 +4976,19 @@ pub fn sinkOnRemoteSettings(self: *H2FrameParser, s: *const h2.Settings) void {
             if (window_grew) {
                 _ = self.flush();
             }
-            const js_val = self.settingsToJS(s, self.globalThis);
-            _ = self.dispatch(.onRemoteSettings, js_val);
+            _ = self.dispatch(.onRemoteSettings, self.remoteSettings.?.toJS(self.globalThis));
     }
 
 pub fn sinkOnPing(self: *H2FrameParser, payload: []const u8, is_ack: bool) void {
             if (is_ack) {
                 self.outStandingPings = (self.outStandingPings -| 1);
             }
-            const buffer = (blk_catch_65: { break :blk_catch_65 ((self.handlers.binary_type.toJS(payload, self.globalThis)) catch |__ce_65| { _ = &__ce_65; return; }); });
+            const buffer = (blk_catch_64: { break :blk_catch_64 ((self.handlers.binary_type.toJS(payload, self.globalThis)) catch |__ce_64| { _ = &__ce_64; return; }); });
             _ = self.dispatchWithExtra(.onPing, buffer, JSValue.jsBoolean(is_ack));
     }
 
 pub fn sinkOnGoAway(self: *H2FrameParser, code: u32, last: u32, debug: []const u8) void {
-            const chunk = (blk_catch_66: { break :blk_catch_66 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_66| { _ = &__ce_66; break :blk_catch_66 JSValue.js_undefined; }); });
+            const chunk = (blk_catch_65: { break :blk_catch_65 ((self.handlers.binary_type.toJS(debug, self.globalThis)) catch |__ce_65| { _ = &__ce_65; break :blk_catch_65 JSValue.js_undefined; }); });
             _ = self.dispatchWith2Extra(.onGoAway, JSValue.jsNumber(code), JSValue.jsNumber(last), chunk);
     }
 
@@ -5045,13 +5039,13 @@ pub fn sinkOnOrigin(self: *H2FrameParser, payload: []const u8) void {
                     _ = origin_value.ensureStillAlive();
                 } else {
                     if ((count == 1)) {
-                        const array = (blk_catch_67: { break :blk_catch_67 ((JSValue.createEmptyArray(self.globalThis, 0)) catch |__ce_67| { _ = &__ce_67; return; }); });
+                        const array = (blk_catch_66: { break :blk_catch_66 ((JSValue.createEmptyArray(self.globalThis, 0)) catch |__ce_66| { _ = &__ce_66; return; }); });
                         _ = array.ensureStillAlive();
-                        _ = (blk_catch_68: { break :blk_catch_68 ((array.push(self.globalThis, origin_value)) catch |__ce_68| { _ = &__ce_68;  }); });
-                        _ = (blk_catch_69: { break :blk_catch_69 ((array.push(self.globalThis, origin_js)) catch |__ce_69| { _ = &__ce_69;  }); });
+                        _ = (blk_catch_67: { break :blk_catch_67 ((array.push(self.globalThis, origin_value)) catch |__ce_67| { _ = &__ce_67;  }); });
+                        _ = (blk_catch_68: { break :blk_catch_68 ((array.push(self.globalThis, origin_js)) catch |__ce_68| { _ = &__ce_68;  }); });
                         origin_value = array;
                     } else {
-                        _ = (blk_catch_70: { break :blk_catch_70 ((origin_value.push(self.globalThis, origin_js)) catch |__ce_70| { _ = &__ce_70;  }); });
+                        _ = (blk_catch_69: { break :blk_catch_69 ((origin_value.push(self.globalThis, origin_js)) catch |__ce_69| { _ = &__ce_69;  }); });
                     }
                 }
                 count = (count + 1);
@@ -5069,11 +5063,11 @@ pub fn sinkOnStreamOpen(self: *H2FrameParser, stream_id: u32) void {
 
 pub fn sinkOnHeader(self: *H2FrameParser, _stream_id: u32, name: []const u8, value: []const u8, never_index: bool) void {
             _ = &_stream_id;
-            const name_copy = (blk_catch_71: { break :blk_catch_71 ((self.allocator.dupe(u8, name)) catch |__ce_71| { _ = &__ce_71; return; }); });
-            const value_copy = (blk_catch_72: { break :blk_catch_72 ((self.allocator.dupe(u8, value)) catch |__ce_72| { _ = &__ce_72; _ = self.allocator.free(name_copy);
+            const name_copy = (blk_catch_70: { break :blk_catch_70 ((self.allocator.dupe(u8, name)) catch |__ce_70| { _ = &__ce_70; return; }); });
+            const value_copy = (blk_catch_71: { break :blk_catch_71 ((self.allocator.dupe(u8, value)) catch |__ce_71| { _ = &__ce_71; _ = self.allocator.free(name_copy);
             return; }); });
-            _ = (blk_catch_73: { break :blk_catch_73 ((self.hdr_entries.append(self.allocator, HdrEntry{ .name = name_copy, .value = value_copy, .never_index = never_index })) catch |__ce_73| { _ = &__ce_73; _ = self.allocator.free(name_copy);
-            break :blk_catch_73 self.allocator.free(value_copy); }); });
+            _ = (blk_catch_72: { break :blk_catch_72 ((self.hdr_entries.append(self.allocator, HdrEntry{ .name = name_copy, .value = value_copy, .never_index = never_index })) catch |__ce_72| { _ = &__ce_72; _ = self.allocator.free(name_copy);
+            break :blk_catch_72 self.allocator.free(value_copy); }); });
     }
 
 pub fn clearHdrEntries(self: *H2FrameParser) void {
@@ -5109,38 +5103,46 @@ pub fn materializeHeadersTuple(self: *H2FrameParser) !JSValue {
                     }
                     _ = try sensitive_array.push(g, js_name);
                 }
-                if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), "set-cookie")) {
-                    if (try headers_obj.getOwn(g, "set-cookie")) |existing| {
-                        _ = &existing;
-                        _ = try existing.push(g, js_val);
-                    } else {
-                        const arr = try JSValue.createEmptyArray(g, 0);
-                        _ = try arr.push(g, js_val);
-                        _ = headers_obj.put(g, "set-cookie", arr);
+                if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), ":status")) {
+                    const existing = try headers_obj.getOwn(g, ":status");
+                    if ((existing == null)) {
+                        const status_num = (blk_catch_73: { break :blk_catch_73 ((std.fmt.parseInt(i32, (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value), 10)) catch |__ce_73| { _ = &__ce_73; break :blk_catch_73 0; }); });
+                        _ = headers_obj.put(g, ":status", JSValue.jsNumber(status_num));
                     }
                 } else {
-                    if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), "cookie")) {
-                        if (try headers_obj.getOwn(g, "cookie")) |existing| {
+                    if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), "set-cookie")) {
+                        if (try headers_obj.getOwn(g, "set-cookie")) |existing| {
                             _ = &existing;
-                            const prev = try existing.toSlice(g, self.allocator);
-                            defer {
-                            _ = prev.deinit();
-                            }
-                            const joined = (blk_catch_74: { break :blk_catch_74 ((std.fmt.allocPrint(self.allocator, "{s}; {s}", .{ prev.slice(), (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) })) catch |__ce_74| { _ = &__ce_74; break :blk_catch_74 null; }); });
-                            if (joined) |j| {
-                                _ = &j;
-                                defer {
-                                _ = self.allocator.free(j);
-                                }
-                                _ = headers_obj.put(g, "cookie", jsc.ZigString.init(j).toJS(g));
-                            }
+                            _ = try existing.push(g, js_val);
                         } else {
-                            _ = headers_obj.put(g, "cookie", js_val);
+                            const arr = try JSValue.createEmptyArray(g, 0);
+                            _ = try arr.push(g, js_val);
+                            _ = headers_obj.put(g, "set-cookie", arr);
                         }
                     } else {
-                        const existing = try headers_obj.getOwn(g, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
-                        if ((existing == null)) {
-                            _ = headers_obj.put(g, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), js_val);
+                        if (std.mem.eql(u8, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), "cookie")) {
+                            if (try headers_obj.getOwn(g, "cookie")) |existing| {
+                                _ = &existing;
+                                const prev = try existing.toSlice(g, self.allocator);
+                                defer {
+                                _ = prev.deinit();
+                                }
+                                const joined = (blk_catch_74: { break :blk_catch_74 ((std.fmt.allocPrint(self.allocator, "{s}; {s}", .{ prev.slice(), (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) })) catch |__ce_74| { _ = &__ce_74; break :blk_catch_74 null; }); });
+                                if (joined) |j| {
+                                    _ = &j;
+                                    defer {
+                                    _ = self.allocator.free(j);
+                                    }
+                                    _ = headers_obj.put(g, "cookie", jsc.ZigString.init(j).toJS(g));
+                                }
+                            } else {
+                                _ = headers_obj.put(g, "cookie", js_val);
+                            }
+                        } else {
+                            const existing = try headers_obj.getOwn(g, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name));
+                            if ((existing == null)) {
+                                _ = headers_obj.put(g, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), js_val);
+                            }
                         }
                     }
                 }

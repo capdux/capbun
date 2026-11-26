@@ -486,8 +486,12 @@ String TextCodecCJK::iso2022JPDecode(std::span<const uint8_t> bytes, bool flush,
             m_iso2022JPDecoderState = m_iso2022JPDecoderOutputState;
             if (m_lead) {
                 ASSERT(isASCII(m_lead));
-                if (byteParser(std::exchange(m_lead, 0x00), result) == SawError::Yes)
+                if (byteParser(std::exchange(m_lead, 0x00), result) == SawError::Yes) {
                     result.append(replacementCharacter);
+                } else if (m_iso2022JPDecoderState == ISO2022JPDecoderState::TrailByte) {
+                    m_iso2022JPDecoderState = ISO2022JPDecoderState::LeadByte;
+                    result.append(replacementCharacter);
+                }
             }
             break;
         }

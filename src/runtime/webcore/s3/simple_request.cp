@@ -359,7 +359,11 @@ export class S3HttpSimpleTask {
                 switch (response.status_code) {
                     200 => {
                         if (body := _.result.body) {
-                            const success = ListObjects.parseS3ListObjectsResult(body.slice()) catch {
+                            const success = ListObjects.parseS3ListObjectsResult(body.slice()) catch e => {
+                                if (e == error.InvalidResponse) {
+                                    _.callback.fail("InvalidResponse", "The S3 response could not be parsed as valid XML.", _.callback_context)?;
+                                    return;
+                                }
                                 _.errorWithBody(.failure)?;
                                 return;
                             };
@@ -431,7 +435,14 @@ export class S3HttpSimpleTask {
 
     pub fn httpCallback(*_, async_http: *bun.http.AsyncHTTP, result: bun.http.HTTPClientResult) {
         const is_done = !result.has_more;
+        const prev_metadata = _.result.metadata;
         _.result = result;
+        if (_.result.metadata == null) {
+            _.result.metadata = prev_metadata;
+        } else if (prev_metadata != null) {
+            let old_meta = prev_metadata.?;
+            old_meta.deinit(bun.default_allocator);
+        }
         _.http = async_http.*;
         _.response_buffer = async_http.response_buffer.*;
         if (is_done) {

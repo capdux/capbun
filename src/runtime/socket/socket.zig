@@ -446,12 +446,22 @@ pub fn onError(self: *DuplexUpgradeContext, err_value: jsc.JSValue) void {
                 if (self.tls) |tls| {
                     _ = &tls;
                     _ = tls.handleError(err_value);
+                } else {
+                    if (self.upgrade.global) |g| {
+                        _ = &g;
+                        _ = self.vm.uncaughtException(g, err_value, false);
+                    }
                 }
             } else {
                 if (self.tls) |tls| {
                     _ = &tls;
                     self.tls = null;
                     _ = (blk_catch_2: { break :blk_catch_2 ((tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ECONNREFUSED))) catch |__ce_2| { _ = &__ce_2;  }); });
+                } else {
+                    if (self.upgrade.global) |g| {
+                        _ = &g;
+                        _ = self.vm.uncaughtException(g, err_value, false);
+                    }
                 }
             }
     }
@@ -1193,6 +1203,20 @@ pub fn getThisValue(self: *@This(), globalObject: *jsc.JSGlobalObject) JSValue {
             const value = self.toJS(globalObject);
             _ = value.ensureStillAlive();
             _ = self.this_value.setStrong(value, globalObject);
+            return value;
+    }
+
+pub fn getWeakThisValue(self: *@This(), globalObject: *jsc.JSGlobalObject) JSValue {
+            if (self.this_value.tryGet()) |value| {
+                _ = &value;
+                return value;
+            }
+            if ((self.this_value == .finalized)) {
+                return .js_undefined;
+            }
+            const value = self.toJS(globalObject);
+            _ = value.ensureStillAlive();
+            _ = self.this_value.setWeak(value);
             return value;
     }
 

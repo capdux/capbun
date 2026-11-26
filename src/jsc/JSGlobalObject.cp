@@ -111,6 +111,7 @@ pub struct ValidateObjectOptions {
     fn JSGlobalObject__throwOutOfMemoryError(global: *JSGlobalObject);
     fn JSGlobalObject__createOutOfMemoryError(global: *JSGlobalObject): JSValue;
     fn Bun__ErrorCode__determineSpecificType(global: *JSGlobalObject, val: JSValue): String;
+    fn Bun__ErrorCode__throwInvalidArgumentTypeValue(global: *JSGlobalObject, arg_name_ptr: [*]const u8, arg_name_len: usize, type_name_ptr: [*]const u8, type_name_len: usize, val: JSValue);
     fn Bun__runOnLoadPlugins(global: *JSGlobalObject, maybe_path: (*const bun.String)?, path: *const bun.String, target: _BunPluginTarget): JSValue;
     fn Bun__runOnResolvePlugins(global: *JSGlobalObject, maybe_path: (*const bun.String)?, path: *const bun.String, specifier: *const String, target: _BunPluginTarget): JSValue;
     fn JSC__JSGlobalObject__queueMicrotaskCallback(global: *JSGlobalObject, ctx: *!, func: MicrotaskCallback);
@@ -350,9 +351,8 @@ inline fn argsIsEmpty(comptime T: type): bool {
         typename: []const u8,
         value: JSValue,
     ): bun.JSError {
-        const actual_string_value = determineSpecificType(_, value)?;
-        const _guard_actual_string_value = DerefGuard<String>{ ptr: unsafe { &actual_string_value } };
-        return _.ERR(.INVALID_ARG_TYPE, "The \"{s}\" argument must be of type {s}. Received {f}", .{ argname, typename, actual_string_value }).throw();
+        Bun__ErrorCode__throwInvalidArgumentTypeValue(_, argname.ptr, argname.len, typename.ptr, typename.len, value);
+        return error.JSError;
     }
 
     pub fn throwInvalidArgumentTypeValue2(

@@ -1126,7 +1126,12 @@ static JSC::JSValue rebindStatement(JSC::JSGlobalObject* lexicalGlobalObject, JS
 
     int i = 0;
     for (; i < count; i++) {
-        JSC::JSValue value = array->getIndexQuickly(i);
+        unsigned idx = static_cast<unsigned>(i);
+        JSC::JSValue value = array->canGetIndexQuickly(idx) ? array->getIndexQuickly(idx) : array->get(lexicalGlobalObject, idx);
+        RETURN_IF_EXCEPTION(scope, {});
+        if (!value) {
+            value = jsNull();
+        }
         if (statement ? statement->stmt != stmt : versionDB->handle() != db) [[unlikely]] {
             throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, statement ? finalizedMessage(statement) : "Database has closed"_s));
             return {};
@@ -1900,7 +1905,12 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementFcntlFunction, (JSC::JSGlobalObject * lex
         RETURN_IF_EXCEPTION(scope, {});
     }
 
-    int resultInt = -1;
+    union {
+        int32_t i;
+        int64_t i64;
+        char* ptr;
+    } resultStorage;
+    resultStorage.i64 = -1;
     void* resultPtr = nullptr;
     if (resultValue.isObject()) {
         if (auto* view = dynamicDowncast<JSC::JSArrayBufferView>(resultValue.getObject())) {
@@ -1909,25 +1919,39 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementFcntlFunction, (JSC::JSGlobalObject * lex
                 return {};
             }
 
+            if (view->byteLength() < 8) {
+                throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "TypedArray must be at least 8 bytes"_s));
+                return {};
+            }
+
             resultPtr = view->vector();
             if (resultPtr == nullptr) {
                 throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Expected buffer"_s));
                 return {};
             }
+        } else {
+            throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Expected result to be a number, null or a TypedArray"_s));
+            return {};
         }
     } else if (resultValue.isNumber()) {
-        resultInt = resultValue.toInt32(lexicalGlobalObject);
+        resultStorage.i = resultValue.toInt32(lexicalGlobalObject);
         RETURN_IF_EXCEPTION(scope, {});
 
-        resultPtr = &resultInt;
-    } else if (resultValue.isNull()) {
-
+        resultPtr = &resultStorage;
+    } else if (resultValue.isNull() || resultValue.isUndefined()) {
+        if (op != SQLITE_FCNTL_SET_LOCKPROXYFILE || !resultValue.isNull()) {
+            resultPtr = &resultStorage;
+        }
     } else {
         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, "Expected result to be a number, null or a TypedArray"_s));
         return {};
     }
 
     int statusCode = sqlite3_file_control(db, fileNameStr.isNull() ? nullptr : fileNameStr.data(), op, resultPtr);
+
+    if (resultPtr == &resultStorage && (op == SQLITE_FCNTL_VFSNAME || op == SQLITE_FCNTL_TEMPFILENAME) && statusCode == SQLITE_OK && resultStorage.ptr) {
+        sqlite3_free(resultStorage.ptr);
+    }
 
     if (statusCode == SQLITE_ERROR) {
         throwException(lexicalGlobalObject, scope, createSQLiteError(lexicalGlobalObject, db));
@@ -2238,11 +2262,12 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteStatementFunctionAll, (JSC::JSGlob
             bool useBigInt64 = castedThis->useBigInt64;
             JSC::JSArray* resultArray = JSC::constructEmptyArray(lexicalGlobalObject, static_cast<ArrayAllocationProfile*>(nullptr), 0);
             RETURN_IF_EXCEPTION(scope, {});
+            unsigned rowIndex = 0;
             if (useBigInt64) {
                 do {
                     JSC::JSValue result = constructResultObject<true>(lexicalGlobalObject, castedThis);
                     RETURN_IF_EXCEPTION(scope, {});
-                    resultArray->push(lexicalGlobalObject, result);
+                    resultArray->putDirectIndex(lexicalGlobalObject, rowIndex++, result);
                     RETURN_IF_EXCEPTION(scope, {});
                     if (castedThis->stmt != stmt) [[unlikely]] {
                         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, finalizedMessage(castedThis)));
@@ -2254,7 +2279,7 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteStatementFunctionAll, (JSC::JSGlob
                 do {
                     JSC::JSValue result = constructResultObject<false>(lexicalGlobalObject, castedThis);
                     RETURN_IF_EXCEPTION(scope, {});
-                    resultArray->push(lexicalGlobalObject, result);
+                    resultArray->putDirectIndex(lexicalGlobalObject, rowIndex++, result);
                     RETURN_IF_EXCEPTION(scope, {});
                     if (castedThis->stmt != stmt) [[unlikely]] {
                         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, finalizedMessage(castedThis)));
@@ -2395,6 +2420,7 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteStatementFunctionRows, (JSC::JSGlo
             RETURN_IF_EXCEPTION(scope, {});
             {
                 size_t columnCount = sqlite3_column_count(stmt);
+                unsigned rowIndex = 0;
 
                 do {
                     JSC::JSArray* row = constructResultRow(vm, lexicalGlobalObject, castedThis, columnCount);
@@ -2402,7 +2428,7 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteStatementFunctionRows, (JSC::JSGlo
                         sqlite3_reset(stmt);
                         RELEASE_AND_RETURN(scope, {});
                     }
-                    resultArray->push(lexicalGlobalObject, row);
+                    resultArray->putDirectIndex(lexicalGlobalObject, rowIndex++, row);
                     RETURN_IF_EXCEPTION(scope, {});
                     if (castedThis->stmt != stmt) [[unlikely]] {
                         throwException(lexicalGlobalObject, scope, createError(lexicalGlobalObject, finalizedMessage(castedThis)));
@@ -2484,6 +2510,7 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteStatementFunctionRawRows, (JSC::JS
             RETURN_IF_EXCEPTION(scope, {});
             {
                 size_t columnCount = sqlite3_column_count(stmt);
+                unsigned rowIndex = 0;
 
                 do {
                     JSC::JSArray* row = constructResultRowRaw(vm, lexicalGlobalObject, castedThis, columnCount);
@@ -2491,7 +2518,7 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteStatementFunctionRawRows, (JSC::JS
                         sqlite3_reset(stmt);
                         RELEASE_AND_RETURN(scope, {});
                     }
-                    resultArray->push(lexicalGlobalObject, row);
+                    resultArray->putDirectIndex(lexicalGlobalObject, rowIndex++, row);
                     // no sqlite3_reset: push() can run user code that finalizes `stmt`
                     RETURN_IF_EXCEPTION(scope, {});
 

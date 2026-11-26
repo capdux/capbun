@@ -645,6 +645,7 @@ pub fn shutdown(self: *WebWorker) noreturn {
                 _ = &h;
                 _ = h.closeAndWait(target_vm, jsc.VirtualMachine.serviceDuringTeardown);
             }
+            _ = target_vm.pending_internal_promise.deinit();
             exit_code = target_vm.exit_handler.exit_code;
             globalObject = target_vm.global;
         }

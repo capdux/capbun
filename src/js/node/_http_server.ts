@@ -59,9 +59,11 @@ const kConnectionsCheckingInterval = Symbol("http.server.connectionsCheckingInte
 
 const getBunServerAllClosedPromise = $newZigFunction("node_http_binding.zig", "getBunServerAllClosedPromise", 1);
 const sendHelper = $newZigFunction("node_cluster_binding.zig", "sendHelperChild", 3);
+const BlockList = $zig("node_net_binding.zig", "BlockList");
 
 const kServerResponse = Symbol("ServerResponse");
 const kRejectNonStandardBodyWrites = Symbol("kRejectNonStandardBodyWrites");
+const kNeedDrain = Symbol("kNeedDrain");
 const GlobalPromise = globalThis.Promise;
 const kEmptyBuffer = Buffer.alloc(0);
 const ObjectKeys = Object.keys;
@@ -221,6 +223,7 @@ function Server(options, callback): void {
   this[kInternalSocketData] = undefined;
   this[tlsSymbol] = null;
   this.noDelay = true;
+  this.blockList = undefined;
   if (typeof options === "function") {
     callback = options;
     options = {};
@@ -263,20 +266,30 @@ function Server(options, callback): void {
       throw $ERR_INVALID_ARG_TYPE("options.secureOptions", "number", secureOptions);
     }
 
-    if (this[isTlsSymbol]) {
-      this[tlsSymbol] = normalizeServerTls({
-        serverName,
-        key,
-        cert,
-        ca,
-        passphrase,
-        secureOptions,
-        requestCert: options.requestCert,
-        rejectUnauthorized: options.rejectUnauthorized,
-      });
-    } else {
-      this[tlsSymbol] = null;
+    if (this[isTlsSymbol] && options.blockList !== undefined) {
+      if (!BlockList.isBlockList(options.blockList)) {
+        throw $ERR_INVALID_ARG_TYPE("options.blockList", "net.BlockList", options.blockList);
+      }
+      this.blockList = options.blockList;
     }
+  }
+
+  if (this[isTlsSymbol]) {
+    this[tlsSymbol] = normalizeServerTls({
+      serverName: options.servername,
+      key: options.key,
+      cert: options.cert,
+      ca: options.ca,
+      passphrase: typeof options.passphrase === "string" ? options.passphrase : undefined,
+      secureOptions: options.secureOptions || 0,
+      requestCert: options.requestCert,
+      rejectUnauthorized: options.rejectUnauthorized,
+      ciphers: typeof options.ciphers === "string" ? options.ciphers : undefined,
+      ALPNProtocols: options.ALPNProtocols,
+      allowPartialTrustChain: options.allowPartialTrustChain,
+    });
+  } else {
+    this[tlsSymbol] = null;
   }
 
   this[optionsSymbol] = options;
@@ -540,6 +553,25 @@ Server.prototype[kRealListen] = function (tls, port, host, socketPath, reusePort
       ) {
         const prevIsNextIncomingMessageHTTPS = getIsNextIncomingMessageHTTPS();
         setIsNextIncomingMessageHTTPS(isHTTPS);
+        if (server.blockList && !socket) {
+          const addr = socketHandle.remoteAddress;
+          if (addr && addr.address && addr.family) {
+            const family = addr.family === "IPv4" ? "ipv4" : addr.family === "IPv6" ? "ipv6" : undefined;
+            if (family) {
+              let blocked = false;
+              try {
+                blocked = server.blockList.check(addr.address, family);
+              } catch {
+                blocked = true;
+              }
+              if (blocked) {
+                setIsNextIncomingMessageHTTPS(prevIsNextIncomingMessageHTTPS);
+                socketHandle.close();
+                return;
+              }
+            }
+          }
+        }
         if (!socket) {
           socket = new NodeHTTPServerSocket(server, socketHandle, !!tls);
         }
@@ -727,7 +759,11 @@ Server.prototype[kRealListen] = function (tls, port, host, socketPath, reusePort
       this[serverSymbol],
       this.requireHostHeader,
       true,
-      typeof this.maxHeaderSize !== "undefined" ? this.maxHeaderSize : getMaxHTTPHeaderSize(),
+      typeof this.maxHeaderSize !== "undefined"
+        ? this.maxHeaderSize === Infinity
+          ? Number.MAX_SAFE_INTEGER
+          : this.maxHeaderSize
+        : getMaxHTTPHeaderSize(),
       onServerClientError.bind(this),
     );
 
@@ -976,6 +1012,17 @@ const NodeHTTPServerSocket = class Socket extends Duplex {
     }
 
     this.#closeHandle(handle, callback);
+  }
+
+  destroySoon() {
+    if (this.writable) {
+      this.end();
+    }
+    if (this.writableFinished) {
+      this.destroy();
+    } else {
+      this.once("finish", this.destroy);
+    }
   }
 
   _final(callback) {
@@ -1237,6 +1284,7 @@ function ServerResponse(req, options): void {
   this._sent100 = false;
   this[headerStateSymbol] = NodeHTTPHeaderState.none;
   this[kPendingCallbacks] = [];
+  this[kNeedDrain] = false;
   this.finished = false;
 
   // this is matching node's behaviour
@@ -1499,6 +1547,7 @@ ServerResponse.prototype.write = function (chunk, encoding, callback) {
   }
 
   if (result < 0) {
+    this[kNeedDrain] = true;
     if (callback) {
       // The write was buffered due to backpressure.
       // We need to defer the callback until the write actually goes through.
@@ -1511,7 +1560,9 @@ ServerResponse.prototype.write = function (chunk, encoding, callback) {
   if (callback) {
     process.nextTick(callback);
   }
-  this.emit("drain");
+  if (this[kNeedDrain]) {
+    process.nextTick(emitDrainNT, this);
+  }
 
   return true;
 };
@@ -1554,7 +1605,7 @@ ServerResponse.prototype._implicitHeader = function () {
 
 Object.defineProperty(ServerResponse.prototype, "writableNeedDrain", {
   get() {
-    return !this.destroyed && !this.finished && (this[kHandle]?.bufferedAmount ?? 0) !== 0;
+    return !this.destroyed && !this.finished && !!this[kNeedDrain];
   },
 });
 
@@ -1707,8 +1758,16 @@ function callWriteHeadIfObservable(self, headerState) {
   }
 }
 
+function emitDrainNT(self) {
+  if (!self.destroyed && !self.finished && self[kNeedDrain]) {
+    self[kNeedDrain] = false;
+    self.emit("drain");
+  }
+}
+
 function allowWritesToContinue() {
   this._callPendingCallbacks();
+  this[kNeedDrain] = false;
   this.emit("drain");
 }
 

@@ -255,9 +255,8 @@ fn forceDetach(globalObject: *JSGlobalObject) {
 /// be careful, this can invalidate the stream do not call this multiple times
 /// this is meant to be called only once when we are done consuming the stream or from the ReadableStream.Strong.deinit
 fn detachIfPossible(globalObject: *JSGlobalObject) {
-    * = _.value;
-    * = globalObject;
     jsc.markBinding(@src());
+    ReadableStream__detach(_.value, globalObject);
 }
 
 fn isDisturbed(globalObject: *JSGlobalObject): bool {

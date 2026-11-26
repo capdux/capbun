@@ -762,6 +762,7 @@ pub struct LiveWorkers {
             if (h := target_vm.handle) {
                 h.closeAndWait(target_vm, jsc.VirtualMachine.serviceDuringTeardown);
             }
+            target_vm.pending_internal_promise.deinit();
             exit_code = target_vm.exit_handler.exit_code;
             globalObject = target_vm.global;
         }

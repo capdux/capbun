@@ -28,6 +28,7 @@ public:
         IsWasm = 16,
         IsFunction = 32,
         IsAsync = 64,
+        IsToplevel = 128,
     };
 
 private:
@@ -81,6 +82,7 @@ public:
     bool isStrict() const { return m_flags & static_cast<unsigned int>(Flags::IsStrict); }
     bool isNative() const { return m_flags & static_cast<unsigned int>(Flags::IsNative); }
     bool isAsync() const { return m_flags & static_cast<unsigned int>(Flags::IsAsync); }
+    bool isToplevel() const { return m_flags & static_cast<unsigned int>(Flags::IsToplevel); }
 
     void setLineNumber(OrdinalNumber lineNumber) { m_lineNumber = lineNumber; }
     void setColumnNumber(OrdinalNumber columnNumber) { m_columnNumber = columnNumber; }

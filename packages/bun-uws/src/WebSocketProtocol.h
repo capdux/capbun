@@ -43,6 +43,7 @@ const std::string_view ERR_FRAGMENTED_CONTROL("Received fragmented control frame
 const std::string_view ERR_TOO_BIG_CONTROL("Received too big control frame");
 const std::string_view ERR_INTERLEAVED_MESSAGE("Received new message inside a fragmented message");
 const std::string_view ERR_UNEXPECTED_CONTINUATION("Received unexpected continuation frame");
+const std::string_view ERR_UNMASKED_FRAME("Received an incorrectly masked frame");
 
 enum OpCode : unsigned char {
     CONTINUATION = 0,
@@ -241,6 +242,7 @@ protected:
     static inline unsigned char payloadLength(char *frame) {return ((unsigned char *) frame)[1] & 127;}
     static inline bool rsv23(char *frame) {return *((unsigned char *) frame) & 48;}
     static inline bool rsv1(char *frame) {return *((unsigned char *) frame) & 64;}
+    static inline bool isMasked(char *frame) {return ((unsigned char *) frame)[1] & 128;}
 
     template <int N>
     static inline void UnrolledXor(char * __restrict data, char * __restrict mask) {
@@ -405,7 +407,14 @@ public:
         }
         if (wState->state.wantsHead) {
             parseNext:
-            while (length >= SHORT_MESSAGE_HEADER) {
+            while (length >= 2) {
+                if (isServer && !isMasked(src)) {
+                    Impl::forceClose(wState, user, ERR_UNMASKED_FRAME, 1002);
+                    return;
+                }
+                if (length < SHORT_MESSAGE_HEADER) {
+                    break;
+                }
 
                 // invalid reserved bits / invalid opcodes / invalid control frames / set compressed frame
                 if (rsv23(src)) {

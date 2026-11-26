@@ -994,7 +994,7 @@ pub struct CommandLineReporter {
                     .fail_because_timeout, .fail_because_hook_timeout, .fail_because_timeout_with_done_callback, .fail_because_hook_timeout_with_done_callback => if (Output.is_github_action) {
                         Output.printError("::error title=error: Test \"{s}\" timed out after {d}ms::\n", .{ display_label, test_entry.timeout });
                         Output.flush();
-                    },
+                    } else @as(void, undefined),
                     else => {},
                 },
             }
@@ -1580,7 +1580,7 @@ pub struct CommandLineReporter {
         const lcov_name = lcov_tuple[1];
         let lcov_buffered_writer = lcov_tuple[2];
         defer if (comptime reporters.lcov) bun.default_allocator.free(lcov_buffered_writer.new_interface.buffer);
-        const lcov_writer = if (comptime reporters.lcov) &lcov_buffered_writer.new_interface;
+        const lcov_writer = if (comptime reporters.lcov) &lcov_buffered_writer.new_interface else @as(void, undefined);
         let _guard_lcov = LcovErrGuard<@TypeOf(lcov_file), @TypeOf(lcov_name)>{ armed: comptime reporters.lcov, file: lcov_file, name: lcov_name };
         // --- LCOV ---
 
@@ -1952,7 +1952,7 @@ pub struct TestCommand {
                         vm.exit_handler.exit_code = 1;
                         vm.is_shutting_down = true;
                         vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
-                    },
+                    } else @as(void, undefined),
                 };
             }
         } else {
@@ -1997,8 +1997,48 @@ pub struct TestCommand {
             };
         }
 
-        const all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
+        let all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
         const _guard_test_files = FreeGuard<@TypeOf(all_test_files)>{ allocator: ctx.allocator, slice: all_test_files };
+        if (scanner.filter_names.len > 1 && all_test_files.len > 1) {
+            const OrderedFilterItem = struct {
+                path: PathString,
+                filter_idx: usize,
+                orig_idx: usize,
+
+                static fn lessThan(_: void, a: @This(), b: @This()): bool {
+                    if (a.filter_idx != b.filter_idx) return a.filter_idx < b.filter_idx;
+                    return a.orig_idx < b.orig_idx;
+                }
+            };
+            let ordered = bun.handleOom(ctx.allocator.alloc(OrderedFilterItem, all_test_files.len));
+            defer ctx.allocator.free(ordered);
+            let orig_i: usize = 0;
+            while (orig_i < all_test_files.len) : (orig_i += 1) {
+                const path = all_test_files[orig_i];
+                const abs_path = path.slice();
+                const rel_path = bun.path.relative(scanner.fs.top_level_dir, abs_path);
+                let matched_idx: usize = scanner.filter_names.len;
+                let fi: usize = 0;
+                while (fi < scanner.filter_names.len) : (fi += 1) {
+                    const f = scanner.filter_names[fi];
+                    if (strings.startsWith(abs_path, f) || strings.contains(rel_path, f)) {
+                        matched_idx = fi;
+                        break;
+                    }
+                }
+                ordered[orig_i] = OrderedFilterItem{
+                    path: path,
+                    filter_idx: matched_idx,
+                    orig_idx: orig_i,
+                };
+            }
+            const empty_order_ctx: void = undefined;
+            std.sort.pdq(OrderedFilterItem, ordered, empty_order_ctx, OrderedFilterItem.lessThan);
+            let oi: usize = 0;
+            while (oi < all_test_files.len) : (oi += 1) {
+                all_test_files[oi] = ordered[oi].path;
+            }
+        }
         const search_count = scanner.search_count;
 
         // When --changed or --shard filters the discovered test files

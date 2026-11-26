@@ -327,7 +327,7 @@ pub fn createTestModule(globalObject: *JSGlobalObject) bun.JSError!JSValue {
     }
 
 pub fn createMockObjects(globalObject: *JSGlobalObject, module: JSValue) void {
-            const setSystemTime = jsc.JSFunction.create(globalObject, "setSystemTime", JSMock__jsSetSystemTime, 0, .{});
+            const setSystemTime = jsc.JSFunction.create(globalObject, "setSystemTime", jsc.toJSHostFn(bun_test.FakeTimers.jsSetSystemTime), 0, .{});
             _ = module.put(globalObject, "setSystemTime", setSystemTime);
             const mockFn = jsc.JSFunction.create(globalObject, "fn", JSMock__jsMockFn, 1, .{});
             const spyOn = jsc.JSFunction.create(globalObject, "spyOn", JSMock__jsSpyOn, 2, .{});

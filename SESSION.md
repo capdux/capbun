@@ -1098,3 +1098,12 @@
 - **验证摘要**：
   - **新全绿（0 fail）**：`web/console`（12/12）、`web/web-globals.test.js`（61/61）、`web/workers/worker-postmessage-transfer.test.ts`（7/7）、`node/crypto/crypto.test.ts`（403/403）、`node/stream/node-stream-uint8array.test.ts`（5/5）、`node/fs/fs-stats-constructor.test.ts`（7/7）、`node/dns/`（0 fail）、`node/readline/readline.node.test.ts`（`TERM=xterm` 下 81/81）、`regression/issue/{28024,11029,21274,23183,31002,30963,jsx-template-string-crash,26915}`（8 套件全 0 fail）。
   - **显著收敛**：`bun/cookie`（168/171）、`bun/image`（268/271）、`bun/udp`（234/236）、`node/worker_threads/worker_destruction.test.ts`（4/5）、`node/path`（124/125）、`web/url`（136/137）、`web/html`（176/178，无崩溃）、`web/workers/message-channel.test.ts`（15/17）、`web/websocket/websocket-proxy-connect-reply.test.ts`（22/54）、`bun/repl`（71/129）、`bun/jsonc`（354/375）。
+
+### [2026-11-27 Batch 40–47] 3 路并行排查、OOM 根因消除、`bun bd` 编译与验收提交
+- **用户指令**：临时文件放入 `tmp/`；先扫描收集错误、集中修改后编译 debug 版；结果写入 `test/stats.md`、已通过项不重复测试；每波及时提交并推送；同时定位并紧急解决 `bun-debug` 91.2 GB 内存暴涨根因。
+- **核心动作**：
+  - 完成 **Batch 40–47**（3 路并行子智能体 + 主智能体协同），彻底定位并修复 `dedupe.cp` / `workspace_selection.cp` `copyInto` 源目写反导致的 `Pass.settle` 死循环堆分配（91.2 GB 泄漏元凶）；
+  - 通过 `bun bd -p 'Bun.version'` 成功构建 `1.4.5-debug` 并分路并发完成验收。
+- **验证摘要**：
+  - **新全绿（0 fail）**：`bun/cookie`、`bun/udp`、`bun/css`、`bun/ffi/ffi-viewSource-non-object.test.ts`（28/28）、`bun/net/socket-dns-error.test.ts`、`node/path`、`web/encoding`（全 6 文件 0 fail）、`web/workers/message-channel.test.ts`、`web/websocket/websocket-proxy-connect-reply.test.ts`（54/54）、`regression/issue/{25589,25589-write-end,31611,36450}.test.ts`、`cli/update_interactive_install.test.ts`（7/7）。
+  - **显著收敛**：`web-stream-state.test.ts`（44 fail -> 3 fail）、`node-tls-duplex-close-throw-uaf`（前 4 项全绿）、`bun/jsonc`（仅余 6 fail）、`bun/archive`（仅余 1 fail）、`process-stdin`（5 fail -> 2 fail）、`bun/net` `stop(true)` 与 `node:net handle GC` 超时清零。

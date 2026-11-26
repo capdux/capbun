@@ -269,9 +269,8 @@ pub fn forceDetach(self: ReadableStream, globalObject: *JSGlobalObject) void {
 }
 
 pub fn detachIfPossible(self: ReadableStream, globalObject: *JSGlobalObject) void {
-        _ = self.value;
-        _ = &globalObject;
         _ = jsc.markBinding(@src());
+        _ = ReadableStream__detach(self.value, globalObject);
 }
 
 pub fn isDisturbed(self: ReadableStream, globalObject: *JSGlobalObject) bool {

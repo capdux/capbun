@@ -63,15 +63,16 @@ pub fn readJpeg(bytes: []const u8): Orientation {
     if (bytes.len < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8) return .normal;
     let i: usize = 2;
     while (i + 4 <= bytes.len) {
-        if (bytes[i] != 0xFF) return .normal;
+        while (i < bytes.len && bytes[i] != 0xFF) : (i += 1) {}
+        if (i + 4 > bytes.len) return .normal;
         const marker = bytes[i + 1];
         switch (marker) {
-            // Padding / restart markers carry no length field.
+            // Byte-stuffed 0xFF00 and padding / restart markers carry no length field.
             0xFF => {
                 i += 1;
                 continue;
             },
-            0xD0...0xD8 => {
+            0x00, 0xD0..=0xD8 => {
                 i += 2;
                 continue;
             },

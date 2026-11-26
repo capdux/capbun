@@ -106,6 +106,7 @@ pub const TOML = struct {
     log: *logger.Log,
     allocator: std.mem.Allocator,
     stack_check: bun.StackCheck,
+    inline_depth: u32 = 0,
 
 pub fn init(allocator: std.mem.Allocator, source_: logger.Source, log: *logger.Log, redact_logs: bool) !TOML {
             return TOML{ .lexer = try Lexer.init(log, source_, allocator, redact_logs), .allocator = allocator, .log = log, .stack_check = bun.StackCheck.init() };
@@ -298,7 +299,7 @@ pub fn parseValue(self: *TOML) !Expr {
                 _ = try bun.throwStackOverflow();
             }
             const loc = self.lexer.loc();
-            self.lexer.allow_double_bracket = true;
+            self.lexer.allow_double_bracket = (self.inline_depth == 0);
             switch (self.lexer.token) {
 .t_false => {
 _ = try self.lexer.next();
@@ -336,7 +337,12 @@ _ = try self.lexer.next();
             return self.e(E.Number{ .value = value }, loc);
 },
 .t_open_brace => {
-_ = try self.lexer.next();
+self.inline_depth = (self.inline_depth + 1);
+            defer {
+            self.inline_depth = (self.inline_depth - 1);
+            }
+            self.lexer.allow_double_bracket = false;
+            _ = try self.lexer.next();
             var is_single_line = (!self.lexer.has_newline_before);
             _ = &is_single_line;
             var stack = std.heap.stackFallback((@sizeOf(Rope) * 6), self.allocator);
@@ -363,24 +369,28 @@ _ = try self.lexer.next();
             if (self.lexer.has_newline_before) {
                 is_single_line = false;
             }
-            self.lexer.allow_double_bracket = true;
+            self.lexer.allow_double_bracket = (self.inline_depth == 1);
             _ = try self.lexer.expect(.t_close_brace);
             return expr;
 },
 .t_empty_array => {
-_ = try self.lexer.next();
-            self.lexer.allow_double_bracket = true;
+self.lexer.allow_double_bracket = (self.inline_depth == 0);
+            _ = try self.lexer.next();
             return self.e(std.mem.zeroInit(E.Array, .{}), loc);
 },
 .t_open_bracket => {
-_ = try self.lexer.next();
+self.inline_depth = (self.inline_depth + 1);
+            defer {
+            self.inline_depth = (self.inline_depth - 1);
+            }
+            self.lexer.allow_double_bracket = false;
+            _ = try self.lexer.next();
             var is_single_line = (!self.lexer.has_newline_before);
             _ = &is_single_line;
             const array_ = self.e(std.mem.zeroInit(E.Array, .{}), loc);
             var array = array_.data.e_array;
             _ = &array;
             const allocator = self.allocator;
-            self.lexer.allow_double_bracket = false;
             while ((self.lexer.token != .t_close_bracket)) {
                 if ((array.items.len > 0)) {
                     if (self.lexer.has_newline_before) {
@@ -398,7 +408,7 @@ _ = try self.lexer.next();
             if (self.lexer.has_newline_before) {
                 is_single_line = false;
             }
-            self.lexer.allow_double_bracket = true;
+            self.lexer.allow_double_bracket = (self.inline_depth == 1);
             _ = try self.lexer.expect(.t_close_bracket);
             return array_;
 },

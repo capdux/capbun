@@ -92,6 +92,28 @@ private:
             size_t closePayloadLength = protocol::formatClosePayload(closePayload, closeCode, reason.data(), length);
             ws->send(std::string_view(closePayload, closePayloadLength), OpCode::CLOSE);
             ((AsyncSocket<SSL> *) s)->uncork();
+
+            AsyncSocket<SSL> *asyncSocket = (AsyncSocket<SSL> *) s;
+            if (asyncSocket->getBufferedAmount() > 0) {
+                WebSocketData *webSocketData = (WebSocketData *) us_socket_ext((us_socket_t *) s);
+                if (!webSocketData->isShuttingDown) {
+                    webSocketData->isShuttingDown = true;
+                    auto *webSocketContextData = getExtS((us_socket_t *) s);
+                    asyncSocket->timeout(webSocketContextData->idleTimeoutComponents.second);
+                    if (webSocketData->subscriber && webSocketContextData->subscriptionHandler) {
+                        for (Topic *t : webSocketData->subscriber->topics) {
+                            webSocketContextData->subscriptionHandler(ws, t->name, (int) t->size() - 1, (int) t->size());
+                        }
+                    }
+                    webSocketContextData->topicTree->freeSubscriber(webSocketData->subscriber);
+                    webSocketData->subscriber = nullptr;
+                    if (webSocketContextData->closeHandler) {
+                        webSocketContextData->closeHandler(ws, 1006, reason);
+                    }
+                }
+                us_socket_shutdown_read((us_socket_t *) s);
+                return;
+            }
         }
         us_socket_close((us_socket_t *) s, (int) reason.length(), (void *) reason.data());
     }

@@ -122,10 +122,10 @@ pub fn newDetachedSocket(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFr
         const is_ssl = args[0].toBoolean();
         if ((!is_ssl)) {
             const socket = bun.api.TCPSocket.new(.{ .socket = .detached, .ref_count = .init(), .protos = null, .handlers = null, .flags = .{ .defers_server_identity = true } });
-            return socket.getThisValue(globalThis);
+            return socket.getWeakThisValue(globalThis);
         } else {
             const socket = bun.api.TLSSocket.new(.{ .socket = .detached, .ref_count = .init(), .protos = null, .handlers = null, .flags = .{ .defers_server_identity = true } });
-            return socket.getThisValue(globalThis);
+            return socket.getWeakThisValue(globalThis);
         }
 }
 

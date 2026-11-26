@@ -514,6 +514,13 @@ pub static fn printHelp(subcommand: Subcommand) {
                 \\  <b><green>bun add<r> <cyan>--optional<r> <blue>lodash<r>
                 \\  <b><green>bun add<r> <cyan>--peer<r> <blue>esbuild<r>
                 \\
+                \\  <d>Add a dependency to a specific workspace in a monorepo<r>
+                \\  <b><green>bun add<r> <blue>zod<r> <cyan>--filter<r> <blue>api<r>
+                \\
+                \\  <d>Add to the workspace catalog instead of pinning a version<r>
+                \\  <b><green>bun add<r> <cyan>--catalog<r> <blue>react<r>
+                \\  <b><green>bun add<r> <cyan>--catalog=testing<r> <blue>vitest<r>
+                \\
                 \\Full documentation is available at <magenta>https://bun.com/docs/cli/add<r>.
                 \\
             ;
@@ -564,8 +571,11 @@ pub static fn printHelp(subcommand: Subcommand) {
                 \\  <d>Directory should contain a package.json.<r>
                 \\  <b><green>bun link<r>
                 \\
-                \\  <d>Add a previously-registered linkable package as a dependency of the current project.<r>
+                \\  <d>Link a previously-registered linkable package into the current project's node_modules.<r>
                 \\  <b><green>bun link<r> <blue>\<package\><r>
+                \\
+                \\  <d>Also add it to the current project's package.json as a link: dependency.<r>
+                \\  <b><green>bun link<r> <cyan>--save<r> <blue>\<package\><r>
                 \\
                 \\Full documentation is available at <magenta>https://bun.com/docs/cli/link<r>.
                 \\
@@ -716,6 +726,17 @@ pub static fn printHelp(subcommand: Subcommand) {
                 \\
                 \\  <d>Output package vulnerabilities in JSON format.<r>
                 \\  <b><green>bun audit --json<r>
+                \\
+                \\  <d>bun audit fix upgrades vulnerable packages to the lowest safe version that still satisfies every dependent's range.<r>
+                \\
+                \\  <d>Upgrade vulnerable packages in bun.lock and node_modules; package.json is only changed when an exact pin has to be bumped.<r>
+                \\  <b><green>bun audit fix<r>
+                \\
+                \\  <d>Show what bun audit fix would change without changing anything.<r>
+                \\  <b><green>bun audit fix --dry-run<r>
+                \\
+                \\  <d>Also apply fixes that your package.json ranges exclude, rewriting those ranges.<r>
+                \\  <b><green>bun audit fix --latest<r>
                 \\
                 \\Full documentation is available at <magenta>https://bun.com/docs/install/audit<r>.
                 \\

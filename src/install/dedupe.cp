@@ -192,7 +192,7 @@ const Pass = struct {
     fn cover(*_): usize {
         const n = _.candidates.items.len;
         const m = _.edge_count;
-        _.required.unmanaged.copyInto(_.chosen.unmanaged);
+        _.chosen.unmanaged.copyInto(_.required.unmanaged);
         _.covered.unmanaged.setAll(false);
         let uncovered = m;
         let size: usize = 0;
@@ -383,7 +383,7 @@ const Pass = struct {
             if (!can_move) continue;
 
             const base_size = _.cover();
-            _.chosen.unmanaged.copyInto(_.survivors.unmanaged);
+            _.survivors.unmanaged.copyInto(_.chosen.unmanaged);
 
             _.protected.clearRetainingCapacity();
             e = 0;
@@ -415,7 +415,7 @@ const Pass = struct {
                     if (_.survivors.isSet(k)) continue;
                     _.required.set(k);
                     if (_.cover() == base_size) {
-                        _.chosen.unmanaged.copyInto(_.survivors.unmanaged);
+                        _.survivors.unmanaged.copyInto(_.chosen.unmanaged);
                     } else {
                         _.required.unset(k);
                     }
@@ -444,8 +444,7 @@ const Pass = struct {
     }
 
     fn settle(*_, cur: []const PackageID, live: *const DynamicBitSet): []PackageID! {
-        let live_unmanaged = unsafe { @constCast(&live.unmanaged) };
-        live_unmanaged.copyInto(_.voters.unmanaged);
+        _.voters.unmanaged.copyInto(live.unmanaged);
         let best: ([]PackageID)? = null;
         errdefer if (b := best) _.allocator.free(b);
 

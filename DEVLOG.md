@@ -1932,3 +1932,8 @@
   - `src/js_parser/ast/skipTypescript.cp`：三元条件内箭头函数返回类型回溯扫描遇模板字面量 `${...}` 内的 `}` 时未调用 `rescanCloseBraceAsTemplateToken()`，导致后续 `:` 与 `)` 被吞进伪模板字面量而误判回溯。
   - `src/js/internal/streams/readable.ts`：`howMuchToRead(n, state)` 对非 `setEncoding` 的 paused 流在 `read()` 无参时改为逐 chunk 返回，同步修复 `cipher events` 与 `node-stream-uint8array`。
   - `src/runtime/webcore/FormData.cp` / `Body.cp` / `Blob.cp`：`tryTakeException()` 返回的是 `*JSC::Exception` 包装对象，需通过 `exc.toError() ?? exc` 解包后再用于 `JSPromise` reject，避免触发 `JSPromise::resolve` `!value.inherits<Exception>()` 断言。
+
+## 2026-11-27: Batch 40–47 内存泄漏根因消除与跨模块收敛
+- **91 GB OOM 元凶消除（`src/install/dedupe.cp` & `workspace_selection.cp`）**：`DynamicBitSetUnmanaged.copyInto(self, other)` 语义为 `self <- other`，原迁移代码将 6 处调用源目写反，导致 `Pass.settle` 清零 `live` 位图并在 `dedupeLockfile` 中陷入死循环持续分配内存；修正方向后 `update_interactive_install.test.ts` 7/7 全绿。
+- **Web Streams / Fetch / Encoding / WebSocket**：恢复 `ReadableStream.cp` `detachIfPossible` 与 `Body.cp` `createJSSink`（`web-stream-state` 44 fail -> 3 fail）；`JSGlobalObject.cp` + `ErrorCode.cpp` 经 WTF UTF-16 抛出 `ERR_INVALID_ARG_TYPE` 保留孤立代理字符，`web/encoding` 全 6 文件 0 fail；`WebSocketUpgradeClient.cp` + `WebSocket.cpp` 转发代理 CONNECT 状态码/原因及 `"Response headers too large"`，`websocket-proxy-connect-reply.test.ts` 54/54 全绿。
+- **Net / TLS / TestRunner / FFI / CLI**：`Listener.cp` 消除 `ListenerCloseGuard` 提前释放 UAF，`node_net_binding.cp` 未连接 socket 改用弱引用包装；`UpgradedDuplex.cp` + `socket.cp` 补全 `StartTLS` 前关闭/EOF 派发及异常透传；`immutable.cp` 修正 `countChar` `u1` 向量求和溢出为 `@popCount(AsciiVectorInt)`；`FFI.h` 将 `UINT32_TO_JSVALUE` / `INT64_TO_JSVALUE` 上界修正为 `< MAX_INT32`。

@@ -45,6 +45,8 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -53,6 +55,7 @@ const ptr = @import("bun").ptr;
 const strings = @import("bun").strings;
 const String = @import("bun").String;
 const JSError = @import("bun").JSError;
+pub const xml_response = @import("./xml_response.zig");
 pub const S3ListObjectsOptions = struct {
     continuation_token: ?[]const u8 = null,
     delimiter: ?[]const u8 = null,
@@ -111,11 +114,49 @@ pub const S3ListObjectsContents = struct {
     storage_class: ?[]const u8 = null,
     owner: ?ObjectOwner = null,
     restore_status: ?ObjectRestoreStatus = null,
+    strings_owned: bool = false,
 
 pub fn deinit(self: *S3ListObjectsContents) void {
             if (self.etag) |*etag| {
                 _ = &etag;
                 _ = (etag.*).deinit();
+            }
+            if (self.strings_owned) {
+                _ = default_allocator.free(self.key);
+                if (self.checksum_type) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.checksum_algorithme) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.last_modified) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.storage_class) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.owner) |o| {
+                    _ = &o;
+                    if (o.id) |s| {
+                        _ = &s;
+                        _ = default_allocator.free(s);
+                    }
+                    if (o.display_name) |s| {
+                        _ = &s;
+                        _ = default_allocator.free(s);
+                    }
+                }
+                if (self.restore_status) |r| {
+                    _ = &r;
+                    if (r.restore_expiry_date) |s| {
+                        _ = &s;
+                        _ = default_allocator.free(s);
+                    }
+                }
             }
     }
 };
@@ -134,12 +175,39 @@ pub const S3ListObjectsV2Result = struct {
     start_after: ?[]const u8 = null,
     common_prefixes: ?Managed(string) = null,
     contents: ?Managed(S3ListObjectsContents) = null,
+    strings_owned: bool = false,
 
 pub fn deinit(self: *S3ListObjectsV2Result) void {
-            if (self.delimiter_owned) {
+            if ((self.delimiter_owned or self.strings_owned)) {
                 if (self.delimiter) |d| {
                     _ = &d;
                     _ = default_allocator.free(d);
+                }
+            }
+            if (self.strings_owned) {
+                if (self.name) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.prefix) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.encoding_type) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.continuation_token) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.next_continuation_token) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
+                }
+                if (self.start_after) |s| {
+                    _ = &s;
+                    _ = default_allocator.free(s);
                 }
             }
             if (self.contents) |contents| {
@@ -152,6 +220,12 @@ pub fn deinit(self: *S3ListObjectsV2Result) void {
             }
             if (self.common_prefixes) |common_prefixes| {
                 _ = &common_prefixes;
+                if (self.strings_owned) {
+                    for (common_prefixes.items) |cp_prefix| {
+                        _ = &cp_prefix;
+                        _ = default_allocator.free(cp_prefix);
+                    }
+                }
                 _ = common_prefixes.deinit();
             }
     }
@@ -218,7 +292,11 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                         _ = &checksum_algorithme;
                         const js_alg = try BunString.createUTF8ForJS(globalObject, checksum_algorithme);
                         _ = objectInfo.put(globalObject, ZigString.static("checksumAlgorithm"), js_alg);
-                        _ = objectInfo.put(globalObject, ZigString.static("checksumAlgorithme"), js_alg);
+                        const prop_name = JSStringCreateWithUTF8CString("checksumAlgorithme");
+                        defer {
+                        _ = JSStringRelease(prop_name);
+                        }
+                        _ = JSObjectSetProperty(globalObject, objectInfo.asObjectRef(), prop_name, js_alg.asObjectRef(), .kJSPropertyAttributeDontEnum, null);
                     }
                     if (item.checksum_type) |checksum_type| {
                         _ = &checksum_type;
@@ -275,430 +353,116 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
     }
 };
 
+const JSStringRef = ?*anyopaque;
 const BunString = bun.String;
 const JSGlobalObject = bun.jsc.JSGlobalObject;
 const JSValue = bun.jsc.JSValue;
 const ZigString = bun.jsc.ZigString;
 const Managed = std.array_list.Managed;
-const parseInt = std.fmt.parseInt;
-const replace = std.mem.replace;
-const replacementSize = std.mem.replacementSize;
 
-pub fn parseS3ListObjectsResult(xml: []const u8) !S3ListObjectsV2Result {
-        var result = S3ListObjectsV2Result{ .contents = null, .common_prefixes = null, .continuation_token = null, .delimiter = null, .encoding_type = null, .is_truncated = null, .key_count = null, .max_keys = null, .name = null, .next_continuation_token = null, .prefix = null, .start_after = null };
+extern "c" fn JSObjectSetProperty(ctx: *JSGlobalObject, object: bun.jsc.C.JSObjectRef, propertyName: JSStringRef, value: bun.jsc.C.JSValueRef, attributes: bun.jsc.C.JSPropertyAttributes, exception: bun.jsc.C.ExceptionRef) callconv(.c) void;
+
+extern "c" fn JSStringCreateWithUTF8CString(str: [*:0]const u8) callconv(.c) JSStringRef;
+
+extern "c" fn JSStringRelease(str: JSStringRef) callconv(.c) void;
+
+pub fn readListBucketResult(_: void, root: xml_response.Node) ?S3ListObjectsV2Result {
+        if ((!strings.eqlComptime((if (@typeInfo(@TypeOf(root)) == .@"enum" or @typeInfo(@TypeOf(root)) == .@"union") @tagName(root) else root.name), "ListBucketResult"))) {
+            return null;
+        }
+        var result = S3ListObjectsV2Result{ .name = root.childNonemptyText("Name", default_allocator), .prefix = root.childNonemptyText("Prefix", default_allocator), .key_count = root.childI64("KeyCount"), .max_keys = root.childI64("MaxKeys"), .delimiter = root.childNonemptyText("Delimiter", default_allocator), .delimiter_owned = false, .encoding_type = root.childNonemptyText("EncodingType", default_allocator), .is_truncated = root.childBool("IsTruncated"), .continuation_token = root.childNonemptyText("ContinuationToken", default_allocator), .next_continuation_token = root.childNonemptyText("NextContinuationToken", default_allocator), .start_after = root.childNonemptyText("StartAfter", default_allocator), .common_prefixes = null, .contents = null, .strings_owned = true };
         _ = &result;
         var contents = Managed(S3ListObjectsContents).init(default_allocator);
         _ = &contents;
         var common_prefixes = Managed(string).init(default_allocator);
         _ = &common_prefixes;
-        if (strings.indexOf(xml, "<ListBucketResult")) |delete_result_pos| {
-            _ = &delete_result_pos;
-            var i: usize = 0;
-            _ = &i;
-            while ((i < xml[delete_result_pos..].len)) {
-                if ((xml[@as(usize, @intCast(i))] != 60)) {
-                    i = (i + 1);
-                    continue;
-                }
-                if (strings.indexOf(xml[(i + 1)..], ">")) |end| {
-                    _ = &end;
-                    i = (i + 1);
-                    var tag_name_end_pos = (i + end);
-                    _ = &tag_name_end_pos;
-                    var tagName = xml[i..tag_name_end_pos];
-                    _ = &tagName;
-                    i = (tag_name_end_pos + 1);
-                    if (strings.eql(tagName, "Contents")) {
-                        var looking_for_end_tag = true;
-                        _ = &looking_for_end_tag;
-                        var object_key: ?[]const u8 = null;
-                        _ = &object_key;
-                        var last_modified: ?[]const u8 = null;
-                        _ = &last_modified;
-                        var object_size: ?i64 = null;
-                        _ = &object_size;
-                        var storage_class: ?[]const u8 = null;
-                        _ = &storage_class;
-                        var etag: ?[]const u8 = null;
-                        _ = &etag;
-                        var etag_owned: bool = false;
-                        _ = &etag_owned;
-                        var checksum_type: ?[]const u8 = null;
-                        _ = &checksum_type;
-                        var checksum_algorithme: ?[]const u8 = null;
-                        _ = &checksum_algorithme;
-                        var owner_id: ?[]const u8 = null;
-                        _ = &owner_id;
-                        var owner_display_name: ?[]const u8 = null;
-                        _ = &owner_display_name;
-                        var is_restore_in_progress: ?bool = null;
-                        _ = &is_restore_in_progress;
-                        var restore_expiry_date: ?[]const u8 = null;
-                        _ = &restore_expiry_date;
-                        while (looking_for_end_tag) {
-                            if ((i >= xml.len)) {
-                                break;
-                            }
-                            if ((xml[@as(usize, @intCast(i))] == 60)) {
-                                if (strings.indexOf(xml[(i + 1)..], ">")) |__end| {
-                                    _ = &__end;
-                                    var inner_tag_name_or_tag_end = xml[(i + 1)..((i + 1) + __end)];
-                                    _ = &inner_tag_name_or_tag_end;
-                                    i = ((i + 2) + __end);
-                                    if (strings.eql(inner_tag_name_or_tag_end, "/Contents")) {
-                                        looking_for_end_tag = false;
-                                    } else {
-                                        if (strings.eql(inner_tag_name_or_tag_end, "Key")) {
-                                            if (strings.indexOf(xml[i..], "</Key>")) |__tag_end| {
-                                                _ = &__tag_end;
-                                                object_key = xml[i..(i + __tag_end)];
-                                                i = ((i + __tag_end) + 6);
-                                            }
-                                        } else {
-                                            if (strings.eql(inner_tag_name_or_tag_end, "LastModified")) {
-                                                if (strings.indexOf(xml[i..], "</LastModified>")) |__tag_end| {
-                                                    _ = &__tag_end;
-                                                    last_modified = xml[i..(i + __tag_end)];
-                                                    i = ((i + __tag_end) + 15);
-                                                }
-                                            } else {
-                                                if (strings.eql(inner_tag_name_or_tag_end, "Size")) {
-                                                    if (strings.indexOf(xml[i..], "</Size>")) |__tag_end| {
-                                                        _ = &__tag_end;
-                                                        var size = xml[i..(i + __tag_end)];
-                                                        _ = &size;
-                                                        object_size = (blk_catch_0: { break :blk_catch_0 ((parseInt(i64, size, 10)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
-                                                        i = ((i + __tag_end) + 7);
-                                                    }
-                                                } else {
-                                                    if (strings.eql(inner_tag_name_or_tag_end, "StorageClass")) {
-                                                        if (strings.indexOf(xml[i..], "</StorageClass>")) |__tag_end| {
-                                                            _ = &__tag_end;
-                                                            storage_class = xml[i..(i + __tag_end)];
-                                                            i = ((i + __tag_end) + 15);
-                                                        }
-                                                    } else {
-                                                        if (strings.eql(inner_tag_name_or_tag_end, "ChecksumType")) {
-                                                            if (strings.indexOf(xml[i..], "</ChecksumType>")) |__tag_end| {
-                                                                _ = &__tag_end;
-                                                                checksum_type = xml[i..(i + __tag_end)];
-                                                                i = ((i + __tag_end) + 15);
-                                                            }
-                                                        } else {
-                                                            if (strings.eql(inner_tag_name_or_tag_end, "ChecksumAlgorithm")) {
-                                                                if (strings.indexOf(xml[i..], "</ChecksumAlgorithm>")) |__tag_end| {
-                                                                    _ = &__tag_end;
-                                                                    checksum_algorithme = xml[i..(i + __tag_end)];
-                                                                    i = ((i + __tag_end) + 20);
-                                                                }
-                                                            } else {
-                                                                if (strings.eql(inner_tag_name_or_tag_end, "ETag")) {
-                                                                    if (strings.indexOf(xml[i..], "</ETag>")) |__tag_end| {
-                                                                        _ = &__tag_end;
-                                                                        var input = xml[i..(i + __tag_end)];
-                                                                        _ = &input;
-                                                                        var size = replacementSize(u8, input, "&quot;", "\"");
-                                                                        _ = &size;
-                                                                        var output: []u8 = try default_allocator.alloc(u8, size);
-                                                                        _ = &output;
-                                                                        var len = replace(u8, input, "&quot;", "\"", output);
-                                                                        _ = &len;
-                                                                        if ((len != 0)) {
-                                                                            etag = output[0..(input.len - (len * 5))];
-                                                                            etag_owned = true;
-                                                                        } else {
-                                                                            _ = default_allocator.free(output);
-                                                                            etag = input;
-                                                                        }
-                                                                        i = ((i + __tag_end) + 7);
-                                                                    }
-                                                                } else {
-                                                                    if (strings.eql(inner_tag_name_or_tag_end, "Owner")) {
-                                                                        if (strings.indexOf(xml[i..], "</Owner>")) |__tag_end| {
-                                                                            _ = &__tag_end;
-                                                                            var owner = xml[i..(i + __tag_end)];
-                                                                            _ = &owner;
-                                                                            i = ((i + __tag_end) + 8);
-                                                                            if (strings.indexOf(owner, "<ID>")) |id_start| {
-                                                                                _ = &id_start;
-                                                                                var id_start_pos = (id_start + 4);
-                                                                                _ = &id_start_pos;
-                                                                                if (strings.indexOf(owner, "</ID>")) |id_end| {
-                                                                                    _ = &id_end;
-                                                                                    if ((id_start_pos < id_end)) {
-                                                                                        owner_id = owner[id_start_pos..id_end];
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                            if (strings.indexOf(owner, "<DisplayName>")) |id_start| {
-                                                                                _ = &id_start;
-                                                                                var id_start_pos = (id_start + 13);
-                                                                                _ = &id_start_pos;
-                                                                                if (strings.indexOf(owner, "</DisplayName>")) |id_end| {
-                                                                                    _ = &id_end;
-                                                                                    if ((id_start_pos < id_end)) {
-                                                                                        owner_display_name = owner[id_start_pos..id_end];
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    } else {
-                                                                        if (strings.eql(inner_tag_name_or_tag_end, "RestoreStatus")) {
-                                                                            if (strings.indexOf(xml[i..], "</RestoreStatus>")) |__tag_end| {
-                                                                                _ = &__tag_end;
-                                                                                var restore_status = xml[i..(i + __tag_end)];
-                                                                                _ = &restore_status;
-                                                                                i = ((i + __tag_end) + 16);
-                                                                                if (strings.indexOf(restore_status, "<IsRestoreInProgress>")) |start| {
-                                                                                    _ = &start;
-                                                                                    var start_pos = (start + 21);
-                                                                                    _ = &start_pos;
-                                                                                    if (strings.indexOf(restore_status, "</IsRestoreInProgress>")) |_end| {
-                                                                                        _ = &_end;
-                                                                                        if ((start_pos < _end)) {
-                                                                                            var is_restore_in_progress_string = restore_status[start_pos.._end];
-                                                                                            _ = &is_restore_in_progress_string;
-                                                                                            if (strings.eql(is_restore_in_progress_string, "true")) {
-                                                                                                is_restore_in_progress = true;
-                                                                                            } else {
-                                                                                                if (strings.eql(is_restore_in_progress_string, "false")) {
-                                                                                                    is_restore_in_progress = false;
-                                                                                                }
-                                                                                            }
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                                if (strings.indexOf(restore_status, "<RestoreExpiryDate>")) |start| {
-                                                                                    _ = &start;
-                                                                                    var start_pos = (start + 19);
-                                                                                    _ = &start_pos;
-                                                                                    if (strings.indexOf(restore_status, "</RestoreExpiryDate>")) |_end| {
-                                                                                        _ = &_end;
-                                                                                        if ((start_pos < _end)) {
-                                                                                            restore_expiry_date = restore_status[start_pos.._end];
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    i = (i + 1);
-                                }
-                            } else {
-                                i = (i + 1);
-                            }
-                        }
-                        if (object_key) |object_key_val| {
-                            _ = &object_key_val;
-                            var owner: ?ObjectOwner = null;
-                            _ = &owner;
-                            if (((owner_id != null) or (owner_display_name != null))) {
-                                owner = ObjectOwner{ .id = owner_id, .display_name = owner_display_name };
-                            }
-                            var restore_status: ?ObjectRestoreStatus = null;
-                            _ = &restore_status;
-                            if (((is_restore_in_progress != null) or (restore_expiry_date != null))) {
-                                restore_status = ObjectRestoreStatus{ .is_restore_in_progress = is_restore_in_progress, .restore_expiry_date = restore_expiry_date };
-                            }
-                            var etag_val = (if ((etag != null)) (if (etag_owned) ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag.?, .init()) else ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag.?, .initBorrowed())) else null);
-                            _ = &etag_val;
-                            _ = try contents.append(S3ListObjectsContents{ .key = object_key_val, .etag = etag_val, .checksum_type = checksum_type, .checksum_algorithme = checksum_algorithme, .last_modified = last_modified, .object_size = object_size, .storage_class = storage_class, .owner = owner, .restore_status = restore_status });
-                        }
-                    } else {
-                        if (strings.eql(tagName, "Name")) {
-                            if (strings.indexOf(xml[i..], "</Name>")) |_end| {
-                                _ = &_end;
-                                result.name = xml[i..(i + _end)];
-                                i = (i + _end);
-                            }
-                        } else {
-                            if (strings.eql(tagName, "Delimiter")) {
-                                if (strings.indexOf(xml[i..], "</Delimiter>")) |_end| {
-                                    _ = &_end;
-                                    const raw = xml[i..(i + _end)];
-                                    if ((strings.indexOfChar(raw, 38) != null)) {
-                                        var buf: std.ArrayListUnmanaged(u8) = .{};
-                                        _ = &buf;
-                                        var j: usize = 0;
-                                        _ = &j;
-                                        while ((j < raw.len)) {
-                                            if ((raw[@as(usize, @intCast(j))] == 38)) {
-                                                if (strings.hasPrefixComptime(raw[j..], "&amp;")) {
-                                                    _ = try buf.append(default_allocator, 38);
-                                                    j = (j + 5);
-                                                    continue;
-                                                } else {
-                                                    if (strings.hasPrefixComptime(raw[j..], "&lt;")) {
-                                                        _ = try buf.append(default_allocator, 60);
-                                                        j = (j + 4);
-                                                        continue;
-                                                    } else {
-                                                        if (strings.hasPrefixComptime(raw[j..], "&gt;")) {
-                                                            _ = try buf.append(default_allocator, 62);
-                                                            j = (j + 4);
-                                                            continue;
-                                                        } else {
-                                                            if (strings.hasPrefixComptime(raw[j..], "&quot;")) {
-                                                                _ = try buf.append(default_allocator, 34);
-                                                                j = (j + 6);
-                                                                continue;
-                                                            } else {
-                                                                if (strings.hasPrefixComptime(raw[j..], "&apos;")) {
-                                                                    _ = try buf.append(default_allocator, 39);
-                                                                    j = (j + 6);
-                                                                    continue;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            _ = try buf.append(default_allocator, raw[@as(usize, @intCast(j))]);
-                                            j = (j + 1);
-                                        }
-                                        result.delimiter = try buf.toOwnedSlice(default_allocator);
-                                        result.delimiter_owned = true;
-                                    } else {
-                                        result.delimiter = raw;
-                                    }
-                                    i = (i + _end);
-                                }
-                            } else {
-                                if (strings.eql(tagName, "NextContinuationToken")) {
-                                    if (strings.indexOf(xml[i..], "</NextContinuationToken>")) |_end| {
-                                        _ = &_end;
-                                        result.next_continuation_token = xml[i..(i + _end)];
-                                        i = (i + _end);
-                                    }
-                                } else {
-                                    if (strings.eql(tagName, "ContinuationToken")) {
-                                        if (strings.indexOf(xml[i..], "</ContinuationToken>")) |_end| {
-                                            _ = &_end;
-                                            result.continuation_token = xml[i..(i + _end)];
-                                            i = (i + _end);
-                                        }
-                                    } else {
-                                        if (strings.eql(tagName, "StartAfter")) {
-                                            if (strings.indexOf(xml[i..], "</StartAfter>")) |_end| {
-                                                _ = &_end;
-                                                result.start_after = xml[i..(i + _end)];
-                                                i = (i + _end);
-                                            }
-                                        } else {
-                                            if (strings.eql(tagName, "EncodingType")) {
-                                                if (strings.indexOf(xml[i..], "</EncodingType>")) |_end| {
-                                                    _ = &_end;
-                                                    result.encoding_type = xml[i..(i + _end)];
-                                                    i = (i + _end);
-                                                }
-                                            } else {
-                                                if (strings.eql(tagName, "KeyCount")) {
-                                                    if (strings.indexOf(xml[i..], "</KeyCount>")) |_end| {
-                                                        _ = &_end;
-                                                        var key_count = xml[i..(i + _end)];
-                                                        _ = &key_count;
-                                                        result.key_count = (blk_catch_1: { break :blk_catch_1 ((parseInt(i64, key_count, 10)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
-                                                        i = (i + _end);
-                                                    }
-                                                } else {
-                                                    if (strings.eql(tagName, "MaxKeys")) {
-                                                        if (strings.indexOf(xml[i..], "</MaxKeys>")) |_end| {
-                                                            _ = &_end;
-                                                            var max_keys = xml[i..(i + _end)];
-                                                            _ = &max_keys;
-                                                            result.max_keys = (blk_catch_2: { break :blk_catch_2 ((parseInt(i64, max_keys, 10)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); });
-                                                            i = (i + _end);
-                                                        }
-                                                    } else {
-                                                        if (strings.eql(tagName, "Prefix")) {
-                                                            if (strings.indexOf(xml[i..], "</Prefix>")) |_end| {
-                                                                _ = &_end;
-                                                                var prefix = xml[i..(i + _end)];
-                                                                _ = &prefix;
-                                                                if ((prefix.len != 0)) {
-                                                                    result.prefix = prefix;
-                                                                }
-                                                                i = (i + _end);
-                                                            }
-                                                        } else {
-                                                            if (strings.eql(tagName, "IsTruncated")) {
-                                                                if (strings.indexOf(xml[i..], "</IsTruncated>")) |_end| {
-                                                                    _ = &_end;
-                                                                    var is_truncated = xml[i..(i + _end)];
-                                                                    _ = &is_truncated;
-                                                                    if (strings.eql(is_truncated, "true")) {
-                                                                        result.is_truncated = true;
-                                                                    } else {
-                                                                        if (strings.eql(is_truncated, "false")) {
-                                                                            result.is_truncated = false;
-                                                                        }
-                                                                    }
-                                                                    i = (i + _end);
-                                                                }
-                                                            } else {
-                                                                if (strings.eql(tagName, "CommonPrefixes")) {
-                                                                    if (strings.indexOf(xml[i..], "</CommonPrefixes>")) |_end| {
-                                                                        _ = &_end;
-                                                                        var common_prefixes_string = xml[i..(i + _end)];
-                                                                        _ = &common_prefixes_string;
-                                                                        i = (i + _end);
-                                                                        var j: usize = 0;
-                                                                        _ = &j;
-                                                                        while ((j < common_prefixes_string.len)) {
-                                                                            if (strings.indexOf(common_prefixes_string[j..], "<Prefix>")) |start| {
-                                                                                _ = &start;
-                                                                                j = ((j + start) + 8);
-                                                                                if (strings.indexOf(common_prefixes_string[j..], "</Prefix>")) |__end| {
-                                                                                    _ = &__end;
-                                                                                    _ = try common_prefixes.append(common_prefixes_string[j..(j + __end)]);
-                                                                                    j = (j + __end);
-                                                                                }
-                                                                            } else {
-                                                                                break;
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    i = (i + 1);
-                }
-            }
-            if ((contents.items.len != 0)) {
-                result.contents = contents;
-            } else {
+        for (cp_iter_slice(root.children)) |child_expr| {
+            _ = &child_expr;
+            const node = ((xml_response.Node.of(child_expr)) orelse continue);
+            if (strings.eqlComptime((if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name), "Contents")) {
+                const object_key = ((node.childText("Key", default_allocator)) orelse {
                 for (contents.items) |*item| {
                     _ = &item;
                     _ = (item.*).deinit();
                 }
                 _ = contents.deinit();
-            }
-            if ((common_prefixes.items.len != 0)) {
-                result.common_prefixes = common_prefixes;
-            } else {
+                for (common_prefixes.items) |cp_prefix| {
+                    _ = &cp_prefix;
+                    _ = default_allocator.free(cp_prefix);
+                }
                 _ = common_prefixes.deinit();
+                _ = result.deinit();
+                return null;
+});
+                var etag_val: ?ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)) = null;
+                _ = &etag_val;
+                if (node.childNonemptyText("ETag", default_allocator)) |etag_str| {
+                    _ = &etag_str;
+                    etag_val = ptr.OwnedIn(string, bun.allocators.MaybeOwned(bun.DefaultAllocator)).fromRawIn(etag_str, .init());
+                }
+                var owner: ?ObjectOwner = null;
+                _ = &owner;
+                if (node.child("Owner")) |owner_node| {
+                    _ = &owner_node;
+                    const owner_id = owner_node.childNonemptyText("ID", default_allocator);
+                    const owner_display_name = owner_node.childNonemptyText("DisplayName", default_allocator);
+                    if (((owner_id != null) or (owner_display_name != null))) {
+                        owner = ObjectOwner{ .id = owner_id, .display_name = owner_display_name };
+                    }
+                }
+                var restore_status: ?ObjectRestoreStatus = null;
+                _ = &restore_status;
+                if (node.child("RestoreStatus")) |restore_node| {
+                    _ = &restore_node;
+                    const in_progress = restore_node.childBool("IsRestoreInProgress");
+                    const expiry_date = restore_node.childNonemptyText("RestoreExpiryDate", default_allocator);
+                    if (((in_progress != null) or (expiry_date != null))) {
+                        restore_status = ObjectRestoreStatus{ .is_restore_in_progress = in_progress, .restore_expiry_date = expiry_date };
+                    }
+                }
+                _ = bun.handleOom(contents.append(S3ListObjectsContents{ .key = object_key, .etag = etag_val, .checksum_type = node.childNonemptyText("ChecksumType", default_allocator), .checksum_algorithme = node.childNonemptyText("ChecksumAlgorithm", default_allocator), .last_modified = node.childNonemptyText("LastModified", default_allocator), .object_size = node.childI64("Size"), .storage_class = node.childNonemptyText("StorageClass", default_allocator), .owner = owner, .restore_status = restore_status, .strings_owned = true }));
+            } else {
+                if (strings.eqlComptime((if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name), "CommonPrefixes")) {
+                    for (cp_iter_slice(node.children)) |cp_expr| {
+                        _ = &cp_expr;
+                        const p = ((xml_response.Node.of(cp_expr)) orelse continue);
+                        if (strings.eqlComptime((if (@typeInfo(@TypeOf(p)) == .@"enum" or @typeInfo(@TypeOf(p)) == .@"union") @tagName(p) else p.name), "Prefix")) {
+                            if (p.text(default_allocator)) |pt| {
+                                _ = &pt;
+                                if ((pt.len > 0)) {
+                                    _ = bun.handleOom(common_prefixes.append(pt));
+                                } else {
+                                    _ = default_allocator.free(pt);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+        if ((contents.items.len != 0)) {
+            result.contents = contents;
+        } else {
+            _ = contents.deinit();
+        }
+        if ((common_prefixes.items.len != 0)) {
+            result.common_prefixes = common_prefixes;
+        } else {
+            _ = common_prefixes.deinit();
+        }
         return result;
+}
+
+pub fn parseS3ListObjectsResult(xml_body: []const u8) !S3ListObjectsV2Result {
+        const empty_ctx: void = undefined;
+        if (xml_response.parseWith(?S3ListObjectsV2Result, xml_body, empty_ctx, readListBucketResult)) |outer| {
+            _ = &outer;
+            if (outer) |res| {
+                _ = &res;
+                return res;
+            }
+        }
+        return error.InvalidResponse;
 }
 
 pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSValue) !S3ListObjectsOptions {

@@ -209,7 +209,8 @@ pub const PosixBufferedReaderFlags = packed struct(u16) {
     is_paused: bool = false,
     read_failed: bool = false,
     rwf_unsupported: bool = false,
-    _: u4 = 0,
+    is_unrefed: bool = false,
+    _: u3 = 0,
 };
 
 pub const PosixBufferedReader = struct {
@@ -225,12 +226,19 @@ pub fn init(comptime Type: type) PosixBufferedReader {
             return PosixBufferedReader{ .vtable = BufferedReaderVTable.init(Type) };
     }
 
-pub fn updateRef(self: PosixBufferedReader, value: bool) void {
+pub fn updateRef(self: *PosixBufferedReader, value: bool) void {
+            self.flags.is_unrefed = (!value);
             const poll = ((self.handle.getPoll()) orelse { return; });
             if ((value and (!poll.isRegistered()))) {
                 return;
             }
             _ = poll.setKeepingProcessAlive(self.vtable.eventLoop(), value);
+    }
+
+pub fn stopAtBackstop(self: *PosixBufferedReader) void {
+            if ((self.handle == .poll)) {
+                _ = self.handle.poll.unregister(self.loop(), false);
+            }
     }
 
 pub inline fn isDone(self: PosixBufferedReader) bool {
@@ -407,7 +415,7 @@ pub fn registerPollWithStatus(self: *PosixBufferedReader) bool {
             return true;
 }));
             _ = poll.owner.set(self);
-            if ((!poll.flags.contains(.was_ever_registered))) {
+            if ((!self.flags.is_unrefed)) {
                 _ = poll.enableKeepingProcessAlive(self.eventLoop());
             }
             switch (poll.registerWithFd(self.loop(), .readable, .dispatch, poll.fd)) {
@@ -613,7 +621,10 @@ if (self.maxbuf) |l| {
                         return;
                     }
                     if (streaming) {
-                        _ = self.vtable.onReadChunk(stack_buffer[0..bytes_read], (if ((received_hup and (bytes_read < stack_buffer.len))) .eof else .progress));
+                        if ((!self.vtable.onReadChunk(stack_buffer[0..bytes_read], (if ((received_hup and (bytes_read < stack_buffer.len))) .eof else .progress)))) {
+                            _ = self.stopAtBackstop();
+                            return;
+                        }
                     } else {
                         _ = bun.handleOom(self._buffer.appendSlice(stack_buffer[0..bytes_read]));
                     }
@@ -659,6 +670,7 @@ if (self.maxbuf) |l| {
                             }
                         }
                         if ((!ok)) {
+                            _ = self.stopAtBackstop();
                             return;
                         }
                     }
@@ -729,6 +741,7 @@ if (self.maxbuf) |l| {
                         }
                         if ((stack_buffer_head.len < stack_buffer_cutoff)) {
                             if ((!self.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], (if (received_hup) .eof else .progress)))) {
+                                _ = self.stopAtBackstop();
                                 return;
                             }
                             stack_buffer_head = stack_buffer;
@@ -736,15 +749,18 @@ if (self.maxbuf) |l| {
 },
 .err => |e| {
 if (e.isRetry()) {
+                            if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
+                                if ((!self.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], .drained))) {
+                                    _ = self.stopAtBackstop();
+                                    return;
+                                }
+                            }
                             if (comptime (file_type == .file)) {
                                 _ = bun.Output.debugWarn("Received EAGAIN while reading from a file. This is a bug.", .{});
                             } else {
                                 if ((!self.registerPollWithStatus())) {
                                     return;
                                 }
-                            }
-                            if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
-                                _ = self.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], .drained);
                             }
                             return;
                         }
@@ -759,6 +775,7 @@ if (e.isRetry()) {
                     }
                     if ((stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)].len > 0)) {
                         if (((!self.vtable.onReadChunk(stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)], (if (received_hup) .eof else .progress))) and (!received_hup))) {
+                            _ = self.stopAtBackstop();
                             return;
                         }
                     }
@@ -836,6 +853,7 @@ if (self.maxbuf) |l| {
                         var ___clear_guard_moved = false; _ = &___clear_guard_moved;
                         defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
                         if ((!self.vtable.onReadChunk(self._buffer.items, .progress))) {
+                            _ = self.stopAtBackstop();
                             return;
                         }
                         continue;
@@ -846,8 +864,13 @@ if (self.maxbuf) |l| {
 self.flags.read_failed = true;
                 if (self.vtable.isStreamingEnabled()) {
                     if ((self._buffer.items.len > 0)) {
-                        _ = self.vtable.onReadChunk(self._buffer.items, .drained);
+                        const ok = self.vtable.onReadChunk(self._buffer.items, .drained);
                         _ = self._buffer.clearRetainingCapacity();
+                        if (((!ok) and e.isRetry())) {
+                            self.flags.read_failed = false;
+                            _ = self.stopAtBackstop();
+                            return;
+                        }
                     }
                 }
                 if (e.isRetry()) {

@@ -297,6 +297,12 @@ pub struct UpdateInteractiveCommand {
     }
 
     static fn exec(ctx: Command.Context)! {
+        const assume_tty = if (val := bun.getenvZ("BUN_INTERNAL_INTERACTIVE_ASSUME_TTY")) val.len > 0 else false;
+        if (!assume_tty && !std.posix.isatty(std.posix.STDIN_FILENO)) {
+            Output.errGeneric("bun update --interactive requires an interactive terminal", {});
+            Global.exit(1);
+        }
+
         Output.prettyln("<r><b>bun update --interactive <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>", {});
         Output.flush();
 

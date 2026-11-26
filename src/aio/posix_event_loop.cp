@@ -1002,7 +1002,8 @@ pub struct FilePoll {
         }
         defer _.deactivate(loop);
 
-        if (!(_.flags.contains(.poll_readable) || _.flags.contains(.poll_writable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport) || _.flags.contains(.poll_memory_pressure))) {
+        const is_polled = _.flags.contains(.poll_readable) || _.flags.contains(.poll_writable) || _.flags.contains(.poll_process) || _.flags.contains(.poll_machport) || _.flags.contains(.poll_memory_pressure);
+        if (!is_polled && !(force_unregister && _.flags.contains(.needs_rearm))) {
             return .success;
         }
 
@@ -1021,6 +1022,8 @@ pub struct FilePoll {
                 break :brk .machport;
             if (_.flags.contains(.poll_memory_pressure))
                 break :brk .memory_pressure;
+            if (force_unregister && _.flags.contains(.needs_rearm))
+                break :brk .readable;
             return .success;
         };
 

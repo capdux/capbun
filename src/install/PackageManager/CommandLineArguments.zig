@@ -221,7 +221,7 @@ _ = PackageManagerCommand.printHelp();
 },
 Subcommand.add => {
 const intro_text: []const u8 = "\n<b>Usage<r>: <b><green>bun add<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r>\n<b>Alias<r>: <b><green>bun a<r>\n\n  Add a new dependency to package.json and install it.\n\n<b>Flags:<r>";
-        const outro_text: []const u8 = "\n\n<b>Examples:<r>\n  <d>Add a dependency from the npm registry<r>\n  <b><green>bun add<r> <blue>zod<r>\n  <b><green>bun add<r> <blue>zod@next<r>\n  <b><green>bun add<r> <blue>zod@3.0.0<r>\n\n  <d>Add a dev, optional, or peer dependency <r>\n  <b><green>bun add<r> <cyan>-d<r> <blue>typescript<r>\n  <b><green>bun add<r> <cyan>--optional<r> <blue>lodash<r>\n  <b><green>bun add<r> <cyan>--peer<r> <blue>esbuild<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/add<r>.\n";
+        const outro_text: []const u8 = "\n\n<b>Examples:<r>\n  <d>Add a dependency from the npm registry<r>\n  <b><green>bun add<r> <blue>zod<r>\n  <b><green>bun add<r> <blue>zod@next<r>\n  <b><green>bun add<r> <blue>zod@3.0.0<r>\n\n  <d>Add a dev, optional, or peer dependency <r>\n  <b><green>bun add<r> <cyan>-d<r> <blue>typescript<r>\n  <b><green>bun add<r> <cyan>--optional<r> <blue>lodash<r>\n  <b><green>bun add<r> <cyan>--peer<r> <blue>esbuild<r>\n\n  <d>Add a dependency to a specific workspace in a monorepo<r>\n  <b><green>bun add<r> <blue>zod<r> <cyan>--filter<r> <blue>api<r>\n\n  <d>Add to the workspace catalog instead of pinning a version<r>\n  <b><green>bun add<r> <cyan>--catalog<r> <blue>react<r>\n  <b><green>bun add<r> <cyan>--catalog=testing<r> <blue>vitest<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/add<r>.\n";
         _ = Output.pretty(intro_text, .{});
         _ = clap.simpleHelp(add_params);
         _ = Output.pretty(outro_text, .{});
@@ -237,7 +237,7 @@ const intro_text: []const u8 = "\n<b>Usage<r>: <b><green>bun remove<r> <cyan>[fl
 },
 Subcommand.link => {
 const intro_text: []const u8 = "\n<b>Usage<r>: <b><green>bun link<r> <cyan>[flags]<r> <blue>[\\<packages\\>]<r>\n\n  Register a local directory as a \"linkable\" package, or link a \"linkable\" package to the current project.\n\n<b>Flags:<r>";
-        const outro_text: []const u8 = "\n\n<b>Examples:<r>\n  <d>Register the current directory as a linkable package.<r>\n  <d>Directory should contain a package.json.<r>\n  <b><green>bun link<r>\n\n  <d>Add a previously-registered linkable package as a dependency of the current project.<r>\n  <b><green>bun link<r> <blue>\\<package\\><r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/link<r>.\n";
+        const outro_text: []const u8 = "\n\n<b>Examples:<r>\n  <d>Register the current directory as a linkable package.<r>\n  <d>Directory should contain a package.json.<r>\n  <b><green>bun link<r>\n\n  <d>Link a previously-registered linkable package into the current project's node_modules.<r>\n  <b><green>bun link<r> <blue>\\<package\\><r>\n\n  <d>Also add it to the current project's package.json as a link: dependency.<r>\n  <b><green>bun link<r> <cyan>--save<r> <blue>\\<package\\><r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/link<r>.\n";
         _ = Output.pretty(intro_text, .{});
         _ = clap.simpleHelp(link_params);
         _ = Output.pretty(outro_text, .{});
@@ -277,7 +277,7 @@ const intro_text: []const u8 = "\n<b>Usage<r>: <b><green>bun publish<r> <cyan>[f
 },
 .audit => {
 const intro_text: []const u8 = "\n<b>Usage<r>: <b><green>bun audit<r> <cyan>[flags]<r>\n\n  Check installed packages for vulnerabilities.\n\n<b>Flags:<r>";
-        const outro_text: []const u8 = "\n\n<b>Examples:<r>\n  <d>Check the current project's packages for vulnerabilities.<r>\n  <b><green>bun audit<r>\n\n  <d>Output package vulnerabilities in JSON format.<r>\n  <b><green>bun audit --json<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/install/audit<r>.\n";
+        const outro_text: []const u8 = "\n\n<b>Examples:<r>\n  <d>Check the current project's packages for vulnerabilities.<r>\n  <b><green>bun audit<r>\n\n  <d>Output package vulnerabilities in JSON format.<r>\n  <b><green>bun audit --json<r>\n\n  <d>bun audit fix upgrades vulnerable packages to the lowest safe version that still satisfies every dependent's range.<r>\n\n  <d>Upgrade vulnerable packages in bun.lock and node_modules; package.json is only changed when an exact pin has to be bumped.<r>\n  <b><green>bun audit fix<r>\n\n  <d>Show what bun audit fix would change without changing anything.<r>\n  <b><green>bun audit fix --dry-run<r>\n\n  <d>Also apply fixes that your package.json ranges exclude, rewriting those ranges.<r>\n  <b><green>bun audit fix --latest<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/install/audit<r>.\n";
         _ = Output.pretty(intro_text, .{});
         _ = clap.simpleHelp(audit_params);
         _ = Output.pretty(outro_text, .{});

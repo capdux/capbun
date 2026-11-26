@@ -160,40 +160,7 @@ JSC_DEFINE_HOST_FUNCTION(callSiteProtoFuncGetScriptNameOrSourceURL, (JSGlobalObj
 JSC_DEFINE_HOST_FUNCTION(callSiteProtoFuncIsToplevel, (JSGlobalObject * globalObject, JSC::CallFrame* callFrame))
 {
     ENTER_PROTO_FUNC();
-
-    if (JSValue functionValue = callSite->function()) {
-        if (JSObject* fn = functionValue.getObject()) {
-            if (JSFunction* function = dynamicDowncast<JSFunction>(fn)) {
-                if (function->inherits<JSC::JSBoundFunction>()) {
-                    return JSC::JSValue::encode(JSC::jsBoolean(false));
-                }
-
-                if (function->isHostFunction()) {
-                    return JSC::JSValue::encode(JSC::jsBoolean(true));
-                }
-
-                if (auto* executable = function->jsExecutable()) {
-                    return JSValue::encode(jsBoolean(executable->isProgramExecutable() || executable->isModuleProgramExecutable()));
-                }
-            } else if (dynamicDowncast<InternalFunction>(functionValue)) {
-                return JSC::JSValue::encode(JSC::jsBoolean(true));
-            }
-        }
-    }
-
-    JSC::JSValue thisValue = callSite->thisValue();
-
-    // This is what v8 does (JSStackFrame::IsToplevel in messages.cc):
-    if (thisValue.isUndefinedOrNull()) {
-        return JSC::JSValue::encode(JSC::jsBoolean(true));
-    }
-
-    JSC::JSObject* thisObject = thisValue.getObject();
-    if (thisObject && thisObject->isGlobalObject()) {
-        return JSC::JSValue::encode(JSC::jsBoolean(true));
-    }
-
-    return JSC::JSValue::encode(JSC::jsBoolean(false));
+    return JSC::JSValue::encode(JSC::jsBoolean(callSite->isToplevel()));
 }
 
 JSC_DEFINE_HOST_FUNCTION(callSiteProtoFuncIsEval, (JSGlobalObject * globalObject, JSC::CallFrame* callFrame))

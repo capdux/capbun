@@ -771,6 +771,22 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
         }
 
+        pub fn failWithReason(*_, code: ErrorCode, msg: []const u8) {
+            log("onFail: {s}: {s}", .{ @tagName(code), msg });
+            jsc.markBinding(@src());
+            if (ws := _.outgoing_websocket) {
+                _.outgoing_websocket = null;
+                ws.didAbruptCloseWithReason(code, msg);
+                _.deref();
+            }
+
+            if (comptime ssl) {
+                _.tcp.close(.normal);
+            } else {
+                _.tcp.close(.failure);
+            }
+        }
+
         pub fn dispatchAbruptClose(*_, code: ErrorCode) {
             if (ws := _.outgoing_websocket) {
                 _.outgoing_websocket = null;
@@ -791,6 +807,10 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
         pub fn terminate(*_, code: ErrorCode) {
             _.fail(code);
+        }
+
+        pub fn terminateWithReason(*_, code: ErrorCode, msg: []const u8) {
+            _.failWithReason(code, msg);
         }
 
         pub fn handleHandshake(*_, socket: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) {
@@ -1015,11 +1035,14 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
 
             if (response.status_code < 200 || response.status_code >= 300) {
-                if (response.status_code == 407) {
-                    _.terminate(ErrorCode.proxy_authentication_required);
-                } else {
-                    _.terminate(ErrorCode.proxy_connect_failed);
-                }
+                const code = if (response.status_code == 407) ErrorCode.proxy_authentication_required else ErrorCode.proxy_connect_failed;
+                const prefix = if (response.status_code == 407) "Proxy authentication required" else "Proxy connection failed";
+                let msg_buf: [256]u8 = undefined;
+                const msg = if (response.status.len > 0)
+                    std.fmt.bufPrint(&msg_buf, "{s}: {d} {s}", .{ prefix, response.status_code, response.status }) catch prefix
+                else
+                    std.fmt.bufPrint(&msg_buf, "{s}: {d}", .{ prefix, response.status_code }) catch prefix;
+                _.terminateWithReason(code, msg);
                 return;
             }
 

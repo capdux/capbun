@@ -10,6 +10,8 @@
 #include "HTTPParsers.h"
 namespace WebCore {
 
+extern "C" size_t Bun__stringSyntheticAllocationLimit;
+
 extern "C" WebCore::Cookie* Cookie__fromJS(JSC::EncodedJSValue value)
 {
     return WebCoreCast<WebCore::JSCookie, WebCore::Cookie>(value);
@@ -178,11 +180,14 @@ bool Cookie::isExpired() const
     return currentTime > m_expires;
 }
 
-String Cookie::toString(JSC::VM& vm) const
+ExceptionOr<String> Cookie::toString(JSC::VM& vm) const
 {
     StringBuilder builder;
     appendTo(vm, builder);
-    return builder.toString();
+    if (builder.hasOverflowed() || builder.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]] {
+        return Exception { RangeError, "Out of memory"_s };
+    }
+    return ExceptionOr<String> { String { builder.toString() } };
 }
 
 static inline bool isValidCharacterInCookieName(char16_t c)

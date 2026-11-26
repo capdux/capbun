@@ -191,6 +191,7 @@ pub const Cursor = struct {
     const clear_line = (CSI ++ "2K");
     const clear_to_end = (CSI ++ "0K");
     const clear_to_start = (CSI ++ "1K");
+    const clear_below = (CSI ++ "J");
     const clear_screen = (CSI ++ "2J");
     const clear_scrollback = (CSI ++ "3J");
 };
@@ -617,7 +618,11 @@ is_tty: bool = false,
 use_colors: bool = false,
 terminal_width: u16 = 80,
 terminal_height: u16 = 24,
+prev_cursor_row: usize = 0,
+cursor_on_empty_wrap_row: bool = false,
 ctrl_c_pressed: bool = false,
+suggestion_buf: [256]u8 = std.mem.zeroes([256]u8),
+suggestion_len: usize = 0,
 stdin_buf: [256]u8 = std.mem.zeroes([256]u8),
 stdin_buf_start: usize = 0,
 stdin_buf_end: usize = 0,
@@ -674,10 +679,7 @@ pub fn setupTerminal(self: *Repl) void {
             return;
         }
         self.use_colors = (!bun.env_var.NO_COLOR.get());
-        if ((Output.terminal_size.col > 0)) {
-            self.terminal_width = Output.terminal_size.col;
-            self.terminal_height = Output.terminal_size.row;
-        }
+        _ = self.updateTerminalSize();
         if (Environment.isPosix) {
             _ = bun.tty.setMode(0, .raw);
         } else {
@@ -880,7 +882,15 @@ else => .unknown,
                 if ((next_opt == null)) {
                     return .unknown;
                 }
-                utf8_buf[cp_cast_int(usize, i)] = next_opt.?;
+                const next_byte = next_opt.?;
+                if (((next_byte & 192) != 128)) {
+                    if ((self.stdin_buf_start > 0)) {
+                        self.stdin_buf_start = (self.stdin_buf_start - 1);
+                        self.stdin_buf[cp_cast_int(usize, self.stdin_buf_start)] = next_byte;
+                    }
+                    return .unknown;
+                }
+                utf8_buf[cp_cast_int(usize, i)] = next_byte;
             }
             const cp = (blk_catch_11: { break :blk_catch_11 ((std.unicode.utf8Decode(utf8_buf[0..seq_len])) catch |__ce_11| { _ = &__ce_11; return .unknown; }); });
             return Key{ .char = cp };
@@ -910,7 +920,196 @@ pub fn getPromptLength(self: *Repl) usize {
         return 2;
 }
 
+pub fn updateTerminalSize(self: *Repl) void {
+        if (comptime Environment.isPosix) {
+            var size: std.posix.winsize = undefined;
+            _ = &size;
+            if ((std.posix.system.ioctl(std.posix.STDOUT_FILENO, std.posix.T.IOCGWINSZ, (blk: {
+            break :blk @intFromPtr((&size));
+
+})) == 0)) {
+                if ((size.col > 0)) {
+                    self.terminal_width = size.col;
+                }
+                if ((size.row > 0)) {
+                    self.terminal_height = size.row;
+                }
+                return;
+            }
+        } else {
+            if (comptime Environment.isWindows) {
+                const windows = std.os.windows;
+                if ((blk_catch_12: { break :blk_catch_12 ((windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 null; }); })) |handle| {
+                    _ = &handle;
+                    var csbi: windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
+                    _ = &csbi;
+                    if ((windows.kernel32.GetConsoleScreenBufferInfo(handle, (&csbi)) != windows.FALSE)) {
+                        const w = ((csbi.srWindow.Right - csbi.srWindow.Left) + 1);
+                        const h = ((csbi.srWindow.Bottom - csbi.srWindow.Top) + 1);
+                        if ((w > 0)) {
+                            self.terminal_width = @as(u16, @intCast(w));
+                        }
+                        if ((h > 0)) {
+                            self.terminal_height = @as(u16, @intCast(h));
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        if ((Output.terminal_size.col > 0)) {
+            self.terminal_width = Output.terminal_size.col;
+            self.terminal_height = Output.terminal_size.row;
+        }
+}
+
+pub fn codepointWidth(cp: u21) usize {
+        if ((cp < 32)) {
+            return 0;
+        }
+        if ((cp < 127)) {
+            return 1;
+        }
+        if ((cp < 160)) {
+            return 0;
+        }
+        if ((((((((((((((cp >= 4352) and (cp <= 4447)) or ((cp >= 9001) and (cp <= 9002))) or (((cp >= 11904) and (cp <= 42191)) and (cp != 12351))) or ((cp >= 44032) and (cp <= 55203))) or ((cp >= 63744) and (cp <= 64255))) or ((cp >= 65040) and (cp <= 65049))) or ((cp >= 65072) and (cp <= 65135))) or ((cp >= 65280) and (cp <= 65376))) or ((cp >= 65504) and (cp <= 65510))) or ((cp >= 127744) and (cp <= 129535))) or ((cp >= 131072) and (cp <= 196605))) or ((cp >= 196608) and (cp <= 262141)))) {
+            return 2;
+        }
+        return 1;
+}
+
+pub fn advanceDisplayPos(row: *usize, col: *usize, text: []const u8, term_width: usize) void {
+        var i: usize = 0;
+        _ = &i;
+        while ((i < text.len)) {
+            const seq_len = (blk_catch_13: { break :blk_catch_13 ((std.unicode.utf8ByteSequenceLength(text[@as(usize, @intCast(i))])) catch |__ce_13| { _ = &__ce_13; if (((col.* + 1) > term_width)) {
+                row.* = (row.* + 1);
+                col.* = 0;
+            }
+            col.* = (col.* + 1);
+            i = (i + 1);
+            continue; }); });
+            if (((i + seq_len) > text.len)) {
+                break;
+            }
+            const cp = (blk_catch_14: { break :blk_catch_14 ((std.unicode.utf8Decode(text[i..(i + seq_len)])) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 65533; }); });
+            const w = codepointWidth(cp);
+            if ((w > 0)) {
+                if (((col.* + w) > term_width)) {
+                    row.* = (row.* + 1);
+                    col.* = 0;
+                }
+                col.* = (col.* + w);
+            }
+            i = (i + seq_len);
+        }
+}
+
+pub fn computeSuggestion(self: *Repl, line: []const u8) void {
+        self.suggestion_len = 0;
+        if ((self.global == null)) {
+            return;
+        }
+        const global = self.global.?;
+        var word_start: usize = line.len;
+        _ = &word_start;
+        while ((word_start > 0)) {
+            const c = line[@as(usize, @intCast((word_start - 1)))];
+            if ((((!std.ascii.isAlphanumeric(c)) and (c != 95)) and (c != 36))) {
+                break;
+            }
+            word_start = (word_start - 1);
+        }
+        const prefix = line[word_start..];
+        var target: jsc.JSValue = .js_undefined;
+        _ = &target;
+        var is_member = false;
+        _ = &is_member;
+        if (((word_start > 0) and (line[@as(usize, @intCast((word_start - 1)))] == 46))) {
+            is_member = true;
+            var expr_start: usize = (word_start - 1);
+            _ = &expr_start;
+            while ((expr_start > 0)) {
+                const c = line[@as(usize, @intCast((expr_start - 1)))];
+                if (((((!std.ascii.isAlphanumeric(c)) and (c != 95)) and (c != 36)) and (c != 46))) {
+                    break;
+                }
+                expr_start = (expr_start - 1);
+            }
+            const target_expr = line[expr_start..(word_start - 1)];
+            if ((((target_expr.len == 0) or (target_expr[0] == 46)) or (target_expr[@as(usize, @intCast((target_expr.len - 1)))] == 46))) {
+                return;
+            }
+            var exception: jsc.JSValue = .js_undefined;
+            _ = &exception;
+            const eval_res = Bun__REPL__evaluate(global, target_expr.ptr, target_expr.len, "[repl]".ptr, "[repl]".len, (&exception));
+            if (((!exception.isUndefined()) and (!exception.isNull()))) {
+                return;
+            }
+            if ((eval_res.isUndefined() or eval_res.isNull())) {
+                return;
+            }
+            target = eval_res;
+        } else {
+            if ((prefix.len == 0)) {
+                return;
+            }
+        }
+        const completions = Bun__REPL__getCompletions(global, target, prefix.ptr, prefix.len);
+        if (((!completions.isUndefined()) and completions.isArray())) {
+            const len = (blk_catch_15: { break :blk_catch_15 ((completions.getLength(global)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 brk: {
+            _ = global.clearException();
+            break :brk 0;
+}; }); });
+            var i: u32 = 0;
+            _ = &i;
+            while ((i < @as(u32, @truncate(len)))) : (i = (i + 1)) {
+                const item = (blk_catch_16: { break :blk_catch_16 ((completions.getIndex(global, i)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 brk: {
+                _ = global.clearException();
+                break :brk .js_undefined;
+}; }); });
+                if (item.isString()) {
+                    var slice = (blk_catch_17: { break :blk_catch_17 ((item.toSlice(global, self.allocator)) catch |__ce_17| { _ = &__ce_17; _ = global.clearException();
+                    continue; }); });
+                    _ = &slice;
+                    var _guard_slice = DeinitGuard(jsc.ZigString.Slice){ .ptr = (&slice) };
+                    _ = &_guard_slice;
+                    var ___guard_slice_moved = false; _ = &___guard_slice_moved;
+                    defer if (!___guard_slice_moved) { ___guard_slice_moved = true; const __T = @TypeOf(_guard_slice); if (@typeInfo(__T) == .optional) { if (_guard_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_slice; _drop_val.__cp_deinit(); } };
+                    const name = slice.slice();
+                    if (((name.len > prefix.len) and strings.startsWith(name, prefix))) {
+                        const suffix = name[prefix.len..];
+                        if ((suffix.len <= self.suggestion_buf.len)) {
+                            _ = @memcpy(self.suggestion_buf[0..suffix.len], suffix);
+                            self.suggestion_len = suffix.len;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        if (((!is_member) and (prefix.len > 0))) {
+            const js_keywords: [42][]const u8 = .{ "async", "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export", "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "of", "return", "static", "super", "switch", "this", "throw", "true", "try", "typeof", "undefined", "var", "void", "while", "with", "yield" };
+            for (cp_iter_slice(js_keywords)) |kw| {
+                _ = &kw;
+                if (((kw.len > prefix.len) and strings.startsWith(kw, prefix))) {
+                    const suffix = kw[prefix.len..];
+                    if ((suffix.len <= self.suggestion_buf.len)) {
+                        _ = @memcpy(self.suggestion_buf[0..suffix.len], suffix);
+                        self.suggestion_len = suffix.len;
+                        return;
+                    }
+                }
+            }
+        }
+}
+
 pub fn refreshLine(self: *Repl) void {
+        _ = self.refreshLineWithSuggestion(true);
+}
+
+pub fn refreshLineWithSuggestion(self: *Repl, show_suggestion: bool) void {
         _ = Output.flush();
         const prompt = self.getPrompt();
         const line = self.line_editor.getLine();
@@ -921,28 +1120,78 @@ pub fn refreshLine(self: *Repl) void {
             }
             return;
         }
+        _ = self.updateTerminalSize();
+        const term_width: usize = (if ((self.terminal_width > 0)) (if (comptime @typeInfo(@TypeOf(self.terminal_width)) == .@"enum") cp_cast_int(usize, @intFromEnum(self.terminal_width)) else cp_cast_int(usize, self.terminal_width)) else 80);
         const prompt_len = self.getPromptLength();
+        if ((self.prev_cursor_row > 0)) {
+            var up_buf: [16]u8 = undefined;
+            _ = &up_buf;
+            const up_seq = (blk_catch_18: { break :blk_catch_18 ((std.fmt.bufPrint((&up_buf), (CSI ++ "{d}A"), .{ self.prev_cursor_row })) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 ""; }); });
+            _ = self.write(up_seq);
+        }
         _ = self.write("\r");
-        _ = self.write(Cursor.clear_line);
+        _ = self.write(Cursor.clear_below);
         _ = self.write(prompt);
         if (((self.use_colors and (line.len > 0)) and (line.len <= 2048))) {
             _ = self.writeHighlighted(line);
         } else {
             _ = self.write(line);
         }
-        if ((Output.terminal_size.col > 0)) {
-            self.terminal_width = Output.terminal_size.col;
+        if (((((((show_suggestion and self.use_colors) and (!self.in_multiline)) and (!self.editor_mode)) and (self.line_editor.cursor == line.len)) and (line.len > 0)) and (line[0] != 46))) {
+            _ = self.computeSuggestion(line);
+        } else {
+            self.suggestion_len = 0;
         }
-        const cursor_pos = (prompt_len + self.line_editor.cursor);
-        if ((cursor_pos < self.terminal_width)) {
+        const suggestion = self.suggestion_buf[0..self.suggestion_len];
+        if ((suggestion.len > 0)) {
+            _ = self.write(Color.dim);
+            _ = self.write(suggestion);
+            _ = self.write(Color.reset);
+        }
+        var cursor_row: usize = 0;
+        _ = &cursor_row;
+        var cursor_col: usize = prompt_len;
+        _ = &cursor_col;
+        const cursor_byte = @min(self.line_editor.cursor, line.len);
+        _ = Repl.advanceDisplayPos((&cursor_row), (&cursor_col), line[0..cursor_byte], term_width);
+        var end_row: usize = cursor_row;
+        _ = &end_row;
+        var end_col: usize = cursor_col;
+        _ = &end_col;
+        _ = Repl.advanceDisplayPos((&end_row), (&end_col), line[cursor_byte..], term_width);
+        if ((suggestion.len > 0)) {
+            _ = Repl.advanceDisplayPos((&end_row), (&end_col), suggestion, term_width);
+        }
+        if (((end_col == term_width) and (term_width > 0))) {
+            _ = self.write("\r\n");
+            end_row = (end_row + 1);
+            end_col = 0;
+            if (((cursor_row == (end_row - 1)) and (cursor_col == term_width))) {
+                cursor_row = end_row;
+                cursor_col = 0;
+                self.cursor_on_empty_wrap_row = (suggestion.len == 0);
+            } else {
+                self.cursor_on_empty_wrap_row = false;
+            }
+        } else {
+            self.cursor_on_empty_wrap_row = false;
+        }
+        if ((end_row > cursor_row)) {
+            var up_buf: [16]u8 = undefined;
+            _ = &up_buf;
+            const up_seq = (blk_catch_19: { break :blk_catch_19 ((std.fmt.bufPrint((&up_buf), (CSI ++ "{d}A"), .{ (end_row - cursor_row) })) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 ""; }); });
+            _ = self.write(up_seq);
+        }
+        if (((end_row > cursor_row) or (end_col != cursor_col))) {
             _ = self.write("\r");
-            if ((cursor_pos > 0)) {
-                var buf: [16]u8 = undefined;
-                _ = &buf;
-                const seq = (blk_catch_12: { break :blk_catch_12 ((std.fmt.bufPrint((&buf), (CSI ++ "{d}C"), .{ cursor_pos })) catch |__ce_12| { _ = &__ce_12; return; }); });
-                _ = self.write(seq);
+            if ((cursor_col > 0)) {
+                var col_buf: [16]u8 = undefined;
+                _ = &col_buf;
+                const col_seq = (blk_catch_20: { break :blk_catch_20 ((std.fmt.bufPrint((&col_buf), (CSI ++ "{d}C"), .{ cursor_col })) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 ""; }); });
+                _ = self.write(col_seq);
             }
         }
+        self.prev_cursor_row = cursor_row;
         _ = Output.flush();
 }
 
@@ -951,7 +1200,7 @@ pub fn writeHighlighted(self: *Repl, text: []const u8) void {
         var writer = Output.writer();
         _ = &writer;
         const highlighter = fmt.QuickAndDirtyJavaScriptSyntaxHighlighter{ .text = text, .opts = .{ .enable_colors = true, .check_for_unhighlighted_write = false } };
-        _ = (blk_catch_13: { break :blk_catch_13 ((highlighter.format(writer)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 (blk_catch_14: { break :blk_catch_14 ((writer.writeAll(text)) catch |__ce_14| { _ = &__ce_14;  }); }); }); });
+        _ = (blk_catch_21: { break :blk_catch_21 ((highlighter.format(writer)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 (blk_catch_22: { break :blk_catch_22 ((writer.writeAll(text)) catch |__ce_22| { _ = &__ce_22;  }); }); }); });
 }
 
 pub fn isIncompleteCode(code: []const u8) bool {
@@ -1088,7 +1337,7 @@ _ = self.print("\n", .{});
 }
         }
         if (resolved_result.isObject()) {
-            const maybe_value = (blk_catch_15: { break :blk_catch_15 ((resolved_result.getOwn(global, "value")) catch |e| { _ = &e; const exc = global.takeException(e);
+            const maybe_value = (blk_catch_23: { break :blk_catch_23 ((resolved_result.getOwn(global, "value")) catch |e| { _ = &e; const exc = global.takeException(e);
             _ = self.setLastError(exc);
             _ = self.printJSError(exc);
             _ = vm.tick();
@@ -1179,7 +1428,7 @@ return true;
 }
         }
         if (resolved_result.isObject()) {
-            const maybe_value = (blk_catch_16: { break :blk_catch_16 ((resolved_result.getOwn(global, "value")) catch |e| { _ = &e; const exc = global.takeException(e);
+            const maybe_value = (blk_catch_24: { break :blk_catch_24 ((resolved_result.getOwn(global, "value")) catch |e| { _ = &e; const exc = global.takeException(e);
             _ = self.printJSErrorTo(exc, Output.errorWriter(), stderr_colors);
             return true; }); });
             if (maybe_value) |value| {
@@ -1300,7 +1549,7 @@ return;
 }
         }
         if (resolved_result.isObject()) {
-            const maybe_value = (blk_catch_17: { break :blk_catch_17 ((resolved_result.getOwn(global, "value")) catch |e| { _ = &e; const exc = global.takeException(e);
+            const maybe_value = (blk_catch_25: { break :blk_catch_25 ((resolved_result.getOwn(global, "value")) catch |e| { _ = &e; const exc = global.takeException(e);
             _ = self.setLastError(exc);
             _ = self.printJSError(exc);
             _ = vm.tick();
@@ -1315,9 +1564,9 @@ return;
             const global_this = global.toJSValue();
             _ = global_this.put(global, "_", resolved_result);
         }
-        _ = (blk_catch_18: { break :blk_catch_18 ((self.copyValueToClipboard(resolved_result)) catch |e| { _ = &e; const exc = global.takeException(e);
+        _ = (blk_catch_26: { break :blk_catch_26 ((self.copyValueToClipboard(resolved_result)) catch |e| { _ = &e; const exc = global.takeException(e);
         _ = self.setLastError(exc);
-        break :blk_catch_18 @as(void, self.printJSError(exc)); }); });
+        break :blk_catch_26 @as(void, self.printJSError(exc)); }); });
         _ = vm.tick();
 }
 
@@ -1327,10 +1576,10 @@ pub fn valueToClipboardString(self: *Repl, value: jsc.JSValue) bun.JSError!?[]co
         }
         const global = self.global.?;
         if (value.isUndefined()) {
-            return (blk_catch_19: { break :blk_catch_19 ((self.allocator.dupe(u8, "undefined")) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 null; }); });
+            return (blk_catch_27: { break :blk_catch_27 ((self.allocator.dupe(u8, "undefined")) catch |__ce_27| { _ = &__ce_27; break :blk_catch_27 null; }); });
         }
         if (value.isNull()) {
-            return (blk_catch_20: { break :blk_catch_20 ((self.allocator.dupe(u8, "null")) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 null; }); });
+            return (blk_catch_28: { break :blk_catch_28 ((self.allocator.dupe(u8, "null")) catch |__ce_28| { _ = &__ce_28; break :blk_catch_28 null; }); });
         }
         if (value.isString()) {
             var slice = try value.toSlice(global, self.allocator);
@@ -1339,7 +1588,7 @@ pub fn valueToClipboardString(self: *Repl, value: jsc.JSValue) bun.JSError!?[]co
             _ = &_guard_slice;
             var ___guard_slice_moved = false; _ = &___guard_slice_moved;
             defer if (!___guard_slice_moved) { ___guard_slice_moved = true; const __T = @TypeOf(_guard_slice); if (@typeInfo(__T) == .optional) { if (_guard_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_slice; _drop_val.__cp_deinit(); } };
-            return (blk_catch_21: { break :blk_catch_21 ((self.allocator.dupe(u8, slice.slice())) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); });
+            return (blk_catch_29: { break :blk_catch_29 ((self.allocator.dupe(u8, slice.slice())) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); });
         }
         var array = std.Io.Writer.Allocating.init(self.allocator);
         _ = &array;
@@ -1351,8 +1600,8 @@ pub fn valueToClipboardString(self: *Repl, value: jsc.JSValue) bun.JSError!?[]co
         break :blk @ptrCast((&value));
 
 }), 1, (&array.writer), .{ .enable_colors = false, .add_newline = false, .flush = false, .quote_strings = true, .ordered_properties = false, .max_depth = 4 });
-        _ = (blk_catch_22: { break :blk_catch_22 ((array.writer.flush()) catch |__ce_22| { _ = &__ce_22; return null; }); });
-        return (blk_catch_23: { break :blk_catch_23 ((self.allocator.dupe(u8, array.written())) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 null; }); });
+        _ = (blk_catch_30: { break :blk_catch_30 ((array.writer.flush()) catch |__ce_30| { _ = &__ce_30; return null; }); });
+        return (blk_catch_31: { break :blk_catch_31 ((self.allocator.dupe(u8, array.written())) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 null; }); });
 }
 
 pub fn copyValueToClipboard(self: *Repl, value: jsc.JSValue) !void {
@@ -1366,7 +1615,7 @@ pub fn copyValueToClipboard(self: *Repl, value: jsc.JSValue) !void {
         _ = &_guard_text;
         var ___guard_text_moved = false; _ = &___guard_text_moved;
         defer if (!___guard_text_moved) { ___guard_text_moved = true; const __T = @TypeOf(_guard_text); if (@typeInfo(__T) == .optional) { if (_guard_text) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_text.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_text; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_24: { break :blk_catch_24 ((self.copyToClipboardOSC52(text)) catch |__ce_24| { _ = &__ce_24; _ = self.printError("Failed to write to clipboard\n", .{});
+        _ = (blk_catch_32: { break :blk_catch_32 ((self.copyToClipboardOSC52(text)) catch |__ce_32| { _ = &__ce_32; _ = self.printError("Failed to write to clipboard\n", .{});
         return; }); });
         if (self.use_colors) {
             _ = self.print("{s}Copied {d} characters to clipboard{s}\n", .{ Color.dim, text.len, Color.reset });
@@ -1426,7 +1675,7 @@ pub fn transformForRepl(self: *Repl, code: []const u8) ?[]const u8 {
             return null;
         }
         const is_object_literal = Repl.isLikelyObjectLiteral(code);
-        const processed_code = (if (is_object_literal) (blk_catch_25: { break :blk_catch_25 ((std.fmt.allocPrint(self.allocator, "({s})", .{ code })) catch |__ce_25| { _ = &__ce_25; return null; }); }) else code);
+        const processed_code = (if (is_object_literal) (blk_catch_33: { break :blk_catch_33 ((std.fmt.allocPrint(self.allocator, "({s})", .{ code })) catch |__ce_33| { _ = &__ce_33; return null; }); }) else code);
         var _guard_processed = FreeGuard(u8){ .allocator = self.allocator, .slice = (if (is_object_literal) processed_code else null) };
         _ = &_guard_processed;
         var ___guard_processed_moved = false; _ = &___guard_processed_moved;
@@ -1454,9 +1703,9 @@ pub fn transformForRepl(self: *Repl, code: []const u8) ?[]const u8 {
         var ___guard_log_moved = false; _ = &___guard_log_moved;
         defer if (!___guard_log_moved) { ___guard_log_moved = true; const __T = @TypeOf(_guard_log); if (@typeInfo(__T) == .optional) { if (_guard_log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_log; _drop_val.__cp_deinit(); } };
         const source = logger.Source.initPathString("[repl]", processed_code);
-        var parser = (blk_catch_26: { break :blk_catch_26 ((js_parser.Parser.init(opts, (&log), (&source), vm.transpiler.options.define, allocator)) catch |__ce_26| { _ = &__ce_26; return null; }); });
+        var parser = (blk_catch_34: { break :blk_catch_34 ((js_parser.Parser.init(opts, (&log), (&source), vm.transpiler.options.define, allocator)) catch |__ce_34| { _ = &__ce_34; return null; }); });
         _ = &parser;
-        const parse_result = (blk_catch_27: { break :blk_catch_27 ((parser.parse()) catch |__ce_27| { _ = &__ce_27; return null; }); });
+        const parse_result = (blk_catch_35: { break :blk_catch_35 ((parser.parse()) catch |__ce_35| { _ = &__ce_35; return null; }); });
         if ((parse_result != .ast)) {
             return null;
         }
@@ -1473,9 +1722,9 @@ pub fn transformForRepl(self: *Repl, code: []const u8) ?[]const u8 {
         defer if (!___guard_buf_printer_moved) { ___guard_buf_printer_moved = true; const __T = @TypeOf(_guard_buf_printer); if (@typeInfo(__T) == .optional) { if (_guard_buf_printer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf_printer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf_printer; _drop_val.__cp_deinit(); } };
         const symbols_nested = bun.ast.Symbol.NestedList.fromBorrowedSliceDangerous((&.{ ast.symbols }));
         const symbols_map = bun.ast.Symbol.Map.initList(symbols_nested);
-        _ = (blk_catch_28: { break :blk_catch_28 ((js_printer.printAst(@TypeOf((&buffer_printer)), (&buffer_printer), ast, symbols_map, (&source), true, .{ .mangled_props = null }, false)) catch |__ce_28| { _ = &__ce_28; return null; }); });
+        _ = (blk_catch_36: { break :blk_catch_36 ((js_printer.printAst(@TypeOf((&buffer_printer)), (&buffer_printer), ast, symbols_map, (&source), true, .{ .mangled_props = null }, false)) catch |__ce_36| { _ = &__ce_36; return null; }); });
         const written = buffer_printer.ctx.getWritten();
-        return (blk_catch_29: { break :blk_catch_29 ((self.allocator.dupe(u8, written)) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 null; }); });
+        return (blk_catch_37: { break :blk_catch_37 ((self.allocator.dupe(u8, written)) catch |__ce_37| { _ = &__ce_37; break :blk_catch_37 null; }); });
 }
 
 pub fn isLikelyObjectLiteral(code: []const u8) bool {
@@ -1512,11 +1761,11 @@ pub fn printJSErrorTo(self: *Repl, error_value: jsc.JSValue, writer: *std.Io.Wri
             return;
         }
         const global = self.global.?;
-        _ = (blk_catch_30: { break :blk_catch_30 ((jsc.ConsoleObject.format2(.Error, global, (blk: {
+        _ = (blk_catch_38: { break :blk_catch_38 ((jsc.ConsoleObject.format2(.Error, global, (blk: {
         break :blk @ptrCast((&error_value));
 
-}), 1, writer, .{ .enable_colors = enable_colors, .add_newline = true, .flush = false, .quote_strings = true, .ordered_properties = false, .max_depth = 4 })) catch |__ce_30| { _ = &__ce_30; _ = global.clearException();
-        break :blk_catch_30 (blk_catch_31: { break :blk_catch_31 ((writer.writeAll("error: [failed to format error]\n")) catch |__ce_31| { _ = &__ce_31;  }); }); }); });
+}), 1, writer, .{ .enable_colors = enable_colors, .add_newline = true, .flush = false, .quote_strings = true, .ordered_properties = false, .max_depth = 4 })) catch |__ce_38| { _ = &__ce_38; _ = global.clearException();
+        break :blk_catch_38 (blk_catch_39: { break :blk_catch_39 ((writer.writeAll("error: [failed to format error]\n")) catch |__ce_39| { _ = &__ce_39;  }); }); }); });
 }
 
 pub fn printFormattedValue(self: *Repl, value: jsc.JSValue) void {
@@ -1525,12 +1774,12 @@ pub fn printFormattedValue(self: *Repl, value: jsc.JSValue) void {
         }
         const global = self.global.?;
         const writer = Output.writer();
-        _ = (blk_catch_32: { break :blk_catch_32 ((jsc.ConsoleObject.format2(.Log, global, (blk: {
+        _ = (blk_catch_40: { break :blk_catch_40 ((jsc.ConsoleObject.format2(.Log, global, (blk: {
         break :blk @ptrCast((&value));
 
 }), 1, writer, .{ .enable_colors = self.use_colors, .add_newline = true, .flush = false, .quote_strings = true, .ordered_properties = false, .max_depth = 4 })) catch |e| { _ = &e; const exc = global.takeException(e);
         _ = self.setLastError(exc);
-        break :blk_catch_32 self.printJSError(exc); }); });
+        break :blk_catch_40 self.printJSError(exc); }); });
 }
 
 pub fn run(self: *Repl) !void {
@@ -1592,6 +1841,8 @@ if (self.editor_mode) {
 .ctrl_l => {
 _ = self.write(Cursor.clear_screen);
             _ = self.write(Cursor.home);
+            self.prev_cursor_row = 0;
+            self.cursor_on_empty_wrap_row = false;
             _ = self.refreshLine();
 },
 .ctrl_a => {
@@ -1607,7 +1858,12 @@ _ = self.line_editor.moveLeft();
             _ = self.refreshLine();
 },
 .ctrl_f, .arrow_right => {
-_ = self.line_editor.moveRight();
+if (((self.suggestion_len > 0) and (self.line_editor.cursor == self.line_editor.buffer.items.len))) {
+                _ = (blk_catch_41: { break :blk_catch_41 ((self.line_editor.insertSlice(self.suggestion_buf[0..self.suggestion_len])) catch |__ce_41| { _ = &__ce_41;  }); });
+                self.suggestion_len = 0;
+            } else {
+                _ = self.line_editor.moveRight();
+            }
             _ = self.refreshLine();
 },
 .alt_b, .alt_left => {
@@ -1649,14 +1905,14 @@ _ = self.line_editor.deleteChar();
 .arrow_up, .ctrl_p => {
 if (self.history.prev(self.line_editor.getLine())) |prev_line| {
                 _ = &prev_line;
-                _ = (blk_catch_33: { break :blk_catch_33 ((self.line_editor.set(prev_line)) catch |__ce_33| { _ = &__ce_33;  }); });
+                _ = (blk_catch_42: { break :blk_catch_42 ((self.line_editor.set(prev_line)) catch |__ce_42| { _ = &__ce_42;  }); });
                 _ = self.refreshLine();
             }
 },
 .arrow_down, .ctrl_n => {
 if (self.history.next()) |next_line| {
                 _ = &next_line;
-                _ = (blk_catch_34: { break :blk_catch_34 ((self.line_editor.set(next_line)) catch |__ce_34| { _ = &__ce_34;  }); });
+                _ = (blk_catch_43: { break :blk_catch_43 ((self.line_editor.set(next_line)) catch |__ce_43| { _ = &__ce_43;  }); });
             } else {
                 _ = self.line_editor.clear();
             }
@@ -1670,11 +1926,16 @@ _ = self.line_editor.moveToStart();
             _ = self.refreshLine();
 },
 .end => {
-_ = self.line_editor.moveToEnd();
+if (((self.suggestion_len > 0) and (self.line_editor.cursor == self.line_editor.buffer.items.len))) {
+                _ = (blk_catch_44: { break :blk_catch_44 ((self.line_editor.insertSlice(self.suggestion_buf[0..self.suggestion_len])) catch |__ce_44| { _ = &__ce_44;  }); });
+                self.suggestion_len = 0;
+            } else {
+                _ = self.line_editor.moveToEnd();
+            }
             _ = self.refreshLine();
 },
 .char => |c| {
-_ = (blk_catch_35: { break :blk_catch_35 ((self.line_editor.insert(c)) catch |__ce_35| { _ = &__ce_35;  }); });
+_ = (blk_catch_45: { break :blk_catch_45 ((self.line_editor.insert(c)) catch |__ce_45| { _ = &__ce_45;  }); });
             _ = self.refreshLine();
 },
 else => {
@@ -1686,7 +1947,14 @@ else => {
 }
 
 pub fn handleEnter(self: *Repl) !void {
-        _ = self.print("\n", .{});
+        if ((self.suggestion_len > 0)) {
+            _ = self.refreshLineWithSuggestion(false);
+        }
+        if ((!self.cursor_on_empty_wrap_row)) {
+            _ = self.print("\n", .{});
+        }
+        self.prev_cursor_row = 0;
+        self.cursor_on_empty_wrap_row = false;
         const line = self.line_editor.getLine();
         if (self.editor_mode) {
             if ((strings.trim(line, " \t").len == 0)) {
@@ -1796,10 +2064,19 @@ pub fn handleCtrlC(self: *Repl) void {
             }
         }
         _ = self.history.resetPosition();
+        self.prev_cursor_row = 0;
+        self.cursor_on_empty_wrap_row = false;
+        self.suggestion_len = 0;
         _ = self.refreshLine();
 }
 
 pub fn handleTab(self: *Repl) void {
+        if ((self.suggestion_len > 0)) {
+            _ = (blk_catch_48: { break :blk_catch_48 ((self.line_editor.insertSlice(self.suggestion_buf[0..self.suggestion_len])) catch |__ce_48| { _ = &__ce_48;  }); });
+            self.suggestion_len = 0;
+            _ = self.refreshLine();
+            return;
+        }
         const line = self.line_editor.getLine();
         if (((line.len > 0) and (line[0] == 46))) {
             var matches = ArrayList(string).init(self.allocator);
@@ -1811,12 +2088,12 @@ pub fn handleTab(self: *Repl) void {
             for (cp_iter_slice(ReplCommand.all)) |cmd| {
                 _ = &cmd;
                 if (strings.startsWith((if (@typeInfo(@TypeOf(cmd)) == .@"enum" or @typeInfo(@TypeOf(cmd)) == .@"union") @tagName(cmd) else cmd.name), line)) {
-                    _ = (blk_catch_38: { break :blk_catch_38 ((matches.append((if (@typeInfo(@TypeOf(cmd)) == .@"enum" or @typeInfo(@TypeOf(cmd)) == .@"union") @tagName(cmd) else cmd.name))) catch |__ce_38| { _ = &__ce_38; continue; }); });
+                    _ = (blk_catch_49: { break :blk_catch_49 ((matches.append((if (@typeInfo(@TypeOf(cmd)) == .@"enum" or @typeInfo(@TypeOf(cmd)) == .@"union") @tagName(cmd) else cmd.name))) catch |__ce_49| { _ = &__ce_49; continue; }); });
                 }
             }
             if ((matches.items.len == 1)) {
-                _ = (blk_catch_39: { break :blk_catch_39 ((self.line_editor.set(matches.items[0])) catch |__ce_39| { _ = &__ce_39;  }); });
-                _ = (blk_catch_40: { break :blk_catch_40 ((self.line_editor.insert(32)) catch |__ce_40| { _ = &__ce_40;  }); });
+                _ = (blk_catch_50: { break :blk_catch_50 ((self.line_editor.set(matches.items[0])) catch |__ce_50| { _ = &__ce_50;  }); });
+                _ = (blk_catch_51: { break :blk_catch_51 ((self.line_editor.insert(32)) catch |__ce_51| { _ = &__ce_51;  }); });
                 _ = self.refreshLine();
             } else {
                 if ((matches.items.len > 1)) {
@@ -1831,8 +2108,8 @@ pub fn handleTab(self: *Repl) void {
             return;
         }
         if ((self.global == null)) {
-            _ = (blk_catch_41: { break :blk_catch_41 ((self.line_editor.insert(32)) catch |__ce_41| { _ = &__ce_41;  }); });
-            _ = (blk_catch_42: { break :blk_catch_42 ((self.line_editor.insert(32)) catch |__ce_42| { _ = &__ce_42;  }); });
+            _ = (blk_catch_52: { break :blk_catch_52 ((self.line_editor.insert(32)) catch |__ce_52| { _ = &__ce_52;  }); });
+            _ = (blk_catch_53: { break :blk_catch_53 ((self.line_editor.insert(32)) catch |__ce_53| { _ = &__ce_53;  }); });
             _ = self.refreshLine();
             return;
         }
@@ -1849,28 +2126,28 @@ pub fn handleTab(self: *Repl) void {
         const prefix = line[word_start..];
         const completions = Bun__REPL__getCompletions(global, .js_undefined, prefix.ptr, prefix.len);
         if ((completions.isUndefined() or (!completions.isArray()))) {
-            _ = (blk_catch_43: { break :blk_catch_43 ((self.line_editor.insert(32)) catch |__ce_43| { _ = &__ce_43;  }); });
-            _ = (blk_catch_44: { break :blk_catch_44 ((self.line_editor.insert(32)) catch |__ce_44| { _ = &__ce_44;  }); });
+            _ = (blk_catch_54: { break :blk_catch_54 ((self.line_editor.insert(32)) catch |__ce_54| { _ = &__ce_54;  }); });
+            _ = (blk_catch_55: { break :blk_catch_55 ((self.line_editor.insert(32)) catch |__ce_55| { _ = &__ce_55;  }); });
             _ = self.refreshLine();
             return;
         }
-        const len = (blk_catch_45: { break :blk_catch_45 ((completions.getLength(global)) catch |__ce_45| { _ = &__ce_45; break :blk_catch_45 brk: {
+        const len = (blk_catch_56: { break :blk_catch_56 ((completions.getLength(global)) catch |__ce_56| { _ = &__ce_56; break :blk_catch_56 brk: {
         _ = global.clearException();
         break :brk 0;
 }; }); });
         if ((len == 0)) {
-            _ = (blk_catch_46: { break :blk_catch_46 ((self.line_editor.insert(32)) catch |__ce_46| { _ = &__ce_46;  }); });
-            _ = (blk_catch_47: { break :blk_catch_47 ((self.line_editor.insert(32)) catch |__ce_47| { _ = &__ce_47;  }); });
+            _ = (blk_catch_57: { break :blk_catch_57 ((self.line_editor.insert(32)) catch |__ce_57| { _ = &__ce_57;  }); });
+            _ = (blk_catch_58: { break :blk_catch_58 ((self.line_editor.insert(32)) catch |__ce_58| { _ = &__ce_58;  }); });
             _ = self.refreshLine();
             return;
         }
         if ((len == 1)) {
-            const item = (blk_catch_48: { break :blk_catch_48 ((completions.getIndex(global, 0)) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 brk: {
+            const item = (blk_catch_59: { break :blk_catch_59 ((completions.getIndex(global, 0)) catch |__ce_59| { _ = &__ce_59; break :blk_catch_59 brk: {
             _ = global.clearException();
             break :brk .js_undefined;
 }; }); });
             if (item.isString()) {
-                var slice = (blk_catch_49: { break :blk_catch_49 ((item.toSlice(global, self.allocator)) catch |__ce_49| { _ = &__ce_49; _ = global.clearException();
+                var slice = (blk_catch_60: { break :blk_catch_60 ((item.toSlice(global, self.allocator)) catch |__ce_60| { _ = &__ce_60; _ = global.clearException();
                 return; }); });
                 _ = &slice;
                 var _guard_slice = DeinitGuard(jsc.ZigString.Slice){ .ptr = (&slice) };
@@ -1881,7 +2158,7 @@ pub fn handleTab(self: *Repl) void {
                 while ((self.line_editor.cursor > word_start)) {
                     _ = self.line_editor.backspace();
                 }
-                _ = (blk_catch_50: { break :blk_catch_50 ((self.line_editor.insertSlice(completion)) catch |__ce_50| { _ = &__ce_50;  }); });
+                _ = (blk_catch_61: { break :blk_catch_61 ((self.line_editor.insertSlice(completion)) catch |__ce_61| { _ = &__ce_61;  }); });
                 _ = self.refreshLine();
             }
         } else {
@@ -1890,12 +2167,12 @@ pub fn handleTab(self: *Repl) void {
                 var i: u32 = 0;
                 _ = &i;
                 while ((i < @as(u32, @truncate(len)))) : (i = (i + 1)) {
-                    const item = (blk_catch_51: { break :blk_catch_51 ((completions.getIndex(global, i)) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 brk: {
+                    const item = (blk_catch_62: { break :blk_catch_62 ((completions.getIndex(global, i)) catch |__ce_62| { _ = &__ce_62; break :blk_catch_62 brk: {
                     _ = global.clearException();
                     break :brk .js_undefined;
 }; }); });
                     if (item.isString()) {
-                        var slice = (blk_catch_52: { break :blk_catch_52 ((item.toSlice(global, self.allocator)) catch |__ce_52| { _ = &__ce_52; _ = global.clearException();
+                        var slice = (blk_catch_63: { break :blk_catch_63 ((item.toSlice(global, self.allocator)) catch |__ce_63| { _ = &__ce_63; _ = global.clearException();
                         continue; }); });
                         _ = &slice;
                         var _guard_slice = DeinitGuard(jsc.ZigString.Slice){ .ptr = (&slice) };
@@ -2004,7 +2281,7 @@ pub fn cmdHelp(repl: *Repl, _: []const u8) ReplResult {
 pub fn cmdCopy(repl: *Repl, args: []const u8) ReplResult {
         const code = strings.trim(args, " \t");
         if ((code.len == 0)) {
-            _ = (blk_catch_53: { break :blk_catch_53 ((repl.copyValueToClipboard(repl.last_result)) catch |e| { _ = &e; if (repl.global) |global| {
+            _ = (blk_catch_64: { break :blk_catch_64 ((repl.copyValueToClipboard(repl.last_result)) catch |e| { _ = &e; if (repl.global) |global| {
                 _ = &global;
                 const exc = global.takeException(e);
                 _ = repl.setLastError(exc);
@@ -2065,8 +2342,8 @@ pub fn cmdSave(repl: *Repl, args: []const u8) ReplResult {
         defer if (!___guard_content_moved) { ___guard_content_moved = true; const __T = @TypeOf(_guard_content); if (@typeInfo(__T) == .optional) { if (_guard_content) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_content.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_content; _drop_val.__cp_deinit(); } };
         for (repl.history.entries.items) |entry| {
             _ = &entry;
-            _ = (blk_catch_54: { break :blk_catch_54 ((content.appendSlice(entry)) catch |__ce_54| { _ = &__ce_54; return .skip_eval; }); });
-            _ = (blk_catch_55: { break :blk_catch_55 ((content.append(10)) catch |__ce_55| { _ = &__ce_55; return .skip_eval; }); });
+            _ = (blk_catch_65: { break :blk_catch_65 ((content.appendSlice(entry)) catch |__ce_65| { _ = &__ce_65; return .skip_eval; }); });
+            _ = (blk_catch_66: { break :blk_catch_66 ((content.append(10)) catch |__ce_66| { _ = &__ce_66; return .skip_eval; }); });
         }
         const open_res = bun.sys.openA(filename, ((bun.O.WRONLY | bun.O.CREAT) | bun.O.TRUNC), 420);
         if ((open_res == .err)) {

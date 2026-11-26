@@ -351,6 +351,10 @@ ALWAYS_INLINE String JSCStackFrame::retrieveSourceURL()
         return String(sourceURLWasmString);
     }
 
+    if (!m_codeBlock) {
+        return "[native code]"_s;
+    }
+
     auto url = Zig::sourceURL(m_codeBlock);
     if (!url.isEmpty()) {
         return url;

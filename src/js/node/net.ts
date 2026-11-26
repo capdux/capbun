@@ -23,6 +23,16 @@
 const Duplex = require("internal/streams/duplex");
 const { getDefaultHighWaterMark } = require("internal/streams/state");
 const EventEmitter = require("node:events");
+
+function emitNetConnectPerfEntry(sock: any) {
+  const notifyNet = (globalThis as any)[Symbol.for("bun.perf_hooks.notifyNet")];
+  if (typeof notifyNet === "function") {
+    notifyNet("connect", performance.now(), 0, {
+      host: sock.remoteAddress,
+      port: sock.remotePort,
+    });
+  }
+}
 let dns: typeof import("node:dns");
 
 const normalizedArgsSymbol = Symbol("normalizedArgs");
@@ -240,13 +250,7 @@ const SocketHandlers: SocketHandler = {
       // this is already emmited on non-TLS socket and on TLS socket is emmited secureConnect after handshake
       self.emit("connect", self);
       self.emit("ready");
-      const notifyNet = (globalThis as any)[Symbol.for("bun.perf_hooks.notifyNet")];
-      if (typeof notifyNet === "function") {
-        notifyNet("connect", performance.now(), 0, {
-          host: self.remoteAddress,
-          port: self.remotePort,
-        });
-      }
+      emitNetConnectPerfEntry(self);
     }
 
     SocketHandlers.drain(socket);
@@ -905,6 +909,7 @@ Socket.prototype[kAttach] = function (port, socket) {
     // this is already emmited on non-TLS socket and on TLS socket is emmited secureConnect after handshake
     this.emit("connect", this);
     this.emit("ready");
+    emitNetConnectPerfEntry(this);
   }
   SocketHandlers.drain(socket);
 };
@@ -2043,6 +2048,7 @@ function afterConnect(status, handle, req, readable, writable) {
 
     self.emit("connect");
     self.emit("ready");
+    emitNetConnectPerfEntry(self);
 
     // Start the first read, or get an immediate EOF.
     // this doesn't actually consume any bytes, because len=0.

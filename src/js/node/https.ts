@@ -1,6 +1,8 @@
 // Hardcoded module "node:https"
 const http = require("node:http");
 const { urlToHttpOptions } = require("internal/url");
+const { isTlsSymbol } = require("internal/http");
+const { convertALPNProtocols } = require("node:tls");
 
 const ArrayPrototypeShift = Array.prototype.shift;
 const ObjectAssign = Object.assign;
@@ -44,11 +46,37 @@ function Agent(options) {
 $toClass(Agent, "Agent", http.Agent);
 Agent.prototype.createConnection = http.createConnection;
 
+function Server(opts, requestListener) {
+  if (!(this instanceof Server)) return new Server(opts, requestListener);
+  if (typeof opts === "function") {
+    requestListener = opts;
+    opts = undefined;
+  }
+  opts = opts != null ? { ...opts } : {};
+  if (opts.ALPNCallback) {
+    this.ALPNCallback = opts.ALPNCallback;
+  } else if (!opts.ALPNProtocols) {
+    opts.ALPNProtocols = ["http/1.1"];
+  }
+  if (opts.ALPNProtocols) {
+    convertALPNProtocols(opts.ALPNProtocols, this);
+    opts.ALPNProtocols = this.ALPNProtocols;
+  }
+  this[isTlsSymbol] = true;
+  http.Server.$call(this, opts, requestListener);
+  return this;
+}
+$toClass(Server, "Server", http.Server);
+
+function createServer(opts, requestListener) {
+  return new Server(opts, requestListener);
+}
+
 var https = {
   Agent,
   globalAgent: new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000 }),
-  Server: http.Server,
-  createServer: http.createServer,
+  Server,
+  createServer,
   get,
   request,
 };

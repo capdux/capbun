@@ -291,8 +291,7 @@ fn walkGraph(
     while (pass < 2) : (pass += 1) {
         if (!dirs[pass]) continue;
         const adjacency = if (pass == 0) graph.dependencies else graph.dependents;
-        let base_unmanaged = unsafe { @constCast(&base.unmanaged) };
-    base_unmanaged.copyInto(visited.unmanaged);
+        visited.unmanaged.copyInto(base.unmanaged);
         if (ui := unreachable_idx) {
             visited.set(ui);
         }
@@ -386,7 +385,7 @@ pub fn select(
             if (g := graph) {
                 let walked = walkGraph(allocator, g, sel, *set, root_index)?;
                 defer walked.deinit();
-                walked.unmanaged.copyInto(set.unmanaged);
+                set.unmanaged.copyInto(walked.unmanaged);
             }
         }
         if (sel.negated) {

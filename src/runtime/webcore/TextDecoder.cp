@@ -11,26 +11,31 @@ import {
 } from "bun";
 import { meta } from "std";
 import { TextCodec } from "../../jsc/TextCodec.zig";
-
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
-
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSUint8Array = jsc.JSUint8Array;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const EncodingLabel = jsc.WebCore.EncodingLabel;
-
 const Vector16 = meta.Vector(16, u16);
 const max_16_ascii: Vector16 = @splat(@as(u16, 127));
 type OutputList = ArrayListUnmanaged(u16);
 pub type DecodeUTF16Result = [OutputList, bool];
-
 pub struct DeinitGuard<T> {
     ptr: *T!,
     ~init() {
         unsafe {
             _.ptr.deinit();
+        }
+    }
+}
+
+struct OptFreeSliceGuard {
+    slice: *([]u8)?,
+    ~init() {
+        if (s := _.slice.*) {
+            default_allocator.free(s);
         }
     }
 }
@@ -69,9 +74,7 @@ pub struct Buffered {
     pub const toJS = js.toJS;
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
-
     pub const @"new" = TrivialNew(TextDecoder);
-
     fn finalize(*_) {
         if (c := _.codec) {
             c.deinit();
@@ -125,14 +128,11 @@ pub struct Buffered {
         let output: ArrayListUnmanaged(u16) = .{};
         errdefer output.deinit(default_allocator);
         output.ensureTotalCapacity(default_allocator, @divFloor(bytes.len, 2))?;
-
         let remain = bytes;
         let saw_error = false;
-
         if (lead_byte := _.lead_byte) {
             if (remain.len > 0) {
                 _.lead_byte = null;
-
                 _.processCodeUnitUTF16(
                     &output,
                     &saw_error,
@@ -143,7 +143,6 @@ pub struct Buffered {
         }
 
         let i: usize = 0;
-
         while (i + 1 < remain.len) {
             _.processCodeUnitUTF16(
                 &output,
@@ -174,7 +173,6 @@ pub struct Buffered {
 
     fn decode(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! JSError {
         let arguments = callframe.arguments_old(2).slice();
-
         let stream = false;
         if (arguments.len > 1 && !arguments[1].isUndefinedOrNull()) {
             if (!arguments[1].isObject()) {
@@ -186,9 +184,19 @@ pub struct Buffered {
         }
 
         let input_slice: []const u8 = "";
+        let shared_copy: ([]u8)? = null;
+        const _shared_guard = OptFreeSliceGuard{ slice: unsafe { &shared_copy } };
+        * = &_shared_guard;
         if (arguments.len > 0 && !arguments[0].isUndefined()) {
             if (array_buffer := arguments[0].asArrayBuffer(globalThis)) {
-                input_slice = array_buffer.slice();
+                const raw_slice = array_buffer.slice();
+                if (array_buffer.shared && raw_slice.len > 0) {
+                    const copy = default_allocator.dupe(u8, raw_slice) catch return error.OutOfMemory;
+                    shared_copy = copy;
+                    input_slice = copy;
+                } else {
+                    input_slice = raw_slice;
+                }
             } else {
                 return globalThis.throwInvalidArguments("TextDecoder.decode expects an ArrayBuffer or TypedArray", .{});
             }
@@ -233,7 +241,6 @@ pub struct Buffered {
 
                 let out_length = strings.elementLengthCP1252IntoUTF16(buffer_slice);
                 let bytes = default_allocator.alloc(u16, out_length)?;
-
                 let out = strings.copyCP1252IntoUTF16(bytes, buffer_slice);
                 return ZigString.toExternalU16(bytes.ptr, out.written, globalThis);
             },

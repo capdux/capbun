@@ -165,6 +165,7 @@ export function getStdinStream(
 
   const ReadStream = isTTY ? require("node:tty").ReadStream : require("node:fs").ReadStream;
   const stream = new ReadStream(null, { fd, autoClose: false });
+  stream._readableState.autoDestroy = true;
 
   const originalOn = stream.on;
 

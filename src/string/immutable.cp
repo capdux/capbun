@@ -902,8 +902,8 @@ pub fn countChar(client: string, char: u8): usize {
 
     while (remaining.len >= 16) {
         const vec: AsciiVector = remaining[0..ascii_vector_size].*;
-        const cmp = @popCount(@as(@Vector(ascii_vector_size, u1), @bitCast(vec == splatted)));
-        total += @as(usize, @reduce(.Add, cmp));
+        const mask = @as(AsciiVectorInt, @bitCast(vec == splatted));
+        total += @as(usize, @popCount(mask));
         remaining = remaining[ascii_vector_size..];
     }
 

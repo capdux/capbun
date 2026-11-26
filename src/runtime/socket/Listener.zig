@@ -140,27 +140,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-pub const ListenerCloseGuard = struct {
-    listener: ListenerType,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *ListenerCloseGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            switch (self.listener) {
-.uws => |socket| {
-_ = socket.close();
-},
-.namedPipe => |namedPipe| {
-_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined));
-},
-.none => {
-
-},
-}
-    }
-};
-
 pub const PathBufferPoolGuard = struct {
     buf: *bun.PathBuffer,
     __cp_dropped: bool = false,
@@ -403,14 +382,19 @@ pub fn doStop(self: *Listener, force_close: bool) void {
             return;
         }
         const listener = self.listener;
-        if ((listener == .uws)) {
-            _ = self.unlinkUnixSocketPath();
-        }
-        var _guard_listener_close = ListenerCloseGuard{ .listener = listener };
-        _ = &_guard_listener_close;
-        var ___guard_listener_close_moved = false; _ = &___guard_listener_close_moved;
-        defer if (!___guard_listener_close_moved) { ___guard_listener_close_moved = true; const __T = @TypeOf(_guard_listener_close); if (@typeInfo(__T) == .optional) { if (_guard_listener_close) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_listener_close.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_listener_close; _drop_val.__cp_deinit(); } };
         self.listener = .none;
+        switch (listener) {
+.uws => |socket| {
+_ = self.unlinkUnixSocketPath();
+        _ = socket.close();
+},
+.namedPipe => |namedPipe| {
+_ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined));
+},
+.none => {
+
+},
+}
         if ((self.handlers.active_connections == 0)) {
             _ = self.poll_ref.unref(self.handlers.vm);
             _ = self.strong_self.clearWithoutDeallocation();
@@ -1140,7 +1124,9 @@ else => {
                     } else {
                         tls = TLSSocket.new(.{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TLSSocket.Socket.detached, .connection = connection, .protos = (if ((ssl != null)) ssl.?.takeProtos() else null), .server_name = (if ((ssl != null)) ssl.?.takeServerName() else null) });
                     }
-                    _ = TLSSocket.js.dataSetCached(tls.getThisValue(globalObject), globalObject, default_data);
+                    const this_value = tls.getThisValue(globalObject);
+                    _ = tls.this_value.upgrade(globalObject);
+                    _ = TLSSocket.js.dataSetCached(this_value, globalObject, default_data);
                     _ = tls.poll_ref.ref(handlers.vm);
                     _ = tls.ref();
                     const ctx_for_pipe = owned_ssl_ctx;
@@ -1149,10 +1135,12 @@ else => {
                     _guard_connection.armed = false;
                     _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
-.unix => (blk_catch_10: { break :blk_catch_10 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_10| { _ = &__ce_10; _ = tls.poll_ref.unref(handlers.vm);
+.unix => (blk_catch_10: { break :blk_catch_10 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_10| { _ = &__ce_10; _ = tls.this_value.downgrade();
+                    _ = tls.poll_ref.unref(handlers.vm);
                     _ = tls.deref();
                     return promise_value; }); }),
-.fd => |fd| (blk_catch_11: { break :blk_catch_11 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_11| { _ = &__ce_11; _ = tls.poll_ref.unref(handlers.vm);
+.fd => |fd| (blk_catch_11: { break :blk_catch_11 ((WindowsNamedPipeContext.open(globalObject, fd, (if ((ssl != null)) (ssl.?).* else null), ctx_for_pipe, .{ .tls = tls })) catch |__ce_11| { _ = &__ce_11; _ = tls.this_value.downgrade();
+                    _ = tls.poll_ref.unref(handlers.vm);
                     _ = tls.deref();
                     return promise_value; }); }),
 else => unreachable,
@@ -1183,16 +1171,20 @@ else => unreachable,
                         tcp = TCPSocket.new(.{ .ref_count = .init(), .handlers = handlers_ptr, .socket = TCPSocket.Socket.detached, .connection = connection, .protos = null, .server_name = null });
                     }
                     _ = tcp.ref();
-                    _ = TCPSocket.js.dataSetCached(tcp.getThisValue(globalObject), globalObject, default_data);
+                    const this_value = tcp.getThisValue(globalObject);
+                    _ = tcp.this_value.upgrade(globalObject);
+                    _ = TCPSocket.js.dataSetCached(this_value, globalObject, default_data);
                     _ = tcp.poll_ref.ref(handlers.vm);
                     _guard_handlers.armed = false;
                     _guard_connection.armed = false;
                     _guard_ssl_ctx.armed = false;
                     const named_pipe = (switch (connection) {
-.unix => (blk_catch_12: { break :blk_catch_12 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_12| { _ = &__ce_12; _ = tcp.poll_ref.unref(handlers.vm);
+.unix => (blk_catch_12: { break :blk_catch_12 ((WindowsNamedPipeContext.connect(globalObject, pipe_name.?, null, null, .{ .tcp = tcp })) catch |__ce_12| { _ = &__ce_12; _ = tcp.this_value.downgrade();
+                    _ = tcp.poll_ref.unref(handlers.vm);
                     _ = tcp.deref();
                     return promise_value; }); }),
-.fd => |fd| (blk_catch_13: { break :blk_catch_13 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_13| { _ = &__ce_13; _ = tcp.poll_ref.unref(handlers.vm);
+.fd => |fd| (blk_catch_13: { break :blk_catch_13 ((WindowsNamedPipeContext.open(globalObject, fd, null, null, .{ .tcp = tcp })) catch |__ce_13| { _ = &__ce_13; _ = tcp.this_value.downgrade();
+                    _ = tcp.poll_ref.unref(handlers.vm);
                     _ = tcp.deref();
                     return promise_value; }); }),
 else => unreachable,
@@ -1271,7 +1263,9 @@ else => unreachable,
                 _guard_connection.armed = false;
                 _guard_ssl_ctx.armed = false;
                 _ = socket.ref();
-                _ = SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
+                const this_value = socket.getThisValue(globalObject);
+                _ = socket.this_value.upgrade(globalObject);
+                _ = SocketType.js.dataSetCached(this_value, globalObject, default_data);
                 socket.flags.allow_half_open = socket_config.allowHalfOpen;
                 _ = socket.poll_ref.ref(handlers.vm);
                 _ = (blk_catch_14: { break :blk_catch_14 ((socket.doConnect(connection)) catch |__ce_14| { _ = &__ce_14; var connect_err: c_int = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);

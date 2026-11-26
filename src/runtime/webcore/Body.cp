@@ -1337,12 +1337,18 @@ pub struct ValueBufferer {
             sink.js_sink = null;
             wrapper.sink.destroy();
         }
+        if (stream := sink.readable_stream_ref.get(sink.global)) {
+            stream.cancel(sink.global);
+        }
         let strong_ref = jsc.Strong.Optional.create(e, sink.global);
         const _guard_sref = DeinitGuard<jsc.Strong.Optional>{ ptr: &strong_ref };
         sink.onFinishedBuffering(sink.ctx, "", { JSValue: strong_ref }, is_async);
     }
 
     static fn handleResolveStream(sink: *@This(), is_async: bool) {
+        if (stream := sink.readable_stream_ref.get(sink.global)) {
+            stream.done(sink.global);
+        }
         if (wrapper := sink.js_sink) {
             const bytes = wrapper.sink.bytes.slice();
             log("handleResolveStream {}", .{bytes.len});
@@ -1396,7 +1402,7 @@ pub struct ValueBufferer {
             // it returns a Promise when it goes through ReadableStreamDefaultReader
             if (promise := assignment_result.asAnyPromise()) {
                 switch (promise.status()) {
-                    .Pending => {
+                    .pending => {
                         const cell = bun.api.NativePromiseContext.create(globalThis, sink);
                         assignment_result.thenWithValue(
                             globalThis,
@@ -1405,22 +1411,19 @@ pub struct ValueBufferer {
                             onRejectStream,
                         ) catch {};
                     },
-                    .Fulfilled => {
-                        const _guard_sv = UnprotectGuard{ val: stream.value };
-
+                    .fulfilled => {
                         sink.handleResolveStream(false);
                     },
-                    .Rejected => {
-                        const _guard_sv = UnprotectGuard{ val: stream.value };
-
+                    .rejected => {
                         sink.handleRejectStream(promise.result(globalThis.vm()), false);
                     },
                 }
                 return;
             }
+            return error.PipeFailed;
         }
 
-        return error.PipeFailed;
+        sink.handleResolveStream(false);
     }
 
     static fn bufferLockedBodyValue(sink: *@This(), value: *jsc.WebCore.Body.Value, owned_readable_stream: jsc.WebCore.ReadableStream?)! {
@@ -1451,14 +1454,8 @@ pub struct ValueBufferer {
                 .Invalid => {
                     return error.InvalidStream;
                 },
-                // Streaming .File (e.g. pipe fd) or unconvertible .Blob cannot be buffered here
-                .Blob, .File => {
-                    return error.UnsupportedStreamType;
-                },
-                .JavaScript, .Direct => {
-                    // this is broken right now
-                    // return sink.createJSSink(stream);
-                    return error.UnsupportedStreamType;
+                .Blob, .File, .JavaScript, .Direct => {
+                    return sink.createJSSink(stream);
                 },
                 .Bytes => |bs| {
                     assert(bs.pipe.ctx == null);

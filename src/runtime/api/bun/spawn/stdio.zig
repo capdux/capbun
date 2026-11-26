@@ -344,7 +344,7 @@ else => false,
 });
     }
 
-pub fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, is_sync: bool) bun.JSError!void {
+pub fn extractBodyValue(out_stdio: *Stdio, globalThis: *jsc.JSGlobalObject, i: i32, body: *jsc.WebCore.Body.Value, owned_readable_stream: ?jsc.WebCore.ReadableStream, is_sync: bool) bun.JSError!void {
             _ = body.toBlobIfPossible();
             if (body.tryUseAsAnyBlob()) |blob| {
                 _ = &blob;
@@ -382,8 +382,14 @@ else => {
 _ = unreachable;
 },
 }
+            const stream = brk: {
+            if (owned_readable_stream) |owned| {
+                _ = &owned;
+                break :brk owned;
+            }
             const stream_value = try body.toReadableStream(globalThis);
-            const stream = ((try jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)) orelse { return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{}); });
+            break :brk ((try jsc.WebCore.ReadableStream.fromJS(stream_value, globalThis)) orelse { return globalThis.throwInvalidArguments("Failed to create ReadableStream", .{}); });
+};
             if (stream.isDisturbed(globalThis)) {
                 return globalThis.ERR(.BODY_ALREADY_USED, "ReadableStream has already been used", .{}).throw();
             }
@@ -481,11 +487,11 @@ if ((i == 0)) {
                     } else {
                         if (value.as(jsc.WebCore.Request)) |req| {
                             _ = &req;
-                            return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), is_sync);
+                            return extractBodyValue(out_stdio, globalThis, i, req.getBodyValue(), req.getBodyReadableStream(globalThis), is_sync);
                         } else {
                             if (value.as(jsc.WebCore.Response)) |res| {
                                 _ = &res;
-                                return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), is_sync);
+                                return extractBodyValue(out_stdio, globalThis, i, res.getBodyValue(), res.getBodyReadableStream(globalThis), is_sync);
                             }
                         }
                     }
@@ -543,12 +549,12 @@ pub fn extractBlob(stdio: *Stdio, globalThis: *jsc.JSGlobalObject, blob: jsc.Web
 .std_in => {
 _ = (if (((i == 1) or (i == 2))) ({
                                 return globalThis.throwInvalidArguments("stdin cannot be used for stdout or stderr", .{});
-}) else null);
+}) else @as(void, undefined));
 },
 .std_out, .std_err => {
 _ = (if ((i == 0)) ({
                                 return globalThis.throwInvalidArguments("stdout and stderr cannot be used for stdin", .{});
-}) else null);
+}) else @as(void, undefined));
 },
 }
                             }

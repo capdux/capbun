@@ -2560,17 +2560,17 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                         break :brk deviceRootKey[0..3 :0];
                     }
                     bufSize = 1;
-                    // Reuse buf2 for the env key because it's used to get the path.
-                    buf2[0] = asT(T, '=');
+                    // Reuse buf for the env key because buf2 may back resolvedTail.
+                    buf[0] = asT(T, '=');
                     bufOffset = bufSize;
                     bufSize += resolvedDeviceLen;
-                    bun.memmove(buf2[bufOffset..bufSize], resolvedDevice);
+                    bun.memmove(buf[bufOffset..bufSize], resolvedDevice);
                     if (T == u16) {
-                        buf2[bufSize] = asT(T, 0);
-                        const slice: [:0]const T = buf2[0..bufSize :0];
+                        buf[bufSize] = asT(T, 0);
+                        const slice: [:0]const T = buf[0..bufSize :0];
                         break :brk unsafe { @as([*:0]const u16, @ptrCast(slice.ptr)) };
                     } else {
-                        bufSize = std.unicode.wtf8ToWtf16Le(&u16Buf, buf2[0..bufSize]) catch unreachable;
+                        bufSize = std.unicode.wtf8ToWtf16Le(&u16Buf, buf[0..bufSize]) catch unreachable;
                         u16Buf[bufSize] = 0;
                         break :brk u16Buf[0..bufSize :0];
                     }
@@ -2583,19 +2583,19 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                 if (r := std.process.getenvW(key_w)) {
                     if (T == u16) {
                         bufSize = r.len;
-                        bun.memmove(buf2[0..bufSize], r);
+                        bun.memmove(buf[0..bufSize], r);
                     } else {
-                        // Reuse buf2 because it's used for path.
-                        bufSize = std.unicode.wtf16LeToWtf8(buf2, r);
+                        // Reuse buf because buf2 may back resolvedTail.
+                        bufSize = std.unicode.wtf16LeToWtf8(buf, r);
                     }
-                    envPath = buf2[0..bufSize];
+                    envPath = buf[0..bufSize];
                 }
             }
             if (_envPath := envPath) {
                 path = _envPath;
             } else {
-                // cwd is limited to MAX_PATH_BYTES.
-                const cwdRes = getCwdT(T, &tmpBuf);
+                // Use buf (not tmpBuf, which backs resolvedDevice) for cwd.
+                const cwdRes = getCwdT(T, buf);
                 if (cwdRes == .err) return .{ err: cwdRes.err };
                 path = cwdRes.result;
                 // We must set envPath here so that it doesn't hit the null check just below.
@@ -2618,11 +2618,11 @@ pub fn resolveWindowsT(comptime T: type, paths: []const []const T, buf: []T, buf
                 // Translated from the following JS code:
                 //   path = `${resolvedDevice}\\`;
                 bufSize = resolvedDeviceLen;
-                bun.memmove(buf2[0..bufSize], resolvedDevice);
+                bun.memmove(buf[0..bufSize], resolvedDevice);
                 bufOffset = bufSize;
                 bufSize += 1;
-                buf2[bufOffset] = asT(T, CHAR_BACKWARD_SLASH);
-                path = buf2[0..bufSize];
+                buf[bufOffset] = asT(T, CHAR_BACKWARD_SLASH);
+                path = buf[0..bufSize];
             }
         }
 

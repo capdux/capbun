@@ -698,6 +698,8 @@ export function readDirectStream(stream, sink, underlyingSource) {
     if (stream) {
       $putByIdDirectPrivate(stream, "readableStreamController", undefined);
       $putByIdDirectPrivate(stream, "reader", undefined);
+      stream.$bunNativePtr = -1;
+      $putByIdDirectPrivate(stream, "disturbed", true);
       if (reason) {
         $putByIdDirectPrivate(stream, "state", $streamErrored);
         $putByIdDirectPrivate(stream, "storedError", reason);
@@ -772,6 +774,10 @@ export function assignStreamIntoResumableSink(stream, sink) {
         reader.releaseLock();
       } catch {}
       reader = undefined;
+    }
+    if (stream) {
+      stream.$bunNativePtr = -1;
+      $putByIdDirectPrivate(stream, "disturbed", true);
     }
     sink = undefined;
     if (stream) {
@@ -961,6 +967,10 @@ export async function readStreamIntoSink(stream: ReadableStream, sink, isNative)
         reader.releaseLock();
       } catch {}
       reader = undefined;
+    }
+    if (isNative && stream) {
+      stream.$bunNativePtr = -1;
+      $putByIdDirectPrivate(stream, "disturbed", true);
     }
     sink = undefined;
     if (stream) {

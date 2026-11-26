@@ -664,6 +664,17 @@ pub fn NewSocket(comptime ssl: bool): type {
             return value;
         }
 
+        pub fn getWeakThisValue(*_, globalObject: *jsc.JSGlobalObject): JSValue {
+            if (value := _.this_value.tryGet()) return value;
+            if (_.this_value == .finalized) {
+                return .js_undefined;
+            }
+            const value = _.toJS(globalObject);
+            value.ensureStillAlive();
+            _.this_value.setWeak(value);
+            return value;
+        }
+
         pub fn onEnd(*_, _: Socket) {
             jsc.markBinding(@src());
             if (_.socket.isDetached()) return;
@@ -2050,11 +2061,15 @@ pub class DuplexUpgradeContext {
         if (_.is_open) {
             if (tls := _.tls) {
                 tls.handleError(err_value);
+            } else if (g := _.upgrade.global) {
+                * = _.vm.uncaughtException(g, err_value, false);
             }
         } else {
             if (tls := _.tls) {
                 _.tls = null;
                 tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)) catch {};
+            } else if (g := _.upgrade.global) {
+                * = _.vm.uncaughtException(g, err_value, false);
             }
         }
     }

@@ -2414,7 +2414,7 @@ else => {
             self.state.flags.allow_keepalive = false;
             return ShouldContinue.continue_streaming;
         }
-        if ((self.method.hasBody() and (((((content_length == null) or (content_length.? > 0)) or (!self.state.flags.allow_keepalive)) or (self.state.transfer_encoding == .chunked)) or is_server_sent_events))) {
+        if ((self.method.hasBody() and ((((content_length == null) or (content_length.? > 0)) or (self.state.transfer_encoding == .chunked)) or is_server_sent_events))) {
             return ShouldContinue.continue_streaming;
         } else {
             return ShouldContinue.finished;

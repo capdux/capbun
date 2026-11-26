@@ -1285,8 +1285,8 @@ pub fn countChar(client: []const u8, char: u8) usize {
         const splatted: AsciiVector = @splat(char);
         while ((remaining.len >= 16)) {
             const vec: AsciiVector = (remaining[0..ascii_vector_size]).*;
-            const cmp = @popCount(@as(@Vector(ascii_vector_size, u1), @bitCast((vec == splatted))));
-            total = (total + (if (comptime @typeInfo(@TypeOf(@reduce(.Add, cmp))) == .@"enum") cp_cast_int(usize, @intFromEnum(@reduce(.Add, cmp))) else cp_cast_int(usize, @reduce(.Add, cmp))));
+            const mask = @as(AsciiVectorInt, @bitCast((vec == splatted)));
+            total = (total + (if (comptime @typeInfo(@TypeOf(@popCount(mask))) == .@"enum") cp_cast_int(usize, @intFromEnum(@popCount(mask))) else cp_cast_int(usize, @popCount(mask))));
             remaining = remaining[ascii_vector_size..];
         }
         while ((remaining.len > 0)) {

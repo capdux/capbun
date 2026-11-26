@@ -72,17 +72,6 @@ pub struct ErrFreeGuard<T> {
     }
 }
 
-struct ListenerCloseGuard {
-    listener: ListenerType,
-    ~init() {
-        switch (_.listener) {
-            .uws => |socket| socket.close(),
-            .namedPipe => |namedPipe| if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined),
-            .none => {},
-        }
-    }
-}
-
 struct PathBufferPoolGuard {
     buf: *bun.PathBuffer!,
     ~init() {
@@ -274,11 +263,16 @@ struct NamedPipeCtxErrGuard {
     fn doStop(*_, force_close: bool) {
         if (_.listener == .none) return;
         const listener = _.listener;
-
-        if (listener == .uws) _.unlinkUnixSocketPath();
-
-        const _guard_listener_close = ListenerCloseGuard{ listener: listener };
         _.listener = .none;
+
+        switch (listener) {
+            .uws socket => {
+                _.unlinkUnixSocketPath();
+                socket.close();
+            },
+            .namedPipe namedPipe => if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined),
+            .none => {},
+        }
 
         if (_.handlers.active_connections == 0) {
             _.poll_ref.unref(_.handlers.vm);
@@ -861,7 +855,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                     });
                 }
 
-                TLSSocket.js.dataSetCached(tls.getThisValue(globalObject), globalObject, default_data);
+                const this_value = tls.getThisValue(globalObject);
+                tls.this_value.upgrade(globalObject);
+                TLSSocket.js.dataSetCached(this_value, globalObject, default_data);
                 tls.poll_ref.ref(handlers.vm);
                 tls.ref();
 
@@ -878,6 +874,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         ctx_for_pipe,
                         .{ .tls = tls },
                     ) catch {
+                        tls.this_value.downgrade();
                         tls.poll_ref.unref(handlers.vm);
                         tls.deref();
                         return promise_value;
@@ -889,6 +886,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         ctx_for_pipe,
                         .{ .tls = tls },
                     ) catch {
+                        tls.this_value.downgrade();
                         tls.poll_ref.unref(handlers.vm);
                         tls.deref();
                         return promise_value;
@@ -924,7 +922,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                     });
                 }
                 tcp.ref();
-                TCPSocket.js.dataSetCached(tcp.getThisValue(globalObject), globalObject, default_data);
+                const this_value = tcp.getThisValue(globalObject);
+                tcp.this_value.upgrade(globalObject);
+                TCPSocket.js.dataSetCached(this_value, globalObject, default_data);
                 tcp.poll_ref.ref(handlers.vm);
 
                 _guard_handlers.armed = false;
@@ -938,6 +938,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         null,
                         .{ .tcp = tcp },
                     ) catch {
+                        tcp.this_value.downgrade();
                         tcp.poll_ref.unref(handlers.vm);
                         tcp.deref();
                         return promise_value;
@@ -949,6 +950,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
                         null,
                         .{ .tcp = tcp },
                     ) catch {
+                        tcp.this_value.downgrade();
                         tcp.poll_ref.unref(handlers.vm);
                         tcp.deref();
                         return promise_value;
@@ -1033,7 +1035,9 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
             _guard_connection.armed = false;
             _guard_ssl_ctx.armed = false;
             socket.ref();
-            SocketType.js.dataSetCached(socket.getThisValue(globalObject), globalObject, default_data);
+            const this_value = socket.getThisValue(globalObject);
+            socket.this_value.upgrade(globalObject);
+            SocketType.js.dataSetCached(this_value, globalObject, default_data);
             socket.flags.allow_half_open = socket_config.allowHalfOpen;
             // Held for the connect attempt regardless of `ref_pollref_on_connect`; `onOpen` applies that.
             socket.poll_ref.ref(handlers.vm);

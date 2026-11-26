@@ -367,15 +367,8 @@ pub fn throwInvalidScryptParams(self: *JSGlobalObject) JSError {
     }
 
 pub fn throwInvalidArgumentTypeValue(self: *JSGlobalObject, argname: []const u8, typename: []const u8, value: JSValue) bun.JSError {
-            const actual_string_value = try JSGlobalObject.determineSpecificType(self, value);
-            var _guard_actual_string_value = DerefGuard(String){ .ptr = (blk: {
-            break :blk (&actual_string_value);
-
-}) };
-            _ = &_guard_actual_string_value;
-            var ___guard_actual_string_value_moved = false; _ = &___guard_actual_string_value_moved;
-            defer if (!___guard_actual_string_value_moved) { ___guard_actual_string_value_moved = true; const __T = @TypeOf(_guard_actual_string_value); if (@typeInfo(__T) == .optional) { if (_guard_actual_string_value) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_actual_string_value.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_actual_string_value; _drop_val.__cp_deinit(); } };
-            return self.ERR(.INVALID_ARG_TYPE, "The \"{s}\" argument must be of type {s}. Received {f}", .{ argname, typename, actual_string_value }).throw();
+            _ = Bun__ErrorCode__throwInvalidArgumentTypeValue(self, argname.ptr, argname.len, typename.ptr, typename.len, value);
+            return error.JSError;
     }
 
 pub fn throwInvalidArgumentTypeValue2(self: *JSGlobalObject, argname: []const u8, typename: []const u8, value: JSValue) JSError {
@@ -1146,6 +1139,8 @@ extern "c" fn JSGlobalObject__throwOutOfMemoryError(global: *JSGlobalObject) cal
 extern "c" fn JSGlobalObject__createOutOfMemoryError(global: *JSGlobalObject) callconv(.c) JSValue;
 
 extern "c" fn Bun__ErrorCode__determineSpecificType(global: *JSGlobalObject, val: JSValue) callconv(.c) String;
+
+extern "c" fn Bun__ErrorCode__throwInvalidArgumentTypeValue(global: *JSGlobalObject, arg_name_ptr: [*]const u8, arg_name_len: usize, type_name_ptr: [*]const u8, type_name_len: usize, val: JSValue) callconv(.c) void;
 
 extern "c" fn Bun__runOnLoadPlugins(global: *JSGlobalObject, maybe_path: ?*const bun.String, path: *const bun.String, target: _BunPluginTarget) callconv(.c) JSValue;
 

@@ -387,12 +387,7 @@ pub fn walkGraph(allocator: Allocator, graph: *const WorkspaceGraph, sel: Select
                 continue;
             }
             const adjacency = (if ((pass == 0)) graph.dependencies else graph.dependents);
-            var base_unmanaged = (blk: {
-            break :blk @constCast((&base.unmanaged));
-
-});
-            _ = &base_unmanaged;
-            _ = base_unmanaged.copyInto(visited.unmanaged);
+            _ = visited.unmanaged.copyInto(base.unmanaged);
             if (unreachable_idx) |ui| {
                 _ = &ui;
                 _ = visited.set(ui);
@@ -508,7 +503,7 @@ pub fn select(allocator: Allocator, patterns: []const []const u8, original_cwd: 
                     defer {
                     _ = walked.deinit();
                     }
-                    _ = walked.unmanaged.copyInto(set.unmanaged);
+                    _ = set.unmanaged.copyInto(walked.unmanaged);
                 }
             }
             if (sel.negated) {

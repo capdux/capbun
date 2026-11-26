@@ -1073,6 +1073,38 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
                     return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err_ref.toJS(globalThis));
                 },
                 .Locked => {
+                    if (readable := response.getBodyReadableStream(globalThis) ?? bodyValue.Locked.readable.get(globalThis)) {
+                        if (readable.isDisturbed(globalThis)) {
+                            destination_blob.detach();
+                            return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                        }
+                        if (destination_blob.isS3()) {
+                            const s3 = &destination_blob.store.?.data.s3;
+                            let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
+                            const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
+                            let proxy_url: ([]const u8)? = null;
+                            if (p := globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+                                proxy_url = p.href;
+                            }
+                            return S3.uploadStream(
+                                (if (options.extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                                s3.path(),
+                                readable,
+                                globalThis,
+                                aws_options.options,
+                                aws_options.acl,
+                                aws_options.storage_class,
+                                destination_blob.contentTypeOrMimeType(),
+                                aws_options.content_disposition,
+                                aws_options.content_encoding,
+                                proxy_url,
+                                aws_options.request_payer,
+                                null,
+                                undefined,
+                            );
+                        }
+                        return destination_blob.pipeReadableStreamToBlob(globalThis, readable, options.extra_options);
+                    }
                     if (destination_blob.isS3()) {
                         const s3 = &destination_blob.store.?.data.s3;
                         let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
@@ -1139,6 +1171,38 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
                     return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err_ref.toJS(globalThis));
                 },
                 .Locked locked => {
+                    if (readable := request.getBodyReadableStream(globalThis) ?? locked.readable.get(globalThis)) {
+                        if (readable.isDisturbed(globalThis)) {
+                            destination_blob.detach();
+                            return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+                        }
+                        if (destination_blob.isS3()) {
+                            const s3 = &destination_blob.store.?.data.s3;
+                            let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
+                            const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
+                            let proxy_url: ([]const u8)? = null;
+                            if (p := globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null)) {
+                                proxy_url = p.href;
+                            }
+                            return S3.uploadStream(
+                                (if (options.extra_options != null) aws_options.credentials.dupe() else s3.getCredentials()),
+                                s3.path(),
+                                readable,
+                                globalThis,
+                                aws_options.options,
+                                aws_options.acl,
+                                aws_options.storage_class,
+                                destination_blob.contentTypeOrMimeType(),
+                                aws_options.content_disposition,
+                                aws_options.content_encoding,
+                                proxy_url,
+                                aws_options.request_payer,
+                                null,
+                                undefined,
+                            );
+                        }
+                        return destination_blob.pipeReadableStreamToBlob(globalThis, readable, options.extra_options);
+                    }
                     if (destination_blob.isS3()) {
                         const s3 = &destination_blob.store.?.data.s3;
                         let aws_options = s3.getCredentialsWithOptions(options.extra_options, globalThis)?;
@@ -1191,6 +1255,14 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
         if (archive := data.as(Archive)) {
             archive.store.ref();
             break :brk Blob.initWithStore(archive.store, globalThis);
+        }
+
+        if (readable := jsc.WebCore.ReadableStream.fromJS(data, globalThis)?) {
+            if (readable.isDisturbed(globalThis)) {
+                destination_blob.detach();
+                return globalThis.throwInvalidArguments("ReadableStream has already been used", .{});
+            }
+            return destination_blob.pipeReadableStreamToBlob(globalThis, readable, options.extra_options);
         }
 
         break :brk Blob.get(

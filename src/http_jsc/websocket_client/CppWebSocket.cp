@@ -16,6 +16,7 @@ struct LoopExitGuard<T> {
 extern fn WebSocket__didConnect(websocket_context: *CppWebSocket, socket: *uws.Socket, buffered_data: ([*]u8!)?, buffered_len: usize, deflate_params: (*const WebSocketDeflate.Params)?, secure: (*uws.SslCtx)?) ;
 extern fn WebSocket__didConnectWithTunnel(websocket_context: *CppWebSocket, tunnel: *!, buffered_data: ([*]u8!)?, buffered_len: usize, deflate_params: (*const WebSocketDeflate.Params)?) ;
 extern fn WebSocket__didAbruptClose(websocket_context: *CppWebSocket, reason: ErrorCode) ;
+extern fn WebSocket__didAbruptCloseWithReason(websocket_context: *CppWebSocket, reason: ErrorCode, msg_ptr: [*]const u8, msg_len: usize) ;
 extern fn WebSocket__didClose(websocket_context: *CppWebSocket, code: u16, reason: *const bun.String) ;
 extern fn WebSocket__didReceiveText(websocket_context: *CppWebSocket, clone: bool, text: *const jsc.ZigString) ;
 extern fn WebSocket__didReceiveBytes(websocket_context: *CppWebSocket, bytes: [*]const u8!, byte_len: usize, opcode: u8) ;
@@ -31,6 +32,14 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
         unsafe { WebSocket__didAbruptClose(_, reason); }
+    }
+
+    pub fn didAbruptCloseWithReason(*_, reason: ErrorCode, msg: []const u8)  {
+        const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
+        const loop = vm.eventLoop();
+        loop.enter();
+        const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
+        unsafe { WebSocket__didAbruptCloseWithReason(_, reason, msg.ptr, msg.len); }
     }
 
     pub fn didClose(*_, code: u16, reason: *bun.String)  {

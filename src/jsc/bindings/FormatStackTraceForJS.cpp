@@ -713,7 +713,7 @@ JSC::JSValue computeErrorInfoWrapperToJSValue(JSC::VM& vm, Vector<StackFrame>& s
     if (protectedFrameCells.hasOverflowed()) [[unlikely]] {
         auto scope = DECLARE_THROW_SCOPE(vm);
         throwOutOfMemoryError(errorInstance->globalObject(), scope);
-        return jsUndefined();
+        return {};
     }
 
     JSValue result = computeErrorInfoToJSValue(vm, stackTrace, line, column, sourceURL, errorInstance, bunErrorData);
@@ -721,7 +721,7 @@ JSC::JSValue computeErrorInfoWrapperToJSValue(JSC::VM& vm, Vector<StackFrame>& s
     line_in = line.oneBasedInt();
     column_in = column.oneBasedInt();
 
-    return result ? result : jsUndefined();
+    return result;
 }
 
 JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncAppendStackTrace, (JSC::JSGlobalObject * lexicalGlobalObject, JSC::CallFrame* callFrame))
@@ -871,7 +871,8 @@ JSC_DEFINE_HOST_FUNCTION(errorConstructorFuncCaptureStackTrace, (JSC::JSGlobalOb
             String sourceURL;
             JSValue result = computeErrorInfoToJSValue(vm, stackTrace, line, column, sourceURL, errorObject, nullptr);
             RETURN_IF_EXCEPTION(scope, {});
-            errorObject->putDirect(vm, vm.propertyNames->stack, result, PropertyAttribute::DontEnum | 0);
+            PropertyDescriptor desc(result, PropertyAttribute::DontEnum | 0);
+            errorObject->methodTable()->defineOwnProperty(errorObject, lexicalGlobalObject, vm.propertyNames->stack, desc, false);
         } else {
             // Not yet materialized — safe to install new frames with a lazy getter.
             instance->setStackFrames(vm, WTF::move(stackTrace));

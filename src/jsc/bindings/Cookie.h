@@ -108,7 +108,7 @@ public:
     bool isExpired() const;
 
     void appendTo(JSC::VM& vm, StringBuilder& builder) const;
-    String toString(JSC::VM& vm) const;
+    ExceptionOr<String> toString(JSC::VM& vm) const;
     JSC::JSValue toJSON(JSC::VM& vm, JSC::JSGlobalObject*) const;
     size_t memoryCost() const;
 

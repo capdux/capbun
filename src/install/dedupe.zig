@@ -263,7 +263,7 @@ pub fn markCovered(self: *@This(), c: usize, uncovered_in: usize) usize {
 pub fn cover(self: *@This()) usize {
             const n = self.candidates.items.len;
             const m = self.edge_count;
-            _ = self.required.unmanaged.copyInto(self.chosen.unmanaged);
+            _ = self.chosen.unmanaged.copyInto(self.required.unmanaged);
             _ = self.covered.unmanaged.setAll(false);
             var uncovered = m;
             _ = &uncovered;
@@ -484,7 +484,7 @@ pub fn vote(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet) 
                     continue;
                 }
                 const base_size = self.cover();
-                _ = self.chosen.unmanaged.copyInto(self.survivors.unmanaged);
+                _ = self.survivors.unmanaged.copyInto(self.chosen.unmanaged);
                 _ = self.protected.clearRetainingCapacity();
                 e = 0;
                 while ((e < m)) : (e = (e + 1)) {
@@ -524,7 +524,7 @@ pub fn lt(ctx: void, a: usize, b: usize) bool {
                         }
                         _ = self.required.set(k);
                         if ((self.cover() == base_size)) {
-                            _ = self.chosen.unmanaged.copyInto(self.survivors.unmanaged);
+                            _ = self.survivors.unmanaged.copyInto(self.chosen.unmanaged);
                         } else {
                             _ = self.required.unset(k);
                         }
@@ -547,12 +547,7 @@ pub fn lt(ctx: void, a: usize, b: usize) bool {
     }
 
 pub fn settle(self: *@This(), cur: []const PackageID, live: *const DynamicBitSet) ![]PackageID {
-            var live_unmanaged = (blk: {
-            break :blk @constCast((&live.unmanaged));
-
-});
-            _ = &live_unmanaged;
-            _ = live_unmanaged.copyInto(self.voters.unmanaged);
+            _ = self.voters.unmanaged.copyInto(live.unmanaged);
             var best: ?[]PackageID = null;
             _ = &best;
             errdefer {

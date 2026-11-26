@@ -1078,7 +1078,10 @@ pub fn newOKLCH(l: f32, a: f32, b: f32, alpha: f32) LABColor {
     }
 
 pub fn hash(self: LABColor, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), (&self), hasher);
+            return css.implementHash(@This(), (blk: {
+            break :blk (&self);
+
+}), hasher);
     }
 };
 
@@ -1093,7 +1096,10 @@ pub const PredefinedColor = union(enum) {
     xyz_d65: XYZd65,
 
 pub fn hash(self: PredefinedColor, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), (&self), hasher);
+            return css.implementHash(@This(), (blk: {
+            break :blk (&self);
+
+}), hasher);
     }
 };
 
@@ -1103,7 +1109,10 @@ pub const FloatColor = union(enum) {
     hwb: HWB,
 
 pub fn hash(self: FloatColor, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), (&self), hasher);
+            return css.implementHash(@This(), (blk: {
+            break :blk (&self);
+
+}), hasher);
     }
 };
 
@@ -1126,7 +1135,10 @@ pub fn unpremultiply(self: *LAB, a: f32) void {
     }
 
 pub fn intoCssColor(self: LAB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(LAB, .LAB)((&self), allocator);
+            return ImplementIntoCssColor(LAB, .LAB)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustHue(self: *LAB, _: *@This(), _: HueInterpolationMethod) void {
@@ -1169,7 +1181,10 @@ pub fn unpremultiply(self: *SRGB, a: f32) void {
     }
 
 pub fn intoCssColor(self: SRGB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(SRGB, .SRGB)((&self), allocator);
+            return ImplementIntoCssColor(SRGB, .SRGB)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *SRGB) void {
@@ -1221,7 +1236,10 @@ pub fn unpremultiply(self: *HSL, a: f32) void {
     }
 
 pub fn intoCssColor(self: HSL, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(HSL, .HSL)((&self), allocator);
+            return ImplementIntoCssColor(HSL, .HSL)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *HSL) void {
@@ -1276,7 +1294,10 @@ pub fn unpremultiply(self: *HWB, a: f32) void {
     }
 
 pub fn intoCssColor(self: HWB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(HWB, .HWB)((&self), allocator);
+            return ImplementIntoCssColor(HWB, .HWB)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *HWB) void {
@@ -1327,7 +1348,10 @@ pub fn unpremultiply(self: *SRGBLinear, a: f32) void {
     }
 
 pub fn intoCssColor(self: SRGBLinear, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)((&self), allocator);
+            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *SRGBLinear) void {
@@ -1366,7 +1390,10 @@ pub const P3 = struct {
     alpha: f32,
 
 pub fn intoCssColor(self: P3, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(P3, .P3)((&self), allocator);
+            return ImplementIntoCssColor(P3, .P3)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1394,7 +1421,10 @@ pub const A98 = struct {
     alpha: f32,
 
 pub fn intoCssColor(self: A98, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(A98, .A98)((&self), allocator);
+            return ImplementIntoCssColor(A98, .A98)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1422,7 +1452,10 @@ pub const ProPhoto = struct {
     alpha: f32,
 
 pub fn intoCssColor(self: ProPhoto, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(ProPhoto, .ProPhoto)((&self), allocator);
+            return ImplementIntoCssColor(ProPhoto, .ProPhoto)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1450,7 +1483,10 @@ pub const Rec2020 = struct {
     alpha: f32,
 
 pub fn intoCssColor(self: Rec2020, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(Rec2020, .Rec2020)((&self), allocator);
+            return ImplementIntoCssColor(Rec2020, .Rec2020)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1478,7 +1514,10 @@ pub const XYZd50 = struct {
     alpha: f32,
 
 pub fn intoCssColor(self: XYZd50, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(XYZd50, .XYZd50)((&self), allocator);
+            return ImplementIntoCssColor(XYZd50, .XYZd50)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1520,7 +1559,10 @@ pub fn unpremultiply(self: *XYZd65, a: f32) void {
     }
 
 pub fn intoCssColor(self: XYZd65, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(XYZd65, .XYZd65)((&self), allocator);
+            return ImplementIntoCssColor(XYZd65, .XYZd65)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *XYZd65) void {
@@ -1575,7 +1617,10 @@ pub fn unpremultiply(self: *LCH, a: f32) void {
     }
 
 pub fn intoCssColor(self: LCH, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(LCH, .LCH)((&self), allocator);
+            return ImplementIntoCssColor(LCH, .LCH)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1618,7 +1663,10 @@ pub fn unpremultiply(self: *OKLAB, a: f32) void {
     }
 
 pub fn intoCssColor(self: OKLAB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(OKLAB, .OKLAB)((&self), allocator);
+            return ImplementIntoCssColor(OKLAB, .OKLAB)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
 
 pub fn adjustHue(self: *OKLAB, _: *@This(), _: HueInterpolationMethod) void {
@@ -1669,7 +1717,10 @@ pub fn unpremultiply(self: *OKLCH, a: f32) void {
     }
 
 pub fn intoCssColor(self: OKLCH, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(OKLCH, .OKLCH)((&self), allocator);
+            return ImplementIntoCssColor(OKLCH, .OKLCH)((blk: {
+            break :blk (&self);
+
+}), allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -2996,6 +3047,10 @@ pub fn mapGamut(comptime T: type, color: T) T {
         _ = &min;
         var max = current.c;
         _ = &max;
+        const clipped_initial = color.clip();
+        if ((deltaEok(T, clipped_initial, current) < JND)) {
+            return clipped_initial;
+        }
         while (((max - min) > EPSILON)) {
             const chroma = ((min + max) / 2.0);
             current.c = chroma;

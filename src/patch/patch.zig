@@ -110,6 +110,24 @@ _ = self.file_mode_change.deinit(allocator);
     }
 };
 
+pub const ApplyError = union(enum) {
+    sys: bun.sys.Error,
+    hunk_does_not_apply: HunkApplyError,
+    pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
+    pub fn name(self: @This()) []const u8 { return @tagName(self); }
+
+pub fn format(self: ApplyError, writer: *std.Io.Writer) !void {
+            switch (self) {
+.sys => |e| {
+return e.format(writer);
+},
+.hunk_does_not_apply => |h| {
+return writer.print("hunk #{d} does not apply to {s} (expected at line {d})", .{ h.hunk_number, h.path, h.expected_line });
+},
+}
+    }
+};
+
 pub const PatchMutationPartType = enum(u2) {
     context = 0,
     insertion,
@@ -292,6 +310,12 @@ return .{ .err = e.withFd(fd) };
     }
 };
 
+pub const HunkApplyError = struct {
+    hunk_number: usize,
+    path: []const u8,
+    expected_line: u32,
+};
+
 pub const PatchFile = struct {
     parts: List(PatchFilePart) = .{},
 
@@ -303,7 +327,7 @@ pub fn deinit(self: *PatchFile, allocator: Allocator) void {
             _ = self.parts.deinit(allocator);
     }
 
-pub fn apply(self: PatchFile, allocator: Allocator, patch_dir: bun.FD) ?bun.sys.Error {
+pub fn apply(self: PatchFile, allocator: Allocator, patch_dir: bun.FD) ?ApplyError {
             var state: ApplyState = .{};
             _ = &state;
             var sfb = std.heap.stackFallback(1024, allocator);
@@ -327,12 +351,12 @@ pub fn apply(self: PatchFile, allocator: Allocator, patch_dir: bun.FD) ?bun.sys.
 const pathz = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_deletion.path));
                 if (bun.sys.unlinkat(patch_dir, pathz).asErr()) |e| {
                     _ = &e;
-                    return e.withoutPath();
+                    return .{ .sys = e.withoutPath() };
                 }
 },
 .file_rename => {
 if (((!isSafePatchPath(part.file_rename.from_path)) or (!isSafePatchPath(part.file_rename.to_path)))) {
-                    return bun.sys.Error.fromCode(.INVAL, .rename);
+                    return .{ .sys = bun.sys.Error.fromCode(.INVAL, .rename) };
                 }
                 const from_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.from_path));
                 const to_path = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_rename.to_path));
@@ -341,23 +365,23 @@ if (((!isSafePatchPath(part.file_rename.from_path)) or (!isSafePatchPath(part.fi
                     const abs_patch_dir = (switch (state.patchDirAbsPath(patch_dir)) {
 .result => |p| p,
 .err => |e| {
-return e.withoutPath();
+return .{ .sys = e.withoutPath() };
 },
 });
                     if ((((abs_patch_dir.len + 1) + todir.len) >= (bun.MAX_PATH_BYTES - 2))) {
-                        return bun.sys.Error.fromCode(.NAMETOOLONG, .mkdir);
+                        return .{ .sys = bun.sys.Error.fromCode(.NAMETOOLONG, .mkdir) };
                     }
                     const path_to_make = bun.path.joinZ((&.{ abs_patch_dir, todir }), .auto);
                     var nodefs = bun.api.node.fs.NodeFS{  };
                     _ = &nodefs;
                     if (nodefs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(path_to_make) }, .recursive = true, .mode = 493 }).asErr()) |e| {
                         _ = &e;
-                        return e.withoutPath();
+                        return .{ .sys = e.withoutPath() };
                     }
                 }
                 if (bun.sys.renameat(patch_dir, from_path, patch_dir, to_path).asErr()) |e| {
                     _ = &e;
-                    return e.withoutPath();
+                    return .{ .sys = e.withoutPath() };
                 }
 },
 .file_creation => {
@@ -370,19 +394,19 @@ const filepath = bun.PathString.init(bun.handleOom(arena_alloc.allocator().dupeZ
                     const abs_patch_dir = (switch (state.patchDirAbsPath(patch_dir)) {
 .result => |p| p,
 .err => |e| {
-return e.withoutPath();
+return .{ .sys = e.withoutPath() };
 },
 });
                     const path_to_make = bun.path.joinZ((&.{ abs_patch_dir, filedir }), .auto);
                     if (nodefs.mkdirRecursive(.{ .path = .{ .string = bun.PathString.init(path_to_make) }, .recursive = true, .mode = 493 }).asErr()) |e| {
                         _ = &e;
-                        return e.withoutPath();
+                        return .{ .sys = e.withoutPath() };
                     }
                 }
                 const newfile_fd = (switch (bun.sys.openat(patch_dir, filepath.sliceAssumeZ(), ((bun.O.CREAT | bun.O.WRONLY) | bun.O.TRUNC), mode.toBunMode())) {
 .result => |fd| fd,
 .err => |e| {
-return e.withoutPath();
+return .{ .sys = e.withoutPath() };
 },
 });
                 var newfile_fd_guard = CloseGuard(bun.FD){ .val = newfile_fd };
@@ -445,37 +469,37 @@ return e.withoutPath();
 written = (written + bytes);
 },
 .err => |e| {
-return e.withoutPath();
+return .{ .sys = e.withoutPath() };
 },
 }
                 }
 },
 .file_patch => {
 if ((!isSafePatchPath(part.file_patch.path))) {
-                    return bun.sys.Error.fromCode(.INVAL, .open);
+                    return .{ .sys = bun.sys.Error.fromCode(.INVAL, .open) };
                 }
-                if (PatchFile.applyPatch(part.file_patch, (&arena_alloc), patch_dir, (&state)).asErr()) |e| {
+                if (PatchFile.applyPatch(part.file_patch, (&arena_alloc), patch_dir, (&state))) |e| {
                     _ = &e;
-                    return e.withoutPath();
+                    return e;
                 }
 },
 .file_mode_change => {
 if ((!isSafePatchPath(part.file_mode_change.path))) {
-                    return bun.sys.Error.fromCode(.INVAL, .fchmodat);
+                    return .{ .sys = bun.sys.Error.fromCode(.INVAL, .fchmodat) };
                 }
                 const newmode = part.file_mode_change.new_mode;
                 const filepath = bun.handleOom(arena_alloc.allocator().dupeZ(u8, part.file_mode_change.path));
                 if (comptime bun.Environment.isPosix) {
                     if (bun.sys.fchmodat(patch_dir, filepath, newmode.toBunMode(), 0).asErr()) |e| {
                         _ = &e;
-                        return e.withoutPath();
+                        return .{ .sys = e.withoutPath() };
                     }
                 }
                 if (comptime bun.Environment.isWindows) {
                     const absfilepath = (switch (state.patchDirAbsPath(patch_dir)) {
 .result => |p| p,
 .err => |e| {
-return e.withoutPath();
+return .{ .sys = e.withoutPath() };
 },
 });
                     var buf: bun.PathBuffer = undefined;
@@ -483,7 +507,7 @@ return e.withoutPath();
                     const joined_absfilepath = bun.path.joinZBuf((&buf), (&.{ absfilepath, filepath }), .auto);
                     const fd = (switch (bun.sys.open(joined_absfilepath, bun.O.RDWR, 0)) {
 .err => |e| {
-return e.withoutPath();
+return .{ .sys = e.withoutPath() };
 },
 .result => |f| f,
 });
@@ -493,7 +517,7 @@ return e.withoutPath();
                     defer if (!__fd_guard_moved) { __fd_guard_moved = true; const __T = @TypeOf(fd_guard); if (@typeInfo(__T) == .optional) { if (fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = fd_guard; _drop_val.__cp_deinit(); } };
                     if (bun.sys.fchmod(fd, newmode.toBunMode()).asErr()) |e| {
                         _ = &e;
-                        return e.withoutPath();
+                        return .{ .sys = e.withoutPath() };
                     }
                 }
 },
@@ -559,26 +583,27 @@ old_side_ended = true;
             return true;
     }
 
-pub fn applyPatch(patch: *const FilePatch, arena_alloc: *bun.ArenaAllocator, patch_dir: bun.FD, state: *ApplyState) bun.sys.Maybe(void) {
+pub fn applyPatch(patch: *const FilePatch, arena_alloc: *bun.ArenaAllocator, patch_dir: bun.FD, state: *ApplyState) ?ApplyError {
             const file_path: [:0]const u8 = bun.handleOom(arena_alloc.allocator().dupeZ(u8, patch.path));
             const stat = (switch ((if (bun.Environment.isPosix) bun.sys.fstatat(patch_dir, file_path) else bun.sys.stat((switch (state.patchDirAbsPath(patch_dir)) {
 .result => |p| bun.path.joinZ((&.{ p, file_path }), .auto),
 .err => |e| {
-return .{ .err = e };
+return .{ .sys = e };
 },
 })))) {
 .err => |e| {
-return .{ .err = e.withPath(file_path) };
+return .{ .sys = e.withPath(file_path) };
 },
 .result => |s| s,
 });
             const use_arena: bool = (stat.size <= PAGE_SIZE);
             const file_alloc = (if (use_arena) arena_alloc.allocator() else bun.default_allocator);
-            const filebuf = (blk_catch_0: { break :blk_catch_0 ((patch_dir.stdDir().readFileAlloc(file_alloc, file_path, (((1024 * 1024) * 1024) * 4))) catch |__ce_0| { _ = &__ce_0; return .{ .err = bun.sys.Error.fromCode(.INVAL, .read).withPath(file_path) }; }); });
+            const filebuf = (blk_catch_0: { break :blk_catch_0 ((patch_dir.stdDir().readFileAlloc(file_alloc, file_path, (((1024 * 1024) * 1024) * 4))) catch |__ce_0| { _ = &__ce_0; return .{ .sys = bun.sys.Error.fromCode(.INVAL, .read).withPath(file_path) }; }); });
             var filebuf_guard = FreeGuard(u8){ .alloc = file_alloc, .slice = filebuf };
             _ = &filebuf_guard;
             var __filebuf_guard_moved = false; _ = &__filebuf_guard_moved;
             defer if (!__filebuf_guard_moved) { __filebuf_guard_moved = true; const __T = @TypeOf(filebuf_guard); if (@typeInfo(__T) == .optional) { if (filebuf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { filebuf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = filebuf_guard; _drop_val.__cp_deinit(); } };
+            const is_crlf = (std.mem.indexOf(u8, filebuf, "\r\n") != null);
             var file_line_count: usize = 0;
             _ = &file_line_count;
             const lines_count = brk: {
@@ -624,12 +649,18 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                 var i: usize = 0;
                 _ = &i;
                 while (iter.next()) |line| : (i = (i + 1)) {
-                    _ = bun.handleOom(lines.append(bun.default_allocator, line));
+                    const clean_line = (if (((is_crlf and (line.len > 0)) and (line[@as(usize, @intCast((line.len - 1)))] == 13))) line[0..(line.len - 1)] else line);
+                    _ = bun.handleOom(lines.append(bun.default_allocator, clean_line));
                 }
                 _ = bun.debugAssert((i == file_line_count));
             }
+            var hunk_num: usize = 1;
+            _ = &hunk_num;
             for (patch.hunks.items) |hunk| {
                 _ = &hunk;
+                defer {
+                hunk_num = (hunk_num + 1);
+                }
                 const hint: usize = (hunk.header.patched.start -| 1);
                 const has_old_lines = brk: {
                 for (hunk.parts.items) |p| {
@@ -644,7 +675,7 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                 _ = &line_cursor;
                 if ((!has_old_lines)) {
                     if ((line_cursor > lines.items.len)) {
-                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                        return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
                     }
                 } else {
                     var found: ?usize = null;
@@ -653,7 +684,7 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                         found = hint;
                     } else {
                         const max_delta = @max(hint, lines.items.len);
-                        var delta: usize = 1;
+                        var delta: usize = (if ((hint > lines.items.len)) (hint - lines.items.len) else 1);
                         _ = &delta;
                         while ((delta <= max_delta)) : (delta = (delta + 1)) {
                             if ((hint >= delta)) {
@@ -670,7 +701,7 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                         }
                     }
                     if ((found == null)) {
-                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                        return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
                     }
                     line_cursor = found.?;
                 }
@@ -681,7 +712,7 @@ count = (count -| @intFromBool(part.no_newline_at_end_of_file));
                     switch (part.type) {
 .context => {
 if (((line_cursor + part.lines.items.len) > lines.items.len)) {
-                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                        return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
                     }
                     line_cursor = (line_cursor + part.lines.items.len);
                     if (part.no_newline_at_end_of_file) {
@@ -697,7 +728,7 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
 },
 .insertion => {
 if ((line_cursor > lines.items.len)) {
-                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                        return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
                     }
                     const lines_to_insert = bun.handleOom(lines.addManyAt(bun.default_allocator, line_cursor, part.lines.items.len));
                     _ = @memcpy(lines_to_insert, part.lines.items);
@@ -714,7 +745,7 @@ if ((line_cursor > lines.items.len)) {
 },
 .deletion => {
 if (((line_cursor + part.lines.items.len) > lines.items.len)) {
-                        return .{ .err = bun.sys.Error.fromCode(.INVAL, .fstatat).withPath(file_path) };
+                        return .{ .hunk_does_not_apply = .{ .hunk_number = hunk_num, .path = patch.path, .expected_line = hunk.header.original.start } };
                     }
                     const empty_lines: []const []const u8 = &.{};
                     _ = bun.handleOom(lines.replaceRange(bun.default_allocator, line_cursor, part.lines.items.len, empty_lines));
@@ -729,7 +760,7 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
             }
             const file_fd = (switch (bun.sys.openat(patch_dir, file_path, ((bun.O.CREAT | bun.O.WRONLY) | bun.O.TRUNC), (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(stat.mode)) == .int or @typeInfo(@TypeOf(stat.mode)) == .comptime_int)) @as(bun.Mode, @enumFromInt(stat.mode)) else @as(bun.Mode, stat.mode)))) {
 .err => |e| {
-return .{ .err = e.withPath(file_path) };
+return .{ .sys = e.withPath(file_path) };
 },
 .result => |fd| fd,
 });
@@ -737,7 +768,8 @@ return .{ .err = e.withPath(file_path) };
             _ = &file_fd_guard;
             var __file_fd_guard_moved = false; _ = &__file_fd_guard_moved;
             defer if (!__file_fd_guard_moved) { __file_fd_guard_moved = true; const __T = @TypeOf(file_fd_guard); if (@typeInfo(__T) == .optional) { if (file_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_fd_guard; _drop_val.__cp_deinit(); } };
-            const contents = bun.handleOom(std.mem.join(bun.default_allocator, "\n", lines.items));
+            const join_sep = (if (is_crlf) "\r\n" else "\n");
+            const contents = bun.handleOom(std.mem.join(bun.default_allocator, join_sep, lines.items));
             var contents_guard = FreeGuard(u8){ .alloc = bun.default_allocator, .slice = contents };
             _ = &contents_guard;
             var __contents_guard_moved = false; _ = &__contents_guard_moved;
@@ -748,11 +780,11 @@ return .{ .err = e.withPath(file_path) };
                 written = (written + (switch (bun.sys.write(file_fd, contents[written..])) {
 .result => |w| w,
 .err => |e| {
-return .{ .err = e.withPath(file_path) };
+return .{ .sys = e.withPath(file_path) };
 },
 }));
             }
-            return .success;
+            return null;
     }
 };
 
@@ -1354,8 +1386,8 @@ pub fn parseDiffLinePaths(line: []const u8) ?[2][]const u8 {
             if ((rest.len == 0)) {
                 return null;
             }
-            if (((rest.len >= 3) and (((rest.len - 2) % 2) == 0))) {
-                const half = ((rest.len - 2) / 2);
+            if (((rest.len >= 3) and (((rest.len - 3) % 2) == 0))) {
+                const half = ((rest.len - 3) / 2);
                 if ((std.mem.eql(u8, rest[half..(half + 3)], " b/") and std.mem.eql(u8, rest[0..half], rest[(half + 3)..]))) {
                     return .{ rest[0..half], rest[(half + 3)..] };
                 }

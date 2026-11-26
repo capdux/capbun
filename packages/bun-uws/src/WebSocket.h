@@ -106,7 +106,7 @@ public:
         WebSocketContextData<SSL, USERDATA> *webSocketContextData = getContextData();
 
         /* Skip sending and report success if we are over the limit of maxBackpressure */
-        if (webSocketContextData->maxBackpressure && webSocketContextData->maxBackpressure < getBufferedAmount()) {
+        if (opCode != OpCode::CLOSE && webSocketContextData->maxBackpressure && webSocketContextData->maxBackpressure < getBufferedAmount()) {
             /* Also defer a close if we should */
             if (webSocketContextData->closeOnBackpressureLimit) {
                 us_socket_shutdown_read((us_socket_t *) this);
@@ -215,11 +215,11 @@ public:
         size_t length = std::min<size_t>(MAX_CLOSE_PAYLOAD, message.length());
         char closePayload[MAX_CLOSE_PAYLOAD + 2];
         size_t closePayloadLength = protocol::formatClosePayload(closePayload, (uint16_t) code, message.data(), length);
-        bool ok = send(std::string_view(closePayload, closePayloadLength), OpCode::CLOSE);
+        SendStatus status = send(std::string_view(closePayload, closePayloadLength), OpCode::CLOSE);
 
         /* FIN if we are ok and not corked */
         if (!this->isCorked()) {
-            if (ok) {
+            if (status == SUCCESS && this->getBufferedAmount() == 0) {
                 /* If we are not corked, and we just sent off everything, we need to FIN right here.
                  * In all other cases, we need to fin either if uncork was successful, or when drainage is complete. */
                 this->shutdown();
@@ -259,6 +259,11 @@ public:
             auto [written, failed] = Super::uncork();
             (void)written;
             (void)failed;
+
+            WebSocketData *webSocketData = (WebSocketData *) Super::getAsyncSocketData();
+            if (webSocketData->isShuttingDown && Super::getBufferedAmount() == 0 && !us_socket_is_closed((us_socket_t *) this)) {
+                Super::shutdown();
+            }
         } else {
             /* We are already corked, or can't cork so let's just call the handler */
             handler();

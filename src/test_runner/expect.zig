@@ -502,6 +502,26 @@ inline else => |colors| (comptime Output.prettyFmt(matcher_params_fmt, colors)),
             return Expect.processPromise(self.custom_label, self.flags, globalThis, value, matcher_name, matcher_params, false);
     }
 
+pub fn noopPromiseCallback(_: *JSGlobalObject, _: *CallFrame) bun.JSError!JSValue {
+            return .js_undefined;
+    }
+
+pub fn callThenIfPending(globalThis: *JSGlobalObject, promise_value: JSValue, promise: jsc.AnyPromise) bun.JSError!void {
+            if ((promise.status() != .pending)) {
+                return;
+            }
+            if ((!promise_value.isObject())) {
+                return;
+            }
+            if (try promise_value.get(globalThis, "then")) |then_fn| {
+                _ = &then_fn;
+                if (then_fn.isCallable()) {
+                    const noop = jsc.JSFunction.create(globalThis, "", jsc.toJSHostFn(noopPromiseCallback), 0, .{});
+                    _ = try then_fn.call(globalThis, promise_value, (&.{ noop, noop }));
+                }
+            }
+    }
+
 pub fn processPromise(custom_label: bun.String, flags: Expect.Flags, globalThis: *JSGlobalObject, value: JSValue, matcher_name: anytype, matcher_params: anytype, comptime silent: bool) bun.JSError!JSValue {
             switch (flags.promise) {
 inline .resolves, .rejects => |resolution| {
@@ -511,6 +531,7 @@ if (value.asAnyPromise()) |p| {
                 _ = &promise;
                 const vm = globalThis.vm();
                 _ = promise.setHandled(vm);
+                _ = try callThenIfPending(globalThis, value, promise);
                 _ = globalThis.bunVM().waitForPromise(promise);
                 const newValue = promise.result(vm);
                 switch (promise.status()) {
@@ -920,6 +941,8 @@ pub fn getValueAsToThrow(self: *Expect, globalThis: *JSGlobalObject, value: JSVa
                 _ = &p;
                 var promise = p;
                 _ = &promise;
+                _ = promise.setHandled(globalThis.vm());
+                _ = try Expect.callThenIfPending(globalThis, return_value, promise);
                 _ = vm.waitForPromise(promise);
                 _ = scope.apply(vm);
                 switch (promise.unwrap(globalThis.vm(), .mark_handled)) {
@@ -1351,6 +1374,7 @@ pub fn executeCustomMatcher(globalThis: *JSGlobalObject, matcher_name: bun.Strin
                 _ = &promise;
                 const vm = globalThis.vm();
                 _ = promise.setHandled(vm);
+                _ = try callThenIfPending(globalThis, result, promise);
                 _ = globalThis.bunVM().waitForPromise(promise);
                 result = promise.result(vm);
                 _ = result.ensureStillAlive();
