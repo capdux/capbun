@@ -180,6 +180,7 @@ export function inspectWebStream(recv, name, fields, depth, options, inspectFn) 
 }
 
 export function inspectReadableStream(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const state = $getByIdDirectPrivate(this, "state");
   if (state === undefined) return this;
   const stateStr = state === $streamReadable ? "readable" : state === $streamClosed ? "closed" : "errored";
@@ -200,6 +201,7 @@ export function inspectReadableStream(this: any, depth, options, inspectFn) {
 }
 
 export function inspectWritableStream(this: any, depth, options, inspectFn, internalStream) {
+  if (!$isObject(this)) return undefined;
   const target = internalStream ?? this;
   const state = $getByIdDirectPrivate(target, "state");
   if (state === undefined) return this;
@@ -217,6 +219,7 @@ export function inspectWritableStream(this: any, depth, options, inspectFn, inte
 }
 
 export function inspectTransformStream(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const readable = $getByIdDirectPrivate(this, "readable");
   if (readable === undefined) return this;
   return $inspectWebStream(
@@ -234,6 +237,7 @@ export function inspectTransformStream(this: any, depth, options, inspectFn) {
 }
 
 export function inspectReadableStreamDefaultReader(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const closedPromiseCapability = $getByIdDirectPrivate(this, "closedPromiseCapability");
   if (!closedPromiseCapability) return this;
   const readRequests = $getByIdDirectPrivate(this, "readRequests");
@@ -252,6 +256,7 @@ export function inspectReadableStreamDefaultReader(this: any, depth, options, in
 }
 
 export function inspectReadableStreamBYOBReader(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const closedPromiseCapability = $getByIdDirectPrivate(this, "closedPromiseCapability");
   if (!closedPromiseCapability) return this;
   const readIntoRequests = $getByIdDirectPrivate(this, "readIntoRequests");
@@ -270,6 +275,7 @@ export function inspectReadableStreamBYOBReader(this: any, depth, options, inspe
 }
 
 export function inspectReadableStreamBYOBRequest(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const controller = $getByIdDirectPrivate(this, "associatedReadableByteStreamController");
   if (!controller) return this;
   return $inspectWebStream(
@@ -285,7 +291,45 @@ export function inspectReadableStreamBYOBRequest(this: any, depth, options, insp
   );
 }
 
+export function inspectReadableStreamDefaultController(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
+  const stream = $getByIdDirectPrivate(this, "controlledReadableStream");
+  if (stream === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "ReadableStreamDefaultController",
+    {},
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function inspectReadableByteStreamController(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
+  const stream = $getByIdDirectPrivate(this, "controlledReadableStream");
+  if (stream === undefined) return this;
+  return $inspectWebStream(
+    this,
+    "ReadableByteStreamController",
+    {},
+    depth,
+    options,
+    inspectFn,
+  );
+}
+
+export function wrapInspectableWritableStream(stream) {
+  if (!stream || stream[Symbol.for("nodejs.util.inspect.custom")]) return stream;
+  return {
+    [Symbol.for("nodejs.util.inspect.custom")](depth, options, inspectFn) {
+      return $inspectWritableStream.$call(stream, depth, options, inspectFn, stream);
+    },
+  };
+}
+
 export function inspectWritableStreamDefaultWriter(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const closedPromise = $getByIdDirectPrivate(this, "closedPromise");
   if (!closedPromise) return this;
   const stream = $getByIdDirectPrivate(this, "stream");
@@ -293,7 +337,7 @@ export function inspectWritableStreamDefaultWriter(this: any, depth, options, in
     this,
     "WritableStreamDefaultWriter",
     {
-      stream,
+      stream: $wrapInspectableWritableStream(stream),
       close: closedPromise.promise,
       ready: $getByIdDirectPrivate(this, "readyPromise")?.promise,
       desiredSize: stream ? this.desiredSize : null,
@@ -305,12 +349,13 @@ export function inspectWritableStreamDefaultWriter(this: any, depth, options, in
 }
 
 export function inspectWritableStreamDefaultController(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const stream = $getByIdDirectPrivate(this, "stream");
   if (stream === undefined) return this;
   return $inspectWebStream(
     this,
     "WritableStreamDefaultController",
-    { stream },
+    { stream: $wrapInspectableWritableStream(stream) },
     depth,
     options,
     inspectFn,
@@ -318,6 +363,7 @@ export function inspectWritableStreamDefaultController(this: any, depth, options
 }
 
 export function inspectTransformStreamDefaultController(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const stream = $getByIdDirectPrivate(this, "stream");
   if (stream === undefined) return this;
   return $inspectWebStream(
@@ -331,6 +377,7 @@ export function inspectTransformStreamDefaultController(this: any, depth, option
 }
 
 export function inspectByteLengthQueuingStrategy(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const highWaterMark = $getByIdDirectPrivate(this, "highWaterMark");
   if (highWaterMark === undefined) return this;
   return $inspectWebStream(
@@ -344,6 +391,7 @@ export function inspectByteLengthQueuingStrategy(this: any, depth, options, insp
 }
 
 export function inspectCountQueuingStrategy(this: any, depth, options, inspectFn) {
+  if (!$isObject(this)) return undefined;
   const highWaterMark = $getByIdDirectPrivate(this, "highWaterMark");
   if (highWaterMark === undefined) return this;
   return $inspectWebStream(
@@ -376,14 +424,13 @@ export function inspectTextEncoderStream(this: any, depth, options, inspectFn) {
 export function inspectTextDecoderStream(this: any, depth, options, inspectFn) {
   const transform = $isObject(this) ? $getByIdDirectPrivate(this, "textDecoderStreamTransform") : undefined;
   if (!transform) throw $ERR_INVALID_THIS("TextDecoderStream");
-  const decoder = $getByIdDirectPrivate(this, "textDecoderStreamDecoder");
   return $inspectWebStream(
     this,
     "TextDecoderStream",
     {
-      encoding: decoder.encoding,
-      fatal: decoder.fatal,
-      ignoreBOM: decoder.ignoreBOM,
+      encoding: $getByIdDirectPrivate(this, "encoding"),
+      fatal: $getByIdDirectPrivate(this, "fatal"),
+      ignoreBOM: $getByIdDirectPrivate(this, "ignoreBOM"),
       readable: $getByIdDirectPrivate(transform, "readable"),
       writable: $getByIdDirectPrivate(transform, "writable"),
     },

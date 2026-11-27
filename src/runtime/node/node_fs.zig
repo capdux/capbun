@@ -2712,7 +2712,7 @@ pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!
                 _ = &b;
                 buffer = b;
             } else {
-                return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value);
+                return ctx.throwInvalidArgumentTypeValue("buffer", "Buffer, TypedArray, or DataView", buffer_value);
             }
             const offset_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
             const offset: u64 = (if (offset_value.isUndefinedOrNull()) 0 else @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER)));

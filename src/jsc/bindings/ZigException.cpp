@@ -160,9 +160,11 @@ static void populateStackFramePosition(const JSC::StackFrame& stackFrame, BunStr
     if (flags == PopulateStackTraceFlags::OnlyPosition)
         return;
 
-    if (source_lines_count > 1 && source_lines != nullptr && sourceString.is8Bit()) {
+    if (source_lines_count > 1 && source_lines != nullptr && sourceString.is8Bit() && !sourceString.isEmpty() && location.byte_position >= 0) {
         // Search for the beginning of the line
-        unsigned int lineStart = location.byte_position;
+        unsigned int maxIndex = sourceString.length() - 1;
+        unsigned int rawPos = static_cast<unsigned int>(location.byte_position);
+        unsigned int lineStart = rawPos > maxIndex ? maxIndex : rawPos;
         while (lineStart > 0 && sourceString[lineStart] != '\n') {
             lineStart--;
         }

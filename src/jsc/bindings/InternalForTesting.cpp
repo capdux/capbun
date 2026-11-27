@@ -47,6 +47,15 @@ JSC_DEFINE_HOST_FUNCTION(jsFunction_lsanDoLeakCheck, (JSC::JSGlobalObject * glob
     return encodedJSUndefined();
 }
 
+JSC_DEFINE_HOST_FUNCTION(jsFunction_isASANEnabled, (JSC::JSGlobalObject*, JSC::CallFrame*))
+{
+#if ASAN_ENABLED
+    return JSC::JSValue::encode(JSC::jsBoolean(true));
+#else
+    return JSC::JSValue::encode(JSC::jsBoolean(false));
+#endif
+}
+
 // Returns the net refcount change on the *original* StringImpl after a
 // BunString owning one ref to it is passed through BunString__toThreadSafe
 // and then released. A correct implementation must return 0; a positive

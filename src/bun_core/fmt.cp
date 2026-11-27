@@ -1178,21 +1178,24 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
 
                         prev_keyword = null;
                         let i: usize = 1;
-                        if (txt.len > 1 && num == '0' && txt[1] == 'x') {
+                        if (txt.len > 1 && num == '0' && (txt[1] == 'x' || txt[1] == 'X')) {
                             i += 1;
                             while (i < txt.len && switch (txt[i]) {
-                                '0'...'9' | 'a'...'f' | 'A'...'F' => true,
+                                '0'..='9' | 'a'..='f' | 'A'..='F' | '_' => true,
                                 else => false,
                             }) {
                                 i += 1;
                             }
                         } else {
                             while (i < txt.len && switch (txt[i]) {
-                                '0'...'9' | '.' | 'e' | 'E' | 'x' | 'X' | 'b' | 'B' | 'o' | 'O' => true,
+                                '0'..='9' | '.' | 'e' | 'E' | 'x' | 'X' | 'b' | 'B' | 'o' | 'O' | '_' => true,
                                 else => false,
                             }) {
                                 i += 1;
                             }
+                        }
+                        if (i < txt.len && txt[i] == 'n') {
+                            i += 1;
                         }
 
                         writer.print(Output.prettyFmt("<r><yellow>{s}<r>", true), [txt[0..i]])?;

@@ -910,24 +910,26 @@ pub fn parse(arena_allocator: std.mem.Allocator, script: []const u8, jsobjs: []J
                 return shell.ParseError.Lex;
             }
             if (comptime bun.Environment.isDebug) {
-                const debug = bun.Output.scoped(.ShellTokens, .hidden);
-                var test_tokens = (blk_catch_0: { break :blk_catch_0 ((std.array_list.Managed(shell.Test.TestToken).initCapacity(arena_allocator, lex_result.tokens.len)) catch |__ce_0| { _ = &__ce_0; @panic("OOPS"); }); });
-                _ = &test_tokens;
-                var _guard_test_tokens = DeinitGuard(@TypeOf(test_tokens)){ .ptr = (&test_tokens) };
-                _ = &_guard_test_tokens;
-                var ___guard_test_tokens_moved = false; _ = &___guard_test_tokens_moved;
-                defer if (!___guard_test_tokens_moved) { ___guard_test_tokens_moved = true; const __T = @TypeOf(_guard_test_tokens); if (@typeInfo(__T) == .optional) { if (_guard_test_tokens) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_test_tokens.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_test_tokens; _drop_val.__cp_deinit(); } };
-                for (cp_iter_slice(lex_result.tokens)) |tok| {
-                    _ = &tok;
-                    const test_tok = shell.Test.TestToken.from_real(tok, lex_result.strpool);
-                    _ = (blk_catch_1: { break :blk_catch_1 ((test_tokens.append(test_tok)) catch |__ce_1| { _ = &__ce_1; @panic("OOPS"); }); });
+                if (bun.Output.isScopedVisible(.ShellTokens, .hidden)) {
+                    const debug = bun.Output.scoped(.ShellTokens, .hidden);
+                    var test_tokens = (blk_catch_0: { break :blk_catch_0 ((std.array_list.Managed(shell.Test.TestToken).initCapacity(arena_allocator, lex_result.tokens.len)) catch |__ce_0| { _ = &__ce_0; @panic("OOPS"); }); });
+                    _ = &test_tokens;
+                    var _guard_test_tokens = DeinitGuard(@TypeOf(test_tokens)){ .ptr = (&test_tokens) };
+                    _ = &_guard_test_tokens;
+                    var ___guard_test_tokens_moved = false; _ = &___guard_test_tokens_moved;
+                    defer if (!___guard_test_tokens_moved) { ___guard_test_tokens_moved = true; const __T = @TypeOf(_guard_test_tokens); if (@typeInfo(__T) == .optional) { if (_guard_test_tokens) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_test_tokens.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_test_tokens; _drop_val.__cp_deinit(); } };
+                    for (cp_iter_slice(lex_result.tokens)) |tok| {
+                        _ = &tok;
+                        const test_tok = shell.Test.TestToken.from_real(tok, lex_result.strpool);
+                        _ = (blk_catch_1: { break :blk_catch_1 ((test_tokens.append(test_tok)) catch |__ce_1| { _ = &__ce_1; @panic("OOPS"); }); });
+                    }
+                    const str = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", .{ std.json.fmt(test_tokens.items[0..], .{}) }));
+                    var _guard_str = FreeGuard(@TypeOf(str)){ .alloc = bun.default_allocator, .slice = str };
+                    _ = &_guard_str;
+                    var ___guard_str_moved = false; _ = &___guard_str_moved;
+                    defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
+                    _ = debug("Tokens: {s}", .{ str });
                 }
-                const str = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", .{ std.json.fmt(test_tokens.items[0..], .{}) }));
-                var _guard_str = FreeGuard(@TypeOf(str)){ .alloc = bun.default_allocator, .slice = str };
-                _ = &_guard_str;
-                var ___guard_str_moved = false; _ = &___guard_str_moved;
-                defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
-                _ = debug("Tokens: {s}", .{ str });
             }
             out_parser.* = try bun.shell.Parser.new(arena_allocator, lex_result, jsobjs);
             const script_ast = try out_parser.*.?.parse();
@@ -1442,7 +1444,7 @@ pub fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(u32)) voi
             _ = log("Interpreter decr pending activity {d}", .{ has_pending_activity.load(.seq_cst) });
     }
 
-pub fn rootIO(self: *const Interpreter) *const IO {
+pub fn rootIO(self: *Interpreter) *const IO {
             return (&self.root_io);
     }
 

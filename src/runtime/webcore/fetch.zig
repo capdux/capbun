@@ -696,7 +696,25 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if (try obj.get(globalThis, "unix")) |socket_path| {
                 _ = &socket_path;
                 if ((socket_path.isString() and (try socket_path.getLength(globalThis) > 0))) {
-                    unix_socket_path = try socket_path.toSliceCloneWithAllocator(globalThis, allocator);
+                    var raw_slice = try socket_path.toSliceCloneWithAllocator(globalThis, allocator);
+                    _ = &raw_slice;
+                    const raw = raw_slice.slice();
+                    if ((((raw.len > 0) and (raw[0] != 0)) and (!std.fs.path.isAbsolute(raw)))) {
+                        defer {
+                        _ = raw_slice.deinit();
+                        }
+                        var cwd_buf: bun.PathBuffer = undefined;
+                        _ = &cwd_buf;
+                        const cwd = (blk_catch_5: { break :blk_catch_5 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve unix socket path"); }); });
+                        var path_buf: bun.PathBuffer = undefined;
+                        _ = &path_buf;
+                        var parts: [1][]const u8 = .{ raw };
+                        _ = &parts;
+                        const resolved = bun.path.joinAbsStringBuf(cwd, (&path_buf), (&parts), .auto);
+                        unix_socket_path = ZigString.Slice.init(allocator, bun.handleOom(allocator.dupe(u8, resolved)));
+                    } else {
+                        unix_socket_path = raw_slice;
+                    }
                     break;
                 }
             }
@@ -769,7 +787,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if ((obj == JSValue.zero)) {
                 continue;
             }
-            var maybe_red = (blk_catch_5: { break :blk_catch_5 ((obj.getOptionalEnum(globalThis, "redirect", FetchRedirect)) catch |__ce_5| { _ = &__ce_5; return JSValue.zero; }); });
+            var maybe_red = (blk_catch_6: { break :blk_catch_6 ((obj.getOptionalEnum(globalThis, "redirect", FetchRedirect)) catch |__ce_6| { _ = &__ce_6; return JSValue.zero; }); });
             _ = &maybe_red;
             if (maybe_red) |red| {
                 _ = &red;
@@ -896,7 +914,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                                     if ((!headers_value.isUndefinedOrNull())) {
                                         if (headers_value.as(FetchHeaders)) |fetch_hdrs| {
                                             _ = &fetch_hdrs;
-                                            proxy_headers.val = (blk_catch_6: { break :blk_catch_6 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+                                            proxy_headers.val = (blk_catch_7: { break :blk_catch_7 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
                                         } else {
                                             if (try FetchHeaders.createFromJS(globalThis, headers_value)) |fetch_hdrs| {
                                                 _ = &fetch_hdrs;
@@ -904,7 +922,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                                                 _ = &_fh_guard;
                                                 var ___fh_guard_moved = false; _ = &___fh_guard_moved;
                                                 defer if (!___fh_guard_moved) { ___fh_guard_moved = true; const __T = @TypeOf(_fh_guard); if (@typeInfo(__T) == .optional) { if (_fh_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fh_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fh_guard; _drop_val.__cp_deinit(); } };
-                                                proxy_headers.val = (blk_catch_7: { break :blk_catch_7 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
+                                                proxy_headers.val = (blk_catch_8: { break :blk_catch_8 ((Headers.from(fetch_hdrs, allocator, .{})) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
                                             }
                                         }
                                     }
@@ -1141,7 +1159,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     upgraded_connection = true;
                 }
             }
-            headers = (blk_catch_8: { break :blk_catch_8 ((Headers.from(fh, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_8 bun.handleOom(e); }); });
+            headers = (blk_catch_9: { break :blk_catch_9 ((Headers.from(fh, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
         }
         if (globalThis.hasException()) {
             return JSValue.zero;
@@ -1153,7 +1171,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             _ = &path_buf2;
             var stream = std.io.fixedBufferStream((&path_buf2));
             _ = &stream;
-            var url_path_decoded: []const u8 = path_buf2[0..(blk_catch_9: { break :blk_catch_9 ((PercentEncoding.decode(@TypeOf((&stream.writer())), (&stream.writer()), (switch (url_type) {
+            var url_path_decoded: []const u8 = path_buf2[0..(blk_catch_10: { break :blk_catch_10 ((PercentEncoding.decode(@TypeOf((&stream.writer())), (&stream.writer()), (switch (url_type) {
 .file => url.path,
 .blob => url.href["blob:".len..],
 .remote => unreachable,
@@ -1167,7 +1185,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if ((url_type == URLType.blob)) {
                 if (jsc.WebCore.ObjectURLRegistry.singleton().resolveAndDupe(url_path_decoded)) |resolved| {
                     _ = &resolved;
-                    url_string.val = (blk_catch_10: { break :blk_catch_10 ((bun.String.createFormat("blob:{s}", .{ url_path_decoded })) catch |e| { _ = &e; break :blk_catch_10 bun.handleOom(e); }); });
+                    url_string.val = (blk_catch_11: { break :blk_catch_11 ((bun.String.createFormat("blob:{s}", .{ url_path_decoded })) catch |e| { _ = &e; break :blk_catch_11 bun.handleOom(e); }); });
                     break :blob resolved;
                 } else {
                     const err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to resolve blob:{s}", .{ url_path_decoded });
@@ -1180,13 +1198,13 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     if ((url_path_decoded[0] == 47)) {
                         url_path_decoded = url_path_decoded[1..];
                     }
-                    break :brk (blk_catch_11: { break :blk_catch_11 ((PosixToWinNormalizer.resolveCWDWithExternalBufZ((&path_buf), url_path_decoded)) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); });
+                    break :brk (blk_catch_12: { break :blk_catch_12 ((PosixToWinNormalizer.resolveCWDWithExternalBufZ((&path_buf), url_path_decoded)) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); });
                 }
                 break :brk url_path_decoded;
             }
             var cwd_buf: bun.PathBuffer = undefined;
             _ = &cwd_buf;
-            const cwd = (if (Environment.isWindows) (blk_catch_12: { break :blk_catch_12 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); }) else globalThis.bunVM().transpiler.fs.top_level_dir);
+            const cwd = (if (Environment.isWindows) (blk_catch_13: { break :blk_catch_13 ((bun.getcwd((&cwd_buf))) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); }) else globalThis.bunVM().transpiler.fs.top_level_dir);
             var parts: [3][]const u8 = undefined;
             _ = &parts;
             parts[cp_cast_int(usize, 0)] = globalThis.bunVM().main;
@@ -1194,7 +1212,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             parts[cp_cast_int(usize, 2)] = url_path_decoded;
             const fullpath = bun.path.joinAbsStringBuf(cwd, (&path_buf), (&parts), .auto);
             if (Environment.isWindows) {
-                break :brk (blk_catch_13: { break :blk_catch_13 ((PosixToWinNormalizer.resolveCWDWithExternalBufZ((&path_buf2), fullpath)) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); });
+                break :brk (blk_catch_14: { break :blk_catch_14 ((PosixToWinNormalizer.resolveCWDWithExternalBufZ((&path_buf2), fullpath)) catch |e| { _ = &e; return globalThis.throwError(e, "Failed to resolve file url"); }); });
             }
             break :brk fullpath;
 };
@@ -1234,7 +1252,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             }
         }
         if ((((headers == null) and body.hasBody()) and body.hasContentTypeFromUser())) {
-            headers = (blk_catch_14: { break :blk_catch_14 ((Headers.from(null, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_14 bun.handleOom(e); }); });
+            headers = (blk_catch_15: { break :blk_catch_15 ((Headers.from(null, allocator, .{ .body = body.getAnyBlob() })) catch |e| { _ = &e; break :blk_catch_15 bun.handleOom(e); }); });
         }
         var http_body = body;
         _ = &http_body;
@@ -1269,7 +1287,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             const opened_fd = (switch (opened_fd_res) {
 .@"err" => |e| {
 {
-                const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_15: { break :blk_catch_15 ((e.toJS(globalThis)) catch |__ce_15| { _ = &__ce_15; return JSValue.zero; }); }));
+                const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_16: { break :blk_catch_16 ((e.toJS(globalThis)) catch |__ce_16| { _ = &__ce_16; return JSValue.zero; }); }));
                 _ = body.detach();
                 return rejected_value;
             }
@@ -1307,7 +1325,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             break :prepare_body (switch (res) {
 .@"err" => |e| {
 {
-                const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_16: { break :blk_catch_16 ((e.toJS(globalThis)) catch |__ce_16| { _ = &__ce_16; return JSValue.zero; }); }));
+                const rejected_value = JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_17: { break :blk_catch_17 ((e.toJS(globalThis)) catch |__ce_17| { _ = &__ce_17; return JSValue.zero; }); }));
                 _ = body.detach();
                 return rejected_value;
             }
@@ -1334,7 +1352,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     if ((headers == null)) {
                         headers = Headers{ .allocator = allocator };
                     }
-                    _ = (blk_catch_17: { break :blk_catch_17 ((headers.?.append("Content-Encoding", compress_opt.encoding.headerValue())) catch |e| { _ = &e; break :blk_catch_17 bun.handleOom(e); }); });
+                    _ = (blk_catch_18: { break :blk_catch_18 ((headers.?.append("Content-Encoding", compress_opt.encoding.headerValue())) catch |e| { _ = &e; break :blk_catch_18 bun.handleOom(e); }); });
                 } else {
                     compress = null;
                 }
@@ -1381,7 +1399,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
             if ((method == .POST)) {
                 method = .PUT;
             }
-            var result = (blk_catch_18: { break :blk_catch_18 ((credentialsWithOptions.credentials.signRequest(.{ .path = url.s3Path(), .method = method }, false, null)) catch |sign_err| { _ = &sign_err; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, s3.getJSSignError(sign_err, globalThis)); }); });
+            var result = (blk_catch_19: { break :blk_catch_19 ((credentialsWithOptions.credentials.signRequest(.{ .path = url.s3Path(), .method = method }, false, null)) catch |sign_err| { _ = &sign_err; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, s3.getJSSignError(sign_err, globalThis)); }); });
             _ = &result;
             defer {
             _ = result.deinit();
@@ -1439,7 +1457,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         }
         break :brk 0;
 };
-        _ = (blk_catch_19: { break :blk_catch_19 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = http_body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .compress = compress, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
+        _ = (blk_catch_20: { break :blk_catch_20 ((FetchTasklet.queue(allocator, globalThis, (&.{ .method = method, .url = url, .headers = ((headers) orelse (Headers{ .allocator = allocator })), .body = http_body, .disable_keepalive = disable_keepalive, .disable_timeout = disable_timeout, .disable_decompression = disable_decompression, .reject_unauthorized = reject_unauthorized, .redirect_type = redirect_type, .verbose = verbose, .proxy = proxy, .proxy_headers = proxy_headers.val, .url_proxy_buffer = url_proxy_buffer, .signal = signal, .globalThis = globalThis, .ssl_config = ssl_config, .hostname = hostname, .upgraded_connection = upgraded_connection, .force_http2 = force_http2, .force_http3 = force_http3, .force_http1 = force_http1, .compress = compress, .check_server_identity = (if (check_server_identity.isEmptyOrUndefinedOrNull()) .empty else .create(check_server_identity, globalThis)), .unix_socket_path = unix_socket_path }), promise)) catch |e| { _ = &e; break :blk_catch_20 bun.handleOom(e); }); });
         if (Environment.isDebug) {
             if (body.store()) |store| {
                 _ = &store;

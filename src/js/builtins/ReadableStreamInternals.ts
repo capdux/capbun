@@ -1198,6 +1198,38 @@ export function tryUseReadableStreamBufferedFastPath(stream, method) {
   }
 }
 
+export function onCancelDirectStream(controller, reason) {
+  if (!controller) return Promise.$resolve();
+
+  var underlyingSource = controller.$underlyingSource;
+  if (typeof underlyingSource?.cancel === "function") {
+    try {
+      underlyingSource.cancel.$call(underlyingSource, reason);
+    } catch {}
+  }
+  $putByIdDirectPrivate(controller, "underlyingSource", undefined);
+
+  var sink = controller.$sink;
+  if (sink) {
+    $putByIdDirectPrivate(controller, "sink", undefined);
+    try {
+      sink.end();
+    } catch {}
+  }
+
+  controller.error = controller.flush = controller.close = controller.end = $onReadableStreamDirectControllerClosed;
+  controller.write = $onReadableStreamDirectControllerClosedWrite;
+
+  if (controller._pendingRead) {
+    var read = controller._pendingRead;
+    controller._pendingRead = undefined;
+    $putByIdDirectPrivate(controller, "pull", $noopDoneFunction);
+    $fulfillPromise(read, { value: undefined, done: true });
+  }
+
+  return Promise.$resolve();
+}
+
 export function onCloseDirectStream(reason) {
   var stream = this.$controlledReadableStream;
   if (!stream || $getByIdDirectPrivate(stream, "state") !== $streamReadable) return;
@@ -1442,6 +1474,7 @@ export function initializeTextStream(underlyingSource, highWaterMark: number) {
     error: $handleDirectStreamError,
     end: $onCloseDirectStream,
     $close: $onCloseDirectStream,
+    $cancel: $onCancelDirectStream,
     flush: $onFlushDirectStream,
     _pendingRead: undefined,
     _deferClose: 0,
@@ -1502,6 +1535,7 @@ export function initializeArrayStream(underlyingSource, _highWaterMark: number) 
     error: $handleDirectStreamError,
     end: $onCloseDirectStream,
     $close: $onCloseDirectStream,
+    $cancel: $onCancelDirectStream,
     flush: $onFlushDirectStream,
     _pendingRead: undefined,
     _deferClose: 0,
@@ -1538,6 +1572,7 @@ export function initializeArrayBufferStream(underlyingSource, highWaterMark: num
     error: $handleDirectStreamError,
     end: $onCloseDirectStream,
     $close: $onCloseDirectStream,
+    $cancel: $onCancelDirectStream,
     flush: $onFlushDirectStream,
     _pendingRead: undefined,
     _deferClose: 0,
@@ -1874,7 +1909,10 @@ export function readableStreamReaderGenericRelease(reader) {
 
   var stream = $getByIdDirectPrivate(reader, "ownerReadableStream");
   if (stream.$bunNativePtr) {
-    $getByIdDirectPrivate($getByIdDirectPrivate(stream, "readableStreamController"), "underlyingSource").$resume(false);
+    const controller = $getByIdDirectPrivate(stream, "readableStreamController");
+    if (controller) {
+      $getByIdDirectPrivate(controller, "underlyingSource")?.$resume?.(false);
+    }
   }
   $putByIdDirectPrivate(stream, "reader", undefined);
   $putByIdDirectPrivate(reader, "ownerReadableStream", undefined);

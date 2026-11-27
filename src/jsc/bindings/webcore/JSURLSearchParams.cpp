@@ -194,9 +194,10 @@ JSC_DEFINE_HOST_FUNCTION(jsURLSearchParamsPrototype_inspectCustom, (JSC::JSGloba
 {
     auto& vm = lexicalGlobalObject->vm();
     auto throwScope = DECLARE_THROW_SCOPE(vm);
-    auto* jsParams = dynamicDowncast<JSURLSearchParams>(callFrame->thisValue());
+    JSValue thisValue = callFrame->thisValue();
+    auto* jsParams = dynamicDowncast<JSURLSearchParams>(thisValue);
     if (!jsParams) {
-        return Bun::ERR::INVALID_THIS(throwScope, lexicalGlobalObject, "URLSearchParams"_s);
+        return JSValue::encode(thisValue.isObject() ? thisValue : jsUndefined());
     }
     auto iter = jsParams->wrapped().createIterator(nullptr);
     auto first = iter.next();

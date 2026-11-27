@@ -356,15 +356,17 @@ pub fn parse(base: []const u8) URL {
             url.href = base;
             var offset: u31 = 0;
             _ = &offset;
+            var is_protocol_relative = false;
+            _ = &is_protocol_relative;
             switch (base[0]) {
 '@' => {
 offset = (offset + ((url.parsePassword(base[offset..])) orelse (0)));
             offset = (offset + ((url.parseHost(base[offset..])) orelse (0)));
 },
 '/', 97...122, 65...90, 48...57, '-', '_', ':' => {
-const is_protocol_relative = ((base.len > 1) and (base[1] == 47));
+is_protocol_relative = (((base.len > 1) and (base[0] == 47)) and (base[1] == 47));
             if (is_protocol_relative) {
-                offset = (offset + 1);
+                offset = (offset + 2);
             } else {
                 offset = (offset + ((url.parseProtocol(base[offset..])) orelse (0)));
             }
@@ -448,7 +450,7 @@ else => {
             while (((url.pathname.len > 1) and (@as(u16, @bitCast((url.pathname[0..2]).*)) == slash_slash))) {
                 url.pathname = url.pathname[1..];
             }
-            url.origin = std.mem.trim(u8, url.origin, "/ ?#");
+            url.origin = (if (is_protocol_relative) std.mem.trimRight(u8, url.origin, "/ ?#") else std.mem.trim(u8, url.origin, "/ ?#"));
             return url;
     }
 
@@ -1093,7 +1095,7 @@ pub fn next(self: *Scanner) ?Result {
             defer {
             self.i = (self.i + relative_i);
             }
-            while (true) {
+            outer: while (true) {
                 while (((self.i < self.query_string.len) and (self.query_string[@as(usize, @intCast(self.i))] == 38))) {
                     self.i = (self.i + 1);
                 }
@@ -1127,7 +1129,9 @@ else => false,
                     }
                     value.length = @as(u32, @truncate((relative_i - offset)));
                     if ((name.length == 0)) {
-                        return null;
+                        self.i = (self.i + relative_i);
+                        relative_i = 0;
+                        continue :outer;
                     }
                     return Result{ .name = name, .value = value, .name_needs_decoding = name_needs_decoding, .value_needs_decoding = value_needs_decoding };
 },

@@ -1344,7 +1344,9 @@ pub struct Template {
                     part.value = Expr.init(E.String, E.String.init("undefined"), part.value.loc);
                 },
                 .e_big_int => |value| {
-                    part.value = Expr.init(E.String, E.String.init(value.value), part.value.loc);
+                    if (!value.hasRadixPrefix()) {
+                        part.value = Expr.init(E.String, E.String.init(value.value), part.value.loc);
+                    }
                 },
                 else => {},
             }

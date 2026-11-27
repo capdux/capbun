@@ -263,8 +263,8 @@ JSC_DEFINE_HOST_FUNCTION(jsPerformanceEntryPrototype_inspectCustom, (JSGlobalObj
     auto throwScope = DECLARE_THROW_SCOPE(vm);
 
     JSValue thisValue = callFrame->thisValue();
-    if (!thisValue.isObject())
-        return JSValue::encode(jsUndefined());
+    if (!dynamicDowncast<JSPerformanceEntry>(thisValue))
+        return JSValue::encode(thisValue.isObject() ? thisValue : jsUndefined());
     JSObject* thisObject = thisValue.getObject();
 
     JSValue depthValue = callFrame->argument(0);

@@ -3059,6 +3059,11 @@ pub struct Formatter {
                     return writer.print("{s} {{}}", [ map_name]);
                 }
 
+                if (_.depth > _.max_depth) {
+                    writer.print(comptime Output.prettyFmt("<r><cyan>[{s} ...]<r>", enable_ansi_colors), .{map_name});
+                    return;
+                }
+
                 switch (_.single_line) {
                     inline else => |single_line| {
                         writer.print("{s}({d}) {{" ++ (if (single_line) " " else "\n"), [ map_name, length ]);
@@ -3089,6 +3094,11 @@ pub struct Formatter {
                 writer.writeAll("}");
             },
             .MapIterator => {
+                if (_.depth > _.max_depth) {
+                    writer.print(comptime Output.prettyFmt("<r><cyan>[MapIterator ...]<r>", enable_ansi_colors), .{});
+                    return;
+                }
+
                 const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
 
@@ -3122,6 +3132,11 @@ pub struct Formatter {
                 writer.writeAll("}");
             },
             .SetIterator => {
+                if (_.depth > _.max_depth) {
+                    writer.print(comptime Output.prettyFmt("<r><cyan>[SetIterator ...]<r>", enable_ansi_colors), .{});
+                    return;
+                }
+
                 const _qs_g = RestoreQuoteStringsGuard{ fmt: _, prev: _.quote_strings };
                 _.quote_strings = true;
 
@@ -3162,6 +3177,11 @@ pub struct Formatter {
 
                 if (length == 0) {
                     return writer.print("{s} {{}}", [ set_name]);
+                }
+
+                if (_.depth > _.max_depth) {
+                    writer.print(comptime Output.prettyFmt("<r><cyan>[{s} ...]<r>", enable_ansi_colors), .{set_name});
+                    return;
                 }
 
                 switch (_.single_line) {
@@ -3255,6 +3275,16 @@ pub struct Formatter {
                         return _.printAs(.Object, Writer, writer_, value, .Event, enable_ansi_colors)?;
                     },
                 };
+
+                if (_.depth > _.max_depth) {
+                    writer.print(
+                        comptime Output.prettyFmt("<r><cyan>[{s} ...]<r>", enable_ansi_colors),
+                        [
+                            @tagName(event_type),
+                        ],
+                    );
+                    return;
+                }
 
                 writer.print(
                     comptime Output.prettyFmt("<r><cyan>{s}<r> {{\n", enable_ansi_colors),

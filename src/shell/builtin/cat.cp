@@ -300,7 +300,7 @@ pub struct Opts {
             .exec_filepath_args => {
                 _.state.exec_filepath_args.in_done = true;
                 if (exit_code != 0) {
-                    if (_.state.exec_filepath_args.out_done || _.bltn().stdout.needsIO() == null) {
+                    if (_.state.exec_filepath_args.out_done || (_.state.exec_filepath_args.chunks_done >= _.state.exec_filepath_args.chunks_queued) || _.bltn().stdout.needsIO() == null) {
                         _.state.exec_filepath_args.deinit();
                         return _.bltn().done(exit_code);
                     }

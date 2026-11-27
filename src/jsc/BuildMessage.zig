@@ -138,7 +138,7 @@ pub fn generatePositionObject(msg: logger.Msg, globalThis: *jsc.JSGlobalObject) 
             const loc = location.?;
             var object = jsc.JSValue.createEmptyObject(globalThis, 7);
             _ = &object;
-            _ = object.put(globalThis, ZigString.static("lineText"), ZigString.init(((loc.line_text) orelse (""))).toJS(globalThis));
+            _ = object.put(globalThis, ZigString.static("lineText"), ZigString.init(((loc.line_text) orelse (""))).withEncoding().toJS(globalThis));
             _ = object.put(globalThis, ZigString.static("file"), ZigString.init(loc.file).toJS(globalThis));
             _ = object.put(globalThis, ZigString.static("namespace"), ZigString.init(loc.namespace).toJS(globalThis));
             _ = object.put(globalThis, ZigString.static("line"), JSValue.jsNumber(loc.line));

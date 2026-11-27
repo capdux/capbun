@@ -837,7 +837,7 @@ pub union(enum) PathLike {
 
             // Validate the UTF-8 byte length after conversion, since the path
             // will be stored in a fixed-size PathBuffer.
-            Valid.pathStringLength(sliced.slice().len, global)?;
+            Valid.pathStringLength(sliced.slice().len, sliced.slice(), global)?;
             Valid.pathNullBytes(sliced.slice(), global)?;
 
             _guard_sliced.disarm();
@@ -853,7 +853,7 @@ pub union(enum) PathLike {
 
             // Validate the UTF-8 byte length after conversion, since the path
             // will be stored in a fixed-size PathBuffer.
-            Valid.pathStringLength(sliced.slice().len, global)?;
+            Valid.pathStringLength(sliced.slice().len, sliced.slice(), global)?;
             Valid.pathNullBytes(sliced.slice(), global)?;
 
             _guard_sliced.disarm();
@@ -872,10 +872,11 @@ pub union(enum) PathLike {
 
 pub struct Valid {
     const MAX_PATH_BYTES = bun.MAX_PATH_BYTES;
+    const MAX_VALID_PATH_BYTES = MAX_PATH_BYTES - 1;
 
     static fn pathSlice(zig_str: jsc.ZigString.Slice, ctx: *jsc.JSGlobalObject)! {
         switch (zig_str.len) {
-            0..=MAX_PATH_BYTES => { return; },
+            0..=MAX_VALID_PATH_BYTES => { return; },
             else => {
                 let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).withPath(zig_str.slice()).toSystemError();
                 system_error.syscall = bun.String.dead;
@@ -885,11 +886,16 @@ pub struct Valid {
         comptime unreachable;
     }
 
-    static fn pathStringLength(len: usize, ctx: *jsc.JSGlobalObject)! {
+    static fn pathStringLength(len: usize, path: ([]const u8)?, ctx: *jsc.JSGlobalObject)! {
         switch (len) {
-            0..=MAX_PATH_BYTES => { return; },
+            0..=MAX_VALID_PATH_BYTES => { return; },
             else => {
-                let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).toSystemError();
+                const err_base = bun.sys.Error.fromCode(.NAMETOOLONG, .open);
+                let err_val = err_base;
+                if (p := path) {
+                    err_val = err_base.withPath(p);
+                }
+                let system_error = err_val.toSystemError();
                 system_error.syscall = bun.String.dead;
                 return ctx.throwValue(system_error.toErrorInstance(ctx));
             },
@@ -898,7 +904,7 @@ pub struct Valid {
     }
 
     static fn pathString(zig_str: jsc.ZigString, ctx: *jsc.JSGlobalObject)! {
-        return pathStringLength(zig_str.len, ctx);
+        return pathStringLength(zig_str.len, null, ctx);
     }
 
     static fn pathBuffer(buffer: Buffer, ctx: *jsc.JSGlobalObject)! {
@@ -907,9 +913,9 @@ pub struct Valid {
             0 => {
                 return ctx.throwInvalidArguments("Invalid path buffer: can't be empty", .{});
             },
-            1..=MAX_PATH_BYTES => { return; },
+            1..=MAX_VALID_PATH_BYTES => { return; },
             else => {
-                let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).toSystemError();
+                let system_error = bun.sys.Error.fromCode(.NAMETOOLONG, .open).withPath(slice).toSystemError();
                 system_error.syscall = bun.String.dead;
                 return ctx.throwValue(system_error.toErrorInstance(ctx));
             },

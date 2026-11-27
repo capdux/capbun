@@ -493,13 +493,13 @@ pub fn isWsOnly(text: Slice) bool {
     
     pub fn endLeaf(self: *@This(), txt: Slice, _loc: Loc) XMLError!void {
                 _ = &_loc;
-                const frame = ((self.stack.pop()) orelse (unreachable));
+                const frame = ((self.stack.pop()) orelse unreachable);
                 const val = try self.leafValue(frame, txt);
                 return self.deliver((if (@typeInfo(@TypeOf(frame)) == .@"enum" or @typeInfo(@TypeOf(frame)) == .@"union") @tagName(frame) else frame.name), val, frame.loc);
         }
     
     pub fn endElement(self: *@This()) XMLError!void {
-                const frame = ((self.stack.pop()) orelse (unreachable));
+                const frame = ((self.stack.pop()) orelse unreachable);
                 const props_mark = (if (comptime @typeInfo(@TypeOf(frame.props_mark)) == .@"enum") cp_cast_int(usize, @intFromEnum(frame.props_mark)) else cp_cast_int(usize, frame.props_mark));
                 const children_mark = (props_mark + (if (comptime @typeInfo(@TypeOf(frame.attribute_count)) == .@"enum") cp_cast_int(usize, @intFromEnum(frame.attribute_count)) else cp_cast_int(usize, frame.attribute_count)));
                 const has_text = (frame.text_prop != std.math.maxInt(u32));
@@ -525,8 +525,8 @@ pub fn isWsOnly(text: Slice) bool {
         }
     
     pub fn finish(self: *@This()) XMLError!Expr {
-                const name = ((self.root_name) orelse (unreachable));
-                const val = ((self.root_value) orelse (unreachable));
+                const name = ((self.root_name) orelse unreachable);
+                const val = ((self.root_value) orelse unreachable);
                 const mark = self.props.items.len;
                 _ = (blk_catch_15: { break :blk_catch_15 ((self.props.append(self.allocator, G.Property{ .key = makeStrExpr(name, self.root_loc), .value = val })) catch |__ce_15| { _ = &__ce_15; return error.OutOfMemory; }); });
                 return makeObjectExpr(self.allocator, (&self.props), mark, self.root_loc);
@@ -594,7 +594,7 @@ pub fn isWsOnly(text: Slice) bool {
         }
     
     pub fn endElement(self: *@This()) XMLError!void {
-                const frame = ((self.stack.pop()) orelse (unreachable));
+                const frame = ((self.stack.pop()) orelse unreachable);
                 const attributes = try makeObjectExpr(self.allocator, (&self.props), frame.props_mark, frame.loc);
                 const children_slice = self.items.items[frame.children_mark..];
                 const children = try makeArrayExpr(self.allocator, children_slice, frame.loc);
@@ -612,7 +612,7 @@ pub fn isWsOnly(text: Slice) bool {
         }
     
     pub fn finish(self: *@This()) XMLError!Expr {
-                return ((self.root) orelse (unreachable));
+                return ((self.root) orelse unreachable);
         }
     };
 };
@@ -1738,6 +1738,7 @@ pub fn parseUnits(comptime U: type, source: *const bun.logger.Source, contents: 
 }
 
 pub fn parse(source: *const bun.logger.Source, log: *bun.logger.Log, allocator: std.mem.Allocator, options: Options) XMLError!Expr {
+        _ = try source.checkParseableLen(log, "XML document");
         return parseUnits(u8, source, source.contents, log, allocator, options);
 }
 

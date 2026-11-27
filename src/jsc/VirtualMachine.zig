@@ -2892,6 +2892,10 @@ pub fn printErrorLikeObjectToConsole(client: *VirtualMachine, value: JSValue) vo
 }
 
 pub fn printErrorlikeObject(self: *VirtualMachine, value: JSValue, exception: ?*Exception, exception_list: ?*ExceptionList, formatter: *ConsoleObject.Formatter, comptime Writer: type, writer: *std.Io.Writer, comptime allow_ansi_color: bool, comptime allow_side_effects: bool) void {
+        if (((formatter.depth > formatter.max_depth) or (!formatter.stack_check.isSafeToRecurse()))) {
+            _ = (blk_catch_57: { break :blk_catch_57 ((writer.print((comptime Output.prettyFmt("<r><cyan>[Error ...]<r>", allow_ansi_color)), .{})) catch |__ce_57| { _ = &__ce_57;  }); });
+            return;
+        }
         var was_internal = false;
         _ = &was_internal;
         var _trace_guard = PrintInternalTraceGuard(Writer){ .was_internal = (blk: {
@@ -2901,39 +2905,41 @@ pub fn printErrorlikeObject(self: *VirtualMachine, value: JSValue, exception: ?*
         _ = &_trace_guard;
         var ___trace_guard_moved = false; _ = &___trace_guard_moved;
         defer if (!___trace_guard_moved) { ___trace_guard_moved = true; const __T = @TypeOf(_trace_guard); if (@typeInfo(__T) == .optional) { if (_trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace_guard; _drop_val.__cp_deinit(); } };
-        const agg_errors = (if (value.isAggregateError(self.global)) (blk_catch_57: { break :blk_catch_57 ((value.fastGet(self.global, .errors)) catch |__ce_57| { _ = &__ce_57; _ = self.global.clearException();
-        break :blk_catch_57 null; }); }) else null);
+        was_internal = self.printErrorFromMaybePrivateData(value, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects);
+        const agg_errors = (if (value.isAggregateError(self.global)) (blk_catch_58: { break :blk_catch_58 ((value.fastGet(self.global, .errors)) catch |__ce_58| { _ = &__ce_58; _ = self.global.clearException();
+        break :blk_catch_58 null; }); }) else null);
         if (agg_errors) |errors| {
             _ = &errors;
+            const prev_depth = formatter.depth;
+            formatter.depth = (formatter.depth +| 1);
+            defer {
+            formatter.depth = prev_depth;
+            }
             var iter = AggregateErrorIterator(Writer){ .writer = writer, .current_exception_list = exception_list, .formatter = formatter };
             _ = &iter;
             var ok = true;
             _ = &ok;
             if (comptime allow_ansi_color) {
                 if (comptime allow_side_effects) {
-                    _ = (blk_catch_58: { break :blk_catch_58 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorAndSideEffects)) catch |__ce_58| { _ = &__ce_58; ok = false;
-                    break :blk_catch_58 {}; }); });
-                } else {
-                    _ = (blk_catch_59: { break :blk_catch_59 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorNoSideEffects)) catch |__ce_59| { _ = &__ce_59; ok = false;
+                    _ = (blk_catch_59: { break :blk_catch_59 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorAndSideEffects)) catch |__ce_59| { _ = &__ce_59; ok = false;
                     break :blk_catch_59 {}; }); });
+                } else {
+                    _ = (blk_catch_60: { break :blk_catch_60 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithColorNoSideEffects)) catch |__ce_60| { _ = &__ce_60; ok = false;
+                    break :blk_catch_60 {}; }); });
                 }
             } else {
                 if (comptime allow_side_effects) {
-                    _ = (blk_catch_60: { break :blk_catch_60 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorAndSideEffects)) catch |__ce_60| { _ = &__ce_60; ok = false;
-                    break :blk_catch_60 {}; }); });
-                } else {
-                    _ = (blk_catch_61: { break :blk_catch_61 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorNoSideEffects)) catch |__ce_61| { _ = &__ce_61; ok = false;
+                    _ = (blk_catch_61: { break :blk_catch_61 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorAndSideEffects)) catch |__ce_61| { _ = &__ce_61; ok = false;
                     break :blk_catch_61 {}; }); });
+                } else {
+                    _ = (blk_catch_62: { break :blk_catch_62 ((errors.forEach(self.global, (&iter), AggregateErrorIterator(Writer).iteratorWithoutColorNoSideEffects)) catch |__ce_62| { _ = &__ce_62; ok = false;
+                    break :blk_catch_62 {}; }); });
                 }
             }
             if ((!ok)) {
                 _ = self.global.clearException();
             }
-            if (iter.printed_member) {
-                return;
-            }
         }
-        was_internal = self.printErrorFromMaybePrivateData(value, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects);
 }
 
 pub fn printErrorFromMaybePrivateData(self: *VirtualMachine, value: JSValue, exception_list: ?*ExceptionList, formatter: *ConsoleObject.Formatter, comptime Writer: type, writer: *std.Io.Writer, comptime allow_ansi_color: bool, comptime allow_side_effects: bool) bool {
@@ -2946,15 +2952,15 @@ pub fn printErrorFromMaybePrivateData(self: *VirtualMachine, value: JSValue, exc
                 defer if (!___out_guard_moved) { ___out_guard_moved = true; const __T = @TypeOf(_out_guard); if (@typeInfo(__T) == .optional) { if (_out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _out_guard; _drop_val.__cp_deinit(); } };
                 if ((!build_error.logged)) {
                     if (self.had_errors) {
-                        _ = (blk_catch_62: { break :blk_catch_62 ((writer.writeAll("\n")) catch |__ce_62| { _ = &__ce_62;  }); });
+                        _ = (blk_catch_63: { break :blk_catch_63 ((writer.writeAll("\n")) catch |__ce_63| { _ = &__ce_63;  }); });
                     }
-                    _ = (blk_catch_63: { break :blk_catch_63 ((build_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_63| { _ = &__ce_63;  }); });
+                    _ = (blk_catch_64: { break :blk_catch_64 ((build_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_64| { _ = &__ce_64;  }); });
                     build_error.logged = true;
-                    _ = (blk_catch_64: { break :blk_catch_64 ((writer.writeAll("\n")) catch |__ce_64| { _ = &__ce_64;  }); });
+                    _ = (blk_catch_65: { break :blk_catch_65 ((writer.writeAll("\n")) catch |__ce_65| { _ = &__ce_65;  }); });
                 }
                 self.had_errors = (self.had_errors or (build_error.msg.kind == .err));
                 if ((exception_list != null)) {
-                    _ = (blk_catch_65: { break :blk_catch_65 ((self.log.addMsg(build_error.msg)) catch |__ce_65| { _ = &__ce_65;  }); });
+                    _ = (blk_catch_66: { break :blk_catch_66 ((self.log.addMsg(build_error.msg)) catch |__ce_66| { _ = &__ce_66;  }); });
                 }
                 return true;
             } else {
@@ -2966,21 +2972,21 @@ pub fn printErrorFromMaybePrivateData(self: *VirtualMachine, value: JSValue, exc
                     defer if (!___out_guard_moved) { ___out_guard_moved = true; const __T = @TypeOf(_out_guard); if (@typeInfo(__T) == .optional) { if (_out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _out_guard; _drop_val.__cp_deinit(); } };
                     if ((!resolve_error.logged)) {
                         if (self.had_errors) {
-                            _ = (blk_catch_66: { break :blk_catch_66 ((writer.writeAll("\n")) catch |__ce_66| { _ = &__ce_66;  }); });
+                            _ = (blk_catch_67: { break :blk_catch_67 ((writer.writeAll("\n")) catch |__ce_67| { _ = &__ce_67;  }); });
                         }
-                        _ = (blk_catch_67: { break :blk_catch_67 ((resolve_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_67| { _ = &__ce_67;  }); });
+                        _ = (blk_catch_68: { break :blk_catch_68 ((resolve_error.msg.writeFormat(writer, allow_ansi_color)) catch |__ce_68| { _ = &__ce_68;  }); });
                         resolve_error.logged = true;
-                        _ = (blk_catch_68: { break :blk_catch_68 ((writer.writeAll("\n")) catch |__ce_68| { _ = &__ce_68;  }); });
+                        _ = (blk_catch_69: { break :blk_catch_69 ((writer.writeAll("\n")) catch |__ce_69| { _ = &__ce_69;  }); });
                     }
                     self.had_errors = (self.had_errors or (resolve_error.msg.kind == .err));
                     if ((exception_list != null)) {
-                        _ = (blk_catch_69: { break :blk_catch_69 ((self.log.addMsg(resolve_error.msg)) catch |__ce_69| { _ = &__ce_69;  }); });
+                        _ = (blk_catch_70: { break :blk_catch_70 ((self.log.addMsg(resolve_error.msg)) catch |__ce_70| { _ = &__ce_70;  }); });
                     }
                     return true;
                 }
             }
         }
-        _ = (blk_catch_70: { break :blk_catch_70 ((self.printErrorInstance(.js, value, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects)) catch |e| { _ = &e; if ((e == error.JSError)) {
+        _ = (blk_catch_71: { break :blk_catch_71 ((self.printErrorInstance(.js, value, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects)) catch |e| { _ = &e; if ((e == error.JSError)) {
             _ = self.global.clearException();
         } else {
             if (comptime Environment.isDebug) {
@@ -3309,7 +3315,7 @@ pub fn remapZigException(client: *VirtualMachine, exception: *ZigException, erro
             _ = &_log_guard;
             var ___log_guard_moved = false; _ = &___log_guard_moved;
             defer if (!___log_guard_moved) { ___log_guard_moved = true; const __T = @TypeOf(_log_guard); if (@typeInfo(__T) == .optional) { if (_log_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _log_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _log_guard; _drop_val.__cp_deinit(); } };
-            var original_source = (blk_catch_71: { break :blk_catch_71 ((fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, (&log), .print_source)) catch |__ce_71| { _ = &__ce_71; return; }); });
+            var original_source = (blk_catch_72: { break :blk_catch_72 ((fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, (&log), .print_source)) catch |__ce_72| { _ = &__ce_72; break :code ZigString.Slice.empty; }); });
             _ = &original_source;
             must_reset_parser_arena_later.* = true;
             break :code original_source.source_code.toUTF8(bun.default_allocator);
@@ -3422,6 +3428,28 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         _ = &_slice_guard;
         var ___slice_guard_moved = false; _ = &___slice_guard_moved;
         defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
+        var added_to_visited_map = false;
+        _ = &added_to_visited_map;
+        if (comptime (mode == .js)) {
+            if ((error_instance != .zero)) {
+                if ((formatter.map_node == null)) {
+                    formatter.map_node = ConsoleObject.Formatter.Visited.Pool.get(default_allocator);
+                    _ = formatter.map_node.?.data.clearRetainingCapacity();
+                    formatter.map = formatter.map_node.?.data;
+                }
+                const entry = ((formatter.map.getOrPut(error_instance)) catch unreachable);
+                added_to_visited_map = (!entry.found_existing);
+            }
+        }
+        defer {
+        {
+            if (comptime (mode == .js)) {
+                if (added_to_visited_map) {
+                    _ = formatter.map.remove(error_instance);
+                }
+            }
+        }
+        }
         if ((mode == .js)) {
             _ = client.remapZigException(exception, error_instance, exception_list, (&exception_holder.need_to_clear_parser_arena_on_deinit), (&source_code_slice), (formatter.error_display_level != .warn));
         }
@@ -3490,7 +3518,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
         if (error_instance.uncheckedPtrCast(jsc.JSObject).getCodePropertyVMInquiry(client.global)) |code_value| {
             _ = &code_value;
             if (code_value.isStringLiteral()) {
-                const code_string = (blk_catch_72: { break :blk_catch_72 ((code_value.toBunString(client.global)) catch |__ce_72| { _ = &__ce_72; break :blk_catch_72 bun.outOfMemory(); }); });
+                const code_string = (blk_catch_74: { break :blk_catch_74 ((code_value.toBunString(client.global)) catch |__ce_74| { _ = &__ce_74; break :blk_catch_74 bun.outOfMemory(); }); });
                 var _code_str_guard = DerefGuard(@TypeOf(code_string)){ .val = code_string };
                 _ = &_code_str_guard;
                 var ___code_str_guard_moved = false; _ = &___code_str_guard_moved;
@@ -3621,11 +3649,11 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                 if ((field.eqlComptime("code") and (code != null))) {
                     continue;
                 }
+                if (field.eqlComptime("cause")) {
+                    saw_cause = true;
+                }
                 const kind = value.jsType();
-                if (((kind == .ErrorInstance) and (!prev_had_errors))) {
-                    if (field.eqlComptime("cause")) {
-                        saw_cause = true;
-                    }
+                if ((((kind == .ErrorInstance) and (!prev_had_errors)) and (!((formatter.map_node != null) and formatter.map.contains(value))))) {
                     _ = value.protect();
                     _ = try errors_to_append.append(value);
                 } else {
@@ -3646,7 +3674,6 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                         _ = &_fmt_depth_guard;
                         var ___fmt_depth_guard_moved = false; _ = &___fmt_depth_guard_moved;
                         defer if (!___fmt_depth_guard_moved) { ___fmt_depth_guard_moved = true; const __T = @TypeOf(_fmt_depth_guard); if (@typeInfo(__T) == .optional) { if (_fmt_depth_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fmt_depth_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fmt_depth_guard; _drop_val.__cp_deinit(); } };
-                        formatter.max_depth = 1;
                         formatter.quote_strings = true;
                         formatter.disable_inspect_custom = true;
                         const pad_left = (longest_name -| field.length());
@@ -3658,7 +3685,7 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                                 _ = client.global.clearException();
                             }
                         }
-                        _ = (blk_catch_73: { break :blk_catch_73 ((formatter.format(try jsc.Formatter.Tag.getAdvanced(value, client.global, .{ .disable_inspect_custom = true, .hide_global = true }), Writer, writer, value, client.global, allow_ansi_color)) catch |__ce_73| { _ = &__ce_73;  }); });
+                        _ = (blk_catch_75: { break :blk_catch_75 ((formatter.format(try jsc.Formatter.Tag.getAdvanced(value, client.global, .{ .disable_inspect_custom = true, .hide_global = true }), Writer, writer, value, client.global, allow_ansi_color)) catch |__ce_75| { _ = &__ce_75;  }); });
                         if (allow_side_effects) {
                             if (client.global.hasException()) {
                                 _ = client.global.clearException();
@@ -3686,8 +3713,14 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                 if (try error_instance.getOwn(client.global, "cause")) |cause| {
                     _ = &cause;
                     if ((cause.jsType() == .ErrorInstance)) {
-                        _ = cause.protect();
-                        _ = try errors_to_append.append(cause);
+                        if (((formatter.map_node != null) and formatter.map.contains(cause))) {
+                            const pad_left = (longest_name -| "cause".len);
+                            _ = try writer.splatByteAll(32, pad_left);
+                            _ = try writer.writeAll((comptime Output.prettyFmt(" cause<r><d>:<r> <cyan>[Circular]<r><d>,<r>\n", allow_ansi_color)));
+                        } else {
+                            _ = cause.protect();
+                            _ = try errors_to_append.append(cause);
+                        }
                     }
                 }
             }
@@ -3718,7 +3751,17 @@ pub fn printErrorInstance(client: *VirtualMachine, comptime mode: PrintErrorMode
                 continue;
             }
             _ = try writer.writeAll("\n");
-            _ = try client.printErrorInstance(.js, e, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects);
+            {
+                formatter.depth = (formatter.depth + 1);
+                defer {
+                formatter.depth = (formatter.depth - 1);
+                }
+                if ((formatter.depth > formatter.max_depth)) {
+                    _ = try writer.writeAll((comptime Output.prettyFmt("<r><cyan>[Error ...]<r>", allow_ansi_color)));
+                } else {
+                    _ = try client.printErrorInstance(.js, e, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects);
+                }
+            }
             _ = formatter.map.remove(e);
         }
 }
@@ -3809,17 +3852,17 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
                 var ___src_url_guard_moved = false; _ = &___src_url_guard_moved;
                 defer if (!___src_url_guard_moved) { ___src_url_guard_moved = true; const __T = @TypeOf(_src_url_guard); if (@typeInfo(__T) == .optional) { if (_src_url_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_url_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_url_guard; _drop_val.__cp_deinit(); } };
                 const file = bun.path.relative(dir, source_url.slice());
-                _ = (blk_catch_75: { break :blk_catch_75 ((writer.print("\n::error file={s},line={d},col={d},title=", .{ file, frame.position.line.oneBased(), frame.position.column.oneBased() })) catch |__ce_75| { _ = &__ce_75;  }); });
+                _ = (blk_catch_77: { break :blk_catch_77 ((writer.print("\n::error file={s},line={d},col={d},title=", .{ file, frame.position.line.oneBased(), frame.position.column.oneBased() })) catch |__ce_77| { _ = &__ce_77;  }); });
                 has_location = true;
             }
         }
         if ((!has_location)) {
-            _ = (blk_catch_76: { break :blk_catch_76 ((writer.print("\n::error title=", .{})) catch |__ce_76| { _ = &__ce_76;  }); });
+            _ = (blk_catch_78: { break :blk_catch_78 ((writer.print("\n::error title=", .{})) catch |__ce_78| { _ = &__ce_78;  }); });
         }
         if ((name.isEmpty() or name.eqlComptime("Error"))) {
-            _ = (blk_catch_77: { break :blk_catch_77 ((writer.print("error", .{})) catch |__ce_77| { _ = &__ce_77;  }); });
+            _ = (blk_catch_79: { break :blk_catch_79 ((writer.print("error", .{})) catch |__ce_79| { _ = &__ce_79;  }); });
         } else {
-            _ = (blk_catch_78: { break :blk_catch_78 ((writer.print("{f}", .{ name.githubAction() })) catch |__ce_78| { _ = &__ce_78;  }); });
+            _ = (blk_catch_80: { break :blk_catch_80 ((writer.print("{f}", .{ name.githubAction() })) catch |__ce_80| { _ = &__ce_80;  }); });
         }
         if ((!message.isEmpty())) {
             const message_slice = message.toUTF8(allocator);
@@ -3836,13 +3879,13 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
                 cursor = (i + 1);
                 if ((msg[@as(usize, @intCast(i))] == 10)) {
                     const first_line = bun.String.borrowUTF8(msg[0..i]);
-                    _ = (blk_catch_79: { break :blk_catch_79 ((writer.print(": {f}::", .{ first_line.githubAction() })) catch |__ce_79| { _ = &__ce_79;  }); });
+                    _ = (blk_catch_81: { break :blk_catch_81 ((writer.print(": {f}::", .{ first_line.githubAction() })) catch |__ce_81| { _ = &__ce_81;  }); });
                     found_newline = true;
                     break;
                 }
             }
             if ((!found_newline)) {
-                _ = (blk_catch_80: { break :blk_catch_80 ((writer.print(": {f}::", .{ message.githubAction() })) catch |__ce_80| { _ = &__ce_80;  }); });
+                _ = (blk_catch_82: { break :blk_catch_82 ((writer.print(": {f}::", .{ message.githubAction() })) catch |__ce_82| { _ = &__ce_82;  }); });
             }
             while (strings.indexOfNewlineOrNonASCIIOrANSI(msg, cursor)) |i| {
                 cursor = (i + 1);
@@ -3852,10 +3895,10 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
             }
             if ((cursor > 0)) {
                 const body = ZigString.initUTF8(msg[cursor..]);
-                _ = (blk_catch_81: { break :blk_catch_81 ((writer.print("{f}", .{ body.githubAction() })) catch |__ce_81| { _ = &__ce_81;  }); });
+                _ = (blk_catch_83: { break :blk_catch_83 ((writer.print("{f}", .{ body.githubAction() })) catch |__ce_83| { _ = &__ce_83;  }); });
             }
         } else {
-            _ = (blk_catch_82: { break :blk_catch_82 ((writer.print("::", .{})) catch |__ce_82| { _ = &__ce_82;  }); });
+            _ = (blk_catch_84: { break :blk_catch_84 ((writer.print("::", .{})) catch |__ce_84| { _ = &__ce_84;  }); });
         }
         if (top_frame) |_| {
             const vm = VirtualMachine.get();
@@ -3876,13 +3919,13 @@ pub noinline fn printGithubAnnotation(exception: *ZigException) void {
                 }
                 const has_name = (std.fmt.count("{f}", .{ frame.nameFormatter(false) }) > 0);
                 if (has_name) {
-                    _ = (blk_catch_83: { break :blk_catch_83 ((writer.print("%0A      at {f} ({f})", .{ frame.nameFormatter(false), frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_83| { _ = &__ce_83;  }); });
+                    _ = (blk_catch_85: { break :blk_catch_85 ((writer.print("%0A      at {f} ({f})", .{ frame.nameFormatter(false), frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_85| { _ = &__ce_85;  }); });
                 } else {
-                    _ = (blk_catch_84: { break :blk_catch_84 ((writer.print("%0A      at {f}", .{ frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_84| { _ = &__ce_84;  }); });
+                    _ = (blk_catch_86: { break :blk_catch_86 ((writer.print("%0A      at {f}", .{ frame.sourceURLFormatter(file, origin, false, false) })) catch |__ce_86| { _ = &__ce_86;  }); });
                 }
             }
         }
-        _ = (blk_catch_85: { break :blk_catch_85 ((writer.print("\n", .{})) catch |__ce_85| { _ = &__ce_85;  }); });
+        _ = (blk_catch_87: { break :blk_catch_87 ((writer.print("\n", .{})) catch |__ce_87| { _ = &__ce_87;  }); });
 }
 
 pub fn resolveSourceMapping(client: *VirtualMachine, path: []const u8, line: Ordinal, column: Ordinal, source_handling: SourceMap.SourceContentHandling) ?SourceMap.Mapping.Lookup {
@@ -3903,7 +3946,7 @@ pub fn resolveSourceMapping(client: *VirtualMachine, path: []const u8, line: Ord
             }
             const map = map_opt.?;
             _ = map.ref();
-            _ = (blk_catch_86: { break :blk_catch_86 ((client.source_mappings.putValue(path, SavedSourceMap.Value.init(map))) catch |__ce_86| { _ = &__ce_86; break :blk_catch_86 bun.outOfMemory(); }); });
+            _ = (blk_catch_88: { break :blk_catch_88 ((client.source_mappings.putValue(path, SavedSourceMap.Value.init(map))) catch |__ce_88| { _ = &__ce_88; break :blk_catch_88 bun.outOfMemory(); }); });
             const mapping_opt = map.findMapping(line, column);
             if ((mapping_opt == null)) {
                 return null;
@@ -3959,7 +4002,7 @@ else => instance: {
         _ = &instance;
         instance.data = .init(opts.mode, .{ .virtual_machine = instance }, .uninitialized);
         client.ipc = .{ .initialized = instance };
-        _ = (blk_catch_87: { break :blk_catch_87 ((instance.data.windowsConfigureClient(opts.fd)) catch |__ce_87| { _ = &__ce_87; _ = instance.deinit();
+        _ = (blk_catch_89: { break :blk_catch_89 ((instance.data.windowsConfigureClient(opts.fd)) catch |__ce_89| { _ = &__ce_89; _ = instance.deinit();
         client.ipc = null;
         _ = Output.warn("Unable to start IPC pipe '{f}'", .{ opts.fd });
         return null; }); });

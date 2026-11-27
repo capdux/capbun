@@ -626,11 +626,11 @@ pub inline fn eventLoopCtx(self: *const GlobalJS) *jsc.VirtualMachine {
             return self.globalThis.bunVM();
     }
 
-pub inline fn throwInvalidArguments(self: GlobalJS, comptime fmt: []const u8, args: anytype) ShellErr {
+pub inline fn throwInvalidArguments(self: *const GlobalJS, comptime fmt: []const u8, args: anytype) ShellErr {
             return .{ .invalid_arguments = .{ .val = bun.handleOom(std.fmt.allocPrint(self.globalThis.bunVM().allocator, fmt, args)) } };
     }
 
-pub inline fn throwTODO(self: GlobalJS, msg: []const u8) ShellErr {
+pub inline fn throwTODO(self: *const GlobalJS, msg: []const u8) ShellErr {
             return .{ .todo = bun.handleOom(std.fmt.allocPrint(self.globalThis.bunVM().allocator, "{s}", .{ msg })) };
     }
 
@@ -638,12 +638,12 @@ pub inline fn throwError(self: GlobalJS, e: bun.sys.Error) void {
             _ = self.globalThis.throwValue(e.toJS(self.globalThis));
     }
 
-pub inline fn handleError(self: GlobalJS, e: anytype, comptime fmt: []const u8) ShellErr {
+pub inline fn handleError(self: *const GlobalJS, e: anytype, comptime fmt: []const u8) ShellErr {
             const str = bun.handleOom(std.fmt.allocPrint(self.globalThis.bunVM().allocator, ("{s} " ++ fmt), .{ @errorName(e) }));
             return .{ .custom = str };
     }
 
-pub inline fn throw(self: GlobalJS, comptime fmt: []const u8, args: anytype) ShellErr {
+pub inline fn throw(self: *const GlobalJS, comptime fmt: []const u8, args: anytype) ShellErr {
             const str = bun.handleOom(std.fmt.allocPrint(self.globalThis.bunVM().allocator, fmt, args));
             return .{ .custom = str };
     }
@@ -697,15 +697,15 @@ pub inline fn eventLoopCtx(self: *const GlobalMini) *jsc.MiniEventLoop {
             return self.mini;
     }
 
-pub inline fn throwTODO(self: GlobalMini, msg: []const u8) ShellErr {
+pub inline fn throwTODO(self: *const GlobalMini, msg: []const u8) ShellErr {
             return .{ .todo = bun.handleOom(std.fmt.allocPrint(self.mini.allocator, "{s}", .{ msg })) };
     }
 
-pub inline fn throwInvalidArguments(self: GlobalMini, comptime fmt: []const u8, args: anytype) ShellErr {
+pub inline fn throwInvalidArguments(self: *const GlobalMini, comptime fmt: []const u8, args: anytype) ShellErr {
             return .{ .invalid_arguments = .{ .val = bun.handleOom(std.fmt.allocPrint(self.allocator(), fmt, args)) } };
     }
 
-pub inline fn handleError(self: GlobalMini, e: anytype, comptime fmt: []const u8) ShellErr {
+pub inline fn handleError(self: *const GlobalMini, e: anytype, comptime fmt: []const u8) ShellErr {
             const str = bun.handleOom(std.fmt.allocPrint(self.mini.allocator, ("{s} " ++ fmt), .{ @errorName(e) }));
             return .{ .custom = str };
     }
@@ -729,7 +729,7 @@ pub inline fn topLevelDir(self: *const GlobalMini) []const u8 {
             return self.mini.top_level_dir;
     }
 
-pub inline fn throw(self: GlobalMini, comptime fmt: []const u8, args: anytype) ShellErr {
+pub inline fn throw(self: *const GlobalMini, comptime fmt: []const u8, args: anytype) ShellErr {
             const str = bun.handleOom(std.fmt.allocPrint(self.allocator(), fmt, args));
             return .{ .custom = str };
     }
@@ -805,8 +805,8 @@ pub fn memoryCost(self: ASTExpr) usize {
 });
     }
 
-pub fn asPipelineItem(self: ASTExpr) ?ASTPipelineItem {
-            return (switch (self) {
+pub fn asPipelineItem(self: *const ASTExpr) ?ASTPipelineItem {
+            return (switch (self.*) {
 .assign => .{ .assigns = self.assign },
 .cmd => .{ .cmd = self.cmd },
 .subshell => .{ .subshell = self.subshell },
@@ -829,9 +829,9 @@ pub fn memoryCost(self: ASTCondExpr) usize {
             return cost;
     }
 
-pub fn to_expr(self: ASTCondExpr, alloc: Allocator) !ASTExpr {
+pub fn to_expr(self: *const ASTCondExpr, alloc: Allocator) !ASTExpr {
             const condexpr = try alloc.create(ASTCondExpr);
-            condexpr.* = self;
+            condexpr.* = self.*;
             return .{ .condexpr = condexpr };
     }
     const ArgList = SmolList(ASTAtom, 2);
@@ -860,9 +860,9 @@ pub const ASTIf = struct {
     then: SmolList(ASTStmt, 1) = SmolList(ASTStmt, 1).zeroes,
     else_parts: SmolList(SmolList(ASTStmt, 1), 1) = SmolList(SmolList(ASTStmt, 1), 1).zeroes,
 
-pub fn to_expr(self: ASTIf, alloc: Allocator) !ASTExpr {
+pub fn to_expr(self: *const ASTIf, alloc: Allocator) !ASTExpr {
             const @"if" = try alloc.create(ASTIf);
-            @"if".* = self;
+            @"if".* = self.*;
             return .{ .@"if" = @"if" };
     }
 
@@ -943,8 +943,8 @@ pub const ASTCmdOrAssigns = union(ASTCmdOrAssignsTag) {
     cmd: ASTCmd,
     assigns: []ASTAssign,
 
-pub fn to_pipeline_item(self: ASTCmdOrAssigns, alloc: Allocator) ASTPipelineItem {
-            switch (self) {
+pub fn to_pipeline_item(self: *const ASTCmdOrAssigns, alloc: Allocator) ASTPipelineItem {
+            switch (self.*) {
 .cmd => |cmd| {
 const cmd_ptr = try alloc.create(ASTCmd);
             cmd_ptr.* = cmd;
@@ -956,8 +956,8 @@ return .{ .assign = assigns };
 }
     }
 
-pub fn to_expr(self: ASTCmdOrAssigns, alloc: Allocator) !ASTExpr {
-            switch (self) {
+pub fn to_expr(self: *const ASTCmdOrAssigns, alloc: Allocator) !ASTExpr {
+            switch (self.*) {
 .cmd => |cmd| {
 const cmd_ptr = try alloc.create(ASTCmd);
             cmd_ptr.* = cmd;
@@ -1305,13 +1305,14 @@ pub const Parser = struct {
     current: u32 = 0,
     errors: std.array_list.Managed(ParserError),
     inside_subshell: ?SubshellKind = null,
+    depth: u32 = 0,
 
 pub fn new(allocator: Allocator, lex_result: LexResult, jsobjs: []JSValue) !Parser {
             return .{ .strpool = lex_result.strpool, .tokens = lex_result.tokens, .alloc = allocator, .jsobjs = jsobjs, .errors = std.array_list.Managed(ParserError).init(allocator) };
     }
 
 pub fn make_subparser(self: *Parser, kind: SubshellKind) Parser {
-            const subparser: Parser = .{ .strpool = self.strpool, .tokens = self.tokens, .alloc = self.alloc, .jsobjs = self.jsobjs, .current = self.current, .errors = self.errors, .inside_subshell = kind };
+            const subparser: Parser = .{ .strpool = self.strpool, .tokens = self.tokens, .alloc = self.alloc, .jsobjs = self.jsobjs, .current = self.current, .errors = self.errors, .inside_subshell = kind, .depth = self.depth };
             return subparser;
     }
 
@@ -1483,6 +1484,14 @@ else => {
     }
 
 pub fn parse_subshell(self: *Parser) !AST.Subshell {
+            if ((self.depth >= 256)) {
+                _ = try self.add_error("Nesting depth exceeded", .{});
+                return ParseError.Expected;
+            }
+            self.depth = (self.depth + 1);
+            defer {
+            self.depth = (self.depth - 1);
+            }
             _ = self.expect(.OpenParen);
             var subparser = self.make_subparser(.normal);
             _ = &subparser;
@@ -1591,6 +1600,14 @@ pub fn parse_if_body(self: *Parser, comptime until: []const IfClauseTok) !SmolLi
     }
 
 pub fn parse_if_clause(self: *Parser) !AST.If {
+            if ((self.depth >= 256)) {
+                _ = try self.add_error("Nesting depth exceeded", .{});
+                return ParseError.Expected;
+            }
+            self.depth = (self.depth + 1);
+            defer {
+            self.depth = (self.depth - 1);
+            }
             _ = self.expectIfClauseTextToken(.@"if");
             const cond = try self.parse_if_body((&.{ .then }));
             if ((!self.match_if_clausetok(.then))) {
@@ -1877,7 +1894,15 @@ has_comma = true;
                     }
 },
 .CmdSubstBegin => {
-_ = self.expect(.CmdSubstBegin);
+if ((self.depth >= 256)) {
+                        _ = try self.add_error("Nesting depth exceeded", .{});
+                        return ParseError.Expected;
+                    }
+                    self.depth = (self.depth + 1);
+                    defer {
+                    self.depth = (self.depth - 1);
+                    }
+                    _ = self.expect(.CmdSubstBegin);
                     const is_quoted = self.matchTok(.CmdSubstQuoted);
                     var subparser = self.make_subparser(.cmd_subst);
                     _ = &subparser;
@@ -2971,8 +2996,8 @@ pub fn Result(comptime T: anytype) type {
     result: T,
     @"err": ShellErr,
 
-pub fn asErr(self: @This()) ?ShellErr {
-            if ((self == .err)) {
+pub fn asErr(self: *const @This()) ?ShellErr {
+            if ((self.* == .err)) {
                 return self.err;
             }
             return null;
@@ -3014,7 +3039,7 @@ pub fn new(alloc: Allocator, src: []const u8, strings_to_escape: []bun.String, j
             return .{ .chars = Chars.init(src), .tokens = ArrayList(Token).init(alloc), .strpool = ArrayList(u8).init(alloc), .errors = ArrayList(LexError).init(alloc), .string_refs = strings_to_escape, .jsobjs_len = jsobjs_len };
     }
 
-pub fn get_result(self: @This()) LexResult {
+pub fn get_result(self: *const @This()) LexResult {
             return .{ .tokens = self.tokens.items, .strpool = self.strpool.items, .errors = self.errors.items };
     }
 
@@ -3393,7 +3418,7 @@ _ = (comptime assertSpecialChar(124));
                             _ = try self.tokens.append(.Pipe);
                         } else {
                             if ((next.char == 124)) {
-                                _ = ((self.eat()) orelse (unreachable));
+                                _ = ((self.eat()) orelse unreachable);
                                 _ = try self.tokens.append(.DoublePipe);
                             }
                         }
@@ -3440,7 +3465,7 @@ _ = (comptime assertSpecialChar(38));
                                 _ = try self.tokens.append(.Ampersand);
                             } else {
                                 if ((next.char == 38)) {
-                                    _ = ((self.eat()) orelse (unreachable));
+                                    _ = ((self.eat()) orelse unreachable);
                                     _ = try self.tokens.append(.DoubleAmpersand);
                                 } else {
                                     _ = try self.tokens.append(.Ampersand);
@@ -3964,7 +3989,7 @@ if (((((!escaped) and ((self.in_subshell == .dollar) and (char == 41))) or ((sel
                 }
                 switch (char) {
 48...57, 97...122, 65...90, '_' => {
-_ = ((self.eat()) orelse (unreachable));
+_ = ((self.eat()) orelse unreachable);
                 _ = try self.appendCharToStrPool(char);
 },
 else => {

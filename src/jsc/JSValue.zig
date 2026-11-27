@@ -239,6 +239,14 @@ pub fn toNumber(self: JSValue, global: *JSGlobalObject) bun.JSError!f64 {
             return bun.jsc.fromJSHostCallGeneric(global, @src(), Bun__JSValue__toNumber, .{ self, global });
     }
 
+pub fn toNumeric(self: JSValue, global: *JSGlobalObject) bun.JSError!JSValue {
+            const res = Bun__JSValue__toNumeric(global, self);
+            if ((res == .zero)) {
+                return error.JSError;
+            }
+            return res;
+    }
+
 pub fn isInteger(self: JSValue) bool {
             if (self.isInt32()) {
                 return true;
@@ -2184,6 +2192,8 @@ extern "c" fn JSC__JSValue__getDirectIndex(val: JSValue, global: *JSGlobalObject
 extern "c" fn JSC__JSValue__forEachPropertyNonIndexed(JSValue0: JSValue, arg1: *JSGlobalObject, arg2: ?*anyopaque, ArgFn3: ?*const fn (*JSGlobalObject, ?*anyopaque, *ZigString, JSValue, bool, bool) callconv(.c) void) callconv(.c) void;
 
 extern "c" fn Bun__JSValue__toNumber(value: JSValue, global: *JSGlobalObject) callconv(.c) f64;
+
+extern "c" fn Bun__JSValue__toNumeric(global: *JSGlobalObject, value: JSValue) callconv(.c) JSValue;
 
 extern "c" fn JSC__JSValue__isInstanceOf(val: JSValue, global: *JSGlobalObject, constructor: JSValue) callconv(.c) bool;
 

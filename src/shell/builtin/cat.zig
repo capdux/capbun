@@ -407,7 +407,7 @@ self.state.exec_stdin.errno = exit_code;
 .exec_filepath_args => {
 self.state.exec_filepath_args.in_done = true;
         if ((exit_code != 0)) {
-            if ((self.state.exec_filepath_args.out_done or (self.bltn().stdout.needsIO() == null))) {
+            if (((self.state.exec_filepath_args.out_done or (self.state.exec_filepath_args.chunks_done >= self.state.exec_filepath_args.chunks_queued)) or (self.bltn().stdout.needsIO() == null))) {
                 _ = self.state.exec_filepath_args.deinit();
                 return self.bltn().done(exit_code);
             }

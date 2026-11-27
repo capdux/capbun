@@ -245,14 +245,33 @@ pub fn next(self: *@This()) Result {
                     if ((rc == 0)) {
                         return .{ .result = null };
                     }
+                    if ((rc > self.buf.len)) {
+                        return .{ .err = bun.sys.Error.fromCode(.IO, .getdents64) };
+                    }
                     self.index = 0;
                     self.end_index = rc;
                 }
+                const name_offset = @offsetOf(linux.dirent64, "name");
+                if (((self.index + name_offset) >= self.end_index)) {
+                    return .{ .err = bun.sys.Error.fromCode(.IO, .getdents64) };
+                }
                 const linux_entry: *align(1) linux.dirent64 = @ptrCast((&self.buf[@as(usize, @intCast(self.index))]));
-                const next_index = (self.index + linux_entry.reclen);
-                self.index = next_index;
-                const name_ptr: [*:0]u8 = @ptrCast((&(if (@typeInfo(@TypeOf(linux_entry)) == .@"enum" or @typeInfo(@TypeOf(linux_entry)) == .@"union") @tagName(linux_entry) else linux_entry.name)));
-                const name = mem.sliceTo(name_ptr, 0);
+                if (((linux_entry.reclen < (name_offset + 1)) or ((self.index + linux_entry.reclen) > self.end_index))) {
+                    return .{ .err = bun.sys.Error.fromCode(.IO, .getdents64) };
+                }
+                const name_max_len = (linux_entry.reclen - name_offset);
+                const name_start = (self.index + name_offset);
+                const name_buf = self.buf[name_start..(name_start + name_max_len)];
+                var nul_pos: usize = 0;
+                _ = &nul_pos;
+                if (std.mem.indexOfScalar(u8, name_buf, 0)) |p| {
+                    _ = &p;
+                    nul_pos = p;
+                } else {
+                    return .{ .err = bun.sys.Error.fromCode(.IO, .getdents64) };
+                }
+                const name = name_buf[0..nul_pos];
+                self.index = (self.index + linux_entry.reclen);
                 if ((strings.eqlComptime(name, ".") or strings.eqlComptime(name, ".."))) {
                     continue :start_over;
                 }

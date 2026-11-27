@@ -20,7 +20,9 @@ public:
         if (view.is8Bit() && view.containsOnlyASCII()) {
             m_view = view;
         } else {
-            m_underlying = view.utf8();
+            if (auto expected = view.tryGetUTF8()) {
+                m_underlying = WTF::move(expected.value());
+            }
             m_isCString = true;
         }
     }
@@ -29,7 +31,9 @@ public:
         if (str.is8Bit() && str.containsOnlyASCII()) {
             m_view = str;
         } else {
-            m_underlying = str.utf8();
+            if (auto expected = str.tryGetUTF8()) {
+                m_underlying = WTF::move(expected.value());
+            }
             m_isCString = true;
         }
     }
@@ -37,6 +41,8 @@ public:
     WTF::CString m_underlying {};
     WTF::StringView m_view {};
     bool m_isCString { false };
+
+    bool isNull() const { return m_isCString && m_underlying.isNull(); }
 
     std::span<const uint8_t> bytes() const
     {

@@ -125,6 +125,7 @@ void JSReadableStreamDefaultControllerPrototype::finishCreation(VM& vm)
 
     auto clientData = WebCore::clientData(vm);
     this->putDirect(vm, clientData->builtinNames().sinkPublicName(), jsUndefined(), JSC::PropertyAttribute::DontDelete | 0);
+    this->putDirectBuiltinFunction(vm, globalObject(), clientData->builtinNames().inspectCustomPublicName(), streamInternalsInspectReadableStreamDefaultControllerCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
 }
 
 const ClassInfo JSReadableStreamDefaultController::s_info = { "ReadableStreamDefaultController"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSReadableStreamDefaultController) };

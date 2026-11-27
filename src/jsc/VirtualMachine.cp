@@ -3080,6 +3080,11 @@ pub fn printErrorlikeObject(
     comptime allow_ansi_color: bool,
     comptime allow_side_effects: bool,
 ) {
+    if (formatter.depth > formatter.max_depth || !formatter.stack_check.isSafeToRecurse()) {
+        writer.print(comptime Output.prettyFmt("<r><cyan>[Error ...]<r>", allow_ansi_color), .{}) catch {};
+        return;
+    }
+
     let was_internal = false;
 
     const _trace_guard = PrintInternalTraceGuard<Writer>{
@@ -3091,6 +3096,16 @@ pub fn printErrorlikeObject(
         allow_ansi_color: allow_ansi_color,
     };
 
+    was_internal = _.printErrorFromMaybePrivateData(
+        value,
+        exception_list,
+        formatter,
+        Writer,
+        writer,
+        allow_ansi_color,
+        allow_side_effects,
+    );
+
     const agg_errors = if (value.isAggregateError(_.global))
         value.fastGet(_.global, .errors) catch {
             _.global.clearException();
@@ -3099,6 +3114,9 @@ pub fn printErrorlikeObject(
     else
         null;
     if (errors := agg_errors) {
+        const prev_depth = formatter.depth;
+        formatter.depth +|= 1;
+        defer formatter.depth = prev_depth;
         let iter = AggregateErrorIterator<Writer>{ writer: writer, current_exception_list: exception_list, formatter: formatter };
         let ok = true;
         if (comptime allow_ansi_color) {
@@ -3117,21 +3135,7 @@ pub fn printErrorlikeObject(
         if (!ok) {
             _.global.clearException();
         }
-        if (iter.printed_member) {
-            return;
-        }
-        // `errors` is empty or not iterable: print the AggregateError itself.
     }
-
-    was_internal = _.printErrorFromMaybePrivateData(
-        value,
-        exception_list,
-        formatter,
-        Writer,
-        writer,
-        allow_ansi_color,
-        allow_side_effects,
-    );
 }
 
 fn printErrorFromMaybePrivateData(
@@ -3606,7 +3610,7 @@ pub fn remapZigException(
             let log = logger.Log.init(bun.default_allocator);
             const _log_guard = DeinitGuard<*logger.Log>{ val: &log };
 
-            let original_source = fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, &log, .print_source) catch return;
+            let original_source = fetchWithoutOnLoadPlugins(client, client.global, top.source_url, bun.String.empty, &log, .print_source) catch break :code ZigString.Slice.empty;
             must_reset_parser_arena_later.* = true;
             break :code original_source.source_code.toUTF8(bun.default_allocator);
         };
@@ -3736,6 +3740,26 @@ fn printErrorInstance(
     // remapZigException, but still get freed.
     let source_code_slice: ZigString.Slice? = null;
     const _slice_guard = OptDeinitPtrGuard<OptZigStringSlice>{ ptr: unsafe { &source_code_slice } };
+
+    let added_to_visited_map = false;
+    if (comptime mode == .js) {
+        if (error_instance != .zero) {
+            if (formatter.map_node == null) {
+                formatter.map_node = ConsoleObject.Formatter.Visited.Pool.get(default_allocator);
+                formatter.map_node.?.data.clearRetainingCapacity();
+                formatter.map = formatter.map_node.?.data;
+            }
+            const entry = formatter.map.getOrPut(error_instance) catch unreachable;
+            added_to_visited_map = !entry.found_existing;
+        }
+    }
+    defer {
+        if (comptime mode == .js) {
+            if (added_to_visited_map) {
+                * = formatter.map.remove(error_instance);
+            }
+        }
+    }
 
     if (mode == .js) {
         client.remapZigException(
@@ -3965,14 +3989,15 @@ fn printErrorInstance(
                 continue;
             }
 
+            if (field.eqlComptime("cause")) {
+                saw_cause = true;
+            }
             const kind = value.jsType();
             if (kind == .ErrorInstance &&
                 // avoid infinite recursion
-                !prev_had_errors)
+                !prev_had_errors &&
+                !(formatter.map_node != null && formatter.map.contains(value)))
             {
-                if (field.eqlComptime("cause")) {
-                    saw_cause = true;
-                }
                 value.protect();
                 errors_to_append.append(value)?;
             } else if (kind.isObject() || kind.isArray() || value.isPrimitive() || kind.isStringLike()) {
@@ -3991,7 +4016,6 @@ fn printErrorInstance(
                     prev_disable_inspect_custom: prev_disable_inspect_custom,
                     prev_format_buffer_as_text: prev_format_buffer_as_text,
                 };
-                formatter.max_depth = 1;
                 formatter.quote_strings = true;
                 formatter.disable_inspect_custom = true;
 
@@ -4052,8 +4076,14 @@ fn printErrorInstance(
         if (!saw_cause) {
             if (cause := error_instance.getOwn(client.global, "cause")?) {
                 if (cause.jsType() == .ErrorInstance) {
-                    cause.protect();
-                    errors_to_append.append(cause)?;
+                    if (formatter.map_node != null && formatter.map.contains(cause)) {
+                        const pad_left = longest_name -| "cause".len;
+                        writer.splatByteAll(' ', pad_left)?;
+                        writer.writeAll(comptime Output.prettyFmt(" cause<r><d>:<r> <cyan>[Circular]<r><d>,<r>\n", allow_ansi_color))?;
+                    } else {
+                        cause.protect();
+                        errors_to_append.append(cause)?;
+                    }
                 }
             }
         }
@@ -4107,7 +4137,15 @@ fn printErrorInstance(
         }
 
         writer.writeAll("\n")?;
-        client.printErrorInstance(.js, e, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects)?;
+        {
+            formatter.depth += 1;
+            defer formatter.depth -= 1;
+            if (formatter.depth > formatter.max_depth) {
+                writer.writeAll(comptime Output.prettyFmt("<r><cyan>[Error ...]<r>", allow_ansi_color))?;
+            } else {
+                client.printErrorInstance(.js, e, exception_list, formatter, Writer, writer, allow_ansi_color, allow_side_effects)?;
+            }
+        }
         * = formatter.map.remove(e);
     }
 }

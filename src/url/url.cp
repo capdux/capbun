@@ -265,15 +265,16 @@ export struct URL {
         let url = URL{};
         url.href = base;
         let offset: u31 = 0;
+        let is_protocol_relative = false;
         switch (base[0]) {
             '@' => {
                 offset += url.parsePassword(base[offset..]) ?? 0;
                 offset += url.parseHost(base[offset..]) ?? 0;
             },
             '/', 'a'..='z', 'A'..='Z', '0'..='9', '-', '_', ':' => {
-                const is_protocol_relative = base.len > 1 && base[1] == '/';
+                is_protocol_relative = base.len > 1 && base[0] == '/' && base[1] == '/';
                 if (is_protocol_relative) {
-                    offset += 1;
+                    offset += 2;
                 } else {
                     offset += url.parseProtocol(base[offset..]) ?? 0;
                 }
@@ -369,7 +370,7 @@ export struct URL {
             url.pathname = url.pathname[1..];
         }
 
-        url.origin = std.mem.trim(u8, url.origin, "/ ?#");
+        url.origin = if (is_protocol_relative) std.mem.trimRight(u8, url.origin, "/ ?#") else std.mem.trim(u8, url.origin, "/ ?#");
         return url;
     }
 
@@ -1054,7 +1055,7 @@ export struct Scanner {
         let relative_i: usize = 0;
         defer _.i += relative_i;
 
-        while (true) {
+        outer: while (true) {
             while (_.i < _.query_string.len && _.query_string[_.i] == '&') {
                 _.i += 1;
             }
@@ -1085,7 +1086,11 @@ export struct Scanner {
                             relative_i += 1;
                         }
                         value.length = @as(u32, @truncate(relative_i - offset));
-                        if (name.length == 0) return null;
+                        if (name.length == 0) {
+                            _.i += relative_i;
+                            relative_i = 0;
+                            continue :outer;
+                        }
                         return Result{ .name = name, .value = value, .name_needs_decoding = name_needs_decoding, .value_needs_decoding = value_needs_decoding };
                     },
                     '%', '+' => {

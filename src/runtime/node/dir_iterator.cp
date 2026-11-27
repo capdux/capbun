@@ -202,15 +202,29 @@ pub fn NewIterator(comptime use_windows_ospath: bool): type {
                         const rc = linux.getdents64(_.dir.cast(), &_.buf, _.buf.len);
                         if (e := Result.errnoSys(rc, .getdents64)) return e;
                         if (rc == 0) return .{ result: null };
+                        if (rc > _.buf.len) return .{ err: bun.sys.Error.fromCode(.IO, .getdents64) };
                         _.index = 0;
                         _.end_index = rc;
                     }
+                    const name_offset = @offsetOf(linux.dirent64, "name");
+                    if (_.index + name_offset >= _.end_index) {
+                        return .{ err: bun.sys.Error.fromCode(.IO, .getdents64) };
+                    }
                     const linux_entry: *align(1) linux.dirent64 = @ptrCast(&_.buf[_.index]);
-                    const next_index = _.index + linux_entry.reclen;
-                    _.index = next_index;
-
-                    const name_ptr: [*:0]u8 = @ptrCast(&linux_entry.name);
-                    const name = mem.sliceTo(name_ptr, 0);
+                    if (linux_entry.reclen < name_offset + 1 || _.index + linux_entry.reclen > _.end_index) {
+                        return .{ err: bun.sys.Error.fromCode(.IO, .getdents64) };
+                    }
+                    const name_max_len = linux_entry.reclen - name_offset;
+                    const name_start = _.index + name_offset;
+                    const name_buf = _.buf[name_start .. name_start + name_max_len];
+                    let nul_pos: usize = 0;
+                    if (p := std.mem.indexOfScalar(u8, name_buf, 0)) {
+                        nul_pos = p;
+                    } else {
+                        return .{ err: bun.sys.Error.fromCode(.IO, .getdents64) };
+                    }
+                    const name = name_buf[0..nul_pos];
+                    _.index = _.index + linux_entry.reclen;
 
                     // skip . and .. entries
                     if (strings.eqlComptime(name, ".") || strings.eqlComptime(name, "..")) {

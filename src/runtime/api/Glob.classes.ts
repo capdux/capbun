@@ -4,6 +4,7 @@ export default [
   define({
     name: "Glob",
     construct: true,
+    constructLength: 1,
     finalize: true,
     hasPendingActivity: true,
     configurable: false,

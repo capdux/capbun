@@ -21,7 +21,7 @@
 
 "use strict";
 
-const { SafeMap, SafeSet, SafeWeakSet } = require("internal/primordials");
+const { SafeMap, SafeSet, SafeWeakMap, SafeWeakSet } = require("internal/primordials");
 const {
   isKeyObject,
   isPromise,
@@ -383,11 +383,24 @@ const SafeMapPrototypeGet = SafeMap.prototype.get;
 const SafeMapPrototypeSet = SafeMap.prototype.set;
 const SafeMapPrototypeDelete = SafeMap.prototype.delete;
 
+function pushComparedPair(comparedObjects, actual, expected) {
+  let seenExpected = comparedObjects.get(actual);
+  if (seenExpected?.has(expected)) {
+    return null;
+  }
+  if (!seenExpected) {
+    seenExpected = new SafeWeakSet();
+    comparedObjects.set(actual, seenExpected);
+  }
+  seenExpected.add(expected);
+  return seenExpected;
+}
+
 /**
  * Compares two objects or values recursively to check if they are equal.
  * @param {any} actual - The actual value to compare.
  * @param {any} expected - The expected value to compare.
- * @param {Set} [comparedObjects=new Set()] - Set to track compared objects for handling circular references.
+ * @param {SafeWeakMap} [comparedObjects] - Map of active (actual, expected) pairs for handling circular references.
  * @returns {boolean} - Returns `true` if the actual value matches the expected value, otherwise `false`.
  * @example
  * compareBranch({a: 1, b: 2, c: 3}, {a: 1, b: 2}); // true
@@ -399,27 +412,29 @@ function compareBranch(actual, expected, comparedObjects?) {
       return false; // `expected` can't be a subset if it has more elements
     }
 
-    comparedObjects ??= new SafeWeakSet();
-
-    // Handle circular references
-    if (comparedObjects.has(actual)) {
+    comparedObjects ??= new SafeWeakMap();
+    const seenExpected = pushComparedPair(comparedObjects, actual, expected);
+    if (!seenExpected) {
       return true;
     }
-    comparedObjects.add(actual);
 
-    const expectedIterator = SafeMapPrototypeIterator.$call(expected);
+    try {
+      const expectedIterator = SafeMapPrototypeIterator.$call(expected);
 
-    for (const { 0: key, 1: expectedValue } of expectedIterator) {
-      if (!SafeMapPrototypeHas.$call(actual, key)) {
-        return false;
+      for (const { 0: key, 1: expectedValue } of expectedIterator) {
+        if (!SafeMapPrototypeHas.$call(actual, key)) {
+          return false;
+        }
+        const actualValue = SafeMapPrototypeGet.$call(actual, key);
+        if (!compareBranch(actualValue, expectedValue, comparedObjects)) {
+          return false;
+        }
       }
-      const actualValue = SafeMapPrototypeGet.$call(actual, key);
-      if (!compareBranch(actualValue, expectedValue, comparedObjects)) {
-        return false;
-      }
+
+      return true;
+    } finally {
+      seenExpected.delete(expected);
     }
-
-    return true;
   }
 
   // Check for ArrayBuffer object equality
@@ -461,43 +476,30 @@ function compareBranch(actual, expected, comparedObjects?) {
     return true;
   }
 
-  // Check if expected array is a subset of actual array
+  // Check if expected array is an ordered subsequence of actual array
   if ($isArray(actual) && $isArray(expected)) {
     if (expected.length > actual.length) {
       return false;
     }
 
-    // Create a map to count occurrences of each element in the expected array
-    const expectedCounts = new SafeMap();
-    for (const expectedItem of expected) {
-      let found = false;
-      for (const { 0: key, 1: count } of expectedCounts) {
-        if (isDeepStrictEqual(key, expectedItem)) {
-          SafeMapPrototypeSet.$call(expectedCounts, key, count + 1);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        SafeMapPrototypeSet.$call(expectedCounts, expectedItem, 1);
-      }
+    comparedObjects ??= new SafeWeakMap();
+    const seenExpected = pushComparedPair(comparedObjects, actual, expected);
+    if (!seenExpected) {
+      return true;
     }
 
-    // Create a map to count occurrences of relevant elements in the actual array
-    for (const actualItem of actual) {
-      for (const { 0: key, 1: count } of expectedCounts) {
-        if (isDeepStrictEqual(key, actualItem)) {
-          if (count === 1) {
-            SafeMapPrototypeDelete.$call(expectedCounts, key);
-          } else {
-            SafeMapPrototypeSet.$call(expectedCounts, key, count - 1);
-          }
-          break;
+    try {
+      let expectedIdx = 0;
+      for (let actualIdx = 0; actualIdx < actual.length && expectedIdx < expected.length; actualIdx++) {
+        if (compareBranch(actual[actualIdx], expected[expectedIdx], comparedObjects)) {
+          expectedIdx++;
         }
       }
-    }
 
-    return !expectedCounts.size;
+      return expectedIdx === expected.length;
+    } finally {
+      seenExpected.delete(expected);
+    }
   }
 
   // Comparison done when at least one of the values is not an object
@@ -508,28 +510,25 @@ function compareBranch(actual, expected, comparedObjects?) {
   // Use Reflect.ownKeys() instead of Object.keys() to include symbol properties
   const keysExpected = ReflectOwnKeys(expected);
 
-  comparedObjects ??= new SafeWeakSet();
-
-  // Handle circular references
-  if (comparedObjects.has(actual)) {
+  comparedObjects ??= new SafeWeakMap();
+  const seenExpected = pushComparedPair(comparedObjects, actual, expected);
+  if (!seenExpected) {
     return true;
   }
-  comparedObjects.add(actual);
 
-  if (AssertionError === undefined) loadAssertionError();
-  // Check if all expected keys and values match
-  for (let i = 0; i < keysExpected.length; i++) {
-    const key = keysExpected[i];
-    assert(
-      ReflectHas(actual, key),
-      new AssertionError({ message: `Expected key ${String(key)} not found in actual object` }),
-    );
-    if (!compareBranch(actual[key], expected[key], comparedObjects)) {
-      return false;
+  try {
+    // Check if all expected keys and values match
+    for (let i = 0; i < keysExpected.length; i++) {
+      const key = keysExpected[i];
+      if (!ReflectHas(actual, key) || !compareBranch(actual[key], expected[key], comparedObjects)) {
+        return false;
+      }
     }
-  }
 
-  return true;
+    return true;
+  } finally {
+    seenExpected.delete(expected);
+  }
 }
 
 /**

@@ -1540,6 +1540,7 @@ pub fn parse(
     allocator: std.mem.Allocator,
     options: Options,
 ): XMLError!Expr {
+    source.checkParseableLen(log, "XML document")?;
     return parseUnits(u8, source, source.contents, log, allocator, options);
 }
 

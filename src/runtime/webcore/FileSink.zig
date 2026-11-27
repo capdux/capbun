@@ -213,6 +213,7 @@ pub fn runPending(self: *FileSink) void {
         defer {
         _ = l.exit();
         }
+        self.pending.consumed = 0;
         _ = self.pending.run();
         _ = self.js_sink_ref.deinit();
 }
@@ -240,12 +241,12 @@ pub fn onWrite(self: *FileSink, amount: usize, status: io.WriteStatus) void {
         }
         if (((status == .pending) and has_pending_data)) {
             if ((self.pending.state == .pending)) {
-                self.pending.consumed = @truncate(amount);
+                self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(amount)));
             }
             return;
         }
         if ((self.pending.state == .pending)) {
-            self.pending.consumed = @truncate(amount);
+            self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(amount)));
             if ((self.done or (status == .end_of_file))) {
                 self.pending.result = .{ .owned_and_done = self.pending.consumed };
             } else {
@@ -283,6 +284,12 @@ pub fn onError(self: *FileSink, e: sys.Error) void {
 
 pub fn onReady(self: *FileSink) void {
         _ = log("onReady()", .{});
+        var event_loop = self.eventLoop();
+        _ = &event_loop;
+        _ = event_loop.enter();
+        defer {
+        _ = event_loop.exit();
+        }
         _ = self.signal.ready(null, null);
 }
 
@@ -291,6 +298,12 @@ pub fn onClose(self: *FileSink) void {
         _ = self.ref();
         defer {
         _ = self.deref();
+        }
+        var event_loop = self.eventLoop();
+        _ = &event_loop;
+        _ = event_loop.enter();
+        defer {
+        _ = event_loop.exit();
         }
         if (self.readable_stream.has()) {
             if (self.event_loop_handle.globalObject()) |global| {
@@ -453,15 +466,24 @@ pub fn onAutoFlush(self: *FileSink) bool {
             return false;
         } else {
             if ((flush_res == .done)) {
+                self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(flush_res.done)));
+                if ((self.pending.state == .pending)) {
+                    self.pending.result = .{ .owned_and_done = self.pending.consumed };
+                }
                 _ = self.updateRef(false);
                 _ = self.runPendingLater();
             } else {
                 if ((flush_res == .wrote)) {
+                    self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(flush_res.wrote)));
                     if ((flush_res.wrote == amount_buffered)) {
+                        if ((self.pending.state == .pending)) {
+                            self.pending.result = .{ .owned = self.pending.consumed };
+                        }
                         _ = self.updateRef(false);
                         _ = self.runPendingLater();
                     }
                 } else {
+                    self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(flush_res.pending)));
                     return true;
                 }
             }
@@ -634,7 +656,8 @@ pub fn endFromJS(self: *FileSink, globalThis: *JSGlobalObject) sys.Maybe(JSValue
                         _ = self.ref();
                     }
                     self.done = true;
-                    self.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
+                    self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(pending_written)));
+                    self.pending.result = .{ .owned = self.pending.consumed };
                     const promise_result = self.pending.promise(globalThis);
                     return .{ .result = promise_result.toJS() };
                 } else {
@@ -697,7 +720,7 @@ pub fn toResult(self: *FileSink, write_result: io.WriteResult) streams.Result.Wr
                         _ = self.ref();
                     }
                     self.pending.consumed = (self.pending.consumed + @as(Blob.SizeType, @truncate(pending_written)));
-                    self.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
+                    self.pending.result = .{ .owned = self.pending.consumed };
                     return .{ .pending = (&self.pending) };
                 }
             }

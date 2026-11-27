@@ -45,6 +45,8 @@ WTF::String toWTFString(ncrypto::BIOPointer& bio)
 {
     BUF_MEM* bptr;
     BIO_get_mem_ptr(bio.get(), &bptr);
+    if (bptr->length == 0)
+        return WTF::emptyString();
     std::span<const char> span(bptr->data, bptr->length);
     if (simdutf::validate_ascii(span.data(), span.size())) {
         return toExternalStringImpl(bio, span);
@@ -108,6 +110,10 @@ static JSValue createX509Certificate(JSC::VM& vm, JSGlobalObject* globalObject, 
     if (arg.isString()) {
         view = arg.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
+        if (view.isNull()) [[unlikely]] {
+            throwException(globalObject, scope, createOutOfMemoryError(globalObject));
+            return {};
+        }
         data = std::span(reinterpret_cast<const uint8_t*>(view.span().data()), view.span().size());
     } else if (auto* typedArray = dynamicDowncast<JSArrayBufferView>(arg)) {
         if (typedArray->isDetached()) [[unlikely]] {
@@ -240,11 +246,6 @@ void JSX509Certificate::finishCreation(VM& vm)
     m_subjectAltName.initLater([](const JSC::LazyProperty<JSX509Certificate, JSString>::Initializer& init) {
         init.property.setMayBeNull(init.owner->vm(), init.owner, init.owner->computeSubjectAltName(init.owner->view(), init.owner->globalObject()));
     });
-
-    m_publicKey.initLater([](const JSC::LazyProperty<JSX509Certificate, JSCell>::Initializer& init) {
-        JSValue value = init.owner->computePublicKey(init.owner->view(), init.owner->globalObject());
-        init.property.setMayBeNull(init.owner->vm(), init.owner, !value.isEmpty() && value.isCell() ? value.asCell() : nullptr);
-    });
 }
 
 JSX509Certificate* JSX509Certificate::create(VM& vm, Structure* structure)
@@ -315,7 +316,7 @@ void JSX509Certificate::visitChildrenImpl(JSCell* cell, Visitor& visitor)
     thisObject->m_raw.visit(visitor);
     thisObject->m_infoAccess.visit(visitor);
     thisObject->m_subjectAltName.visit(visitor);
-    thisObject->m_publicKey.visit(visitor);
+    visitor.append(thisObject->m_publicKey);
     visitor.reportExtraMemoryVisited(thisObject->m_extraMemorySizeForGC);
 }
 
@@ -458,13 +459,13 @@ JSValue JSX509Certificate::computeIssuer(ncrypto::X509View view, JSGlobalObject*
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
 
-    auto bio = view.getIssuer();
-    if (!bio) {
-        throwCryptoOperationFailed(globalObject, scope);
-        return {};
-    }
-
     if (!legacy) {
+        auto bio = view.getIssuer();
+        if (!bio) {
+            throwCryptoOperationFailed(globalObject, scope);
+            return {};
+        }
+
         return jsString(vm, toWTFString(bio));
     }
 
@@ -602,12 +603,12 @@ static bool handleMatchResult(JSGlobalObject* globalObject, ASCIILiteral errorMe
     }
 }
 
-bool JSX509Certificate::checkHost(JSGlobalObject* globalObject, std::span<const char> name, uint32_t flags)
+bool JSX509Certificate::checkHost(JSGlobalObject* globalObject, std::span<const char> name, uint32_t flags, ncrypto::DataPointer* peerName)
 {
     VM& vm = globalObject->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
 
-    auto result = view().checkHost(name, flags);
+    auto result = view().checkHost(name, flags, peerName);
     return handleMatchResult(globalObject, "Invalid name"_s, scope, result);
 }
 
@@ -687,7 +688,14 @@ JSString* JSX509Certificate::subjectAltName()
 
 JSValue JSX509Certificate::publicKey()
 {
-    return m_publicKey.get(this);
+    if (JSValue cached = m_publicKey.get()) {
+        return cached;
+    }
+    JSValue value = computePublicKey(view(), globalObject());
+    if (!value.isEmpty() && value.isCell()) {
+        m_publicKey.set(vm(), this, value);
+    }
+    return value;
 }
 
 bool JSX509Certificate::checkPrivateKey(const KeyObject& keyObject)
@@ -732,7 +740,8 @@ JSC::JSObject* JSX509Certificate::toLegacyObject(ncrypto::X509View view, JSGloba
     RETURN_IF_EXCEPTION(scope, nullptr);
 
     // Set subjectaltname
-    object->putDirect(vm, Identifier::fromString(vm, "subjectaltname"_s), valueOrUndefined(computeSubjectAltName(view, globalObject)));
+    JSString* san = computeSubjectAltName(view, globalObject);
+    object->putDirect(vm, Identifier::fromString(vm, "subjectaltname"_s), san ? JSValue(san) : jsUndefined());
     RETURN_IF_EXCEPTION(scope, nullptr);
 
     // Set infoAccess
@@ -906,7 +915,8 @@ JSC::JSObject* JSX509Certificate::toLegacyObject(JSGlobalObject* globalObject)
     RETURN_IF_EXCEPTION(scope, nullptr);
 
     // Set subjectaltname
-    object->putDirect(vm, Identifier::fromString(vm, "subjectaltname"_s), valueOrUndefined(subjectAltName()));
+    JSString* san = subjectAltName();
+    object->putDirect(vm, Identifier::fromString(vm, "subjectaltname"_s), san ? JSValue(san) : jsUndefined());
     RETURN_IF_EXCEPTION(scope, nullptr);
 
     // Set infoAccess
@@ -1126,7 +1136,7 @@ JSString* JSX509Certificate::computeSubjectAltName(ncrypto::X509View view, JSGlo
 
     auto bio = view.getSubjectAltName();
     if (!bio) {
-        return jsEmptyString(vm);
+        return nullptr;
     }
 
     return jsString(vm, toWTFString(bio));

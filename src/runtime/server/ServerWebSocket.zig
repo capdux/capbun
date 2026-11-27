@@ -224,7 +224,7 @@ pub fn onOpen(self: *ServerWebSocket, ws: uws.AnyWebSocket) void {
                 handler.active_connections = (handler.active_connections -| 1);
                 _ = this_value.unprotect();
             }
-            _ = handler.runErrorCallback(vm, globalObject, err_value);
+            _ = handler.runErrorCallback(vm, globalObject, err_value, this_value);
         }
 }
 
@@ -262,7 +262,7 @@ else => unreachable,
         }
         if (result.toError()) |err_value| {
             _ = &err_value;
-            _ = self.#handler.runErrorCallback(vm, globalObject, err_value);
+            _ = self.#handler.runErrorCallback(vm, globalObject, err_value, arguments[0]);
             return;
         }
         if (result.asAnyPromise()) |p| {
@@ -308,7 +308,7 @@ pub fn onDrain(self: *ServerWebSocket, _ws: uws.AnyWebSocket) void {
             const result = corker.result;
             if (result.toError()) |err_value| {
                 _ = &err_value;
-                _ = handler.runErrorCallback(vm, globalObject, err_value);
+                _ = handler.runErrorCallback(vm, globalObject, err_value, drain_args[0]);
             }
         }
 }
@@ -341,7 +341,7 @@ pub fn onPing(self: *ServerWebSocket, _ws: uws.AnyWebSocket, data: []const u8) v
         const ping_args: [2]jsc.JSValue = .{ ((self.#this_value.tryGet()) orelse (.js_undefined)), (blk_catch_3: { break :blk_catch_3 ((self.binaryToJS(globalThis, data)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 @as(jsc.JSValue, .zero); }); }) };
         _ = (blk_catch_4: { break :blk_catch_4 ((cb.call(globalThis, .js_undefined, (&ping_args))) catch |e| { _ = &e; const err_val = globalThis.takeException(e);
         _ = log("onPing error", .{});
-        break :blk_catch_4 handler.runErrorCallback(vm, globalThis, err_val); }); });
+        break :blk_catch_4 handler.runErrorCallback(vm, globalThis, err_val, ping_args[0]); }); });
 }
 
 pub fn onPong(self: *ServerWebSocket, _ws: uws.AnyWebSocket, data: []const u8) void {
@@ -367,7 +367,7 @@ pub fn onPong(self: *ServerWebSocket, _ws: uws.AnyWebSocket, data: []const u8) v
         const pong_args: [2]jsc.JSValue = .{ ((self.#this_value.tryGet()) orelse (.js_undefined)), (blk_catch_5: { break :blk_catch_5 ((self.binaryToJS(globalThis, data)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 @as(jsc.JSValue, .zero); }); }) };
         _ = (blk_catch_6: { break :blk_catch_6 ((cb.call(globalThis, .js_undefined, (&pong_args))) catch |e| { _ = &e; const err_val = globalThis.takeException(e);
         _ = log("onPong error", .{});
-        break :blk_catch_6 handler.runErrorCallback(vm, globalThis, err_val); }); });
+        break :blk_catch_6 handler.runErrorCallback(vm, globalThis, err_val, pong_args[0]); }); });
 }
 
 pub fn onClose(self: *ServerWebSocket, _ws: uws.AnyWebSocket, code: i32, message: []const u8) void {
@@ -421,12 +421,12 @@ pub fn onClose(self: *ServerWebSocket, _ws: uws.AnyWebSocket, code: i32, message
             }
             const message_js = (blk_catch_7: { break :blk_catch_7 ((bun.String.createUTF8ForJS(globalObject, message)) catch |e| { _ = &e; const err_val = globalObject.takeException(e);
             _ = log("onClose error (message) {}", .{ self.#this_value.isNotEmpty() });
-            _ = handler.runErrorCallback(vm, globalObject, err_val);
+            _ = handler.runErrorCallback(vm, globalObject, err_val, ((self.#this_value.tryGet()) orelse (.js_undefined)));
             return; }); });
             const close_args: [3]jsc.JSValue = .{ ((self.#this_value.tryGet()) orelse (.js_undefined)), JSValue.jsNumber(code), message_js };
             _ = (blk_catch_8: { break :blk_catch_8 ((handler.onClose.call(globalObject, .js_undefined, (&close_args))) catch |e| { _ = &e; const err_val = globalObject.takeException(e);
             _ = log("onClose error {}", .{ self.#this_value.isNotEmpty() });
-            _ = handler.runErrorCallback(vm, globalObject, err_val);
+            _ = handler.runErrorCallback(vm, globalObject, err_val, close_args[0]);
             return; }); });
         } else {
             if (signal) |sig| {

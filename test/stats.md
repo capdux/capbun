@@ -24,6 +24,76 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
+- **2026-11-27 17:52 Batch 169A/170R/172A/172B/175R/176A/177R/180R/181R/182A/183A/184R/185R/186A/187A/187R/188R/189A/190R/191A/192R/193A/194R/195A 验收转绿（`1.4.5-debug`，26 个完整实名路径 + 10 冻结；累计 `1,300` 绿 + `176` 冻结 = `1,476 / 2,339 (63.1%)`，剩余 `863`）**：
+  - `test/js/web/streams/readable-stream-terminal-barrier-release.test.ts` (2 pass, 0 fail)
+  - `test/js/web/fetch/server-response-stream-leak.test.ts` (1 pass, 0 fail, `--timeout=25000`)
+  - `test/js/web/fetch/fetch.unix.test.ts` (16 pass, 0 fail)
+  - `test/js/node/crypto/ecdh.test.ts` (16 pass, 0 fail)
+  - `test/js/node/zlib/leak.test.ts` (6 pass, 0 fail)
+  - `test/js/node/util/node-inspect-tests/import.test.mjs` (1 pass, 0 fail)
+  - `test/js/node/util/node-inspect-tests/parallel/util-inspect-getters-accessing-this.test.js` (1 pass, 0 fail)
+  - `test/js/bun/spawn/exit-code.test.ts` (5 pass, 0 fail)
+  - `test/js/node/util/node-inspect-tests/parallel/util-format.test.js` (1 pass, 0 fail)
+  - `test/js/bun/test/ci-restrictions.test.ts` (12 pass, 0 fail)
+  - `test/js/bun/ffi/ffi-error-messages.test.ts` (44 pass, 0 fail)
+  - `test/js/bun/sqlite/column-types.test.js` (9 pass, 0 fail)
+  - `test/js/bun/sqlite/sql-timezone.test.js` (2 pass, 0 fail)
+  - `test/js/node/crypto/x509.test.ts` (33 pass, 0 fail)
+  - `test/js/node/http/node-http-maxHeaderSize.test.ts` (25 pass, 0 fail)
+  - `test/js/bun/shell/parse.test.ts` (19 pass, 4 todo, 0 fail)
+  - `test/js/node/util/custom-inspect.test.js` (45 pass, 0 fail)
+  - `test/js/bun/http/bun-serve-args.test.ts` (74 pass, 0 fail)
+  - `test/js/bun/ffi/addr32.test.ts` (1 pass, 0 fail)
+  - `test/js/web/structured-clone-shared-array-buffer.test.ts` (3 pass, 1 skip, 0 fail)
+  - `test/js/node/buffer-copy-fill-detach.test.ts` (23 pass, 0 fail)
+  - `test/js/bun/glob/proto.test.ts` (4 pass, 1 skip, 0 fail)
+  - `test/js/node/events/event-emitter.test.ts` (91 pass, 0 fail)
+  - `test/js/bun/transpiler/transpiler-radix-bigint.test.ts` (2 pass, 0 fail)
+  - `test/js/bun/transpiler/parse-error-column.test.ts` (8 pass, 0 fail)
+  - `test/js/bun/transpiler/source-too-large.test.ts` (3 pass, 0 fail)
+  - **显式冻结（`ml-dsa-44`/`ml-kem` PQC 未实现）**：`test/js/node/crypto/crypto-pqc.test.ts`
+  - **显式冻结（Windows NTSTATUS `translateNtStatusToE` 未导出）**：`test/js/node/fs/rm-windows-ntstatus.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 `xxHash3ForTesting` / `xxhash3.cpp`）**：`test/js/bun/util/hash.test.js`
+  - **显式冻结（`v1.4.4` 缺失 `subprocessInternals.closeStdinWriter`）**：`test/js/bun/util/filesink.test.ts`
+  - **显式冻结（原生 `_http_client.ts` 未实现 `agent.freeSockets` 池）**：`test/js/node/http/node-http-agent-free-socket.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 `SQL.handleNumber`/`defineFunction`/`updateHook`）**：`test/js/bun/sqlite/sqlite.test.js`
+  - **显式冻结（`v1.4.4` 缺失 `--no-ffi-cc`/`--no-addons` 与 `BUN_TMPDIR`）**：`test/js/bun/ffi/cc.test.ts`
+  - **显式冻结（`Handlers.cp` 未接入 `alpnCallback`/`serverName` 监听器回调）**：`test/js/bun/net/tcp-server.test.ts`
+  - **显式冻结（缺外部包 `fast-glob`）**：`test/js/bun/glob/scan.test.ts`
+  - **显式冻结（`NodeBufferModule.h:206` `Buffer.transcode` 未实现）**：`test/js/node/buffer.test.js`
+
+- **2026-11-27 17:34 Batch 167R 实测转绿（`1.4.5-debug`，1 个完整实名路径 + 1 冻结）**：
+  - `test/js/web/fetch/response.test.ts` (23 pass, 0 fail)
+  - **显式冻结（`v1.4.4` 缺失新特性 `Bun.FetchSession`）**：`test/js/web/fetch/fetch-session.test.ts`
+
+- **2026-11-27 17:31 Batch 166R-2 实测转绿（`1.4.5-debug`，1 个完整实名路径 + 3 冻结）**：
+  - `test/js/web/structured-clone-blob-file.test.ts` (44 pass, 0 fail)
+  - **显式冻结（预编译 WebKit `5488984d` 限制）**：`test/js/web/explicit-resource-management.test.ts`、`test/js/web/atomics.test.ts`、`test/js/bun/jsc/webkit-upgrade-7b485a76e9.test.ts`
+
+- **2026-11-27 17:27 Batch 164A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/error-name-preservation.test.ts` (3 pass, 0 fail)
+
+- **2026-11-27 17:24 Batch 162B 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/sliceAnsi.test.ts` (168 pass, 0 fail)
+
+- **2026-11-27 17:19 Batch 162A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/sleep.test.ts` (2 pass, 0 fail)
+
+- **2026-11-27 17:17 Batches 158–160 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/inspect-error.test.js` (45 pass, 0 fail)
+
+- **2026-11-27 17:12 Batch 158B 验收转绿（`1.4.5-debug`，1 个完整实名路径 + 1 冻结）**：
+  - `test/js/bun/util/highlighter.test.ts` (37 pass, 0 fail)
+  - **显式冻结（预编译 WebKit `Lookup.h:540` / `JSObject.cpp:836` 限制）**：`test/js/bun/util/BunObject.test.ts`
+
+- **2026-11-27 17:08 Batch 157R-1 实测转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/open-in-editor-gc.test.ts` (4 pass, 0 fail)
+
+- **2026-11-27 16:58 Batch 152R 实测转绿（`1.4.5-debug`，1 个完整实名路径 + 2 冻结）**：
+  - `test/js/bun/util/text-loader.test.ts` (7 pass, 0 fail)
+  - **显式冻结（缺外部包 `uuid`）**：`test/js/bun/util/randomUUIDv5.test.ts`
+  - **显式冻结（缺外部包 `v8-heapsnapshot`）**：`test/js/bun/util/v8-heap-snapshot.test.ts`
+
 - **2026-11-27 16:53 Batch 151A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
   - `test/js/bun/shell/shell-hang.test.ts` (7 pass, 0 fail)
 

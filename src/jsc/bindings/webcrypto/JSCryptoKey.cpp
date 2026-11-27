@@ -179,6 +179,7 @@ void JSCryptoKeyPrototype::finishCreation(VM& vm)
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSCryptoKey::info(), JSCryptoKeyPrototypeTableValues, *this);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
+    this->putDirectNativeFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsCryptoKeyPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, JSC::PropertyAttribute::DontEnum | 0);
 }
 
 const ClassInfo JSCryptoKey::s_info = { "CryptoKey"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSCryptoKey) };

@@ -1001,6 +1001,7 @@ static std::optional<WTF::String> emitSliceStreaming(
 
     const Char* p = data + position;
     bool sawCutEnd = false; // set true if we break due to position >= specEnd
+    bool reachedOrigStart = false; // set true if any visible/zero-width cp is seen at position >= origStart
 
     // Visible-codepoint processing, extracted so it can be called from both
     // the SIMD-skipped tight loop and the false-positive fallback. Returns
@@ -1043,6 +1044,7 @@ static std::optional<WTF::String> emitSliceStreaming(
                 return true;
             }
 
+            if (position >= origStart) reachedOrigStart = true;
             if (!include && position >= start) {
                 include = true;
                 activeStyles.emitOpenCodes(result);
@@ -1172,6 +1174,7 @@ static std::optional<WTF::String> emitSliceStreaming(
                     position += skipN;
                     bulkN -= skipN;
                 }
+                if (bulkN > 0 && position >= origStart) reachedOrigStart = true;
                 if (bulkN > 0 && !include && position >= start) {
                     include = true;
                     activeStyles.emitOpenCodes(result);
@@ -1301,10 +1304,11 @@ walkDone:;
         if (include) flushPending(/*filterCloseOnly=*/trailingPastEnd);
     }
 
-    if (ellipsisWidth > 0 && (cutStartForEllipsis || sawCutEnd) && position > origStart)
-        return ellipsis.toString();
-
-    if (!include) return emptyString();
+    if (!include) {
+        if (ellipsisWidth > 0 && (cutStartForEllipsis || sawCutEnd) && reachedOrigStart)
+            return ellipsis.toString();
+        return emptyString();
+    }
 
     // Degenerate range when cutEndKnown was false (e.g. end - start <= ellipsisWidth):
     // if either edge was actually cut, return just the ellipsis.

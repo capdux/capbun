@@ -19,25 +19,12 @@ pub struct js_bindings {
         let writer = buffer.bufferedWriter();
 
         switch (formatter_id) {
-            .highlight_javascript => {
-                const formatter = bun.fmt.fmtJavaScript(code, {
-                    enable_colors: true,
-                    check_for_unhighlighted_write: false,
-                });
-                writer.writer().print("{f}", .{ formatter }) catch e => {
-                    return global.throwError(e, "while formatting");
-                };
-            },
-            .escape_powershell => {
-                writer.writer().print("{f}", .{ bun.fmt.escapePowershell(code) }) catch e => {
-                    return global.throwError(e, "while formatting");
-                };
-            },
+            .highlight_javascript => writer.writer().print("{f}", .{ bun.fmt.fmtJavaScript(code, { enable_colors: true, check_for_unhighlighted_write: false }) }) catch e => return global.throwError(e, "while formatting"),
+            .highlight_javascript_redacted => writer.writer().print("{f}", .{ bun.fmt.fmtJavaScript(code, { enable_colors: true, check_for_unhighlighted_write: false, redact_sensitive_information: true }) }) catch e => return global.throwError(e, "while formatting"),
+            .escape_powershell => writer.writer().print("{f}", .{ bun.fmt.escapePowershell(code) }) catch e => return global.throwError(e, "while formatting"),
         }
 
-        writer.flush() catch e => {
-            return global.throwError(e, "while formatting");
-        };
+        writer.flush() catch e => return global.throwError(e, "while formatting");
 
         return bun.String.cloneUTF8(buffer.list.items);
     }

@@ -914,36 +914,69 @@ pub fn startsWithSecret(str: []const u8) ?TextRange {
 }
 
 pub fn findUrlPassword(text: []const u8) ?TextRange {
-        if ((!strings.hasPrefixComptime(text, "http"))) {
+        if ((text.len == 0)) {
             return null;
         }
-        var offset: usize = "http".len;
-        _ = &offset;
-        if (hasPrefixComptime(text[offset..], "://")) {
-            offset = (offset + "://".len);
-        } else {
-            if (hasPrefixComptime(text[offset..], "s://")) {
-                offset = (offset + "s://".len);
-            } else {
-                return null;
+        switch (text[0]) {
+97...122, 65...90 => {
+
+},
+else => {
+return null;
+},
+}
+        var scheme_end: usize = 1;
+        _ = &scheme_end;
+        while ((scheme_end < text.len)) : (scheme_end = (scheme_end + 1)) {
+            switch (text[@as(usize, @intCast(scheme_end))]) {
+97...122, 65...90, 48...57, '+', '-', '.' => {
+
+},
+else => {
+break;
+},
+}
+        }
+        if ((!hasPrefixComptime(text[scheme_end..], "://"))) {
+            return null;
+        }
+        const offset: usize = (scheme_end + "://".len);
+        const remain = text[offset..];
+        var end: usize = 0;
+        _ = &end;
+        while ((end < remain.len)) : (end = (end + 1)) {
+            switch (remain[@as(usize, @intCast(end))]) {
+' ', 9, 10, 13, '/', '?', '#' => {
+break;
+},
+else => {
+
+},
+}
+        }
+        const authority = remain[0..end];
+        var at: ?usize = null;
+        _ = &at;
+        var i: usize = authority.len;
+        _ = &i;
+        while ((i > 0)) {
+            i = (i - 1);
+            if ((authority[@as(usize, @intCast(i))] == 64)) {
+                at = i;
+                break;
             }
         }
-        var remain = text[offset..];
-        _ = &remain;
-        const end = ((indexOfChar(remain, 10)) orelse (remain.len));
-        remain = remain[0..end];
-        const at_opt = indexOfChar(remain, 64);
-        if ((at_opt == null)) {
-            return null;
+        if (at) |at_idx| {
+            _ = &at_idx;
+            if ((at_idx == 0)) {
+                return null;
+            }
+            if (eqlComptime(authority[0..at_idx], "git")) {
+                return null;
+            }
+            return TextRange{ .offset = offset, .len = at_idx };
         }
-        const at = at_opt.?;
-        const colon = indexOfCharNeg(remain[0..at], 58);
-        if (((colon == -1) or (colon == (at - 1)))) {
-            return null;
-        }
-        offset = (offset + @as(usize, @intCast((colon + 1))));
-        const len: usize = (at - @as(usize, @intCast((colon + 1))));
-        return TextRange{ .offset = offset, .len = len };
+        return null;
 }
 
 pub fn indexAnyComptime(target: []const u8, comptime chars: []const u8) ?usize {

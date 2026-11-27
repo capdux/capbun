@@ -951,17 +951,19 @@ pub struct Interpreter {
         }
 
         if (comptime bun.Environment.isDebug) {
-            const debug = bun.Output.scoped(.ShellTokens, .hidden);
-            let test_tokens = std.array_list.Managed(shell.Test.TestToken).initCapacity(arena_allocator, lex_result.tokens.len) catch @panic("OOPS");
-            const _guard_test_tokens = DeinitGuard<@TypeOf(test_tokens)>{ ptr: &test_tokens };
-            for (tok of lex_result.tokens) {
-                const test_tok = shell.Test.TestToken.from_real(tok, lex_result.strpool);
-                test_tokens.append(test_tok) catch @panic("OOPS");
-            }
+            if (bun.Output.isScopedVisible(.ShellTokens, .hidden)) {
+                const debug = bun.Output.scoped(.ShellTokens, .hidden);
+                let test_tokens = std.array_list.Managed(shell.Test.TestToken).initCapacity(arena_allocator, lex_result.tokens.len) catch @panic("OOPS");
+                const _guard_test_tokens = DeinitGuard<@TypeOf(test_tokens)>{ ptr: &test_tokens };
+                for (tok of lex_result.tokens) {
+                    const test_tok = shell.Test.TestToken.from_real(tok, lex_result.strpool);
+                    test_tokens.append(test_tok) catch @panic("OOPS");
+                }
 
-            const str = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", .{std.json.fmt(test_tokens.items[0..], {})}));
-            const _guard_str = FreeGuard<@TypeOf(str)>{ alloc: bun.default_allocator, slice: str };
-            debug("Tokens: {s}", .{str});
+                const str = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", .{std.json.fmt(test_tokens.items[0..], {})}));
+                const _guard_str = FreeGuard<@TypeOf(str)>{ alloc: bun.default_allocator, slice: str };
+                debug("Tokens: {s}", .{str});
+            }
         }
 
         out_parser.* = bun.shell.Parser.new(arena_allocator, lex_result, jsobjs)?;
@@ -1548,7 +1550,7 @@ pub struct Interpreter {
         log("Interpreter decr pending activity {d}", .{has_pending_activity.load(.seq_cst)});
     }
 
-    fn rootIO(): *const IO {
+    fn rootIO(*_): *const IO {
         return &_.root_io;
     }
 

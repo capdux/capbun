@@ -1374,8 +1374,12 @@ KeyObject KeyObject::getKeyObjectHandleFromRaw(JSGlobalObject* globalObject, Thr
         }
         WTF::String curveStr = namedCurveValue.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto curveUtf8 = curveStr.utf8();
-        int curveNid = ncrypto::Ec::GetCurveIdFromName(curveUtf8.data());
+        auto curveUtf8 = curveStr.tryGetUTF8();
+        if (!curveUtf8) {
+            ERR::CRYPTO_INVALID_CURVE(scope, globalObject);
+            return {};
+        }
+        int curveNid = ncrypto::Ec::GetCurveIdFromName(curveUtf8->data());
         if (curveNid == NID_undef) {
             ERR::CRYPTO_INVALID_CURVE(scope, globalObject);
             return {};

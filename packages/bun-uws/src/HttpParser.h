@@ -29,6 +29,7 @@
 #include <cstring>
 #include <algorithm>
 #include <climits>
+#include <limits>
 #include <string_view>
 #include <span>
 #include <map>
@@ -865,7 +866,8 @@ namespace uWS
             consumedTotal += consumed;
 
             /* Even if we could parse it, check for length here as well */
-            if (consumed > MAX_FALLBACK_SIZE) {
+            const uint64_t maxAllowedHeaderSize = maxHeaderSize > BUN_DEFAULT_MAX_HTTP_HEADER_SIZE ? maxHeaderSize : MAX_FALLBACK_SIZE;
+            if (consumed > maxAllowedHeaderSize) {
                 return HttpParserResult::error(HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE, HTTP_PARSER_ERROR_REQUEST_HEADER_FIELDS_TOO_LARGE);
             }
 
@@ -1025,6 +1027,9 @@ namespace uWS
 
 public:
     HttpParserResult consumePostPadded(uint64_t maxHeaderSize, bool& isConnectRequest, bool requireHostHeader, bool useStrictMethodValidation, char *data, unsigned int length, void *user, void *reserved, MoveOnlyFunction<void *(void *, HttpRequest *)> &&requestHandler, MoveOnlyFunction<void *(void *, std::string_view, bool)> &&dataHandler) {
+        const size_t maxFallbackSize = maxHeaderSize > BUN_DEFAULT_MAX_HTTP_HEADER_SIZE
+            ? static_cast<size_t>(std::min<uint64_t>(maxHeaderSize, std::numeric_limits<size_t>::max()))
+            : BUN_DEFAULT_MAX_HTTP_HEADER_SIZE;
         /* This resets BloomFilter by construction, but later we also reset it again.
         * Optimize this to skip resetting twice (req could be made global) */
         HttpRequest req;
@@ -1071,7 +1076,7 @@ public:
         } else if (fallback.length()) {
             unsigned int had = (unsigned int) fallback.length();
 
-            size_t maxCopyDistance = std::min<size_t>(MAX_FALLBACK_SIZE - fallback.length(), (size_t) length);
+            size_t maxCopyDistance = std::min<size_t>(maxFallbackSize - fallback.length(), (size_t) length);
 
             /* We don't want fallback to be short string optimized, since we want to move it */
             fallback.reserve(fallback.length() + maxCopyDistance + std::max<unsigned int>(MINIMUM_HTTP_POST_PADDING, sizeof(std::string)));
@@ -1134,7 +1139,7 @@ public:
                 }
 
             } else {
-                if (fallback.length() == MAX_FALLBACK_SIZE) {
+                if (fallback.length() == maxFallbackSize) {
                     return HttpParserResult::error(HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE, HTTP_PARSER_ERROR_REQUEST_HEADER_FIELDS_TOO_LARGE);
                 }
                 return HttpParserResult::success(0, user);
@@ -1153,7 +1158,7 @@ public:
         length -= consumedBytes;
 
         if (length) {
-            if (length < MAX_FALLBACK_SIZE) {
+            if (length < maxFallbackSize) {
                 fallback.append(data, length);
             } else {
                 return HttpParserResult::error(HTTP_ERROR_431_REQUEST_HEADER_FIELDS_TOO_LARGE, HTTP_PARSER_ERROR_REQUEST_HEADER_FIELDS_TOO_LARGE);

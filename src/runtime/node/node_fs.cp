@@ -2896,7 +2896,7 @@ pub struct _ArgumentsRead {
         let buffer_value: jsc.JSValue = undefined;
         if (v := arguments.nextEat()) { buffer_value = v; } else { return ctx.throwInvalidArguments("buffer is required", {}); }
         let buffer: jsc.MarkedArrayBuffer = undefined;
-        if (b := Buffer.fromJS(ctx, buffer_value)) { buffer = b; } else { return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value); }
+        if (b := Buffer.fromJS(ctx, buffer_value)) { buffer = b; } else { return ctx.throwInvalidArgumentTypeValue("buffer", "Buffer, TypedArray, or DataView", buffer_value); }
 
         const offset_value: jsc.JSValue = arguments.nextEat() ?? .@"null";
         // if (offset == null) {

@@ -2659,7 +2659,6 @@ void JSC__JSObject__putRecord(JSC::JSObject* object, JSC::JSGlobalObject* global
     }
 
     object->methodTable()->defineOwnProperty(object, global, ident, descriptor, true);
-    object->putDirect(global->vm(), ident, descriptor.value());
     scope.release();
 }
 void JSC__JSValue__putRecord(JSC::EncodedJSValue objectValue, JSC::JSGlobalObject* global, ZigString* key,
@@ -2710,7 +2709,6 @@ void JSC__JSValue__putRecord(JSC::EncodedJSValue objectValue, JSC::JSGlobalObjec
     }
 
     object->methodTable()->defineOwnProperty(object, global, ident, descriptor, true);
-    object->putDirect(global->vm(), ident, descriptor.value());
     scope.release();
 }
 
@@ -4630,6 +4628,15 @@ CPP_DECL double Bun__JSValue__toNumber(JSC::EncodedJSValue JSValue0, JSC::JSGlob
     double result = JSC::JSValue::decode(JSValue0).toNumber(arg1);
     RETURN_IF_EXCEPTION(scope, PNaN);
     return result;
+}
+
+CPP_DECL JSC::EncodedJSValue Bun__JSValue__toNumeric(JSC::JSGlobalObject* globalObject, JSC::EncodedJSValue value)
+{
+    ASSERT_NO_PENDING_EXCEPTION(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(globalObject->vm());
+    JSC::JSValue result = JSC::JSValue::decode(value).toNumeric(globalObject);
+    RETURN_IF_EXCEPTION(scope, {});
+    return JSC::JSValue::encode(result);
 }
 
 // truncates values larger than int32

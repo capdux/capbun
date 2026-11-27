@@ -71,13 +71,21 @@ pub struct FileSystemRouter {
         }
 
         if (dir := argument.get(globalThis, "dir")?) {
+            if (dir.isUndefined()) {
+                return globalThis.throwInvalidArguments("FileSystemRouterOptions.dir is required", {});
+            }
             if (!dir.isString()) {
-                return globalThis.throwInvalidArguments("Expected dir to be a string", {});
+                return globalThis.throwInvalidArguments("FileSystemRouterOptions.dir must be a string", {});
             }
             const root_dir_path_ = dir.toSlice(globalThis, globalThis.allocator())?;
-            if (!(root_dir_path_.len == 0 || strings.eqlComptime(root_dir_path_.slice(), "."))) {
+            const path = root_dir_path_.slice();
+            if (std.mem.indexOfScalar(u8, path, 0) != null) {
+                let mut_path_ = root_dir_path_;
+                mut_path_.deinit();
+                return globalThis.ERR(.INVALID_ARG_VALUE, "The property \"dir\" must not contain null bytes", {}).throw();
+            }
+            if (!(root_dir_path_.len == 0 || strings.eqlComptime(path, "."))) {
                 // resolve relative path if needed
-                const path = root_dir_path_.slice();
                 if (bun.path.Platform.isAbsolute(.auto, path)) {
                     root_dir_path = root_dir_path_;
                 } else {
@@ -87,7 +95,7 @@ pub struct FileSystemRouter {
             }
         } else {
             // dir is not optional
-            return globalThis.throwInvalidArguments("Expected dir to be a string", {});
+            return globalThis.throwInvalidArguments("FileSystemRouterOptions.dir is required", {});
         }
         let arena_ = globalThis.allocator().create(bun.ArenaAllocator) catch unreachable;
         arena_.* = bun.ArenaAllocator.init(globalThis.allocator());
@@ -110,9 +118,9 @@ pub struct FileSystemRouter {
                     globalThis.allocator().destroy(arena_);
                     return globalThis.throwInvalidArguments("Expected fileExtensions to be an Array of strings", {});
                 }
-                if (val.getLength(globalThis)? == 0) continue;
                 const bytes = val.toUTF8Bytes(globalThis, allocator)?;
-                extensions.appendAssumeCapacity(bytes[1..]);
+                if (bytes.len == 0) continue;
+                extensions.appendAssumeCapacity(if (bytes[0] == '.') bytes[1..] else bytes);
             }
         }
 
@@ -171,7 +179,7 @@ pub struct FileSystemRouter {
             if (!origin.isString()) {
                 arena_.deinit();
                 globalThis.allocator().destroy(arena_);
-                return globalThis.throwInvalidArguments("Expected origin to be a string", {});
+                return globalThis.throwInvalidArguments("FileSystemRouterOptions.origin must be a string", {});
             }
             origin_str = origin.toSlice(globalThis, globalThis.allocator())?;
         }
@@ -455,7 +463,10 @@ pub struct QueryObjectCreator {
     query: *QueryStringMap,
     pub fn create(*_, obj: *JSObject, global: *JSGlobalObject): bun.JSError!void {
         let iter = _.query.iter();
+        let count: usize = 0;
         while (entry := iter.next(&query_string_values_buf)) {
+            if (count >= 1024) break;
+            count += 1;
             const entry_name = entry.name;
             let str = ZigString.init(entry_name).withEncoding();
 
@@ -592,7 +603,7 @@ pub struct MatchedRoute {
     static fn createQueryObject(ctx: *jsc.JSGlobalObject, map: *QueryStringMap): JSValue {
         let creator = QueryObjectCreator{ query: map };
 
-        const value = JSObject.createWithInitializer(QueryObjectCreator, &creator, ctx, map.getNameCount());
+        const value = JSObject.createWithInitializer(QueryObjectCreator, &creator, ctx, @min(map.getNameCount(), 1024));
 
         return value;
     }

@@ -28,26 +28,25 @@ pub @value class Handler {
 
     flags: HandlerFlags = .{};
 
-    pub fn runErrorCallback(vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) {
+    pub fn runErrorCallback(vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue, ws_value: jsc.JSValue) {
         // Termination raised inside the preceding callback.call() cannot be
         // cleared; entering JS again trips executeCallImpl's assertNoException.
         if (globalObject.hasException()) {
             return;
         }
+        const err_arg = error_value.toError() ?? error_value;
         const onError = _.onError;
         if (!onError.isEmptyOrUndefinedOrNull()) {
-            * = onError.call(globalObject, .js_undefined, &.{error_value}) catch e =>
+            * = onError.call(globalObject, .js_undefined, &.{ err_arg, ws_value }) catch e =>
                 _.globalObject.reportActiveExceptionAsUnhandled(e);
             return;
         }
 
-        * = vm.uncaughtException(globalObject, error_value, false);
+        * = vm.uncaughtException(globalObject, err_arg, false);
     }
 
     pub static fn fromJS(globalObject: *jsc.JSGlobalObject, object: jsc.JSValue): bun.JSError!Handler {
         let handler = Handler{ .globalObject = globalObject, .vm = VirtualMachine.get() };
-
-        let valid = false;
 
         inline for (pair of .{
             .{ "error", "onError" },
@@ -65,16 +64,10 @@ pub @value class Handler {
                 const cb = value.withAsyncContextIfNeeded(globalObject);
                 @field(handler, pair[1]) = cb;
                 cb.ensureStillAlive();
-                if (!std.mem.eql(u8, pair[0], "error")) {
-                    valid = true;
-                }
             }
         }
 
-        if (valid)
-            return handler;
-
-        return globalObject.throwInvalidArguments("WebSocketServerContext expects a message handler", .{});
+        return handler;
     }
 
     pub fn protect() {
@@ -193,7 +186,7 @@ export @root struct WebSocketServerContext {
                         if (c := CompressTable.getWithEql(compression.getZigString(globalObject)?, ZigString.eqlComptime)) {
                             server.compression |= c;
                         } else {
-                            return globalObject.throwInvalidArguments("WebSocketServerContext expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});
+                            return globalObject.throwInvalidArguments("websocket expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});
                         }
                     } else {
                         return globalObject.throwInvalidArguments("websocket expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});

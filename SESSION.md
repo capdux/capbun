@@ -1258,3 +1258,7 @@
     - `test/js/bun/shell/bunshell-instance.test.ts` (18/18)、`test/js/bun/util/fuzzy-wuzzy.test.ts` (153/153)、`test/js/bun/util/index-of-line.test.ts` (23/23)、`test/js/bun/shell/commands/rm.test.ts` (9/9)、`test/js/bun/shell/file-io.test.ts` (27/27)、`test/js/bun/shell/shell-hang.test.ts` (7/7)（含前序补录 `base64-url-safe-encode.test.ts` 共 +14 个，其中 3 个已于 `b4831b29d5d` 记账前/后分批入账）；
   - `error-message-string-length-limit.test.ts` 收敛至 1/2（`native error fallback` 通过），`epipe.test.ts` 收敛至 7/8（`rm -rv` 通过）；
 - 精确对账：**实名全绿 1,265 + 冻结 159 = 1,424 / 2,339（60.9%）**，剩余 **915** 个。准备原子提交推送后继续下一批。
+
+- **[2026-11-27 18:32] Batches 153–197A 里程碑验收提交（`1,300` 绿 + `176` 冻结 = `1,476 / 2,339 = 63.1%`，剩余 `863`）**：
+  - 核心修复覆盖 `ConsoleObject.cp`/`VirtualMachine.cp`（Error/Map/Set/Iterator depth cap）、`ReadableStream.ts`/`ReadableStreamInternals.ts`/`StreamInternals.ts`（`concatArrayBuffers`、direct cancel、inspect `$wrapInspectableWritableStream`）、`RequestContext.cp`/`fetch.cp`/`FetchTasklet.cp`/`ServerConfig.cp`/`WebSocketServerContext.cp`/`ServerWebSocket.cp`/`HttpParser.h`（unix socket cwd/no-proxy、stream leak deref、port validation、WS `error(err, ws)`、maxHeaderSize fallback）、`JSX509Certificate*`/`JSECDHPrototype.cpp`/`FFI.h`/`FFI.cp`/`InternalForTesting.*`（`isASANEnabled`）、`shell.cp`/`cat.cp`/`E.cp`/`BuildMessage.cp`/`xml.cp`、`assert.ts`/`http.ts`/`ErrorCode.cpp`。
+  - 实测转绿并记入 `test/stats.md`（较 `b1f697389e6` 新增 `+52` 闭合，含 `+35` 绿灯与 `+17` 显式冻结）。

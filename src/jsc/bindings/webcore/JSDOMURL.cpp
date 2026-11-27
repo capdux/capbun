@@ -244,9 +244,10 @@ JSC_DEFINE_HOST_FUNCTION(jsDOMURLPrototype_inspectCustom, (JSC::JSGlobalObject *
     auto throwScope = DECLARE_THROW_SCOPE(vm);
     auto* globalObject = defaultGlobalObject(lexicalGlobalObject);
 
-    auto* jsUrl = dynamicDowncast<JSDOMURL>(callFrame->thisValue());
+    JSValue thisValue = callFrame->thisValue();
+    auto* jsUrl = dynamicDowncast<JSDOMURL>(thisValue);
     if (!jsUrl) {
-        return Bun::ERR::INVALID_THIS(throwScope, lexicalGlobalObject, "URL"_s);
+        return JSValue::encode(thisValue.isObject() ? thisValue : jsUndefined());
     }
 
     JSValue depthValue = callFrame->argument(0);

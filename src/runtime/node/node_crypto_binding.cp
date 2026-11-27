@@ -272,28 +272,35 @@ fn CryptoJob(comptime Ctx: type): type {
 
 pub struct RandomJobCtx {
     value: JSValue,
-    bytes: [*]u8!,
+    temp_buf: ([]u8)? = null,
     offset: u32,
     length: usize,
-
+    size_unspecified: bool = false,
     result: void = undefined,
-
     fn init(*_, _: *JSGlobalObject)! {
         _.value.protect();
+        _.temp_buf = bun.default_allocator.alloc(u8, _.length)?;
     }
-
     fn runTask(*_, _: void) {
-        unsafe {
-            bun.csprng(_.bytes[_.offset..][0.._.length]);
-        }
+        if (buf := _.temp_buf) bun.csprng(buf);
     }
-
     fn runFromJS(global: *JSGlobalObject, callback: JSValue) {
         const vm = global.bunVM();
-        vm.eventLoop().runCallback(callback, global, .js_undefined, &.{ .@"null", _.value });
+        if (current := _.value.asArrayBuffer(global)) {
+            if (!current.isDetached() && _.offset <= current.byte_len) {
+                const avail = current.byte_len - _.offset;
+                const write_len = if (_.size_unspecified) @min(_.length, avail) else _.length;
+                if (write_len <= avail && !(_.size_unspecified && _.length > 0 && avail == 0)) {
+                    if (buf := _.temp_buf) @memcpy(current.slice()[_.offset .. _.offset + write_len], buf[0..write_len]);
+                    vm.eventLoop().runCallback(callback, global, .js_undefined, &.{ .@"null", _.value });
+                    return;
+                }
+            }
+        }
+        vm.eventLoop().runCallback(callback, global, .js_undefined, &.{ global.ERR(.CRYPTO_OPERATION_FAILED, "Failed to fill buffer with random bytes", .{}).toJS() });
     }
-
     fn deinit(*_) {
+        if (buf := _.temp_buf) { bun.default_allocator.free(buf); _.temp_buf = null; }
         _.value.unprotect();
     }
 }
@@ -467,7 +474,6 @@ pub struct random {
 
         const ctx: JobCtx = .{
             .value = result,
-            .bytes = bytes.ptr,
             .offset = 0,
             .length = size,
         };
@@ -543,6 +549,7 @@ pub struct random {
             offset = assertOffset(global, offset_value, element_size, buf.byte_len)?;
         }
 
+        const size_unspecified = offset_value.isCallable() || size_value.isUndefined();
         const size = if (size_value.isUndefined())
             buf.byte_len - offset
         else
@@ -555,9 +562,9 @@ pub struct random {
 
         const ctx: JobCtx = .{
             .value = buf_value,
-            .bytes = buf.slice().ptr,
             .offset = offset,
             .length = size,
+            .size_unspecified = size_unspecified,
         };
         Job.initAndSchedule(global, callback, &ctx)?;
 

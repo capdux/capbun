@@ -777,14 +777,14 @@ pub fn isS3(self: BlobAny) bool {
 
 pub fn slice(self: *const BlobAny) []const u8 {
             switch (self.*) {
-.Blob => |b| {
+.Blob => |*b| {
 return b.sharedView();
 },
-.InternalBlob => |b| {
+.InternalBlob => |*b| {
 return b.sliceConst();
 },
-.WTFStringImpl => |s| {
-return s.latin1Slice();
+.WTFStringImpl => {
+return self.WTFStringImpl.latin1Slice();
 },
 }
     }
@@ -1532,7 +1532,7 @@ pub fn deinit(self: *Blob) void {
         _ = self.releaseInternal();
 }
 
-pub fn dupe(self: Blob) Blob {
+pub fn dupe(self: *const Blob) Blob {
         if (self.store) |store| {
             _ = &store;
             _ = store.ref();
@@ -1541,7 +1541,7 @@ pub fn dupe(self: Blob) Blob {
         return Blob{ .reported_estimated_size = self.reported_estimated_size, .size = self.size, .offset = self.offset, .store = self.store, .content_type = content_type, .content_type_allocated = self.content_type_allocated, .content_type_was_set = self.content_type_was_set, .charset = self.charset, .is_jsdom_file = self.is_jsdom_file, .ref_count = .init(0), .globalThis = self.globalThis, .last_modified = self.last_modified, .name = self.name.dupeRef() };
 }
 
-pub fn dupeWithContentType(self: Blob, preserve_type: bool) Blob {
+pub fn dupeWithContentType(self: *const Blob, preserve_type: bool) Blob {
         if (self.store) |store| {
             _ = &store;
             _ = store.ref();
@@ -2979,7 +2979,7 @@ var sliced = try item.toSlice(global, bun.default_allocator);
 could_have_non_ascii = true;
                     var buf = (item.asArrayBuffer(global)).?;
                     _ = &buf;
-                    _ = joiner.pushStatic(buf.byteSlice());
+                    _ = joiner.pushCloned(buf.byteSlice());
                     continue;
 },
 .Array, .DerivedArray => {
@@ -3023,7 +3023,7 @@ if (current.as(Blob)) |blob| {
 .ArrayBuffer, .Int8Array, .Uint8Array, .Uint8ClampedArray, .Int16Array, .Uint16Array, .Int32Array, .Uint32Array, .Float16Array, .Float32Array, .Float64Array, .BigInt64Array, .BigUint64Array, .DataView => {
 var buf = (current.asArrayBuffer(global)).?;
             _ = &buf;
-            _ = joiner.pushStatic(buf.slice());
+            _ = joiner.pushCloned(buf.slice());
             could_have_non_ascii = true;
 },
 else => {
@@ -3203,7 +3203,6 @@ else => {
 
 }));
         _ = assignment_result.ensureStillAlive();
-        _ = bun.assert((!signal.isDead()));
         if (assignment_result.toError()) |e| {
             _ = &e;
             _ = file_sink.deref();

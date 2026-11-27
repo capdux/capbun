@@ -1949,7 +1949,7 @@ private:
                     code = SerializationReturnCode::DataCloneError;
                     return true;
                 }
-                if (m_context != SerializationContext::WorkerPostMessage) {
+                if (m_context != SerializationContext::WorkerPostMessage && !(m_context == SerializationContext::Default && m_forStorage == SerializationForStorage::No)) {
                     code = SerializationReturnCode::DataCloneError;
                     return true;
                 }
@@ -6559,7 +6559,8 @@ ExceptionOr<Ref<SerializedScriptValue>> SerializedScriptValue::create(JSGlobalOb
     // #endif
     //             ));
     scope.releaseAssertNoException();
-    return adoptRef(*new SerializedScriptValue(WTF::move(buffer), arrayBufferContentsArray.releaseReturnValue(), context == SerializationContext::WorkerPostMessage ? WTF::move(sharedBuffers) : nullptr
+    const bool canShareMemory = context == SerializationContext::WorkerPostMessage || (context == SerializationContext::Default && forStorage == SerializationForStorage::No);
+    return adoptRef(*new SerializedScriptValue(WTF::move(buffer), arrayBufferContentsArray.releaseReturnValue(), canShareMemory ? WTF::move(sharedBuffers) : nullptr
 #if ENABLE(OFFSCREEN_CANVAS_IN_WORKERS)
         ,
         WTF::move(detachedCanvases)
@@ -6570,7 +6571,7 @@ ExceptionOr<Ref<SerializedScriptValue>> SerializedScriptValue::create(JSGlobalOb
 #endif
 #if ENABLE(WEBASSEMBLY)
             ,
-        makeUnique<WasmModuleArray>(wasmModules), context == SerializationContext::WorkerPostMessage ? makeUnique<WasmMemoryHandleArray>(wasmMemoryHandles) : nullptr
+        makeUnique<WasmModuleArray>(wasmModules), canShareMemory ? makeUnique<WasmMemoryHandleArray>(wasmMemoryHandles) : nullptr
 #endif
 #if ENABLE(WEB_CODECS)
         ,

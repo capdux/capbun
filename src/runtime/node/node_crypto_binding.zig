@@ -119,27 +119,50 @@ pub fn __cp_deinit(self: *StringOrBufferGuard) void {
 
 pub const RandomJobCtx = struct {
     value: JSValue,
-    bytes: [*]u8,
+    temp_buf: ?[]u8 = null,
     offset: u32,
     length: usize,
+    size_unspecified: bool = false,
     result: void = undefined,
 
 pub fn init(self: *RandomJobCtx, _: *JSGlobalObject) !void {
             _ = self.value.protect();
+            self.temp_buf = try bun.default_allocator.alloc(u8, self.length);
     }
 
 pub fn runTask(self: *RandomJobCtx, _: void) void {
-            {
-                _ = bun.csprng(self.bytes[self.offset..][0..self.length]);
+            if (self.temp_buf) |buf| {
+                _ = &buf;
+                _ = bun.csprng(buf);
             }
     }
 
 pub fn runFromJS(self: RandomJobCtx, global: *JSGlobalObject, callback: JSValue) void {
             const vm = global.bunVM();
-            _ = vm.eventLoop().runCallback(callback, global, .js_undefined, (&.{ .@"null", self.value }));
+            if (self.value.asArrayBuffer(global)) |current| {
+                _ = &current;
+                if (((!current.isDetached()) and (self.offset <= current.byte_len))) {
+                    const avail = (current.byte_len - self.offset);
+                    const write_len = (if (self.size_unspecified) @min(self.length, avail) else self.length);
+                    if (((write_len <= avail) and (!((self.size_unspecified and (self.length > 0)) and (avail == 0))))) {
+                        if (self.temp_buf) |buf| {
+                            _ = &buf;
+                            _ = @memcpy(current.slice()[self.offset..(self.offset + write_len)], buf[0..write_len]);
+                        }
+                        _ = vm.eventLoop().runCallback(callback, global, .js_undefined, (&.{ .@"null", self.value }));
+                        return;
+                    }
+                }
+            }
+            _ = vm.eventLoop().runCallback(callback, global, .js_undefined, (&.{ global.ERR(.CRYPTO_OPERATION_FAILED, "Failed to fill buffer with random bytes", .{}).toJS() }));
     }
 
 pub fn deinit(self: *RandomJobCtx) void {
+            if (self.temp_buf) |buf| {
+                _ = &buf;
+                _ = bun.default_allocator.free(buf);
+                self.temp_buf = null;
+            }
             _ = self.value.unprotect();
     }
 };
@@ -289,7 +312,7 @@ pub fn randomBytes(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!J
                 _ = bun.csprng(bytes);
                 return result;
             }
-            const ctx: JobCtx = .{ .value = result, .bytes = bytes.ptr, .offset = 0, .length = size };
+            const ctx: JobCtx = .{ .value = result, .offset = 0, .length = size };
             _ = try Job.initAndSchedule(global, callback, (&ctx));
             return JSValue.js_undefined;
     }
@@ -345,12 +368,13 @@ pub fn randomFill(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
                     offset = try assertOffset(global, offset_value, element_size, buf.byte_len);
                 }
             }
+            const size_unspecified = (offset_value.isCallable() or size_value.isUndefined());
             const size = (if (size_value.isUndefined()) (buf.byte_len - offset) else try assertSize(global, size_value, element_size, offset, buf.byte_len));
             if ((size == 0)) {
                 _ = try callback.call(global, .js_undefined, (&.{ .@"null", buf_value }));
                 return JSValue.js_undefined;
             }
-            const ctx: JobCtx = .{ .value = buf_value, .bytes = buf.slice().ptr, .offset = offset, .length = size };
+            const ctx: JobCtx = .{ .value = buf_value, .offset = offset, .length = size, .size_unspecified = size_unspecified };
             _ = try Job.initAndSchedule(global, callback, (&ctx));
             return JSValue.js_undefined;
     }

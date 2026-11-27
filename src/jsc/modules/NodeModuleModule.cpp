@@ -510,8 +510,8 @@ JSC_DEFINE_HOST_FUNCTION(jsFunctionResolveLookupPaths,
     String request = callFrame->argument(0).toWTFString(globalObject);
     RETURN_IF_EXCEPTION(scope, {});
 
-    auto utf8 = request.utf8();
-    if (ModuleLoader__isBuiltin(utf8.data(), utf8.length())) {
+    auto utf8 = request.tryGetUTF8();
+    if (utf8 && ModuleLoader__isBuiltin(utf8->data(), utf8->length())) {
         return JSC::JSValue::encode(JSC::jsNull());
     }
 

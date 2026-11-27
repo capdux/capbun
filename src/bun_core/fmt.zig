@@ -870,21 +870,24 @@ if (self.opts.redact_sensitive_information) {
                     prev_keyword = null;
                     var i: usize = 1;
                     _ = &i;
-                    if ((((txt.len > 1) and (num == 48)) and (txt[1] == 120))) {
+                    if ((((txt.len > 1) and (num == 48)) and ((txt[1] == 120) or (txt[1] == 88)))) {
                         i = (i + 1);
                         while (((i < txt.len) and (switch (txt[@as(usize, @intCast(i))]) {
-48...57, 97...102, 65...70 => true,
+48...57, 97...102, 65...70, '_' => true,
 else => false,
 }))) {
                             i = (i + 1);
                         }
                     } else {
                         while (((i < txt.len) and (switch (txt[@as(usize, @intCast(i))]) {
-48...57, '.', 'e', 'E', 'x', 'X', 'b', 'B', 'o', 'O' => true,
+48...57, '.', 'e', 'E', 'x', 'X', 'b', 'B', 'o', 'O', '_' => true,
 else => false,
 }))) {
                             i = (i + 1);
                         }
+                    }
+                    if (((i < txt.len) and (txt[@as(usize, @intCast(i))] == 110))) {
+                        i = (i + 1);
                     }
                     _ = try writer.print(Output.prettyFmt("<r><yellow>{s}<r>", true), .{ txt[0..i] });
                     txt = txt[i..];

@@ -70,12 +70,14 @@ CookieMap::CookieMap(Vector<KeyValuePair<String, String>>&& cookies)
 {
 }
 
-static String decodeCookieComponent(StringView view)
+static ExceptionOr<String> decodeCookieComponent(StringView view)
 {
     if (view.find('%') == notFound)
         return view.toString();
 
     Bun::UTF8View utf8View(view);
+    if (utf8View.isNull()) [[unlikely]]
+        return Exception { OutOfMemoryError };
     auto bytes = utf8View.bytes();
     if (view.containsOnlyASCII())
         return Bun::decodeURIComponentSIMD(bytes);
@@ -143,7 +145,11 @@ ExceptionOr<Ref<CookieMap>> CookieMap::create(std::variant<Vector<Vector<String>
 
                 name = nameView.toString();
                 if (hasAnyPercentEncoded) {
-                    value = decodeCookieComponent(valueView);
+                    auto decoded = decodeCookieComponent(valueView);
+                    if (decoded.hasException()) [[unlikely]] {
+                        return decoded.releaseException();
+                    }
+                    value = decoded.releaseReturnValue();
                 } else {
                     value = valueView.toString();
                 }

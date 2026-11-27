@@ -1287,6 +1287,11 @@ pub struct visible {
                 saw_1b = false;
                 // Don't count this char as part of escape, treat normally below
             }
+            if (exclude_ansi_colors && cp == 0x9b) {
+                saw_csi = true;
+                stretch_len = 0;
+                continue;
+            }
 
             if (prev_ := prev_visible) {
                 const should_break = grapheme.graphemeBreak(@truncate(prev_), @truncate(cp), &break_state);

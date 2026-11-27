@@ -1840,7 +1840,7 @@ pub fn spawnProcessPosix(
                 extra_fds.append(.unavailable)?;
             },
             .ignore => {
-                actions.openZ(fileno, "/dev/null", bun.O.RDWR, 0o664)?;
+                actions.close(fileno)?;
                 extra_fds.append(.unavailable)?;
             },
 
@@ -1853,12 +1853,12 @@ pub fn spawnProcessPosix(
                     std.posix.AF.UNIX,
                     std.posix.SOCK.STREAM,
                     0,
-                    if (ipc == .ipc) .nonblocking else .blocking,
+                    .blocking,
                 );
                 if (extra_pair_res == .err) return { err: extra_pair_res.err };
                 const fds: [2]bun.FD = extra_pair_res.result;
 
-                if (!options.sync && ipc == .buffer)
+                if (ipc == .ipc || (!options.sync && ipc == .buffer))
                     bun.sys.setNonblocking(fds[0]).unwrap()?;
 
                 to_close_at_end.append(fds[1])?;

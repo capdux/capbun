@@ -99,6 +99,11 @@ export class ClassDefinition {
   construct?: boolean;
 
   /**
+   * Length of the constructor function (`Constructor.length`). Defaults to 0.
+   */
+  constructLength?: number;
+
+  /**
    * Class constructor needs `this` value.
    *
    * Makes the code generator call the Zig constructor function **after** the

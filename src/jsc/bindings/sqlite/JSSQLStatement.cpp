@@ -902,6 +902,10 @@ static inline bool rebindValue(JSC::JSGlobalObject* lexicalGlobalObject, sqlite3
             CHECK_BIND(sqlite3_bind_text(stmt, i, reinterpret_cast<const char*>(roped->span8().data()), roped->length(), SQLITE_TRANSIENT));
         } else {
             Bun::UTF8View utf8(roped);
+            if (utf8.isNull()) [[unlikely]] {
+                throwException(lexicalGlobalObject, scope, createOutOfMemoryError(lexicalGlobalObject));
+                return false;
+            }
             CHECK_BIND(sqlite3_bind_text(stmt, i, reinterpret_cast<const char*>(utf8.span().data()), utf8.span().size(), SQLITE_TRANSIENT));
         }
 
@@ -1469,7 +1473,13 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementExecuteFunction, (JSC::JSGlobalObject * l
         return {};
     }
 
-    Bun::UTF8View utf8 = Bun::UTF8View(jsSqlString->view(lexicalGlobalObject));
+    auto sqlView = jsSqlString->view(lexicalGlobalObject);
+    RETURN_IF_EXCEPTION(scope, {});
+    Bun::UTF8View utf8 = Bun::UTF8View(sqlView);
+    if (utf8.isNull()) [[unlikely]] {
+        throwException(lexicalGlobalObject, scope, createOutOfMemoryError(lexicalGlobalObject));
+        return {};
+    }
 
     const char* sqlStringHead = utf8.span().data();
     const char* end = utf8.span().data() + utf8.span().size();
@@ -1656,6 +1666,10 @@ JSC_DEFINE_HOST_FUNCTION(jsSQLStatementPrepareStatementFunction, (JSC::JSGlobalO
     auto sqlString = jsSqlString->view(lexicalGlobalObject);
     RETURN_IF_EXCEPTION(scope, {});
     Bun::UTF8View utf8 = Bun::UTF8View(sqlString);
+    if (utf8.isNull()) [[unlikely]] {
+        throwException(lexicalGlobalObject, scope, createOutOfMemoryError(lexicalGlobalObject));
+        return {};
+    }
 
     unsigned int flags = DEFAULT_SQLITE_PREPARE_FLAGS;
     if (prepareFlagsValue.isNumber()) {

@@ -569,7 +569,7 @@ pub struct ASTCondExpr {
 
     fn to_expr(alloc: Allocator): !ASTExpr {
         const condexpr = alloc.create(ASTCondExpr)?;
-        condexpr.* = _;
+        condexpr.* = _.*;
         return .{
             .condexpr = condexpr,
         };
@@ -598,7 +598,7 @@ pub struct ASTIf {
 
     fn to_expr(alloc: Allocator): !ASTExpr {
         const @"if" = alloc.create(ASTIf)?;
-        @"if".* = _;
+        @"if".* = _.*;
         return .{
             .@"if" = @"if",
         };
@@ -1090,6 +1090,7 @@ pub struct Parser {
     current: u32 = 0,
     errors: std.array_list.Managed(ParserError),
     inside_subshell: SubshellKind? = null,
+    depth: u32 = 0,
 
     static fn new(
         allocator: Allocator,
@@ -1119,6 +1120,7 @@ pub struct Parser {
             // when this subparser is done
             errors: _.errors,
             inside_subshell: kind,
+            depth: _.depth,
         };
         return subparser;
     }
@@ -1350,6 +1352,13 @@ pub struct Parser {
     }
 
     fn parse_subshell(*_): !AST.Subshell {
+        if (_.depth >= 256) {
+            _.add_error("Nesting depth exceeded", {})?;
+            return ParseError.Expected;
+        }
+        _.depth += 1;
+        defer _.depth -= 1;
+
         * = _.expect(.OpenParen);
         let subparser = _.make_subparser(.normal);
         const script = subparser.parse_impl() catch e => {
@@ -1497,6 +1506,13 @@ pub struct Parser {
     }
 
     fn parse_if_clause(*_): !AST.If {
+        if (_.depth >= 256) {
+            _.add_error("Nesting depth exceeded", {})?;
+            return ParseError.Expected;
+        }
+        _.depth += 1;
+        defer _.depth -= 1;
+
         * = _.expectIfClauseTextToken(.@"if");
         // _ = self.expect(.If);
 
@@ -1814,6 +1830,13 @@ pub struct Parser {
                         }
                     },
                     .CmdSubstBegin => {
+                        if (_.depth >= 256) {
+                            _.add_error("Nesting depth exceeded", {})?;
+                            return ParseError.Expected;
+                        }
+                        _.depth += 1;
+                        defer _.depth -= 1;
+
                         * = _.expect(.CmdSubstBegin);
                         const is_quoted = _.matchTok(.CmdSubstQuoted);
                         let subparser = _.make_subparser(.cmd_subst);

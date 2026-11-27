@@ -895,7 +895,7 @@ pub inline fn order(self: String, other: *const String) std.math.Order {
             }
     }
 
-pub fn clone(self: String, allocator: std.mem.Allocator) !String {
+pub fn clone(self: *const String, allocator: std.mem.Allocator) !String {
             return String{ .data = try allocator.dupe(u8, self.data), .prefer_template = self.prefer_template, .is_utf16 = (!self.isUTF8()) };
     }
 
@@ -1160,7 +1160,9 @@ part.value = Expr.init(E.String, E.String.init((if ((if (@typeInfo(@TypeOf(part.
 part.value = Expr.init(E.String, E.String.init("undefined"), part.value.loc);
 },
 .e_big_int => |value| {
-part.value = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(value)) == .@"enum") @intFromEnum(value) else value.value)), part.value.loc);
+if ((!value.hasRadixPrefix())) {
+                    part.value = Expr.init(E.String, E.String.init((if (@typeInfo(@TypeOf(value)) == .@"enum") @intFromEnum(value) else value.value)), part.value.loc);
+                }
 },
 else => {
 

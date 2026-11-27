@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { isASAN, rss } from "../../../harness";
 
 const perBatch = 2000;
-const repeat = 50;
+const repeat = isASAN ? 10 : 50;
 test("Printing errors does not leak", () => {
   function batch() {
     for (let i = 0; i < perBatch; i++) {

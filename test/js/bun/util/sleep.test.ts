@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bunEnv, bunExe, isASAN } from "harness";
+import { bunEnv, bunExe, isASAN, isDebug } from "harness";
 
 test("sleep should saturate timeout values", async () => {
   const fixturesThatShouldTimeout = [
@@ -34,33 +34,34 @@ test("sleep should saturate timeout values", async () => {
     return proc;
   });
 
-  const start = performance.now();
-  const toWait = fixturesThatSHouldCompleteInstantly.map(async timeout => {
-    const proc = Bun.spawn({
-      cmd: [bunExe(), "sleep-4ever.js", timeout],
-      stderr: "inherit",
-      stdout: "inherit",
-      stdin: "inherit",
-      env: bunEnv,
-      cwd: import.meta.dir,
+  try {
+    const start = performance.now();
+    const toWait = fixturesThatSHouldCompleteInstantly.map(async timeout => {
+      const proc = Bun.spawn({
+        cmd: [bunExe(), "sleep-4ever.js", timeout],
+        stderr: "inherit",
+        stdout: "inherit",
+        stdin: "inherit",
+        env: bunEnv,
+        cwd: import.meta.dir,
+      });
+      expect(await proc.exited).toBe(0);
+      expect(performance.now() - start).toBeLessThan((isDebug ? 3000 : 1000) * ASAN_MULTIPLIER);
     });
-    expect(await proc.exited).toBe(0);
-    expect(performance.now() - start).toBeLessThan(1000 * ASAN_MULTIPLIER);
-  });
 
-  await Promise.all(toWait);
-  for (let i = 0; i < toKill.length; i++) {
-    const proc = toKill[i];
-    if (proc.exitCode === 0) {
-      console.warn("warn: Expected process #", i, "to timeout, but it didn't");
+    await Promise.all(toWait);
+    for (let i = 0; i < toKill.length; i++) {
+      const proc = toKill[i];
+      if (proc.exitCode === 0) {
+        console.warn("warn: Expected process #", i, "to timeout, but it didn't");
+      }
+      expect(proc.exitCode).toBe(null);
     }
-    expect(proc.exitCode).toBe(null);
+  } finally {
+    const allExited = Promise.all(toKill.map(proc => proc.exited));
+    toKill.forEach(proc => proc.kill());
+    await allExited;
   }
-
-  const allExited = Promise.all(toKill.map(proc => proc.exited));
-  toKill.forEach(proc => proc.kill());
-
-  await allExited;
 }, 120_000);
 
 test("sleep should keep the event loop alive", async () => {

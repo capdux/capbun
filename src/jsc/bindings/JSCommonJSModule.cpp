@@ -295,9 +295,11 @@ JSC_DEFINE_HOST_FUNCTION(requireResolvePathsFunction, (JSGlobalObject * globalOb
     RETURN_IF_EXCEPTION(scope, {});
     {
         UTF8View utf8(requestStr);
-        auto span = utf8.span();
-        if (ModuleLoader__isBuiltin(span.data(), span.size())) {
-            return JSC::JSValue::encode(JSC::jsNull());
+        if (!utf8.isNull()) {
+            auto span = utf8.span();
+            if (ModuleLoader__isBuiltin(span.data(), span.size())) {
+                return JSC::JSValue::encode(JSC::jsNull());
+            }
         }
     }
 

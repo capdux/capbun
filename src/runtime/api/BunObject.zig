@@ -563,12 +563,19 @@ pub fn validateDataArg(globalThis: *JSGlobalObject, buffer_value: JSValue) bun.J
     }
 
 pub fn coerceInt32Checked(globalThis: *JSGlobalObject, val: JSValue) bun.JSError!i32 {
-            const num = try val.toNumber(globalThis);
-            if (globalThis.hasException()) {
-                return error.JSError;
+            const numeric = try val.toNumeric(globalThis);
+            if (numeric.isBigInt()) {
+                if (try parseBigIntI64(globalThis, numeric)) |parsed| {
+                    _ = &parsed;
+                    if (((parsed >= std.math.minInt(i32)) and (parsed <= std.math.maxInt(i32)))) {
+                        return @as(i32, @intCast(parsed));
+                    }
+                }
+                return std.math.maxInt(i32);
             }
+            const num = numeric.asNumber();
             if ((((!std.math.isFinite(num)) or (num < @as(f64, @floatFromInt(std.math.minInt(i32))))) or (num > @as(f64, @floatFromInt(std.math.maxInt(i32)))))) {
-                return globalThis.ERR(.OUT_OF_RANGE, "Value is out of range for 32-bit signed integer", .{}).throw();
+                return std.math.maxInt(i32);
             }
             return @as(i32, @intFromFloat(@trunc(num)));
     }
@@ -796,7 +803,11 @@ var list = try std.ArrayListUnmanaged(u8).initCapacity(allocator, (if ((compress
             return array_buffer.toJSWithContext(globalThis, reader, reader_deallocator);
 },
 .libdeflate => {
-const compressor_opt = bun.libdeflate.Compressor.alloc(((level) orelse (6)));
+const lvl = ((level) orelse (6));
+            if (((lvl < 0) or (lvl > 12))) {
+                return globalThis.throwInvalidArguments("Compression level must be between 0 and 12", .{});
+            }
+            const compressor_opt = bun.libdeflate.Compressor.alloc(lvl);
             if ((compressor_opt == null)) {
                 return globalThis.throwOutOfMemory();
             }
@@ -933,10 +944,17 @@ pub fn getLevel(globalThis: *JSGlobalObject, options_val: ?JSValue) bun.JSError!
                 _ = &option_obj;
                 if (try option_obj.get(globalThis, "level")) |level_val| {
                     _ = &level_val;
-                    const num = try level_val.toNumber(globalThis);
-                    if (globalThis.hasException()) {
-                        return error.JSError;
+                    const numeric = try level_val.toNumeric(globalThis);
+                    if (numeric.isBigInt()) {
+                        if (try parseBigIntI64(globalThis, numeric)) |parsed| {
+                            _ = &parsed;
+                            if (((parsed >= 1) and (parsed <= 22))) {
+                                return @as(i32, @intCast(parsed));
+                            }
+                        }
+                        return globalThis.throwInvalidArguments("Compression level must be between 1 and 22", .{});
                     }
+                    const num = numeric.asNumber();
                     if ((((!std.math.isFinite(num)) or (num < 1.0)) or (num > 22.0))) {
                         return globalThis.throwInvalidArguments("Compression level must be between 1 and 22", .{});
                     }
@@ -1021,12 +1039,18 @@ pub fn compress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSEr
     }
 
 pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-            const opts = try getOptionsAsync(globalThis, callframe);
-            const buffer = opts[0];
-            const vm = globalThis.bunVM();
-            var job = ZstdJob.create(vm, globalThis, buffer, false, 0);
-            _ = &job;
-            return job.promise.value();
+            const arguments = callframe.arguments();
+            const buffer_value: JSValue = (if ((arguments.len > 0)) arguments[0] else .js_undefined);
+            _ = try validateDataArg(globalThis, buffer_value);
+            const allow_string_object = true;
+            if (try jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, buffer_value, true, allow_string_object)) |buffer| {
+                _ = &buffer;
+                const vm = globalThis.bunVM();
+                var job = ZstdJob.create(vm, globalThis, buffer, false, 0);
+                _ = &job;
+                return job.promise.value();
+            }
+            return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
     }
     pub const ZstdJob = JSZstdJob;
 };
@@ -1602,7 +1626,7 @@ pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         if ((milliseconds < 0)) {
             return globalObject.ERR(.INVALID_ARG_TYPE, "argument to sleepSync must not be negative, got {d}", .{ milliseconds }).throw();
         }
-        _ = bun.mimalloc.mi_collect(false);
+        _ = bun.mimalloc.mi_collect(true);
         _ = std.Thread.sleep(((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(milliseconds)) == .@"enum") cp_cast_int(i32, @intFromEnum(milliseconds)) else cp_cast_int(i32, milliseconds)))) == .@"enum") cp_cast_int(u64, @intFromEnum((if (comptime @typeInfo(@TypeOf(milliseconds)) == .@"enum") cp_cast_int(i32, @intFromEnum(milliseconds)) else cp_cast_int(i32, milliseconds)))) else cp_cast_int(u64, (if (comptime @typeInfo(@TypeOf(milliseconds)) == .@"enum") cp_cast_int(i32, @intFromEnum(milliseconds)) else cp_cast_int(i32, milliseconds)))) * std.time.ns_per_ms));
         return JSValue.js_undefined;
 }
@@ -2376,6 +2400,18 @@ pub export fn compressor_deallocator(_: ?*anyopaque, ctx: ?*anyopaque) callconv(
         _ = &compressor;
         _ = compressor.list.deinit(compressor.allocator);
         _ = compressor.deinit();
+}
+
+pub fn parseBigIntI64(globalThis: *jsc.JSGlobalObject, numeric: jsc.JSValue) bun.JSError!?i64 {
+        const str = try numeric.toBunString(globalThis);
+        defer {
+        _ = str.deref();
+        }
+        const utf8 = str.toUTF8(bun.default_allocator);
+        defer {
+        _ = utf8.deinit();
+        }
+        return (blk_catch_51: { break :blk_catch_51 ((std.fmt.parseInt(i64, utf8.slice(), 10)) catch |__ce_51| { _ = &__ce_51; break :blk_catch_51 null; }); });
 }
 
 pub fn createBunStdin(globalThis: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {

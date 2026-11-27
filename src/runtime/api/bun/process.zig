@@ -2629,7 +2629,7 @@ _ = try actions.inherit(fileno);
                 _ = try extra_fds.append(.unavailable);
 },
 .ignore => {
-_ = try actions.openZ(fileno, "/dev/null", bun.O.RDWR, 436);
+_ = try actions.close(fileno);
                 _ = try extra_fds.append(.unavailable);
 },
 .path => |path| {
@@ -2637,12 +2637,12 @@ _ = try actions.open(fileno, path, (bun.O.RDWR | bun.O.CREAT), 436);
                 _ = try extra_fds.append(.unavailable);
 },
 .ipc, .buffer => {
-const extra_pair_res = bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, (if ((ipc == .ipc)) .nonblocking else .blocking));
+const extra_pair_res = bun.sys.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, .blocking);
                 if ((extra_pair_res == .err)) {
                     return .{ .err = extra_pair_res.err };
                 }
                 const fds: [2]bun.FD = extra_pair_res.result;
-                if (((!options.sync) and (ipc == .buffer))) {
+                if (((ipc == .ipc) or ((!options.sync) and (ipc == .buffer)))) {
                     _ = try bun.sys.setNonblocking(fds[0]).unwrap();
                 }
                 _ = try to_close_at_end.append(fds[1]);

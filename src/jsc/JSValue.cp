@@ -168,6 +168,7 @@ pub struct _exposed_to_ffi {
     fn JSC__JSValue__getDirectIndex(val: JSValue, global: *JSGlobalObject, i: u32): JSValue;
     fn JSC__JSValue__forEachPropertyNonIndexed(JSValue0: JSValue, arg1: *JSGlobalObject, arg2: *!?, ArgFn3: (*const fn (*JSGlobalObject, *!?, *ZigString, JSValue, bool, bool) callconv(.c) void)?);
     fn Bun__JSValue__toNumber(value: JSValue, global: *JSGlobalObject): f64;
+    fn Bun__JSValue__toNumeric(global: *JSGlobalObject, value: JSValue): JSValue;
     fn JSC__JSValue__isInstanceOf(val: JSValue, global: *JSGlobalObject, constructor: JSValue): bool;
     fn Bun__JSValue__call(
         ctx: *JSGlobalObject,
@@ -384,6 +385,14 @@ pub enum JSValue: i64 {
     /// https://tc39.es/ecma262/#sec-tonumber
     pub fn toNumber(global: *JSGlobalObject): bun.JSError!f64 {
         return bun.jsc.fromJSHostCallGeneric(global, @src(), Bun__JSValue__toNumber, .{ _, global });
+    }
+
+    /// Perform the ToNumeric abstract operation, coercing a value to a Number or BigInt.
+    /// https://tc39.es/ecma262/#sec-tonumeric
+    pub fn toNumeric(global: *JSGlobalObject): bun.JSError!JSValue {
+        const res = Bun__JSValue__toNumeric(global, _);
+        if (res == .zero) return error.JSError;
+        return res;
     }
 
     // ECMA-262 20.1.2.3 Number.isInteger

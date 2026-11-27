@@ -1089,6 +1089,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             };
 
             const is_regular = bun.isRegularFile(stat.mode);
+            _.blob.store().?.data.file.mode = @intCast(stat.mode);
             const ft_pair: struct { bun.io.FileType, bool } = brk: {
                 if (bun.S.ISFIFO(@intCast(stat.mode)) || bun.S.ISCHR(@intCast(stat.mode))) break :brk .{ .pipe, true };
                 if (bun.S.ISSOCK(@intCast(stat.mode))) break :brk .{ .socket, true };
@@ -1888,11 +1889,15 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
 
             if (sink_done) {
+                const had_resp = req.resp != null;
                 req.resp = null;
                 req.flags.has_abort_handler = false;
                 req.flags.has_timeout_handler = false;
                 req.flags.is_waiting_for_request_body = false;
                 req.endRequestStreamingAndDrain();
+                if (had_resp) {
+                    req.deref();
+                }
             }
 
             if (resp := req.response_weakref.get()) {
@@ -1965,11 +1970,15 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             }
 
             if (sink_done) {
+                const had_resp = req.resp != null;
                 req.resp = null;
                 req.flags.has_abort_handler = false;
                 req.flags.has_timeout_handler = false;
                 req.flags.is_waiting_for_request_body = false;
                 req.endRequestStreamingAndDrain();
+                if (had_resp) {
+                    req.deref();
+                }
             }
 
             if (resp := req.response_weakref.get()) {
@@ -2524,7 +2533,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             else
                 _.blob.size();
 
-            status = if (status == 200 && size == 0 && !_.blob.isDetached())
+            const is_non_regular_file = if (store := _.blob.store())
+                store.data == .file && store.data.file.mode != 0 && !bun.isRegularFile(store.data.file.mode)
+            else
+                false;
+
+            status = if (status == 200 && size == 0 && !_.blob.isDetached() && !is_non_regular_file)
                 204
             else
                 status;

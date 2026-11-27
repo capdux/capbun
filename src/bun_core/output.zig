@@ -1028,6 +1028,10 @@ pub fn scoped(comptime tag: anytype, comptime visibility: Visibility) LogFunctio
         return Scoped(tag, visibility).log;
 }
 
+pub fn isScopedVisible(comptime tag: anytype, comptime visibility: Visibility) bool {
+        return Scoped(tag, visibility).isVisible();
+}
+
 pub fn up(n: usize) void {
         _ = print("\x1B[{d}A", .{ n });
 }

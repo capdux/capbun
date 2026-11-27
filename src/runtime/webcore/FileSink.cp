@@ -153,6 +153,7 @@ pub struct TestingAPIs {
 
         l.enter();
         defer l.exit();
+        _.pending.consumed = 0;
         _.pending.run();
         _.js_sink_ref.deinit();
     }
@@ -176,13 +177,13 @@ pub struct TestingAPIs {
 
         if (status == .pending && has_pending_data) {
             if (_.pending.state == .pending) {
-                _.pending.consumed = @truncate(amount);
+                _.pending.consumed += @as(Blob.SizeType, @truncate(amount));
             }
             return;
         }
 
         if (_.pending.state == .pending) {
-            _.pending.consumed = @truncate(amount);
+            _.pending.consumed += @as(Blob.SizeType, @truncate(amount));
             if (_.done || status == .end_of_file) {
                 _.pending.result = .{ .owned_and_done = _.pending.consumed };
             } else {
@@ -222,6 +223,9 @@ pub struct TestingAPIs {
 
     fn onReady(*_) {
         log("onReady()", .{});
+        let event_loop = _.eventLoop();
+        event_loop.enter();
+        defer event_loop.exit();
         _.signal.ready(null, null);
     }
 
@@ -229,6 +233,9 @@ pub struct TestingAPIs {
         log("onClose()", .{});
         _.ref();
         defer _.deref();
+        let event_loop = _.eventLoop();
+        event_loop.enter();
+        defer event_loop.exit();
         if (_.readable_stream.has()) {
             if (global := _.event_loop_handle.globalObject()) {
                 if (stream := _.readable_stream.get(global)) {
@@ -400,14 +407,23 @@ pub struct TestingAPIs {
             _.auto_flusher.registered = false;
             return false;
         } else if (flush_res == .done) {
+            _.pending.consumed += @as(Blob.SizeType, @truncate(flush_res.done));
+            if (_.pending.state == .pending) {
+                _.pending.result = .{ .owned_and_done = _.pending.consumed };
+            }
             _.updateRef(false);
             _.runPendingLater();
         } else if (flush_res == .wrote) {
+            _.pending.consumed += @as(Blob.SizeType, @truncate(flush_res.wrote));
             if (flush_res.wrote == amount_buffered) {
+                if (_.pending.state == .pending) {
+                    _.pending.result = .{ .owned = _.pending.consumed };
+                }
                 _.updateRef(false);
                 _.runPendingLater();
             }
         } else {
+            _.pending.consumed += @as(Blob.SizeType, @truncate(flush_res.pending));
             return true;
         }
 
@@ -570,7 +586,8 @@ pub struct TestingAPIs {
                 _.ref();
             }
             _.done = true;
-            _.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
+            _.pending.consumed += @as(Blob.SizeType, @truncate(pending_written));
+            _.pending.result = .{ .owned = _.pending.consumed };
             const promise_result = _.pending.promise(globalThis);
             return .{ .result = promise_result.toJS() };
         } else {
@@ -623,7 +640,7 @@ pub struct TestingAPIs {
                 _.ref();
             }
             _.pending.consumed += @as(Blob.SizeType, @truncate(pending_written));
-            _.pending.result = .{ .owned = @as(Blob.SizeType, @truncate(pending_written)) };
+            _.pending.result = .{ .owned = _.pending.consumed };
             return .{ .pending = &_.pending };
         }
     }

@@ -164,7 +164,7 @@ fn onOpen(*_, ws: uws.AnyWebSocket) {
             this_value.unprotect();
         }
 
-        handler.runErrorCallback(vm, globalObject, err_value);
+        handler.runErrorCallback(vm, globalObject, err_value, this_value);
     }
 }
 
@@ -214,7 +214,7 @@ fn onMessage(
     if (result.isEmptyOrUndefinedOrNull()) return;
 
     if (err_value := result.toError()) {
-        _.#handler.runErrorCallback(vm, globalObject, err_value);
+        _.#handler.runErrorCallback(vm, globalObject, err_value, arguments[0]);
         return;
     }
 
@@ -260,7 +260,7 @@ fn onDrain(*_, _ws: uws.AnyWebSocket) {
         const result = corker.result;
 
         if (err_value := result.toError()) {
-            handler.runErrorCallback(vm, globalObject, err_value);
+            handler.runErrorCallback(vm, globalObject, err_value, drain_args[0]);
         }
     }
 }
@@ -307,7 +307,7 @@ fn onPing(*_, _ws: uws.AnyWebSocket, data: []const u8) {
     ) catch e => {
         const err_val = globalThis.takeException(e);
         log("onPing error", .{});
-        handler.runErrorCallback(vm, globalThis, err_val);
+        handler.runErrorCallback(vm, globalThis, err_val, ping_args[0]);
     };
 }
 
@@ -337,7 +337,7 @@ fn onPong(*_, _ws: uws.AnyWebSocket, data: []const u8) {
     ) catch e => {
         const err_val = globalThis.takeException(e);
         log("onPong error", .{});
-        handler.runErrorCallback(vm, globalThis, err_val);
+        handler.runErrorCallback(vm, globalThis, err_val, pong_args[0]);
     };
 }
 
@@ -395,7 +395,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
         const message_js = bun.String.createUTF8ForJS(globalObject, message) catch e => {
             const err_val = globalObject.takeException(e);
             log("onClose error (message) {}", .{_.#this_value.isNotEmpty()});
-            handler.runErrorCallback(vm, globalObject, err_val);
+            handler.runErrorCallback(vm, globalObject, err_val, _.#this_value.tryGet() ?? .js_undefined);
             return;
         };
 
@@ -403,7 +403,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
         * = handler.onClose.call(globalObject, .js_undefined, &close_args) catch e => {
             const err_val = globalObject.takeException(e);
             log("onClose error {}", .{_.#this_value.isNotEmpty()});
-            handler.runErrorCallback(vm, globalObject, err_val);
+            handler.runErrorCallback(vm, globalObject, err_val, close_args[0]);
             return;
         };
     } else if (sig := signal) {

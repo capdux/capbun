@@ -1263,6 +1263,7 @@ pub fn doSendfile(self: *@This(), blob: Blob) void {
 },
 });
             const is_regular = bun.isRegularFile(stat.mode);
+            (self.blob.store()).?.data.file.mode = @intCast(stat.mode);
             const ft_pair: struct { bun.io.FileType, bool } = brk: {
             if ((bun.S.ISFIFO(@intCast(stat.mode)) or bun.S.ISCHR(@intCast(stat.mode)))) {
                 break :brk .{ .pipe, true };
@@ -1978,11 +1979,15 @@ pub fn handleResolveStream(req: *RequestContext) void {
                 _ = wrapper.sink.destroy();
             }
             if (sink_done) {
+                const had_resp = (req.resp != null);
                 req.resp = null;
                 req.flags.has_abort_handler = false;
                 req.flags.has_timeout_handler = false;
                 req.flags.is_waiting_for_request_body = false;
                 _ = req.endRequestStreamingAndDrain();
+                if (had_resp) {
+                    _ = req.deref();
+                }
             }
             if (req.response_weakref.get()) |resp| {
                 _ = &resp;
@@ -2058,11 +2063,15 @@ pub fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: J
                 _ = wrapper.sink.destroy();
             }
             if (sink_done) {
+                const had_resp = (req.resp != null);
                 req.resp = null;
                 req.flags.has_abort_handler = false;
                 req.flags.has_timeout_handler = false;
                 req.flags.is_waiting_for_request_body = false;
                 _ = req.endRequestStreamingAndDrain();
+                if (had_resp) {
+                    _ = req.deref();
+                }
             }
             if (req.response_weakref.get()) |resp| {
                 _ = &resp;
@@ -2580,7 +2589,8 @@ pub fn renderMetadata(self: *@This()) void {
             var needs_content_range = (self.flags.needs_content_range and ((self.sendfile.total > 0) or (self.sendfile.remain < self.blob.size())));
             _ = &needs_content_range;
             const size = (if (needs_content_range) self.sendfile.remain else self.blob.size());
-            status = (if ((((status == 200) and (size == 0)) and (!self.blob.isDetached()))) 204 else status);
+            const is_non_regular_file = (if (self.blob.store()) |store| (((store.data == .file) and (store.data.file.mode != 0)) and (!bun.isRegularFile(store.data.file.mode))) else false);
+            status = (if (((((status == 200) and (size == 0)) and (!self.blob.isDetached())) and (!is_non_regular_file))) 204 else status);
             const ct_res = getContentType(response.getInitHeaders(), (&self.blob), self.allocator);
             const content_type = ct_res[0];
             const needs_content_type = ct_res[1];

@@ -844,9 +844,15 @@ pub static fn fromJS(
         }
         if (global.hasException()) return error.JSError;
 
-        if (port_ := arg.getTruthy(global, "port")?) {
-            args.address.tcp.port = @as(u16, @intCast(@min(@max(0, port_.coerce(i32, global)?), std.math.maxInt(u16))));
-            port = args.address.tcp.port;
+        if (port_ := arg.get(global, "port")?) {
+            if (!port_.isUndefined()) {
+                const port_num = port_.toNumber(global)?;
+                if (!std.math.isFinite(port_num) || @trunc(port_num) != port_num || port_num < 0 || port_num > 65535) {
+                    return global.throwRangeError(port_num, .{ field_name: "options.port", min: 0, max: 65535 });
+                }
+                args.address.tcp.port = @as(u16, @intFromFloat(port_num));
+                port = args.address.tcp.port;
+            }
         }
         if (global.hasException()) return error.JSError;
 
@@ -1045,7 +1051,7 @@ pub static fn fromJS(
             return global.throwInvalidArguments("Cannot disable http1 without enabling http3", .{});
         }
         if (!args.http1 && args.address == .unix) {
-            return global.throwInvalidArguments("Cannot disable http1 with a unix socket — HTTP/3 over AF_UNIX is not supported", .{});
+            return global.throwInvalidArguments("Cannot disable http1 with a unix socket - HTTP/3 over AF_UNIX is not supported", .{});
         }
     } else {
         return global.throwInvalidArguments("Bun.serve expects an object", .{});

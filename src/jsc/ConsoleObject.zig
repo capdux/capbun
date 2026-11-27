@@ -2260,6 +2260,10 @@ const size_opt = try value.get(self.globalThis, "size");
             if ((length == 0)) {
                 return writer.print("{s} {{}}", .{ map_name });
             }
+            if ((self.depth > self.max_depth)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><cyan>[{s} ...]<r>", enable_ansi_colors)), .{ map_name });
+                return;
+            }
             switch (self.single_line) {
 inline else => |single_line| {
 _ = writer.print(("{s}({d}) {{" ++ (if (single_line) " " else "\n")), .{ map_name, length });
@@ -2293,7 +2297,11 @@ const Iter = Formatter.MapIterator(Writer, enable_ansi_colors, false, single_lin
             _ = writer.writeAll("}");
 },
 .MapIterator => {
-var _qs_g = RestoreQuoteStringsGuard{ .fmt = self, .prev = self.quote_strings };
+if ((self.depth > self.max_depth)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><cyan>[MapIterator ...]<r>", enable_ansi_colors)), .{});
+                return;
+            }
+            var _qs_g = RestoreQuoteStringsGuard{ .fmt = self, .prev = self.quote_strings };
             _ = &_qs_g;
             var ___qs_g_moved = false; _ = &___qs_g_moved;
             defer if (!___qs_g_moved) { ___qs_g_moved = true; const __T = @TypeOf(_qs_g); if (@typeInfo(__T) == .optional) { if (_qs_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _qs_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _qs_g; _drop_val.__cp_deinit(); } };
@@ -2331,7 +2339,11 @@ const Iter = Formatter.MapIterator(Writer, enable_ansi_colors, true, single_line
             _ = writer.writeAll("}");
 },
 .SetIterator => {
-var _qs_g = RestoreQuoteStringsGuard{ .fmt = self, .prev = self.quote_strings };
+if ((self.depth > self.max_depth)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><cyan>[SetIterator ...]<r>", enable_ansi_colors)), .{});
+                return;
+            }
+            var _qs_g = RestoreQuoteStringsGuard{ .fmt = self, .prev = self.quote_strings };
             _ = &_qs_g;
             var ___qs_g_moved = false; _ = &___qs_g_moved;
             defer if (!___qs_g_moved) { ___qs_g_moved = true; const __T = @TypeOf(_qs_g); if (@typeInfo(__T) == .optional) { if (_qs_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _qs_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _qs_g; _drop_val.__cp_deinit(); } };
@@ -2376,6 +2388,10 @@ const size_opt = try value.get(self.globalThis, "size");
             const set_name = (if ((value.jsType() == .WeakSet)) "WeakSet" else "Set");
             if ((length == 0)) {
                 return writer.print("{s} {{}}", .{ set_name });
+            }
+            if ((self.depth > self.max_depth)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><cyan>[{s} ...]<r>", enable_ansi_colors)), .{ set_name });
+                return;
             }
             switch (self.single_line) {
 inline else => |single_line| {
@@ -2476,6 +2492,10 @@ else => {
             }
 },
 });
+            if ((self.depth > self.max_depth)) {
+                _ = writer.print((comptime Output.prettyFmt("<r><cyan>[{s} ...]<r>", enable_ansi_colors)), .{ @tagName(event_type) });
+                return;
+            }
             _ = writer.print((comptime Output.prettyFmt("<r><cyan>{s}<r> {{\n", enable_ansi_colors)), .{ @tagName(event_type) });
             {
                 self.indent = (self.indent + 1);

@@ -61,13 +61,11 @@ pub fn parse(possibly_encoded_pathname_: string): !URLPath {
             possibly_encoded_pathname.len,
         )];
 
-        bun.copy(u8, possibly_encoded_pathname, possibly_encoded_pathname_[0..possibly_encoded_pathname.len]);
-        let clone = possibly_encoded_pathname[0..possibly_encoded_pathname.len];
-
+        const input = possibly_encoded_pathname_[0..possibly_encoded_pathname.len];
         let fbs = std.io.fixedBufferStream(possibly_encoded_pathname);
         let writer = fbs.writer();
 
-        decoded_pathname = @as(string, possibly_encoded_pathname[0..PercentEncoding.decodeFaultTolerant(@TypeOf(writer), writer, clone, *needs_redirect, true)?]);
+        decoded_pathname = @as(string, possibly_encoded_pathname[0..PercentEncoding.decodeFaultTolerant(@TypeOf(writer), writer, input, *needs_redirect, true)?]);
     }
 
     if (decoded_pathname.len == 0) {

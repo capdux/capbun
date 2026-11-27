@@ -49,7 +49,7 @@ public:
     LazyProperty<JSX509Certificate, JSUint8Array> m_raw;
     LazyProperty<JSX509Certificate, JSString> m_subjectAltName;
     LazyProperty<JSX509Certificate, JSString> m_infoAccess;
-    LazyProperty<JSX509Certificate, JSCell> m_publicKey;
+    JSC::WriteBarrier<JSC::Unknown> m_publicKey;
 
     JSString* subject();
     JSString* issuer();
@@ -65,7 +65,7 @@ public:
     JSValue publicKey();
 
     // Certificate validation methods
-    bool checkHost(JSGlobalObject*, std::span<const char>, uint32_t flags);
+    bool checkHost(JSGlobalObject*, std::span<const char>, uint32_t flags, ncrypto::DataPointer* peerName = nullptr);
     bool checkEmail(JSGlobalObject*, std::span<const char>, uint32_t flags);
     bool checkIP(JSGlobalObject*, const char*);
     bool checkIssued(JSGlobalObject*, JSX509Certificate* issuer);

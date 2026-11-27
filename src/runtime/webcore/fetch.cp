@@ -539,7 +539,21 @@ fn fetchImpl(
         if (obj == JSValue.zero) continue;
         if (socket_path := obj.get(globalThis, "unix")?) {
             if (socket_path.isString() && socket_path.getLength(globalThis)? > 0) {
-                unix_socket_path = socket_path.toSliceCloneWithAllocator(globalThis, allocator)?;
+                let raw_slice = socket_path.toSliceCloneWithAllocator(globalThis, allocator)?;
+                const raw = raw_slice.slice();
+                if (raw.len > 0 && raw[0] != 0 && !std.fs.path.isAbsolute(raw)) {
+                    defer raw_slice.deinit();
+                    let cwd_buf: bun.PathBuffer = undefined;
+                    const cwd = bun.getcwd(&cwd_buf) catch e => {
+                        return globalThis.throwError(e, "Failed to resolve unix socket path");
+                    };
+                    let path_buf: bun.PathBuffer = undefined;
+                    let parts: [1]string = [raw];
+                    const resolved = bun.path.joinAbsStringBuf(cwd, &path_buf, &parts, .auto);
+                    unix_socket_path = ZigString.Slice.init(allocator, bun.handleOom(allocator.dupe(u8, resolved)));
+                } else {
+                    unix_socket_path = raw_slice;
+                }
                 break;
             }
         }

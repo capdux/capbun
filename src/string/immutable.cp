@@ -393,26 +393,44 @@ pub fn startsWithSecret(str: string): TextRange? {
 }
 
 pub fn findUrlPassword(text: string): TextRange? {
-    if (!strings.hasPrefixComptime(text, "http")) return null;
-    let offset: usize = "http".len;
-    if (hasPrefixComptime(text[offset..], "://")) {
-        offset += "://".len;
-    } else if (hasPrefixComptime(text[offset..], "s://")) {
-        offset += "s://".len;
-    } else {
-        return null;
+    if (text.len == 0) return null;
+    switch (text[0]) {
+        'a'..='z', 'A'..='Z' => {},
+        else => return null,
     }
-    let remain = text[offset..];
-    const end = indexOfChar(remain, '\n') ?? remain.len;
-    remain = remain[0..end];
-    const at_opt = indexOfChar(remain, '@');
-    if (at_opt == null) return null;
-    const at = at_opt.?;
-    const colon = indexOfCharNeg(remain[0..at], ':');
-    if (colon == -1 || colon == at - 1) return null;
-    offset += @as(usize, @intCast(colon + 1));
-    const len: usize = at - @as(usize, @intCast(colon + 1));
-    return TextRange{ offset: offset, len: len };
+    let scheme_end: usize = 1;
+    while (scheme_end < text.len) : (scheme_end += 1) {
+        switch (text[scheme_end]) {
+            'a'..='z', 'A'..='Z', '0'..='9', '+', '-', '.' => {},
+            else => break,
+        }
+    }
+    if (!hasPrefixComptime(text[scheme_end..], "://")) return null;
+    const offset: usize = scheme_end + "://".len;
+    const remain = text[offset..];
+    let end: usize = 0;
+    while (end < remain.len) : (end += 1) {
+        switch (remain[end]) {
+            ' ', '\t', '\n', '\r', '/', '?', '#' => break,
+            else => {},
+        }
+    }
+    const authority = remain[0..end];
+    let at: usize? = null;
+    let i: usize = authority.len;
+    while (i > 0) {
+        i -= 1;
+        if (authority[i] == '@') {
+            at = i;
+            break;
+        }
+    }
+    if (at_idx := at) {
+        if (at_idx == 0) return null;
+        if (eqlComptime(authority[0..at_idx], "git")) return null;
+        return TextRange{ offset: offset, len: at_idx };
+    }
+    return null;
 }
 
 pub fn indexAnyComptime(target: string, comptime chars: string): usize? {

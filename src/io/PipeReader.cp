@@ -547,17 +547,7 @@ struct PosixBufferedReader {
 
                 switch (_.readPipeNowait(fd, read_buf)) {
                     .result bytes_read => {
-                        if (_.checkMaxBuf(bytes_read)) {
-                            _.closeWithoutReporting();
-                            if (streaming) {
-                                * = _.vtable.onReadChunk(read_buf[0..bytes_read], .eof);
-                            } else {
-                                bun.handleOom(_._buffer.appendSlice(read_buf[0..bytes_read]));
-                            }
-                            if (!_.flags.is_done)
-                                _.done();
-                            return;
-                        }
+                        if (_.checkMaxBuf(bytes_read)) return;
 
                         if (bytes_read == 0) {
                             _.closeWithoutReporting();
@@ -602,23 +592,7 @@ struct PosixBufferedReader {
                     .result bytes_read => {
                         _._offset += bytes_read;
                         _._buffer.items.len += bytes_read;
-                        if (_.checkMaxBuf(bytes_read)) {
-                            _.closeWithoutReporting();
-                            if (streaming) {
-                                const prev_len = _._buffer.items.len;
-                                * = _.vtable.onReadChunk(buf[0..bytes_read], .eof);
-                                if (_._buffer.items.len > prev_len) {
-                                    const reentered = _._buffer.items[prev_len..];
-                                    std.mem.copyForwards(u8, _._buffer.items[0..reentered.len], reentered);
-                                    _._buffer.items.len = reentered.len;
-                                } else if (_._buffer.items.len == prev_len) {
-                                    _._buffer.items.len = 0;
-                                }
-                            }
-                            if (!_.flags.is_done)
-                                _.done();
-                            return;
-                        }
+                        if (_.checkMaxBuf(bytes_read)) return;
 
                         if (bytes_read == 0) {
                             _.closeWithoutReporting();
@@ -718,16 +692,7 @@ struct PosixBufferedReader {
                     )) {
                         .result bytes_read => {
                             _._offset += bytes_read;
-                            if (_.checkMaxBuf(bytes_read)) {
-                                stack_buffer_head = stack_buffer_head[bytes_read..];
-                                _.closeWithoutReporting();
-                                const pending = stack_buffer[0 .. stack_buffer.len - stack_buffer_head.len];
-                                if (pending.len > 0)
-                                    * = _.vtable.onReadChunk(pending, .eof);
-                                if (!_.flags.is_done)
-                                    _.done();
-                                return;
-                            }
+                            if (_.checkMaxBuf(bytes_read)) return;
                             const read_full_limit = hit_max_read && bytes_read == buf.len;
                             buf = stack_buffer_head[0..bytes_read];
                             stack_buffer_head = stack_buffer_head[bytes_read..];
@@ -803,13 +768,7 @@ struct PosixBufferedReader {
                         bun.handleOom(_._buffer.appendSlice(read_buf[0..bytes_read]));
                     }
                     _._offset += bytes_read;
-                    if (_.checkMaxBuf(bytes_read)) {
-                        _.closeWithoutReporting();
-                        * = _.drainChunk(_._buffer.items, .eof);
-                        if (!_.flags.is_done)
-                            _.done();
-                        return;
-                    }
+                    if (_.checkMaxBuf(bytes_read)) return;
 
                     if (bytes_read == 0) {
                         _.closeWithoutReporting();
@@ -852,13 +811,7 @@ struct PosixBufferedReader {
                 .result bytes_read => {
                     _._offset += bytes_read;
                     _._buffer.items.len += bytes_read;
-                    if (_.checkMaxBuf(bytes_read)) {
-                        _.closeWithoutReporting();
-                        * = _.drainChunk(_._buffer.items, .eof);
-                        if (!_.flags.is_done)
-                            _.done();
-                        return;
-                    }
+                    if (_.checkMaxBuf(bytes_read)) return;
                     buf = buf[0..bytes_read];
 
                     if (bytes_read == 0) {

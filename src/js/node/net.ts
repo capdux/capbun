@@ -2447,7 +2447,7 @@ Server.prototype.listen = function listen(port, hostname, onListen) {
       onListen,
     );
   } catch (err) {
-    setTimeout(emitErrorNextTick, 1, this, err);
+    process.nextTick(emitErrorNextTick, this, err);
   }
   return this;
 };
@@ -2526,7 +2526,7 @@ Server.prototype[kRealListen] = function (
   // That leads to all sorts of confusion.
   //
   // process.nextTick() is not sufficient because it will run before the IO queue.
-  setTimeout(emitListeningNextTick, 1, this);
+  process.nextTick(emitListeningNextTick, this);
 };
 
 Server.prototype[EventEmitter.captureRejectionSymbol] = function (err, event, sock) {

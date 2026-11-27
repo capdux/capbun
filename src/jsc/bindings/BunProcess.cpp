@@ -3078,8 +3078,13 @@ static JSValue maybe_uid_by_name(JSC::ThrowScope& throwScope, JSGlobalObject* gl
 
     auto str = value.getString(globalObject);
     RETURN_IF_EXCEPTION(throwScope, {});
-    auto utf8 = str.utf8();
-    auto name = utf8.data();
+    auto utf8 = str.tryGetUTF8();
+    if (!utf8) {
+        auto message = makeString("User identifier does not exist: "_s, str);
+        throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_CREDENTIAL, message));
+        return {};
+    }
+    auto name = utf8->data();
     struct passwd pwd;
     struct passwd* pp = nullptr;
     char buf[8192];
@@ -3100,8 +3105,13 @@ static JSValue maybe_gid_by_name(JSC::ThrowScope& throwScope, JSGlobalObject* gl
 
     auto str = value.getString(globalObject);
     RETURN_IF_EXCEPTION(throwScope, {});
-    auto utf8 = str.utf8();
-    auto name = utf8.data();
+    auto utf8 = str.tryGetUTF8();
+    if (!utf8) {
+        auto message = makeString("Group identifier does not exist: "_s, str);
+        throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_CREDENTIAL, message));
+        return {};
+    }
+    auto name = utf8->data();
     struct group pwd;
     struct group* pp = nullptr;
     char buf[8192];

@@ -113,6 +113,7 @@ pub inline fn JSVALUE_TO_FLOAT(arg_val: EncodedJSValue): f32 {
 }
 pub inline fn JSVALUE_TO_DOUBLE(arg_val: EncodedJSValue): f64 {
     let val = arg_val;
+    if (JSVALUE_IS_INT32(val)) return @as(f64, @floatFromInt(JSVALUE_TO_INT32(val)));
     val.asInt64 -= @as(i64, 1) << @as(i64, 49);
     return val.asDouble;
 }

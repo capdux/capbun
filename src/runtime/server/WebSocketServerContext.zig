@@ -70,23 +70,22 @@ pub const Handler = struct {
     active_connections: usize = 0,
     flags: HandlerFlags = .{},
 
-pub fn runErrorCallback(self: Handler, vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) void {
+pub fn runErrorCallback(self: Handler, vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue, ws_value: jsc.JSValue) void {
             if (globalObject.hasException()) {
                 return;
             }
+            const err_arg = ((error_value.toError()) orelse (error_value));
             const onError = self.onError;
             if ((!onError.isEmptyOrUndefinedOrNull())) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((onError.call(globalObject, .js_undefined, (&.{ error_value }))) catch |e| { _ = &e; break :blk_catch_0 self.globalObject.reportActiveExceptionAsUnhandled(e); }); });
+                _ = (blk_catch_0: { break :blk_catch_0 ((onError.call(globalObject, .js_undefined, (&.{ err_arg, ws_value }))) catch |e| { _ = &e; break :blk_catch_0 self.globalObject.reportActiveExceptionAsUnhandled(e); }); });
                 return;
             }
-            _ = vm.uncaughtException(globalObject, error_value, false);
+            _ = vm.uncaughtException(globalObject, err_arg, false);
     }
 
 pub fn fromJS(globalObject: *jsc.JSGlobalObject, object: jsc.JSValue) bun.JSError!Handler {
             var handler = Handler{ .globalObject = globalObject, .vm = VirtualMachine.get() };
             _ = &handler;
-            var valid = false;
-            _ = &valid;
             inline for (.{ .{ "error", "onError" }, .{ "message", "onMessage" }, .{ "open", "onOpen" }, .{ "close", "onClose" }, .{ "drain", "onDrain" }, .{ "ping", "onPing" }, .{ "pong", "onPong" } }) |pair| {
                 if (try object.getTruthy(globalObject, pair[0])) |value| {
                     _ = &value;
@@ -96,15 +95,9 @@ pub fn fromJS(globalObject: *jsc.JSGlobalObject, object: jsc.JSValue) bun.JSErro
                     const cb = value.withAsyncContextIfNeeded(globalObject);
                     @field(handler, pair[1]) = cb;
                     _ = cb.ensureStillAlive();
-                    if ((!std.mem.eql(u8, pair[0], "error"))) {
-                        valid = true;
-                    }
                 }
             }
-            if (valid) {
-                return handler;
-            }
-            return globalObject.throwInvalidArguments("WebSocketServerContext expects a message handler", .{});
+            return handler;
     }
 
 pub fn protect(self: Handler) void {
@@ -187,7 +180,7 @@ pub fn onCreate(globalObject: *jsc.JSGlobalObject, object: JSValue) bun.JSError!
                             _ = &c;
                             server.compression = (server.compression | c);
                         } else {
-                            return globalObject.throwInvalidArguments("WebSocketServerContext expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});
+                            return globalObject.throwInvalidArguments("websocket expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});
                         }
                     } else {
                         return globalObject.throwInvalidArguments("websocket expects a valid compress option, either disable \"shared\" \"dedicated\" \"3KB\" \"4KB\" \"8KB\" \"16KB\" \"32KB\" \"64KB\" \"128KB\" or \"256KB\"", .{});

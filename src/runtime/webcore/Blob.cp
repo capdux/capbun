@@ -1639,7 +1639,7 @@ pub union(enum) BlobAny {
         switch (_) {
             .Blob(b) => return b.sharedView(),
             .InternalBlob(b) => return b.sliceConst(),
-            .WTFStringImpl(s) => return s.latin1Slice(),
+            .WTFStringImpl => return _.WTFStringImpl.latin1Slice(),
         }
     }
 
@@ -4083,7 +4083,7 @@ pub struct BlobExternalSharedDescriptor {
                                 .DataView => {
                                     could_have_non_ascii = true;
                                     let buf = item.asArrayBuffer(global).?;
-                                    joiner.pushStatic(buf.byteSlice());
+                                    joiner.pushCloned(buf.byteSlice());
                                     continue;
                                 },
                                 .Array, .DerivedArray => {
@@ -4139,7 +4139,7 @@ pub struct BlobExternalSharedDescriptor {
                 .BigUint64Array,
                 .DataView => {
                     let buf = current.asArrayBuffer(global).?;
-                    joiner.pushStatic(buf.slice());
+                    joiner.pushCloned(buf.slice());
                     could_have_non_ascii = true;
                 },
 
@@ -4350,7 +4350,6 @@ pub struct BlobExternalSharedDescriptor {
         );
 
         assignment_result.ensureStillAlive();
-        bun.assert(!signal.isDead());
 
         if (e := assignment_result.toError()) {
             file_sink.deref();

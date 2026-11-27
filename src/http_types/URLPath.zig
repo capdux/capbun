@@ -120,14 +120,12 @@ else => big_temp_path_buf[0..],
 });
             _ = &possibly_encoded_pathname;
             possibly_encoded_pathname = possibly_encoded_pathname[0..@min(possibly_encoded_pathname_.len, possibly_encoded_pathname.len)];
-            _ = bun.copy(u8, possibly_encoded_pathname, possibly_encoded_pathname_[0..possibly_encoded_pathname.len]);
-            var clone = possibly_encoded_pathname[0..possibly_encoded_pathname.len];
-            _ = &clone;
+            const input = possibly_encoded_pathname_[0..possibly_encoded_pathname.len];
             var fbs = std.io.fixedBufferStream(possibly_encoded_pathname);
             _ = &fbs;
             var writer = fbs.writer();
             _ = &writer;
-            decoded_pathname = @as([]const u8, possibly_encoded_pathname[0..try PercentEncoding.decodeFaultTolerant(@TypeOf(writer), writer, clone, (&needs_redirect), true)]);
+            decoded_pathname = @as([]const u8, possibly_encoded_pathname[0..try PercentEncoding.decodeFaultTolerant(@TypeOf(writer), writer, input, (&needs_redirect), true)]);
         }
         if ((decoded_pathname.len == 0)) {
             decoded_pathname = "/";

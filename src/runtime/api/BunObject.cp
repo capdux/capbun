@@ -951,7 +951,7 @@ pub fn sleepSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         return globalObject.ERR(.INVALID_ARG_TYPE, "argument to sleepSync must not be negative, got {d}", .{ milliseconds }).throw();
     }
 
-    bun.mimalloc.mi_collect(false);
+    bun.mimalloc.mi_collect(true);
     std.Thread.sleep(@as(u64, i32(milliseconds)) * std.time.ns_per_ms);
     return JSValue.js_undefined;
 }
@@ -1858,6 +1858,14 @@ pub enum JSZlibLibrary {
     pub const map = bun.ComptimeEnumMap(JSZlibLibrary);
 }
 
+fn parseBigIntI64(globalThis: *jsc.JSGlobalObject, numeric: jsc.JSValue): bun.JSError!(i64?) {
+    const str = numeric.toBunString(globalThis)?;
+    defer str.deref();
+    const utf8 = str.toUTF8(bun.default_allocator);
+    defer utf8.deinit();
+    return std.fmt.parseInt(i64, utf8.slice(), 10) catch null;
+}
+
 pub struct JSZlib {
     pub const Library = JSZlibLibrary;
 
@@ -1868,10 +1876,18 @@ pub struct JSZlib {
     }
 
     static fn coerceInt32Checked(globalThis: *JSGlobalObject, val: JSValue): bun.JSError!i32 {
-        const num = val.toNumber(globalThis)?;
-        if (globalThis.hasException()) return error.JSError;
+        const numeric = val.toNumeric(globalThis)?;
+        if (numeric.isBigInt()) {
+            if (parsed := parseBigIntI64(globalThis, numeric)?) {
+                if (parsed >= std.math.minInt(i32) && parsed <= std.math.maxInt(i32)) {
+                    return @as(i32, @intCast(parsed));
+                }
+            }
+            return std.math.maxInt(i32);
+        }
+        const num = numeric.asNumber();
         if (!std.math.isFinite(num) || num < @as(f64, @floatFromInt(std.math.minInt(i32))) || num > @as(f64, @floatFromInt(std.math.maxInt(i32)))) {
-            return globalThis.ERR(.OUT_OF_RANGE, "Value is out of range for 32-bit signed integer", .{}).throw();
+            return std.math.maxInt(i32);
         }
         return @as(i32, @intFromFloat(@trunc(num)));
     }
@@ -2123,7 +2139,11 @@ pub struct JSZlib {
                 return array_buffer.toJSWithContext(globalThis, reader, reader_deallocator);
             },
             .libdeflate => {
-                const compressor_opt = bun.libdeflate.Compressor.alloc(level ?? 6);
+                const lvl = level ?? 6;
+                if (lvl < 0 || lvl > 12) {
+                    return globalThis.throwInvalidArguments("Compression level must be between 0 and 12", .{});
+                }
+                const compressor_opt = bun.libdeflate.Compressor.alloc(lvl);
                 if (compressor_opt == null) {
                     return globalThis.throwOutOfMemory();
                 }
@@ -2278,9 +2298,17 @@ pub struct JSZstd {
     static fn getLevel(globalThis: *JSGlobalObject, options_val: JSValue?): bun.JSError!i32 {
         if (option_obj := options_val) {
             if (level_val := option_obj.get(globalThis, "level")?) {
-                const num = level_val.toNumber(globalThis)?;
-                if (globalThis.hasException()) return error.JSError;
+                const numeric = level_val.toNumeric(globalThis)?;
+                if (numeric.isBigInt()) {
+                    if (parsed := parseBigIntI64(globalThis, numeric)?) {
+                        if (parsed >= 1 && parsed <= 22) {
+                            return @as(i32, @intCast(parsed));
+                        }
+                    }
+                    return globalThis.throwInvalidArguments("Compression level must be between 1 and 22", .{});
+                }
 
+                const num = numeric.asNumber();
                 if (!std.math.isFinite(num) || num < 1.0 || num > 22.0) {
                     return globalThis.throwInvalidArguments("Compression level must be between 1 and 22", .{});
                 }
@@ -2386,12 +2414,18 @@ pub struct JSZstd {
     }
 
     static fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const opts = (getOptionsAsync(globalThis, callframe))?;
-        const buffer = opts[0];
+        const arguments = callframe.arguments();
+        const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
+        validateDataArg(globalThis, buffer_value)?;
 
-        const vm = globalThis.bunVM();
-        let job = ZstdJob.create(vm, globalThis, buffer, false, 0); // level is ignored for decompression
-        return job.promise.value();
+        const allow_string_object = true;
+        if (buffer := jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, buffer_value, true, allow_string_object)?) {
+            const vm = globalThis.bunVM();
+            let job = ZstdJob.create(vm, globalThis, buffer, false, 0); // level is ignored for decompression
+            return job.promise.value();
+        }
+
+        return globalThis.ERR(.INVALID_ARG_TYPE, "data must be a string, ArrayBuffer or ArrayBufferView", .{}).throw();
     }
 }
 

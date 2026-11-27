@@ -605,6 +605,11 @@ pub fn visibleUTF16WidthFn(input_: []const u16, exclude_ansi_colors: bool, ambig
                 if (saw_1b) {
                     saw_1b = false;
                 }
+                if ((exclude_ansi_colors and (cp == 155))) {
+                    saw_csi = true;
+                    stretch_len = 0;
+                    continue;
+                }
                 if (prev_visible) |prev_| {
                     _ = &prev_;
                     const should_break = grapheme.graphemeBreak(@truncate(prev_), @truncate(cp), (&break_state));

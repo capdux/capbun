@@ -291,6 +291,7 @@ static EncodedJSValue BOOLEAN_TO_JSVALUE(bool val) {
 
 
 static double JSVALUE_TO_DOUBLE(EncodedJSValue val) {
+  if (JSVALUE_IS_INT32(val)) return (double)JSVALUE_TO_INT32(val);
   val.asInt64 -= DoubleEncodeOffset;
   return val.asDouble;
 }

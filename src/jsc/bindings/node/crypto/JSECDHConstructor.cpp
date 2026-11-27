@@ -56,9 +56,12 @@ JSC_DEFINE_HOST_FUNCTION(constructECDH, (JSC::JSGlobalObject * globalObject, JSC
     WTF::String curveString = curveValue.toWTFString(globalObject);
     RETURN_IF_EXCEPTION(scope, {});
 
-    auto curve = curveString.utf8();
+    auto curve = curveString.tryGetUTF8();
+    if (!curve) {
+        return Bun::ERR::CRYPTO_INVALID_CURVE(scope, globalObject);
+    }
 
-    int nid = OBJ_sn2nid(curve.data());
+    int nid = OBJ_sn2nid(curve->data());
     if (nid == NID_undef) {
         return Bun::ERR::CRYPTO_INVALID_CURVE(scope, globalObject);
     }
@@ -108,7 +111,11 @@ JSC_DEFINE_HOST_FUNCTION(jsECDHConvertKey, (JSC::JSGlobalObject * lexicalGlobalO
     auto curveName = curveValue.toWTFString(lexicalGlobalObject);
     RETURN_IF_EXCEPTION(scope, {});
 
-    int nid = OBJ_sn2nid(curveName.utf8().data());
+    auto curveUtf8 = curveName.tryGetUTF8();
+    if (!curveUtf8)
+        return Bun::ERR::CRYPTO_INVALID_CURVE(scope, lexicalGlobalObject);
+
+    int nid = OBJ_sn2nid(curveUtf8->data());
     if (nid == NID_undef)
         return Bun::ERR::CRYPTO_INVALID_CURVE(scope, lexicalGlobalObject);
 

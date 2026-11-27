@@ -564,15 +564,26 @@ function spawnSync(file, args, options) {
       stdio: bunStdio,
       windowsVerbatimArguments: options.windowsVerbatimArguments,
       windowsHide: options.windowsHide,
+      detached: options.detached,
       argv0: options.args[0],
       timeout: options.timeout,
       killSignal: options.killSignal,
       maxBuffer: options.maxBuffer,
     });
   } catch (err) {
-    error = err;
-    stdout = null;
-    stderr = null;
+    if (err) {
+      err.syscall = "spawnSync " + options.file;
+      err.spawnargs = ArrayPrototypeSlice.$call(options.args, 1);
+    }
+    return {
+      status: null,
+      signal: null,
+      output: null,
+      pid: 0,
+      stdout: undefined,
+      stderr: undefined,
+      error: err,
+    };
   }
 
   // When stdio is redirected to a file descriptor, Bun.spawnSync returns the fd number

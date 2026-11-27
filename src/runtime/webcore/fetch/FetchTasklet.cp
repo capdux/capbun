@@ -877,14 +877,19 @@ export class FetchTasklet {
         }
 
         const fail_err = _.result.fail.?;
-        const code_str: [:0]const u8 = if (fail_err == error.ConnectionClosed) "ECONNRESET" else @errorName(fail_err);
+        const code_str: [:0]const u8 = if (fail_err == error.ConnectionClosed)
+            "ECONNRESET"
+        else if (fail_err == error.ConnectionRefused)
+            "ECONNREFUSED"
+        else
+            @errorName(fail_err);
         const fetch_error = jsc.SystemError{
             .code = BunString.static(code_str),
             .message = switch (fail_err) {
-                error.ConnectionClosed => BunString.static("The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"),
+                error.ConnectionClosed => BunString.static("ECONNRESET: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"),
                 error.FailedToOpenSocket => BunString.static("Was there a typo in the url or port?"),
-                error.TooManyRedirects => BunString.static("The response redirected too many times. For more information, pass `verbose: true` in the second argument to fetch()"),
-                error.ConnectionRefused => BunString.static("Unable to connect. Is the computer able to access the url?"),
+                error.TooManyRedirects => BunString.static("TooManyRedirects: The response redirected too many times. For more information, pass `verbose: true` in the second argument to fetch()"),
+                error.ConnectionRefused => BunString.static("ECONNREFUSED: Unable to connect. Is the computer able to access the url?"),
                 error.RedirectURLInvalid => BunString.static("Redirect URL in Location header is invalid."),
 
                 error.UNABLE_TO_GET_ISSUER_CERT => BunString.static("unable to get issuer certificate"),
@@ -1199,7 +1204,7 @@ export class FetchTasklet {
                     proxy = proxy_opt;
                 }
             }
-        } else {
+        } else if (fetch_options.unix_socket_path.length() == 0) {
             if (env_proxy := jsc_vm.transpiler.env.getHttpProxyFor(url)) {
                 if (env_proxy.href.len > 0) {
                     const old_url_len = url.href.len;

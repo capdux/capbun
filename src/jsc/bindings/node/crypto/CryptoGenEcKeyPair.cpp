@@ -128,9 +128,13 @@ std::optional<EcKeyPairJobCtx> EcKeyPairJobCtx::fromJS(JSGlobalObject* globalObj
     GCOwnedDataScope<WTF::StringView> namedCurveView = namedCurveString->view(globalObject);
     RETURN_IF_EXCEPTION(scope, std::nullopt);
 
-    CString curveName = namedCurveView->utf8();
+    auto curveName = namedCurveView->tryGetUTF8();
+    if (!curveName) {
+        ERR::CRYPTO_INVALID_CURVE(scope, globalObject);
+        return std::nullopt;
+    }
 
-    int curveNid = ncrypto::Ec::GetCurveIdFromName(curveName.data());
+    int curveNid = ncrypto::Ec::GetCurveIdFromName(curveName->data());
     if (curveNid == NID_undef) {
         ERR::CRYPTO_INVALID_CURVE(scope, globalObject);
         return std::nullopt;

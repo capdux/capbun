@@ -183,6 +183,10 @@ void copyBufferOrString(JSGlobalObject* lexicalGlobalObject, ThrowScope& scope, 
         GCOwnedDataScope<WTF::StringView> view = str->view(lexicalGlobalObject);
         RETURN_IF_EXCEPTION(scope, );
         UTF8View utf8(view);
+        if (utf8.isNull()) [[unlikely]] {
+            throwException(lexicalGlobalObject, scope, createOutOfMemoryError(lexicalGlobalObject));
+            return;
+        }
         buffer.append(utf8.span());
     } else if (auto* view = dynamicDowncast<JSC::JSArrayBufferView>(value)) {
         buffer.append(view->span());

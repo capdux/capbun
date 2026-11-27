@@ -274,6 +274,8 @@ JSC_DEFINE_HOST_FUNCTION(jsX509CertificateProtoFuncCheckEmail, (JSGlobalObject *
     RETURN_IF_EXCEPTION(scope, {});
 
     Bun::UTF8View emailView(view);
+    if (emailView.isNull()) [[unlikely]]
+        return JSValue::encode(jsUndefined());
 
     auto check = thisObject->checkEmail(globalObject, emailView.span(), flags);
     RETURN_IF_EXCEPTION(scope, {});
@@ -309,10 +311,16 @@ JSC_DEFINE_HOST_FUNCTION(jsX509CertificateProtoFuncCheckHost, (JSGlobalObject * 
     RETURN_IF_EXCEPTION(scope, {});
 
     Bun::UTF8View hostView(view);
+    if (hostView.isNull()) [[unlikely]]
+        return JSValue::encode(jsUndefined());
 
-    auto check = thisObject->checkHost(globalObject, hostView.span(), flags);
+    ncrypto::DataPointer peerName;
+    auto check = thisObject->checkHost(globalObject, hostView.span(), flags, &peerName);
     RETURN_IF_EXCEPTION(scope, {});
     if (!check) return JSValue::encode(jsUndefined());
+    if (peerName.get() && peerName.size() > 0) {
+        return JSValue::encode(jsString(vm, String::fromUTF8({ reinterpret_cast<const char*>(peerName.get()), peerName.size() })));
+    }
     return JSValue::encode(hostString);
 }
 
@@ -421,6 +429,11 @@ JSC_DEFINE_HOST_FUNCTION(jsX509CertificateProtoFuncToLegacyObject, (JSGlobalObje
     }
 
     RELEASE_AND_RETURN(scope, JSValue::encode(thisObject->toLegacyObject(globalObject)));
+}
+
+static JSValue valueOrUndefined(JSString* value)
+{
+    return value ? JSValue(value) : jsUndefined();
 }
 
 static JSValue undefinedIfEmpty(JSString* value)
@@ -580,7 +593,7 @@ JSC_DEFINE_CUSTOM_GETTER(jsX509CertificateGetter_subjectAltName, (JSGlobalObject
         return {};
     }
 
-    RELEASE_AND_RETURN(scope, JSValue::encode(undefinedIfEmpty(thisObject->subjectAltName())));
+    RELEASE_AND_RETURN(scope, JSValue::encode(valueOrUndefined(thisObject->subjectAltName())));
 }
 
 JSC_DEFINE_CUSTOM_GETTER(jsX509CertificateGetter_infoAccess, (JSGlobalObject * globalObject, EncodedJSValue thisValue, PropertyName))
