@@ -84,11 +84,13 @@ pub const bun = @import("bun");
 pub const ParserError = error{
     OutOfMemory,
     UnexpectedToken,
+    TooManyBraces,
 };
 
 pub const ExpandError = error{
     OutOfMemory,
     UnexpectedToken,
+    TooManyBraces,
 };
 
 pub fn DeinitWithAllocGuard(comptime T: type) type {
@@ -176,6 +178,17 @@ pub fn init(tokens: []const Token, alloc: Allocator) Parser {
     }
 
 pub fn parse(self: *Parser) !AST.Group {
+            var open_count: usize = 0;
+            _ = &open_count;
+            for (cp_iter_slice(self.tokens)) |tok| {
+                _ = &tok;
+                if ((tok == .open)) {
+                    open_count = (open_count + 1);
+                    if ((open_count > MAX_BRACE_GROUPS)) {
+                        return ParserError.TooManyBraces;
+                    }
+                }
+            }
             var group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), self.alloc);
             _ = &group_alloc_;
             const group_alloc = group_alloc_.get();
@@ -357,6 +370,7 @@ pub const OpenBrace = struct {
 
 const log = bun.Output.scoped(.BRACES, .visible);
 const MAX_NESTED_BRACES = 10;
+pub const MAX_BRACE_GROUPS: usize = 2048;
 pub const Lexer = NewLexer(.ascii);
 const SmolStr = string_pkg.SmolStr;
 const Encoding = shell.StringEncoding;

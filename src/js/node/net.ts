@@ -309,7 +309,11 @@ function SocketEmitEndNT(self, _err?) {
       self.write = writeAfterFIN;
     }
     self[kended] = true;
-    self.push(null);
+    if (!self._parentWrap) {
+      self.push(null);
+    } else if (!self.destroyed) {
+      self.destroy(_err);
+    }
   }
   // TODO: check how the best way to handle this
   // if (err) {
@@ -1231,13 +1235,14 @@ Socket.prototype._final = function _final(callback) {
   if (this.connecting) {
     return this.once("connect", () => this._final(callback));
   }
-  if (this.secureConnecting) {
-    return this.once("secure", () => {
-      if (this.destroyed) return callback();
-      this._final(callback);
-    });
-  }
   const socket = this._handle;
+  if (this.secureConnecting) {
+    process.nextTick(() => {
+      socket?.shutdown?.();
+      callback();
+    });
+    return;
+  }
 
   // already closed call destroy
   if (!socket) return callback();

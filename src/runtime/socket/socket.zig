@@ -2011,11 +2011,13 @@ pub fn writeOrEnd(self: *@This(), globalObject: *jsc.JSGlobalObject, args: []jsc
                 self.flags.end_after_flush = true;
             }
             if ((bytes.len == 0)) {
-                if (ssl) {
-                    _ = log("writeOrEnd 0", .{});
-                    self.flags.empty_packet_pending = true;
-                    if ((!self.tryWriteEmptyPacket())) {
-                        return .{ .success = .{ .wrote = -1, .total = bytes.len } };
+                if (comptime ssl) {
+                    if ((!self.flags.bypass_tls)) {
+                        _ = log("writeOrEnd 0", .{});
+                        self.flags.empty_packet_pending = true;
+                        if ((!self.tryWriteEmptyPacket())) {
+                            return .{ .success = .{ .wrote = -1, .total = bytes.len } };
+                        }
                     }
                 }
                 return .{ .success = .{} };
@@ -2033,12 +2035,14 @@ pub fn writeOrEnd(self: *@This(), globalObject: *jsc.JSGlobalObject, args: []jsc
     }
 
 pub fn tryWriteEmptyPacket(self: *@This()) bool {
-            if (ssl) {
-                if (((!self.flags.handshake_complete) or (self.buffered_data_for_node_net.len > 0))) {
-                    return false;
+            if (comptime ssl) {
+                if ((!self.flags.bypass_tls)) {
+                    if (((!self.flags.handshake_complete) or (self.buffered_data_for_node_net.len > 0))) {
+                        return false;
+                    }
+                    self.flags.empty_packet_pending = false;
+                    return true;
                 }
-                self.flags.empty_packet_pending = false;
-                return true;
             }
             return false;
     }

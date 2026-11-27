@@ -64,6 +64,8 @@ public:
     static void clearSocketData(bool upgraded, us_socket_t* socket);
 
     void close();
+    void pause();
+    void resume();
     bool isClosed() const;
     bool isAuthorized() const;
 

@@ -336,6 +336,7 @@ pub fn exportAll() void {
             _ = @export((&@field(BunObject, "registerMacro")), .{ .name = callbackName("registerMacro") });
             _ = @export((&@field(BunObject, "resolve")), .{ .name = callbackName("resolve") });
             _ = @export((&@field(BunObject, "resolveSync")), .{ .name = callbackName("resolveSync") });
+            _ = @export((&@field(BunObject, "braces")), .{ .name = callbackName("braces") });
             _ = @export((&@field(BunObject, "serve")), .{ .name = callbackName("serve") });
             _ = @export((&@field(BunObject, "sha")), .{ .name = callbackName("sha") });
             _ = @export((&@field(BunObject, "shellEscape")), .{ .name = callbackName("shellEscape") });
@@ -358,6 +359,7 @@ pub fn exportAll() void {
             _ = @export((&@field(BunObject, "setMain")), .{ .name = "BunObject_setter_main" });
     }
     pub const allocUnsafe = toJSCallback(Bun.allocUnsafe);
+    pub const braces = toJSCallback(Bun.bracesJS);
     pub const build = toJSCallback(Bun.JSBundler.buildFn);
     pub const color = toJSCallback(bun.css.CssColor.jsFunctionColor);
     pub const connect = toJSCallback(host_fn.wrapStaticMethod(api.Listener, "connect", false));
@@ -1111,6 +1113,33 @@ pub fn shellEscape(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         return jsval;
 }
 
+pub fn bracesJS(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+        const arguments = callframe.arguments_old(2);
+        const input_val = (if ((arguments.len >= 1)) arguments.ptr[0] else .js_undefined);
+        const brace_str = try input_val.toBunString(global);
+        if (global.hasException()) {
+            return JSValue.zero;
+        }
+        var _brace_str_g = DerefGuard(bun.String){ .val = brace_str };
+        _ = &_brace_str_g;
+        var ___brace_str_g_moved = false; _ = &___brace_str_g_moved;
+        defer if (!___brace_str_g_moved) { ___brace_str_g_moved = true; const __T = @TypeOf(_brace_str_g); if (@typeInfo(__T) == .optional) { if (_brace_str_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _brace_str_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _brace_str_g; _drop_val.__cp_deinit(); } };
+        var opts: gen.BracesOptions = .{ .tokenize = false, .parse = false };
+        _ = &opts;
+        if ((arguments.len >= 2)) {
+            const opts_val = arguments.ptr[1];
+            if (opts_val.isObject()) {
+                opts.tokenize = ((try opts_val.getBooleanLoose(global, "tokenize")) orelse (false));
+                opts.parse = ((try opts_val.getBooleanLoose(global, "parse")) orelse (false));
+            } else {
+                if ((!opts_val.isUndefinedOrNull())) {
+                    return global.ERR(.INVALID_ARG_TYPE, "BracesOptions must be an object", .{}).throw();
+                }
+            }
+        }
+        return braces(global, brace_str, opts);
+}
+
 pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.BracesOptions) bun.JSError!jsc.JSValue {
         const brace_slice = brace_str.toUTF8(bun.default_allocator);
         var _brace_slice_g = DeinitGuard(@TypeOf(brace_slice)){ .val = brace_slice };
@@ -1142,7 +1171,10 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         if (opts.parse) {
             var parser = Braces.Parser.init(lexer_output.tokens.items[0..], arena_g.val.allocator());
             _ = &parser;
-            const ast_node = (blk_catch_11: { break :blk_catch_11 ((parser.parse()) catch |e| { _ = &e; return global.throwError(e, "failed to parse braces"); }); });
+            const ast_node = (blk_catch_11: { break :blk_catch_11 ((parser.parse()) catch |e| { _ = &e; if ((e == error.TooManyBraces)) {
+                return global.throwPretty("Too many braces in brace expansion", .{});
+            }
+            return global.throwError(e, "failed to parse braces"); }); });
             const str = bun.handleOom(std.fmt.allocPrint(global.bunVM().allocator, "{f}", .{ std.json.fmt(ast_node, .{}) }));
             var _str_g = FreeGuard(@TypeOf(str)){ .alloc = global.bunVM().allocator, .ptr = str };
             _ = &_str_g;
@@ -1167,6 +1199,9 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         }
         _ = (blk_catch_12: { break :blk_catch_12 ((Braces.expand(arena_g.val.allocator(), lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
+        }
+        if ((e == error.TooManyBraces)) {
+            return global.throwPretty("Too many braces in brace expansion", .{});
         }
         return global.throwPretty("Unexpected token while expanding braces", .{}); }); });
         var out_strings = try arena_g.val.allocator().alloc(bun.String, expansion_count);

@@ -144,9 +144,17 @@ struct SgrStyleState {
     void applyStart(const String& openCodeStr, const String& endCodeStr)
     {
         // Remove existing entry with same endCode, then add new one.
-        // Bold (1) and dim (2) share close code 22 but are independent
-        // attributes until closed together by SGR 22.
-        if (endCodeStr == "\x1b[22m"_s) {
+        // Bold (1) and dim (2) share close code 22; 23/24/25/54/75 are also shared
+        // close codes for independent attributes.
+        auto isSharedCloseCode = [](const String& s) -> bool {
+            return s == "\x1b[22m"_s || s == StringView::fromLatin1("\x9b" "22m")
+                || s == "\x1b[23m"_s || s == StringView::fromLatin1("\x9b" "23m")
+                || s == "\x1b[24m"_s || s == StringView::fromLatin1("\x9b" "24m")
+                || s == "\x1b[25m"_s || s == StringView::fromLatin1("\x9b" "25m")
+                || s == "\x1b[54m"_s || s == StringView::fromLatin1("\x9b" "54m")
+                || s == "\x1b[75m"_s || s == StringView::fromLatin1("\x9b" "75m");
+        };
+        if (isSharedCloseCode(endCodeStr)) {
             entries.removeAllMatching([&](const Entry& e) {
                 return e.endCode == endCodeStr && e.openCode == openCodeStr;
             });
@@ -166,9 +174,19 @@ struct SgrStyleState {
 
     void emitCloseCodes(StringBuilder& result) const
     {
-        // Emit in reverse order (matching upstream undoAnsiCodes)
-        for (size_t i = entries.size(); i > 0; --i)
-            result.append(entries[i - 1].endCode);
+        // Emit in reverse order (matching upstream undoAnsiCodes), skipping duplicate endCodes
+        for (size_t i = entries.size(); i > 0; --i) {
+            const String& endCode = entries[i - 1].endCode;
+            bool alreadyEmitted = false;
+            for (size_t j = entries.size(); j > i; --j) {
+                if (entries[j - 1].endCode == endCode) {
+                    alreadyEmitted = true;
+                    break;
+                }
+            }
+            if (!alreadyEmitted)
+                result.append(endCode);
+        }
     }
 
     bool isEmpty() const { return entries.isEmpty(); }
@@ -690,6 +708,10 @@ static const Char* tryParseAnsi(const Char* start, const Char* end, TokenType& t
     // Fallback: 2-byte (ESC + 0x30..0x7E) and nF (ESC + 0x20..0x2F+ + 0x30..0x7E) escape sequences
     if (c == 0x1b && start + 1 < end) {
         Char next = *(start + 1);
+        if (next == 0x1b) {
+            type = TokenType::Control;
+            return start + 1;
+        }
         if (next >= 0x30 && next <= 0x7E) {
             type = TokenType::Control;
             return start + 2;
@@ -936,6 +958,7 @@ static std::optional<WTF::String> emitSliceStreaming(
     bool needStartEllipsis = false;
     bool needEndEllipsis = false;
     size_t ellipsisEndBudget = 0; // how much we shrank `end` by for end ellipsis
+    const size_t origStart = start;
     if (ellipsisWidth > 0) {
         if (cutStartForEllipsis && ellipsisWidth < (endUnbounded ? SIZE_MAX - start : end - start)) {
             needStartEllipsis = true;
@@ -1001,7 +1024,10 @@ static std::optional<WTF::String> emitSliceStreaming(
             nextGs.reset(cp, ambiguousIsWide);
             const size_t nextW = nextGs.width();
 
-            if (!endUnbounded && (position > specEnd || (nextW > 0 && position + nextW > specEnd))) {
+            const bool pastEnd = ellipsisWidth > 0
+                ? (position > specEnd || (nextW > 0 && position + nextW > specEnd))
+                : (position >= specEnd);
+            if (!endUnbounded && pastEnd) {
                 sawCutEnd = true;
                 flushPending(/*filterCloseOnly=*/true);
                 return false; // signal break
@@ -1040,7 +1066,10 @@ static std::optional<WTF::String> emitSliceStreaming(
         } else {
             // JOIN: continuation, position unchanged. Pending is inside cluster.
             gs.add(cp, ambiguousIsWide);
-            if (!endUnbounded && (position > specEnd || (gs.width() > 0 && position + gs.width() > specEnd))) {
+            const bool pastEnd = ellipsisWidth > 0
+                ? (position > specEnd || (gs.width() > 0 && position + gs.width() > specEnd))
+                : (position >= specEnd);
+            if (!endUnbounded && pastEnd) {
                 sawCutEnd = true;
                 flushPending(/*filterCloseOnly=*/true);
                 return false;
@@ -1271,6 +1300,9 @@ walkDone:;
         bool trailingPastEnd = !endUnbounded && position >= specEnd;
         if (include) flushPending(/*filterCloseOnly=*/trailingPastEnd);
     }
+
+    if (ellipsisWidth > 0 && (cutStartForEllipsis || sawCutEnd) && position > origStart)
+        return ellipsis.toString();
 
     if (!include) return emptyString();
 

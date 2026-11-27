@@ -277,6 +277,7 @@ const errors: ErrorCodeMapping = [
   ["ERR_ZLIB_INITIALIZATION_FAILED", Error],
   ["MODULE_NOT_FOUND", Error],
   ["ERR_INTERNAL_ASSERTION", Error],
+  ["ERR_OSSL_BAD_DECRYPT", Error],
   ["ERR_OSSL_EVP_INVALID_DIGEST", Error],
   ["ERR_KEY_GENERATION_JOB_FAILED", Error],
   ["ERR_MISSING_OPTION", TypeError],

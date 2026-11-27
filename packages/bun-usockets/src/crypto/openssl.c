@@ -486,6 +486,12 @@ end:
 }
 
 static int us_verify_callback(int preverify_ok, X509_STORE_CTX *ctx) {
+  SSL *ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+  if (ssl && SSL_is_server(ssl) &&
+      (SSL_get_verify_mode(ssl) & SSL_VERIFY_FAIL_IF_NO_PEER_CERT) != 0 &&
+      !preverify_ok) {
+    return 0;
+  }
   /* Always continue; the user inspects via us_socket_verify_error after
    * on_handshake. See SSL_verify_cb docs — returning 1 lets us defer the
    * decision to JS without aborting mid-handshake. */
@@ -676,10 +682,6 @@ SSL_CTX *us_ssl_ctx_build_raw(struct us_bun_socket_context_options_t options,
       ssl_ctx_build_fail(ssl_context);
       return NULL;
     }
-    if (!SSL_CTX_set_cipher_list(ssl_context, DEFAULT_CIPHER_LIST)) {
-      ssl_ctx_build_fail(ssl_context);
-      return NULL;
-    }
   }
 
   if (options.ssl_ciphers) {
@@ -691,6 +693,11 @@ SSL_CTX *us_ssl_ctx_build_raw(struct us_bun_socket_context_options_t options,
         return NULL;
       }
       ERR_clear_error();
+    }
+  } else {
+    if (!SSL_CTX_set_cipher_list(ssl_context, DEFAULT_CIPHER_LIST ":!kRSA")) {
+      ssl_ctx_build_fail(ssl_context);
+      return NULL;
     }
   }
 
@@ -1188,7 +1195,22 @@ restart:
         }
 
         if (err == SSL_ERROR_SSL || err == SSL_ERROR_SYSCALL) {
+          unsigned long ssl_err = ERR_peek_error();
           ERR_clear_error();
+          if (s->ssl_handshake_state != HANDSHAKE_COMPLETED &&
+              us_internal_ssl_verify_error(s).error != 0) {
+            ssl_trigger_handshake(s, 0);
+            if (ssl_gone(s)) return NULL;
+          } else if (ERR_GET_LIB(ssl_err) == ERR_LIB_SSL &&
+                     ERR_GET_REASON(ssl_err) == SSL_R_TLSV1_ALERT_CERTIFICATE_REQUIRED) {
+            s->ssl_handshake_state = HANDSHAKE_COMPLETED;
+            struct us_bun_verify_error_t verify_error = {
+                .error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT,
+                .code = "ERR_SSL_TLSV1_ALERT_CERTIFICATE_REQUIRED",
+                .reason = "tlsv1 alert certificate required"};
+            us_dispatch_handshake(s, 0, verify_error);
+            if (ssl_gone(s)) return NULL;
+          }
           s->ssl_fatal_error = 1;
         }
         ssl_close(s, 0, NULL);

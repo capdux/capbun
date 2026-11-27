@@ -15,9 +15,11 @@ pub fn ERR_toJS(globalThis: *jsc.JSGlobalObject, err_code: u32): jsc.JSValue {
     boring.ERR_error_string_n(err_code, message_buf, message_buf.len);
 
     const error_message: string = bun.sliceTo(outbuf[0..], 0);
+    const is_bad_decrypt = boring.ERR_GET_LIB(err_code) == boring.ERR_LIB_PEM && boring.ERR_GET_REASON(err_code) == boring.PEM_R_BAD_PASSWORD_READ;
     if (error_message.len == prefix.len) {
+        if (is_bad_decrypt) return globalThis.ERR(.OSSL_BAD_DECRYPT, "bad decrypt", .{}).toJS();
         return globalThis.ERR(.BORINGSSL, "An unknown BoringSSL error occurred: {d}", .{err_code}).toJS();
     }
-
+    if (is_bad_decrypt) return globalThis.ERR(.OSSL_BAD_DECRYPT, "{s}", .{error_message}).toJS();
     return globalThis.ERR(.BORINGSSL, "{s}", .{error_message}).toJS();
 }

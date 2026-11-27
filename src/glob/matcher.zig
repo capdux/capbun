@@ -88,6 +88,7 @@ pub fn matches(self: MatchResult) bool {
 pub const Brace = struct {
     open_brace_idx: u32,
     branch_idx: u32,
+    close_brace_idx: u32,
 };
 
 pub const State = struct {
@@ -334,6 +335,55 @@ pub fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack
         var in_brackets = false;
         _ = &in_brackets;
         const open_brace_index = state.glob_index;
+        var close_brace_idx: u32 = 0;
+        _ = &close_brace_idx;
+        {
+            var scan_idx = open_brace_index;
+            _ = &scan_idx;
+            var scan_depth: i32 = 0;
+            _ = &scan_depth;
+            var scan_in_brackets = false;
+            _ = &scan_in_brackets;
+            var found_close = false;
+            _ = &found_close;
+            while ((scan_idx < glob.len)) {
+                switch (glob[@as(usize, @intCast(scan_idx))]) {
+'{' => {
+if ((!scan_in_brackets)) {
+                    scan_depth = (scan_depth + 1);
+                }
+},
+'}' => {
+if ((!scan_in_brackets)) {
+                    scan_depth = (scan_depth - 1);
+                    if ((scan_depth == 0)) {
+                        close_brace_idx = scan_idx;
+                        found_close = true;
+                        break;
+                    }
+                }
+},
+'[' => {
+if ((!scan_in_brackets)) {
+                    scan_in_brackets = true;
+                }
+},
+']' => {
+scan_in_brackets = false;
+},
+'\\' => {
+scan_idx = (scan_idx + 1);
+},
+else => {
+
+},
+}
+                scan_idx = (scan_idx + 1);
+            }
+            if ((!found_close)) {
+                return false;
+            }
+        }
         var branch_index: u32 = 0;
         _ = &branch_index;
         while ((state.glob_index < glob.len)) {
@@ -350,7 +400,7 @@ if ((!in_brackets)) {
 if ((!in_brackets)) {
                 brace_depth = (brace_depth - 1);
                 if ((brace_depth == 0)) {
-                    if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
+                    if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, close_brace_idx, brace_stack, brace_budget)) {
                         return true;
                     }
                     break;
@@ -359,7 +409,7 @@ if ((!in_brackets)) {
 },
 ',' => {
 if (((!in_brackets) and (brace_depth == 1))) {
-                if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
+                if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, close_brace_idx, brace_stack, brace_budget)) {
                     return true;
                 }
                 branch_index = (state.glob_index + 1);
@@ -385,12 +435,12 @@ else => {
         return false;
 }
 
-pub fn matchBraceBranch(state: *State, glob: []const u8, path: []const u8, open_brace_index: u32, branch_index: u32, brace_stack: *BraceStack, brace_budget: *u32) bool {
+pub fn matchBraceBranch(state: *State, glob: []const u8, path: []const u8, open_brace_index: u32, branch_index: u32, close_brace_idx: u32, brace_stack: *BraceStack, brace_budget: *u32) bool {
         if ((brace_budget.* == 0)) {
             return false;
         }
         brace_budget.* = (brace_budget.* - 1);
-        _ = (blk_catch_1: { break :blk_catch_1 ((brace_stack.append(Brace{ .open_brace_idx = open_brace_index, .branch_idx = branch_index })) catch |__ce_1| { _ = &__ce_1; return false; }); });
+        _ = (blk_catch_1: { break :blk_catch_1 ((brace_stack.append(Brace{ .open_brace_idx = open_brace_index, .branch_idx = branch_index, .close_brace_idx = close_brace_idx })) catch |__ce_1| { _ = &__ce_1; return false; }); });
         var branch_state = state.*;
         _ = &branch_state;
         branch_state.glob_index = branch_index;

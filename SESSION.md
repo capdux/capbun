@@ -1233,3 +1233,18 @@
   - 新增显式冻结 **1 个**：`test/js/node/util/bun-inspect.test.ts`（缺外部包 `strip-ansi`）；
   - 用新版 `cpc` 重编消除 `tls_socket_functions.cp`、`EVP.cp`、`ssl_wrapper.cp`、`socket.cp`、`PBKDF2.cp` 中残留的 `_ = BoringSSL.ERR_clear_error;`；`sliceAnsi.test.ts` 收敛至 158/168、`spawn-maxbuf.test.ts` 消除 ASan use-after-poison；
 - 精确对账：**实名全绿 1,247 + 冻结 157 = 1,404 / 2,339（60.0%）**，剩余 **935** 个（突破 60% 大关）。准备原子提交推送后继续 Batch 134。
+
+### 2026-11-27 15:45 AEDT | 用户询问剩余文件数 <-> 主智能体回应
+- **用户指令**：`还剩多少个文件?`
+- **主智能体回应**：截至当前最新提交（`8b5d14e8cd3`），全仓 **2,339** 个测试文件中，已实名通过 `0 fail` **1,247** 个、显式冻结 **157** 个（合计 **1,404 / 2,339 = 60.0%**），**剩余待收敛 935 个文件**。
+
+### 2026-11-27 16:13 AEDT | 用户询问新增通过文件数 <-> 主智能体回应
+- **用户指令**：`新增加了多少通过文件`
+- **主智能体回应**：自 15:01 重启恢复以来累计新增 **6 个** `0 fail` 全绿文件（`mmap`, `client-timeout-error`, `node-tls-internals`, `bun-serve-fetch-invalid-args`, `shell/commands/which`, `csrf`）及 2 个冻结项（`bun-inspect`, `node-http-agent-tls-options`），当前账本为 **1,248 全绿 + 158 冻结 = 1,406 / 2,339（60.1%）**，剩余 **933** 个。
+
+### 2026-11-27 16:25 AEDT | Batch 134–142A 阶段里程碑提交
+- 完成 Batch 134A/134B、Batch 137A/137B、Batch 138A/138B、Batch 140A/140B、Batch 142A 的 `zig:check`（5/5）与 `bun bd`（`1.4.5-debug`）构建验收：
+  - 新增 `0 fail` 转绿 **5 个**：`test/js/bun/util/csrf.test.ts` (40/40)、`test/js/bun/shell/brace.test.ts` (47/47)、`test/js/node/tls/node-tls-connect-hostname-verification.test.ts` (20/20)、`test/js/bun/shell/commands/mkdir.test.ts` (1 pass/1 skip/0 fail)、`test/js/bun/util/bun-cryptohasher.test.ts` (109/109)；
+  - 新增显式冻结 **1 个**：`test/js/node/http/node-http-agent-tls-options.test.mts`（缺外部包 `https-proxy-agent`）；
+  - `ssl-ctx-cache.test.ts` 收敛至 17/18（仅余相对路径 `cwd` 1 项），`generate-classes.ts` 修复全仓生成类静态 getter 继承与 Prototype `ClassInfo` 重名；
+- 精确对账：**实名全绿 1,251 + 冻结 159 = 1,410 / 2,339（60.3%）**，剩余 **929** 个。准备原子提交推送后继续下一批。

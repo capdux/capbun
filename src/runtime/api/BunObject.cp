@@ -174,6 +174,7 @@ const Bun = @This();
 pub struct BunObject {
     // --- Callbacks ---
     pub const allocUnsafe = toJSCallback(Bun.allocUnsafe);
+    pub const braces = toJSCallback(Bun.bracesJS);
     pub const build = toJSCallback(Bun.JSBundler.buildFn);
     pub const color = toJSCallback(bun.css.CssColor.jsFunctionColor);
     pub const connect = toJSCallback(host_fn.wrapStaticMethod(api.Listener, "connect", false));
@@ -353,6 +354,7 @@ pub struct BunObject {
         @export(&@field(BunObject, "registerMacro"), { name: callbackName("registerMacro") });
         @export(&@field(BunObject, "resolve"), { name: callbackName("resolve") });
         @export(&@field(BunObject, "resolveSync"), { name: callbackName("resolveSync") });
+        @export(&@field(BunObject, "braces"), { name: callbackName("braces") });
         @export(&@field(BunObject, "serve"), { name: callbackName("serve") });
         @export(&@field(BunObject, "sha"), { name: callbackName("sha") });
         @export(&@field(BunObject, "shellEscape"), { name: callbackName("shellEscape") });
@@ -411,6 +413,26 @@ pub fn shellEscape(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     return jsval;
 }
 
+pub fn bracesJS(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    const arguments = callframe.arguments_old(2);
+    const input_val = if (arguments.len >= 1) arguments.ptr[0] else .js_undefined;
+    const brace_str = input_val.toBunString(global)?;
+    if (global.hasException()) return JSValue.zero;
+    const _brace_str_g = DerefGuard<bun.String>{ val: brace_str };
+
+    let opts: gen.BracesOptions = .{ .tokenize = false, .parse = false };
+    if (arguments.len >= 2) {
+        const opts_val = arguments.ptr[1];
+        if (opts_val.isObject()) {
+            opts.tokenize = (opts_val.getBooleanLoose(global, "tokenize")?) ?? false;
+            opts.parse = (opts_val.getBooleanLoose(global, "parse")?) ?? false;
+        } else if (!opts_val.isUndefinedOrNull()) {
+            return global.ERR(.INVALID_ARG_TYPE, "BracesOptions must be an object", .{}).throw();
+        }
+    }
+    return braces(global, brace_str, opts);
+}
+
 pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.BracesOptions): bun.JSError!jsc.JSValue {
     const brace_slice = brace_str.toUTF8(bun.default_allocator);
     const _brace_slice_g = DeinitGuard<@TypeOf(brace_slice)>{ val: brace_slice };
@@ -440,6 +462,9 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
     if (opts.parse) {
         let parser = Braces.Parser.init(lexer_output.tokens.items[0..], arena_g.val.allocator());
         const ast_node = parser.parse() catch e => {
+            if (e == error.TooManyBraces) {
+                return global.throwPretty("Too many braces in brace expansion", .{});
+            }
             return global.throwError(e, "failed to parse braces");
         };
         const str = bun.handleOom(std.fmt.allocPrint(global.bunVM().allocator, "{f}", .{ std.json.fmt(ast_node, .{}) }));
@@ -465,6 +490,7 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         lexer_output.contains_nested,
     ) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.TooManyBraces) return global.throwPretty("Too many braces in brace expansion", .{});
         return global.throwPretty("Unexpected token while expanding braces", .{});
     };
 

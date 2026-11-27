@@ -5,7 +5,7 @@ const Duplex = require("internal/streams/duplex");
 const addServerName = $newZigFunction("Listener.zig", "jsAddServerName", 3);
 const { throwNotImplemented } = require("internal/shared");
 const { throwOnInvalidTLSArray } = require("internal/tls");
-const { validateString, validateFunction } = require("internal/validators");
+const { validateString, validateFunction, validateArray } = require("internal/validators");
 
 const { Server: NetServer, Socket: NetSocket } = net;
 
@@ -412,8 +412,11 @@ const NativeSecureContext = $zig("SecureContext.zig", "js.getConstructor");
 function newNativeSecureContext(options, interned = false) {
   const defaultCurve = tlsExports.DEFAULT_ECDH_CURVE;
   const needsDefaultCurve = (!options || options.ecdhCurve === undefined) && defaultCurve !== "auto";
+  const defaultCA = defaultCACertificatesOverride;
+  const needsDefaultCA = defaultCA !== undefined && (!options || !options.ca);
   if (
     needsDefaultCurve ||
+    needsDefaultCA ||
     (options &&
       (!options.key || !options.cert || !options.ca || options.ALPNProtocols || typeof options.ciphers === "string"))
   ) {
@@ -421,7 +424,7 @@ function newNativeSecureContext(options, interned = false) {
       ...options,
       key: options?.key || null,
       cert: options?.cert || null,
-      ca: options?.ca || null,
+      ca: options?.ca || (needsDefaultCA ? defaultCA : null),
       ...(needsDefaultCurve ? { ecdhCurve: defaultCurve } : undefined),
     };
     if (typeof options.ciphers === "string") {
@@ -742,7 +745,15 @@ function Server(options, secureConnectionListener): void {
     return new Server(options, secureConnectionListener);
   }
 
-  NetServer.$apply(this, [options, secureConnectionListener]);
+  if (typeof options === "function") {
+    secureConnectionListener = options;
+    options = undefined;
+  }
+
+  NetServer.$apply(this, [options]);
+  if (typeof secureConnectionListener === "function") {
+    this.on("secureConnection", secureConnectionListener);
+  }
 
   this.key = undefined;
   this.cert = undefined;
@@ -800,6 +811,8 @@ function Server(options, secureConnectionListener): void {
       if (ca) {
         throwOnInvalidTLSArray("options.ca", ca);
         this.ca = ca;
+      } else if (defaultCACertificatesOverride !== undefined) {
+        this.ca = defaultCACertificatesOverride;
       }
 
       let passphrase = options.passphrase;
@@ -1052,12 +1065,14 @@ function cacheExtraCACertificates(): string[] {
   return extraCACertificates;
 }
 
+let defaultCACertificatesOverride: string[] | undefined;
+
 function getCACertificates(type = "default") {
   validateString(type, "type");
 
   switch (type) {
     case "default":
-      return cacheDefaultCACertificates();
+      return defaultCACertificatesOverride ?? cacheDefaultCACertificates();
     case "bundled":
       return cacheBundledRootCertificates();
     case "system":
@@ -1067,6 +1082,22 @@ function getCACertificates(type = "default") {
     default:
       throw $ERR_INVALID_ARG_VALUE("type", type);
   }
+}
+
+function setDefaultCACertificates(certs) {
+  if (certs === undefined) {
+    defaultCACertificatesOverride = undefined;
+    return;
+  }
+  validateArray(certs, "certs");
+  throwOnInvalidTLSArray("certs", certs);
+  if (certs === defaultCACertificates) {
+    defaultCACertificatesOverride = undefined;
+    return;
+  }
+  const copy = certs.slice();
+  ObjectFreeze(copy);
+  defaultCACertificatesOverride = copy;
 }
 
 function tlsCipherFilter(a: string) {
@@ -1108,6 +1139,7 @@ const tlsExports = {
   TLSSocket,
   checkServerIdentity,
   getCACertificates,
+  setDefaultCACertificates,
 } as any as typeof import("node:tls");
 
 Object.defineProperty(tlsExports, "rootCertificates", {

@@ -348,7 +348,7 @@ export function generateHashTable(nameToUse, symbolName, typeName, obj, props = 
         wrapped,
         defaultPropertyAttributes,
         obj.supportsObjectCreate || false,
-        !!obj.forBind,
+        !wrapped || !!obj.forBind,
       ),
     );
   }
@@ -514,7 +514,7 @@ ${generateHashTable(
 )}
 
 
-const ClassInfo ${proto}::s_info = { "${typeName}"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(${proto}) };
+const ClassInfo ${proto}::s_info = { "${typeName}Prototype"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(${proto}) };
 
 ${renderFieldsImpl(protoSymbolName, typeName, obj, protoFields, obj.values || [])}
 

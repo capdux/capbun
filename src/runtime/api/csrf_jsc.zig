@@ -129,14 +129,42 @@ pub fn readOptString(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_p
         return null;
 }
 
+pub fn formatOutOfRangeInt(num: f64, raw_buf: *[512]u8, out_buf: *[700]u8) []const u8 {
+        const raw = (blk_catch_0: { break :blk_catch_0 ((std.fmt.bufPrint(raw_buf, "{d:.0}", .{ num })) catch |__ce_0| { _ = &__ce_0; return "-"; }); });
+        const is_neg = ((raw.len > 0) and (raw[0] == 45));
+        const digits = (if (is_neg) raw[1..] else raw);
+        if ((digits.len < 5)) {
+            _ = @memcpy(out_buf[0..raw.len], raw);
+            return out_buf[0..raw.len];
+        }
+        var pos: usize = 0;
+        _ = &pos;
+        if (is_neg) {
+            out_buf[cp_cast_int(usize, 0)] = 45;
+            pos = 1;
+        }
+        var i: usize = 0;
+        _ = &i;
+        while ((i < digits.len)) : (i = (i + 1)) {
+            if (((i > 0) and (((digits.len - i) % 3) == 0))) {
+                out_buf[cp_cast_int(usize, pos)] = 95;
+                pos = (pos + 1);
+            }
+            out_buf[cp_cast_int(usize, pos)] = digits[@as(usize, @intCast(i))];
+            pos = (pos + 1);
+        }
+        return out_buf[0..pos];
+}
+
 pub fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto: jsc.JSValue, comptime key: []const u8, comptime field_name: []const u8) bun.JSError!?u64 {
         if (try getOption(globalObject, opts, obj_proto, key)) |val| {
             _ = &val;
             if ((!val.isUndefined())) {
                 if ((!val.isNumber())) {
-                    return globalObject.throwInvalidPropertyTypeValue(field_name, "number", val);
+                    return globalObject.throwInvalidArgumentTypeValue(field_name, "number", val);
                 }
-                if ((!val.isAnyInt())) {
+                const num = val.asNumber();
+                if (((!std.math.isFinite(num)) or (@trunc(num) != num))) {
                     var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalObject };
                     _ = &formatter;
                     var _guard_fmt = DeinitGuard(jsc.ConsoleObject.Formatter){ .ptr = (blk: {
@@ -151,21 +179,13 @@ pub fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_prot
 
 })) }).throw();
                 }
-                const num = val.asNumber();
                 if (((num < 0) or (num > @as(f64, @floatFromInt(jsc.MAX_SAFE_INTEGER))))) {
-                    var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalObject };
-                    _ = &formatter;
-                    var _guard_fmt = DeinitGuard(jsc.ConsoleObject.Formatter){ .ptr = (blk: {
-                    break :blk (&formatter);
-
-}) };
-                    _ = &_guard_fmt;
-                    var ___guard_fmt_moved = false; _ = &___guard_fmt_moved;
-                    defer if (!___guard_fmt_moved) { ___guard_fmt_moved = true; const __T = @TypeOf(_guard_fmt); if (@typeInfo(__T) == .optional) { if (_guard_fmt) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fmt.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fmt; _drop_val.__cp_deinit(); } };
-                    return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= 0 && <= 9007199254740991. Received {f}", .{ field_name, val.toFmt((blk: {
-                    break :blk (&formatter);
-
-})) }).throw();
+                    var raw_buf: [512]u8 = undefined;
+                    _ = &raw_buf;
+                    var out_buf: [700]u8 = undefined;
+                    _ = &out_buf;
+                    const formatted = formatOutOfRangeInt(num, (&raw_buf), (&out_buf));
+                    return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= 0 && <= 9007199254740991. Received {s}", .{ field_name, formatted }).throw();
                 }
                 return @intFromFloat(num);
             }
@@ -276,7 +296,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         const algorithm = try resolveAlgorithm(globalObject, has_algorithm, algo_opt);
         var token_buffer: [512]u8 = undefined;
         _ = &token_buffer;
-        const token_bytes = (blk_catch_0: { break :blk_catch_0 ((csrf.generate(.{ .secret = secret_bytes, .session_id = session_id_bytes, .expires_in_ms = expires_in, .encoding = encoding, .algorithm = algorithm }, (&token_buffer))) catch |e| { _ = &e; if ((e == error.TokenCreationFailed)) {
+        const token_bytes = (blk_catch_1: { break :blk_catch_1 ((csrf.generate(.{ .secret = secret_bytes, .session_id = session_id_bytes, .expires_in_ms = expires_in, .encoding = encoding, .algorithm = algorithm }, (&token_buffer))) catch |e| { _ = &e; if ((e == error.TokenCreationFailed)) {
             return globalObject.throw("Failed to create CSRF token", .{});
         }
         return globalObject.throwError(e, "Failed to generate CSRF token"); }); });

@@ -791,7 +791,7 @@ pub fn defaultClientSslCtx(self: *RareData) *uws.SslCtx {
         if ((self.default_client_ssl_ctx == null)) {
             var e: uws.create_bun_socket_error_t = .none;
             _ = &e;
-            const ctx = self.ssl_ctx_cache.getOrCreateOpts(.{}, (&e));
+            const ctx = self.ssl_ctx_cache.getOrCreateOpts(.{ .ssl_ciphers = (if (self.tls_default_ciphers) |c| c.ptr else null) }, (&e));
             if ((ctx == null)) {
                 var msg: []const u8 = "unknown";
                 _ = &msg;
@@ -849,6 +849,11 @@ pub fn tlsDefaultCiphers(self: *RareData) ?[:0]const u8 {
 }
 
 pub fn setTLSDefaultCiphers(self: *RareData, ciphers: []const u8) void {
+        if (self.default_client_ssl_ctx) |ctx| {
+            _ = &ctx;
+            self.default_client_ssl_ctx = null;
+            _ = bun.BoringSSL.c.SSL_CTX_free(ctx);
+        }
         if (self.tls_default_ciphers) |c| {
             _ = &c;
             _ = bun.default_allocator.free(c);

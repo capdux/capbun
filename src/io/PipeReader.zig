@@ -644,6 +644,15 @@ pub fn readBlockingPipe(self: *PosixBufferedReader, fd: bun.FD, unused_hint: isi
                     switch (self.readPipeNowait(fd, read_buf)) {
 .result => |bytes_read| {
 if (self.checkMaxBuf(bytes_read)) {
+                        _ = self.closeWithoutReporting();
+                        if (streaming) {
+                            _ = self.vtable.onReadChunk(read_buf[0..bytes_read], .eof);
+                        } else {
+                            _ = bun.handleOom(self._buffer.appendSlice(read_buf[0..bytes_read]));
+                        }
+                        if ((!self.flags.is_done)) {
+                            _ = self.done();
+                        }
                         return;
                     }
                     if ((bytes_read == 0)) {
@@ -690,6 +699,23 @@ if ((!e.isRetry())) {
 self._offset = (self._offset + bytes_read);
                     self._buffer.items.len = (self._buffer.items.len + bytes_read);
                     if (self.checkMaxBuf(bytes_read)) {
+                        _ = self.closeWithoutReporting();
+                        if (streaming) {
+                            const prev_len = self._buffer.items.len;
+                            _ = self.vtable.onReadChunk(buf[0..bytes_read], .eof);
+                            if ((self._buffer.items.len > prev_len)) {
+                                const reentered = self._buffer.items[prev_len..];
+                                _ = std.mem.copyForwards(u8, self._buffer.items[0..reentered.len], reentered);
+                                self._buffer.items.len = reentered.len;
+                            } else {
+                                if ((self._buffer.items.len == prev_len)) {
+                                    self._buffer.items.len = 0;
+                                }
+                            }
+                        }
+                        if ((!self.flags.is_done)) {
+                            _ = self.done();
+                        }
                         return;
                     }
                     if ((bytes_read == 0)) {
@@ -791,6 +817,15 @@ pub fn readWithFn(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, rece
 .result => |bytes_read| {
 self._offset = (self._offset + bytes_read);
                         if (self.checkMaxBuf(bytes_read)) {
+                            stack_buffer_head = stack_buffer_head[bytes_read..];
+                            _ = self.closeWithoutReporting();
+                            const pending = stack_buffer[0..(stack_buffer.len - stack_buffer_head.len)];
+                            if ((pending.len > 0)) {
+                                _ = self.vtable.onReadChunk(pending, .eof);
+                            }
+                            if ((!self.flags.is_done)) {
+                                _ = self.done();
+                            }
                             return;
                         }
                         const read_full_limit = (hit_max_read and (bytes_read == buf.len));
@@ -873,6 +908,11 @@ if ((bytes_read > 0)) {
                     }
                     self._offset = (self._offset + bytes_read);
                     if (self.checkMaxBuf(bytes_read)) {
+                        _ = self.closeWithoutReporting();
+                        _ = self.drainChunk(self._buffer.items, .eof);
+                        if ((!self.flags.is_done)) {
+                            _ = self.done();
+                        }
                         return;
                     }
                     if ((bytes_read == 0)) {
@@ -919,6 +959,11 @@ if (e.isRetry()) {
 self._offset = (self._offset + bytes_read);
                 self._buffer.items.len = (self._buffer.items.len + bytes_read);
                 if (self.checkMaxBuf(bytes_read)) {
+                    _ = self.closeWithoutReporting();
+                    _ = self.drainChunk(self._buffer.items, .eof);
+                    if ((!self.flags.is_done)) {
+                        _ = self.done();
+                    }
                     return;
                 }
                 buf = buf[0..bytes_read];

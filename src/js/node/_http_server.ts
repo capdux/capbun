@@ -860,7 +860,9 @@ const NodeHTTPServerSocket = class Socket extends Duplex {
   }
   #onData(chunk, last) {
     if (chunk) {
-      this.push(chunk);
+      if (!this.push(chunk)) {
+        this[kHandle]?.pause?.();
+      }
     }
     if (last) {
       const handle = this[kHandle];
@@ -1014,6 +1016,8 @@ const NodeHTTPServerSocket = class Socket extends Duplex {
         }
         this.push(resumed);
       }
+    } else {
+      handle?.resume?.();
     }
   }
 
@@ -1105,6 +1109,8 @@ const NodeHTTPServerSocket = class Socket extends Duplex {
     const response = handle?.response;
     if (response) {
       response.pause();
+    } else {
+      handle?.pause?.();
     }
 
     return super.pause();

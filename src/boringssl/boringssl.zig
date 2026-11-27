@@ -61,6 +61,8 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -218,14 +220,12 @@ pub fn matchDnsName(pattern: []const u8, hostname: []const u8) bool {
         if ((pattern[0] == 42)) {
             if (((pattern.len >= 2) and (pattern[1] == 46))) {
                 const suffix = pattern[2..];
-                if (strings.containsChar(suffix, 46)) {
-                    if ((hostname.len > (suffix.len + 1))) {
-                        const dot_index = ((hostname.len - suffix.len) - 1);
-                        if (((hostname[@as(usize, @intCast(dot_index))] == 46) and (!strings.containsChar(hostname[0..dot_index], 46)))) {
-                            const host_suffix = hostname[(dot_index + 1)..];
-                            if (strings.eqlCaseInsensitiveASCII(suffix, host_suffix, true)) {
-                                return true;
-                            }
+                if ((strings.containsChar(suffix, 46) and (hostname.len > (suffix.len + 1)))) {
+                    const dot_index = ((hostname.len - suffix.len) - 1);
+                    if (((hostname[@as(usize, @intCast(dot_index))] == 46) and (!strings.containsChar(hostname[0..dot_index], 46)))) {
+                        const host_suffix = hostname[(dot_index + 1)..];
+                        if (strings.eqlCaseInsensitiveASCII(suffix, host_suffix, true)) {
+                            return true;
                         }
                     }
                 }
@@ -382,6 +382,45 @@ pub fn checkServerIdentity(ssl_ptr: *boring.SSL, hostname: []const u8) bool {
         return false;
 }
 
+pub fn isSafeAltName(name: []const u8) bool {
+        for (cp_iter_slice(name)) |ch| {
+            _ = &ch;
+            if (((((((ch == 34) or (ch == 92)) or (ch == 44)) or (ch == 39)) or (ch < 32)) or (ch > 126))) {
+                return false;
+            }
+        }
+        return true;
+}
+
+pub fn writeEscapedAltName(out: *std.array_list.Managed(u8), prefix: []const u8, name: []const u8) !void {
+        _ = try out.appendSlice(prefix);
+        _ = try out.appendSlice(":");
+        if (isSafeAltName(name)) {
+            _ = try out.appendSlice(name);
+            return;
+        }
+        _ = try out.append(34);
+        const hex: []const u8 = "0123456789abcdef";
+        for (cp_iter_slice(name)) |ch| {
+            _ = &ch;
+            if ((ch == 92)) {
+                _ = try out.appendSlice("\\\\");
+            } else {
+                if ((ch == 34)) {
+                    _ = try out.appendSlice("\\\"");
+                } else {
+                    if ((((ch >= 32) and (ch != 44)) and (ch <= 126))) {
+                        _ = try out.append(ch);
+                    } else {
+                        const u = @as([6]u8, .{ 92, 117, 48, 48, hex[@as(usize, @intCast(cp_shr((ch & 240), 4)))], hex[@as(usize, @intCast((ch & 15)))] });
+                        _ = try out.appendSlice((&u));
+                    }
+                }
+            }
+        }
+        _ = try out.append(34);
+}
+
 pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: []const u8, out: *std.array_list.Managed(u8)) !void {
         const NO_DNS: []const u8 = "Cert does not contain a DNS name";
         const host_is_ip = strings.isIPAddress(hostname);
@@ -412,8 +451,8 @@ pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: []const
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_2 = count;
-                    while (i < __end_2) : (i += 1) {
+                    const __end_4 = count;
+                    while (i < __end_4) : (i += 1) {
                         const name = ((boring.sk_GENERAL_NAME_value(names, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)))) orelse continue);
                         if ((name.name_type != .GEN_IPADD)) {
                             continue;
@@ -437,8 +476,8 @@ pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: []const
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_3 = count;
-                while (i < __end_3) : (i += 1) {
+                const __end_5 = count;
+                while (i < __end_5) : (i += 1) {
                     const name = ((boring.sk_GENERAL_NAME_value(names, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)))) orelse continue);
                     if ((name.name_type == .GEN_DNS)) {
                         has_id = true;
@@ -461,8 +500,8 @@ pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: []const
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_4 = count;
-                    while (i < __end_4) : (i += 1) {
+                    const __end_6 = count;
+                    while (i < __end_6) : (i += 1) {
                         const name = ((boring.sk_GENERAL_NAME_value(names, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)))) orelse continue);
                         if (((name.name_type == .GEN_DNS) or (name.name_type == .GEN_URI))) {
                             if ((!first)) {
@@ -470,10 +509,11 @@ pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: []const
                             }
                             first = false;
                             const s = (if ((name.name_type == .GEN_DNS)) name.d.dNSName else name.d.uniformResourceIdentifier);
-                            _ = try writer.print("{s}:{s}", .{ (if ((name.name_type == .GEN_DNS)) "DNS" else "URI"), (blk: {
+                            const alt_str = (blk: {
                             break :blk s.data[0..@as(usize, @intCast(@max(s.length, 0)))];
 
-}) });
+});
+                            _ = try writeEscapedAltName(out, (if ((name.name_type == .GEN_DNS)) "DNS" else "URI"), alt_str);
                         } else {
                             if ((name.name_type == .GEN_IPADD)) {
                                 const ip_len: usize = @intCast(@max(name.d.ip.length, 0));
@@ -495,8 +535,8 @@ pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: []const
                                     {
                                         var g: i32 = 0;
                                         _ = &g;
-                                        const __end_5 = 8;
-                                        while (g < __end_5) : (g += 1) {
+                                        const __end_7 = 8;
+                                        while (g < __end_7) : (g += 1) {
                                             if ((g > 0)) {
                                                 _ = try out.append(58);
                                             }

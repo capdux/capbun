@@ -50,6 +50,9 @@ pub fn isZeroWidthCodepointType(comptime T: type, cp: T) bool {
         // Surrogates (including lone surrogates)
         return true;
 
+    if ((cp >= 0x1160 && cp <= 0x11ff) || (cp >= 0xd7b0 && cp <= 0xd7ff))
+        return true;
+
     // Arabic formatting characters
     if ((cp >= 0x600 && cp <= 0x605) || cp == 0x6dd || cp == 0x70f || cp == 0x8e2)
         return true;
@@ -1275,7 +1278,7 @@ pub struct visible {
                 // CSI sequences should only contain ASCII parameters and final bytes
                 // Non-ASCII char ends the CSI sequence abnormally - don't count it
                 saw_1b = false;
-                saw_csi = false;
+                saw_csi = true;
                 stretch_len = 0;
                 continue;
             }

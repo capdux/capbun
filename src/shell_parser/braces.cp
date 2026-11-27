@@ -68,14 +68,18 @@ pub struct AST {
 
 const MAX_NESTED_BRACES = 10;
 
+pub const MAX_BRACE_GROUPS: usize = 2048;
+
 err ParserError {
     OutOfMemory,
     UnexpectedToken,
+    TooManyBraces,
 }
 
 err ExpandError {
     OutOfMemory,
     UnexpectedToken,
+    TooManyBraces,
 }
 
 // FIXME error location
@@ -98,6 +102,15 @@ pub struct Parser {
     }
 
     fn parse(*_): !AST.Group {
+        let open_count: usize = 0;
+        for (tok of _.tokens) {
+            if (tok == .open) {
+                open_count += 1;
+                if (open_count > MAX_BRACE_GROUPS) {
+                    return ParserError.TooManyBraces;
+                }
+            }
+        }
         let group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), _.alloc);
         const group_alloc = group_alloc_.get();
         let nodes = std.array_list.Managed(AST.Atom).init(group_alloc);

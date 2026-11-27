@@ -3,6 +3,7 @@ import * as bun from "bun";
 struct Brace {
     open_brace_idx: u32,
     branch_idx: u32,
+    close_brace_idx: u32,
 }
 const BraceStack = bun.BoundedArray(Brace, 10);
 
@@ -267,6 +268,39 @@ fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *B
 
     const open_brace_index = state.glob_index;
 
+    let close_brace_idx: u32 = 0;
+    {
+        let scan_idx = open_brace_index;
+        let scan_depth: i32 = 0;
+        let scan_in_brackets = false;
+        let found_close = false;
+        while (scan_idx < glob.len) {
+            switch (glob[scan_idx]) {
+                '{' => {
+                    if (!scan_in_brackets) scan_depth += 1;
+                },
+                '}' => {
+                    if (!scan_in_brackets) {
+                        scan_depth -= 1;
+                        if (scan_depth == 0) {
+                            close_brace_idx = scan_idx;
+                            found_close = true;
+                            break;
+                        }
+                    }
+                },
+                '[' => {
+                    if (!scan_in_brackets) scan_in_brackets = true;
+                },
+                ']' => { scan_in_brackets = false; },
+                0x5C => { scan_idx += 1; },
+                else => {},
+            }
+            scan_idx += 1;
+        }
+        if (!found_close) return false;
+    }
+
     let branch_index: u32 = 0;
 
     while (state.glob_index < glob.len) {
@@ -283,7 +317,7 @@ fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *B
                 if (!in_brackets) {
                     brace_depth -= 1;
                     if (brace_depth == 0) {
-                        if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
+                        if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, close_brace_idx, brace_stack, brace_budget)) {
                             return true;
                         }
                         break;
@@ -292,7 +326,7 @@ fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *B
             },
             ',' => {
                 if (!in_brackets && brace_depth == 1) {
-                    if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, brace_stack, brace_budget)) {
+                    if (matchBraceBranch(state, glob, path, open_brace_index, branch_index, close_brace_idx, brace_stack, brace_budget)) {
                         return true;
                     }
                     branch_index = state.glob_index + 1;
@@ -313,13 +347,13 @@ fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *B
     return false;
 }
 
-fn matchBraceBranch(state: *State, glob: []const u8, path: []const u8, open_brace_index: u32, branch_index: u32, brace_stack: *BraceStack, brace_budget: *u32): bool {
+fn matchBraceBranch(state: *State, glob: []const u8, path: []const u8, open_brace_index: u32, branch_index: u32, close_brace_idx: u32, brace_stack: *BraceStack, brace_budget: *u32): bool {
     if (brace_budget.* == 0) {
         return false;
     }
     brace_budget.* -= 1;
 
-    brace_stack.append(Brace{ open_brace_idx: open_brace_index, branch_idx: branch_index }) catch
+    brace_stack.append(Brace{ open_brace_idx: open_brace_index, branch_idx: branch_index, close_brace_idx: close_brace_idx }) catch
         return false;
 
     let branch_state = state.*;

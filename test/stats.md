@@ -24,9 +24,21 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
+- **2026-11-27 16:24 Batch 142A 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/js/bun/shell/commands/mkdir.test.ts` (1 pass, 1 skip, 0 fail)
+  - `test/js/bun/util/bun-cryptohasher.test.ts` (109 pass, 0 fail)
+
+- **2026-11-27 16:22 Batches 140A–140B 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/js/bun/shell/brace.test.ts` (47 pass, 0 fail)
+  - `test/js/node/tls/node-tls-connect-hostname-verification.test.ts` (20 pass, 0 fail)
+
+- **2026-11-27 16:11 Batch 137A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/csrf.test.ts` (40 pass, 0 fail)
+
 - **2026-11-27 15:20 Batch 133A 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
   - `test/js/bun/http/bun-serve-fetch-invalid-args.test.ts` (14 pass, 0 fail)
   - `test/js/bun/shell/commands/which.test.ts` (5 pass, 0 fail)
+  - **显式冻结（缺外部包 `https-proxy-agent`）**：`test/js/node/http/node-http-agent-tls-options.test.mts`
 
 - **2026-11-27 15:17 Batch 131A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
   - `test/js/node/tls/node-tls-internals.test.ts` (20 pass, 0 fail)

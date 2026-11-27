@@ -38,22 +38,42 @@ fn readOptString(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto
     return null;
 }
 
+fn formatOutOfRangeInt(num: f64, raw_buf: *[512]u8, out_buf: *[700]u8): []const u8 {
+    const raw = std.fmt.bufPrint(raw_buf, "{d:.0}", .{num}) catch return "-";
+    const is_neg = raw.len > 0 && raw[0] == '-';
+    const digits = if (is_neg) raw[1..] else raw;
+    if (digits.len < 5) {
+        @memcpy(out_buf[0..raw.len], raw);
+        return out_buf[0..raw.len];
+    }
+    let pos: usize = 0;
+    if (is_neg) { out_buf[0] = '-'; pos = 1; }
+    let i: usize = 0;
+    while (i < digits.len) : (i += 1) {
+        if (i > 0 && (digits.len - i) % 3 == 0) { out_buf[pos] = '_'; pos += 1; }
+        out_buf[pos] = digits[i];
+        pos += 1;
+    }
+    return out_buf[0..pos];
+}
+
 fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto: jsc.JSValue, comptime key: []const u8, comptime field_name: []const u8): bun.JSError!u64? {
     if (val := getOption(globalObject, opts, obj_proto, key)?) {
         if (!val.isUndefined()) {
             if (!val.isNumber()) {
-                return globalObject.throwInvalidPropertyTypeValue(field_name, "number", val);
+                return globalObject.throwInvalidArgumentTypeValue(field_name, "number", val);
             }
-            if (!val.isAnyInt()) {
+            const num = val.asNumber();
+            if (!std.math.isFinite(num) || @trunc(num) != num) {
                 let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject };
                 const _guard_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
                 return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be an integer. Received {f}", .{ field_name, val.toFmt(unsafe { &formatter }) }).throw();
             }
-            const num = val.asNumber();
             if (num < 0 || num > @as(f64, @floatFromInt(jsc.MAX_SAFE_INTEGER))) {
-                let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject };
-                const _guard_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
-                return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= 0 && <= 9007199254740991. Received {f}", .{ field_name, val.toFmt(unsafe { &formatter }) }).throw();
+                let raw_buf: [512]u8 = undefined;
+                let out_buf: [700]u8 = undefined;
+                const formatted = formatOutOfRangeInt(num, *raw_buf, *out_buf);
+                return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= 0 && <= 9007199254740991. Received {s}", .{ field_name, formatted }).throw();
             }
             return @intFromFloat(num);
         }
@@ -104,9 +124,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         const obj_proto = jsc.JSValue.createEmptyObject(globalObject, 0).getPrototype(globalObject);
         if (v := readOptU64(globalObject, opts, obj_proto, "expiresIn", "CSRFGenerateOptions.expiresIn")?) expires_in = v;
         if (v := readOptString(globalObject, opts, obj_proto, "sessionId", "CSRFGenerateOptions.sessionId")?) _guard_session_id.val = v;
-        if (encoding_js := getOption(globalObject, opts, obj_proto, "encoding")?) {
-            encoding_enum_opt = jsc.Node.Encoding.fromJSWithDefaultOnEmpty(encoding_js, globalObject, .base64url)?;
-        }
+        if (encoding_js := getOption(globalObject, opts, obj_proto, "encoding")?) encoding_enum_opt = jsc.Node.Encoding.fromJSWithDefaultOnEmpty(encoding_js, globalObject, .base64url)?;
         if (algo_js := getOption(globalObject, opts, obj_proto, "algorithm")?) {
             if (!algo_js.isUndefined()) {
                 if (!algo_js.isString()) return globalObject.throwInvalidArguments("CSRFGenerateOptions.algorithm must be a string", {});
@@ -130,13 +148,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     const encoding = resolveEncoding(globalObject, encoding_enum_opt)?;
     const algorithm = resolveAlgorithm(globalObject, has_algorithm, algo_opt)?;
     let token_buffer: [512]u8 = undefined;
-    const token_bytes = csrf.generate({
-        secret: secret_bytes,
-        session_id: session_id_bytes,
-        expires_in_ms: expires_in,
-        encoding: encoding,
-        algorithm: algorithm,
-    }, &token_buffer) catch e => {
+    const token_bytes = csrf.generate({ secret: secret_bytes, session_id: session_id_bytes, expires_in_ms: expires_in, encoding: encoding, algorithm: algorithm }, &token_buffer) catch e => {
         if (e == error.TokenCreationFailed) return globalObject.throw("Failed to create CSRF token", {});
         return globalObject.throwError(e, "Failed to generate CSRF token");
     };
@@ -166,9 +178,7 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
         if (v := readOptString(globalObject, opts, obj_proto, "secret", "CSRFVerifyOptions.secret")?) _guard_secret.val = v;
         if (v := readOptString(globalObject, opts, obj_proto, "sessionId", "CSRFVerifyOptions.sessionId")?) _guard_session_id.val = v;
         if (v := readOptU64(globalObject, opts, obj_proto, "maxAge", "CSRFVerifyOptions.maxAge")?) max_age = v;
-        if (encoding_js := getOption(globalObject, opts, obj_proto, "encoding")?) {
-            encoding_enum_opt = jsc.Node.Encoding.fromJSWithDefaultOnEmpty(encoding_js, globalObject, .base64url)?;
-        }
+        if (encoding_js := getOption(globalObject, opts, obj_proto, "encoding")?) encoding_enum_opt = jsc.Node.Encoding.fromJSWithDefaultOnEmpty(encoding_js, globalObject, .base64url)?;
         if (algo_js := getOption(globalObject, opts, obj_proto, "algorithm")?) {
             if (!algo_js.isUndefined()) {
                 if (!algo_js.isString()) return globalObject.throwInvalidArguments("CSRFVerifyOptions.algorithm must be a string", {});
@@ -192,14 +202,7 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
 
     const encoding = resolveEncoding(globalObject, encoding_enum_opt)?;
     const algorithm = resolveAlgorithm(globalObject, has_algorithm, algo_opt)?;
-    return jsc.JSValue.jsBoolean(csrf.verify({
-        token: token.slice(),
-        secret: secret_bytes,
-        session_id: session_id_bytes,
-        max_age_ms: max_age,
-        encoding: encoding,
-        algorithm: algorithm,
-    }));
+    return jsc.JSValue.jsBoolean(csrf.verify({ token: token.slice(), secret: secret_bytes, session_id: session_id_bytes, max_age_ms: max_age, encoding: encoding, algorithm: algorithm }));
 }
 
 import csrf from "../../csrf/csrf.zig";

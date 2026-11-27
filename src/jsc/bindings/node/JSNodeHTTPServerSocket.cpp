@@ -64,6 +64,20 @@ void JSNodeHTTPServerSocket::close()
     }
 }
 
+void JSNodeHTTPServerSocket::pause()
+{
+    if (!isClosed() && socket) {
+        us_socket_pause(socket);
+    }
+}
+
+void JSNodeHTTPServerSocket::resume()
+{
+    if (!isClosed() && socket) {
+        us_socket_resume(socket);
+    }
+}
+
 bool JSNodeHTTPServerSocket::isClosed() const
 {
     return !socket || us_socket_is_closed(socket);

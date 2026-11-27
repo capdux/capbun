@@ -142,6 +142,7 @@ struct MutexUnlockGuard {
         let copy = _.*;
         copy.request_cert = 1;
         copy.reject_unauthorized = 0;
+        copy.cached_hash = 0;
         return copy;
     }
 
@@ -524,15 +525,32 @@ fn handlePath(
     comptime field: []const u8,
     str_impl: bun.string.WTFStringImpl,
 ): bun.JSError![:0]const u8 {
-    const name = str_impl.toOwnedSliceZ(bun.default_allocator);
-    let _name_guard = FreeSensitiveZGuard{ slice: name };
+    const raw_name = str_impl.toOwnedSliceZ(bun.default_allocator);
+    let _raw_name_guard = FreeSensitiveZGuard{ slice: raw_name };
+    let resolved_name: ([:0]const u8)? = null;
+    if (!std.fs.path.isAbsolute(raw_name)) {
+        let cwd_buf: bun.PathBuffer = undefined;
+        switch (bun.sys.getcwd(&cwd_buf)) {
+            .result cwd => {
+                const abs = bun.path.joinAbsStringZ(cwd, .{ raw_name }, .auto);
+                resolved_name = bun.handleOom(bun.default_allocator.dupeZ(u8, abs));
+            },
+            .err => {},
+        }
+    }
+    const name = resolved_name ?? raw_name;
+    let _resolved_guard = FreeSensitiveZGuard{ slice: resolved_name };
     if (std.posix.system.access(name, std.posix.F_OK) != 0) {
         return global.throwInvalidArguments(
             std.fmt.comptimePrint("Unable to access {s} path", .{field}),
             .{},
         );
     }
-    _name_guard.slice = null;
+    if (resolved_name != null) {
+        _resolved_guard.slice = null;
+    } else {
+        _raw_name_guard.slice = null;
+    }
     return name;
 }
 

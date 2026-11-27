@@ -256,7 +256,6 @@ struct NamedPipeCtxErrGuard {
         log("close", .{});
 
         _.doStop(if (arguments.len > 0 && arguments.ptr[0].isBoolean()) arguments.ptr[0].toBoolean() else false);
-
         return JSValue.js_undefined;
     }
 
@@ -264,7 +263,6 @@ struct NamedPipeCtxErrGuard {
         if (_.listener == .none) return;
         const listener = _.listener;
         _.listener = .none;
-
         switch (listener) {
             .uws socket => {
                 _.unlinkUnixSocketPath();
@@ -273,7 +271,7 @@ struct NamedPipeCtxErrGuard {
             .namedPipe namedPipe => if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, undefined),
             .none => {},
         }
-
+        if (ctx := _.secure_ctx) { _.secure_ctx = null; BoringSSL.SSL_CTX_free(ctx); }
         if (_.handlers.active_connections == 0) {
             _.poll_ref.unref(_.handlers.vm);
             _.strong_self.clearWithoutDeallocation();

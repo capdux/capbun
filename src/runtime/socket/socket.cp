@@ -1439,14 +1439,16 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
 
             if (bytes.len == 0) {
-                if (ssl) {
-                    log("writeOrEnd 0", .{});
-                    _.flags.empty_packet_pending = true;
-                    if (!_.tryWriteEmptyPacket()) {
-                        return .{ .success = .{
-                            .wrote = -1,
-                            .total = bytes.len,
-                        } };
+                if (comptime ssl) {
+                    if (!_.flags.bypass_tls) {
+                        log("writeOrEnd 0", .{});
+                        _.flags.empty_packet_pending = true;
+                        if (!_.tryWriteEmptyPacket()) {
+                            return .{ .success = .{
+                                .wrote = -1,
+                                .total = bytes.len,
+                            } };
+                        }
                     }
                 }
                 return .{ .success = .{} };
@@ -1473,11 +1475,13 @@ pub fn NewSocket(comptime ssl: bool): type {
         }
 
         fn tryWriteEmptyPacket(*_): bool {
-            if (ssl) {
-                if (!_.flags.handshake_complete || _.buffered_data_for_node_net.len > 0) return false;
+            if (comptime ssl) {
+                if (!_.flags.bypass_tls) {
+                    if (!_.flags.handshake_complete || _.buffered_data_for_node_net.len > 0) return false;
 
-                _.flags.empty_packet_pending = false;
-                return true;
+                    _.flags.empty_packet_pending = false;
+                    return true;
+                }
             }
             return false;
         }

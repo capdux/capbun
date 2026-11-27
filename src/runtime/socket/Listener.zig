@@ -395,6 +395,11 @@ _ = (if (Environment.isWindows) namedPipe.closePipeAndDeinit() else @as(void, un
 
 },
 }
+        if (self.secure_ctx) |ctx| {
+            _ = &ctx;
+            self.secure_ctx = null;
+            _ = BoringSSL.SSL_CTX_free(ctx);
+        }
         if ((self.handlers.active_connections == 0)) {
             _ = self.poll_ref.unref(self.handlers.vm);
             _ = self.strong_self.clearWithoutDeallocation();
@@ -576,12 +581,12 @@ pub const UnixOrHost = union(enum) {
     host: _UnixOrHostAddr,
     fd: bun.FD,
 
-pub fn clone(self: UnixOrHost) UnixOrHost {
-            switch (self) {
+pub fn clone(self: *const UnixOrHost) UnixOrHost {
+            switch (self.*) {
 .unix => |u| {
 return .{ .unix = bun.handleOom(bun.default_allocator.dupe(u8, u)) };
 },
-.host => |h| {
+.host => |*h| {
 return .{ .host = _UnixOrHostAddr{ .host = bun.handleOom(bun.default_allocator.dupe(u8, h.host)), .port = h.port } };
 },
 .fd => |f| {

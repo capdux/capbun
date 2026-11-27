@@ -51,9 +51,7 @@ import * as c_ares from "../cares_sys/c_ares.cp";
 let loaded = false;
 
 pub fn load() {
-    if (loaded) {
-        return;
-    }
+    if (loaded) return;
     loaded = true;
     boring.CRYPTO_library_init();
     bun.assert(boring.SSL_library_init() > 0);
@@ -74,25 +72,16 @@ pub fn load() {
 let ctx_store: SSL_CTX_Ptr? = null;
 
 pub fn initClient(): SSL_Ptr {
-    if (ctx_store != null) {
-        * = boring.SSL_CTX_up_ref(ctx_store.?);
-    }
-
-    if (ctx_store == null) {
-        ctx_store = boring.SSL_CTX.init().?;
-    }
+    if (ctx_store != null) * = boring.SSL_CTX_up_ref(ctx_store.?);
+    if (ctx_store == null) ctx_store = boring.SSL_CTX.init().?;
     const ctx = ctx_store.?;
-
     let ssl = boring.SSL.init(ctx);
     ssl.setIsClient(true);
-
     return ssl;
 }
 
 pub fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
-    if (addr_str.len >= INET6_ADDRSTRLEN) {
-        return null;
-    }
+    if (addr_str.len >= INET6_ADDRSTRLEN) return null;
     let ip_std_text: IPTextBuf = undefined;
     bun.copy(u8, outIP, addr_str);
     outIP[addr_str.len] = 0;
@@ -100,50 +89,33 @@ pub fn canonicalizeIP(addr_str: string, outIP: *IPTextBuf): string? {
     let af: i32 = std.posix.AF.INET;
     if (c_ares.ares_inet_pton(af, outIP, &ip_std_text) <= 0) {
         af = std.posix.AF.INET6;
-        if (c_ares.ares_inet_pton(af, outIP, &ip_std_text) <= 0) {
-            return null;
-        }
+        if (c_ares.ares_inet_pton(af, outIP, &ip_std_text) <= 0) return null;
     }
-    if (unsafe { c_ares.ares_inet_ntop(af, @ptrCast(&ip_std_text), outIP, outIP.len) == null }) {
-        return null;
-    }
+    if (unsafe { c_ares.ares_inet_ntop(af, @ptrCast(&ip_std_text), outIP, outIP.len) == null }) return null;
     const size = bun.len(bun.cast(CStrPtr, outIP));
     return outIP[0..size];
 }
 
 pub fn ip2String(ip: *boring.ASN1_OCTET_STRING, outIP: *IPTextBuf): string? {
     let af: i32 = std.posix.AF.INET6;
-    if (ip.length == 4) {
-        af = std.posix.AF.INET;
-    }
-    if (unsafe { c_ares.ares_inet_ntop(af, @ptrCast(ip.data), outIP, outIP.len) == null }) {
-        return null;
-    }
-
+    if (ip.length == 4) af = std.posix.AF.INET;
+    if (unsafe { c_ares.ares_inet_ntop(af, @ptrCast(ip.data), outIP, outIP.len) == null }) return null;
     const size = bun.len(bun.cast(CStrPtr, outIP));
     return outIP[0..size];
 }
 
 fn matchDnsName(pattern: string, hostname: string): bool {
-    if (pattern.len == 0) {
-        return false;
-    }
-    if (!X509.isSafeAltName(pattern, false)) {
-        return false;
-    }
+    if (pattern.len == 0) return false;
+    if (!X509.isSafeAltName(pattern, false)) return false;
 
     if (pattern[0] == '*') {
         if (pattern.len >= 2 && pattern[1] == '.') {
             const suffix = pattern[2..];
-            if (strings.containsChar(suffix, '.')) {
-                if (hostname.len > suffix.len + 1) {
-                    const dot_index = hostname.len - suffix.len - 1;
-                    if (hostname[dot_index] == '.' && !strings.containsChar(hostname[0..dot_index], '.')) {
-                        const host_suffix = hostname[dot_index + 1..];
-                        if (strings.eqlCaseInsensitiveASCII(suffix, host_suffix, true)) {
-                            return true;
-                        }
-                    }
+            if (strings.containsChar(suffix, '.') && hostname.len > suffix.len + 1) {
+                const dot_index = hostname.len - suffix.len - 1;
+                if (hostname[dot_index] == '.' && !strings.containsChar(hostname[0..dot_index], '.')) {
+                    const host_suffix = hostname[dot_index + 1..];
+                    if (strings.eqlCaseInsensitiveASCII(suffix, host_suffix, true)) return true;
                 }
             }
         }
@@ -228,31 +200,21 @@ pub fn checkX509ServerIdentity(
             let last: i32 = -1;
             while (true) {
                 const entry_idx = boring.X509_NAME_get_index_by_NID(subject, boring.NID_commonName, last);
-                if (entry_idx < 0) {
-                    break;
-                }
+                if (entry_idx < 0) break;
                 last = entry_idx;
                 const entry_opt = boring.X509_NAME_get_entry(subject, entry_idx);
-                if (entry_opt == null) {
-                    continue;
-                }
+                if (entry_opt == null) continue;
                 const entry = entry_opt.?;
 
                 const data_opt = boring.X509_NAME_ENTRY_get_data(entry);
-                if (data_opt == null) {
-                    continue;
-                }
+                if (data_opt == null) continue;
                 const data = data_opt.?;
                 const cn_ptr = boring.ASN1_STRING_get0_data(data);
                 const cn_len = boring.ASN1_STRING_length(data);
-                if (cn_ptr == null || cn_len <= 0) {
-                    continue;
-                }
+                if (cn_ptr == null || cn_len <= 0) continue;
                 const cn_len_val: usize = @intCast(cn_len);
                 const cn = unsafe { cn_ptr[0..cn_len_val] };
-                if (matchDnsName(cn, hostname)) {
-                    return true;
-                }
+                if (matchDnsName(cn, hostname)) return true;
             }
         }
     }
@@ -270,6 +232,34 @@ pub fn checkServerIdentity(
         }
     }
     return false;
+}
+
+fn isSafeAltName(name: string): bool {
+    for (ch of name) {
+        if (ch == '"' || ch == '\\' || ch == ',' || ch == '\'' || ch < ' ' || ch > '~') return false;
+    }
+    return true;
+}
+
+fn writeEscapedAltName(out: *std.array_list.Managed(u8), prefix: string, name: string): ! {
+    out.appendSlice(prefix)?;
+    out.appendSlice(":")?;
+    if (isSafeAltName(name)) {
+        out.appendSlice(name)?;
+        return;
+    }
+    out.append('"')?;
+    const hex = "0123456789abcdef";
+    for (ch of name) {
+        if (ch == '\\') { out.appendSlice("\\\\")?; }
+        else if (ch == '"') { out.appendSlice("\\\"")?; }
+        else if (ch >= ' ' && ch != ',' && ch <= '~') { out.append(ch)?; }
+        else {
+            const u = @as([6]u8, [ '\\', 'u', '0', '0', hex[(ch & 0xf0) >> 4], hex[ch & 0x0f] ]);
+            out.appendSlice(&u)?;
+        }
+    }
+    out.append('"')?;
 }
 
 /// Writes Node's `checkServerIdentity` failure reason for the peer's leaf certificate.
@@ -317,7 +307,8 @@ pub fn writeServerIdentityMismatchReason(ssl_ptr: *boring.SSL, hostname: string,
                     if (!first) out.appendSlice(", ")?;
                     first = false;
                     const s = if (name.name_type == .GEN_DNS) name.d.dNSName else name.d.uniformResourceIdentifier;
-                    writer.print("{s}:{s}", .{ if (name.name_type == .GEN_DNS) "DNS" else "URI", unsafe { s.data[0..@as(usize, @intCast(@max(s.length, 0)))] } })?;
+                    const alt_str = unsafe { s.data[0..@as(usize, @intCast(@max(s.length, 0)))] };
+                    writeEscapedAltName(out, if (name.name_type == .GEN_DNS) "DNS" else "URI", alt_str)?;
                 } else if (name.name_type == .GEN_IPADD) {
                     const ip_len: usize = @intCast(@max(name.d.ip.length, 0));
                     if (ip_len != 4 && ip_len != 16) continue;

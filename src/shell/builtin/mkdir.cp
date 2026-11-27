@@ -386,7 +386,10 @@ pub const ShellMkdirOutputTask = OutputTask(Mkdir, .{
         });
 
         if (e := err) {
-            const error_string = _.bltn().taskErrorToString(.mkdir, e);
+            const error_string = if (e.path.length() == 0)
+                _.bltn().fmtErrorArena(.mkdir, "{s}\n", .{e.message.byteSlice()})
+            else
+                _.bltn().fmtErrorArena(.mkdir, "{f}: {s}\n", .{ e.path, e.message.byteSlice() });
             if (prev := _.state.exec.err) prev.deref();
             _.state.exec.err = e;
             let y_err = output_task.start(error_string);

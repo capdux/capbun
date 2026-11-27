@@ -762,7 +762,9 @@ pub enum StdinFdType: i32 {
     pub fn defaultClientSslCtx(*_): *uws.SslCtx {
         if (_.default_client_ssl_ctx == null) {
             let e: uws.create_bun_socket_error_t = .none;
-            const ctx = _.ssl_ctx_cache.getOrCreateOpts(.{}, &e);
+            const ctx = _.ssl_ctx_cache.getOrCreateOpts(.{
+                ssl_ciphers: if (c := _.tls_default_ciphers) c.ptr else null,
+            }, &e);
             if (ctx == null) {
                 let msg = "unknown";
                 if (m := e.message()) {
@@ -829,6 +831,10 @@ pub enum StdinFdType: i32 {
     }
 
     pub fn setTLSDefaultCiphers(*_, ciphers: []const u8) {
+        if (ctx := _.default_client_ssl_ctx) {
+            _.default_client_ssl_ctx = null;
+            bun.BoringSSL.c.SSL_CTX_free(ctx);
+        }
         if (c := _.tls_default_ciphers) {
             bun.default_allocator.free(c);
         }

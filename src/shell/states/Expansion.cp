@@ -470,6 +470,14 @@ pub struct ShellGlobTask {
                                 "unexpected error from Braces.expand: UnexpectedToken",
                                 .{},
                             ),
+                            error.TooManyBraces => {
+                                _.state = .{
+                                    .@"err" = bun.shell.ShellErr{
+                                        .custom = bun.handleOom(_.base.allocator().dupe(u8, "Too many braces in brace expansion")),
+                                    },
+                                };
+                                return _.parent.childDone(_, 1);
+                            },
                         };
 
                         if (_.node.has_glob_expansion()) {

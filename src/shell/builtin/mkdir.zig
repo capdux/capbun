@@ -428,7 +428,7 @@ pub fn onShellMkdirTaskDone(self: *Mkdir, task: *ShellMkdirTask) void {
         const output_task: *ShellMkdirOutputTask = bun.new(ShellMkdirOutputTask, .{ .parent = self, .output = .{ .arrlist = output.moveToUnmanaged() }, .state = .waiting_write_err });
         if (err) |e| {
             _ = &e;
-            const error_string = self.bltn().taskErrorToString(.mkdir, e);
+            const error_string = (if ((e.path.length() == 0)) self.bltn().fmtErrorArena(.mkdir, "{s}\n", .{ e.message.byteSlice() }) else self.bltn().fmtErrorArena(.mkdir, "{f}: {s}\n", .{ e.path, e.message.byteSlice() }));
             if (self.state.exec.err) |prev| {
                 _ = &prev;
                 _ = prev.deref();

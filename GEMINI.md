@@ -369,3 +369,7 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 8. **2026-11-27 14:16 3h 审计固化（共性雷区静态清零 + Harness 阻塞优先解锁）**：
    - **(a) 全仓共性编译器/语义雷区一次性清零**：发现如 `if (cp_match_tag(..., unreachable))` 或「无 `*_` 值接收者返回内部切片（Use-After-Return）」类系统性缺陷时，直接脚本扫全仓 `.cp`/`.zig` 一次清零并向 `cp_agy` 提单从编译器根除，效率远超按单测逐个排查。
    - **(b) 共享 Harness 阻塞优先解锁**：当整目录几十个用例同报构建/环境错时（如 `node-napi-tests` 55 文件卡在 `harness.ts` 头文件版本），优先修通 harness 即刻收割整目录 90%+ 通过率。
+9. **2026-11-27 15:59 3h 审计固化（编译器缺陷提单后全仓静态扫描重编 + 静默诊断防刷屏）**：
+   - **(a) 提单修复后全仓静态扫雷重编**：向 `cp_agy` 提单修复共性 codegen 缺陷（如 `task-bun-20261127-zero-arg-call` 零参外部调用丢 `()`）结单后，立即用 `rg` 扫描全仓 `.zig` 受波及文件（如 5 个 BoringSSL `.cp`），批量用新版 `cpc` 一键重编净化，零修改成本消灭隐性 bug。
+   - **(b) 诊断命令强制 `BUN_DEBUG_QUIET_LOGS=1`**：只读运行 `bun-debug test` 排查报错时，必须显式设置 `BUN_DEBUG_QUIET_LOGS=1`，杜绝 `[sys] openat` / `[fs]` 调试日志刷屏截断关键 `error:` 行而浪费二次复跑。
+   - **(c) 严禁空口汇报后台动作**：任何提及"已启动 `bun bd` / 子智能体"的回复，必须在当轮已实际发出对应工具调用，绝不允许只输出文字而漏调工具。

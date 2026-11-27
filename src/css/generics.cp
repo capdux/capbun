@@ -453,14 +453,16 @@ pub inline fn eql(comptime T: type, lhs: *const T, rhs: *const T): bool {
         CustomIdent, DashedIdent, Ident => bun.strings.eql(lhs.v, rhs.v),
         bun.string => bun.strings.eql(lhs.*, rhs.*),
         Loc => lhs.eql(rhs.*),
-        else => if (@typeInfo(T) == .@"struct" && @typeInfo(T).@"struct".layout == .@"packed")
-            lhs.* == rhs.*
-        else if (comptime @typeInfo(@TypeOf(T.eql)).@"fn".params.len == 3)
+        else => if (comptime @hasDecl(T, "eql")) (if (comptime @typeInfo(@TypeOf(T.eql)).@"fn".params.len == 3)
             T.eql(lhs.*, lhs, rhs)
         else if (comptime @typeInfo(@TypeOf(T.eql)).@"fn".params[0].type.? == T)
             T.eql(lhs.*, rhs)
         else
-            T.eql(lhs, rhs),
+            T.eql(lhs, rhs))
+        else if (@typeInfo(T) == .@"struct" && @typeInfo(T).@"struct".layout == .@"packed")
+            lhs.* == rhs.*
+        else
+            @compileError("Missing eql implementation for " ++ @typeName(T)),
     };
 }
 
