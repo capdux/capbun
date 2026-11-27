@@ -417,9 +417,11 @@ static inline uint32_t sgrCloseCode(uint32_t openCode)
     case 2:
         return 22; // bold, dim
     case 3:
-        return 23; // italic
+    case 20:
+        return 23; // italic, fraktur
     case 4:
-        return 24; // underline
+    case 21:
+        return 24; // underline, double underline
     case 5:
     case 6:
         return 25; // blink
@@ -467,8 +469,16 @@ static inline uint32_t sgrCloseCode(uint32_t openCode)
     case 106:
     case 107:
         return 49;
+    case 51:
+    case 52:
+        return 54; // framed, encircled
     case 53:
         return 55; // overline
+    case 58:
+        return 59; // underline color
+    case 73:
+    case 74:
+        return 75; // superscript, subscript
     default:
         return 0; // Unknown → caller uses full reset
     }
@@ -487,7 +497,10 @@ static inline bool isSgrEndCode(uint32_t code)
     case 29:
     case 39:
     case 49:
+    case 54:
     case 55:
+    case 59:
+    case 75:
         return true;
     default:
         return false;

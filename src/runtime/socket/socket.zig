@@ -267,7 +267,7 @@ pub fn __cp_deinit(self: *SSLErrClearGuard) void {
         if (self.__cp_dropped) return;
         self.__cp_dropped = true;
             if (self.has_err) {
-                _ = BoringSSL.ERR_clear_error;
+                _ = BoringSSL.ERR_clear_error();
             }
     }
 };

@@ -218,7 +218,7 @@ pub fn run(self: PBKDF2, output: []u8) bool {
             if ((length == 0)) {
                 return false;
             }
-            _ = BoringSSL.ERR_clear_error;
+            _ = BoringSSL.ERR_clear_error();
             const rc = BoringSSL.PKCS5_PBKDF2_HMAC((if ((password.len > 0)) password.ptr else null), @intCast(password.len), salt.ptr, @intCast(salt.len), @intCast(iteration_count), (algorithm.md()).?, @intCast(length), output.ptr);
             if ((rc <= 0)) {
                 return false;

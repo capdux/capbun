@@ -253,7 +253,7 @@ pub fn shutdown(self: *@This(), fast_shutdown: bool) bool {
             self.flags.sent_ssl_shutdown = (ret >= 0);
             if ((ret < 0)) {
                 const ssl_err = BoringSSL.SSL_get_error(ssl, ret);
-                _ = BoringSSL.ERR_clear_error;
+                _ = BoringSSL.ERR_clear_error();
                 if (((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL))) {
                     self.flags.fatal_error = true;
                     _ = self.triggerCloseCallback();
@@ -319,7 +319,7 @@ pub fn writeData(self: *@This(), data: []const u8) !usize {
             const written = BoringSSL.SSL_write(ssl, data.ptr, @as(c_int, @intCast(data.len)));
             if ((written <= 0)) {
                 const ssl_err = BoringSSL.SSL_get_error(ssl, written);
-                _ = BoringSSL.ERR_clear_error;
+                _ = BoringSSL.ERR_clear_error();
                 if ((ssl_err == BoringSSL.SSL_ERROR_WANT_READ)) {
                     _ = self.handleTraffic();
                     return error.WantRead;
@@ -414,7 +414,7 @@ pub fn updateHandshakeState(self: *@This()) bool {
             const result = BoringSSL.SSL_do_handshake(ssl);
             if ((result <= 0)) {
                 const ssl_err = BoringSSL.SSL_get_error(ssl, result);
-                _ = BoringSSL.ERR_clear_error;
+                _ = BoringSSL.ERR_clear_error();
                 if ((ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
                     self.flags.received_ssl_shutdown = true;
                     _ = self.handleEndOfRenegotiation();
@@ -461,7 +461,7 @@ pub fn handleReading(self: *@This(), buffer: *[BUFFER_SIZE]u8) bool {
                 _ = log("just read {d}", .{ just_read });
                 if ((just_read <= 0)) {
                     const ssl_err = BoringSSL.SSL_get_error(ssl, just_read);
-                    _ = BoringSSL.ERR_clear_error;
+                    _ = BoringSSL.ERR_clear_error();
                     if (((ssl_err != BoringSSL.SSL_ERROR_WANT_READ) and (ssl_err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
                         if ((ssl_err == BoringSSL.SSL_ERROR_WANT_RENEGOTIATE)) {
                             self.flags.handshake_state = HandshakeState.HANDSHAKE_RENEGOTIATION_PENDING;

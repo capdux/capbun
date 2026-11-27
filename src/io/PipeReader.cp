@@ -528,7 +528,7 @@ struct PosixBufferedReader {
     fn readBlockingPipe(*_, fd: bun.FD, unused_hint: isize, received_hup_initially: bool) {
         * = unused_hint;
         let received_hup = received_hup_initially;
-        while (true) {
+        while (!_.isDone() && _.handle != .closed) {
             const streaming = _.vtable.isStreamingEnabled();
             let got_retry = false;
 
@@ -547,7 +547,7 @@ struct PosixBufferedReader {
 
                 switch (_.readPipeNowait(fd, read_buf)) {
                     .result bytes_read => {
-                        if (l := _.maxbuf) l.onReadBytes(bytes_read);
+                        if (_.checkMaxBuf(bytes_read)) return;
 
                         if (bytes_read == 0) {
                             _.closeWithoutReporting();
@@ -589,9 +589,9 @@ struct PosixBufferedReader {
 
                 switch (_.readPipeNowait(fd, buf)) {
                     .result bytes_read => {
-                        if (l := _.maxbuf) l.onReadBytes(bytes_read);
                         _._offset += bytes_read;
                         _._buffer.items.len += bytes_read;
+                        if (_.checkMaxBuf(bytes_read)) return;
 
                         if (bytes_read == 0) {
                             _.closeWithoutReporting();
@@ -650,16 +650,26 @@ struct PosixBufferedReader {
         }
     }
 
+    fn checkMaxBuf(*_, bytes_read: usize): bool {
+        if (l := _.maxbuf) {
+            const new_remaining = std.math.sub(i64, l.remaining_bytes, std.math.cast(i64, bytes_read) ?? 0) catch -1;
+            const exceeded = new_remaining < 0 && l.owned_by_subprocess != null;
+            l.onReadBytes(bytes_read);
+            return exceeded;
+        }
+        return false;
+    }
+
     fn readWithFn(*_, fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: fn (bun.FD, []u8, usize) bun.sys.Maybe(usize)) {
         * = size_hint;
         const streaming = _.vtable.isStreamingEnabled();
 
         if (streaming) {
             const stack_buffer = _.vtable.eventLoop().pipeReadBuffer();
-            while (_._buffer.items.len == 0) {
+            while (_._buffer.items.len == 0 && !_.isDone() && _.handle != .closed) {
                 const stack_buffer_cutoff = stack_buffer.len / 2;
                 let stack_buffer_head = stack_buffer;
-                while (stack_buffer_head.len > 16 * 1024) {
+                while (stack_buffer_head.len > 16 * 1024 && !_.isDone() && _.handle != .closed) {
                     let buf = stack_buffer_head;
                     const already_read = stack_buffer.len - stack_buffer_head.len;
                     let hit_max_read = false;
@@ -680,8 +690,8 @@ struct PosixBufferedReader {
                         _._offset,
                     )) {
                         .result bytes_read => {
-                            if (l := _.maxbuf) l.onReadBytes(bytes_read);
                             _._offset += bytes_read;
+                            if (_.checkMaxBuf(bytes_read)) return;
                             const read_full_limit = hit_max_read && bytes_read == buf.len;
                             buf = stack_buffer_head[0..bytes_read];
                             stack_buffer_head = stack_buffer_head[bytes_read..];
@@ -756,8 +766,8 @@ struct PosixBufferedReader {
                     if (bytes_read > 0) {
                         bun.handleOom(_._buffer.appendSlice(read_buf[0..bytes_read]));
                     }
-                    if (l := _.maxbuf) l.onReadBytes(bytes_read);
                     _._offset += bytes_read;
+                    if (_.checkMaxBuf(bytes_read)) return;
 
                     if (bytes_read == 0) {
                         _.closeWithoutReporting();
@@ -783,7 +793,7 @@ struct PosixBufferedReader {
             }
         }
 
-        while (true) {
+        while (!_.isDone() && _.handle != .closed) {
             bun.handleOom(_._buffer.ensureUnusedCapacity(16 * 1024));
             let buf: []u8 = _._buffer.unusedCapacitySlice();
             if (max_read := _.vtable.maxReadSize()) {
@@ -798,10 +808,10 @@ struct PosixBufferedReader {
 
             switch (sys_fn(fd, buf, _._offset)) {
                 .result bytes_read => {
-                    if (l := _.maxbuf) l.onReadBytes(bytes_read);
                     _._offset += bytes_read;
-                    buf = buf[0..bytes_read];
                     _._buffer.items.len += bytes_read;
+                    if (_.checkMaxBuf(bytes_read)) return;
+                    buf = buf[0..bytes_read];
 
                     if (bytes_read == 0) {
                         _.closeWithoutReporting();

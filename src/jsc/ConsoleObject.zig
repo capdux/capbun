@@ -989,9 +989,19 @@ pub fn fromJS(formatOptions: *FormatOptions, globalThis: *jsc.JSGlobalObject, ar
                         if (opt.isNumber()) {
                             const v = try opt.coerce(f64, globalThis);
                             if (std.math.isInf(v)) {
+                                if ((v < 0)) {
+                                    return globalThis.throwInvalidArguments("expected depth to be greater than or equal to 0, got {d}", .{ v });
+                                }
                                 formatOptions.max_depth = std.math.maxInt(u16);
                             } else {
-                                return globalThis.throwInvalidArguments("expected depth to be an integer, got {d}", .{ v });
+                                if (((!std.math.isNan(v)) and (@trunc(v) == v))) {
+                                    if ((v < 0)) {
+                                        return globalThis.throwInvalidArguments("expected depth to be greater than or equal to 0, got {d}", .{ v });
+                                    }
+                                    formatOptions.max_depth = @as(u16, @intFromFloat(@min(v, @as(f64, @floatFromInt(std.math.maxInt(u16))))));
+                                } else {
+                                    return globalThis.throwInvalidArguments("expected depth to be an integer, got {d}", .{ v });
+                                }
                             }
                         }
                     }
@@ -1022,9 +1032,19 @@ pub fn fromJS(formatOptions: *FormatOptions, globalThis: *jsc.JSGlobalObject, ar
                         if (depthArg.isNumber()) {
                             const v = try depthArg.coerce(f64, globalThis);
                             if (std.math.isInf(v)) {
+                                if ((v < 0)) {
+                                    return globalThis.throwInvalidArguments("expected depth to be greater than or equal to 0, got {d}", .{ v });
+                                }
                                 formatOptions.max_depth = std.math.maxInt(u16);
                             } else {
-                                return globalThis.throwInvalidArguments("expected depth to be an integer, got {d}", .{ v });
+                                if (((!std.math.isNan(v)) and (@trunc(v) == v))) {
+                                    if ((v < 0)) {
+                                        return globalThis.throwInvalidArguments("expected depth to be greater than or equal to 0, got {d}", .{ v });
+                                    }
+                                    formatOptions.max_depth = @as(u16, @intFromFloat(@min(v, @as(f64, @floatFromInt(std.math.maxInt(u16))))));
+                                } else {
+                                    return globalThis.throwInvalidArguments("expected depth to be an integer, got {d}", .{ v });
+                                }
                             }
                         }
                     }

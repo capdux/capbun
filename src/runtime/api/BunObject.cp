@@ -1371,15 +1371,15 @@ fn parseMmapOptionUsize(globalThis: *jsc.JSGlobalObject, raw_value: jsc.JSValue,
         }
     }
     if (value.isBigInt()) {
-        if (value.isBigIntInUInt64Range(0, std.math.maxInt(u64))) {
-            return @as(usize, @intCast(value.toUInt64NoTruncate()));
-        }
         const str = value.toBunString(globalThis)?;
         defer str.deref();
-        if (str.length() > 0 && str.charAt(0) == '-') {
+        const utf8 = str.toUTF8(bun.default_allocator);
+        defer utf8.deinit();
+        const slice = utf8.slice();
+        if (slice.len > 0 && slice[0] == '-') {
             return globalThis.throwInvalidArguments(field_name ++ " must be a non-negative integer", .{});
         }
-        return std.math.maxInt(usize);
+        return std.fmt.parseInt(usize, slice, 10) catch std.math.maxInt(usize);
     }
     const num = value.toNumber(globalThis)?;
     if (std.math.isNan(num)) {

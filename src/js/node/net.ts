@@ -434,11 +434,11 @@ const ServerHandlers: SocketHandler<NetSocket> = {
       if (verifyError) {
         self.authorized = false;
         self.authorizationError = verifyError.code || verifyError.message;
-        server.emit("tlsClientError", verifyError, self);
         if (self._rejectUnauthorized) {
+          server.emit("tlsClientError", verifyError, self);
           // if we reject we still need to emit secure
           self.emit("secure", self);
-          self.destroy(verifyError);
+          self.destroy();
           return;
         }
       } else {

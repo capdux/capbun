@@ -221,8 +221,8 @@ pub fn asUSocketsForClientVerification(self: *const SSLConfig) uws.SocketContext
         return opts;
 }
 
-pub fn forClientVerification(self: SSLConfig) SSLConfig {
-        var copy = self;
+pub fn forClientVerification(self: *const SSLConfig) SSLConfig {
+        var copy = self.*;
         _ = &copy;
         copy.request_cert = 1;
         copy.reject_unauthorized = 0;
@@ -442,6 +442,13 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
             result.ssl_ciphers = ciphers.toOwnedSliceZ(bun.default_allocator).ptr;
             result.is_using_default_ciphers = false;
             result.requires_custom_request_ctx = true;
+        } else {
+            if (vm.rareData().tlsDefaultCiphers()) |default_ciphers| {
+                _ = &default_ciphers;
+                result.ssl_ciphers = bun.handleOom(bun.default_allocator.dupeZ(u8, default_ciphers)).ptr;
+                result.is_using_default_ciphers = false;
+                result.requires_custom_request_ctx = true;
+            }
         }
         result.client_renegotiation_limit = generated.client_renegotiation_limit;
         result.client_renegotiation_window = generated.client_renegotiation_window;

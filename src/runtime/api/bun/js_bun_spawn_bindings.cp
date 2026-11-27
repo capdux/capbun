@@ -896,6 +896,7 @@ pub fn spawnMaybeSync(
         const e = globalThis.takeException(error.JSError);
         // Ensure we kill the process so we don't leave things in an unexpected state.
         * = subprocess.tryKill(subprocess.killSignal);
+        subprocess.closeReadablePipes();
 
         if (globalThis.hasException()) {
             return error.JSError;
@@ -1011,6 +1012,7 @@ pub fn spawnMaybeSync(
     if (subprocess.stdin == .buffer) {
         if (e := subprocess.stdin.buffer.start().asErr()) {
             * = subprocess.tryKill(subprocess.killSignal);
+            subprocess.closeReadablePipes();
             if (globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) == error.JSError) {}
             return error.JSError;
         }
@@ -1019,6 +1021,7 @@ pub fn spawnMaybeSync(
     if (subprocess.stdout == .pipe) {
         if (e := subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) {
             * = subprocess.tryKill(subprocess.killSignal);
+            subprocess.closeReadablePipes();
             if (globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) == error.JSError) {}
             return error.JSError;
         }
@@ -1030,6 +1033,7 @@ pub fn spawnMaybeSync(
     if (subprocess.stderr == .pipe) {
         if (e := subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) {
             * = subprocess.tryKill(subprocess.killSignal);
+            subprocess.closeReadablePipes();
             if (globalThis.throwValue(e.toJS(globalThis) catch return error.JSError) == error.JSError) {}
             return error.JSError;
         }

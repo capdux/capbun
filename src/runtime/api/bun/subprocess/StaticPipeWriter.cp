@@ -64,10 +64,27 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
             _.ref();
             _.buffer = _.source.slice();
             if (Environment.isWindows) {
-                return _.writer.startWithCurrentPipe();
+                switch (_.writer.startWithCurrentPipe()) {
+                    .err e => {
+                        _.buffer = "";
+                        _.source.detach();
+                        _.process.onCloseIO(.stdin);
+                        _.deref();
+                        return .{ .err = e };
+                    },
+                    .result => return .success,
+                }
             }
             switch (_.writer.start(_.stdio_result.?, true)) {
                 .err e => {
+                    if (fd := _.stdio_result) {
+                        fd.close();
+                        _.stdio_result = null;
+                    }
+                    _.buffer = "";
+                    _.source.detach();
+                    _.process.onCloseIO(.stdin);
+                    _.deref();
                     return .{ .err = e };
                 },
                 .result => {

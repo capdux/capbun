@@ -2598,3 +2598,8 @@
 - **CP/C++ 模块修复**：`src/css/{css_parser,error,printer,rules/rules,rules/style,selectors/selector,values/calc}.cp`, `src/glob/matcher.cp`, `src/install/lockfile/Package/WorkspaceMap.cp`, `src/jsc/bindings/sliceAnsi.cpp`, `src/runtime/api/{BunObject,csrf_jsc}.cp`, `src/runtime/server/RequestContext.cp`, `src/shell/states/Expansion.cp`, `src/sys/sys.cp`, `src/test_runner/{Order,bun_test,expect/toHaveReturnedWith}.cp`。
 - **SQL Enum 重编（28 个 `.zig`）**：基于 `task-bun-20261127-enum-slice-by-val` 修复后新版 `cpc` 重新生成 `src/sql/` 与 `src/sql_jsc/` 下 18 个 `enum`/`union(enum)` 生成文件。
 - **规则与进度账本**：`GEMINI.md`（16.6–16.8）、`SESSION.md`、`CHANGELOG.md`、`DEVLOG.md`、`test/stats.md`（+4 全绿、+1 冻结）。
+
+## 2026-11-27 (Batch 129–133A: TLS / HTTP Client & Server / Spawn / Mmap / Which / BoringSSL 重编)
+- **CP/TS/C++ 模块修复**：`src/js/node/{_http_client,net}.ts`, `src/jsc/{ConsoleObject.cp,bindings/ANSIHelpers.h,bindings/sliceAnsi.cpp}`, `src/io/PipeReader.cp`, `src/runtime/api/{BunObject,csrf_jsc}.cp`, `src/runtime/api/bun/{SecureContext,js_bun_spawn_bindings,subprocess,subprocess/StaticPipeWriter,subprocess/Writable}.cp`, `src/runtime/server/server.cp`, `src/runtime/socket/SSLConfig.cp`, `src/runtime/webcore/fetch.cp`, `src/shell/builtin/which.cp`, `src/which/which.cp`。
+- **新版 `cpc` 重编净化（5 个）**：`src/runtime/socket/{tls_socket_functions,ssl_wrapper,socket}.cp`、`src/runtime/crypto/{EVP,PBKDF2}.cp`（清零 `_ = BoringSSL.ERR_clear_error;`）。
+- **进度账本**：`test/stats.md`（+5 全绿、+1 冻结；总计 1,404/2,339 = 60.0%），`SESSION.md`、`CHANGELOG.md`、`DEVLOG.md`。

@@ -17,7 +17,6 @@ struct SSLConfigGuard {
     ~init() { _.config.deinit(); }
 }
 
-
 struct cpp {
     static {
         extern fn Bun__SecureContextCache__get(global: *jsc.JSGlobalObject, key: u64): jsc.JSValue;
@@ -55,18 +54,17 @@ fn createWithDigestAndCurve(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketCon
     const ctx = ctx_opt.?;
     if (curve := ecdh_curve) {
         if (BoringSSL.SSL_CTX_set1_groups_list(ctx, curve.ptr) != 1) {
-            BoringSSL.ERR_clear_error();
+            const clear_err = BoringSSL.ERR_clear_error;
+            clear_err();
             BoringSSL.SSL_CTX_free(ctx);
             return global.ERR(.CRYPTO_OPERATION_FAILED, "Failed to set ECDH curve", .{}).throw();
         }
     }
     return bun.new(SecureContext, { ctx: ctx, digest: d, extra_memory: ctx_opts.approxCertBytes() + ssl_ctx_base_cost, shared: use_cache });
 }
-
 fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.BunSocketContextOptions, d: [32]u8): bun.JSError!*SecureContext {
     return createWithDigestAndCurve(global, ctx_opts, d, null, true);
 }
-
 @root struct SecureContext {
     ctx: *BoringSSL.SSL_CTX,
     digest: [32]u8,
@@ -152,7 +150,7 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
             defer BoringSSL.X509_free(x);
             * = BoringSSL.X509_STORE_add_cert(store, x);
         }
-        BoringSSL.ERR_clear_error();
+        const clear_err = BoringSSL.ERR_clear_error; clear_err();
         return .js_undefined;
     }
 

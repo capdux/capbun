@@ -139,7 +139,7 @@ struct MutexUnlockGuard {
     /// Sets request_cert=1 (to receive server cert) and reject_unauthorized=0
     /// (to handle verification manually in handshake callback).
     pub fn forClientVerification(): SSLConfig {
-        let copy = _;
+        let copy = _.*;
         copy.request_cert = 1;
         copy.reject_unauthorized = 0;
         return copy;
@@ -329,6 +329,10 @@ struct MutexUnlockGuard {
         }
         if (ciphers := generated.ciphers.get()) {
             result.ssl_ciphers = ciphers.toOwnedSliceZ(bun.default_allocator).ptr;
+            result.is_using_default_ciphers = false;
+            result.requires_custom_request_ctx = true;
+        } else if (default_ciphers := vm.rareData().tlsDefaultCiphers()) {
+            result.ssl_ciphers = bun.handleOom(bun.default_allocator.dupeZ(u8, default_ciphers)).ptr;
             result.is_using_default_ciphers = false;
             result.requires_custom_request_ctx = true;
         }

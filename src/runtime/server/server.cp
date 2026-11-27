@@ -1453,13 +1453,13 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
             jsc.markBinding(@src());
 
             if (_.config.onRequest == .zero) {
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() requires the server to have a fetch handler").toErrorInstance(ctx));
+                return JSPromise.rejectedPromise(ctx, ZigString.init("fetch() requires the server to have a fetch handler").toErrorInstance(ctx)).toJS();
             }
 
             const arguments = callframe.arguments_old(2).slice();
             if (arguments.len == 0) {
                 const fetch_error = WebCore.Fetch.fetch_error_no_args;
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init(fetch_error).toErrorInstance(ctx));
+                return JSPromise.rejectedPromise(ctx, ZigString.init(fetch_error).toErrorInstance(ctx)).toJS();
             }
 
             let headers: (*WebCore.FetchHeaders)? = null;
@@ -1480,7 +1480,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 
                 if (temp_url_str.len == 0) {
                     const fetch_error = jsc.WebCore.Fetch.fetch_error_blank_url;
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init(fetch_error).toErrorInstance(ctx));
+                    return JSPromise.rejectedPromise(ctx, ZigString.init(fetch_error).toErrorInstance(ctx)).toJS();
                 }
 
                 let url = URL.parse(temp_url_str);
@@ -1512,8 +1512,11 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     }
 
                     if (body__ := opts.fastGet(ctx, .body)?) {
-                        const new_blob = Blob.get(ctx, body__, true, false) catch {
-                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx));
+                        const new_blob = Blob.get(ctx, body__, true, false) catch |e| {
+                            if (ctx.hasException()) {
+                                return JSPromise.rejectedPromise(ctx, ctx.takeError(e)).toJS();
+                            }
+                            return JSPromise.rejectedPromise(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx)).toJS();
                         };
                         body = .{ .Blob = new_blob };
                     }
@@ -1536,7 +1539,7 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
                 const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{fetch_error});
 
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, err);
+                return JSPromise.rejectedPromise(ctx, err).toJS();
             }
 
             let request = Request.new(existing_request);
@@ -1547,14 +1550,16 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 _.globalThis,
                 _.jsValueAssertAlive(),
                 &req_args,
-            ) catch |err| _.globalThis.takeException(err);
+            ) catch |e| {
+                return jsc.JSPromise.rejectedPromise(ctx, _.globalThis.takeError(e)).toJS();
+            };
 
             if (response_value.isAnyError()) {
-                return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, response_value);
+                return jsc.JSPromise.rejectedPromise(ctx, response_value).toJS();
             }
 
             if (response_value.isEmptyOrUndefinedOrNull()) {
-                return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() returned an empty value").toErrorInstance(ctx));
+                return jsc.JSPromise.rejectedPromise(ctx, ZigString.init("fetch() returned an empty value").toErrorInstance(ctx)).toJS();
             }
 
             if (response_value.asAnyPromise() != null) {
@@ -2137,7 +2142,8 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                 if (written > 0) {
                     const message = output_buf[0..written];
                     error_instance = globalThis.createErrorInstance("OpenSSL {s}", .{message});
-                    BoringSSL.ERR_clear_error();
+                    const clear_err = BoringSSL.ERR_clear_error;
+                    clear_err();
                 }
             }
 
@@ -3905,7 +3911,8 @@ fn throwSSLErrorIfNecessary(globalThis: *jsc.JSGlobalObject) : bool {
     const getErr = BoringSSL.ERR_get_error;
     const err_code = getErr();
     if (err_code != 0) {
-        defer BoringSSL.ERR_clear_error();
+        const clear_err = BoringSSL.ERR_clear_error;
+        defer clear_err();
         if (globalThis.throwValue(jsc.API.Bun.Crypto.createCryptoError(globalThis, err_code)) == error.JSError) {}
         return true;
     }

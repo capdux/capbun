@@ -682,6 +682,12 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
+        if ((ssl_config == null)) {
+            if (vm.rareData().tlsDefaultCiphers()) |default_ciphers| {
+                _ = &default_ciphers;
+                ssl_config = ServerConfig.SSLConfig.GlobalRegistry.intern(ServerConfig.SSLConfig{ .ssl_ciphers = bun.handleOom(bun.default_allocator.dupeZ(u8, default_ciphers)).ptr, .is_using_default_ciphers = false, .requires_custom_request_ctx = true, .reject_unauthorized = @intFromBool(vm.getTLSRejectUnauthorized()) });
+            }
+        }
         for (cp_iter_slice(decompress_objs)) |obj| {
             _ = &obj;
             if ((obj == JSValue.zero)) {

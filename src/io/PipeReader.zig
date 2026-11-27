@@ -623,7 +623,7 @@ pub fn readBlockingPipe(self: *PosixBufferedReader, fd: bun.FD, unused_hint: isi
             _ = &unused_hint;
             var received_hup = received_hup_initially;
             _ = &received_hup;
-            while (true) {
+            while (((!self.isDone()) and (self.handle != .closed))) {
                 const streaming = self.vtable.isStreamingEnabled();
                 var got_retry = false;
                 _ = &got_retry;
@@ -643,9 +643,8 @@ pub fn readBlockingPipe(self: *PosixBufferedReader, fd: bun.FD, unused_hint: isi
                     }
                     switch (self.readPipeNowait(fd, read_buf)) {
 .result => |bytes_read| {
-if (self.maxbuf) |l| {
-                        _ = &l;
-                        _ = l.onReadBytes(bytes_read);
+if (self.checkMaxBuf(bytes_read)) {
+                        return;
                     }
                     if ((bytes_read == 0)) {
                         _ = self.closeWithoutReporting();
@@ -688,12 +687,11 @@ if ((!e.isRetry())) {
                     }
                     switch (self.readPipeNowait(fd, buf)) {
 .result => |bytes_read| {
-if (self.maxbuf) |l| {
-                        _ = &l;
-                        _ = l.onReadBytes(bytes_read);
-                    }
-                    self._offset = (self._offset + bytes_read);
+self._offset = (self._offset + bytes_read);
                     self._buffer.items.len = (self._buffer.items.len + bytes_read);
+                    if (self.checkMaxBuf(bytes_read)) {
+                        return;
+                    }
                     if ((bytes_read == 0)) {
                         _ = self.closeWithoutReporting();
                         if ((!self.flags.is_done)) {
@@ -752,16 +750,27 @@ _ = self.registerPoll();
             }
     }
 
+pub fn checkMaxBuf(self: *PosixBufferedReader, bytes_read: usize) bool {
+            if (self.maxbuf) |l| {
+                _ = &l;
+                const new_remaining = (blk_catch_1: { break :blk_catch_1 ((std.math.sub(i64, l.remaining_bytes, ((std.math.cast(i64, bytes_read)) orelse (0)))) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 -1; }); });
+                const exceeded = ((new_remaining < 0) and (l.owned_by_subprocess != null));
+                _ = l.onReadBytes(bytes_read);
+                return exceeded;
+            }
+            return false;
+    }
+
 pub fn readWithFn(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, received_hup: bool, comptime file_type: FileType, comptime sys_fn: *const fn (bun.FD, []u8, usize) bun.sys.Maybe(usize)) void {
             _ = &size_hint;
             const streaming = self.vtable.isStreamingEnabled();
             if (streaming) {
                 const stack_buffer = self.vtable.eventLoop().pipeReadBuffer();
-                while ((self._buffer.items.len == 0)) {
+                while ((((self._buffer.items.len == 0) and (!self.isDone())) and (self.handle != .closed))) {
                     const stack_buffer_cutoff = (stack_buffer.len / 2);
                     var stack_buffer_head = stack_buffer;
                     _ = &stack_buffer_head;
-                    while ((stack_buffer_head.len > (16 * 1024))) {
+                    while ((((stack_buffer_head.len > (16 * 1024)) and (!self.isDone())) and (self.handle != .closed))) {
                         var buf = stack_buffer_head;
                         _ = &buf;
                         const already_read = (stack_buffer.len - stack_buffer_head.len);
@@ -780,11 +789,10 @@ pub fn readWithFn(self: *PosixBufferedReader, fd: bun.FD, size_hint: isize, rece
                         }
                         switch (sys_fn(fd, buf, self._offset)) {
 .result => |bytes_read| {
-if (self.maxbuf) |l| {
-                            _ = &l;
-                            _ = l.onReadBytes(bytes_read);
+self._offset = (self._offset + bytes_read);
+                        if (self.checkMaxBuf(bytes_read)) {
+                            return;
                         }
-                        self._offset = (self._offset + bytes_read);
                         const read_full_limit = (hit_max_read and (bytes_read == buf.len));
                         buf = stack_buffer_head[0..bytes_read];
                         stack_buffer_head = stack_buffer_head[bytes_read..];
@@ -863,11 +871,10 @@ if (e.isRetry()) {
 if ((bytes_read > 0)) {
                         _ = bun.handleOom(self._buffer.appendSlice(read_buf[0..bytes_read]));
                     }
-                    if (self.maxbuf) |l| {
-                        _ = &l;
-                        _ = l.onReadBytes(bytes_read);
-                    }
                     self._offset = (self._offset + bytes_read);
+                    if (self.checkMaxBuf(bytes_read)) {
+                        return;
+                    }
                     if ((bytes_read == 0)) {
                         _ = self.closeWithoutReporting();
                         _ = self.drainChunk(self._buffer.items, .eof);
@@ -893,7 +900,7 @@ if (e.isRetry()) {
 }
                 }
             }
-            while (true) {
+            while (((!self.isDone()) and (self.handle != .closed))) {
                 _ = bun.handleOom(self._buffer.ensureUnusedCapacity((16 * 1024)));
                 var buf: []u8 = self._buffer.unusedCapacitySlice();
                 _ = &buf;
@@ -909,13 +916,12 @@ if (e.isRetry()) {
                 }
                 switch (sys_fn(fd, buf, self._offset)) {
 .result => |bytes_read| {
-if (self.maxbuf) |l| {
-                    _ = &l;
-                    _ = l.onReadBytes(bytes_read);
-                }
-                self._offset = (self._offset + bytes_read);
-                buf = buf[0..bytes_read];
+self._offset = (self._offset + bytes_read);
                 self._buffer.items.len = (self._buffer.items.len + bytes_read);
+                if (self.checkMaxBuf(bytes_read)) {
+                    return;
+                }
+                buf = buf[0..bytes_read];
                 if ((bytes_read == 0)) {
                     _ = self.closeWithoutReporting();
                     _ = self.drainChunk(self._buffer.items, .eof);

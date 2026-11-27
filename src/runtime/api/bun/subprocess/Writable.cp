@@ -104,12 +104,11 @@ pub union(enum) Writable {
                         switch (pipe.writer.startWithCurrentPipe()) {
                             .result => {},
                             .err e => {
-                                * = e;
                                 pipe.deref();
                                 if (stdio.* == .readable_stream) {
                                     stdio.readable_stream.cancel(event_loop.global);
                                 }
-                                return error.UnexpectedCreatingStdin;
+                                return event_loop.global.throwValue(e.toJS(event_loop.global)?);
                             },
                         }
                         pipe.writer.setParent(pipe);
@@ -179,13 +178,13 @@ pub union(enum) Writable {
                 switch (pipe.writer.start(pipe.fd, true)) {
                     .result => {},
                     .err e => {
-                        * = e;
+                        pipe.fd.close();
                         pipe.deref();
                         if (stdio.* == .readable_stream) {
                             stdio.readable_stream.cancel(event_loop.global);
                         }
 
-                        return error.UnexpectedCreatingStdin;
+                        return event_loop.global.throwValue(e.toJS(event_loop.global)?);
                     },
                 }
 

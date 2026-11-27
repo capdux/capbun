@@ -33,6 +33,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -132,7 +133,41 @@ pub fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_prot
         if (try getOption(globalObject, opts, obj_proto, key)) |val| {
             _ = &val;
             if ((!val.isUndefined())) {
-                return try globalObject.validateIntegerRange(val, u64, 0, .{ .min = 0, .max = jsc.MAX_SAFE_INTEGER, .field_name = field_name });
+                if ((!val.isNumber())) {
+                    return globalObject.throwInvalidPropertyTypeValue(field_name, "number", val);
+                }
+                if ((!val.isAnyInt())) {
+                    var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalObject };
+                    _ = &formatter;
+                    var _guard_fmt = DeinitGuard(jsc.ConsoleObject.Formatter){ .ptr = (blk: {
+                    break :blk (&formatter);
+
+}) };
+                    _ = &_guard_fmt;
+                    var ___guard_fmt_moved = false; _ = &___guard_fmt_moved;
+                    defer if (!___guard_fmt_moved) { ___guard_fmt_moved = true; const __T = @TypeOf(_guard_fmt); if (@typeInfo(__T) == .optional) { if (_guard_fmt) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fmt.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fmt; _drop_val.__cp_deinit(); } };
+                    return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be an integer. Received {f}", .{ field_name, val.toFmt((blk: {
+                    break :blk (&formatter);
+
+})) }).throw();
+                }
+                const num = val.asNumber();
+                if (((num < 0) or (num > @as(f64, @floatFromInt(jsc.MAX_SAFE_INTEGER))))) {
+                    var formatter = jsc.ConsoleObject.Formatter{ .globalThis = globalObject };
+                    _ = &formatter;
+                    var _guard_fmt = DeinitGuard(jsc.ConsoleObject.Formatter){ .ptr = (blk: {
+                    break :blk (&formatter);
+
+}) };
+                    _ = &_guard_fmt;
+                    var ___guard_fmt_moved = false; _ = &___guard_fmt_moved;
+                    defer if (!___guard_fmt_moved) { ___guard_fmt_moved = true; const __T = @TypeOf(_guard_fmt); if (@typeInfo(__T) == .optional) { if (_guard_fmt) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fmt.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fmt; _drop_val.__cp_deinit(); } };
+                    return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= 0 && <= 9007199254740991. Received {f}", .{ field_name, val.toFmt((blk: {
+                    break :blk (&formatter);
+
+})) }).throw();
+                }
+                return @intFromFloat(num);
             }
         }
         return null;

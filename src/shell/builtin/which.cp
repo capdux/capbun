@@ -74,7 +74,8 @@ struct DerefGuard<T> {
                 }
                 const resolved = maybe_resolved.?;
 
-                * = _.bltn().writeNoIO(.stdout, resolved);
+                const buf = _.bltn().fmtErrorArena(null, "{s}\n", .{resolved});
+                * = _.bltn().writeNoIO(.stdout, buf);
             }
             return _.bltn().done(@intFromBool(had_not_found));
         }

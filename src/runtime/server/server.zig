@@ -1065,7 +1065,7 @@ pub fn plugins(self: *const AnyServer) ?*ServePlugins {
             }
     }
 
-pub fn getPlugins(self: AnyServer) PluginsResult {
+pub fn getPlugins(self: *const AnyServer) PluginsResult {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).getPlugins();
             } else {
@@ -1337,7 +1337,7 @@ pub fn onSavedRequest(self: AnyServer, req: SavedRequest.Union, resp: uws.AnyRes
             }
     }
 
-pub fn prepareAndSaveJsRequestContext(self: AnyServer, req: *uws.Request, resp: uws.AnyResponse, global: *jsc.JSGlobalObject, method: ?bun.http.Method) bun.JSError!?SavedRequest {
+pub fn prepareAndSaveJsRequestContext(self: *const AnyServer, req: *uws.Request, resp: uws.AnyResponse, global: *jsc.JSGlobalObject, method: ?bun.http.Method) bun.JSError!?SavedRequest {
             if ((self.ptr.tag() == case_http)) {
                 if (self.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
                     _ = &ctx;
@@ -1505,7 +1505,7 @@ pub fn PreparedRequestFor(comptime Ctx: type) type {
     request_object: *Request,
     ctx: *Ctx,
 
-pub fn save(self: @This(), global: *jsc.JSGlobalObject, req: *Ctx.Req, resp: *Ctx.Resp) SavedRequest {
+pub fn save(self: *const @This(), global: *jsc.JSGlobalObject, req: *Ctx.Req, resp: *Ctx.Resp) SavedRequest {
             if (comptime Ctx.is_h3) {
                 _ = @compileError("PreparedRequest.save is HTTP/1-only");
             }
@@ -2200,12 +2200,12 @@ pub fn onReload(self: *@This(), globalThis: *jsc.JSGlobalObject, callframe: *jsc
 pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
             _ = jsc.markBinding(@src());
             if ((self.config.onRequest == .zero)) {
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() requires the server to have a fetch handler").toErrorInstance(ctx));
+                return JSPromise.rejectedPromise(ctx, ZigString.init("fetch() requires the server to have a fetch handler").toErrorInstance(ctx)).toJS();
             }
             const arguments = callframe.arguments_old(2).slice();
             if ((arguments.len == 0)) {
                 const fetch_error = WebCore.Fetch.fetch_error_no_args;
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init(fetch_error).toErrorInstance(ctx));
+                return JSPromise.rejectedPromise(ctx, ZigString.init(fetch_error).toErrorInstance(ctx)).toJS();
             }
             var headers: ?*WebCore.FetchHeaders = null;
             _ = &headers;
@@ -2239,7 +2239,7 @@ pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                 const temp_url_str = url_zig_str.slice();
                 if ((temp_url_str.len == 0)) {
                     const fetch_error = jsc.WebCore.Fetch.fetch_error_blank_url;
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init(fetch_error).toErrorInstance(ctx));
+                    return JSPromise.rejectedPromise(ctx, ZigString.init(fetch_error).toErrorInstance(ctx)).toJS();
                 }
                 var url = URL.parse(temp_url_str);
                 _ = &url;
@@ -2279,7 +2279,10 @@ pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                     }
                     if (try opts.fastGet(ctx, .body)) |body__| {
                         _ = &body__;
-                        const new_blob = (blk_catch_2: { break :blk_catch_2 ((Blob.get(ctx, body__, true, false)) catch |__ce_2| { _ = &__ce_2; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx)); }); });
+                        const new_blob = (blk_catch_2: { break :blk_catch_2 ((Blob.get(ctx, body__, true, false)) catch |e| { _ = &e; if (ctx.hasException()) {
+                            return JSPromise.rejectedPromise(ctx, ctx.takeError(e)).toJS();
+                        }
+                        return JSPromise.rejectedPromise(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx)).toJS(); }); });
                         body = .{ .Blob = new_blob };
                     }
                 }
@@ -2291,19 +2294,19 @@ pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                 } else {
                     const fetch_error = jsc.WebCore.Fetch.fetch_type_error_strings.get(bun.jsc.C.JSValueGetType(ctx, first_arg.asRef()));
                     const err = ctx.toTypeError(.INVALID_ARG_TYPE, "{s}", .{ fetch_error });
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, err);
+                    return JSPromise.rejectedPromise(ctx, err).toJS();
                 }
             }
             var request = Request.new(existing_request);
             _ = &request;
             _ = bun.assert((self.config.onRequest != .zero));
             const req_args: [1]jsc.JSValue = .{ request.toJS(self.globalThis) };
-            const response_value = (blk_catch_3: { break :blk_catch_3 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&req_args))) catch |err| { _ = &err; break :blk_catch_3 self.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_3: { break :blk_catch_3 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&req_args))) catch |e| { _ = &e; return jsc.JSPromise.rejectedPromise(ctx, self.globalThis.takeError(e)).toJS(); }); });
             if (response_value.isAnyError()) {
-                return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, response_value);
+                return jsc.JSPromise.rejectedPromise(ctx, response_value).toJS();
             }
             if (response_value.isEmptyOrUndefinedOrNull()) {
-                return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() returned an empty value").toErrorInstance(ctx));
+                return jsc.JSPromise.rejectedPromise(ctx, ZigString.init("fetch() returned an empty value").toErrorInstance(ctx)).toJS();
             }
             if ((response_value.asAnyPromise() != null)) {
                 return response_value;
@@ -2873,7 +2876,8 @@ pub noinline fn onListenFailed(self: @This()) void {
                 if ((written > 0)) {
                     const message = output_buf[0..written];
                     error_instance = globalThis.createErrorInstance("OpenSSL {s}", .{ message });
-                    _ = BoringSSL.ERR_clear_error;
+                    const clear_err = BoringSSL.ERR_clear_error;
+                    _ = clear_err();
                 }
             }
             if ((error_instance == .zero)) {
@@ -4313,8 +4317,9 @@ pub fn throwSSLErrorIfNecessary(globalThis: *jsc.JSGlobalObject) bool {
         const getErr = BoringSSL.ERR_get_error;
         const err_code = getErr();
         if ((err_code != 0)) {
+            const clear_err = BoringSSL.ERR_clear_error;
             defer {
-            _ = BoringSSL.ERR_clear_error;
+            _ = clear_err();
             }
             if ((globalThis.throwValue(jsc.API.Bun.Crypto.createCryptoError(globalThis, err_code)) == error.JSError)) {
             }

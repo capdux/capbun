@@ -1980,3 +1980,7 @@
 - **CSS & 语法**：`calc.cp` 区分按值接收者 `intoValue`（保留 `_`）与 `*const @This()` 方法 `deepClone`/`mulF32`（使用 `_.*`）；`css_parser.cp`/`rules.cp`/`style.cp`/`selector.cp` 修复不兼容规则合并与嵌套展开回溯（`nested-function-backtracking`、`nested-selector-expansion` 转绿）。
 - **TestRunner & BunObject**：`toHaveReturnedWith.cp` 增加 `SuccessfulReturnsGuard` + `protect()`（`toHaveReturnedWith` 43/43 转绿）；`Order.cp`/`bun_test.cp` 改为迭代栈析构；`BunObject.cp` 修复 `which`/`allocUnsafe`/`mmapFile`（`bun/util/which` 8/8 转绿）。
 - **工具链协同**：向 `cp_agy` 提交零参外部调用丢 `()` 工单 `task-bun-20261127-zero-arg-call`（`BoringSSL.ERR_clear_error()`）。
+
+## 2026-11-27: Batch 129–133A 突破 60% 里程碑收敛
+- **HTTP & TLS**：`_http_client.ts` 修正 `_checkInvalidHeaderChar` 解构别名（`client-timeout-error` 2/2）；`net.ts` 将 `tlsClientError` 移入 `_rejectUnauthorized` 分支并改用无参 `destroy()`（`node-tls-internals` 20/20）；`SSLConfig.cp` & `fetch.cp` 纳入 `tlsDefaultCiphers()`；`server.cp` `onFetch` 全部 9 处改用 `JSPromise.rejectedPromise().toJS()`（`bun-serve-fetch-invalid-args` 14/14）与 `takeError(e)`；批量重编 5 个 TLS/Crypto `.cp` 文件消除了旧版 `cpc` 吞掉 `BoringSSL.ERR_clear_error()` 括号的隐患。
+- **Util / Spawn / Shell**：`BunObject.cp` 修复 `mmap` BigInt `size`/`offset` 解析绕过 `BigInt32` 漏判（`mmap` 26/26）；`which/which.cp` 与 `shell/builtin/which.cp` 修 NUL 越界与 `\n` 输出（`which` 5/5）；`PipeReader.cp` 在 `readBlockingPipe`/`readWithFn` 接入 `checkMaxBuf` 消除 `onMaxBuffer` 后 use-after-poison；`sliceAnsi.cpp` & `ANSIHelpers.h` 补全 SGR 58/59/20/21/51/52/73/74、bold/dim 独立追踪与 speculative zone 快照恢复。

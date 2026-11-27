@@ -24,6 +24,18 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
+- **2026-11-27 15:20 Batch 133A 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/js/bun/http/bun-serve-fetch-invalid-args.test.ts` (14 pass, 0 fail)
+  - `test/js/bun/shell/commands/which.test.ts` (5 pass, 0 fail)
+
+- **2026-11-27 15:17 Batch 131A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/node/tls/node-tls-internals.test.ts` (20 pass, 0 fail)
+
+- **2026-11-27 15:08 Batch 129 验收转绿（`1.4.5-debug`，2 个完整实名路径 + 1 冻结）**：
+  - `test/js/bun/util/mmap.test.js` (26 pass, 0 fail)
+  - `test/js/node/http/client-timeout-error.test.ts` (2 pass, 0 fail)
+  - **显式冻结（缺外部包 `strip-ansi`）**：`test/js/node/util/bun-inspect.test.ts`
+
 - **2026-11-27 14:47 Batches 124–127 验收转绿（`1.4.5-debug`，4 个完整实名路径）**：
   - `test/js/bun/test/expect/toHaveReturnedWith.test.ts` (43 pass, 0 fail)
   - `test/js/bun/util/which.test.ts` (8 pass, 0 fail)

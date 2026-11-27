@@ -185,7 +185,8 @@ pub fn addCACert(self: *SecureContext, global: *jsc.JSGlobalObject, callframe: *
             }
             _ = BoringSSL.X509_STORE_add_cert(store, x);
         }
-        _ = BoringSSL.ERR_clear_error;
+        const clear_err = BoringSSL.ERR_clear_error;
+        _ = clear_err();
         return .js_undefined;
 }
 
@@ -256,7 +257,8 @@ pub fn createWithDigestAndCurve(global: *jsc.JSGlobalObject, ctx_opts: uws.Socke
         if (ecdh_curve) |curve| {
             _ = &curve;
             if ((BoringSSL.SSL_CTX_set1_groups_list(ctx, curve.ptr) != 1)) {
-                _ = BoringSSL.ERR_clear_error;
+                const clear_err = BoringSSL.ERR_clear_error;
+                _ = clear_err();
                 _ = BoringSSL.SSL_CTX_free(ctx);
                 return global.ERR(.CRYPTO_OPERATION_FAILED, "Failed to set ECDH curve", .{}).throw();
             }

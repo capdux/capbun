@@ -470,6 +470,7 @@ pub fn timeoutCallback(self: *Subprocess) void {
 pub fn onMaxBuffer(self: *Subprocess, kind: MaxBuf.Kind) void {
         self.exited_due_to_maxbuf = kind;
         _ = self.tryKill(self.killSignal);
+        _ = self.closeReadablePipes();
 }
 
 pub fn kill(client: *Subprocess, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {

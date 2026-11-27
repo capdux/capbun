@@ -12,7 +12,7 @@ const {
 const nodeHttpClient = $newZigFunction("fetch.zig", "nodeHttpClient", 2);
 const { urlToHttpOptions } = require("internal/url");
 const { throwOnInvalidTLSArray } = require("internal/tls");
-const { validateHeaderName, checkInvalidHeaderChar } = require("node:_http_common");
+const { validateHeaderName, _checkInvalidHeaderChar: checkInvalidHeaderChar } = require("node:_http_common");
 const { getTimerDuration } = require("internal/timers");
 const { ConnResetException, getLazy } = require("internal/shared");
 const tlsModule = getLazy(() => require("node:tls"));

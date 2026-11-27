@@ -19,7 +19,7 @@ fn isValid(buf: *bun.PathBuffer, segment: string, bin: string): u16? {
 }
 
 pub fn which(buf: *bun.PathBuffer, path: string, cwd: string, bin: string): [:0]const u8? {
-    if (bin.len > bun.MAX_PATH_BYTES) return null;
+    if (bin.len >= bun.MAX_PATH_BYTES) return null;
     bun.Output.scoped(.which, .hidden)("path={s} cwd={s} bin={s}", .{ path, cwd, bin });
 
     if (bun.Environment.os == .windows) {

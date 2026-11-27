@@ -123,11 +123,31 @@ pub fn start(self: *@This()) bun.sys.Maybe(void) {
             _ = self.ref();
             self.buffer = self.source.slice();
             if (Environment.isWindows) {
-                return self.writer.startWithCurrentPipe();
+                switch (self.writer.startWithCurrentPipe()) {
+.err => |e| {
+self.buffer = "";
+                _ = self.source.detach();
+                _ = self.process.onCloseIO(.stdin);
+                _ = self.deref();
+                return .{ .err = e };
+},
+.result => {
+return .success;
+},
+}
             }
             switch (self.writer.start(self.stdio_result.?, true)) {
 .err => |e| {
-return .{ .err = e };
+if (self.stdio_result) |fd| {
+                _ = &fd;
+                _ = fd.close();
+                self.stdio_result = null;
+            }
+            self.buffer = "";
+            _ = self.source.detach();
+            _ = self.process.onCloseIO(.stdin);
+            _ = self.deref();
+            return .{ .err = e };
 },
 .result => {
 if (comptime Environment.isPosix) {

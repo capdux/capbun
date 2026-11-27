@@ -917,6 +917,7 @@ _ = fd.close();
         if (globalThis.hasException()) {
             const e = globalThis.takeException(error.JSError);
             _ = subprocess.tryKill(subprocess.killSignal);
+            _ = subprocess.closeReadablePipes();
             if (globalThis.hasException()) {
                 return error.JSError;
             }
@@ -1011,6 +1012,7 @@ send_exit_notification = true;
             if (subprocess.stdin.buffer.start().asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
+                _ = subprocess.closeReadablePipes();
                 if ((globalThis.throwValue((blk_catch_6: { break :blk_catch_6 ((e.toJS(globalThis)) catch |__ce_6| { _ = &__ce_6; return error.JSError; }); })) == error.JSError)) {
                 }
                 return error.JSError;
@@ -1020,6 +1022,7 @@ send_exit_notification = true;
             if (subprocess.stdout.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
+                _ = subprocess.closeReadablePipes();
                 if ((globalThis.throwValue((blk_catch_7: { break :blk_catch_7 ((e.toJS(globalThis)) catch |__ce_7| { _ = &__ce_7; return error.JSError; }); })) == error.JSError)) {
                 }
                 return error.JSError;
@@ -1032,6 +1035,7 @@ send_exit_notification = true;
             if (subprocess.stderr.pipe.start(subprocess, event_loop).asErr()) |e| {
                 _ = &e;
                 _ = subprocess.tryKill(subprocess.killSignal);
+                _ = subprocess.closeReadablePipes();
                 if ((globalThis.throwValue((blk_catch_8: { break :blk_catch_8 ((e.toJS(globalThis)) catch |__ce_8| { _ = &__ce_8; return error.JSError; }); })) == error.JSError)) {
                 }
                 return error.JSError;

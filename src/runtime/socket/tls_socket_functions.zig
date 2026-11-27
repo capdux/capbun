@@ -929,7 +929,7 @@ pub fn renegotiate(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *j
             return JSValue.js_undefined;
         }
         const ssl_ptr = ssl_ptr_opt.?;
-        _ = BoringSSL.ERR_clear_error;
+        _ = BoringSSL.ERR_clear_error();
         if ((BoringSSL.SSL_renegotiate(ssl_ptr) != 1)) {
             return globalObject.throwValue(getSSLException(globalObject, "SSL_renegotiate error"));
         }
@@ -1041,7 +1041,7 @@ pub noinline fn getSSLException(globalThis: *jsc.JSGlobalObject, defaultMessage:
             var encoded_str = zig_str.withEncoding();
             _ = &encoded_str;
             _ = encoded_str.markGlobal();
-            _ = BoringSSL.ERR_clear_error;
+            _ = BoringSSL.ERR_clear_error();
         }
         if ((zig_str.len == 0)) {
             zig_str = ZigString.init(defaultMessage);

@@ -476,6 +476,7 @@ pub struct TestingAPIs {
     pub fn onMaxBuffer(*_, kind: MaxBuf.Kind) {
         _.exited_due_to_maxbuf = kind;
         * = _.tryKill(_.killSignal);
+        _.closeReadablePipes();
     }
 
     pub static fn kill(

@@ -78,7 +78,7 @@ pub fn isValid(buf: *bun.PathBuffer, segment: []const u8, bin: []const u8) ?u16 
 }
 
 pub fn which(buf: *bun.PathBuffer, path: []const u8, cwd: []const u8, bin: []const u8) ?[:0]const u8 {
-        if ((bin.len > bun.MAX_PATH_BYTES)) {
+        if ((bin.len >= bun.MAX_PATH_BYTES)) {
             return null;
         }
         _ = bun.Output.scoped(.which, .hidden)("path={s} cwd={s} bin={s}", .{ path, cwd, bin });

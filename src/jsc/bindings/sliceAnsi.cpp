@@ -143,10 +143,18 @@ struct SgrStyleState {
 
     void applyStart(const String& openCodeStr, const String& endCodeStr)
     {
-        // Remove existing entry with same endCode, then add new one
-        entries.removeAllMatching([&](const Entry& e) {
-            return e.endCode == endCodeStr;
-        });
+        // Remove existing entry with same endCode, then add new one.
+        // Bold (1) and dim (2) share close code 22 but are independent
+        // attributes until closed together by SGR 22.
+        if (endCodeStr == "\x1b[22m"_s) {
+            entries.removeAllMatching([&](const Entry& e) {
+                return e.endCode == endCodeStr && e.openCode == openCodeStr;
+            });
+        } else {
+            entries.removeAllMatching([&](const Entry& e) {
+                return e.endCode == endCodeStr;
+            });
+        }
         entries.append(Entry { endCodeStr, openCodeStr });
     }
 
@@ -225,6 +233,7 @@ static SgrParams parseSgrParams(const Char* paramStart, const Char* paramEnd)
     SgrParams out;
     uint32_t current = 0;
     bool hasDigit = false;
+    bool sawSeparator = false;
 
     for (const Char* p = paramStart; p < paramEnd; ++p) {
         Char c = *p;
@@ -235,6 +244,7 @@ static SgrParams parseSgrParams(const Char* paramStart, const Char* paramEnd)
             hasDigit = true;
         } else if (c == ';' || c == ':') {
             if (c == ':') out.hasColon = true;
+            sawSeparator = true;
             if (out.count >= SgrParams::kMax) {
                 out.overflow = true;
                 return out;
@@ -246,12 +256,12 @@ static SgrParams parseSgrParams(const Char* paramStart, const Char* paramEnd)
             break; // non-parameter character
         }
     }
-    if (hasDigit || out.count == 0) {
+    if (hasDigit || sawSeparator || out.count == 0) {
         if (out.count >= SgrParams::kMax) {
             out.overflow = true;
             return out;
         }
-        out.data[out.count++] = current;
+        out.data[out.count++] = hasDigit ? current : 0;
     }
     return out;
 }
@@ -311,9 +321,9 @@ static void applySgrToState(SgrStyleState& state, const Char* seqStart, const Ch
             continue;
         }
 
-        // Extended foreground (38) or background (48)
-        if (code == 38 || code == 48) {
-            uint32_t defaultClose = (code == 38) ? 39 : 49;
+        // Extended foreground (38), background (48), or underline color (58)
+        if (code == 38 || code == 48 || code == 58) {
+            uint32_t defaultClose = (code == 38) ? 39 : (code == 48) ? 49 : 59;
             String endStr = makeSgrCode(false, defaultClose);
 
             if (i + 1 < params.size()) {
@@ -387,7 +397,7 @@ static bool shouldIncludeSgrAfterEnd(const SgrParams& params, const SgrStyleStat
         }
 
         // Extended color sequences
-        if (code == 38 || code == 48) {
+        if (code == 38 || code == 48 || code == 58) {
             hasStartFragment = true;
             // Skip sub-parameters
             if (i + 1 < params.size()) {
@@ -473,8 +483,10 @@ static const Char* parseCsi(const Char* start, const Char* end, bool& isSgr, boo
             continue;
         }
 
-        // Invalid byte for CSI - sequence is malformed
-        return it; // Return pointer to the malformed byte (treated as control up to here)
+        // Non-standard / non-0x20..0x7E payload byte (e.g. \u0100):
+        // mark non-canonical SGR and keep scanning until final byte 0x40..0x7E.
+        isCanonicalSgr = false;
+        it++;
     }
 
     // Unterminated CSI - consume everything
@@ -675,6 +687,24 @@ static const Char* tryParseAnsi(const Char* start, const Char* end, TokenType& t
         }
     }
 
+    // Fallback: 2-byte (ESC + 0x30..0x7E) and nF (ESC + 0x20..0x2F+ + 0x30..0x7E) escape sequences
+    if (c == 0x1b && start + 1 < end) {
+        Char next = *(start + 1);
+        if (next >= 0x30 && next <= 0x7E) {
+            type = TokenType::Control;
+            return start + 2;
+        }
+        if (next >= 0x20 && next <= 0x2F) {
+            const Char* it = start + 2;
+            while (it < end && *it >= 0x20 && *it <= 0x2F)
+                it++;
+            if (it < end && *it >= 0x30 && *it <= 0x7E) {
+                type = TokenType::Control;
+                return it + 1;
+            }
+        }
+    }
+
     return nullptr;
 }
 
@@ -829,7 +859,26 @@ static std::optional<WTF::String> emitSliceStreaming(
     // Captured hyperlink parse state per pending Hyperlink entry (indexed separately).
     Vector<std::tuple<String, String, String>, 2> pendingHl; // code, closePrefix, terminator
 
+    StringBuilder specZone;
+    bool inSpecZone = false;
+    bool hasSpecSnapshot = false;
+    SgrStyleState specActiveStyles;
+    bool specActiveHyperlink = false;
+    String specActiveHyperlinkClosePrefix, specActiveHyperlinkTerminator, specActiveHyperlinkCode;
+    auto enterSpecZone = [&]() {
+        if (!inSpecZone) {
+            inSpecZone = true;
+            hasSpecSnapshot = true;
+            specActiveStyles = activeStyles;
+            specActiveHyperlink = activeHyperlink;
+            specActiveHyperlinkClosePrefix = activeHyperlinkClosePrefix;
+            specActiveHyperlinkTerminator = activeHyperlinkTerminator;
+            specActiveHyperlinkCode = activeHyperlinkCode;
+        }
+    };
+
     auto flushPending = [&](bool filterCloseOnly) {
+        StringBuilder& target = inSpecZone ? specZone : result;
         size_t hlIdx = 0;
         for (auto& pa : pending) {
             bool emit = false;
@@ -874,7 +923,7 @@ static std::optional<WTF::String> emitSliceStreaming(
                 break;
             }
             if (emit)
-                result.append(std::span { pa.start, static_cast<size_t>(pa.end - pa.start) });
+                target.append(std::span { pa.start, static_cast<size_t>(pa.end - pa.start) });
         }
         pending.clear();
         pendingHl.clear();
@@ -907,12 +956,6 @@ static std::optional<WTF::String> emitSliceStreaming(
         if (cutEndKnown && (cutStartForEllipsis || cutEndHint) && !needStartEllipsis && !needEndEllipsis)
             return ellipsis.toString(); // degenerate: range too small
     }
-    // Speculative zone: when cutEnd is unknown and we've budgeted for an
-    // ellipsis, content in cols [end, end+ellipsisEndBudget) goes here. If
-    // we later detect cutEnd (more input past the zone) → discard, emit
-    // ellipsis. If EOF reached first (no cut) → flush specZone, no ellipsis.
-    StringBuilder specZone;
-    bool inSpecZone = false;
     const size_t specEnd = (ellipsisEndBudget > 0) ? end + ellipsisEndBudget : end;
 
     // ------------------------------------------------------------------------
@@ -954,10 +997,24 @@ static std::optional<WTF::String> emitSliceStreaming(
         if (shouldBreak) {
             if (hasPrev) position += gs.width();
 
-            if (!endUnbounded && position >= specEnd) {
+            GraphemeWidthState nextGs;
+            nextGs.reset(cp, ambiguousIsWide);
+            const size_t nextW = nextGs.width();
+
+            if (!endUnbounded && (position > specEnd || (nextW > 0 && position + nextW > specEnd))) {
                 sawCutEnd = true;
                 flushPending(/*filterCloseOnly=*/true);
                 return false; // signal break
+            }
+
+            if (!endUnbounded && position >= specEnd) {
+                // Zero-width cluster at specEnd boundary: do not append and do not
+                // trigger sawCutEnd unless a later non-zero-width cluster or joiner arrives.
+                gs = nextGs;
+                prevVisCp = cp;
+                hasPrev = true;
+                p += charLen;
+                return true;
             }
 
             if (!include && position >= start) {
@@ -967,20 +1024,33 @@ static std::optional<WTF::String> emitSliceStreaming(
                 if (activeHyperlink) result.append(activeHyperlinkCode);
             }
             if (include) {
-                flushPending(/*filterCloseOnly=*/false);
                 if (!endUnbounded && position >= end && ellipsisEndBudget > 0) {
-                    if (!inSpecZone) inSpecZone = true;
+                    enterSpecZone();
+                    flushPending(/*filterCloseOnly=*/false);
                     specZone.append(std::span { p, charLen });
                 } else {
+                    flushPending(/*filterCloseOnly=*/false);
                     result.append(std::span { p, charLen });
                 }
             } else {
                 pending.clear();
                 pendingHl.clear();
             }
-            gs.reset(cp, ambiguousIsWide);
+            gs = nextGs;
         } else {
             // JOIN: continuation, position unchanged. Pending is inside cluster.
+            gs.add(cp, ambiguousIsWide);
+            if (!endUnbounded && (position > specEnd || (gs.width() > 0 && position + gs.width() > specEnd))) {
+                sawCutEnd = true;
+                flushPending(/*filterCloseOnly=*/true);
+                return false;
+            }
+            if (!endUnbounded && position >= specEnd) {
+                prevVisCp = cp;
+                hasPrev = true;
+                p += charLen;
+                return true;
+            }
             if (include) {
                 flushPending(/*filterCloseOnly=*/false);
                 if (inSpecZone)
@@ -991,7 +1061,6 @@ static std::optional<WTF::String> emitSliceStreaming(
                 pending.clear();
                 pendingHl.clear();
             }
-            gs.add(cp, ambiguousIsWide);
         }
         prevVisCp = cp;
         hasPrev = true;
@@ -1081,23 +1150,25 @@ static std::optional<WTF::String> emitSliceStreaming(
                     if (activeHyperlink) result.append(activeHyperlinkCode);
                 }
                 if (bulkN > 0 && include) {
-                    flushPending(/*filterCloseOnly=*/false);
                     // How many can we emit before specEnd?
                     size_t emitN = endUnbounded ? bulkN
                                                 : std::min(static_cast<size_t>(specEnd > position ? specEnd - position : 0), bulkN);
                     if (emitN > 0) {
                         // Split at spec zone boundary [end, specEnd).
                         if (ellipsisEndBudget > 0 && position < end && !endUnbounded) {
+                            flushPending(/*filterCloseOnly=*/false);
                             size_t toMain = std::min(end - position, emitN);
                             result.append(std::span { p, toMain });
                             if (emitN > toMain) {
-                                inSpecZone = true;
+                                enterSpecZone();
                                 specZone.append(std::span { p + toMain, emitN - toMain });
                             }
-                        } else if (inSpecZone || (!endUnbounded && position >= end)) {
-                            inSpecZone = true;
+                        } else if (ellipsisEndBudget > 0 && (inSpecZone || (!endUnbounded && position >= end))) {
+                            enterSpecZone();
+                            flushPending(/*filterCloseOnly=*/false);
                             specZone.append(std::span { p, emitN });
                         } else {
+                            flushPending(/*filterCloseOnly=*/false);
                             result.append(std::span { p, emitN });
                         }
                         p += emitN;
@@ -1203,11 +1274,23 @@ walkDone:;
 
     if (!include) return emptyString();
 
+    // Degenerate range when cutEndKnown was false (e.g. end - start <= ellipsisWidth):
+    // if either edge was actually cut, return just the ellipsis.
+    if (ellipsisWidth > 0 && !needStartEllipsis && !needEndEllipsis && (cutStartForEllipsis || sawCutEnd))
+        return ellipsis.toString();
+
     // Resolve lazy cutEnd: if we budgeted a spec zone and sawCutEnd → cut.
     // Otherwise (EOF reached without exceeding specEnd) → no cut, flush zone.
     if (ellipsisEndBudget > 0) {
         if (sawCutEnd) {
-            // Cut confirmed: discard spec zone, keep ellipsis budget (emit ellipsis).
+            // Cut confirmed: discard spec zone, restore style/hyperlink snapshot, emit ellipsis.
+            if (hasSpecSnapshot) {
+                activeStyles = WTF::move(specActiveStyles);
+                activeHyperlink = specActiveHyperlink;
+                activeHyperlinkClosePrefix = WTF::move(specActiveHyperlinkClosePrefix);
+                activeHyperlinkTerminator = WTF::move(specActiveHyperlinkTerminator);
+                activeHyperlinkCode = WTF::move(specActiveHyperlinkCode);
+            }
         } else {
             // No cut: append spec zone content, cancel ellipsis.
             result.append(specZone);
@@ -1333,7 +1416,7 @@ static std::optional<WTF::String> sliceAnsiImpl(std::span<const Char> input, dou
         SliceBounds b = resolveSliceBounds(startD, endD, totalW);
         if (b.empty) return emptyString();
         start = b.start;
-        end = b.end;
+        end = b.cutEnd ? b.end : SIZE_MAX;
         cutEndKnown = true;
         cutEndHint = b.cutEnd;
     }

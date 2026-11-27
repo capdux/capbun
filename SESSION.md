@@ -1217,3 +1217,19 @@
 - 完成 `src/css/`、`src/shell/states/Expansion.cp`、`src/test_runner/`、`src/runtime/api/{BunObject,csrf_jsc}.cp`、`src/runtime/server/RequestContext.cp`、`src/install/lockfile/Package/WorkspaceMap.cp`、`src/glob/matcher.cp`、`src/sys/sys.cp`、`src/jsc/bindings/sliceAnsi.cpp` 及 28 个 SQL `enum` 重编文件的 `zig:check`（5/5）与 `bun bd`（`1.4.5-debug`）构建验收；
 - 8 路并发验收新增 `0 fail` 转绿 **4 个**（`toHaveReturnedWith.test.ts` 43/43、`bun/util/which.test.ts` 8/8、`nested-function-backtracking.test.ts` 5/5、`nested-selector-expansion.test.ts` 4/4），并显式冻结 `issue-207.test.ts`（预编译 WebKit `overridenDateNow > -1` 限制）；
 - 精确对账：**实名全绿 1,242 + 冻结 156 = 1,398 / 2,339（59.8%）**，剩余 **941** 个。准备原子提交推送后继续 Batch 129。
+
+### 2026-11-27 15:01 AEDT | 用户重启恢复指令 <-> 主智能体回应
+- **用户指令**：切换配额账号重启恢复上下文；重开 2 个子智能体并重新分发未完成任务，主子并行工作；按 `/root/.agy/comm/COMM.md` 保持跨 AGY 通信畅通；阶段完成更新文档并自动 Git 提交，持续自主推导下一阶段；保留每 3 小时 Token 与效率审计定时任务。
+- **主智能体回应**：已立即重开 2 路全新写入型子智能体（Batch 129A: Spawn/Console/SecureContext；Batch 129B: HttpClient/Server/Mmap），重建 3 小时周期审计 cron，并核查 `/root/.agy/comm/COMM.md` 与 `unacked` 跨 AGY 队列。
+
+### 2026-11-27 15:06 AEDT | 跨 AGY 结单验收（`cp_agy -> bun_agy`）
+- **工单 ID**：`task-bun-20261127-zero-arg-call`（`resolved_at: 2026-11-27 15:06:26`）
+- **修复结论**：`cpc/src/codegen/expr/error_flow.rs` 已修复对 `(!is_enum || is_enum_method) && ei.tuple_args.is_some()` 正确输出 `Obj.Method()`，不再丢失零参调用括号（`cargo test & golden_and_fuzz` 全绿）。
+- **复现验证与 `ack`**：本地实测 `/data/dev/cp/temp/repro_zero_arg_extern_call.cp` 已正确生成 `_ = BoringSSL.ERR_clear_error();`，已执行 `task_queue.py ack --agent bun_agy task-bun-20261127-zero-arg-call`。
+
+### 2026-11-27 15:21 AEDT | Batch 129–133A 阶段里程碑提交
+- 完成 Batch 129A/129B、Batch 131A/131B、Batch 133A 的 `zig:check`（5/5）与 `bun bd`（`1.4.5-debug`）构建验收：
+  - 新增 `0 fail` 转绿 **5 个**：`test/js/bun/util/mmap.test.js` (26/26)、`test/js/node/http/client-timeout-error.test.ts` (2/2)、`test/js/node/tls/node-tls-internals.test.ts` (20/20)、`test/js/bun/http/bun-serve-fetch-invalid-args.test.ts` (14/14)、`test/js/bun/shell/commands/which.test.ts` (5/5)；
+  - 新增显式冻结 **1 个**：`test/js/node/util/bun-inspect.test.ts`（缺外部包 `strip-ansi`）；
+  - 用新版 `cpc` 重编消除 `tls_socket_functions.cp`、`EVP.cp`、`ssl_wrapper.cp`、`socket.cp`、`PBKDF2.cp` 中残留的 `_ = BoringSSL.ERR_clear_error;`；`sliceAnsi.test.ts` 收敛至 158/168、`spawn-maxbuf.test.ts` 消除 ASan use-after-poison；
+- 精确对账：**实名全绿 1,247 + 冻结 157 = 1,404 / 2,339（60.0%）**，剩余 **935** 个（突破 60% 大关）。准备原子提交推送后继续 Batch 134。

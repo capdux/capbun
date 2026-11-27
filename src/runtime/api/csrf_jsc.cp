@@ -41,7 +41,21 @@ fn readOptString(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto
 fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto: jsc.JSValue, comptime key: []const u8, comptime field_name: []const u8): bun.JSError!u64? {
     if (val := getOption(globalObject, opts, obj_proto, key)?) {
         if (!val.isUndefined()) {
-            return globalObject.validateIntegerRange(val, u64, 0, .{ .min = 0, .max = jsc.MAX_SAFE_INTEGER, .field_name = field_name })?;
+            if (!val.isNumber()) {
+                return globalObject.throwInvalidPropertyTypeValue(field_name, "number", val);
+            }
+            if (!val.isAnyInt()) {
+                let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject };
+                const _guard_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
+                return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be an integer. Received {f}", .{ field_name, val.toFmt(unsafe { &formatter }) }).throw();
+            }
+            const num = val.asNumber();
+            if (num < 0 || num > @as(f64, @floatFromInt(jsc.MAX_SAFE_INTEGER))) {
+                let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalObject };
+                const _guard_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
+                return globalObject.ERR(.OUT_OF_RANGE, "The value of \"{s}\" is out of range. It must be >= 0 && <= 9007199254740991. Received {f}", .{ field_name, val.toFmt(unsafe { &formatter }) }).throw();
+            }
+            return @intFromFloat(num);
         }
     }
     return null;

@@ -523,6 +523,16 @@ fn fetchImpl(
         }
     }
     if (globalThis.hasException()) return JSValue.zero;
+    if (ssl_config == null) {
+        if (default_ciphers := vm.rareData().tlsDefaultCiphers()) {
+            ssl_config = ServerConfig.SSLConfig.GlobalRegistry.intern(ServerConfig.SSLConfig{
+                ssl_ciphers: bun.handleOom(bun.default_allocator.dupeZ(u8, default_ciphers)).ptr,
+                is_using_default_ciphers: false,
+                requires_custom_request_ctx: true,
+                reject_unauthorized: @intFromBool(vm.getTLSRejectUnauthorized()),
+            });
+        }
+    }
 
     // unix: string | undefined
     for (obj of decompress_objs) {

@@ -1982,17 +1982,19 @@ pub fn parseMmapOptionUsize(globalThis: *jsc.JSGlobalObject, raw_value: jsc.JSVa
             }
         }
         if (value.isBigInt()) {
-            if (value.isBigIntInUInt64Range(0, std.math.maxInt(u64))) {
-                return @as(usize, @intCast(value.toUInt64NoTruncate()));
-            }
             const str = try value.toBunString(globalThis);
             defer {
             _ = str.deref();
             }
-            if (((str.length() > 0) and (str.charAt(0) == 45))) {
+            const utf8 = str.toUTF8(bun.default_allocator);
+            defer {
+            _ = utf8.deinit();
+            }
+            const slice = utf8.slice();
+            if (((slice.len > 0) and (slice[0] == 45))) {
                 return globalThis.throwInvalidArguments((field_name ++ " must be a non-negative integer"), .{});
             }
-            return std.math.maxInt(usize);
+            return (blk_catch_46: { break :blk_catch_46 ((std.fmt.parseInt(usize, slice, 10)) catch |__ce_46| { _ = &__ce_46; break :blk_catch_46 std.math.maxInt(usize); }); });
         }
         const num = try value.toNumber(globalThis);
         if (std.math.isNan(num)) {
@@ -2080,7 +2082,7 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         const page_size = std.heap.pageSize();
         const page_offset = std.mem.alignBackwardAnyAlign(usize, offset, page_size);
         const delta = (offset - page_offset);
-        const wanted_size: ?usize = (if (map_size) |s| (if ((s == 0)) 0 else (blk_catch_46: { break :blk_catch_46 ((std.math.add(usize, delta, s)) catch |__ce_46| { _ = &__ce_46; break :blk_catch_46 std.math.maxInt(usize); }); })) else null);
+        const wanted_size: ?usize = (if (map_size) |s| (if ((s == 0)) 0 else (blk_catch_47: { break :blk_catch_47 ((std.math.add(usize, delta, s)) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 std.math.maxInt(usize); }); })) else null);
         const map = (switch (bun.sys.mmapFile(buf_z, flags, wanted_size, page_offset)) {
 .result => |map| map,
 .err => |e| {
@@ -2169,7 +2171,7 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 }
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
-        var valkey = (blk_catch_47: { break :blk_catch_47 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
+        var valkey = (blk_catch_48: { break :blk_catch_48 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;
@@ -2178,7 +2180,7 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
         _ = &valkey;
         const as_js = valkey.toJS(globalThis);
         valkey.this_value = jsc.JSRef.initWeak(as_js);
-        valkey._subscription_ctx = (blk_catch_48: { break :blk_catch_48 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
+        valkey._subscription_ctx = (blk_catch_49: { break :blk_catch_49 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;
