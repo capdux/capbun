@@ -449,7 +449,7 @@ const ServerHandlers: SocketHandler<NetSocket> = {
         self.authorized = true;
       }
     } else {
-      self.authorized = true;
+      self.authorized = false;
     }
     const connectionListener = server[bunSocketServerOptions]?.connectionListener;
     if (typeof connectionListener === "function") {

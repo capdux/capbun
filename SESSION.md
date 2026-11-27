@@ -1248,3 +1248,13 @@
   - 新增显式冻结 **1 个**：`test/js/node/http/node-http-agent-tls-options.test.mts`（缺外部包 `https-proxy-agent`）；
   - `ssl-ctx-cache.test.ts` 收敛至 17/18（仅余相对路径 `cwd` 1 项），`generate-classes.ts` 修复全仓生成类静态 getter 继承与 Prototype `ClassInfo` 重名；
 - 精确对账：**实名全绿 1,251 + 冻结 159 = 1,410 / 2,339（60.3%）**，剩余 **929** 个。准备原子提交推送后继续下一批。
+
+### 2026-11-27 16:56 AEDT | Batch 145–151B 阶段里程碑提交
+- 完成 Batch 145A/145B、Batch 147A/147B、Batch 149A、Batch 150A、Batch 151A/151B 的 `zig:check`（5/5）与 `bun bd`（`1.4.5-debug`）构建验收：
+  - 新增 `0 fail` 转绿 **10 个**：
+    - `test/js/bun/http/serve-reused-response.test.ts` (11/11)、`test/js/bun/http/serve-async-stream-client-abort.test.ts` (4/4)
+    - `test/js/bun/shell/shell-cmdsub-crash.test.ts`、`test/js/bun/shell/shell-blocking-pipe.test.ts`
+    - `test/js/bun/shell/commands/yes.test.ts` (4/4)、`test/js/bun/shell/commands/touch.test.ts` (1/1)、`test/js/bun/shell/commands/cp.test.ts` (11 pass/30 skip/0 fail)
+    - `test/js/bun/shell/bunshell-instance.test.ts` (18/18)、`test/js/bun/util/fuzzy-wuzzy.test.ts` (153/153)、`test/js/bun/util/index-of-line.test.ts` (23/23)、`test/js/bun/shell/commands/rm.test.ts` (9/9)、`test/js/bun/shell/file-io.test.ts` (27/27)、`test/js/bun/shell/shell-hang.test.ts` (7/7)（含前序补录 `base64-url-safe-encode.test.ts` 共 +14 个，其中 3 个已于 `b4831b29d5d` 记账前/后分批入账）；
+  - `error-message-string-length-limit.test.ts` 收敛至 1/2（`native error fallback` 通过），`epipe.test.ts` 收敛至 7/8（`rm -rv` 通过）；
+- 精确对账：**实名全绿 1,265 + 冻结 159 = 1,424 / 2,339（60.9%）**，剩余 **915** 个。准备原子提交推送后继续下一批。

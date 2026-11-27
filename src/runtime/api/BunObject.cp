@@ -1145,31 +1145,86 @@ pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bu
 pub fn indexOfLine(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments_ = callframe.arguments_old(2);
     const arguments = arguments_.slice();
-    if (arguments.len == 0) {
-        return jsc.JSValue.jsNumberFromInt32(-1);
+    if (arguments.len == 0 || arguments[0].asArrayBuffer(globalThis) == null) {
+        return globalThis.ERR(.INVALID_ARG_TYPE, "buffer must be an ArrayBuffer or ArrayBufferView", .{}).throw();
     }
-
-    const buffer_opt = arguments[0].asArrayBuffer(globalThis);
-    if (buffer_opt == null) {
-        return jsc.JSValue.jsNumberFromInt32(-1);
-    }
-    let buffer = buffer_opt.?;
 
     let offset: usize = 0;
-    if (arguments.len > 1) {
-        const offset_value = arguments[1].coerce(i64, globalThis)?;
-        offset = @as(usize, @intCast(@max(offset_value, 0)));
+    if (arguments.len > 1 && !arguments[1].isUndefined()) {
+        let offset_val = arguments[1];
+        if (offset_val.isObject()) {
+            if (value_of := offset_val.get(globalThis, "valueOf")?) {
+                if (value_of.isCallable()) {
+                    const res = value_of.call(globalThis, offset_val, [])?;
+                    if (!res.isObject()) {
+                        offset_val = res;
+                    }
+                }
+            }
+        }
+        if (offset_val.isBigInt()) {
+            const str = offset_val.toBunString(globalThis)?;
+            defer str.deref();
+            const utf8 = str.toUTF8(bun.default_allocator);
+            defer utf8.deinit();
+            const slice = utf8.slice();
+            if (slice.len > 0 && slice[0] == '-') {
+                offset = 0;
+            } else {
+                offset = std.fmt.parseInt(usize, slice, 10) catch return jsc.JSValue.jsNumberFromInt32(-1);
+            }
+        } else {
+            const num = offset_val.toNumber(globalThis)?;
+            if (std.math.isNan(num) || num <= 0.0) {
+                offset = 0;
+            } else if (num >= 9007199254740992.0) {
+                return jsc.JSValue.jsNumberFromInt32(-1);
+            } else {
+                const truncated = @trunc(num);
+                const max_usize_f = @as(f64, @floatFromInt(std.math.maxInt(usize)));
+                if (truncated >= max_usize_f) {
+                    return jsc.JSValue.jsNumberFromInt32(-1);
+                }
+                offset = @as(usize, @intFromFloat(truncated));
+            }
+        }
     }
 
-    const bytes = buffer.byteSlice();
-    let current_offset = offset;
-    const end = @as(u32, @truncate(bytes.len));
+    let fresh_buf = jsc.ArrayBuffer{};
+    if (fb := arguments[0].asArrayBuffer(globalThis)) {
+        fresh_buf = fb;
+    } else {
+        return jsc.JSValue.jsNumberFromInt32(-1);
+    }
 
-    while (current_offset < end) {
-        if (i := strings.indexOfNewlineOrNonASCII(bytes, @as(u32, @truncate(current_offset)))) {
+    const bytes = fresh_buf.byteSlice();
+    if (offset >= bytes.len) {
+        return jsc.JSValue.jsNumberFromInt32(-1);
+    }
+
+    const is_shared = fresh_buf.shared;
+    let current_offset = offset;
+    while (current_offset < bytes.len) {
+        const remaining = bytes[current_offset..];
+        const first = remaining[0];
+        let rel_opt: usize? = null;
+        if (first > 127 || (first < 0x20 && first != 0x09)) {
+            rel_opt = 0;
+        } else if (is_shared) {
+            rel_opt = bun.highway.indexOfNewlineOrNonASCIIUnchecked(remaining);
+        } else {
+            rel_opt = bun.highway.indexOfNewlineOrNonASCII(remaining);
+        }
+
+        if (rel_i := rel_opt) {
+            const i = current_offset + rel_i;
             const byte = bytes[i];
             if (byte > 0x7F) {
-                current_offset = @as(usize, i) + @max(strings.wtf8ByteSequenceLength(byte), 1);
+                const seq_len = @max(strings.wtf8ByteSequenceLength(byte), 1);
+                let next = i + 1;
+                const limit = @min(i + seq_len, bytes.len);
+                while (next < limit && (bytes[next] & 0xC0) == 0x80) : (next += 1) {}
+                current_offset = next;
                 continue;
             }
 

@@ -24,9 +24,37 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
-- **2026-11-27 16:24 Batch 142A 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
+- **2026-11-27 16:53 Batch 151A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/shell/shell-hang.test.ts` (7 pass, 0 fail)
+
+- **2026-11-27 16:48 Batch 149A 验收转绿（`1.4.5-debug`，3 个完整实名路径）**：
+  - `test/js/bun/util/index-of-line.test.ts` (23 pass, 0 fail)
+  - `test/js/bun/shell/commands/rm.test.ts` (9 pass, 0 fail)
+  - `test/js/bun/shell/file-io.test.ts` (27 pass, 0 fail)
+
+- **2026-11-27 16:46 Batch 148R 实测转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/util/fuzzy-wuzzy.test.ts` (153 pass, 0 fail)
+
+- **2026-11-27 16:43 Batch 147A 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/shell/bunshell-instance.test.ts` (18 pass, 0 fail)
+
+- **2026-11-27 16:38 Batches 145A–145B 验收转绿（`1.4.5-debug`，3 个完整实名路径）**：
+  - `test/js/bun/shell/commands/yes.test.ts` (4 pass, 0 fail)
+  - `test/js/bun/shell/commands/touch.test.ts` (1 pass, 0 fail)
+  - `test/js/bun/shell/commands/cp.test.ts` (11 pass, 30 skip, 0 fail)
+
+- **2026-11-27 16:36 Shell 扫测补录（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/js/bun/shell/shell-cmdsub-crash.test.ts` (0 fail)
+  - `test/js/bun/shell/shell-blocking-pipe.test.ts` (0 fail)
+
+- **2026-11-27 16:33 Batch 143A 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/js/bun/http/serve-reused-response.test.ts` (11 pass, 0 fail)
+  - `test/js/bun/http/serve-async-stream-client-abort.test.ts` (4 pass, 0 fail)
+
+- **2026-11-27 16:24 Batch 142A 验收转绿（`1.4.5-debug`，3 个完整实名路径）**：
   - `test/js/bun/shell/commands/mkdir.test.ts` (1 pass, 1 skip, 0 fail)
   - `test/js/bun/util/bun-cryptohasher.test.ts` (109 pass, 0 fail)
+  - `test/js/bun/util/base64-url-safe-encode.test.ts` (0 fail)
 
 - **2026-11-27 16:22 Batches 140A–140B 验收转绿（`1.4.5-debug`，2 个完整实名路径）**：
   - `test/js/bun/shell/brace.test.ts` (47 pass, 0 fail)

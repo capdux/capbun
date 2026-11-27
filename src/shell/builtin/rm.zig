@@ -352,6 +352,15 @@ _ = debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ (blk: {
             break :blk @intFromPtr(self);
 
 }), @tagName(e.getErrno()), e.path });
+            _ = self.storeFirstErr(e);
+},
+.result => {
+
+},
+}
+    }
+
+pub fn storeFirstErr(self: *ShellDirTask, e: Syscall.Error) void {
             _ = self.task_manager.err_mutex.lock();
             const mutex_ptr = (blk: {
             break :blk (&self.task_manager.err_mutex);
@@ -369,11 +378,6 @@ _ = debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ (blk: {
                 _ = &err2;
                 _ = err2.deinit();
             }
-},
-.result => {
-
-},
-}
     }
 
 pub fn handleErr(self: *ShellDirTask, e: Syscall.Error) void {
@@ -381,21 +385,7 @@ pub fn handleErr(self: *ShellDirTask, e: Syscall.Error) void {
             break :blk @intFromPtr(self);
 
 }), @tagName(e.getErrno()), e.path });
-            _ = self.task_manager.err_mutex.lock();
-            const mutex_ptr = (blk: {
-            break :blk (&self.task_manager.err_mutex);
-
-});
-            var _err_mutex_guard = UnlockGuard(@TypeOf(mutex_ptr.*)){ .ptr = mutex_ptr };
-            _ = &_err_mutex_guard;
-            var ___err_mutex_guard_moved = false; _ = &___err_mutex_guard_moved;
-            defer if (!___err_mutex_guard_moved) { ___err_mutex_guard_moved = true; const __T = @TypeOf(_err_mutex_guard); if (@typeInfo(__T) == .optional) { if (_err_mutex_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_mutex_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_mutex_guard; _drop_val.__cp_deinit(); } };
-            if ((self.task_manager.e == null)) {
-                self.task_manager.e = e;
-                _ = self.task_manager.error_signal.store(true, .seq_cst);
-            } else {
-                _ = self.task_manager.e.?.deinit();
-            }
+            _ = self.storeFirstErr(e);
     }
 
 pub fn postRun(self: *ShellDirTask) void {
@@ -884,7 +874,7 @@ else => {
             return .{ .err = self.errorWithPath(derr, path) };
 },
 else => {
-return .{ .err = derr };
+return .{ .err = self.errorWithPath(derr, path) };
 },
 }
 },
@@ -1127,17 +1117,7 @@ if (self.opts.recursive) {
             const filepath_args_start = idx;
             const filepath_args = parse_opts.args_slice[filepath_args_start..];
             {
-                var buf: bun.PathBuffer = undefined;
-                _ = &buf;
-                const cwd = (switch (Syscall.getcwd((&buf))) {
-.err => |err| {
-{
-                    const errbuf = self.bltn().fmtErrorArena(.rm, "{s}: {s}", .{ "getcwd", ((err.msg()) orelse ("failed to get cwd")) });
-                    return self.writeFailingError(errbuf, 1);
-                }
-},
-.result => |cwd| cwd,
-});
+                const cwd = self.bltn().parentCmd().base.shell.cwdZ();
                 var join_spill: std.ArrayListUnmanaged(u8) = .empty;
                 _ = &join_spill;
                 defer {
@@ -1258,6 +1238,14 @@ pub fn onIOWriterChunk(self: *Rm, _: usize, e: ?jsc.SystemError) Yield {
             break :blk @intFromPtr(self);
 
 }), self.state.exec.getOutputCount(.output_done), self.state.exec.getOutputCount(.output_count) });
+            if ((e != null)) {
+                _ = self.state.exec.output_done.store(self.state.exec.getOutputCount(.output_count), .seq_cst);
+                if ((self.state.exec.tasksDone() >= self.state.exec.total_tasks)) {
+                    const code: ExitCode = (if ((self.state.exec.e != null)) (if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
+                    return self.bltn().done(code);
+                }
+                return .suspended;
+            }
             _ = self.state.exec.incrementOutputCount(.output_done);
             if (((self.state.exec.tasksDone() >= self.state.exec.total_tasks) and (self.state.exec.getOutputCount(.output_done) >= self.state.exec.getOutputCount(.output_count)))) {
                 const code: ExitCode = (if ((self.state.exec.e != null)) (if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));

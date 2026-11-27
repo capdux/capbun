@@ -570,16 +570,16 @@ pub fn slice16(self: *const Result) []const u16 {
 
 pub fn slice(self: *const Result) []const u8 {
             switch (self.*) {
-.owned => |owned| {
+.owned => |*owned| {
 return owned.slice();
 },
-.owned_and_done => |owned_and_done| {
+.owned_and_done => |*owned_and_done| {
 return owned_and_done.slice();
 },
-.temporary_and_done => |temporary_and_done| {
+.temporary_and_done => |*temporary_and_done| {
 return temporary_and_done.slice();
 },
-.temporary => |temporary| {
+.temporary => |*temporary| {
 return temporary.slice();
 },
 else => {
@@ -1081,12 +1081,12 @@ pub const ReadResult = union(enum) {
     done: void,
     read: []u8,
 
-pub fn toStream(self: ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool) Result {
+pub fn toStream(self: *const ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool) Result {
             return self.toStreamWithIsDone(pending, buf, view, close_on_empty, false);
     }
 
-pub fn toStreamWithIsDone(self: ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool, is_done: bool) Result {
-            switch (self) {
+pub fn toStreamWithIsDone(self: *const ReadResult, pending: *Result.Pending, buf: []u8, view: JSValue, close_on_empty: bool, is_done: bool) Result {
+            switch (self.*) {
 .pending => {
 return .{ .pending = pending };
 },
@@ -1522,6 +1522,13 @@ pub fn end(self: *@This(), e: ?sys.Error) bun.sys.Maybe(void) {
                 _ = self.finalize();
                 return .success;
             }
+            if ((e == null)) {
+                if (self.send(readable)) {
+                    _ = self.signal.close(null);
+                    _ = self.markDone();
+                    _ = self.finalize();
+                }
+            }
             return .success;
     }
 
@@ -1577,7 +1584,12 @@ pub fn abort(self: *@This()) void {
             self.aborted = true;
             _ = (blk_catch_14: { break :blk_catch_14 ((self.flushPromise()) catch |__ce_14| { _ = &__ce_14;  }); });
             _ = self.finalize();
-            _ = self.signal.close(null);
+            if ((!self.signal.isDead())) {
+                {
+                    const controller_js = @as(JSValue, @enumFromInt(@as(jsc.JSValue.backing_int, @bitCast(@intFromPtr(self.signal.ptr.?)))));
+                    _ = JSSink.onClose(controller_js, CommonAbortReason.ConnectionClosed.toJS(self.globalThis));
+                }
+            }
     }
 
 pub fn unregisterAutoFlusher(self: *@This()) void {

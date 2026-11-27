@@ -1792,31 +1792,99 @@ pub export fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSV
 pub fn indexOfLine(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments_ = callframe.arguments_old(2);
         const arguments = arguments_.slice();
-        if ((arguments.len == 0)) {
-            return jsc.JSValue.jsNumberFromInt32(-1);
+        if (((arguments.len == 0) or (arguments[0].asArrayBuffer(globalThis) == null))) {
+            return globalThis.ERR(.INVALID_ARG_TYPE, "buffer must be an ArrayBuffer or ArrayBufferView", .{}).throw();
         }
-        const buffer_opt = arguments[0].asArrayBuffer(globalThis);
-        if ((buffer_opt == null)) {
-            return jsc.JSValue.jsNumberFromInt32(-1);
-        }
-        var buffer = buffer_opt.?;
-        _ = &buffer;
         var offset: usize = 0;
         _ = &offset;
-        if ((arguments.len > 1)) {
-            const offset_value = try arguments[1].coerce(i64, globalThis);
-            offset = @as(usize, @intCast(@max(offset_value, 0)));
+        if (((arguments.len > 1) and (!arguments[1].isUndefined()))) {
+            var offset_val = arguments[1];
+            _ = &offset_val;
+            if (offset_val.isObject()) {
+                if (try offset_val.get(globalThis, "valueOf")) |value_of| {
+                    _ = &value_of;
+                    if (value_of.isCallable()) {
+                        const res = try value_of.call(globalThis, offset_val, &.{});
+                        if ((!res.isObject())) {
+                            offset_val = res;
+                        }
+                    }
+                }
+            }
+            if (offset_val.isBigInt()) {
+                const str = try offset_val.toBunString(globalThis);
+                defer {
+                _ = str.deref();
+                }
+                const utf8 = str.toUTF8(bun.default_allocator);
+                defer {
+                _ = utf8.deinit();
+                }
+                const slice = utf8.slice();
+                if (((slice.len > 0) and (slice[0] == 45))) {
+                    offset = 0;
+                } else {
+                    offset = (blk_catch_43: { break :blk_catch_43 ((std.fmt.parseInt(usize, slice, 10)) catch |__ce_43| { _ = &__ce_43; return jsc.JSValue.jsNumberFromInt32(-1); }); });
+                }
+            } else {
+                const num = try offset_val.toNumber(globalThis);
+                if ((std.math.isNan(num) or (num <= 0.0))) {
+                    offset = 0;
+                } else {
+                    if ((num >= 9007199254740992.0)) {
+                        return jsc.JSValue.jsNumberFromInt32(-1);
+                    } else {
+                        const truncated = @trunc(num);
+                        const max_usize_f = @as(f64, @floatFromInt(std.math.maxInt(usize)));
+                        if ((truncated >= max_usize_f)) {
+                            return jsc.JSValue.jsNumberFromInt32(-1);
+                        }
+                        offset = @as(usize, @intFromFloat(truncated));
+                    }
+                }
+            }
         }
-        const bytes = buffer.byteSlice();
+        var fresh_buf = jsc.ArrayBuffer{  };
+        _ = &fresh_buf;
+        if (arguments[0].asArrayBuffer(globalThis)) |fb| {
+            _ = &fb;
+            fresh_buf = fb;
+        } else {
+            return jsc.JSValue.jsNumberFromInt32(-1);
+        }
+        const bytes = fresh_buf.byteSlice();
+        if ((offset >= bytes.len)) {
+            return jsc.JSValue.jsNumberFromInt32(-1);
+        }
+        const is_shared = fresh_buf.shared;
         var current_offset = offset;
         _ = &current_offset;
-        const end = @as(u32, @truncate(bytes.len));
-        while ((current_offset < end)) {
-            if (strings.indexOfNewlineOrNonASCII(bytes, @as(u32, @truncate(current_offset)))) |i| {
-                _ = &i;
+        while ((current_offset < bytes.len)) {
+            const remaining = bytes[current_offset..];
+            const first = remaining[0];
+            var rel_opt: ?usize = null;
+            _ = &rel_opt;
+            if (((first > 127) or ((first < 32) and (first != 9)))) {
+                rel_opt = 0;
+            } else {
+                if (is_shared) {
+                    rel_opt = bun.highway.indexOfNewlineOrNonASCIIUnchecked(remaining);
+                } else {
+                    rel_opt = bun.highway.indexOfNewlineOrNonASCII(remaining);
+                }
+            }
+            if (rel_opt) |rel_i| {
+                _ = &rel_i;
+                const i = (current_offset + rel_i);
                 const byte = bytes[@as(usize, @intCast(i))];
                 if ((byte > 127)) {
-                    current_offset = ((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)) + @max(strings.wtf8ByteSequenceLength(byte), 1));
+                    const seq_len = @max(strings.wtf8ByteSequenceLength(byte), 1);
+                    var next = (i + 1);
+                    _ = &next;
+                    const limit = @min((i + seq_len), bytes.len);
+                    while (((next < limit) and ((bytes[@as(usize, @intCast(next))] & 192) == 128))) : (next = (next + 1)) {
+                    }
+                    current_offset = next;
                     continue;
                 }
                 if ((byte == 10)) {
@@ -1921,7 +1989,7 @@ const ServerType = (comptime (if (development) (if (has_ssl_config) jsc.API.Debu
         if (vm.debugger) |*debugger| {
             _ = &debugger;
             _ = (debugger.*).http_server_agent.notifyServerStarted(jsc.API.AnyServer.@"from"(server));
-            _ = (blk_catch_43: { break :blk_catch_43 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(jsc.API.AnyServer.@"from"(server))) catch |e| { _ = &e; break :blk_catch_43 bun.handleOom(e); }); });
+            _ = (blk_catch_44: { break :blk_catch_44 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(jsc.API.AnyServer.@"from"(server))) catch |e| { _ = &e; break :blk_catch_44 bun.handleOom(e); }); });
         }
         return obj;
 },
@@ -1936,7 +2004,7 @@ pub export fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: 
         break :blk ptr[0..len];
 
 });
-        const escaped = (blk_catch_44: { break :blk_catch_44 ((strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice)) catch |__ce_44| { _ = &__ce_44; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
+        const escaped = (blk_catch_45: { break :blk_catch_45 ((strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice)) catch |__ce_45| { _ = &__ce_45; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
         }
         return jsc.JSValue.zero; }); });
         switch (escaped) {
@@ -1961,7 +2029,7 @@ pub export fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: J
         var stack_allocator = std.heap.stackFallback(256, globalObject.bunVM().allocator);
         _ = &stack_allocator;
         const allocator = (if ((input_slice.len <= 32)) stack_allocator.get() else stack_allocator.fallback_allocator);
-        const escaped = (blk_catch_45: { break :blk_catch_45 ((strings.escapeHTMLForLatin1Input(allocator, input_slice)) catch |__ce_45| { _ = &__ce_45; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
+        const escaped = (blk_catch_46: { break :blk_catch_46 ((strings.escapeHTMLForLatin1Input(allocator, input_slice)) catch |__ce_46| { _ = &__ce_46; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
         }
         return jsc.JSValue.zero; }); });
         switch (escaped) {
@@ -2029,7 +2097,7 @@ pub fn parseMmapOptionUsize(globalThis: *jsc.JSGlobalObject, raw_value: jsc.JSVa
             if (((slice.len > 0) and (slice[0] == 45))) {
                 return globalThis.throwInvalidArguments((field_name ++ " must be a non-negative integer"), .{});
             }
-            return (blk_catch_46: { break :blk_catch_46 ((std.fmt.parseInt(usize, slice, 10)) catch |__ce_46| { _ = &__ce_46; break :blk_catch_46 std.math.maxInt(usize); }); });
+            return (blk_catch_47: { break :blk_catch_47 ((std.fmt.parseInt(usize, slice, 10)) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 std.math.maxInt(usize); }); });
         }
         const num = try value.toNumber(globalThis);
         if (std.math.isNan(num)) {
@@ -2117,7 +2185,7 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.
         const page_size = std.heap.pageSize();
         const page_offset = std.mem.alignBackwardAnyAlign(usize, offset, page_size);
         const delta = (offset - page_offset);
-        const wanted_size: ?usize = (if (map_size) |s| (if ((s == 0)) 0 else (blk_catch_47: { break :blk_catch_47 ((std.math.add(usize, delta, s)) catch |__ce_47| { _ = &__ce_47; break :blk_catch_47 std.math.maxInt(usize); }); })) else null);
+        const wanted_size: ?usize = (if (map_size) |s| (if ((s == 0)) 0 else (blk_catch_48: { break :blk_catch_48 ((std.math.add(usize, delta, s)) catch |__ce_48| { _ = &__ce_48; break :blk_catch_48 std.math.maxInt(usize); }); })) else null);
         const map = (switch (bun.sys.mmapFile(buf_z, flags, wanted_size, page_offset)) {
 .result => |map| map,
 .err => |e| {
@@ -2206,7 +2274,7 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 }
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
-        var valkey = (blk_catch_48: { break :blk_catch_48 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
+        var valkey = (blk_catch_49: { break :blk_catch_49 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;
@@ -2215,7 +2283,7 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
         _ = &valkey;
         const as_js = valkey.toJS(globalThis);
         valkey.this_value = jsc.JSRef.initWeak(as_js);
-        valkey._subscription_ctx = (blk_catch_49: { break :blk_catch_49 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
+        valkey._subscription_ctx = (blk_catch_50: { break :blk_catch_50 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;

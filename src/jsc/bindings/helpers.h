@@ -202,6 +202,9 @@ static const WTF::String toStringCopy(ZigString str)
     }
 
     if (isTaggedUTF16Ptr(str.ptr)) {
+        if (str.len > Bun__stringSyntheticAllocationLimit || str.len > WTF::String::MaxLength) [[unlikely]] {
+            return {};
+        }
         std::span<char16_t> out;
         auto impl = WTF::StringImpl::tryCreateUninitialized(str.len, out);
         if (!impl) [[unlikely]] {
@@ -210,6 +213,9 @@ static const WTF::String toStringCopy(ZigString str)
         memcpy(out.data(), untag(str.ptr), str.len * sizeof(char16_t));
         return WTF::String(WTF::move(impl));
     } else {
+        if (str.len > Bun__stringSyntheticAllocationLimit || str.len > WTF::String::MaxLength) [[unlikely]] {
+            return {};
+        }
         std::span<Latin1Character> out;
         auto impl = WTF::StringImpl::tryCreateUninitialized(str.len, out);
         if (!impl) [[unlikely]]
@@ -382,8 +388,7 @@ static JSC::JSValue getErrorInstance(const ZigString* str, JSC::JSGlobalObject* 
 {
     WTF::String message = toString(*str);
     if (message.isNull() && str->len > 0) [[unlikely]] {
-        // pending exception while creating an error.
-        return {};
+        message = "The error message exceeds the maximum string length"_s;
     }
 
     // Not JSC::createError(): it asserts the message is not empty, and `new Error("")` is valid.
@@ -395,7 +400,11 @@ static JSC::JSValue getErrorInstance(const ZigString* str, JSC::JSGlobalObject* 
 
 static JSC::JSValue getTypeErrorInstance(const ZigString* str, JSC::JSGlobalObject* globalObject)
 {
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::TypeError), toStringCopy(*str), JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::TypeError, true);
+    WTF::String message = toStringCopy(*str);
+    if (message.isNull() && str->len > 0) [[unlikely]] {
+        message = "The error message exceeds the maximum string length"_s;
+    }
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::TypeError), message, JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::TypeError, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;
@@ -403,7 +412,11 @@ static JSC::JSValue getTypeErrorInstance(const ZigString* str, JSC::JSGlobalObje
 
 static JSC::JSValue getSyntaxErrorInstance(const ZigString* str, JSC::JSGlobalObject* globalObject)
 {
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::SyntaxError), toStringCopy(*str), JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::SyntaxError, true);
+    WTF::String message = toStringCopy(*str);
+    if (message.isNull() && str->len > 0) [[unlikely]] {
+        message = "The error message exceeds the maximum string length"_s;
+    }
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::SyntaxError), message, JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::SyntaxError, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;
@@ -411,7 +424,11 @@ static JSC::JSValue getSyntaxErrorInstance(const ZigString* str, JSC::JSGlobalOb
 
 static JSC::JSValue getRangeErrorInstance(const ZigString* str, JSC::JSGlobalObject* globalObject)
 {
-    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::RangeError), toStringCopy(*str), JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::RangeError, true);
+    WTF::String message = toStringCopy(*str);
+    if (message.isNull() && str->len > 0) [[unlikely]] {
+        message = "The error message exceeds the maximum string length"_s;
+    }
+    JSC::JSObject* result = JSC::ErrorInstance::create(globalObject->vm(), globalObject->errorStructure(JSC::ErrorType::RangeError), message, JSC::JSValue(), nullptr, JSC::TypeNothing, JSC::ErrorType::RangeError, true);
     JSC::EnsureStillAliveScope ensureAlive(result);
 
     return result;

@@ -650,6 +650,10 @@ pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, coun
                 let task_ptr: *StreamPending = task.get(StreamPending).?;
                 task_ptr.runFromJSThread();
             },
+            @field(Task.Tag, @typeName(shell.Interpreter.Builtin.Yes.YesTask)) => {
+                let yes_task: *shell.Interpreter.Builtin.Yes.YesTask = task.get(shell.Interpreter.Builtin.Yes.YesTask).?;
+                yes_task.runFromMainThread();
+            },
             else => {
                 Output.panic("Unexpected Task tag: {d}", .{@intFromEnum(task.tag())});
             },

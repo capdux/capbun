@@ -93,6 +93,18 @@ pub fn indexOfNewlineOrNonASCII(haystack: []const u8) ?usize {
         return result;
 }
 
+pub fn indexOfNewlineOrNonASCIIUnchecked(haystack: []const u8) ?usize {
+        _ = bun.debugAssert((haystack.len > 0));
+        const result = (blk: {
+        break :blk highway_index_of_newline_or_non_ascii(haystack.ptr, haystack.len);
+
+});
+        if ((result == haystack.len)) {
+            return null;
+        }
+        return result;
+}
+
 pub fn indexOfNewlineOrNonASCIIOrANSI(haystack: []const u8) ?usize {
         _ = bun.debugAssert((haystack.len > 0));
         const result = (blk: {

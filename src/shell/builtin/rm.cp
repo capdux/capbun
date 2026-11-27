@@ -238,23 +238,13 @@ pub struct ShellDirTask {
         switch (_.task_manager.removeEntry(_, _.is_absolute)) {
             .err => |e| {
                 debug("[runFromThreadPoolImpl] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
-                _.task_manager.err_mutex.lock();
-                const mutex_ptr = unsafe { &_.task_manager.err_mutex };
-                const _err_mutex_guard = UnlockGuard<@TypeOf(mutex_ptr.*)>{ ptr: mutex_ptr };
-                if (_.task_manager.e == null) {
-                    _.task_manager.e = e;
-                    _.task_manager.error_signal.store(true, .seq_cst);
-                } else {
-                    let err2 = e;
-                    err2.deinit();
-                }
+                _.storeFirstErr(e);
             },
             .result => {},
         }
     }
 
-    pub fn handleErr(*_, e: Syscall.Error) {
-        debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
+    fn storeFirstErr(*_, e: Syscall.Error) {
         _.task_manager.err_mutex.lock();
         const mutex_ptr = unsafe { &_.task_manager.err_mutex };
         const _err_mutex_guard = UnlockGuard<@TypeOf(mutex_ptr.*)>{ ptr: mutex_ptr };
@@ -262,8 +252,14 @@ pub struct ShellDirTask {
             _.task_manager.e = e;
             _.task_manager.error_signal.store(true, .seq_cst);
         } else {
-            _.task_manager.e.?.deinit();
+            let err2 = e;
+            err2.deinit();
         }
+    }
+
+    pub fn handleErr(*_, e: Syscall.Error) {
+        debug("[handleErr] DirTask({x}) failed: {s}: {s}", .{ unsafe { @intFromPtr(_) }, @tagName(e.getErrno()), e.path });
+        _.storeFirstErr(e);
     }
 
     pub fn postRun(*_) {
@@ -733,7 +729,7 @@ pub struct ShellRmTask {
 
                         return { err: _.errorWithPath(derr, path) };
                     },
-                    else => return { err: derr },
+                    else => return { err: _.errorWithPath(derr, path) },
                 }
             },
         }
@@ -1023,18 +1019,7 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
 
                                     // Check that none of the paths will delete the root
                                     {
-                                        let buf: bun.PathBuffer = undefined;
-                                        const cwd = switch (Syscall.getcwd(&buf)) {
-                                            .err => |err| {
-                                                const errbuf = _.bltn().fmtErrorArena(
-                                                    .rm,
-                                                    "{s}: {s}",
-                                                    .{ "getcwd", err.msg() ?? "failed to get cwd" },
-                                                );
-                                                return _.writeFailingError(errbuf, 1);
-                                            },
-                                            .result => |cwd| cwd,
-                                        };
+                                        const cwd = _.bltn().parentCmd().base.shell.cwdZ();
 
                                         let join_spill: std.ArrayListUnmanaged(u8) = .empty;
                                         defer join_spill.deinit(bun.default_allocator);
@@ -1150,6 +1135,14 @@ fn parseFlag(opts: *Opts, _: *Builtin, flag: []const u8): ParseFlagsResult {
 
         if (_.state == .exec && _.state.exec.state == .waiting) {
             log("Rm(0x{x}) output done={d} output count={d}", .{ unsafe { @intFromPtr(_) }, _.state.exec.getOutputCount(.output_done), _.state.exec.getOutputCount(.output_count) });
+            if (e != null) {
+                _.state.exec.output_done.store(_.state.exec.getOutputCount(.output_count), .seq_cst);
+                if (_.state.exec.tasksDone() >= _.state.exec.total_tasks) {
+                    const code: ExitCode = if (_.state.exec.e != null) @as(ExitCode, 1) else @as(ExitCode, 0);
+                    return _.bltn().done(code);
+                }
+                return .suspended;
+            }
             _.state.exec.incrementOutputCount(.output_done);
             if (_.state.exec.tasksDone() >= _.state.exec.total_tasks && _.state.exec.getOutputCount(.output_done) >= _.state.exec.getOutputCount(.output_count)) {
                 const code: ExitCode = if (_.state.exec.e != null) @as(ExitCode, 1) else @as(ExitCode, 0);

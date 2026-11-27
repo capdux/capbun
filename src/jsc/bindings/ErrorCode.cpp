@@ -82,6 +82,11 @@ JSC_DEFINE_HOST_FUNCTION(NodeError_proto_toString, (JSC::JSGlobalObject * global
     builder.append("]: "_s);
     builder.append(messageView);
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
+
     return JSC::JSValue::encode(JSC::jsString(vm, builder.toString()));
 }
 
@@ -487,9 +492,16 @@ void determineSpecificType(JSC::VM& vm, JSC::JSGlobalObject* globalObject, WTF::
 
 extern "C" BunString Bun__ErrorCode__determineSpecificType(JSC::JSGlobalObject* globalObject, EncodedJSValue value)
 {
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
     JSValue jsValue = JSValue::decode(value);
     WTF::StringBuilder builder;
-    determineSpecificType(JSC::getVM(globalObject), globalObject, builder, jsValue);
+    determineSpecificType(vm, globalObject, builder, jsValue);
+    RETURN_IF_EXCEPTION(scope, {});
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     return Bun::toStringRef(builder.toString());
 }
 
@@ -558,6 +570,10 @@ WTF::String ERR_INVALID_ARG_TYPE(JSC::ThrowScope& scope, JSC::JSGlobalObject* gl
     result.append(". Received "_s);
     determineSpecificType(JSC::getVM(globalObject), globalObject, result, actual_value);
     RETURN_IF_EXCEPTION(scope, {});
+    if (result.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     return result.toString();
 }
 
@@ -605,6 +621,11 @@ WTF::String ERR_INVALID_ARG_TYPE(JSC::ThrowScope& scope, JSC::JSGlobalObject* gl
     result.append(". Received "_s);
     determineSpecificType(JSC::getVM(globalObject), globalObject, result, actual_value);
     RETURN_IF_EXCEPTION(scope, {});
+
+    if (result.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
 
     return result.toString();
 }
@@ -656,6 +677,11 @@ WTF::String ERR_OUT_OF_RANGE(JSC::ThrowScope& scope, JSC::JSGlobalObject* global
     JSValueToStringSafe(globalObject, builder, val_input);
     RETURN_IF_EXCEPTION(scope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
+
     return builder.toString();
 }
 
@@ -706,6 +732,11 @@ JSC::EncodedJSValue INVALID_ARG_TYPE_INSTANCE(JSC::ThrowScope& throwScope, JSC::
     determineSpecificType(vm, globalObject, builder, val_actual_value);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, builder.toString()));
     throwScope.release();
     return {};
@@ -722,6 +753,11 @@ JSC::EncodedJSValue INVALID_ARG_TYPE_INSTANCE(JSC::ThrowScope& throwScope, JSC::
     builder.append(". Received "_s);
     determineSpecificType(vm, globalObject, builder, val_actual_value);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
+
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, builder.toString()));
     throwScope.release();
@@ -744,6 +780,11 @@ JSC::EncodedJSValue INVALID_ARG_INSTANCE(JSC::ThrowScope& throwScope, JSC::JSGlo
     determineSpecificType(vm, globalObject, builder, val_actual_value);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_TYPE, builder.toString()));
     throwScope.release();
     return {};
@@ -761,6 +802,11 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
     builder.append(". Received "_s);
     JSValueToStringSafe(globalObject, builder, actual);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
+
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
@@ -785,6 +831,11 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
     JSValueToStringSafe(globalObject, builder, actual);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
     return {};
@@ -807,6 +858,11 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
     JSValueToStringSafe(globalObject, builder, actual);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
     return {};
@@ -828,6 +884,11 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
     JSValueToStringSafe(globalObject, builder, actual);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
     return {};
@@ -843,6 +904,11 @@ JSC::EncodedJSValue OUT_OF_RANGE(JSC::ThrowScope& throwScope, JSC::JSGlobalObjec
     builder.append(". Received "_s);
     JSValueToStringSafe(globalObject, builder, actual);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
+
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_OUT_OF_RANGE, builder.toString()));
     throwScope.release();
@@ -871,6 +937,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
     JSValueToStringSafe(globalObject, builder, value, true);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
     return {};
@@ -891,6 +962,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE_RangeError(JSC::ThrowScope& throwScope, JS
     JSValueToStringSafe(globalObject, builder, value, true);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     auto* structure = createErrorStructure(vm, globalObject, ErrorType::RangeError, "RangeError"_s, "ERR_INVALID_ARG_VALUE"_s);
     auto error = JSC::ErrorInstance::create(vm, structure, builder.toString(), jsUndefined(), nullptr, JSC::RuntimeType::TypeNothing, ErrorType::RangeError, true);
     throwScope.throwException(globalObject, error);
@@ -910,6 +986,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
     builder.append(". Received "_s);
     JSValueToStringSafe(globalObject, builder, value, true);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
+
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
@@ -950,6 +1031,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
     JSValueToStringSafe(globalObject, builder, value, true);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
     return {};
@@ -979,6 +1065,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
         builder.append('`');
     }
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
     return {};
@@ -1006,6 +1097,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
         builder.append(oneOfStr);
     }
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
     return {};
@@ -1029,6 +1125,11 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
     JSValueToStringSafe(globalObject, builder, value, true);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString()));
     throwScope.release();
     return {};
@@ -1036,21 +1137,33 @@ JSC::EncodedJSValue INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobal
 
 JSC::EncodedJSValue INVALID_URL_SCHEME(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& expectedScheme)
 {
-    auto message = makeString("The URL must be of scheme "_s, expectedScheme);
+    auto message = tryMakeString("The URL must be of scheme "_s, expectedScheme);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_URL_SCHEME, message));
     throwScope.release();
     return {};
 }
 JSC::EncodedJSValue INVALID_FILE_URL_HOST(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& platform)
 {
-    auto message = makeString("File URL host must be \"localhost\" or empty on "_s, platform);
+    auto message = tryMakeString("File URL host must be \"localhost\" or empty on "_s, platform);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_FILE_URL_HOST, message));
     throwScope.release();
     return {};
 }
 JSC::EncodedJSValue INVALID_FILE_URL_HOST(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const ASCIILiteral platform)
 {
-    auto message = makeString("File URL host must be \"localhost\" or empty on "_s, platform);
+    auto message = tryMakeString("File URL host must be \"localhost\" or empty on "_s, platform);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_FILE_URL_HOST, message));
     throwScope.release();
     return {};
@@ -1058,7 +1171,11 @@ JSC::EncodedJSValue INVALID_FILE_URL_HOST(JSC::ThrowScope& throwScope, JSC::JSGl
 /// `File URL path {suffix}`
 JSC::EncodedJSValue INVALID_FILE_URL_PATH(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const ASCIILiteral suffix)
 {
-    auto message = makeString("File URL path "_s, suffix);
+    auto message = tryMakeString("File URL path "_s, suffix);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_FILE_URL_PATH, message));
     throwScope.release();
     return {};
@@ -1066,7 +1183,11 @@ JSC::EncodedJSValue INVALID_FILE_URL_PATH(JSC::ThrowScope& throwScope, JSC::JSGl
 
 JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::StringView encoding)
 {
-    auto message = makeString("Unknown encoding: "_s, encoding);
+    auto message = tryMakeString("Unknown encoding: "_s, encoding);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_ENCODING, message));
     throwScope.release();
     return {};
@@ -1080,6 +1201,10 @@ JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& scope, JSGlobalObject* glo
     WTF::StringBuilder builder;
     builder.append("Unknown encoding: "_s);
     builder.append(encodingString);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_ENCODING, builder.toString()));
     scope.release();
     return {};
@@ -1087,7 +1212,11 @@ JSC::EncodedJSValue UNKNOWN_ENCODING(JSC::ThrowScope& scope, JSGlobalObject* glo
 
 JSC::EncodedJSValue INVALID_STATE(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, const WTF::String& statemsg)
 {
-    auto message = makeString("Invalid state: "_s, statemsg);
+    auto message = tryMakeString("Invalid state: "_s, statemsg);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_STATE, message));
     throwScope.release();
     return {};
@@ -1095,7 +1224,11 @@ JSC::EncodedJSValue INVALID_STATE(JSC::ThrowScope& throwScope, JSC::JSGlobalObje
 
 JSC::EncodedJSValue STRING_TOO_LONG(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject)
 {
-    auto message = makeString("Cannot create a string longer than "_s, WTF::String ::MaxLength, " characters"_s);
+    auto message = tryMakeString("Cannot create a string longer than "_s, WTF::String ::MaxLength, " characters"_s);
+    if (message.isNull()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_STRING_TOO_LONG, message));
     throwScope.release();
     return {};
@@ -1104,7 +1237,12 @@ JSC::EncodedJSValue STRING_TOO_LONG(JSC::ThrowScope& throwScope, JSC::JSGlobalOb
 JSC::EncodedJSValue BUFFER_OUT_OF_BOUNDS(JSC::ThrowScope& throwScope, JSC::JSGlobalObject* globalObject, ASCIILiteral name)
 {
     if (!name.isEmpty()) {
-        throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_BUFFER_OUT_OF_BOUNDS, makeString("\""_s, name, "\" is outside of buffer bounds"_s)));
+        auto message = tryMakeString("\""_s, name, "\" is outside of buffer bounds"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, throwScope);
+            return {};
+        }
+        throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_BUFFER_OUT_OF_BOUNDS, message));
         throwScope.release();
         return {};
     }
@@ -1122,6 +1260,10 @@ JSC::EncodedJSValue UNKNOWN_SIGNAL(JSC::ThrowScope& throwScope, JSC::JSGlobalObj
     if (triedUppercase) {
         builder.append(" (signals must use all capital letters)"_s);
     }
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_UNKNOWN_SIGNAL, builder.toString()));
     throwScope.release();
     return {};
@@ -1138,6 +1280,11 @@ JSC::EncodedJSValue SOCKET_BAD_PORT(JSC::ThrowScope& throwScope, JSC::JSGlobalOb
     builder.append(" 0 and < 65536. Received "_s);
     JSValueToStringSafe(globalObject, builder, port);
     RELEASE_RETURN_IF_EXCEPTION(throwScope, {});
+
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
 
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_SOCKET_BAD_PORT, builder.toString()));
     throwScope.release();
@@ -1197,6 +1344,10 @@ JSC::EncodedJSValue CRYPTO_UNKNOWN_CIPHER(JSC::ThrowScope& throwScope, JSC::JSGl
     WTF::StringBuilder builder;
     builder.append("Unknown cipher: "_s);
     builder.append(cipherName);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_UNKNOWN_CIPHER, builder.toString()));
     throwScope.release();
     return {};
@@ -1286,6 +1437,10 @@ JSC::EncodedJSValue CRYPTO_ECDH_INVALID_FORMAT(ThrowScope& scope, JSGlobalObject
     WTF::StringBuilder builder;
     builder.append("Invalid ECDH format: "_s);
     builder.append(formatString);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_ECDH_INVALID_FORMAT, builder.toString()));
     return {};
 }
@@ -1296,6 +1451,10 @@ JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_CURVE(JSC::ThrowScope& throwScope, JS
     builder.append("Unsupported JWK EC curve: "_s);
     builder.append(curve);
     builder.append('.');
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_JWK_UNSUPPORTED_CURVE, builder.toString()));
     throwScope.release();
     return {};
@@ -1309,6 +1468,10 @@ JSC::EncodedJSValue CRYPTO_JWK_UNSUPPORTED_CURVE(JSC::ThrowScope& throwScope, JS
         builder.append(std::span<const char> { curveName, strlen(curveName) });
     }
     builder.append('.');
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_JWK_UNSUPPORTED_CURVE, builder.toString()));
     throwScope.release();
     return {};
@@ -1352,6 +1515,10 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, 
 
     builder.append(". Expected "_s);
     builder.append(expected);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE, builder.toString()));
     throwScope.release();
     return {};
@@ -1375,6 +1542,10 @@ JSC::EncodedJSValue CRYPTO_INVALID_KEY_OBJECT_TYPE(JSC::ThrowScope& throwScope, 
     builder.append(", expected "_s);
     builder.append(expected);
     builder.append('.');
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE, builder.toString()));
     throwScope.release();
     return {};
@@ -1388,6 +1559,10 @@ JSC::EncodedJSValue CRYPTO_INCOMPATIBLE_KEY_OPTIONS(JSC::ThrowScope& throwScope,
     builder.append(' ');
     builder.append(expectedOperation);
     builder.append('.');
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS, builder.toString()));
     throwScope.release();
     return {};
@@ -1405,6 +1580,10 @@ JSC::EncodedJSValue CRYPTO_INVALID_DIGEST(JSC::ThrowScope& throwScope, JSC::JSGl
     WTF::StringBuilder builder;
     builder.append("Invalid digest: "_s);
     builder.append(digest);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_DIGEST, builder.toString()));
     throwScope.release();
     return {};
@@ -1415,6 +1594,10 @@ JSC::EncodedJSValue CRYPTO_INVALID_DIGEST(JSC::ThrowScope& throwScope, JSC::JSGl
     WTF::StringBuilder builder;
     builder.append(message);
     builder.append(digest);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_DIGEST, builder.toString()));
     throwScope.release();
     return {};
@@ -1481,6 +1664,11 @@ JSC::EncodedJSValue INCOMPATIBLE_OPTION_PAIR(JSC::ThrowScope& throwScope, JSC::J
     builder.append(opt2);
     builder.append("\""_s);
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
+
     throwScope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INCOMPATIBLE_OPTION_PAIR, builder.toString()));
     throwScope.release();
     return {};
@@ -1491,6 +1679,10 @@ JSC::EncodedJSValue MISSING_OPTION(JSC::ThrowScope& scope, JSC::JSGlobalObject* 
     WTF::StringBuilder builder;
     builder.append(message);
     builder.append(" is required"_s);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_MISSING_OPTION, builder.toString()));
     scope.release();
     return {};
@@ -1510,6 +1702,11 @@ JSC::EncodedJSValue INVALID_MIME_SYNTAX(JSC::ThrowScope& scope, JSC::JSGlobalObj
         builder.append(String::number(position));
     }
 
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
+
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_MIME_SYNTAX, builder.toString()));
     scope.release();
     return {};
@@ -1527,6 +1724,10 @@ JSC::EncodedJSValue INVALID_THIS(JSC::ThrowScope& scope, JSC::JSGlobalObject* gl
     WTF::StringBuilder builder;
     builder.append("Value of \"this\" must be of type "_s);
     builder.append(expectedType);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     scope.throwException(globalObject, createError(globalObject, ErrorCode::ERR_INVALID_THIS, builder.toString()));
     scope.release();
     return {};
@@ -1589,6 +1790,10 @@ static JSValue ERR_INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalO
         builder.append(" is invalid. Received "_s);
         JSValueToStringSafe(globalObject, builder, value, true);
         RETURN_IF_EXCEPTION(throwScope, {});
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, throwScope);
+            return {};
+        }
         return createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString());
     }
 
@@ -1603,6 +1808,10 @@ static JSValue ERR_INVALID_ARG_VALUE(JSC::ThrowScope& throwScope, JSC::JSGlobalO
     builder.append(". Received "_s);
     JSValueToStringSafe(globalObject, builder, value, true);
     RETURN_IF_EXCEPTION(throwScope, {});
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, throwScope);
+        return {};
+    }
     return createError(globalObject, ErrorCode::ERR_INVALID_ARG_VALUE, builder.toString());
 }
 
@@ -1694,11 +1903,20 @@ JSC::JSObject* Bun::createInvalidThisError(JSC::JSGlobalObject* globalObject, co
 
 JSC::JSObject* Bun::createInvalidThisError(JSC::JSGlobalObject* globalObject, JSC::JSValue thisValue, const ASCIILiteral typeName)
 {
-    if (!thisValue.isEmpty())
+    auto& vm = JSC::getVM(globalObject);
+    auto scope = DECLARE_THROW_SCOPE(vm);
+    if (!thisValue.isEmpty()) {
         thisValue = thisValue.toThis(globalObject, JSC::ECMAMode::strict());
+        RETURN_IF_EXCEPTION(scope, nullptr);
+    }
 
     if (thisValue.isEmpty() || thisValue.isUndefined()) {
-        return Bun::createError(globalObject, Bun::ErrorCode::ERR_INVALID_THIS, makeString("Expected this to be instanceof "_s, typeName));
+        auto message = tryMakeString("Expected this to be instanceof "_s, typeName);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return nullptr;
+        }
+        return Bun::createError(globalObject, Bun::ErrorCode::ERR_INVALID_THIS, message);
     }
 
     // Pathological case: the this value returns a string which is extremely long or causes an out of memory error.
@@ -1706,7 +1924,12 @@ JSC::JSObject* Bun::createInvalidThisError(JSC::JSGlobalObject* globalObject, JS
     builder.append("Expected this to be instanceof "_s);
     builder.append(typeName);
     builder.append(", but received "_s);
-    determineSpecificType(JSC::getVM(globalObject), globalObject, builder, thisValue);
+    determineSpecificType(vm, globalObject, builder, thisValue);
+    RETURN_IF_EXCEPTION(scope, nullptr);
+    if (builder.hasOverflowed()) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return nullptr;
+    }
     return Bun::createError(globalObject, Bun::ErrorCode::ERR_INVALID_THIS, builder.toString());
 }
 
@@ -1763,6 +1986,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         WTF::StringBuilder builder;
         builder.append("Invalid IP address: "_s);
         builder.append(param);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSValue::encode(createError(globalObject, ErrorCode::ERR_INVALID_IP_ADDRESS, builder.toString()));
     }
 
@@ -1789,7 +2016,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg2 = callFrame->argument(3);
         auto str2 = arg2.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid address family: "_s, str0, " "_s, str1, ":"_s, str2);
+        auto message = tryMakeString("Invalid address family: "_s, str0, " "_s, str1, ":"_s, str2);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         auto err = createError(globalObject, ErrorCode::ERR_INVALID_ADDRESS_FAMILY, message);
         err->putDirect(vm, builtinNames(vm).hostPublicName(), arg1, 0);
         err->putDirect(vm, builtinNames(vm).portPublicName(), arg2, 0);
@@ -1812,6 +2043,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         WTF::StringBuilder builder;
         builder.append("Unknown encoding: "_s);
         builder.append(param);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -1825,6 +2060,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         builder.append("Cannot call "_s);
         builder.append(param);
         builder.append(" after a stream was destroyed"_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -1838,6 +2077,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         builder.append("The "_s);
         builder.append(param);
         builder.append(" method is not implemented"_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -1851,6 +2094,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         builder.append("Cannot call "_s);
         builder.append(param);
         builder.append(" after a stream was finished"_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -1883,6 +2130,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
                     builder.append(' ');
                 }
                 builder.append("argument must be specified"_s);
+                if (builder.hasOverflowed()) [[unlikely]] {
+                    JSC::throwOutOfMemoryError(globalObject, scope);
+                    return {};
+                }
                 return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
             }
 
@@ -1894,6 +2145,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
             builder.append("The \""_s);
             builder.append(str0);
             builder.append("\" argument must be specified"_s);
+            if (builder.hasOverflowed()) [[unlikely]] {
+                JSC::throwOutOfMemoryError(globalObject, scope);
+                return {};
+            }
             return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
         }
         case 3: {
@@ -1913,6 +2168,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
             builder.append("\" and \""_s);
             builder.append(str1);
             builder.append("\" arguments must be specified"_s);
+            if (builder.hasOverflowed()) [[unlikely]] {
+                JSC::throwOutOfMemoryError(globalObject, scope);
+                return {};
+            }
             return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
         }
         default: {
@@ -1933,6 +2192,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
                 result.append(' ');
             }
             result.append("arguments must be specified"_s);
+            if (result.hasOverflowed()) [[unlikely]] {
+                JSC::throwOutOfMemoryError(globalObject, scope);
+                return {};
+            }
             return JSC::JSValue::encode(createError(globalObject, error, result.toString()));
         }
         }
@@ -1963,6 +2226,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         RETURN_IF_EXCEPTION(scope, {});
         messageBuilder.append('.');
 
+        if (messageBuilder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
+
         return JSC::JSValue::encode(createError(globalObject, error, messageBuilder.toString()));
     }
 
@@ -1970,7 +2238,9 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto arg1 = callFrame->argument(2);
         auto arg2 = callFrame->argument(3);
-        return JSC::JSValue::encode(createError(globalObject, error, Message::ERR_OUT_OF_RANGE(scope, globalObject, arg0, arg1, arg2)));
+        auto message = Message::ERR_OUT_OF_RANGE(scope, globalObject, arg0, arg1, arg2);
+        RETURN_IF_EXCEPTION(scope, {});
+        return JSC::JSValue::encode(createError(globalObject, error, message));
     }
 
     case Bun::ErrorCode::ERR_INVALID_STATE:
@@ -1984,6 +2254,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         WTF::StringBuilder builder;
         builder.append("Invalid state: "_s);
         builder.append(param);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -2004,6 +2278,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         builder.append("\" not supported. Expected \""_s);
         builder.append(param1);
         builder.append("\""_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -2016,6 +2294,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         WTF::StringBuilder builder;
         builder.append(param);
         builder.append(" is not a valid Brotli parameter"_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -2029,6 +2311,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         builder.append("Cannot create a Buffer larger than "_s);
         builder.append(param);
         builder.append(" bytes"_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -2056,6 +2342,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
             builder.append("Unhandled error. ("_s);
             builder.append(str0);
             builder.append(")"_s);
+            if (builder.hasOverflowed()) [[unlikely]] {
+                JSC::throwOutOfMemoryError(globalObject, scope);
+                return {};
+            }
             return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
         }
 
@@ -2068,6 +2358,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         builder.append("Unhandled error. ("_s);
         builder.append(str0);
         builder.append(")"_s);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -2081,6 +2375,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         WTF::StringBuilder builder;
         builder.append("Value of \"this\" must be of type "_s);
         builder.append(str0);
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, error, builder.toString()));
     }
 
@@ -2096,6 +2394,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
             builder.append("\""_s);
             builder.append(str0);
             builder.append("\" is outside of buffer bounds"_s);
+            if (builder.hasOverflowed()) [[unlikely]] {
+                JSC::throwOutOfMemoryError(globalObject, scope);
+                return {};
+            }
             return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_BUFFER_OUT_OF_BOUNDS, builder.toString()));
         }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_BUFFER_OUT_OF_BOUNDS, "Attempt to access memory outside buffer bounds"_s));
@@ -2108,7 +2410,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " is not a valid "_s, str1, " TLS protocol version"_s);
+        auto message = tryMakeString(str0, " is not a valid "_s, str1, " TLS protocol version"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_TLS_INVALID_PROTOCOL_VERSION, message));
     }
 
@@ -2119,7 +2425,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("TLS protocol version "_s, str0, " conflicts with secureProtocol "_s, str1);
+        auto message = tryMakeString("TLS protocol version "_s, str0, " conflicts with secureProtocol "_s, str1);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_TLS_PROTOCOL_VERSION_CONFLICT, message));
     }
 
@@ -2129,7 +2439,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         RETURN_IF_EXCEPTION(scope, {});
         auto arg1 = callFrame->argument(2);
         auto arg2 = callFrame->argument(3);
-        auto message = makeString("Hostname/IP does not match certificate's altnames: "_s, str0);
+        auto message = tryMakeString("Hostname/IP does not match certificate's altnames: "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         auto err = createError(globalObject, ErrorCode::ERR_TLS_CERT_ALTNAME_INVALID, message);
         err->putDirect(vm, Identifier::fromString(vm, "reason"_s), arg0);
         err->putDirect(vm, Identifier::fromString(vm, "host"_s), arg1);
@@ -2141,7 +2455,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " was closed"_s);
+        auto message = tryMakeString(str0, " was closed"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_USE_AFTER_CLOSE, message));
     }
 
@@ -2152,7 +2470,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " must be a valid HTTP token [\""_s, str1, "\"]"_s);
+        auto message = tryMakeString(str0, " must be a valid HTTP token [\""_s, str1, "\"]"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_INVALID_HTTP_TOKEN, message));
     }
 
@@ -2163,7 +2485,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid value \""_s, str0, "\" for header \""_s, str1, "\""_s);
+        auto message = tryMakeString("Invalid value \""_s, str0, "\" for header \""_s, str1, "\""_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_INVALID_HEADER_VALUE, message));
     }
 
@@ -2171,7 +2497,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid status code: "_s, str0);
+        auto message = tryMakeString("Invalid status code: "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_STATUS_INVALID, message));
     }
 
@@ -2179,7 +2509,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("\""_s, str0, "\" is an invalid pseudoheader or is used incorrectly"_s);
+        auto message = tryMakeString("\""_s, str0, "\" is an invalid pseudoheader or is used incorrectly"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_INVALID_PSEUDOHEADER, message));
     }
 
@@ -2187,7 +2521,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Stream closed with error code "_s, str0);
+        auto message = tryMakeString("Stream closed with error code "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_STREAM_ERROR, message));
     }
 
@@ -2195,7 +2533,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Session closed with error code "_s, str0);
+        auto message = tryMakeString("Session closed with error code "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_SESSION_ERROR, message));
     }
 
@@ -2203,7 +2545,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Responses with "_s, str0, " status must not have a payload"_s);
+        auto message = tryMakeString("Responses with "_s, str0, " status must not have a payload"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_PAYLOAD_FORBIDDEN, message));
     }
 
@@ -2211,7 +2557,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid informational status code: "_s, str0);
+        auto message = tryMakeString("Invalid informational status code: "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP2_INVALID_INFO_STATUS, message));
     }
 
@@ -2240,6 +2590,10 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
             builder.append(str1);
             builder.append("\"]"_s);
         }
+        if (builder.hasOverflowed()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_INVALID_CHAR, builder.toString()));
     }
 
@@ -2250,7 +2604,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid value \""_s, str0, "\" for header \""_s, str1, "\""_s);
+        auto message = tryMakeString("Invalid value \""_s, str0, "\" for header \""_s, str1, "\""_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP_INVALID_HEADER_VALUE, message));
     }
 
@@ -2258,7 +2616,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Cannot "_s, str0, " headers after they are sent to the client"_s);
+        auto message = tryMakeString("Cannot "_s, str0, " headers after they are sent to the client"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP_HEADERS_SENT, message));
     }
 
@@ -2266,7 +2628,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " contains unescaped characters"_s);
+        auto message = tryMakeString(str0, " contains unescaped characters"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_UNESCAPED_CHARACTERS, message));
     }
 
@@ -2274,7 +2640,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid status code: "_s, str0);
+        auto message = tryMakeString("Invalid status code: "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_HTTP_INVALID_STATUS_CODE, message));
     }
 
@@ -2285,7 +2655,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid key object type "_s, str0, ", expected "_s, str1, "."_s);
+        auto message = tryMakeString("Invalid key object type "_s, str0, ", expected "_s, str1, "."_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE, message));
     }
 
@@ -2296,7 +2670,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Incompatible "_s, str0, ": "_s, str1);
+        auto message = tryMakeString("Incompatible "_s, str0, ": "_s, str1);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_CRYPTO_INCOMPATIBLE_KEY, message));
     }
 
@@ -2304,7 +2682,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Forked processes must have an IPC channel, missing value 'ipc' in "_s, str0);
+        auto message = tryMakeString("Forked processes must have an IPC channel, missing value 'ipc' in "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_CHILD_PROCESS_IPC_REQUIRED, message));
     }
 
@@ -2315,7 +2697,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid "_s, str0, " value: "_s, str1);
+        auto message = tryMakeString("Invalid "_s, str0, " value: "_s, str1);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_INVALID_ASYNC_ID, message));
     }
 
@@ -2323,7 +2709,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Invalid name for async \"type\": "_s, str0);
+        auto message = tryMakeString("Invalid name for async \"type\": "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_ASYNC_TYPE, message));
     }
 
@@ -2331,7 +2721,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " must be a function"_s);
+        auto message = tryMakeString(str0, " must be a function"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_ASYNC_CALLBACK, message));
     }
 
@@ -2342,7 +2736,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg1 = callFrame->argument(2);
         auto str1 = arg1.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("The \""_s, str0, "\" argument is ambiguous. "_s, str1);
+        auto message = tryMakeString("The \""_s, str0, "\" argument is ambiguous. "_s, str1);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_AMBIGUOUS_ARGUMENT, message));
     }
 
@@ -2350,7 +2748,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Unsupported fd type: "_s, str0);
+        auto message = tryMakeString("Unsupported fd type: "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_INVALID_FD_TYPE, message));
     }
 
@@ -2358,7 +2760,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " maxBuffer length exceeded"_s);
+        auto message = tryMakeString(str0, " maxBuffer length exceeded"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_CHILD_PROCESS_STDIO_MAXBUFFER, message));
     }
 
@@ -2366,7 +2772,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("IP("_s, str0, ") is blocked by net.BlockList"_s);
+        auto message = tryMakeString("IP("_s, str0, ") is blocked by net.BlockList"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_IP_BLOCKED, message));
     }
 
@@ -2374,7 +2784,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString("Module status "_s, str0);
+        auto message = tryMakeString("Module status "_s, str0);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_VM_MODULE_STATUS, message));
     }
 
@@ -2394,7 +2808,11 @@ JSC_DEFINE_HOST_FUNCTION(Bun::jsFunctionMakeErrorWithCode, (JSC::JSGlobalObject 
         auto arg0 = callFrame->argument(1);
         auto str0 = arg0.toWTFString(globalObject);
         RETURN_IF_EXCEPTION(scope, {});
-        auto message = makeString(str0, " is not a valid zstd parameter"_s);
+        auto message = tryMakeString(str0, " is not a valid zstd parameter"_s);
+        if (message.isNull()) [[unlikely]] {
+            JSC::throwOutOfMemoryError(globalObject, scope);
+            return {};
+        }
         return JSC::JSValue::encode(createError(globalObject, ErrorCode::ERR_ZSTD_INVALID_PARAM, message));
     }
 

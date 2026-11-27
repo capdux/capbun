@@ -719,6 +719,11 @@ var task_ptr: *StreamPending = (task.get(StreamPending)).?;
             _ = &task_ptr;
             _ = task_ptr.runFromJSThread();
 },
+@field(Task.Tag, @typeName(shell.Interpreter.Builtin.Yes.YesTask)) => {
+var yes_task: *shell.Interpreter.Builtin.Yes.YesTask = (task.get(shell.Interpreter.Builtin.Yes.YesTask)).?;
+            _ = &yes_task;
+            _ = yes_task.runFromMainThread();
+},
 else => {
 _ = Output.panic("Unexpected Task tag: {d}", .{ @intFromEnum(task.tag()) });
 },

@@ -926,18 +926,6 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 _.flags.has_finalized = true;
             }
 
-            if (resp := _.response_weakref.get()) {
-                if (stream := resp.getBodyReadableStream(globalThis)) {
-                    stream.value.ensureStillAlive();
-                    resp.detachReadableStream(globalThis);
-                    stream.done(globalThis);
-                }
-                const bv = resp.getBodyValue();
-                if (bv.* == .Locked) {
-                    bv.* = .Used;
-                }
-            }
-
             if (_.response_jsvalue != .zero) {
                 ctxLog("finalizeWithoutDeinit: response_jsvalue != .zero", .{});
                 if (_.flags.response_protected) {

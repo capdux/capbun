@@ -222,6 +222,22 @@ pub fn runFromMainThreadMini(self: *ShellTouchTask, _: *void) void {
             _ = self.runFromMainThread();
     }
 
+pub fn handleUtimesErr(task_self: *ShellTouchTask, filepath: [:0]const u8, err_: Syscall.Error) void {
+            if ((err_.getErrno() == .NOENT)) {
+                const perm: i32 = 436;
+                switch (Syscall.open(filepath, (bun.O.CREAT | bun.O.WRONLY), perm)) {
+.result => |fd| {
+_ = fd.close();
+},
+.err => |e| {
+task_self.err = e.withPath(filepath).toShellSystemError();
+},
+}
+            } else {
+                task_self.err = err_.withPath(filepath).toShellSystemError();
+            }
+    }
+
 pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
             var task_self: *ShellTouchTask = @fieldParentPtr("task", task);
             _ = &task_self;
@@ -242,12 +258,20 @@ pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
             const milliseconds: f64 = @floatFromInt(std.time.milliTimestamp());
             const atime: jsc.Node.TimeLike = (if (bun.Environment.isWindows) (milliseconds / 1000.0) else jsc.Node.TimeLike{ .sec = @intFromFloat(@divFloor(milliseconds, std.time.ms_per_s)), .nsec = @intFromFloat((@mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms)) });
             const mtime = atime;
-            const args = jsc.Node.fs.Arguments.Utimes{ .atime = atime, .mtime = mtime, .path = .{ .string = bun.PathString.init(filepath) } };
-            if (node_fs.utimes(args, .sync).asErr()) |err_| {
-                _ = &err_;
-                if ((err_.getErrno() == .NOENT)) {
-                    const perm: i32 = 436;
-                    switch (Syscall.open(filepath, (bun.O.CREAT | bun.O.WRONLY), perm)) {
+            if ((filepath.len < bun.MAX_PATH_BYTES)) {
+                const args = jsc.Node.fs.Arguments.Utimes{ .atime = atime, .mtime = mtime, .path = .{ .string = bun.PathString.init(filepath) } };
+                if (node_fs.utimes(args, .sync).asErr()) |err_| {
+                    _ = &err_;
+                    _ = handleUtimesErr(task_self, filepath, err_);
+                }
+            } else {
+                if (comptime (!bun.Environment.isWindows)) {
+                    if (Syscall.utimens(filepath, atime, mtime).asErr()) |err_| {
+                        _ = &err_;
+                        _ = handleUtimesErr(task_self, filepath, err_);
+                    }
+                } else {
+                    switch (Syscall.open(filepath, (bun.O.CREAT | bun.O.WRONLY), 436)) {
 .result => |fd| {
 _ = fd.close();
 },
@@ -255,8 +279,6 @@ _ = fd.close();
 task_self.err = e.withPath(filepath).toShellSystemError();
 },
 }
-                } else {
-                    task_self.err = err_.withPath(filepath).toShellSystemError();
                 }
             }
             if ((task_self.event_loop == .js)) {
@@ -417,7 +439,7 @@ pub fn onShellTouchTaskDone(self: *Touch, task: *ShellTouchTask) void {
         if (err) |e| {
             _ = &e;
             const output_task: *ShellTouchOutputTask = bun.new(ShellTouchOutputTask, .{ .parent = self, .output = .{ .arrlist = .{} }, .state = .waiting_write_err });
-            const error_string = self.bltn().taskErrorToString(.touch, e);
+            const error_string = (if ((e.path.length() == 0)) self.bltn().fmtErrorArena(.touch, "{s}\n", .{ e.message.byteSlice() }) else self.bltn().fmtErrorArena(.touch, "{f}: {s}\n", .{ e.path, e.message.byteSlice() }));
             if (self.state.exec.err) |prev| {
                 _ = &prev;
                 _ = prev.deref();

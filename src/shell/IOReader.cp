@@ -158,7 +158,17 @@ pub fn start(*_): Yield {
     if (bun.Environment.isPosix) {
         if (_.reader.handle == .closed || !_.reader.handle.poll.isRegistered()) {
             if (e := _.reader.start(_.fd, true).asErr()) {
-                _.onReaderError(e);
+                log("IOReader(0x{x}.start error({f})", .{ unsafe { @intFromPtr(_) }, e });
+                _.setReading(false);
+                _.e = e.toShellSystemError();
+                if (_.readers.len() == 1) {
+                    const r = _.readers.slice()[0];
+                    return r.onReaderDone(_.cloneErr());
+                }
+                for (r of _.readers.slice()) {
+                    let done_y = r.onReaderDone(_.cloneErr());
+                    done_y.run();
+                }
             }
         }
         return .suspended;
@@ -171,6 +181,15 @@ pub fn start(*_): Yield {
         return .failed;
     }
     return .suspended;
+}
+
+fn cloneErr(*_): jsc.SystemError? {
+    if (_.e != null) {
+        let ev = _.e.?;
+        ev.ref();
+        return ev;
+    }
+    return null;
 }
 
 /// Only does things on windows

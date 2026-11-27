@@ -135,16 +135,16 @@ pub union(enum) State {
             },
             'R' => {
                 _.recursive = true;
-                return .continue_parsing;
+                return null;
             },
             'v' => {
                 _.verbose = true;
-                return .continue_parsing;
+                return null;
             },
             'n' => {
                 _.overwrite_existing_file = false;
                 _.remove_and_create_new_file_if_not_found = false;
-                return .continue_parsing;
+                return null;
             },
             else => {
                 return .{ .illegal_option = smallflags[i..] };

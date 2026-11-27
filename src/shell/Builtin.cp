@@ -466,9 +466,6 @@ static fn initRedirections(
                     return cmd.writeFailingError("bun: ambiguous redirect: at `{s}`\n", .{@tagName(kind)});
                 }
 
-                // Regular files are not pollable on linux and macos
-                const is_pollable: bool = if (bun.Environment.isPosix) false else true;
-
                 const path = cmd.redirection_file.items[0..cmd.redirection_file.items.len -| 1 :0];
                 log("EXPANDED REDIRECT: {s}\n", .{cmd.redirection_file.items[0..]});
                 const perm = 0o666;
@@ -540,7 +537,7 @@ static fn initRedirections(
 
                 const redirect_writer: *IOWriter = .init(
                     redirfd,
-                    { pollable: is_pollable, nonblocking: is_nonblocking, is_socket: is_socket },
+                    { pollable: pollable, nonblocking: is_nonblocking, is_socket: is_socket },
                     cmd.base.eventLoop(),
                 );
                 const _writer_guard = PtrDerefGuard<IOWriter>{ ptr: redirect_writer };

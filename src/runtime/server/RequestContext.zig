@@ -1112,19 +1112,6 @@ pub fn finalizeWithoutDeinit(self: *@This()) void {
                 _ = ctxLog("finalizeWithoutDeinit: has_finalized {}", .{ self.flags.has_finalized });
                 self.flags.has_finalized = true;
             }
-            if (self.response_weakref.get()) |resp| {
-                _ = &resp;
-                if (resp.getBodyReadableStream(globalThis)) |stream| {
-                    _ = &stream;
-                    _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
-                    _ = resp.detachReadableStream(globalThis);
-                    _ = stream.done(globalThis);
-                }
-                const bv = resp.getBodyValue();
-                if ((bv.* == .Locked)) {
-                    bv.* = .Used;
-                }
-            }
             if ((self.response_jsvalue != .zero)) {
                 _ = ctxLog("finalizeWithoutDeinit: response_jsvalue != .zero", .{});
                 if (self.flags.response_protected) {

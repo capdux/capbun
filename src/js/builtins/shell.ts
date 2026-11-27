@@ -335,7 +335,11 @@ export function createBunShellTemplateFunction(createShellInterpreter_, createPa
       return new ShellPromise(parsed_shell_script, throws);
     };
 
-    Object.setPrototypeOf(Shell, ShellPrototype.prototype);
+    Shell[cwdSymbol] = defaultCwd;
+    Shell[envSymbol] = defaultEnv;
+    Shell[throwsSymbol] = true;
+
+    Object.setPrototypeOf(Shell, new.target.prototype);
     Object.defineProperty(Shell, "name", { value: "Shell", configurable: true, enumerable: true });
 
     return Shell;

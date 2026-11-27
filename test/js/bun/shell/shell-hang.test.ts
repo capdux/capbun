@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bunRun, isLinux } from "harness";
+import { bunRun, isDebug, isLinux } from "harness";
 import path from "path";
 
 // Pass by not hanging
@@ -23,7 +23,7 @@ describe("fail", () => {
       const { exitCode } = await bunRun(path.join(import.meta.dir, fixture));
       expect(exitCode).not.toBe(0);
     },
-    700,
+    isDebug ? 5000 : 700,
   );
 });
 
@@ -35,7 +35,7 @@ describe("pass", () => {
       if (exitCode !== 0) console.error(stderr);
       expect(exitCode).toBe(0);
     },
-    700,
+    isDebug ? 5000 : 700,
   );
 });
 

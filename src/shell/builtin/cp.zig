@@ -191,16 +191,16 @@ return .{ .unsupported = unsupportedFlag("-P") };
 },
 'R' => {
 self.recursive = true;
-            return .continue_parsing;
+            return null;
 },
 'v' => {
 self.verbose = true;
-            return .continue_parsing;
+            return null;
 },
 'n' => {
 self.overwrite_existing_file = false;
             self.remove_and_create_new_file_if_not_found = false;
-            return .continue_parsing;
+            return null;
 },
 else => {
 return .{ .illegal_option = smallflags[i..] };

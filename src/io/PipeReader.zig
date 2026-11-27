@@ -663,7 +663,8 @@ if (self.checkMaxBuf(bytes_read)) {
                         return;
                     }
                     if (streaming) {
-                        if ((!self.vtable.onReadChunk(read_buf[0..bytes_read], (if ((received_hup and (bytes_read < read_buf.len))) .eof else .progress)))) {
+                        const is_eof = (received_hup and (bytes_read < read_buf.len));
+                        if (((!self.vtable.onReadChunk(read_buf[0..bytes_read], (if (is_eof) .eof else .progress))) and (!is_eof))) {
                             _ = self.stopAtBackstop();
                             return;
                         }

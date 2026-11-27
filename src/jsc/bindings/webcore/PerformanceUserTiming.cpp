@@ -181,7 +181,10 @@ ExceptionOr<double> PerformanceUserTiming::convertMarkToTimestamp(const String& 
     if (iterator != m_marksMap.end())
         return iterator->value.last()->startTime();
 
-    return Exception { SyntaxError, makeString("No mark named '"_s, mark, "' exists"_s) };
+    auto message = tryMakeString("No mark named '"_s, mark, "' exists"_s);
+    if (message.isNull()) [[unlikely]]
+        return Exception { RangeError, "Out of memory"_s };
+    return Exception { SyntaxError, WTF::move(message) };
 }
 
 ExceptionOr<double> PerformanceUserTiming::convertMarkToTimestamp(double mark) const

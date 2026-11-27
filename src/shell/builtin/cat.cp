@@ -178,7 +178,7 @@ pub struct Opts {
                     .result => |open_fd| open_fd,
                     .err => |e| {
                         const buf = _.bltn().taskErrorToString(.cat, e);
-                        const _exec_guard = DeinitGuard<ExecFilePathArgs>{ ptr: exec };
+                        exec.deinit();
                         return _.writeFailingError(buf, 1);
                     },
                 };

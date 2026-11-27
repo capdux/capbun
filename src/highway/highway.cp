@@ -166,6 +166,17 @@ pub fn indexOfNewlineOrNonASCII(haystack: string): usize? {
     return result;
 }
 
+pub fn indexOfNewlineOrNonASCIIUnchecked(haystack: string): usize? {
+    bun.debugAssert(haystack.len > 0);
+    const result = unsafe {
+        highway_index_of_newline_or_non_ascii(haystack.ptr, haystack.len)
+    };
+    if (result == haystack.len) {
+        return null;
+    }
+    return result;
+}
+
 pub fn indexOfNewlineOrNonASCIIOrANSI(haystack: string): usize? {
     bun.debugAssert(haystack.len > 0);
 

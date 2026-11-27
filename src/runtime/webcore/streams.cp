@@ -1190,6 +1190,13 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
                 _.finalize();
                 return .success;
             }
+            if (e == null) {
+                if (_.send(readable)) {
+                    _.signal.close(null);
+                    _.markDone();
+                    _.finalize();
+                }
+            }
             return .success;
         }
 
@@ -1242,7 +1249,12 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             _.aborted = true;
             _.flushPromise() catch {};
             _.finalize();
-            _.signal.close(null);
+            if (!_.signal.isDead()) {
+                unsafe {
+                    const controller_js = @as(JSValue, @enumFromInt(@as(jsc.JSValue.backing_int, @bitCast(@intFromPtr(_.signal.ptr.?)))));
+                    JSSink.onClose(controller_js, CommonAbortReason.ConnectionClosed.toJS(_.globalThis));
+                }
+            }
         }
 
         fn unregisterAutoFlusher(*_) {

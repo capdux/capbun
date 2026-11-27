@@ -567,7 +567,8 @@ struct PosixBufferedReader {
                         }
 
                         if (streaming) {
-                            if (!_.vtable.onReadChunk(read_buf[0..bytes_read], if (received_hup && bytes_read < read_buf.len) .eof else .progress)) {
+                            const is_eof = received_hup && bytes_read < read_buf.len;
+                            if (!_.vtable.onReadChunk(read_buf[0..bytes_read], if (is_eof) .eof else .progress) && !is_eof) {
                                 _.stopAtBackstop();
                                 return;
                             }

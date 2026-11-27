@@ -1679,7 +1679,16 @@ export function readableStreamCancel(stream: ReadableStream, reason: any) {
   const state = $getByIdDirectPrivate(stream, "state");
   if (state === $streamClosed) return Promise.$resolve();
   if (state === $streamErrored) return Promise.$reject($getByIdDirectPrivate(stream, "storedError"));
-  $readableStreamClose(stream, false);
+  var start_ = $getByIdDirectPrivate(stream, "start");
+  if (start_) {
+    $putByIdDirectPrivate(stream, "start", undefined);
+    start_();
+  }
+
+  const currentState = $getByIdDirectPrivate(stream, "state");
+  if (currentState !== $streamClosed && currentState !== $streamErrored) {
+    $readableStreamClose(stream, false);
+  }
 
   const controller = $getByIdDirectPrivate(stream, "readableStreamController");
   if (controller === null) return Promise.$resolve();

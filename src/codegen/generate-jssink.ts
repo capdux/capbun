@@ -658,8 +658,10 @@ JSObject* JS${controllerName}::createPrototype(VM& vm, JSDOMGlobalObject& global
 }
 
 void JS${controllerName}::detach() {
-    if (m_closed)
+    if (m_closed) {
+        m_sinkPtr = nullptr;
         return;
+    }
     m_closed = true;
 
     if (m_onDestroy) {
@@ -1016,6 +1018,7 @@ extern "C" void ${name}__onClose(JSC::EncodedJSValue controllerValue, JSC::Encod
     if (controller->m_closed)
         return;
     controller->m_closed = true;
+    controller->m_sinkPtr = nullptr;
 
     controller->m_onPull.clear();
     JSC::JSValue function = controller->m_onClose.get();
