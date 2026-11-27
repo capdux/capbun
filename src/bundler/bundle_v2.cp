@@ -3878,7 +3878,7 @@ pub struct BundleV2 {
         _.decrementScanCounter();
     }
 
-    fn onNotifyDeferMini(_: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) {
+    static fn onNotifyDeferMini(_: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) {
         bundle.onNotifyDefer();
     }
 

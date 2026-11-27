@@ -153,7 +153,9 @@ export function registerCompileRules(n: Ninja, cfg: Config): void {
 
   // ─── Static library archive ───
   n.rule("ar", {
-    command: cfg.windows ? `${ar} /nologo /out:$out @$out.rsp` : `${ar} rcs $out @$out.rsp`,
+    command: cfg.windows
+      ? `${ar} /nologo /out:$out @$out.rsp`
+      : `${ar} rcs $out @$out.rsp`,
     description: "ar $out",
     rspfile: "$out.rsp",
     rspfile_content: "$in_newline",
@@ -200,9 +202,16 @@ export interface CompileOpts {
  * Output path: {buildDir}/obj/{path-from-cwd-with-slashes-flattened}.o
  * E.g. src/jsc/bindings/foo.cpp → obj/src_jsc_bindings_foo.cpp.o
  */
-export function cxx(n: Ninja, cfg: Config, src: string, opts: CompileOpts): string {
+export function cxx(
+  n: Ninja,
+  cfg: Config,
+  src: string,
+  opts: CompileOpts,
+): string {
   assert(
-    extname(src) === ".cpp" || extname(src) === ".cc" || extname(src) === ".cxx",
+    extname(src) === ".cpp" ||
+      extname(src) === ".cc" ||
+      extname(src) === ".cxx",
     `cxx() expects .cpp/.cc/.cxx source, got: ${src}`,
   );
   return compile(n, cfg, src, opts, "cxx");
@@ -215,9 +224,17 @@ export function cxx(n: Ninja, cfg: Config, src: string, opts: CompileOpts): stri
  * extension and runs cpp + as. Used by deps that ship hand-tuned kernels
  * (e.g. zstd's huf_decompress_amd64.S).
  */
-export function cc(n: Ninja, cfg: Config, src: string, opts: Omit<CompileOpts, "pch" | "pchHeader">): string {
+export function cc(
+  n: Ninja,
+  cfg: Config,
+  src: string,
+  opts: Omit<CompileOpts, "pch" | "pchHeader">,
+): string {
   const ext = extname(src);
-  assert(ext === ".c" || ext === ".S", `cc() expects .c/.S source, got: ${src}`);
+  assert(
+    ext === ".c" || ext === ".S",
+    `cc() expects .c/.S source, got: ${src}`,
+  );
   // C files never use PCH (PCH is C++-only in our build)
   return compile(n, cfg, src, opts, "cc");
 }
@@ -247,7 +264,13 @@ export function nasm(
   return out;
 }
 
-function compile(n: Ninja, cfg: Config, src: string, opts: CompileOpts, lang: "cxx" | "cc"): string {
+function compile(
+  n: Ninja,
+  cfg: Config,
+  src: string,
+  opts: CompileOpts,
+  lang: "cxx" | "cc",
+): string {
   const absSrc = resolve(cfg.cwd, src);
   const out = objectPath(cfg, src);
 
@@ -261,7 +284,10 @@ function compile(n: Ninja, cfg: Config, src: string, opts: CompileOpts, lang: "c
 
   // PCH is always an implicit dep — if it changes, recompile.
   if (opts.pch !== undefined) {
-    assert(opts.pchHeader !== undefined, "cxx with pch requires pchHeader (the wrapper .hxx)");
+    assert(
+      opts.pchHeader !== undefined,
+      "cxx with pch requires pchHeader (the wrapper .hxx)",
+    );
     implicitInputs.push(opts.pch);
     vars.pch_file = n.rel(opts.pch);
     vars.pch_header = n.rel(opts.pchHeader);
@@ -420,7 +446,13 @@ export interface LinkOpts {
  * Link an executable. Returns absolute path to output (with cfg.exeSuffix
  * appended — clang-cl /Fe auto-appends .exe; ninja's output path must match).
  */
-export function link(n: Ninja, cfg: Config, out: string, objects: string[], opts: LinkOpts): string {
+export function link(
+  n: Ninja,
+  cfg: Config,
+  out: string,
+  objects: string[],
+  opts: LinkOpts,
+): string {
   const absOut = resolve(cfg.buildDir, out + cfg.exeSuffix);
 
   // Linker map is an implicit output (ninja tracks it but not in $out)
@@ -449,7 +481,12 @@ export function link(n: Ninja, cfg: Config, out: string, objects: string[], opts
 /**
  * Create a static library. Returns absolute path to output.
  */
-export function ar(n: Ninja, cfg: Config, out: string, objects: string[]): string {
+export function ar(
+  n: Ninja,
+  cfg: Config,
+  out: string,
+  objects: string[],
+): string {
   const absOut = resolve(cfg.buildDir, out);
 
   n.build({
@@ -519,7 +556,10 @@ export function registerDirStamps(n: Ninja, cfg: Config): void {
   // must tolerate "already exists" — posix has -p, cmd doesn't, so
   // suppress the error (2>nul) and touch unconditionally (&).
   n.rule("mkdir_stamp", {
-    command: cfg.host.os === "windows" ? `cmd /c "mkdir $dir 2>nul & type nul > $out"` : `mkdir -p $dir && touch $out`,
+    command:
+      cfg.host.os === "windows"
+        ? `cmd /c "mkdir $dir 2>nul & type nul > $out"`
+        : `mkdir -p $dir && touch $out`,
     description: "mkdir $dir",
   });
 

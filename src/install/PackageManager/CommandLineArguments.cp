@@ -1016,6 +1016,10 @@ pub static fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcomman
         }
 
         if (otp := args.option("--otp")) {
+            if (std.mem.indexOfAny(u8, otp, "\r\n\x00") != null) {
+                Output.errGeneric("invalid `otp` value: must not contain a newline or NUL byte", .{});
+                Global.crash();
+            }
             cli.publish_config.otp = otp;
         }
 

@@ -117,21 +117,30 @@ async function doBuildkiteAgent(action, cliOptions = {}) {
         }
       `;
       writeFile(servicePath, service, { mode: 0o755 });
-      await spawnSafe(["rc-update", "add", "buildkite-agent", "default"], { stdio: "inherit", privileged: true });
+      await spawnSafe(["rc-update", "add", "buildkite-agent", "default"], {
+        stdio: "inherit",
+        privileged: true,
+      });
     }
 
     if (isMacOS) {
-      const queue = cliOptions.queue || getEnv("BUILDKITE_AGENT_QUEUE", false) || "test-darwin";
+      const queue =
+        cliOptions.queue ||
+        getEnv("BUILDKITE_AGENT_QUEUE", false) ||
+        "test-darwin";
       const token = getEnv("BUILDKITE_AGENT_TOKEN", false);
       if (!token && !existsSync(cfgPath)) {
-        throw new Error("BUILDKITE_AGENT_TOKEN not set and no existing buildkite-agent.cfg to reuse");
+        throw new Error(
+          "BUILDKITE_AGENT_TOKEN not set and no existing buildkite-agent.cfg to reuse",
+        );
       }
 
       // `install` runs via sudo, so process.env.USER is "root". The launchd
       // service must run as the real login user (whose ~/Library the cfg and
       // build dirs live under), and the files we write here must be owned by
       // them so the service can read them.
-      const runAsUser = process.env.SUDO_USER || process.env.USER || "administrator";
+      const runAsUser =
+        process.env.SUDO_USER || process.env.USER || "administrator";
 
       for (const dir of [homePath, cachePath, logsPath]) {
         mkdir(dir);
@@ -203,7 +212,8 @@ async function doBuildkiteAgent(action, cliOptions = {}) {
       // Matches the script already deployed on the fleet: covers both the
       // Homebrew-agent layout (older x64 boxes) and the Library layout (this
       // installer), fixes ownership, then reboots.
-      const cleanupPlistPath = "/Library/LaunchDaemons/com.buildkite.cleanup.plist";
+      const cleanupPlistPath =
+        "/Library/LaunchDaemons/com.buildkite.cleanup.plist";
       const cleanupScript =
         `PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; ` +
         `BASE_PREFIX=$([ "$(uname -m)" = "arm64" ] && echo "/opt/homebrew" || echo "/usr/local"); ` +
@@ -231,15 +241,31 @@ async function doBuildkiteAgent(action, cliOptions = {}) {
       // install runs as root, so everything above is root-owned. The service
       // runs as runAsUser and needs to read the cfg (mode 0600) and write to
       // the build/log/cache dirs.
-      await spawnSafe(["chown", "-R", `${runAsUser}:staff`, cfgPath, homePath, cachePath, logsPath], {
-        stdio: "inherit",
-      });
+      await spawnSafe(
+        [
+          "chown",
+          "-R",
+          `${runAsUser}:staff`,
+          cfgPath,
+          homePath,
+          cachePath,
+          logsPath,
+        ],
+        {
+          stdio: "inherit",
+        },
+      );
 
       // Best-effort: replace any previously-loaded service. bootout fails if
       // not loaded, which is fine.
       for (const p of [plistPath, cleanupPlistPath]) {
-        await spawnSafe(["launchctl", "bootout", "system", p], { stdio: "inherit" }).catch(() => {});
-        await spawnSafe(["launchctl", "bootstrap", "system", p], { stdio: "inherit", privileged: true });
+        await spawnSafe(["launchctl", "bootout", "system", p], {
+          stdio: "inherit",
+        }).catch(() => {});
+        await spawnSafe(["launchctl", "bootstrap", "system", p], {
+          stdio: "inherit",
+          privileged: true,
+        });
       }
       return;
     }
@@ -268,8 +294,14 @@ async function doBuildkiteAgent(action, cliOptions = {}) {
         WantedBy=multi-user.target
       `;
       writeFile(servicePath, service);
-      await spawnSafe(["systemctl", "daemon-reload"], { stdio: "inherit", privileged: true });
-      await spawnSafe(["systemctl", "enable", "buildkite-agent"], { stdio: "inherit", privileged: true });
+      await spawnSafe(["systemctl", "daemon-reload"], {
+        stdio: "inherit",
+        privileged: true,
+      });
+      await spawnSafe(["systemctl", "enable", "buildkite-agent"], {
+        stdio: "inherit",
+        privileged: true,
+      });
     }
   }
 
@@ -305,13 +337,16 @@ async function doBuildkiteAgent(action, cliOptions = {}) {
       // On macOS the hostname is often a meaningless asset ID (e.g. 66783.local),
       // so name the agent by what it actually is. %spawn yields the existing
       // fleet's "-1" suffix at spawn=1.
-      "name": isMacOS ? `${getOs()}-${getArch()}-${distroVersion}-%spawn` : `${getHostname()}-%spawn`,
+      "name": isMacOS
+        ? `${getOs()}-${getArch()}-${distroVersion}-%spawn`
+        : `${getHostname()}-%spawn`,
       "shell": shell,
       "job-log-path": logsPath,
       "build-path": join(homePath, "builds"),
       "hooks-path": join(homePath, "hooks"),
       "plugins-path": join(homePath, "plugins"),
-      "experiment": "normalised-upload-paths,resolve-commit-after-checkout,agent-api",
+      "experiment":
+        "normalised-upload-paths,resolve-commit-after-checkout,agent-api",
     };
 
     // On macOS, token/queue/spawn live in the cfg file written by `install`;
@@ -370,7 +405,9 @@ async function doBuildkiteAgent(action, cliOptions = {}) {
     }
 
     options["tags"] = Object.entries(tags)
-      .filter(([, value]) => value !== undefined && value !== null && value !== "")
+      .filter(
+        ([, value]) => value !== undefined && value !== null && value !== "",
+      )
       .map(([key, value]) => `${key}=${value}`)
       .join(",");
 

@@ -51,7 +51,10 @@ const pipeline = process.env.BUILDKITE_PIPELINE_SLUG || "bun";
 const buildNumber = process.env.BUILDKITE_BUILD_NUMBER;
 const branch = process.env.BUILDKITE_BRANCH;
 
-function agent(args: string[], opts: { quiet?: boolean } = {}): string | undefined {
+function agent(
+  args: string[],
+  opts: { quiet?: boolean } = {},
+): string | undefined {
   const { exitCode, stdout } = Bun.spawnSync(["buildkite-agent", ...args], {
     stderr: opts.quiet ? "ignore" : "inherit",
   });
@@ -59,7 +62,10 @@ function agent(args: string[], opts: { quiet?: boolean } = {}): string | undefin
 }
 
 async function getSecret(name: string): Promise<string | undefined> {
-  const { exitCode, stdout } = Bun.spawnSync(["buildkite-agent", "secret", "get", name], { stderr: "ignore" });
+  const { exitCode, stdout } = Bun.spawnSync(
+    ["buildkite-agent", "secret", "get", name],
+    { stderr: "ignore" },
+  );
   if (exitCode !== 0) return undefined;
   return stdout.toString().trim() || undefined;
 }
@@ -71,18 +77,26 @@ async function getSecret(name: string): Promise<string | undefined> {
 console.log("--- Reading sizes from build meta-data");
 const sizes: Sizes = {};
 for (const { triplet } of targets) {
-  const v = agent(["meta-data", "get", `binary-size:${triplet}`], { quiet: true });
+  const v = agent(["meta-data", "get", `binary-size:${triplet}`], {
+    quiet: true,
+  });
   if (!v) {
     console.log(`  ${triplet}: not set (build may have failed), skipping`);
     continue;
   }
   sizes[triplet] = parseInt(v, 10);
-  console.log(`  ${triplet.padEnd(30)} ${fmtBytes(sizes[triplet]).padStart(10)}`);
+  console.log(
+    `  ${triplet.padEnd(30)} ${fmtBytes(sizes[triplet]).padStart(10)}`,
+  );
 }
 
 await Bun.write(
   "binary-sizes.json",
-  JSON.stringify({ build: buildNumber, branch, release: isRelease, sizes }, null, 2),
+  JSON.stringify(
+    { build: buildNumber, branch, release: isRelease, sizes },
+    null,
+    2,
+  ),
 );
 agent(["artifact", "upload", "binary-sizes.json"]);
 
@@ -91,36 +105,53 @@ agent(["artifact", "upload", "binary-sizes.json"]);
 type Baseline = { label: string; href?: string; sizes: Sizes };
 
 const ghToken = (await getSecret("GITHUB_TOKEN")) ?? process.env.GITHUB_TOKEN;
-const ghHeaders: Record<string, string> = ghToken ? { Authorization: `Bearer ${ghToken}` } : {};
+const ghHeaders: Record<string, string> = ghToken
+  ? { Authorization: `Bearer ${ghToken}` }
+  : {};
 
 async function githubJson<T>(path: string): Promise<T> {
-  const res = await fetch(`https://api.github.com/repos/oven-sh/bun/${path}`, { headers: ghHeaders });
+  const res = await fetch(`https://api.github.com/repos/oven-sh/bun/${path}`, {
+    headers: ghHeaders,
+  });
   if (!res.ok) throw new Error(`github ${path}: ${res.status}`);
   return res.json() as Promise<T>;
 }
 
 async function buildNumberForCommit(sha: string): Promise<number | undefined> {
-  const { statuses } = await githubJson<{ statuses: { context: string; target_url: string }[] }>(
-    `commits/${sha}/status`,
-  );
+  const { statuses } = await githubJson<{
+    statuses: { context: string; target_url: string }[];
+  }>(`commits/${sha}/status`);
   const bk = statuses.find(s => s.context.startsWith("buildkite/"));
   const m = bk?.target_url.match(/\/builds\/(\d+)/);
   return m ? parseInt(m[1], 10) : undefined;
 }
 
-async function sizesFromBuild(n: number): Promise<{ sizes: Sizes; release?: boolean } | undefined> {
-  const res = await fetch(`https://buildkite.com/${org}/${pipeline}/builds/${n}.json`);
+async function sizesFromBuild(
+  n: number,
+): Promise<{ sizes: Sizes; release?: boolean } | undefined> {
+  const res = await fetch(
+    `https://buildkite.com/${org}/${pipeline}/builds/${n}.json`,
+  );
   if (!res.ok) return;
   const { id } = (await res.json()) as { id: string };
   const dir = "binary-size-tmp";
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  const ok = agent(["artifact", "download", "binary-sizes.json", dir, "--build", id], { quiet: true });
+  const ok = agent(
+    ["artifact", "download", "binary-sizes.json", dir, "--build", id],
+    { quiet: true },
+  );
   if (ok === undefined) return;
-  return (await Bun.file(`${dir}/binary-sizes.json`).json()) as { sizes: Sizes; release?: boolean };
+  return (await Bun.file(`${dir}/binary-sizes.json`).json()) as {
+    sizes: Sizes;
+    release?: boolean;
+  };
 }
 
-async function baselineFromCommit(sha: string, label: (n: number) => string): Promise<Baseline | undefined> {
+async function baselineFromCommit(
+  sha: string,
+  label: (n: number) => string,
+): Promise<Baseline | undefined> {
   const n = await buildNumberForCommit(sha);
   if (!n || String(n) === String(buildNumber)) return;
   const record = await sizesFromBuild(n);
@@ -129,7 +160,11 @@ async function baselineFromCommit(sha: string, label: (n: number) => string): Pr
   // against release. Windows binaries differ by several MB between the two, so
   // a release build on main would otherwise trip every PR's threshold.
   if ((record.release ?? false) !== isRelease) return;
-  return { label: label(n), href: `https://buildkite.com/${org}/${pipeline}/builds/${n}`, sizes: record.sizes };
+  return {
+    label: label(n),
+    href: `https://buildkite.com/${org}/${pipeline}/builds/${n}`,
+    sizes: record.sizes,
+  };
 }
 
 // Canary: walk recent main commits until one whose build has a matching
@@ -137,7 +172,9 @@ async function baselineFromCommit(sha: string, label: (n: number) => string): Pr
 console.log(`--- Fetching ${buildKind} baseline`);
 let canaryNote = "";
 const canary: Baseline | undefined = await (async () => {
-  const commits = await githubJson<{ sha: string }[]>("commits?sha=main&per_page=15");
+  const commits = await githubJson<{ sha: string }[]>(
+    "commits?sha=main&per_page=15",
+  );
   for (const { sha } of commits) {
     const b = await baselineFromCommit(sha, n => `main #${n}`);
     if (b) return b;
@@ -167,11 +204,15 @@ const rows: Row[] = targets
     canary: delta(sizes[triplet], canary?.sizes[triplet]),
   }));
 
-const overThreshold = rows.filter(r => r.canary && r.canary.bytes > thresholdBytes);
+const overThreshold = rows.filter(
+  r => r.canary && r.canary.bytes > thresholdBytes,
+);
 const failed = !noFail && overThreshold.length > 0;
 
 const link = (b: Baseline | undefined, fallback: string) =>
-  b?.href ? `<a href="${b.href}">${b.label}</a>` : (b?.label ?? `${fallback} (n/a)`);
+  b?.href
+    ? `<a href="${b.href}">${b.label}</a>`
+    : (b?.label ?? `${fallback} (n/a)`);
 
 const deltaCells = (d: Delta | undefined, over: boolean) => {
   if (!d) return `<td align="right">—</td><td align="right">—</td>`;
@@ -230,12 +271,16 @@ Bun.spawnSync(
 );
 
 for (const r of rows) {
-  const c = r.canary ? `  ${buildKind} ${fmtDelta(r.canary.bytes).padStart(10)}` : "";
+  const c = r.canary
+    ? `  ${buildKind} ${fmtDelta(r.canary.bytes).padStart(10)}`
+    : "";
   console.log(`  ${r.triplet.padEnd(30)} ${fmtBytes(r.now).padStart(10)}${c}`);
 }
 
 if (failed) {
-  console.error(`\nerror: ${overThreshold.length} target(s) exceeded ${limit} vs ${buildKind}`);
+  console.error(
+    `\nerror: ${overThreshold.length} target(s) exceeded ${limit} vs ${buildKind}`,
+  );
   process.exit(1);
 }
 
@@ -247,35 +292,56 @@ function fmtBytes(n: number): string {
 function fmtDelta(n: number): string {
   const sign = n >= 0 ? "+" : "-";
   const abs = Math.abs(n);
-  return abs >= 1024 * 1024 ? `${sign}${(abs / 1024 / 1024).toFixed(2)} MB` : `${sign}${(abs / 1024).toFixed(1)} KB`;
+  return abs >= 1024 * 1024
+    ? `${sign}${(abs / 1024 / 1024).toFixed(2)} MB`
+    : `${sign}${(abs / 1024).toFixed(1)} KB`;
 }
 
 // ─── local mode: canary vs latest tagged release ───
 
-type GithubRelease = { tag_name: string; assets: { name: string; browser_download_url: string }[] };
+type GithubRelease = {
+  tag_name: string;
+  assets: { name: string; browser_download_url: string }[];
+};
 
 async function compareGithubReleases() {
-  const auth = process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : undefined;
+  const auth = process.env.GITHUB_TOKEN
+    ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
+    : undefined;
   const gh = (p: string) =>
-    fetch(`https://api.github.com/repos/oven-sh/bun/${p}`, { headers: auth }).then(r => {
+    fetch(`https://api.github.com/repos/oven-sh/bun/${p}`, {
+      headers: auth,
+    }).then(r => {
       if (!r.ok) throw new Error(`github ${p}: ${r.status} ${r.statusText}`);
       return r.json() as Promise<GithubRelease>;
     });
 
-  const [latest, canary] = await Promise.all([gh("releases/latest"), gh("releases/tags/canary")]);
+  const [latest, canary] = await Promise.all([
+    gh("releases/latest"),
+    gh("releases/tags/canary"),
+  ]);
 
   // The release zips we care about are the stripped runtime binaries:
   // bun-<os>-<arch>[-musl][-baseline].zip. Skip -profile (unstripped) and
   // anything that isn't a single-binary zip.
-  const isBinaryZip = (n: string) => /^bun-[a-z0-9-]+\.zip$/.test(n) && !n.includes("-profile");
+  const isBinaryZip = (n: string) =>
+    /^bun-[a-z0-9-]+\.zip$/.test(n) && !n.includes("-profile");
   const assetMap = (r: GithubRelease) =>
-    new Map(r.assets.filter(a => isBinaryZip(a.name)).map(a => [a.name.replace(/\.zip$/, ""), a.browser_download_url]));
+    new Map(
+      r.assets
+        .filter(a => isBinaryZip(a.name))
+        .map(a => [a.name.replace(/\.zip$/, ""), a.browser_download_url]),
+    );
 
   const latestAssets = assetMap(latest);
   const canaryAssets = assetMap(canary);
-  const triplets = [...latestAssets.keys()].filter(t => canaryAssets.has(t)).sort();
+  const triplets = [...latestAssets.keys()]
+    .filter(t => canaryAssets.has(t))
+    .sort();
 
-  process.stderr.write(`Reading ${triplets.length} zips from each of ${latest.tag_name} and canary…\n`);
+  process.stderr.write(
+    `Reading ${triplets.length} zips from each of ${latest.tag_name} and canary…\n`,
+  );
   const [latestSizes, canarySizes] = await Promise.all([
     sizesFromZips(triplets, latestAssets),
     sizesFromZips(triplets, canaryAssets),
@@ -297,10 +363,15 @@ async function compareGithubReleases() {
     );
   }
   console.log("─".repeat(w + 39));
-  console.log(`${"average".padEnd(w)}  ${" ".repeat(24)}  ${fmtDelta(dTotal / triplets.length).padStart(11)}`);
+  console.log(
+    `${"average".padEnd(w)}  ${" ".repeat(24)}  ${fmtDelta(dTotal / triplets.length).padStart(11)}`,
+  );
 }
 
-async function sizesFromZips(triplets: string[], urls: Map<string, string>): Promise<Sizes> {
+async function sizesFromZips(
+  triplets: string[],
+  urls: Map<string, string>,
+): Promise<Sizes> {
   const out: Sizes = {};
   await Promise.all(
     triplets.map(async t => {
@@ -319,13 +390,19 @@ async function zipBinarySize(url: string): Promise<number> {
   if (!head.ok) throw new Error(`HEAD ${url}: ${head.status}`);
   const total = Number(head.headers.get("content-length"));
   const tail = Math.min(65536, total);
-  const res = await fetch(url, { headers: { Range: `bytes=${total - tail}-${total - 1}` } });
+  const res = await fetch(url, {
+    headers: { Range: `bytes=${total - tail}-${total - 1}` },
+  });
   if (!res.ok) throw new Error(`Range ${url}: ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
   let eocd = -1;
-  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--) {
+  for (
+    let i = buf.length - 22;
+    i >= Math.max(0, buf.length - 22 - 65535);
+    i--
+  ) {
     if (dv.getUint32(i, true) === 0x06054b50) {
       eocd = i;
       break;
@@ -334,13 +411,16 @@ async function zipBinarySize(url: string): Promise<number> {
   if (eocd < 0) throw new Error(`no zip EOCD in ${url}`);
 
   let p = dv.getUint32(eocd + 16, true) - (total - tail);
-  if (p < 0) throw new Error(`zip central directory not within tail for ${url}`);
+  if (p < 0)
+    throw new Error(`zip central directory not within tail for ${url}`);
 
   let size = 0;
   while (p + 46 <= eocd && dv.getUint32(p, true) === 0x02014b50) {
     const uncompressed = dv.getUint32(p + 24, true);
     const nameLen = dv.getUint16(p + 28, true);
-    const name = new TextDecoder().decode(buf.subarray(p + 46, p + 46 + nameLen));
+    const name = new TextDecoder().decode(
+      buf.subarray(p + 46, p + 46 + nameLen),
+    );
     // The binary is the only non-directory entry; take the largest in case the
     // zip ever grows extra metadata files.
     if (!name.endsWith("/") && uncompressed > size) size = uncompressed;

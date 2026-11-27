@@ -181,7 +181,7 @@ pub struct MachoSigner {
         return super_blob_header_size + blob_index_size + code_dir_length;
     }
 
-    pub fn sign(*_, writer: *std.Io.Writer): void! {
+    pub fn sign(*_, writer: *std.Io.Writer): usize! {
         const PAGE_SIZE: usize = SIGNATURE_PAGE_SIZE;
         const HASH_SIZE: usize = SIGNATURE_HASH_SIZE;
 
@@ -255,15 +255,14 @@ pub struct MachoSigner {
         }
 
         if (remaining.len > 0) {
-            let last_page: [4096]u8 = [0; 4096];
-            @memcpy(last_page[0..remaining.len], remaining);
             let digest: bun.sha.SHA256.Digest = undefined;
-            bun.sha.SHA256.hash(&last_page, &digest, null);
+            bun.sha.SHA256.hash(remaining, &digest, null);
             sig_writer.writeAll(&digest)?;
         }
 
         _.data.items.len = (_.linkedit_seg.fileoff + _.linkedit_seg.filesize) as usize;
         writer.writeAll(_.data.items)?;
+        return _.data.items.len;
     }
 }
 
@@ -559,7 +558,7 @@ pub struct MachoFile {
         }
     }
 
-    pub fn buildAndSign(*_, writer: *std.Io.Writer): void! {
+    pub fn buildAndSign(*_, writer: *std.Io.Writer): usize! {
         if (_.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
             let out_data_guard = DeinitGuard<std.array_list.Managed(u8)>{
                 val: std.array_list.Managed(u8).init(_.allocator),
@@ -568,9 +567,10 @@ pub struct MachoFile {
             let signer_guard = DeinitGuard<*MachoSigner!>{
                 val: MachoSigner.init(_.allocator, out_data_guard.val.items)?,
             };
-            signer_guard.val.sign(writer)?;
+            return signer_guard.val.sign(writer)?;
         } else {
             _.build(writer)?;
+            return _.data.items.len;
         }
     }
 }

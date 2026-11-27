@@ -25,9 +25,24 @@ struct cpp {
     }
 }
 
-fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.BunSocketContextOptions, d: [32]u8): bun.JSError!*SecureContext {
+fn extractEcdhCurve(global: *jsc.JSGlobalObject, opts: jsc.JSValue): bun.JSError!(([:0]const u8)?) {
+    if (!opts.isObject()) return null;
+    const ecdh_val = (opts.getTruthy(global, "ecdhCurve")?) ?? return null;
+    if (!ecdh_val.isString()) return global.throwInvalidArgumentTypeValue("ecdhCurve", "string", ecdh_val);
+    const s = ecdh_val.toBunString(global)?;
+    defer s.deref();
+    const utf8 = s.toOwnedSliceZ(bun.default_allocator) catch return global.throwOutOfMemory();
+    if (bun.strings.eqlComptime(utf8, "auto") || utf8.len == 0) {
+        bun.default_allocator.free(utf8);
+        return null;
+    }
+    return utf8;
+}
+
+fn createWithDigestAndCurve(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.BunSocketContextOptions, d: [32]u8, ecdh_curve: ([:0]const u8)?, use_cache: bool): bun.JSError!*SecureContext {
     let e: uws.create_bun_socket_error_t = .none;
-    const ctx_opt = global.bunVM().rareData().sslCtxCache().getOrCreateDigest(ctx_opts, d, &e);
+    const is_cached = use_cache && ecdh_curve == null;
+    const ctx_opt = if (is_cached) global.bunVM().rareData().sslCtxCache().getOrCreateDigest(ctx_opts, d, &e) else ctx_opts.createSSLContext(&e);
     if (ctx_opt == null) {
         if (e == .none) {
             const get_err = BoringSSL.ERR_get_error;
@@ -38,96 +53,109 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         return global.throwValue(e.toJS(global));
     }
     const ctx = ctx_opt.?;
-    return bun.new(SecureContext, {
-        ctx: ctx,
-        digest: d,
-        extra_memory: ctx_opts.approxCertBytes() + ssl_ctx_base_cost,
-    });
+    if (curve := ecdh_curve) {
+        if (BoringSSL.SSL_CTX_set1_groups_list(ctx, curve.ptr) != 1) {
+            BoringSSL.ERR_clear_error();
+            BoringSSL.SSL_CTX_free(ctx);
+            return global.ERR(.CRYPTO_OPERATION_FAILED, "Failed to set ECDH curve", .{}).throw();
+        }
+    }
+    return bun.new(SecureContext, { ctx: ctx, digest: d, extra_memory: ctx_opts.approxCertBytes() + ssl_ctx_base_cost, shared: use_cache });
+}
+
+fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.BunSocketContextOptions, d: [32]u8): bun.JSError!*SecureContext {
+    return createWithDigestAndCurve(global, ctx_opts, d, null, true);
 }
 
 @root struct SecureContext {
-    //! Native backing for `node:tls` `SecureContext`. Owns one BoringSSL
-    //! `SSL_CTX*`; every `tls.connect`/`upgradeTLS`/`addContext` that names this
-    //! object passes that pointer to listen/connect/adopt, where `SSL_new()`
-    //! up-refs it for each socket. Policy (verify mode, reneg limits) is encoded
-    //! on the SSL_CTX itself in `us_ssl_ctx_from_options`, so the SSL_CTX's own
-    //! refcount is the only refcount and a socket safely outlives a GC'd
-    //! SecureContext.
-    //!
-    //! `intern()` memoises by config digest at two levels: a `WeakGCMap` on the
-    //! global (same digest → same `JSSecureContext` while alive) and the per-VM
-    //! native `SSLContextCache` (same digest → same `SSL_CTX*` regardless of which
-    //! consumer asked). The "one config, thousands of connections" pattern
-    //! allocates one of these and one `SSL_CTX` total — `tls.ts` no longer hashes
-    //! in JS.
-
     ctx: *BoringSSL.SSL_CTX,
-    /// `BunSocketContextOptions.digest()` — exactly the fields that reach
-    /// `us_ssl_ctx_from_options`. Stored so an `intern()` WeakGCMap hit (keyed by
-    /// the low 64 bits) can do a full content-equality check before reusing.
     digest: [32]u8,
-    /// Approximate cert/key/CA byte length plus the BoringSSL `SSL_CTX` floor
-    /// (~50 KB), so the GC can account for the off-heap allocation.
     extra_memory: usize,
+    shared: bool = false,
 
     pub static fn constructor(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*SecureContext {
         const args = callframe.arguments();
         const opts = if (args.len > 0) args[0] else .js_undefined;
 
         const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) ?? SSLConfig.zero };
+        const ecdh_curve = extractEcdhCurve(global, opts)?;
+        defer if (c := ecdh_curve) bun.default_allocator.free(c);
 
-        return create(global, &config_guard.config)?;
+        const ctx_opts = config_guard.config.asUSockets();
+        return createWithDigestAndCurve(global, ctx_opts, ctx_opts.digest(), ecdh_curve, false)?;
     }
 
-    /// Mode-neutral: Node lets one `SecureContext` back both `tls.connect()` and
-    /// `tls.createServer({secureContext})`, so we cannot bake client-vs-server
-    /// into the `SSL_CTX`. CTX-level verify mode is whatever `config` asked for
-    /// (i.e. servers don't send CertificateRequest unless `requestCert` was set);
-    /// the per-socket attach overrides client SSLs to `SSL_VERIFY_PEER` so chain
-    /// validation always runs and `verify_error` is populated for the JS-side
-    /// `rejectUnauthorized` decision. The trust store is loaded unconditionally in
-    /// `us_ssl_ctx_from_options` so that override has roots to validate against.
     pub static fn create(global: *jsc.JSGlobalObject, config: *const SSLConfig): bun.JSError!*SecureContext {
         const ctx_opts = config.asUSockets();
         return createWithDigest(global, ctx_opts, ctx_opts.digest());
     }
 
-    /// `tls.createSecureContext(opts)` entry point. WeakGCMap-memoised by config
-    /// digest so identical configs return the same `JSSecureContext` cell while
-    /// it's alive; falls through to `create()` (which itself hits the native
-    /// `SSLContextCache`) on miss. Returning the same cell is what makes
-    /// `secureContext === createSecureContext(opts)` hold and lets `Listener.zig`
-    /// pointer-compare without a JS-side WeakRef map.
     pub static fn intern(global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const args = callframe.arguments();
         const opts = if (args.len > 0) args[0] else .js_undefined;
 
         const config_guard = SSLConfigGuard{ config: (SSLConfig.fromJS(global.bunVM(), global, opts)?) ?? SSLConfig.zero };
+        const ecdh_curve = extractEcdhCurve(global, opts)?;
+        defer if (c := ecdh_curve) bun.default_allocator.free(c);
 
         const ctx_opts = config_guard.config.asUSockets();
-        const d = ctx_opts.digest();
+        let d = ctx_opts.digest();
+        if (curve := ecdh_curve) {
+            let hasher = bun.sha.Hashers.SHA256.init();
+            hasher.update(&d);
+            hasher.update(curve);
+            hasher.final(&d);
+        }
         const key = std.mem.readInt(u64, d[0..8], .little);
 
         const cached = cpp.Bun__SecureContextCache__get(global, key);
         if (cached != .zero) {
             if (existing := fromJS(cached)) {
-                // 64-bit key collision is ~2⁻⁶⁴ but a false hit hands the wrong
-                // cert to a connection. Full-digest compare is 32 bytes; cheap.
-                if (bun.strings.eqlLong(&existing.digest, &d, false)) {
-                    return cached;
-                }
+                if (bun.strings.eqlLong(&existing.digest, &d, false)) return cached;
             }
         }
 
-        const sc = createWithDigest(global, ctx_opts, d)?;
+        const sc = createWithDigestAndCurve(global, ctx_opts, d, ecdh_curve, true)?;
         const value = sc.toJS(global);
         cpp.Bun__SecureContextCache__set(global, key, value);
         return value;
     }
 
-    /// `SSL_CTX_up_ref` and return — for callers that want to outlive this
-    /// wrapper's GC. Most paths just pass `this.ctx` directly and let `SSL_new`
-    /// take its own ref.
+    pub fn addCACert(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        if (_.shared) return global.throw("cannot mutate a shared SecureContext", .{});
+        const args = callframe.arguments();
+        if (args.len == 0 or args[0].isUndefinedOrNull()) return .js_undefined;
+        const arg = args[0];
+
+        let utf8_slice = jsc.ZigString.Slice.empty;
+        defer utf8_slice.deinit();
+        let bytes: []const u8 = "";
+
+        if (arg.isString()) {
+            const s = arg.toBunString(global)?;
+            defer s.deref();
+            utf8_slice = s.toUTF8(bun.default_allocator);
+            bytes = utf8_slice.slice();
+        } else if (ab := arg.asArrayBuffer(global)) {
+            bytes = ab.byteSlice();
+        } else {
+            return global.throwInvalidArgumentTypeValue("cert", "string or Buffer", arg);
+        }
+
+        if (bytes.len == 0) return .js_undefined;
+        const store = BoringSSL.SSL_CTX_get_cert_store(_.ctx) ?? return .js_undefined;
+        const bio = BoringSSL.BIO_new_mem_buf(bytes.ptr, @intCast(bytes.len));
+        if (bio == null) return global.throwOutOfMemory();
+        defer * = BoringSSL.BIO_free(bio);
+
+        while (x := BoringSSL.PEM_read_bio_X509(bio, null, null, null)) {
+            defer BoringSSL.X509_free(x);
+            * = BoringSSL.X509_STORE_add_cert(store, x);
+        }
+        BoringSSL.ERR_clear_error();
+        return .js_undefined;
+    }
+
     pub fn borrow(*_): *BoringSSL.SSL_CTX {
         * = BoringSSL.SSL_CTX_up_ref(_.ctx);
         return _.ctx;
@@ -142,8 +170,6 @@ fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.Bun
         return @sizeOf(SecureContext) + _.extra_memory;
     }
 
-    /// Exposed via `bun:internal-for-testing` so churn tests can assert
-    /// `SSL_CTX_new` was called O(1) times, not O(connections).
     pub static fn jsLiveCount(_: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         return jsc.JSValue.jsNumber(uws.SocketContext.BunSocketContextOptions.liveCount());
     }

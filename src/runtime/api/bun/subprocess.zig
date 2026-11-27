@@ -668,10 +668,14 @@ pub fn onProcessExit(client: *Subprocess, process: *Process, status: bun.spawn.S
         }
         _ = client.setEventLoopTimerRefd(false);
         _ = jsc_vm.onSubprocessExit(process);
-        if ((Environment.isWindows and client.flags.owns_terminal)) {
+        if (client.flags.owns_terminal) {
             if (client.terminal) |terminal| {
                 _ = &terminal;
-                _ = terminal.closePseudoconsole();
+                if (Environment.isWindows) {
+                    _ = terminal.closePseudoconsole();
+                } else {
+                    _ = terminal.drainAndCloseSlaveFd();
+                }
             }
         }
         var stdin: ?*jsc.WebCore.FileSink = (if (((client.stdin == .pipe) and client.flags.is_stdin_a_readable_stream)) client.stdin.pipe else client.weak_file_sink_stdin_ptr);

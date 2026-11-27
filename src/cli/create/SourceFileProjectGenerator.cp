@@ -27,7 +27,7 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
         Output.flush();
         const writer = Output.errorWriterBuffered();
         writer.writeAll(
-            "\nPlease add an export to your file. For example:\n\n   export default function MyApp() {{\n     return <div>Hello World</div>;\n   }};\n\n",
+            "\nPlease add an export to your file. For example:\n\n   export default function MyApp() {\n     return <div>Hello World</div>;\n   }\n",
         )?;
 
         Output.flush();
@@ -89,18 +89,44 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
         template = .ReactTailwindSpa;
     }
 
+    let force = false;
+    for (arg of bun.argv) {
+        if (strings.eqlComptime(arg, "--force")) {
+            force = true;
+            break;
+        }
+    }
+
     // Generate project files from template
-    generateFiles(default_allocator, entry_point, result.dependencies.keys(), dev_dependencies, template, react_component_export)?;
+    generateFiles(default_allocator, entry_point, result.dependencies.keys(), dev_dependencies, template, react_component_export, force)?;
 
     Global.exit(0);
 }
 
+const known_bun_stylesheets: [5][]const u8 = [
+    @embedFile("projects/react-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
+    @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
+    @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
+    @embedFile("projects/react-shadcn-spa/styles/index.css"),
+    @embedFile("projects/react-shadcn-spa/styles/globals.css"),
+];
+
+fn isKnownBunStylesheet(contents: []const u8): bool {
+    for (known of known_bun_stylesheets) {
+        if (strings.eqlLong(contents, known, true)) return true;
+    }
+    return false;
+}
+
 // Create a file with given contents, returns if file was newly created
-fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool) {
+fn createFile(filename: []const u8, contents: []const u8, allow_overwrite: bool, is_css: bool) bun.sys.Maybe(bool) {
     // Check if file exists && has same contents
     if (source_contents := bun.sys.File.readFrom(bun.FD.cwd(), filename, default_allocator).asValue()) {
         const _sc_guard = FreeGuard<u8>{ allocator: default_allocator, slice: source_contents };
         if (strings.eqlLong(source_contents, contents, true)) {
+            return .{ .result = false };
+        }
+        if (!allow_overwrite && !(is_css && isKnownBunStylesheet(source_contents))) {
             return .{ .result = false };
         }
     }
@@ -224,7 +250,7 @@ fn runInstall(argv: [][]const u8) !void {
 }
 
 // Generate all project files from template
-pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependencies: []const []const u8, dev_dependencies: []const []const u8, template: Template, react_component_export: []const u8) !void {
+pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependencies: []const []const u8, dev_dependencies: []const []const u8, template: Template, react_component_export: []const u8, force: bool) !void {
     let log = template.logger();
     let basename = std.fs.path.basename(entry_point);
     const extension = std.fs.path.extension(basename);
@@ -253,20 +279,26 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
             let max_filename_len: usize = 0;
             let filenames: [count]string = undefined;
             let created_files: [count]bool = undefined;
+            let skipped_files: [count]bool = undefined;
             @memset(created_files[0..], false);
+            @memset(skipped_files[0..], false);
 
             // Create all template files
             let index: usize = 0;
             while (index < files.len) : (index += 1) {
                 const file = &files[index];
                 const file_name = stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator)?;
-                if (file.overwrite || !bun.sys.exists(file_name)) {
-                    switch (createFile(file_name, stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator)?)) {
+                filenames[index] = file_name;
+                const exists = bun.sys.exists(file_name);
+                const is_css = file.reason == .css;
+                if (force || file.overwrite || is_css || !exists) {
+                    switch (createFile(file_name, stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator)?, force || file.overwrite, is_css)) {
                         .result => |is_new| {
                             if (is_new) {
                                 created_files[index] = true;
-                                filenames[index] = file_name;
                                 max_filename_len = @max(max_filename_len, file_name.len);
+                            } else if (exists) {
+                                skipped_files[index] = true;
                             }
                         },
                         .err => |err| {
@@ -274,6 +306,8 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
                             Global.crash();
                         },
                     }
+                } else if (exists) {
+                    skipped_files[index] = true;
                 }
             }
 
@@ -281,9 +315,20 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
             while (f_idx < files.len) : (f_idx += 1) {
                 const file = &files[f_idx];
                 const filename = filenames[f_idx];
-                const created = created_files[f_idx];
-                if (created) {
+                if (created_files[f_idx]) {
                     log.file(file, filename, max_filename_len);
+                } else if (skipped_files[f_idx]) {
+                    let replaced_later = false;
+                    let later_idx = f_idx + 1;
+                    while (later_idx < files.len) : (later_idx += 1) {
+                        if (created_files[later_idx] && strings.eqlLong(filenames[later_idx], filename, true)) {
+                            replaced_later = true;
+                            break;
+                        }
+                    }
+                    if (!replaced_later) {
+                        Output.prettyln(" ○ <r><yellow>{s}<r> (already exists, skipping)", .{filename});
+                    }
                 }
             }
         },
@@ -302,6 +347,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
         argv.append("bun")?;
         argv.append("--only-missing")?;
         argv.append("install")?;
+        argv.append("--")?;
         argv.appendSlice(dependencies)?;
         runInstall(argv.items)?;
     }
@@ -313,6 +359,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
         argv.append("--only-missing")?;
         argv.append("add")?;
         argv.append("-d")?;
+        argv.append("--")?;
         argv.appendSlice(dev_dependencies)?;
         runInstall(argv.items)?;
     }
@@ -690,6 +737,7 @@ struct ReactTailwindSpa {
             name: "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css",
             content: @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
             reason: .css,
+            overwrite: false,
         },
         TemplateFile{
             name: "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html",
@@ -764,11 +812,13 @@ struct ReactShadcnSpa {
             name: "lib/utils.ts",
             content: @embedFile("projects/react-shadcn-spa/lib/utils.ts"),
             reason: .shadcn,
+            overwrite: false,
         },
         TemplateFile{
             name: "index.css",
             content: @embedFile("projects/react-shadcn-spa/styles/index.css"),
             reason: .shadcn,
+            overwrite: false,
         },
         TemplateFile{
             name: "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts",
@@ -784,6 +834,7 @@ struct ReactShadcnSpa {
             name: "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css",
             content: @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
             reason: .css,
+            overwrite: false,
         },
         TemplateFile{
             name: "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html",
@@ -794,6 +845,7 @@ struct ReactShadcnSpa {
             name: "styles/globals.css",
             content: @embedFile("projects/react-shadcn-spa/styles/globals.css"),
             reason: .shadcn,
+            overwrite: false,
         },
         TemplateFile{
             name: "bunfig.toml",

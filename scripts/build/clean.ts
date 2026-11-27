@@ -15,7 +15,10 @@ import { allDeps } from "./deps/index.ts";
 const cwd = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Machine-shared cache (ccache/zig/tarballs/webkit). Matches resolveConfig()'s
 // non-CI default. `clean` is a dev-machine tool so we don't branch on CI here.
-const sharedCacheDir = resolve(process.env.BUN_INSTALL || resolve(homedir(), ".bun"), "build-cache");
+const sharedCacheDir = resolve(
+  process.env.BUN_INSTALL || resolve(homedir(), ".bun"),
+  "build-cache",
+);
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -70,7 +73,9 @@ const presets: Record<string, () => string[]> = {
     ...buildProfiles().flatMap(p => [
       resolve(p, "cache", "zig"),
       // Single-object (cg=1) and shard (cg>1) outputs both match.
-      ...(existsSync(p) ? readdirSync(p) : []).filter(f => /^bun-zig(\.\d+)?\.o$/.test(f)).map(f => resolve(p, f)),
+      ...(existsSync(p) ? readdirSync(p) : [])
+        .filter(f => /^bun-zig(\.\d+)?\.o$/.test(f))
+        .map(f => resolve(p, f)),
     ]),
     resolve(sharedCacheDir, "zig"),
     resolve(cwd, "build", "debug", "zig-check-cache"),
@@ -78,7 +83,8 @@ const presets: Record<string, () => string[]> = {
     resolve(cwd, "zig-out"),
   ],
 
-  cpp: () => buildProfiles().flatMap(p => [resolve(p, "obj"), resolve(p, "pch")]),
+  cpp: () =>
+    buildProfiles().flatMap(p => [resolve(p, "obj"), resolve(p, "pch")]),
 
   cache: () => [sharedCacheDir],
 
@@ -87,12 +93,16 @@ const presets: Record<string, () => string[]> = {
     resolve(cwd, "vendor", "zig"),
     resolve(cwd, ".zig-cache"),
     resolve(cwd, "zig-out"),
-    ...allDeps.filter(d => !userManagedDeps.has(d.name)).map(d => resolve(cwd, "vendor", d.name)),
+    ...allDeps
+      .filter(d => !userManagedDeps.has(d.name))
+      .map(d => resolve(cwd, "vendor", d.name)),
   ],
 };
 
 if (!(preset in presets)) {
-  console.error(`[clean] unknown preset '${preset}'. available: ${Object.keys(presets).join(", ")}`);
+  console.error(
+    `[clean] unknown preset '${preset}'. available: ${Object.keys(presets).join(", ")}`,
+  );
   process.exit(1);
 }
 

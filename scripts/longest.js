@@ -16,7 +16,11 @@ function findDeclarations(filePath) {
     const line = lines[lineNum];
 
     // Skip empty lines and comments
-    if (!line || line.trim().startsWith("//") || line.trim().startsWith("///")) {
+    if (
+      !line ||
+      line.trim().startsWith("//") ||
+      line.trim().startsWith("///")
+    ) {
       continue;
     }
 
@@ -97,7 +101,9 @@ function main() {
       return;
     }
 
-    console.log(`Found ${declarations.length} top-level declarations in ${filePath}:\n`);
+    console.log(
+      `Found ${declarations.length} top-level declarations in ${filePath}:\n`,
+    );
 
     // Sort by declaration size (smallest first)
     declarations.sort((a, b) => a.size - b.size);
@@ -106,7 +112,9 @@ function main() {
     const maxNameLength = Math.max(...declarations.map(d => d.match.length));
     const maxTypeLength = Math.max(...declarations.map(d => d.type.length));
 
-    console.log(`${"Name".padEnd(maxNameLength + 2)} ${"Type".padEnd(maxTypeLength + 2)} ${"Num Lines".padEnd(6)}`);
+    console.log(
+      `${"Name".padEnd(maxNameLength + 2)} ${"Type".padEnd(maxTypeLength + 2)} ${"Num Lines".padEnd(6)}`,
+    );
     console.log("-".repeat(maxNameLength + maxTypeLength + 15));
 
     declarations.forEach(decl => {

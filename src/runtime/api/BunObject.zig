@@ -1783,7 +1783,7 @@ pub fn indexOfLine(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
                 _ = &i;
                 const byte = bytes[@as(usize, @intCast(i))];
                 if ((byte > 127)) {
-                    current_offset = (current_offset + @max(strings.wtf8ByteSequenceLength(byte), 1));
+                    current_offset = ((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(usize, @intFromEnum(i)) else cp_cast_int(usize, i)) + @max(strings.wtf8ByteSequenceLength(byte), 1));
                     continue;
                 }
                 if ((byte == 10)) {

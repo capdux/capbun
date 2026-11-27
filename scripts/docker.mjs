@@ -53,7 +53,10 @@ export const docker = {
       args.push(`--platform=${platform}`);
     }
 
-    const { error, stdout } = await spawnSafe($`${docker} ${args}`, { env, ...options });
+    const { error, stdout } = await spawnSafe($`${docker} ${args}`, {
+      env,
+      ...options,
+    });
     if (error) {
       return;
     }
@@ -87,7 +90,8 @@ export const docker = {
   async pullImage(url, platform) {
     const done = await this.spawn($`pull ${url}`, {
       platform,
-      throwOnError: error => !/No such image|manifest unknown/i.test(inspect(error)),
+      throwOnError: error =>
+        !/No such image|manifest unknown/i.test(inspect(error)),
     });
     return !!done;
   },
@@ -113,7 +117,10 @@ export const docker = {
 
     const { os, arch } = platform || {};
     return images
-      ?.filter(({ Os, Architecture }) => !os || !arch || (Os === os && Architecture === arch))
+      ?.filter(
+        ({ Os, Architecture }) =>
+          !os || !arch || (Os === os && Architecture === arch),
+      )
       ?.find((a, b) => (a.Created < b.Created ? 1 : -1));
   },
 
@@ -147,7 +154,9 @@ export const docker = {
    * @returns {Promise<DockerContainer | undefined>}
    */
   async inspectContainer(containerId) {
-    const containers = await this.spawn($`container inspect ${containerId}`, { json: true });
+    const containers = await this.spawn($`container inspect ${containerId}`, {
+      json: true,
+    });
     return containers?.find(a => a.Id === containerId);
   },
 
@@ -179,7 +188,9 @@ export const docker = {
     const { detach, command = [], ...containerOptions } = options;
     const args = Object.entries(containerOptions)
       .filter(([_, value]) => typeof value !== "undefined")
-      .map(([key, value]) => (typeof value === "boolean" ? `--${key}` : `--${key}=${value}`));
+      .map(([key, value]) =>
+        typeof value === "boolean" ? `--${key}` : `--${key}=${value}`,
+      );
     if (detach) {
       args.push("--detach");
     } else {
@@ -187,7 +198,9 @@ export const docker = {
     }
 
     const stdio = detach ? "pipe" : "inherit";
-    const result = await this.spawn($`run ${args} ${url} ${command}`, { stdio });
+    const result = await this.spawn($`run ${args} ${url} ${command}`, {
+      stdio,
+    });
     if (!detach) {
       return;
     }
@@ -248,9 +261,12 @@ export const docker = {
     };
 
     const attach = async () => {
-      const { exitCode, error } = await spawn(["docker", "exec", "-it", containerId, "sh"], {
-        stdio: "inherit",
-      });
+      const { exitCode, error } = await spawn(
+        ["docker", "exec", "-it", containerId, "sh"],
+        {
+          stdio: "inherit",
+        },
+      );
 
       if (exitCode === 0 || exitCode === 130) {
         return;
@@ -285,7 +301,11 @@ export const docker = {
    * @returns {Promise<Machine>}
    */
   async createMachine(options) {
-    const { Id: imageId, Os, Architecture } = await docker.getBaseImage(options);
+    const {
+      Id: imageId,
+      Os,
+      Architecture,
+    } = await docker.getBaseImage(options);
 
     const container = await docker.runContainer(imageId, {
       platform: `${Os}/${Architecture}`,

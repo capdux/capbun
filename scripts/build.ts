@@ -32,7 +32,11 @@ import {
   startGroup,
   uploadArtifacts,
 } from "./build/ci.ts";
-import { formatConfig, formatConfigUnchanged, type PartialConfig } from "./build/config.ts";
+import {
+  formatConfig,
+  formatConfigUnchanged,
+  type PartialConfig,
+} from "./build/config.ts";
 import { configure, type ConfigureResult } from "./build/configure.ts";
 import { BuildError } from "./build/error.ts";
 import { getProfile } from "./build/profiles.ts";
@@ -63,7 +67,15 @@ async function main(): Promise<void> {
     const vsShell = join(import.meta.dirname, "vs-shell.ps1");
     const result = spawnSync(
       "pwsh",
-      ["-NoProfile", "-NoLogo", "-File", vsShell, process.argv0, import.meta.filename, ...process.argv.slice(2)],
+      [
+        "-NoProfile",
+        "-NoLogo",
+        "-File",
+        vsShell,
+        process.argv0,
+        import.meta.filename,
+        ...process.argv.slice(2),
+      ],
       { stdio: "inherit" },
     );
     if (result.error) {
@@ -91,32 +103,51 @@ async function main(): Promise<void> {
     ? loadConfigFile(args.configFile)
     : { ...getProfile(args.profile), ...args.overrides };
 
-  const ninjaArgv = (cfg: { buildDir: string }) => ["-C", cfg.buildDir, ...args.ninjaArgs, ...args.ninjaTargets];
-  const ninjaEnv = (env: Record<string, string>) => ({ ...process.env, ...env });
+  const ninjaArgv = (cfg: { buildDir: string }) => [
+    "-C",
+    cfg.buildDir,
+    ...args.ninjaArgs,
+    ...args.ninjaTargets,
+  ];
+  const ninjaEnv = (env: Record<string, string>) => ({
+    ...process.env,
+    ...env,
+  });
 
   if (isCI) {
     // CI: machine/env dump + collapsible groups + annotation-on-failure.
     printEnvironment();
-    const result = (await startGroup("Configure", () => configure(partial))) as ConfigureResult;
+    const result = (await startGroup("Configure", () =>
+      configure(partial),
+    )) as ConfigureResult;
     if (args.configureOnly) return;
 
     // link-only: download cpp-only + zig-only artifacts before ninja.
     if (result.cfg.buildkite && result.cfg.mode === "link-only") {
-      await startGroup("Download artifacts", () => downloadArtifacts(result.cfg));
+      await startGroup("Download artifacts", () =>
+        downloadArtifacts(result.cfg),
+      );
     }
 
     await startGroup("Build", () =>
-      spawnWithAnnotations("ninja", ninjaArgv(result.cfg), { label: "ninja", env: ninjaEnv(result.env) }),
+      spawnWithAnnotations("ninja", ninjaArgv(result.cfg), {
+        label: "ninja",
+        env: ninjaEnv(result.env),
+      }),
     );
 
     // cpp-only/zig-only: upload build outputs for downstream link-only.
     // link-only: package + upload zips for downstream test steps.
     if (result.cfg.buildkite) {
       if (result.cfg.mode === "cpp-only" || result.cfg.mode === "zig-only") {
-        await startGroup("Upload artifacts", () => uploadArtifacts(result.cfg, result.output));
+        await startGroup("Upload artifacts", () =>
+          uploadArtifacts(result.cfg, result.output),
+        );
       }
       if (result.cfg.mode === "link-only") {
-        await startGroup("Package and upload", () => packageAndUpload(result.cfg, result.output));
+        await startGroup("Package and upload", () =>
+          packageAndUpload(result.cfg, result.output),
+        );
       }
     }
   } else {
@@ -146,7 +177,9 @@ async function main(): Promise<void> {
           `${o.deps.length} deps, ${o.codegen?.all.length ?? 0} codegen, ${o.objects.length} objects in ${result.elapsed}ms\n\n`,
         );
       } else {
-        process.stderr.write(formatConfigUnchanged(result.exe, result.elapsed) + "\n");
+        process.stderr.write(
+          formatConfigUnchanged(result.exe, result.elapsed) + "\n",
+        );
       }
     }
 
@@ -182,7 +215,9 @@ async function main(): Promise<void> {
       env: ninjaEnv(result.env),
     });
     if (ninja.error) {
-      process.stderr.write(`Failed to exec ninja: ${ninja.error.message}\nIs ninja in your PATH?\n`);
+      process.stderr.write(
+        `Failed to exec ninja: ${ninja.error.message}\nIs ninja in your PATH?\n`,
+      );
       process.exit(127);
     }
     if (ninja.status !== 0) {
@@ -198,7 +233,10 @@ async function main(): Promise<void> {
       // (local WebKit no-op shows `[1/555] build WebKit` then silence),
       // it's not obvious ninja finished vs. stalled. This disambiguates.
       // Targets named when explicit so it's clear what was actually built.
-      const what = args.ninjaTargets.length > 0 ? ` ${args.ninjaTargets.map(t => nameColor(t)).join(", ")}` : "";
+      const what =
+        args.ninjaTargets.length > 0
+          ? ` ${args.ninjaTargets.map(t => nameColor(t)).join(", ")}`
+          : "";
       status(`[build]${what} done`);
       process.exit(0);
     }
@@ -238,7 +276,10 @@ async function main(): Promise<void> {
  */
 async function maybeBypassProxyForCratesIo(): Promise<void> {
   const proxySet =
-    process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
+    process.env.HTTPS_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.https_proxy ||
+    process.env.http_proxy;
   if (!proxySet) return;
 
   // Both case variants are honoured by different tools; merge them so we
@@ -265,7 +306,8 @@ async function maybeBypassProxyForCratesIo(): Promise<void> {
   });
   if (!directReachable) return;
 
-  for (const h of ["crates.io", "static.crates.io", "index.crates.io"]) bypass.add(h);
+  for (const h of ["crates.io", "static.crates.io", "index.crates.io"])
+    bypass.add(h);
   const merged = [...bypass].join(",");
   process.env.NO_PROXY = merged;
   process.env.no_proxy = merged;
@@ -426,7 +468,11 @@ function parseArgs(argv: string[]): CliArgs {
     const rawKey = eq[1]!;
     const key = rawKey.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
     const isOurs =
-      key === "profile" || key === "target" || key === "configFile" || boolFields.has(key) || stringFields.has(key);
+      key === "profile" ||
+      key === "target" ||
+      key === "configFile" ||
+      boolFields.has(key) ||
+      stringFields.has(key);
 
     let value = eq[2];
     if (value === undefined) {
@@ -465,14 +511,25 @@ function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  return { profile, overrides, ninjaTargets, ninjaArgs, execArgs, configureOnly, quiet, configFile };
+  return {
+    profile,
+    overrides,
+    ninjaTargets,
+    ninjaArgs,
+    execArgs,
+    configureOnly,
+    quiet,
+    configFile,
+  };
 }
 
 function parseBool(v: string): boolean {
   const lower = v.toLowerCase();
   if (["on", "true", "yes", "1"].includes(lower)) return true;
   if (["off", "false", "no", "0"].includes(lower)) return false;
-  throw new BuildError(`Invalid boolean value: ${v}`, { hint: "Use on/off, true/false, yes/no, or 1/0" });
+  throw new BuildError(`Invalid boolean value: ${v}`, {
+    hint: "Use on/off, true/false, yes/no, or 1/0",
+  });
 }
 
 const USAGE = `\

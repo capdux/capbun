@@ -827,13 +827,28 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue) bun.JSError!JSVa
         defer if (!___guard_listener_moved) { ___guard_listener_moved = true; const __T = @TypeOf(_guard_listener); if (@typeInfo(__T) == .optional) { if (_guard_listener) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_listener.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_listener; _drop_val.__cp_deinit(); } };
         if (ssl) |ssl_cfg| {
             _ = &ssl_cfg;
-            var create_err: uws.create_bun_socket_error_t = .none;
-            _ = &create_err;
-            const created_ctx = ssl_cfg.asUSockets().createSSLContext((&create_err));
-            if ((created_ctx == null)) {
-                return globalObject.throwValue(create_err.toJS(globalObject));
+            var reused_ctx: ?*BoringSSL.SSL_CTX = null;
+            _ = &reused_ctx;
+            if (try opts.getTruthy(globalObject, "tls")) |tls_js| {
+                _ = &tls_js;
+                if (tls_js.isObject()) {
+                    if (try tls_js.getTruthy(globalObject, "secureContext")) |sc_js| {
+                        _ = &sc_js;
+                        if (SecureContext.fromJS(sc_js)) |sc| {
+                            _ = &sc;
+                            reused_ctx = sc.borrow();
+                        }
+                    }
+                }
             }
-            this_ptr.secure_ctx = created_ctx;
+            if ((reused_ctx != null)) {
+                this_ptr.secure_ctx = (reused_ctx.?);
+            } else {
+                var create_err: uws.create_bun_socket_error_t = .none;
+                _ = &create_err;
+                const created_ctx = ((ssl_cfg.asUSockets().createSSLContext((&create_err))) orelse { return globalObject.throwValue(create_err.toJS(globalObject)); });
+                this_ptr.secure_ctx = created_ctx;
+            }
         }
         const kind: uws.SocketKind = (if (ssl_enabled) .bun_listener_tls else .bun_listener_tcp);
         const hostname = bun.handleOom(hostname_or_unix.intoOwnedSlice(bun.default_allocator));

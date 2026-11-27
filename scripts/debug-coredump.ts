@@ -9,7 +9,12 @@ import { parseArgs } from "node:util";
 // -c <URL to the bun-cores.tar.gz.age artifact for the appropriate platform>
 // -d <debugger> (default: lldb)
 const {
-  values: { pid: stringPid, ["build-url"]: buildUrl, ["cores-url"]: coresUrl, debugger: debuggerPath },
+  values: {
+    pid: stringPid,
+    ["build-url"]: buildUrl,
+    ["cores-url"]: coresUrl,
+    debugger: debuggerPath,
+  },
 } = parseArgs({
   options: {
     pid: { type: "string", short: "p" },
@@ -30,7 +35,10 @@ const id = Bun.hash(buildUrl + coresUrl).toString(36);
 const dir = join(tmpdir(), `debug-coredump-${id}.tmp`);
 fs.mkdirSync(dir, { recursive: true });
 
-if (!fs.existsSync(join(dir, "bun-profile")) || !fs.existsSync(join(dir, `bun-${pid}.core`))) {
+if (
+  !fs.existsSync(join(dir, "bun-profile")) ||
+  !fs.existsSync(join(dir, `bun-${pid}.core`))
+) {
   console.log("downloading bun-profile.zip");
   const zip = await (await fetch(buildUrl)).arrayBuffer();
   await Bun.write(join(dir, "bun-profile.zip"), zip);
@@ -51,7 +59,10 @@ if (!fs.existsSync(join(dir, "bun-profile")) || !fs.existsSync(join(dir, `bun-${
   console.log(`already downloaded in ${dir}`);
 }
 
-const desiredCore = join(dir, (await new Bun.Glob(`*${pid}.core`).scan(dir).next()).value);
+const desiredCore = join(
+  dir,
+  (await new Bun.Glob(`*${pid}.core`).scan(dir).next()).value,
+);
 
 const args = [debuggerPath, "--core", desiredCore, join(dir, "bun-profile")];
 

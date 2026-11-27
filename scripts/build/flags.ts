@@ -1216,7 +1216,10 @@ export function computeFlags(cfg: Config): ComputedFlags {
  * Flags forwarded to vendored dependencies via -DCMAKE_C_FLAGS/-DCMAKE_CXX_FLAGS.
  * This is ONLY the global table — no -Werror, no bun-specific defines, no UBSan.
  */
-export function computeDepFlags(cfg: Config): { cflags: string[]; cxxflags: string[] } {
+export function computeDepFlags(cfg: Config): {
+  cflags: string[];
+  cxxflags: string[];
+} {
   const cflags: string[] = [];
   const cxxflags: string[] = [];
   evalTable(globalFlags, cfg, cflags, cxxflags);

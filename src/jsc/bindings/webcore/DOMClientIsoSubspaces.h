@@ -67,6 +67,7 @@ public:
     std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForNapiHandleScopeImpl;
     std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForNapiTypeTag;
     std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForNativePromiseContext;
+    std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForStrongRootBlock;
     std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForObjectTemplate;
     std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForInternalFieldObject;
     std::unique_ptr<GCClient::IsoSubspace> m_clientSubspaceForJSMIMEType;

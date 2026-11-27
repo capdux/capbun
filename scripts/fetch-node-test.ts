@@ -41,10 +41,13 @@ async function fetchNodeTest(testName: string) {
             // Write the file
             writeFileSync(localPath, content);
             console.log(
-              `✅ Successfully fetched and saved: ${localPath} (${new Intl.NumberFormat("en-US", {
-                notation: "compact",
-                unit: "kilobyte",
-              }).format(Buffer.byteLength(content, "utf-8"))})`,
+              `✅ Successfully fetched and saved: ${localPath} (${new Intl.NumberFormat(
+                "en-US",
+                {
+                  notation: "compact",
+                  unit: "kilobyte",
+                },
+              ).format(Buffer.byteLength(content, "utf-8"))})`,
             );
             return localPath;
           }
@@ -70,10 +73,13 @@ async function fetchNodeTest(testName: string) {
           // Write the file
           writeFileSync(localPath, content);
           console.log(
-            `✅ Successfully fetched and saved: ${localPath} (${new Intl.NumberFormat("en-US", {
-              notation: "compact",
-              unit: "kilobyte",
-            }).format(Buffer.byteLength(content, "utf-8"))})`,
+            `✅ Successfully fetched and saved: ${localPath} (${new Intl.NumberFormat(
+              "en-US",
+              {
+                notation: "compact",
+                unit: "kilobyte",
+              },
+            ).format(Buffer.byteLength(content, "utf-8"))})`,
           );
           return localPath;
         }

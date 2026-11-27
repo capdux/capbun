@@ -664,6 +664,15 @@ void us_internal_dispatch_ready_poll(struct us_poll_t *p, int error, int eof, in
                     s = us_internal_socket_close_raw(s, LIBUS_SOCKET_CLOSE_CODE_CLEAN_SHUTDOWN, NULL);
                     return;
                 }
+                if (s->flags.is_paused) {
+                    /* Socket is paused (e.g. pauseOnConnect): defer on_end until
+                     * resume() drains any unread kernel data, and stop polling so
+                     * level-triggered EPOLLHUP does not spin the loop while paused. */
+                    s->poll_stopped_on_pause = 1;
+                    us_poll_stop(&s->p, loop);
+                    s->p.state.poll_type = us_internal_poll_type(&s->p);
+                    return;
+                }
                 if(s->flags.allow_half_open) {
                     /* We got a Error but is EOF and we allow half open so stop polling for readable and keep going*/
                     us_poll_change(&s->p, loop, us_poll_events(&s->p) & LIBUS_SOCKET_WRITABLE);

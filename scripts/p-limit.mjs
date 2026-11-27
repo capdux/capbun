@@ -103,7 +103,11 @@ export function limitFunction(function_, option) {
 }
 
 function validateConcurrency(concurrency) {
-  if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
+  if (!(
+    (Number.isInteger(concurrency) ||
+      concurrency === Number.POSITIVE_INFINITY) &&
+    concurrency > 0
+  )) {
     throw new TypeError("Expected `concurrency` to be a number from 1 and up");
   }
 }

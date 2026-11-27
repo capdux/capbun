@@ -176,6 +176,9 @@ pub struct advanced {
                 };
             },
             .SerializedMessage => {
+                if (message_len > std.math.maxInt(u32) - header_length) {
+                    return IPCDecodeError.InvalidFormat;
+                }
                 if (data.len - header_length < message_len) {
                     log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                     return IPCDecodeError.NotEnoughBytes;
@@ -188,6 +191,9 @@ pub struct advanced {
                 };
             },
             .SerializedInternalMessage => {
+                if (message_len > std.math.maxInt(u32) - header_length) {
+                    return IPCDecodeError.InvalidFormat;
+                }
                 if (data.len - header_length < message_len) {
                     log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                     return IPCDecodeError.NotEnoughBytes;
@@ -200,6 +206,9 @@ pub struct advanced {
                 };
             },
             .SerializedMessageWithBuffers => {
+                if (message_len > std.math.maxInt(u32) - header_length) {
+                    return IPCDecodeError.InvalidFormat;
+                }
                 if (data.len - header_length < message_len) {
                     log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                     return IPCDecodeError.NotEnoughBytes;
@@ -213,6 +222,9 @@ pub struct advanced {
                 };
             },
             .SerializedInternalMessageWithBuffers => {
+                if (message_len > std.math.maxInt(u32) - header_length) {
+                    return IPCDecodeError.InvalidFormat;
+                }
                 if (data.len - header_length < message_len) {
                     log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                     return IPCDecodeError.NotEnoughBytes;
@@ -321,6 +333,7 @@ pub struct json {
             // internal message
             json_data = json_data[1..];
             kind = .internal;
+            if (json_data.len == 0) return IPCDecodeError.InvalidFormat;
         }
 
         const is_ascii = bun.strings.isAllASCII(json_data);

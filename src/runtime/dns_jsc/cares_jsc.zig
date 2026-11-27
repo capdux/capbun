@@ -713,33 +713,34 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
         var ___addr_guard_moved = false; _ = &___addr_guard_moved;
         defer if (!___addr_guard_moved) { ___addr_guard_moved = true; const __T = @TypeOf(_addr_guard); if (@typeInfo(__T) == .optional) { if (_addr_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _addr_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _addr_guard; _drop_val.__cp_deinit(); } };
         const addr_str = addr_arg.slice();
-        if ((addr_str.len >= INET6_ADDRSTRLEN)) {
-            return .js_undefined;
-        }
-        if (strings.containsChar(addr_str, 47)) {
+        const c_str = addr_str[0..((strings.indexOfChar(addr_str, 0)) orelse (addr_str.len))];
+        const pct_idx = strings.indexOfChar(c_str, 37);
+        const ip_part = (if (pct_idx) |idx| c_str[0..idx] else c_str);
+        if (((ip_part.len == 0) or (ip_part.len >= INET6_ADDRSTRLEN))) {
             return .js_undefined;
         }
         var ip_binary: [16]u8 = undefined;
         _ = &ip_binary;
-        var ip_addr: [66]u8 = undefined;
-        _ = &ip_addr;
-        _ = bun.copy(u8, (&ip_addr), addr_str);
-        ip_addr[cp_cast_int(usize, addr_str.len)] = 0;
         var af: i32 = c_ares.AF.INET;
         _ = &af;
-        if ((c_ares.ares_inet_pton(af, (&ip_addr), (&ip_binary)) != 1)) {
+        const ip4_opt = (if ((pct_idx == null)) (blk_catch_21: { break :blk_catch_21 ((std.net.Ip4Address.parse(ip_part, 0)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 null; }); }) else null);
+        if (ip4_opt) |ip4| {
+            _ = &ip4;
+            _ = bun.copy(u8, ip_binary[0..4], std.mem.asBytes((&ip4.sa.addr)));
+        } else {
             af = c_ares.AF.INET6;
-            if ((c_ares.ares_inet_pton(af, (&ip_addr), (&ip_binary)) != 1)) {
-                return .js_undefined;
-            }
+            const ip6 = (blk_catch_22: { break :blk_catch_22 ((std.net.Ip6Address.parse(ip_part, 0)) catch |__ce_22| { _ = &__ce_22; return .js_undefined; }); });
+            _ = bun.copy(u8, ip_binary[0..16], ip6.sa.addr[0..]);
         }
+        var out_buf: [66]u8 = undefined;
+        _ = &out_buf;
         if ((c_ares.ares_inet_ntop(af, (blk: {
         break :blk @ptrCast((&ip_binary));
 
-}), (&ip_addr), @sizeOf(@TypeOf(ip_addr))) == null)) {
+}), (&out_buf), @sizeOf(@TypeOf(out_buf))) == null)) {
             return .js_undefined;
         }
-        const slice = bun.sliceTo(ip_addr[0..], 0);
+        const slice = bun.sliceTo(out_buf[0..], 0);
         if (bun.strings.eql(addr_str, slice)) {
             return arguments[0];
         }

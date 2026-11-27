@@ -2866,8 +2866,7 @@ pub fn onNotifyDefer(self: *BundleV2) void {
             _ = self.decrementScanCounter();
     }
 
-pub fn onNotifyDeferMini(self: *BundleV2, _: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) void {
-        _ = self;
+pub fn onNotifyDeferMini(_: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) void {
             _ = bundle.onNotifyDefer();
     }
 

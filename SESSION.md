@@ -1162,3 +1162,28 @@
   - 新确认转绿：`v8-serdes-buffer` (10/10)、`nested-vendor-prefix-duplication`、`ffi-viewSource-non-object` (28/28)、`readablestreamtoarraybuffer` (2/2)、`yaml-block-scalar-matrix` (1084/1084, `yaml/` 全绿)、`glob/path-length` (6/6)、`randomUUIDv7` (20/20)、`reportError` (7/7)、`node-http2-invalid-padding` (7/7)、`readable-stream-blob-consumed` (1/1)、`native-source-onclose-leak` (4/4)、`buffer-resolveObjectURL` + `web-globals` (65/65)、`websocket-{client,handshake-event,close-connecting,custom-headers}`、`node-tls-getpeercert-leak`；消除 `postgres-binary-array-bounds` 对齐 panic（6/7）与 `cp` 800 层栈溢出；
   - 另通过高速扫绿清库在 `test/stats.md` 新固化 70+ 个 `0 fail` 文件（`transpiler/` 7/11、`bun/util/` 21 个、`bun/http/` 22 个、`web/{streams,ws,workers}` 16 个、`node/{child_process,http2}` 10 个）；
   - **Batch 88A / 89B / 90B**（`create_command.cp`、`run_command.cp`、`bunx_command.cp`、`findImportedFilesInCSSOrder.cp`、`url.cp`、`css_parser.cp`、`html_rewriter.cp`、`h2/connection.cp`）已完成修改并通过 `cpc_brief.py`，连同 **Batch 91B** 待下轮统一 `zig:check` + `bun bd` 验收。
+
+### 2026-11-27 11:06 AEDT | 用户提问与实时对账
+- **用户指令**：`还剩多少个测试文件?`
+- **主智能体回应**：实测 `test/` 下共 **2,339** 个 `.test.{ts,tsx,js,jsx}` 文件；按严格路径/目录匹配已在 `test/stats.md` 明确登记全绿的为 **151** 个、明确冻结为 **22** 个（另 `test/stats.md` 中尚有约 200+ 个以目录计数简写登记的全绿文件），严格路径口径下尚未登记全绿/冻结的剩余文件为 **2,166** 个（扣除计数简写后实际待验收/待收敛约 **1,900+** 个，主要分布在 `test/js/bun` 512、`test/regression/issue` 430、`test/js/node` 284、`test/js/web` 171、`test/js/third_party` 119、`test/cli/install` 112、`test/js/sql` 87、`test/napi` 55 等）。同时 **Batch 98A (`c7e53a65`)** 与 **Batch 99A (`5c96040c`)** 正在后台并行修复中。
+
+### 2026-11-27 11:08 AEDT | 用户追问精确数字
+- **用户指令**：`还有多少个测试文件需要测试? 给个数字, 完成了多少,剩下多少?`
+- **主智能体回应**：全仓共 **2,339** 个测试文件；按 `test/stats.md` 中可逐名/目录匹配的全绿文件为 **465** 个（若计入 `stats.md` 中仅写总数未展开文件名的 `regression/issue` 124 个、`sql/` 36 个等简写批次，已完成全绿约 **650–700** 个），明确冻结 **23** 个；因此严格可核对口径下还剩 **1,851** 个（扣除简写批次后实际待测/收敛约 **1,650** 个）。另 `mv.test.ts` 实测 `15 pass / 1 skip / 0 fail`。
+
+### 2026-11-27 11:14 AEDT | 用户指示战略提速：多核并发先扫绿+实名建账+错误聚类集中解决
+- **用户指令**：`2339个测试文件, 从昨天到今天, 还剩 1650个, 是不是搞错了? 基本上没有什么进展, 这么缓慢吗? 测试通过很难吗? 测试不是应该很快吗? test/stats.md 为何不记录详细呢? 让统计变得如此不确定和困难! 调整思路, 把容易测试通过的, 先测试通过, 提高通过总比例, 然后归纳分类汇总错误, 集中解决后, 快速通过测试.`
+- **主智能体回应**：完全认同！此前慢在两点：(1) 串行单核扫测且聚焦于少数硬骨头（GC/TLS/Macro），未对全仓剩余文件做多核并发摸底，导致大量其实已修通的用例未被测出登记；(2) `test/stats.md` 使用总数缩写而非逐路径实名，导致统计口径模糊。立即切换策略：(a) 利用多核 `xargs -P` 对 `tmp/untested_list.txt` 进行并发快扫，把所有已 `0 fail` 用例逐条实名写入 `test/stats.md`（建立精确机读账本）；(b) 对真正失败的用例按错误签名/根因自动聚类汇总，再集中派发子智能体按类批量解决。
+
+### 2026-11-27 11:16 AEDT | 固化提速规则并执行
+- **用户指令**：`将上述提速规则写入 GEMINI.md 固化, 执行`
+- **主智能体回应**：已将 96 核 `xargs -P 16` 多路并发扫绿、100% 实名路径写入 `test/stats.md`、以及失败签名自动聚类集中攻关 3 条规则追加固化至 `GEMINI.md` 第十六节第 7 条，当前 `task-925`（2,155 文件 16 路并发横扫）与 2 路子智能体（`5c96040c` Batch 99A、`20f4574b` Batch 100A）正在全速执行中。
+
+### 2026-11-27 11:28 AEDT | 并发测试状态与最新完成比例汇报
+- **用户指令**：`是否按你说的, 使用了多线程并发测试, 加快速度 目前完成比例是多少?`
+- **主智能体回应**：是的，当前正在使用 `xargs -P 16`（16 路并发，`task-925`，实测有 47 个 `bun-debug` 进程并行运行）。2,155 个待测文件已扫完 **1,214 个（56.3%）**，已新检出 **366 个 `PASS`**；连同此前实名登记的 465 个与冻结 23 个，严格实名口径已达 **854 / 2,339（36.5%）**（含简写批次约 **42%+**），预计剩余 941 个扫完后将进一步大幅提升。同时 **Batch 101A (`f05c9fc1`)** 与 **Batch 101B (`75f43a85`)** 正在并行修复中。
+
+### 2026-11-27 12:47 AEDT | Batch 92–110 里程碑提交
+- 完成 16 路并发全仓扫绿（+804）与 8 路 30s 超时重扫（+153）并实名归档 132 个外部未安装 npm 包冻结项；
+- 完成 Batch 92–110 编译验收，累计新增 `0 fail` 转绿 **25 个**（含 Batch 88–96 5 个、Batch 97–106 16 个、Batch 107–110 4 个：`bun-serve-headers`, `decodeURIComponentSIMD`, `response`, `request` 等）；
+- 精确对账：**实名全绿 1,181 + 冻结 155 = 1,336 / 2,339（57.1%）**，剩余待收敛 **1,003** 个。准备原子提交推送后继续下一波。

@@ -44,7 +44,12 @@ import { streamPath } from "./stream.ts";
  * disk content, so hand-edits to vendor/<dep>/*.c are preserved (identity
  * still matches, no wipe).
  */
-function invalidateStaleSource(srcDir: string, refStamp: string, commit: string, patchPaths: string[]): void {
+function invalidateStaleSource(
+  srcDir: string,
+  refStamp: string,
+  commit: string,
+  patchPaths: string[],
+): void {
   if (!existsSync(srcDir)) return;
 
   const patchContents = patchPaths.map(p => {
@@ -723,7 +728,12 @@ export function resolveDep(
 
   // Resolve conditional patches. Same list for the whole configure run —
   // we don't want patches changing between emitFetch and the hash check.
-  const patches = dep.patches === undefined ? [] : typeof dep.patches === "function" ? dep.patches(cfg) : dep.patches;
+  const patches =
+    dep.patches === undefined
+      ? []
+      : typeof dep.patches === "function"
+        ? dep.patches(cfg)
+        : dep.patches;
 
   // Sources bun compiles directly (from Provides.sources). Resolved to
   // absolute paths for (a) the ResolvedDep return and (b) declaring as
@@ -757,7 +767,10 @@ export function resolveDep(
   //   (CMakeLists.txt) as the stamp. Editing it → reconfigure.
   let sourceStamp: string;
   if (source.kind === "github-archive") {
-    sourceStamp = emitFetch(n, cfg, dep.name, source, patches, [...resolvedSources, ...directSources]);
+    sourceStamp = emitFetch(n, cfg, dep.name, source, patches, [
+      ...resolvedSources,
+      ...directSources,
+    ]);
   } else {
     // Local/in-tree: no .ref to write. Use the build system's manifest file
     // as the stamp — touching it triggers reconfigure/rebuild.
@@ -767,7 +780,9 @@ export function resolveDep(
     let stampDir: string;
     let stampFile: string;
     if (buildSpec.kind === "nested-cmake") {
-      stampDir = buildSpec.sourceSubdir ? resolve(srcDir, buildSpec.sourceSubdir) : srcDir;
+      stampDir = buildSpec.sourceSubdir
+        ? resolve(srcDir, buildSpec.sourceSubdir)
+        : srcDir;
       stampFile = "CMakeLists.txt";
     } else if (buildSpec.kind === "cargo") {
       stampDir = resolve(srcDir, buildSpec.manifestDir);
@@ -779,12 +794,16 @@ export function resolveDep(
     sourceStamp = stampFile ? resolve(stampDir, stampFile) : stampDir;
 
     const modeName = source.kind === "in-tree" ? "in-tree" : "local";
-    assert(existsSync(sourceStamp), `${modeName} dep "${dep.name}" source not found at ${stampDir}`, {
-      hint:
-        source.kind === "in-tree"
-          ? `Expected ${stampFile || "source"} at ${source.path}/ — check deps/${dep.name}.ts`
-          : (source.hint ?? `Clone the dep to vendor/${dep.name}/ manually`),
-    });
+    assert(
+      existsSync(sourceStamp),
+      `${modeName} dep "${dep.name}" source not found at ${stampDir}`,
+      {
+        hint:
+          source.kind === "in-tree"
+            ? `Expected ${stampFile || "source"} at ${source.path}/ — check deps/${dep.name}.ts`
+            : (source.hint ?? `Clone the dep to vendor/${dep.name}/ manually`),
+      },
+    );
   }
 
   // ─── Resolve fetchDeps → extra inputs on configure + build ───
@@ -802,7 +821,10 @@ export function resolveDep(
   //   ninja's .d files. Restat prunes downstream when nothing changed.
   const fetchDepStamps = (dep.fetchDeps ?? []).flatMap(d => {
     const r = resolved.get(d);
-    assert(r, `${dep.name}: fetchDeps references '${d}' but it wasn't resolved first — fix allDeps ordering`);
+    assert(
+      r,
+      `${dep.name}: fetchDeps references '${d}' but it wasn't resolved first — fix allDeps ordering`,
+    );
     return r.outputs;
   });
 
@@ -825,11 +847,18 @@ export function resolveDep(
     libs = result.libs;
     outputs = result.libs;
   } else if (buildSpec.kind === "cargo") {
-    const result = emitCargo(n, cfg, dep.name, buildSpec, { srcDir, sourceStamp });
+    const result = emitCargo(n, cfg, dep.name, buildSpec, {
+      srcDir,
+      sourceStamp,
+    });
     libs = result.libs;
     outputs = result.libs;
   } else if (buildSpec.kind === "direct") {
-    const result = emitDirect(n, cfg, dep.name, buildSpec, { srcDir, sourceStamp, fetchDepStamps });
+    const result = emitDirect(n, cfg, dep.name, buildSpec, {
+      srcDir,
+      sourceStamp,
+      fetchDepStamps,
+    });
     libs = result.libs;
     objects = result.objects;
     // outputs is the "downstream needs me built" signal — for direct deps
@@ -901,9 +930,13 @@ export function computeDepLibs(cfg: Config, dep: Dependency): string[] {
   // preBuild outputs (ICU) are absolute paths already — appended.
   if (buildSpec.kind === "nested-cmake") {
     const buildDir = depBuildDir(cfg, dep.name);
-    const libDir = buildSpec.libSubdir ? resolve(buildDir, buildSpec.libSubdir) : buildDir;
+    const libDir = buildSpec.libSubdir
+      ? resolve(buildDir, buildSpec.libSubdir)
+      : buildDir;
     const libs = provides.libs.map(lib =>
-      lib.includes(".") ? resolve(libDir, lib) : resolve(libDir, `${cfg.libPrefix}${lib}${cfg.libSuffix}`),
+      lib.includes(".")
+        ? resolve(libDir, lib)
+        : resolve(libDir, `${cfg.libPrefix}${lib}${cfg.libSuffix}`),
     );
     if (buildSpec.preBuild !== undefined) {
       libs.push(...buildSpec.preBuild.outputs);
@@ -915,8 +948,16 @@ export function computeDepLibs(cfg: Config, dep: Dependency): string[] {
   if (buildSpec.kind === "cargo") {
     const targetDir = depBuildDir(cfg, dep.name);
     const profile = cfg.release ? "release" : "debug";
-    const outSubdir = buildSpec.rustTarget ? join(buildSpec.rustTarget, profile) : profile;
-    return [resolve(targetDir, outSubdir, `${cfg.libPrefix}${buildSpec.libName}${cfg.libSuffix}`)];
+    const outSubdir = buildSpec.rustTarget
+      ? join(buildSpec.rustTarget, profile)
+      : profile;
+    return [
+      resolve(
+        targetDir,
+        outSubdir,
+        `${cfg.libPrefix}${buildSpec.libName}${cfg.libSuffix}`,
+      ),
+    ];
   }
 
   // direct: single lib<name>.a when archiveDeps; otherwise the dep's .o
@@ -1104,7 +1145,9 @@ function emitNestedCmake(
 
   // cmake source dir (where CMakeLists.txt lives). Usually srcDir, but
   // some projects nest it (zstd: vendor/zstd/build/cmake/).
-  const cmakeSrcDir = spec.sourceSubdir ? resolve(srcDir, spec.sourceSubdir) : srcDir;
+  const cmakeSrcDir = spec.sourceSubdir
+    ? resolve(srcDir, spec.sourceSubdir)
+    : srcDir;
 
   // ─── Assemble cmake configure args ───
   const args: string[] = [];
@@ -1152,7 +1195,11 @@ function emitNestedCmake(
   // Both may be undefined in zig-only cross-compile (no xcode on the linux
   // CI box); that's fine — the cmake rules are emitted but never pulled.
   // If pulled without an SDK, cmake fails with its own clear error.
-  if (cfg.darwin && cfg.osxDeploymentTarget !== undefined && cfg.osxSysroot !== undefined) {
+  if (
+    cfg.darwin &&
+    cfg.osxDeploymentTarget !== undefined &&
+    cfg.osxSysroot !== undefined
+  ) {
     args.push(`-DCMAKE_OSX_DEPLOYMENT_TARGET=${cfg.osxDeploymentTarget}`);
     args.push(`-DCMAKE_OSX_SYSROOT=${cfg.osxSysroot}`);
   }
@@ -1320,11 +1367,21 @@ interface EmitCargoInput {
  * everything. Its own incremental build is reliable, so restat=1 on the
  * rule keeps our downstream no-ops fast.
  */
-function emitCargo(n: Ninja, cfg: Config, name: string, spec: CargoBuild, input: EmitCargoInput): { libs: string[] } {
+function emitCargo(
+  n: Ninja,
+  cfg: Config,
+  name: string,
+  spec: CargoBuild,
+  input: EmitCargoInput,
+): { libs: string[] } {
   const hostWin = cfg.host.os === "windows";
-  assert(cfg.cargo !== undefined, `dep "${name}" requires cargo but no rust toolchain was found`, {
-    hint: "Install rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
-  });
+  assert(
+    cfg.cargo !== undefined,
+    `dep "${name}" requires cargo but no rust toolchain was found`,
+    {
+      hint: "Install rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+    },
+  );
 
   const { srcDir, sourceStamp } = input;
   const manifestDir = resolve(srcDir, spec.manifestDir);
@@ -1337,7 +1394,11 @@ function emitCargo(n: Ninja, cfg: Config, name: string, spec: CargoBuild, input:
   //   <target-dir>/<triple>/<profile>/{lib}<name>.{a,lib}  (with --target)
   // Follows platform convention (cfg.libPrefix/libSuffix).
   const outSubdir = spec.rustTarget ? join(spec.rustTarget, profile) : profile;
-  const lib = resolve(targetDir, outSubdir, `${cfg.libPrefix}${spec.libName}${cfg.libSuffix}`);
+  const lib = resolve(
+    targetDir,
+    outSubdir,
+    `${cfg.libPrefix}${spec.libName}${cfg.libSuffix}`,
+  );
 
   // ─── Build args ───
   const args: string[] = ["--locked", "--target-dir", targetDir];
@@ -1365,7 +1426,9 @@ function emitCargo(n: Ninja, cfg: Config, name: string, spec: CargoBuild, input:
   if (cfg.windows && cfg.msvcLinker !== undefined) {
     // Triple-specific linker env var. Cargo reads CARGO_TARGET_<TRIPLE>_LINKER
     // where <TRIPLE> is uppercased with hyphens→underscores.
-    const triple = spec.rustTarget ?? (cfg.arm64 ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc");
+    const triple =
+      spec.rustTarget ??
+      (cfg.arm64 ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc");
     const envKey = `CARGO_TARGET_${triple.toUpperCase().replace(/-/g, "_")}_LINKER`;
     env[envKey] = cfg.msvcLinker;
   }
@@ -1379,19 +1442,25 @@ function emitCargo(n: Ninja, cfg: Config, name: string, spec: CargoBuild, input:
     const envKey = `CARGO_TARGET_${spec.rustTarget.toUpperCase().replace(/-/g, "_")}_LINKER`;
     env[envKey] = cfg.cc;
     const linkArgs = [`-Clink-arg=--target=${cfg.crossTarget}`];
-    if (cfg.sysroot !== undefined) linkArgs.push(`-Clink-arg=--sysroot=${cfg.sysroot}`);
+    if (cfg.sysroot !== undefined)
+      linkArgs.push(`-Clink-arg=--sysroot=${cfg.sysroot}`);
     if (cfg.androidNdkRuntimeDir !== undefined) {
       const llvmArch = cfg.arm64 ? "aarch64" : "x86_64";
       linkArgs.push(`-Clink-arg=-L${join(cfg.androidNdkRuntimeDir, llvmArch)}`);
     }
-    env.CARGO_ENCODED_RUSTFLAGS = [...(spec.rustflags ?? []), ...linkArgs].join("\x1f");
+    env.CARGO_ENCODED_RUSTFLAGS = [...(spec.rustflags ?? []), ...linkArgs].join(
+      "\x1f",
+    );
   }
 
   // ─── Emit build node ───
   // dep_cargo_cross prepends `rustup target add` for Tier 2 cross targets.
   // Tier 3 targets (buildStd=true) have no prebuilt std, so target-add would
   // fail — they use plain dep_cargo with -Zbuild-std instead.
-  const cross = cfg.crossTarget !== undefined && spec.rustTarget !== undefined && !spec.buildStd;
+  const cross =
+    cfg.crossTarget !== undefined &&
+    spec.rustTarget !== undefined &&
+    !spec.buildStd;
   n.build({
     outputs: [lib],
     rule: cross ? "dep_cargo_cross" : "dep_cargo",
@@ -1473,8 +1542,16 @@ function emitDirect(
   }
 
   const incFlags = (spec.includes ?? []).map(i => `-I${q(resolve(srcDir, i))}`);
-  const defFlags = Object.entries(spec.defines ?? {}).map(([k, v]) => defineFlag(k, v));
-  const libFlags = [...baseFlags, ...picFlags, ...incFlags, ...defFlags, ...(spec.cflags ?? [])];
+  const defFlags = Object.entries(spec.defines ?? {}).map(([k, v]) =>
+    defineFlag(k, v),
+  );
+  const libFlags = [
+    ...baseFlags,
+    ...picFlags,
+    ...incFlags,
+    ...defFlags,
+    ...(spec.cflags ?? []),
+  ];
 
   // Sources must exist before compile attempts. sourceStamp (or the fetch
   // .ref) is order-only: we don't want every .o recompiling when the stamp
@@ -1495,7 +1572,10 @@ function emitDirect(
     for (const [h, body] of headers) {
       const out = resolve(buildDir, h);
       if (typeof body === "string") {
-        writeIfChanged(out, body === "" ? "/* stub — generated at configure */\n" : body);
+        writeIfChanged(
+          out,
+          body === "" ? "/* stub — generated at configure */\n" : body,
+        );
       } else {
         n.build({
           outputs: [out],
@@ -1526,7 +1606,9 @@ function emitDirect(
     // target triple, just the tool defines and -w. Compile+link in one go
     // so host-arch objects never land in obj/ (which would dirty ccache
     // for the target build).
-    const toolDefs = Object.entries(cg.toolDefines ?? {}).map(([k, v]) => defineFlag(k, v));
+    const toolDefs = Object.entries(cg.toolDefines ?? {}).map(([k, v]) =>
+      defineFlag(k, v),
+    );
     n.build({
       outputs: [toolOut],
       rule: "dep_host_cc",
@@ -1540,7 +1622,9 @@ function emitDirect(
     // path; other args resolve against srcDir. Tool runs with srcDir as
     // cwd so relative input paths it opens internally Just Work.
     generatedHeader = resolve(buildDir, cg.output);
-    const argv = cg.args.map(a => (a === "$out" ? generatedHeader! : resolve(srcDir, a)));
+    const argv = cg.args.map(a =>
+      a === "$out" ? generatedHeader! : resolve(srcDir, a),
+    );
 
     n.build({
       outputs: [generatedHeader],
@@ -1572,12 +1656,20 @@ function emitDirect(
     // forces a C source through the C++ frontend (mimalloc). Everything
     // else (.cc/.cpp/.cxx) → cxx().
     if (path.endsWith(".asm")) {
-      return nasm(n, cfg, abs, { flags: [...(spec.nasmflags ?? []), ...extra], orderOnlyInputs: orderOnly });
+      return nasm(n, cfg, abs, {
+        flags: [...(spec.nasmflags ?? []), ...extra],
+        orderOnlyInputs: orderOnly,
+      });
     }
     const isC = path.endsWith(".c");
     const isAsm = path.endsWith(".S");
     const opts = {
-      flags: [...(isC && isCxx ? ["-x", "c++"] : []), ...libFlags, ...genInc, ...extra],
+      flags: [
+        ...(isC && isCxx ? ["-x", "c++"] : []),
+        ...libFlags,
+        ...genInc,
+        ...extra,
+      ],
       orderOnlyInputs: orderOnly,
       implicitInputs: implicit,
     };
@@ -1594,7 +1686,12 @@ function emitDirect(
     // in this branch.
     mkdirSync(buildDir, { recursive: true });
     for (const o of objects) mkdirSync(resolve(o, ".."), { recursive: true });
-    const lib = ar(n, cfg, join("deps", name, `${cfg.libPrefix}${name}${cfg.libSuffix}`), objects);
+    const lib = ar(
+      n,
+      cfg,
+      join("deps", name, `${cfg.libPrefix}${name}${cfg.libSuffix}`),
+      objects,
+    );
     n.phony(name, [lib]);
     return { libs: [lib], objects: [], headerOutputs: [lib] };
   }

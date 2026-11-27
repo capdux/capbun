@@ -49,7 +49,12 @@ export const lolhtml: Dependency = {
     // Windows REQUIRES unwind tables for SEH — the OS loader refuses to run
     // binaries without them on 64-bit. So this is unix-only.
     if (!cfg.windows) {
-      spec.rustflags = ["-Cpanic=abort", "-Cdebuginfo=0", "-Cforce-unwind-tables=no", "-Copt-level=s"];
+      spec.rustflags = [
+        "-Cpanic=abort",
+        "-Cdebuginfo=0",
+        "-Cforce-unwind-tables=no",
+        "-Copt-level=s",
+      ];
     }
 
     // arm64-windows: cargo defaults to the host triple, but CI builds arm64
@@ -62,7 +67,9 @@ export const lolhtml: Dependency = {
     // Android: always a cross-compile. Static lib only, so cargo needs ar
     // (any llvm-ar works) but no linker.
     if (cfg.abi === "android") {
-      spec.rustTarget = cfg.arm64 ? "aarch64-linux-android" : "x86_64-linux-android";
+      spec.rustTarget = cfg.arm64
+        ? "aarch64-linux-android"
+        : "x86_64-linux-android";
     }
 
     // FreeBSD aarch64 is Tier 3 — no prebuilt std, so -Zbuild-std is
@@ -80,7 +87,9 @@ export const lolhtml: Dependency = {
     // (linux-gnu, darwin, freebsd). musl/android keep the prebuilt-std
     // -Cpanic=abort path.
     const canBuildStdImmediateAbort =
-      cfg.darwin || cfg.freebsd || (cfg.linux && cfg.abi !== "musl" && cfg.abi !== "android");
+      cfg.darwin ||
+      cfg.freebsd ||
+      (cfg.linux && cfg.abi !== "musl" && cfg.abi !== "android");
     if (cfg.release && canBuildStdImmediateAbort) {
       spec.buildStd = true;
       spec.rustflags = [

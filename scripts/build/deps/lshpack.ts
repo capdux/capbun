@@ -68,6 +68,8 @@ export const lshpack: Dependency = {
   provides: cfg => ({
     libs: [],
     includes: cfg.windows || cfg.abi === "musl" ? [".", "compat/queue"] : ["."],
-    defines: Object.entries(lsxpackDefines).map(([name, value]) => `${name}=${value}`),
+    defines: Object.entries(lsxpackDefines).map(
+      ([name, value]) => `${name}=${value}`,
+    ),
   }),
 };

@@ -397,7 +397,7 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
             _ = &default_data_val;
             var handlers_val = try Handlers.fromGenerated(global, (&generated.handlers), is_server);
             _ = &handlers_val;
-            var result: SocketConfig = .{ .hostname_or_unix = .empty, .fd = fd_val, .ssl = ssl, .handlers = handlers_val, .default_data = default_data_val };
+            var result: SocketConfig = .{ .hostname_or_unix = .empty, .fd = fd_val, .ssl = ssl, .handlers = handlers_val, .default_data = default_data_val, .exclusive = generated.exclusive, .allowHalfOpen = generated.allow_half_open, .reusePort = generated.reuse_port, .ipv6Only = generated.ipv6_only };
             _ = &result;
             var _result_guard = ReleaseGuard(SocketConfig){ .ptr = (blk: {
             break :blk (&result);
@@ -440,10 +440,6 @@ pub fn fromGenerated(vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject, gener
                                 return global.throwInvalidArguments("Missing \"port\"", .{});
                             }
                         }
-                        result.exclusive = generated.exclusive;
-                        result.allowHalfOpen = generated.allow_half_open;
-                        result.reusePort = generated.reuse_port;
-                        result.ipv6Only = generated.ipv6_only;
                     } else {
                         return global.throwInvalidArguments("Expected either \"hostname\" or \"unix\"", .{});
                     }

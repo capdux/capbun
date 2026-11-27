@@ -60,12 +60,18 @@ async function githubRequest<T>(
   const rateLimitReset = response.headers.get("x-ratelimit-reset");
 
   if (rateLimitRemaining && parseInt(rateLimitRemaining) < 100) {
-    console.warn(`[WARNING] GitHub API rate limit low: ${rateLimitRemaining} requests remaining`);
+    console.warn(
+      `[WARNING] GitHub API rate limit low: ${rateLimitRemaining} requests remaining`,
+    );
 
     if (parseInt(rateLimitRemaining) < 10) {
-      const resetTime = rateLimitReset ? parseInt(rateLimitReset) * 1000 : Date.now() + 60000;
+      const resetTime = rateLimitReset
+        ? parseInt(rateLimitReset) * 1000
+        : Date.now() + 60000;
       const waitTime = Math.max(0, resetTime - Date.now());
-      console.warn(`[WARNING] Rate limit critically low, waiting ${Math.ceil(waitTime / 1000)}s until reset`);
+      console.warn(
+        `[WARNING] Rate limit critically low, waiting ${Math.ceil(waitTime / 1000)}s until reset`,
+      );
       await sleep(waitTime + 1000); // Add 1s buffer
     }
   }
@@ -73,11 +79,15 @@ async function githubRequest<T>(
   // Handle rate limit errors with retry
   if (response.status === 429 || response.status === 403) {
     if (retryCount >= maxRetries) {
-      throw new Error(`GitHub API rate limit exceeded after ${maxRetries} retries`);
+      throw new Error(
+        `GitHub API rate limit exceeded after ${maxRetries} retries`,
+      );
     }
 
     const retryAfter = response.headers.get("retry-after");
-    const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.min(1000 * Math.pow(2, retryCount), 32000);
+    const waitTime = retryAfter
+      ? parseInt(retryAfter) * 1000
+      : Math.min(1000 * Math.pow(2, retryCount), 32000);
 
     console.warn(
       `[WARNING] Rate limited (${response.status}), retry ${retryCount + 1}/${maxRetries} after ${waitTime}ms`,
@@ -88,7 +98,9 @@ async function githubRequest<T>(
   }
 
   if (!response.ok) {
-    throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `GitHub API request failed: ${response.status} ${response.statusText}`,
+    );
   }
 
   return response.json();
@@ -144,8 +156,13 @@ async function fetchAllReactions(
     allReactions.push(...reactions);
 
     // Early exit if we're looking for a specific author and found their -1 reaction
-    if (authorId && reactions.some(r => r.user.id === authorId && r.content === "-1")) {
-      console.log(`[DEBUG] Found author thumbs down reaction, short-circuiting pagination`);
+    if (
+      authorId &&
+      reactions.some(r => r.user.id === authorId && r.content === "-1")
+    ) {
+      console.log(
+        `[DEBUG] Found author thumbs down reaction, short-circuiting pagination`,
+      );
       break;
     }
 
@@ -158,8 +175,16 @@ async function fetchAllReactions(
   return allReactions;
 }
 
-async function wasIssueReopened(owner: string, repo: string, issueNumber: number, token: string): Promise<boolean> {
-  const events: GitHubEvent[] = await githubRequest(`/repos/${owner}/${repo}/issues/${issueNumber}/events`, token);
+async function wasIssueReopened(
+  owner: string,
+  repo: string,
+  issueNumber: number,
+  token: string,
+): Promise<boolean> {
+  const events: GitHubEvent[] = await githubRequest(
+    `/repos/${owner}/${repo}/issues/${issueNumber}/events`,
+    token,
+  );
 
   // Check if there's a "reopened" event in the issue's timeline
   return events.some(event => event.event === "reopened");
@@ -169,13 +194,19 @@ function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function extractDuplicateIssueNumber(commentBody: string, owner: string, repo: string): number | null {
+function extractDuplicateIssueNumber(
+  commentBody: string,
+  owner: string,
+  repo: string,
+): number | null {
   // Escape owner and repo to prevent ReDoS attacks
   const escapedOwner = escapeRegExp(owner);
   const escapedRepo = escapeRegExp(repo);
 
   // Try to match same-repo GitHub issue URL format first: https://github.com/owner/repo/issues/123
-  const repoUrlPattern = new RegExp(`github\\.com/${escapedOwner}/${escapedRepo}/issues/(\\d+)`);
+  const repoUrlPattern = new RegExp(
+    `github\\.com/${escapedOwner}/${escapedRepo}/issues/(\\d+)`,
+  );
   let match = commentBody.match(repoUrlPattern);
   if (match) {
     return parseInt(match[1], 10);
@@ -197,20 +228,30 @@ async function closeIssueAsDuplicate(
   duplicateOfNumber: number,
   token: string,
 ): Promise<void> {
-  await githubRequest(`/repos/${owner}/${repo}/issues/${issueNumber}`, token, "PATCH", {
-    state: "closed",
-    state_reason: "duplicate",
-  });
+  await githubRequest(
+    `/repos/${owner}/${repo}/issues/${issueNumber}`,
+    token,
+    "PATCH",
+    {
+      state: "closed",
+      state_reason: "duplicate",
+    },
+  );
   // Close the issue as duplicate
-  await githubRequest(`/repos/${owner}/${repo}/issues/${issueNumber}/comments`, token, "POST", {
-    body: `Duplicate of #${duplicateOfNumber}.
+  await githubRequest(
+    `/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
+    token,
+    "POST",
+    {
+      body: `Duplicate of #${duplicateOfNumber}.
     
 This issue has been automatically closed as a duplicate.
 
 If this is incorrect, please re-open this issue or create a new one.
 
 🤖 Generated with [Claude Code](https://claude.ai/code)`,
-  });
+    },
+  );
 }
 
 async function autoCloseDuplicates(): Promise<void> {
@@ -232,7 +273,9 @@ async function autoCloseDuplicates(): Promise<void> {
 
   const threeDaysAgo = new Date();
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-  console.log(`[DEBUG] Checking for duplicate comments older than: ${threeDaysAgo.toISOString()}`);
+  console.log(
+    `[DEBUG] Checking for duplicate comments older than: ${threeDaysAgo.toISOString()}`,
+  );
 
   console.log("[DEBUG] Fetching open issues created more than 3 days ago...");
   const allIssues: GitHubIssue[] = [];
@@ -249,7 +292,8 @@ async function autoCloseDuplicates(): Promise<void> {
 
     // Filter for issues created more than 3 days ago and exclude pull requests
     const oldEnoughIssues = pageIssues.filter(
-      issue => !issue.pull_request && new Date(issue.created_at) <= threeDaysAgo,
+      issue =>
+        !issue.pull_request && new Date(issue.created_at) <= threeDaysAgo,
     );
 
     allIssues.push(...oldEnoughIssues);
@@ -267,11 +311,15 @@ async function autoCloseDuplicates(): Promise<void> {
 
   for (const issue of issues) {
     processedCount++;
-    console.log(`[DEBUG] Processing issue #${issue.number} (${processedCount}/${issues.length}): ${issue.title}`);
+    console.log(
+      `[DEBUG] Processing issue #${issue.number} (${processedCount}/${issues.length}): ${issue.title}`,
+    );
 
     console.log(`[DEBUG] Fetching comments for issue #${issue.number}...`);
     const comments = await fetchAllComments(owner, repo, issue.number, token);
-    console.log(`[DEBUG] Issue #${issue.number} has ${comments.length} comments`);
+    console.log(
+      `[DEBUG] Issue #${issue.number} has ${comments.length} comments`,
+    );
 
     const dupeComments = comments.filter(
       comment =>
@@ -280,10 +328,14 @@ async function autoCloseDuplicates(): Promise<void> {
         comment.user?.type === "Bot" &&
         comment.body.includes("<!-- dedupe-bot:marker -->"),
     );
-    console.log(`[DEBUG] Issue #${issue.number} has ${dupeComments.length} duplicate detection comments`);
+    console.log(
+      `[DEBUG] Issue #${issue.number} has ${dupeComments.length} duplicate detection comments`,
+    );
 
     if (dupeComments.length === 0) {
-      console.log(`[DEBUG] Issue #${issue.number} - no duplicate comments found, skipping`);
+      console.log(
+        `[DEBUG] Issue #${issue.number} - no duplicate comments found, skipping`,
+      );
       continue;
     }
 
@@ -294,7 +346,9 @@ async function autoCloseDuplicates(): Promise<void> {
     );
 
     if (dupeCommentDate > threeDaysAgo) {
-      console.log(`[DEBUG] Issue #${issue.number} - duplicate comment is too recent, skipping`);
+      console.log(
+        `[DEBUG] Issue #${issue.number} - duplicate comment is too recent, skipping`,
+      );
       continue;
     }
     console.log(
@@ -305,41 +359,75 @@ async function autoCloseDuplicates(): Promise<void> {
 
     // Filter for human comments (not bot comments) after the duplicate comment
     const commentsAfterDupe = comments.filter(
-      comment => new Date(comment.created_at) > dupeCommentDate && comment.user?.type !== "Bot",
+      comment =>
+        new Date(comment.created_at) > dupeCommentDate &&
+        comment.user?.type !== "Bot",
     );
     console.log(
       `[DEBUG] Issue #${issue.number} - ${commentsAfterDupe.length} human comments after duplicate detection`,
     );
 
     if (commentsAfterDupe.length > 0) {
-      console.log(`[DEBUG] Issue #${issue.number} - has human activity after duplicate comment, skipping`);
+      console.log(
+        `[DEBUG] Issue #${issue.number} - has human activity after duplicate comment, skipping`,
+      );
       continue;
     }
 
-    console.log(`[DEBUG] Issue #${issue.number} - checking reactions on duplicate comment...`);
-    const reactions = await fetchAllReactions(owner, repo, lastDupeComment.id, token);
-    console.log(`[DEBUG] Issue #${issue.number} - duplicate comment has ${reactions.length} reactions`);
+    console.log(
+      `[DEBUG] Issue #${issue.number} - checking reactions on duplicate comment...`,
+    );
+    const reactions = await fetchAllReactions(
+      owner,
+      repo,
+      lastDupeComment.id,
+      token,
+    );
+    console.log(
+      `[DEBUG] Issue #${issue.number} - duplicate comment has ${reactions.length} reactions`,
+    );
 
     const hasThumbsDown = reactions.some(reaction => reaction.content === "-1");
-    console.log(`[DEBUG] Issue #${issue.number} - has thumbs down reaction: ${hasThumbsDown}`);
+    console.log(
+      `[DEBUG] Issue #${issue.number} - has thumbs down reaction: ${hasThumbsDown}`,
+    );
 
     if (hasThumbsDown) {
-      console.log(`[DEBUG] Issue #${issue.number} - someone disagreed with duplicate detection, skipping`);
+      console.log(
+        `[DEBUG] Issue #${issue.number} - someone disagreed with duplicate detection, skipping`,
+      );
       continue;
     }
 
-    console.log(`[DEBUG] Issue #${issue.number} - checking if issue was reopened...`);
-    const wasReopened = await wasIssueReopened(owner, repo, issue.number, token);
-    console.log(`[DEBUG] Issue #${issue.number} - was reopened: ${wasReopened}`);
+    console.log(
+      `[DEBUG] Issue #${issue.number} - checking if issue was reopened...`,
+    );
+    const wasReopened = await wasIssueReopened(
+      owner,
+      repo,
+      issue.number,
+      token,
+    );
+    console.log(
+      `[DEBUG] Issue #${issue.number} - was reopened: ${wasReopened}`,
+    );
 
     if (wasReopened) {
-      console.log(`[DEBUG] Issue #${issue.number} - issue was previously reopened, skipping auto-close`);
+      console.log(
+        `[DEBUG] Issue #${issue.number} - issue was previously reopened, skipping auto-close`,
+      );
       continue;
     }
 
-    const duplicateIssueNumber = extractDuplicateIssueNumber(lastDupeComment.body, owner, repo);
+    const duplicateIssueNumber = extractDuplicateIssueNumber(
+      lastDupeComment.body,
+      owner,
+      repo,
+    );
     if (!duplicateIssueNumber) {
-      console.log(`[DEBUG] Issue #${issue.number} - could not extract duplicate issue number from comment, skipping`);
+      console.log(
+        `[DEBUG] Issue #${issue.number} - could not extract duplicate issue number from comment, skipping`,
+      );
       continue;
     }
 
@@ -347,11 +435,23 @@ async function autoCloseDuplicates(): Promise<void> {
     const issueUrl = `https://github.com/${owner}/${repo}/issues/${issue.number}`;
 
     try {
-      console.log(`[INFO] Auto-closing issue #${issue.number} as duplicate of #${duplicateIssueNumber}: ${issueUrl}`);
-      await closeIssueAsDuplicate(owner, repo, issue.number, duplicateIssueNumber, token);
-      console.log(`[SUCCESS] Successfully closed issue #${issue.number} as duplicate of #${duplicateIssueNumber}`);
+      console.log(
+        `[INFO] Auto-closing issue #${issue.number} as duplicate of #${duplicateIssueNumber}: ${issueUrl}`,
+      );
+      await closeIssueAsDuplicate(
+        owner,
+        repo,
+        issue.number,
+        duplicateIssueNumber,
+        token,
+      );
+      console.log(
+        `[SUCCESS] Successfully closed issue #${issue.number} as duplicate of #${duplicateIssueNumber}`,
+      );
     } catch (error) {
-      console.error(`[ERROR] Failed to close issue #${issue.number} as duplicate: ${error}`);
+      console.error(
+        `[ERROR] Failed to close issue #${issue.number} as duplicate: ${error}`,
+      );
     }
   }
 

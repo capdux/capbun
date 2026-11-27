@@ -228,7 +228,7 @@ pub fn throwUnlessIdle(stream: *T, globalThis: *jsc.JSGlobalObject) bun.JSError!
     }
 
 pub fn checkNotResizable(buf: jsc.ArrayBuffer, globalThis: *jsc.JSGlobalObject, comptime is_out: bool) bun.JSError!void {
-            if (buf.resizable) {
+            if ((buf.resizable and (!buf.shared))) {
                 const msg = (if (is_out) "The \"out\" argument must not be backed by a resizable ArrayBuffer or a WebAssembly.Memory" else "The \"in\" argument must not be backed by a resizable ArrayBuffer");
                 return globalThis.ERR(.INVALID_ARG_VALUE, msg, .{}).throw();
             }
@@ -475,6 +475,7 @@ pub fn writeSync(stream: *T, globalThis: *jsc.JSGlobalObject, callframe: *jsc.Ca
             _ = stream.stream.doWork();
             if (checkError(stream, globalThis, this_value)) {
                 _ = updateWriteState(stream, globalThis, this_value);
+                _ = stream.stream.setBuffers(null, null);
                 stream.write_in_progress = false;
             }
             _ = stream.deref();

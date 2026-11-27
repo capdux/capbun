@@ -269,12 +269,12 @@ const SocketHandlers: SocketHandler = {
 
     self.emit("secure", self);
     self.alpnProtocol = socket.alpnProtocol;
-    const { checkServerIdentity } = self[bunTLSConnectOptions];
+    const { checkServerIdentity, checkServerIdentityThis } = self[bunTLSConnectOptions];
     if (!verifyError && typeof checkServerIdentity === "function") {
       const hostname = self.servername || self._host || "localhost";
       const cert = self.getPeerCertificate(true);
       if (cert) {
-        verifyError = checkServerIdentity(hostname, cert);
+        verifyError = checkServerIdentity.$call(checkServerIdentityThis, hostname, cert);
       }
     }
     if (self._requestCert || self._rejectUnauthorized) {
@@ -592,12 +592,12 @@ const SocketHandlers2: SocketHandler<NonNullable<import("node:net").Socket["_han
 
     self.emit("secure", self);
     self.alpnProtocol = socket.alpnProtocol;
-    const { checkServerIdentity } = self[bunTLSConnectOptions];
+    const { checkServerIdentity, checkServerIdentityThis } = self[bunTLSConnectOptions];
     if (!verifyError && typeof checkServerIdentity === "function") {
       const hostname = self.servername || self._host || "localhost";
       const cert = self.getPeerCertificate(true);
       if (cert) {
-        verifyError = checkServerIdentity(hostname, cert);
+        verifyError = checkServerIdentity.$call(checkServerIdentityThis, hostname, cert);
       }
     }
     if (self._requestCert || self._rejectUnauthorized) {
@@ -931,6 +931,9 @@ Socket.prototype.connect = function connect(...args) {
     let upgradeDuplex = false;
     let { port, host, path, socket, rejectUnauthorized, checkServerIdentity, session, fd, pauseOnConnect } = options;
     this.servername = options.servername;
+    if (host !== undefined) {
+      this._host = host;
+    }
     if (socket) {
       connection = socket;
     }
@@ -951,9 +954,11 @@ Socket.prototype.connect = function connect(...args) {
     if (pauseOnConnect) {
       this.pause();
     } else {
-      process.nextTick(() => {
-        this.resume();
-      });
+      if (!this.isPaused()) {
+        process.nextTick(() => {
+          if (!this.isPaused()) this.resume();
+        });
+      }
       this.connecting = true;
     }
     if (fd) {
@@ -984,7 +989,10 @@ Socket.prototype.connect = function connect(...args) {
         tls.requestCert = true;
         tls.session = session || tls.session;
         this.servername = tls.servername;
-        tls.checkServerIdentity = checkServerIdentity || tls.checkServerIdentity;
+        if (checkServerIdentity) {
+          tls.checkServerIdentity = checkServerIdentity;
+          tls.checkServerIdentityThis = options;
+        }
         this[bunTLSConnectOptions] = tls;
         if (!connection && tls.socket) {
           connection = tls.socket;
@@ -1805,7 +1813,10 @@ function internalConnect(self, options, address, port, addressType, localAddress
       tls.requestCert = true;
       tls.session = session || tls.session;
       self.servername = tls.servername;
-      tls.checkServerIdentity = checkServerIdentity || tls.checkServerIdentity;
+      if (checkServerIdentity) {
+        tls.checkServerIdentity = checkServerIdentity;
+        tls.checkServerIdentityThis = options;
+      }
       self[bunTLSConnectOptions] = tls;
       if (!connection && tls.socket) {
         connection = tls.socket;
@@ -1942,7 +1953,10 @@ function internalConnectMultiple(context, canceled?) {
       tls.requestCert = true;
       tls.session = session || tls.session;
       self.servername = tls.servername;
-      tls.checkServerIdentity = checkServerIdentity || tls.checkServerIdentity;
+      if (checkServerIdentity) {
+        tls.checkServerIdentity = checkServerIdentity;
+        tls.checkServerIdentityThis = context.options;
+      }
       self[bunTLSConnectOptions] = tls;
       if (!connection && tls.socket) {
         connection = tls.socket;
@@ -2059,6 +2073,7 @@ function afterConnect(status, handle, req, readable, writable) {
     // Start the first read, or get an immediate EOF.
     // this doesn't actually consume any bytes, because len=0.
     if (readable && !self.isPaused()) self.read(0);
+    else if (self.isPaused()) self._handle?.pause();
   } else {
     let details;
     if (req.localAddress && req.localPort) {

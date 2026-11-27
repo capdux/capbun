@@ -8,7 +8,15 @@
  */
 
 import { spawn as nodeSpawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // @ts-ignore — utils.mjs has JSDoc types but no .d.ts
@@ -36,7 +44,8 @@ export const printEnvironment: () => void = utils.printEnvironment;
  * Start a collapsible log group. Buildkite: `--- Title`. GitHub: `::group::`.
  * If `fn` is given, runs it and closes the group (handles async).
  */
-export const startGroup: (title: string, fn?: () => unknown) => unknown = utils.startGroup;
+export const startGroup: (title: string, fn?: () => unknown) => unknown =
+  utils.startGroup;
 
 /** Close the most recent group opened with `startGroup`. */
 export const endGroup: () => void = utils.endGroup;
@@ -132,7 +141,9 @@ export async function spawnWithAnnotations(
 
   const elapsed = Date.now() - start;
   const elapsedStr =
-    elapsed > 60000 ? `${(elapsed / 60000).toFixed(2)} minutes` : `${(elapsed / 1000).toFixed(2)} seconds`;
+    elapsed > 60000
+      ? `${(elapsed / 60000).toFixed(2)} minutes`
+      : `${(elapsed / 1000).toFixed(2)} seconds`;
   console.log(`${label} took ${elapsedStr}`);
 
   if (error) {
@@ -152,7 +163,12 @@ export async function spawnWithAnnotations(
       // compiler, bad flags) since those are actionable; drop dep warnings.
       const annotatable = buffer
         .split("\n")
-        .filter(line => !/^\[[\w-]+\]\s+CMake (Deprecation )?Warning/i.test(line.replace(/\x1b\[[0-9;]*m/g, "")))
+        .filter(
+          line =>
+            !/^\[[\w-]+\]\s+CMake (Deprecation )?Warning/i.test(
+              line.replace(/\x1b\[[0-9;]*m/g, ""),
+            ),
+        )
         .join("\n");
       const { annotations } = utils.parseAnnotations(annotatable);
       for (const ann of annotations) {
@@ -366,8 +382,13 @@ export function packageAndUpload(cfg: Config, output: BunOutput): void {
   // (only for the --revision smoke test).
   // Cross-compiled binaries can't run on the build host — write a stub.
   if (cfg.crossTarget !== undefined) {
-    console.log("Skipping features.json (cross-compiled binary cannot run on host)");
-    writeFileSync(resolve(buildDir, "features.json"), JSON.stringify({ crossTarget: cfg.crossTarget }));
+    console.log(
+      "Skipping features.json (cross-compiled binary cannot run on host)",
+    );
+    writeFileSync(
+      resolve(buildDir, "features.json"),
+      JSON.stringify({ crossTarget: cfg.crossTarget }),
+    );
   } else {
     console.log("Generating features.json...");
     run([exe, resolve(cfg.cwd, "scripts", "features.mjs")], buildDir, {
@@ -403,7 +424,16 @@ export function packageAndUpload(cfg: Config, output: BunOutput): void {
   if (shouldStrip(cfg) && output.strippedExe !== undefined) {
     zipPaths.push(makeZip(cfg, bunTriplet, [basename(output.strippedExe)]));
     const bytes = statSync(output.strippedExe).size;
-    run(["buildkite-agent", "meta-data", "set", `binary-size:${bunTriplet}`, String(bytes)], buildDir);
+    run(
+      [
+        "buildkite-agent",
+        "meta-data",
+        "set",
+        `binary-size:${bunTriplet}`,
+        String(bytes),
+      ],
+      buildDir,
+    );
   }
 
   // ─── Upload ───
@@ -492,14 +522,19 @@ export async function downloadArtifacts(cfg: Config): Promise<void> {
   const dl = (suffix: "cpp" | "zig") => {
     const step = `${targetKey}-build-${suffix}`;
     console.log(`Downloading artifacts from ${step}...`);
-    return runAsync(["buildkite-agent", "artifact", "download", "*", ".", "--step", step], cfg.buildDir);
+    return runAsync(
+      ["buildkite-agent", "artifact", "download", "*", ".", "--step", step],
+      cfg.buildDir,
+    );
   };
   const cppDone = dl("cpp");
   const zigDone = dl("zig");
 
   await cppDone;
   const gzFiles = existsSync(cfg.buildDir)
-    ? readdirSync(cfg.buildDir).filter(f => f.endsWith(".gz") && statSync(resolve(cfg.buildDir, f)).isFile())
+    ? readdirSync(cfg.buildDir).filter(
+        f => f.endsWith(".gz") && statSync(resolve(cfg.buildDir, f)).isFile(),
+      )
     : [];
   const gunzipDone = Promise.all(
     gzFiles.map(gz => {
@@ -532,10 +567,17 @@ function run(argv: string[], cwd: string, env?: Record<string, string>): void {
 function runAsync(argv: string[], cwd: string): Promise<void> {
   return new Promise((res, rej) => {
     const child = nodeSpawn(argv[0]!, argv.slice(1), { cwd, stdio: "inherit" });
-    child.on("error", (err: Error) => rej(new BuildError(`Failed to spawn ${argv[0]}`, { cause: err })));
+    child.on("error", (err: Error) =>
+      rej(new BuildError(`Failed to spawn ${argv[0]}`, { cause: err })),
+    );
     child.on("close", (code: number | null) => {
       if (code === 0) res();
-      else rej(new BuildError(`${argv[0]} exited with code ${code}`, { hint: `Command: ${argv.join(" ")}` }));
+      else
+        rej(
+          new BuildError(`${argv[0]} exited with code ${code}`, {
+            hint: `Command: ${argv.join(" ")}`,
+          }),
+        );
     });
   });
 }

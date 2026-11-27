@@ -79,15 +79,23 @@ interface Ctx {
  */
 function readPackageDeps(pkgDir: string): string[] {
   const pkgPath = resolve(pkgDir, "package.json");
-  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+  let pkg: {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
   try {
     pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as typeof pkg;
   } catch (cause) {
-    throw new BuildError(`Could not parse package.json`, { file: pkgPath, cause });
+    throw new BuildError(`Could not parse package.json`, {
+      file: pkgPath,
+      cause,
+    });
   }
   const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
   const nodeModules = resolve(pkgDir, "node_modules");
-  return Object.keys(deps).map(name => resolve(nodeModules, name, "package.json"));
+  return Object.keys(deps).map(name =>
+    resolve(nodeModules, name, "package.json"),
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -139,7 +147,9 @@ export function registerCodegenRules(n: Ninja, cfg: Config): void {
     ? `set TARGET_PLATFORM=${platform}&& set TARGET_ARCH=${arch}&& `
     : `TARGET_PLATFORM=${platform} TARGET_ARCH=${arch} `;
   n.rule("codegen", {
-    command: hostWin ? `cmd /c "cd /d $cwd && ${env}${bun} $args"` : `cd $cwd && ${env}${bun} $args`,
+    command: hostWin
+      ? `cmd /c "cd /d $cwd && ${env}${bun} $args"`
+      : `cd $cwd && ${env}${bun} $args`,
     description: "gen $desc",
     restat: true,
   });
@@ -147,7 +157,9 @@ export function registerCodegenRules(n: Ninja, cfg: Config): void {
   // esbuild invocations. No restat — esbuild always touches outputs.
   // No pool — esbuild is fast and single-threaded per bundle.
   n.rule("esbuild", {
-    command: hostWin ? `cmd /c "cd /d $cwd && ${esbuild} $args"` : `cd $cwd && ${esbuild} $args`,
+    command: hostWin
+      ? `cmd /c "cd /d $cwd && ${esbuild} $args"`
+      : `cd $cwd && ${esbuild} $args`,
     description: "esbuild $desc",
   });
 
@@ -264,7 +276,11 @@ export interface CodegenOutputs {
  * Call after registerCodegenRules() and after registerDirStamps() (we use
  * the `mkdir_stamp` rule for the codegen dir).
  */
-export function emitCodegen(n: Ninja, cfg: Config, sources: Sources): CodegenOutputs {
+export function emitCodegen(
+  n: Ninja,
+  cfg: Config,
+  sources: Sources,
+): CodegenOutputs {
   n.comment("─── Codegen ───");
   n.blank();
 
@@ -310,7 +326,9 @@ export function emitCodegen(n: Ninja, cfg: Config, sources: Sources): CodegenOut
   n.blank();
 
   // Assemble cppAll — the cxx-relevant subset. See field docstring.
-  o.cppAll = [...new Set([...o.cppHeaders, ...o.cppSources, ...o.bindgenV2Cpp])];
+  o.cppAll = [
+    ...new Set([...o.cppHeaders, ...o.cppSources, ...o.bindgenV2Cpp]),
+  ];
 
   return o;
 }
@@ -329,7 +347,10 @@ export function emitCodegen(n: Ninja, cfg: Config, sources: Sources): CodegenOut
  */
 function emitBunInstall(n: Ninja, cfg: Config, pkgDir: string): string {
   const depPackageJsons = readPackageDeps(pkgDir);
-  assert(depPackageJsons.length > 0, `package.json has no dependencies: ${pkgDir}/package.json`);
+  assert(
+    depPackageJsons.length > 0,
+    `package.json has no dependencies: ${pkgDir}/package.json`,
+  );
 
   const pkgJson = resolve(pkgDir, "package.json");
   const lockfile = resolve(pkgDir, "bun.lock");
@@ -386,7 +407,10 @@ function emitBunError({ n, cfg, sources, o, dirStamp }: Ctx): void {
   const installStamp = emitBunInstall(n, cfg, sourceDir);
 
   const outDir = resolve(cfg.codegenDir, "bun-error");
-  const outputs = [resolve(outDir, "index.js"), resolve(outDir, "bun-error.css")];
+  const outputs = [
+    resolve(outDir, "index.js"),
+    resolve(outDir, "bun-error.css"),
+  ];
 
   n.build({
     outputs,
@@ -498,7 +522,12 @@ function emitNodeFallbacks({ n, cfg, sources, o, dirStamp }: Ctx): void {
       cwd: sourceDir,
       desc: "node-fallbacks/*.js",
       // `bun run build-fallbacks` resolves to `./build-fallbacks.ts` in cwd
-      args: shJoin(cfg, ["run", "build-fallbacks", outDir, ...sources.nodeFallbacks]),
+      args: shJoin(cfg, [
+        "run",
+        "build-fallbacks",
+        outDir,
+        ...sources.nodeFallbacks,
+      ]),
     },
   });
 
@@ -506,12 +535,21 @@ function emitNodeFallbacks({ n, cfg, sources, o, dirStamp }: Ctx): void {
   o.zigInputs.push(...outputs);
 
   // ─── react-refresh (separate bundle, uses node-fallbacks' node_modules) ───
-  const rrSrc = resolve(sourceDir, "node_modules", "react-refresh", "cjs", "react-refresh-runtime.development.js");
+  const rrSrc = resolve(
+    sourceDir,
+    "node_modules",
+    "react-refresh",
+    "cjs",
+    "react-refresh-runtime.development.js",
+  );
   const rrOut = resolve(outDir, "react-refresh.js");
   n.build({
     outputs: [rrOut],
     rule: "codegen",
-    inputs: [resolve(sourceDir, "package.json"), resolve(sourceDir, "bun.lock")],
+    inputs: [
+      resolve(sourceDir, "package.json"),
+      resolve(sourceDir, "bun.lock"),
+    ],
     implicitInputs: [installStamp],
     orderOnlyInputs: [dirStamp],
     vars: {
@@ -591,14 +629,25 @@ function emitGeneratedClasses({ n, cfg, sources, o, dirStamp }: Ctx): void {
     vars: {
       cwd: cfg.cwd,
       desc: "ZigGeneratedClasses.{zig,cpp,h}",
-      args: shJoin(cfg, ["run", script, ...sources.zigGeneratedClasses, cfg.codegenDir]),
+      args: shJoin(cfg, [
+        "run",
+        script,
+        ...sources.zigGeneratedClasses,
+        cfg.codegenDir,
+      ]),
     },
   });
 
   o.all.push(...outputs);
   o.zigInputs.push(...outputs);
   o.cppSources.push(outputs[1]!); // .cpp
-  o.cppHeaders.push(outputs[0]!, outputs[2]!, outputs[3]!, outputs[4]!, outputs[5]!); // .h files
+  o.cppHeaders.push(
+    outputs[0]!,
+    outputs[2]!,
+    outputs[3]!,
+    outputs[4]!,
+    outputs[5]!,
+  ); // .h files
   // .lut.txt is consumed by emitObjectLuts below
 }
 
@@ -618,7 +667,9 @@ function emitCppBind({ n, cfg, sources, o, dirStamp }: Ctx): void {
   // codegenDir may not exist yet on first configure — mkdir it.
   mkdirSync(cfg.codegenDir, { recursive: true });
   const cxxSourcesFile = resolve(cfg.codegenDir, "cxx-sources.txt");
-  const cxxSourcesLines = sources.cxx.map(p => relative(cfg.cwd, p).replace(/\\/g, "/"));
+  const cxxSourcesLines = sources.cxx.map(p =>
+    relative(cfg.cwd, p).replace(/\\/g, "/"),
+  );
   writeIfChanged(cxxSourcesFile, cxxSourcesLines.join("\n") + "\n");
 
   n.build({
@@ -645,7 +696,12 @@ function emitCppBind({ n, cfg, sources, o, dirStamp }: Ctx): void {
       desc: "cpp.zig (cppbind)",
       // cppbind.ts takes: <srcdir> <codegendir> <cxx-sources>. No `run` —
       // direct script invocation (`${BUN_EXECUTABLE} ${script} ...`).
-      args: shJoin(cfg, [script, resolve(cfg.cwd, "src"), cfg.codegenDir, cxxSourcesFile]),
+      args: shJoin(cfg, [
+        script,
+        resolve(cfg.cwd, "src"),
+        cfg.codegenDir,
+        cxxSourcesFile,
+      ]),
     },
   });
 
@@ -680,7 +736,13 @@ function emitJsModules({ n, cfg, sources, o, dirStamp }: Ctx): void {
   const script = resolve(cfg.cwd, "src", "codegen", "bundle-modules.ts");
 
   // InternalModuleRegistry.cpp is read by the script (for a sanity check).
-  const extraInput = resolve(cfg.cwd, "src", "jsc", "bindings", "InternalModuleRegistry.cpp");
+  const extraInput = resolve(
+    cfg.cwd,
+    "src",
+    "jsc",
+    "bindings",
+    "InternalModuleRegistry.cpp",
+  );
 
   // Written into src/ (not codegenDir) — see zigFilesGeneratedIntoSrc at top.
   const js2nativeZig = resolve(cfg.cwd, zigFilesGeneratedIntoSrc[1]);
@@ -689,7 +751,10 @@ function emitJsModules({ n, cfg, sources, o, dirStamp }: Ctx): void {
     resolve(cfg.codegenDir, "WebCoreJSBuiltins.cpp"),
     resolve(cfg.codegenDir, "WebCoreJSBuiltins.h"),
     resolve(cfg.codegenDir, "InternalModuleRegistryConstants.h"),
-    resolve(cfg.codegenDir, "InternalModuleRegistry+createInternalModuleById.h"),
+    resolve(
+      cfg.codegenDir,
+      "InternalModuleRegistry+createInternalModuleById.h",
+    ),
     resolve(cfg.codegenDir, "InternalModuleRegistry+enum.h"),
     resolve(cfg.codegenDir, "InternalModuleRegistry+numberOfModules.h"),
     resolve(cfg.codegenDir, "NativeModuleImpl.h"),
@@ -746,7 +811,12 @@ function emitBakeCodegen({ n, cfg, sources, o, dirStamp }: Ctx): void {
     vars: {
       cwd: cfg.cwd,
       desc: "bake.{client,server,error}.js",
-      args: shJoin(cfg, ["run", script, debugFlag(cfg), `--codegen-root=${cfg.codegenDir}`]),
+      args: shJoin(cfg, [
+        "run",
+        script,
+        debugFlag(cfg),
+        `--codegen-root=${cfg.codegenDir}`,
+      ]),
     },
   });
 
@@ -774,14 +844,23 @@ function emitBindgenV2({ n, cfg, sources, o, dirStamp }: Ctx): void {
   const sourcesArg = sources.bindgenV2.join(",");
   const listResult = spawnSync(
     cfg.bun,
-    ["run", script, "--command=list-outputs", `--sources=${sourcesArg}`, `--codegen-path=${cfg.codegenDir}`],
+    [
+      "run",
+      script,
+      "--command=list-outputs",
+      `--sources=${sourcesArg}`,
+      `--codegen-path=${cfg.codegenDir}`,
+    ],
     { cwd: cfg.cwd, encoding: "utf8" },
   );
   if (listResult.status !== 0) {
-    throw new BuildError(`bindgenv2 list-outputs failed (exit ${listResult.status})`, {
-      file: script,
-      hint: listResult.stderr?.trim(),
-    });
+    throw new BuildError(
+      `bindgenv2 list-outputs failed (exit ${listResult.status})`,
+      {
+        file: script,
+        hint: listResult.stderr?.trim(),
+      },
+    );
   }
   // Output is semicolon-separated (CMake list format).
   const allOutputs = listResult.stdout
@@ -793,8 +872,13 @@ function emitBindgenV2({ n, cfg, sources, o, dirStamp }: Ctx): void {
 
   const cppOutputs = allOutputs.filter(p => p.endsWith(".cpp"));
   const zigOutputs = allOutputs.filter(p => p.endsWith(".zig"));
-  const other = allOutputs.filter(p => !p.endsWith(".cpp") && !p.endsWith(".zig"));
-  assert(other.length === 0, `bindgenv2 emitted unexpected output type: ${other.join(", ")}`);
+  const other = allOutputs.filter(
+    p => !p.endsWith(".cpp") && !p.endsWith(".zig"),
+  );
+  assert(
+    other.length === 0,
+    `bindgenv2 emitted unexpected output type: ${other.join(", ")}`,
+  );
 
   n.build({
     outputs: allOutputs,
@@ -838,7 +922,12 @@ function emitBindgen({ n, cfg, sources, o, dirStamp }: Ctx): void {
     vars: {
       cwd: cfg.cwd,
       desc: ".bind.ts → GeneratedBindings.{cpp,zig}",
-      args: shJoin(cfg, ["run", script, debugFlag(cfg), `--codegen-root=${cfg.codegenDir}`]),
+      args: shJoin(cfg, [
+        "run",
+        script,
+        debugFlag(cfg),
+        `--codegen-root=${cfg.codegenDir}`,
+      ]),
     },
   });
 
@@ -849,7 +938,12 @@ function emitBindgen({ n, cfg, sources, o, dirStamp }: Ctx): void {
 
 function emitJsSink({ n, cfg, o, dirStamp }: Ctx): void {
   const script = resolve(cfg.cwd, "src", "codegen", "generate-jssink.ts");
-  const hashTableScript = resolve(cfg.cwd, "src", "codegen", "create-hash-table.ts");
+  const hashTableScript = resolve(
+    cfg.cwd,
+    "src",
+    "codegen",
+    "create-hash-table.ts",
+  );
   const perlScript = resolve(cfg.cwd, "src", "codegen", "create_hash_table");
 
   // generate-jssink.ts writes JSSink.{cpp,h,lut.txt}, then internally spawns
@@ -894,10 +988,22 @@ function emitObjectLuts({ n, cfg, o, dirStamp }: Ctx): void {
   // (source, output) pairs. ZigGeneratedClasses.lut.txt is special: it's
   // GENERATED by emitGeneratedClasses, so it's in codegenDir not src/.
   const pairs: [src: string, out: string][] = [
-    [resolve(cfg.cwd, "src/jsc/bindings/BunObject.cpp"), resolve(cfg.codegenDir, "BunObject.lut.h")],
-    [resolve(cfg.cwd, "src/jsc/bindings/ZigGlobalObject.lut.txt"), resolve(cfg.codegenDir, "ZigGlobalObject.lut.h")],
-    [resolve(cfg.cwd, "src/jsc/bindings/JSBuffer.cpp"), resolve(cfg.codegenDir, "JSBuffer.lut.h")],
-    [resolve(cfg.cwd, "src/jsc/bindings/BunProcess.cpp"), resolve(cfg.codegenDir, "BunProcess.lut.h")],
+    [
+      resolve(cfg.cwd, "src/jsc/bindings/BunObject.cpp"),
+      resolve(cfg.codegenDir, "BunObject.lut.h"),
+    ],
+    [
+      resolve(cfg.cwd, "src/jsc/bindings/ZigGlobalObject.lut.txt"),
+      resolve(cfg.codegenDir, "ZigGlobalObject.lut.h"),
+    ],
+    [
+      resolve(cfg.cwd, "src/jsc/bindings/JSBuffer.cpp"),
+      resolve(cfg.codegenDir, "JSBuffer.lut.h"),
+    ],
+    [
+      resolve(cfg.cwd, "src/jsc/bindings/BunProcess.cpp"),
+      resolve(cfg.codegenDir, "BunProcess.lut.h"),
+    ],
     [
       resolve(cfg.cwd, "src/jsc/bindings/ProcessBindingBuffer.cpp"),
       resolve(cfg.codegenDir, "ProcessBindingBuffer.lut.h"),
@@ -906,7 +1012,10 @@ function emitObjectLuts({ n, cfg, o, dirStamp }: Ctx): void {
       resolve(cfg.cwd, "src/jsc/bindings/ProcessBindingConstants.cpp"),
       resolve(cfg.codegenDir, "ProcessBindingConstants.lut.h"),
     ],
-    [resolve(cfg.cwd, "src/jsc/bindings/ProcessBindingFs.cpp"), resolve(cfg.codegenDir, "ProcessBindingFs.lut.h")],
+    [
+      resolve(cfg.cwd, "src/jsc/bindings/ProcessBindingFs.cpp"),
+      resolve(cfg.codegenDir, "ProcessBindingFs.lut.h"),
+    ],
     [
       resolve(cfg.cwd, "src/jsc/bindings/ProcessBindingNatives.cpp"),
       resolve(cfg.codegenDir, "ProcessBindingNatives.lut.h"),
@@ -915,9 +1024,18 @@ function emitObjectLuts({ n, cfg, o, dirStamp }: Ctx): void {
       resolve(cfg.cwd, "src/jsc/bindings/ProcessBindingHTTPParser.cpp"),
       resolve(cfg.codegenDir, "ProcessBindingHTTPParser.lut.h"),
     ],
-    [resolve(cfg.cwd, "src/jsc/modules/NodeModuleModule.cpp"), resolve(cfg.codegenDir, "NodeModuleModule.lut.h")],
-    [resolve(cfg.codegenDir, "ZigGeneratedClasses.lut.txt"), resolve(cfg.codegenDir, "ZigGeneratedClasses.lut.h")],
-    [resolve(cfg.cwd, "src/jsc/bindings/webcore/JSEvent.cpp"), resolve(cfg.codegenDir, "JSEvent.lut.h")],
+    [
+      resolve(cfg.cwd, "src/jsc/modules/NodeModuleModule.cpp"),
+      resolve(cfg.codegenDir, "NodeModuleModule.lut.h"),
+    ],
+    [
+      resolve(cfg.codegenDir, "ZigGeneratedClasses.lut.txt"),
+      resolve(cfg.codegenDir, "ZigGeneratedClasses.lut.h"),
+    ],
+    [
+      resolve(cfg.cwd, "src/jsc/bindings/webcore/JSEvent.cpp"),
+      resolve(cfg.codegenDir, "JSEvent.lut.h"),
+    ],
   ];
 
   // create-hash-table.ts reads TARGET_PLATFORM env (set in registerCodegenRules)

@@ -24,19 +24,33 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import type { Sources } from "../glob-sources.ts";
-import { emitCodegen, zigFilesGeneratedIntoSrc, type CodegenOutputs } from "./codegen.ts";
+import {
+  emitCodegen,
+  zigFilesGeneratedIntoSrc,
+  type CodegenOutputs,
+} from "./codegen.ts";
 import { ar, cc, cxx, link, pch } from "./compile.ts";
 import { bunExeName, shouldStrip, type Config } from "./config.ts";
 import { generateDepVersionsHeader } from "./depVersionsHeader.ts";
 import { allDeps } from "./deps/index.ts";
 import { zstd } from "./deps/zstd.ts";
 import { assert } from "./error.ts";
-import { bunIncludes, computeFlags, extraFlagsFor, linkDepends } from "./flags.ts";
+import {
+  bunIncludes,
+  computeFlags,
+  extraFlagsFor,
+  linkDepends,
+} from "./flags.ts";
 import { writeIfChanged } from "./fs.ts";
 import type { Ninja } from "./ninja.ts";
 import { quote, slash } from "./shell.ts";
 import { emitShims } from "./shims.ts";
-import { computeDepLibs, depSourceStamp, resolveDep, type ResolvedDep } from "./source.ts";
+import {
+  computeDepLibs,
+  depSourceStamp,
+  resolveDep,
+  type ResolvedDep,
+} from "./source.ts";
 import { streamPath } from "./stream.ts";
 import { generateUnifiedSources } from "./unified.ts";
 import { emitZig, emitZigCheck, zigObjectPaths } from "./zig.ts";
@@ -90,7 +104,16 @@ function systemLibs(cfg: Config): string[] {
     // pthread/m: explicit on FreeBSD (not folded into libc).
     // execinfo: backtrace() — separate library on FreeBSD.
     // kvm/procstat/elf/util: process introspection for node:os and crash handler.
-    libs.push("-lc", "-lpthread", "-lm", "-lexecinfo", "-lkvm", "-lprocstat", "-lelf", "-lutil");
+    libs.push(
+      "-lc",
+      "-lpthread",
+      "-lm",
+      "-lexecinfo",
+      "-lkvm",
+      "-lprocstat",
+      "-lelf",
+      "-lutil",
+    );
   }
 
   if (cfg.windows) {
@@ -219,7 +242,9 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   // cpp-only: skip zig entirely (runs on a separate CI machine).
   let zigObjects: string[] = [];
   if (cfg.mode !== "cpp-only") {
-    const codegenZigSet = new Set(zigFilesGeneratedIntoSrc.map(p => resolve(cfg.cwd, p)));
+    const codegenZigSet = new Set(
+      zigFilesGeneratedIntoSrc.map(p => resolve(cfg.cwd, p)),
+    );
     const zigSources = sources.zig.filter(f => !codegenZigSet.has(f));
     const zigInputs = {
       codegenInputs: codegen.zigInputs,
@@ -313,7 +338,10 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     // rescle.h does `#define UNICODE` before including ATL; with PCH the
     // headers are already past in MBCS mode and ATL's TCHAR mismatches.
     const rescle = resolve(cfg.cwd, "src/jsc/bindings/windows/rescle.cpp");
-    const rescleBinding = resolve(cfg.cwd, "src/jsc/bindings/windows/rescle-binding.cpp");
+    const rescleBinding = resolve(
+      cfg.cwd,
+      "src/jsc/bindings/windows/rescle-binding.cpp",
+    );
     cxxSources.push(rescle, rescleBinding);
     noPchSources.add(rescle);
     noPchSources.add(rescleBinding);
@@ -451,7 +479,11 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
     // depLibs explicit in the phony: deps with no provided includes (tinycc,
     // lolhtml) aren't in depHeaderSignal, so the archive doesn't pull them
     // transitively — but link-only still needs them uploaded.
-    n.phony("bun", [archive, ...depLibs, ...(depUploadStamp ? [depUploadStamp] : [])]);
+    n.phony("bun", [
+      archive,
+      ...depLibs,
+      ...(depUploadStamp ? [depUploadStamp] : []),
+    ]);
     n.default(["bun"]);
     return { archive, deps, codegen, zigObjects, objects: allObjects };
   }
@@ -468,11 +500,22 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
 
   // Full link.
   const shims = emitShims(n, cfg);
-  const exe = link(n, cfg, exeName, [...allObjects, ...zigObjects, ...windowsRes], {
-    libs: depLibs,
-    flags: [...flags.ldflags, ...systemLibs(cfg), ...manifestLinkFlags(cfg), ...shims.ldflags],
-    implicitInputs: [...linkImplicitInputs(cfg), ...shims.implicitInputs],
-  });
+  const exe = link(
+    n,
+    cfg,
+    exeName,
+    [...allObjects, ...zigObjects, ...windowsRes],
+    {
+      libs: depLibs,
+      flags: [
+        ...flags.ldflags,
+        ...systemLibs(cfg),
+        ...manifestLinkFlags(cfg),
+        ...shims.ldflags,
+      ],
+      implicitInputs: [...linkImplicitInputs(cfg), ...shims.implicitInputs],
+    },
+  );
 
   // ─── Step 8: post-link (strip + dsymutil) ───
   // Plain release only: produce stripped `bun` alongside `bun-profile`.
@@ -509,7 +552,15 @@ export function emitBun(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   // fall back to direct invocation.
   emitSmokeTest(n, cfg, exe, exeName);
 
-  return { exe, strippedExe, dsym, deps, codegen, zigObjects, objects: allObjects };
+  return {
+    exe,
+    strippedExe,
+    dsym,
+    deps,
+    codegen,
+    zigObjects,
+    objects: allObjects,
+  };
 }
 
 /**
@@ -535,14 +586,19 @@ function emitZigOnly(n: Ninja, cfg: Config, sources: Sources): BunOutput {
   // Only dep: zstd, for @cImport headers. resolveDep emits its
   // fetch/configure/build; emitZig only depends on the fetch stamp.
   const zstdDep = resolveDep(n, cfg, zstd, new Map());
-  assert(zstdDep !== null, "zstd resolveDep returned null — should never be skipped");
+  assert(
+    zstdDep !== null,
+    "zstd resolveDep returned null — should never be skipped",
+  );
 
   // Codegen: emitted fully, but only zigInputs/zigOrderOnly are pulled.
   // The cpp-related outputs (cppSources, bindgenV2Cpp) have no consumer
   // in this graph — ninja skips them.
   const codegen = emitCodegen(n, cfg, sources);
 
-  const codegenZigSet = new Set(zigFilesGeneratedIntoSrc.map(p => resolve(cfg.cwd, p)));
+  const codegenZigSet = new Set(
+    zigFilesGeneratedIntoSrc.map(p => resolve(cfg.cwd, p)),
+  );
   const zigSources = sources.zig.filter(f => !codegenZigSet.has(f));
   const zigObjects = emitZig(n, cfg, {
     codegenInputs: codegen.zigInputs,
@@ -588,7 +644,10 @@ function emitLinkOnly(n: Ninja, cfg: Config): BunOutput {
 
   // Archive from cpp-only: same name cpp-only emits (exe name + lib
   // prefix/suffix, e.g. libbun-profile.a).
-  const archive = resolve(cfg.buildDir, `${cfg.libPrefix}${exeName}${cfg.libSuffix}`);
+  const archive = resolve(
+    cfg.buildDir,
+    `${cfg.libPrefix}${exeName}${cfg.libSuffix}`,
+  );
 
   // bun-zig*.o from zig-only: same paths emitZig writes to. Shared
   // helper so both sides of the CI split agree (single file at cg<=1,
@@ -609,7 +668,12 @@ function emitLinkOnly(n: Ninja, cfg: Config): BunOutput {
   const shims = emitShims(n, cfg);
   const exe = link(n, cfg, exeName, [archive, ...zigObjects, ...windowsRes], {
     libs: depLibs,
-    flags: [...flags.ldflags, ...systemLibs(cfg), ...manifestLinkFlags(cfg), ...shims.ldflags],
+    flags: [
+      ...flags.ldflags,
+      ...systemLibs(cfg),
+      ...manifestLinkFlags(cfg),
+      ...shims.ldflags,
+    ],
     implicitInputs: [...linkImplicitInputs(cfg), ...shims.implicitInputs],
   });
 
@@ -639,7 +703,12 @@ function emitLinkOnly(n: Ninja, cfg: Config): BunOutput {
  * linker didn't catch (missing symbol only referenced at init, ICU ABI
  * mismatch, etc.).
  */
-function emitSmokeTest(n: Ninja, cfg: Config, exe: string, exeName: string): void {
+function emitSmokeTest(
+  n: Ninja,
+  cfg: Config,
+  exe: string,
+  exeName: string,
+): void {
   // Cross-compiled binaries can't run on the build host. Skip the smoke
   // test entirely — `ninja check` becomes a no-op alias for the exe.
   if (cfg.crossTarget !== undefined) {
@@ -697,7 +766,12 @@ function emitSmokeTest(n: Ninja, cfg: Config, exe: string, exeName: string): voi
  * Input (bun-profile) is NOT modified — strip writes a new file via `-o`.
  * The profile binary keeps its symbols for profiling/debugging release crashes.
  */
-function emitStrip(n: Ninja, cfg: Config, inputExe: string, stripflags: string[]): string {
+function emitStrip(
+  n: Ninja,
+  cfg: Config,
+  inputExe: string,
+  stripflags: string[],
+): string {
   const out = resolve(cfg.buildDir, "bun" + cfg.exeSuffix);
 
   // Windows: strip equivalent is handled at link time (/OPT:REF etc), no
@@ -733,7 +807,12 @@ function emitStrip(n: Ninja, cfg: Config, inputExe: string, stripflags: string[]
  * symbolicate crash logs from the stripped `bun` — lldb/Instruments find
  * it automatically by UUID.
  */
-function emitDsymutil(n: Ninja, cfg: Config, inputExe: string, exeName: string): string {
+function emitDsymutil(
+  n: Ninja,
+  cfg: Config,
+  inputExe: string,
+  exeName: string,
+): string {
   assert(cfg.darwin, "dsymutil is darwin-only");
   assert(cfg.dsymutil !== undefined, "dsymutil not found in toolchain");
 
@@ -799,7 +878,9 @@ function emitWindowsResources(n: Ninja, cfg: Config): string {
   const ico = resolve(cfg.cwd, "src/bun.ico");
   const rcIn = readFileSync(rcTemplate, "utf8");
   const [major = "0", minor = "0", patch = "0"] = cfg.version.split(".");
-  const versionWithTag = cfg.canary ? `${cfg.version}-canary.${cfg.canaryRevision}` : cfg.version;
+  const versionWithTag = cfg.canary
+    ? `${cfg.version}-canary.${cfg.canaryRevision}`
+    : cfg.version;
   // slash(): rc parses .rc as C-like source; backslashes in the ICON path
   // string would need escaping. Forward slashes work for Windows file APIs.
   const rcOut = rcIn

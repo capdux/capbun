@@ -27,6 +27,7 @@
 #include "../../bake/BakeGlobalObject.h"
 #include "napi_handle_scope.h"
 #include "NativePromiseContext.h"
+#include "StrongRef.h"
 
 namespace WebCore {
 using namespace JSC;
@@ -39,6 +40,7 @@ JSHeapData::JSHeapData(Heap& heap)
     , m_heapCellTypeForBakeGlobalObject(JSC::IsoHeapCellType::Args<Bake::GlobalObject>())
     , m_heapCellTypeForNapiHandleScopeImpl(JSC::IsoHeapCellType::Args<Bun::NapiHandleScopeImpl>())
     , m_heapCellTypeForNativePromiseContext(JSC::IsoHeapCellType::Args<Bun::NativePromiseContext>())
+    , m_heapCellTypeForStrongRootBlock(JSC::IsoHeapCellType::Args<Bun::StrongRootBlock>())
     , m_domBuiltinConstructorSpace ISO_SUBSPACE_INIT(heap, heap.cellHeapCellType, JSDOMBuiltinConstructorBase)
     , m_domConstructorSpace ISO_SUBSPACE_INIT(heap, heap.cellHeapCellType, JSDOMConstructorBase)
     , m_domNamespaceObjectSpace ISO_SUBSPACE_INIT(heap, heap.cellHeapCellType, JSDOMObject)
@@ -101,6 +103,7 @@ JSVMClientData::~JSVMClientData()
     });
     m_clients.clear();
 
+    Bun::freeStrongRootBlockNodes(strongRootBlockHead);
     m_normalWorld = nullptr;
 }
 void JSVMClientData::create(VM* vm, void* bunVM)
@@ -122,6 +125,7 @@ void JSVMClientData::create(VM* vm, void* bunVM)
     clientData->m_normalWorld = DOMWrapperWorld::create(*vm, DOMWrapperWorld::Type::Normal);
 
     vm->heap.addMarkingConstraint(makeUnique<WebCore::DOMGCOutputConstraint>(*vm, clientData->heapData()));
+    vm->heap.addMarkingConstraint(Bun::createStrongRootBlockConstraint(*vm, *clientData));
     vm->m_typedArrayController = adoptRef(new WebCoreTypedArrayController(true));
     clientData->builtinFunctions().exportNames();
 }

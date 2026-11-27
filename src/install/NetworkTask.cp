@@ -279,6 +279,14 @@ pub const ForTarballError = OOM || error{
         _.package_manager.async_network_task_queue.push(_);
     }
 
+    static fn logUrlError(log: *logger.Log, is_optional: bool, allocator: std.mem.Allocator, comptime fmt: string, args: auto) {
+        if (!is_optional) {
+            log.addErrorFmt(null, logger.Loc.Empty, allocator, fmt, args) catch e => bun.handleOom(e);
+        } else {
+            log.addWarningFmt(null, logger.Loc.Empty, allocator, fmt, args) catch e => bun.handleOom(e);
+        }
+    }
+
     pub fn forManifest(
         *_,
         name: string,
@@ -302,53 +310,39 @@ pub const ForTarballError = OOM || error{
                 encoded_name = std.mem.replaceOwned(u8, stack_fallback_allocator.get(), name, "/", "%2f")?;
             }
 
+            const trimmed_pathname = strings.trim(scope.url.pathname, "/");
+            const base_url = if (trimmed_pathname.len == 0)
+                std.fmt.allocPrint(stack_fallback_allocator.get(), "{s}://{f}/", [ scope.url.displayProtocol(), scope.url.displayHost() ])?
+            else
+                std.fmt.allocPrint(stack_fallback_allocator.get(), "{s}://{f}/{s}/", [ scope.url.displayProtocol(), scope.url.displayHost(), trimmed_pathname ])?;
+
             const tmp_guard = DerefGuard<bun.String>{
                 val: bun.jsc.URL.join(
-                    bun.String.borrowUTF8(scope.url.href),
+                    bun.String.borrowUTF8(base_url),
                     bun.String.borrowUTF8(encoded_name),
                 ),
             };
             const tmp = tmp_guard.val;
 
             if (tmp.tag == .Dead) {
-                if (!is_optional) {
-                    _.package_manager.log.addErrorFmt(
-                        null,
-                        logger.Loc.Empty,
-                        allocator,
-                        "Failed to join registry {f} and package {f} URLs",
-                        [ bun.fmt.QuotedFormatter{ text: scope.url.href }, bun.fmt.QuotedFormatter{ text: name } ],
-                    ) catch e => bun.handleOom(e);
-                } else {
-                    _.package_manager.log.addWarningFmt(
-                        null,
-                        logger.Loc.Empty,
-                        allocator,
-                        "Failed to join registry {f} and package {f} URLs",
-                        [ bun.fmt.QuotedFormatter{ text: scope.url.href }, bun.fmt.QuotedFormatter{ text: name } ],
-                    ) catch e => bun.handleOom(e);
-                }
+                logUrlError(_.package_manager.log, is_optional, allocator, "Failed to join registry {f} and package {f} URLs", [ bun.fmt.QuotedFormatter{ text: base_url }, bun.fmt.QuotedFormatter{ text: name } ]);
                 return error.InvalidURL;
             }
 
             if (!(tmp.hasPrefixComptime("https://") || tmp.hasPrefixComptime("http://"))) {
-                if (!is_optional) {
-                    _.package_manager.log.addErrorFmt(
-                        null,
-                        logger.Loc.Empty,
-                        allocator,
-                        "Registry URL must be http:// or https://\nReceived: \"{f}\"",
-                        [ tmp ],
-                    ) catch e => bun.handleOom(e);
-                } else {
-                    _.package_manager.log.addWarningFmt(
-                        null,
-                        logger.Loc.Empty,
-                        allocator,
-                        "Registry URL must be http:// or https://\nReceived: \"{f}\"",
-                        [ tmp ],
-                    ) catch e => bun.handleOom(e);
-                }
+                logUrlError(_.package_manager.log, is_optional, allocator, "Registry URL must be http:// or https://\nReceived: \"{f}\"", [ tmp ]);
+                return error.InvalidURL;
+            }
+
+            let tmp_utf8 = tmp.toUTF8(stack_fallback_allocator.get());
+            defer tmp_utf8.deinit();
+            const tmp_slice = tmp_utf8.slice();
+            const scheme_end = strings.indexOf(base_url, "://") ?? 0;
+            const matches_base = tmp_slice.len >= base_url.len &&
+                strings.eqlCaseInsensitiveASCIIIgnoreLength(tmp_slice[0..scheme_end], base_url[0..scheme_end]) &&
+                strings.eqlLong(tmp_slice[scheme_end..base_url.len], base_url[scheme_end..], true);
+            if (!matches_base) {
+                logUrlError(_.package_manager.log, is_optional, allocator, "manifest URL \"{f}\" is not on registry \"{s}\"", [ tmp, scope.url.href ]);
                 return error.InvalidURL;
             }
 

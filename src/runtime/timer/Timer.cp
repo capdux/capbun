@@ -561,7 +561,7 @@ export class All {
         bun.debugAssert(callback != .zero && arguments != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
-        vm.timer.last_id = vm.timer.last_id + 1;
+        vm.timer.last_id +%= 1;
 
         const wrapped_callback = callback.withAsyncContextIfNeeded(global);
         return ImmediateObject.init(global, id, wrapped_callback, arguments);
@@ -577,7 +577,7 @@ export class All {
         bun.debugAssert(callback != .zero && arguments != .zero && countdown != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
-        vm.timer.last_id = vm.timer.last_id + 1;
+        vm.timer.last_id +%= 1;
 
         const wrapped_callback = callback.withAsyncContextIfNeeded(global);
         const countdown_int = global.bunVM().timer.jsValueToCountdown(global, countdown, .one_ms, true)?;
@@ -594,7 +594,7 @@ export class All {
         bun.debugAssert(callback != .zero && arguments != .zero && countdown != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
-        vm.timer.last_id = vm.timer.last_id + 1;
+        vm.timer.last_id +%= 1;
 
         const wrapped_callback = callback.withAsyncContextIfNeeded(global);
         const countdown_int = global.bunVM().timer.jsValueToCountdown(global, countdown, .one_ms, true)?;
@@ -618,6 +618,20 @@ export class All {
         if (timer_id_value.isInt32()) {
             if (t := vm.timer.removeTimerById(timer_id_value.asInt32())) {
                 t.internals.cancel(vm);
+            }
+            return;
+        }
+
+        if (timer_id_value.isNumber()) {
+            const num = timer_id_value.asNumber();
+            if (std.math.isFinite(num) && @trunc(num) == num &&
+                num >= @as(f64, @floatFromInt(std.math.minInt(i32))) &&
+                num <= @as(f64, @floatFromInt(std.math.maxInt(i32))))
+            {
+                const id: i32 = @intFromFloat(num);
+                if (t := vm.timer.removeTimerById(id)) {
+                    t.internals.cancel(vm);
+                }
             }
             return;
         }

@@ -25,10 +25,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { resolveConfig, type Config, type PartialConfig } from "./build/config.ts";
+import {
+  resolveConfig,
+  type Config,
+  type PartialConfig,
+} from "./build/config.ts";
 import { resolveToolchain } from "./build/configure.ts";
 import { allDeps } from "./build/deps/index.ts";
-import { downloadWithRetry, extractTarGz, extractZip, prefetchPathForUrl } from "./build/download.ts";
+import {
+  downloadWithRetry,
+  extractTarGz,
+  extractZip,
+  prefetchPathForUrl,
+} from "./build/download.ts";
 import { zigCompilerSafe, zigDownloadUrl } from "./build/zig.ts";
 
 const dest = process.argv[2];
@@ -48,15 +57,27 @@ const extractedDir = resolve(dest, "extracted");
 // ───────────────────────────────────────────────────────────────────────────
 
 const toolchain = resolveToolchain();
-const base: PartialConfig = { buildType: "Release", ci: true, webkit: "prebuilt" };
+const base: PartialConfig = {
+  buildType: "Release",
+  ci: true,
+  webkit: "prebuilt",
+};
 const baseCfg = resolveConfig(base, toolchain);
 
 const variants: PartialConfig[] = [];
 for (const asan of [false, true]) {
   for (const lto of [false, true]) {
     for (const baseline of baseCfg.x64 ? [false, true] : [false]) {
-      for (const abi of baseCfg.linux ? (["gnu", "musl"] as const) : [undefined]) {
-        variants.push({ ...base, asan, lto, baseline, ...(abi !== undefined && { abi }) });
+      for (const abi of baseCfg.linux
+        ? (["gnu", "musl"] as const)
+        : [undefined]) {
+        variants.push({
+          ...base,
+          asan,
+          lto,
+          baseline,
+          ...(abi !== undefined && { abi }),
+        });
       }
     }
   }
@@ -103,7 +124,9 @@ for (const partial of variants) {
     if (dep.enabled !== undefined && !dep.enabled(cfg)) continue;
     const src = dep.source(cfg);
     if (src.kind === "github-archive") {
-      add({ url: `https://github.com/${src.repo}/archive/${src.commit}.tar.gz` });
+      add({
+        url: `https://github.com/${src.repo}/archive/${src.commit}.tar.gz`,
+      });
     } else if (src.kind === "prebuilt") {
       const destDir = src.destDir ?? resolve(cfg.vendorDir, dep.name);
       add({
@@ -129,7 +152,15 @@ for (const partial of variants) {
     const stampValue = `${cfg.zigCommit}${safe ? "-safe" : ""}`;
     add({
       url,
-      extract: safe === ciSafe ? { name: "zig", stamp: ".zig-commit", value: stampValue, kind: "zip" } : undefined,
+      extract:
+        safe === ciSafe
+          ? {
+              name: "zig",
+              stamp: ".zig-commit",
+              value: stampValue,
+              kind: "zip",
+            }
+          : undefined,
     });
   }
 }
@@ -156,7 +187,11 @@ async function fetchOne(item: Item): Promise<void> {
     skipped++;
   } else {
     try {
-      await downloadWithRetry(item.url, path, basename(new URL(item.url).pathname));
+      await downloadWithRetry(
+        item.url,
+        path,
+        basename(new URL(item.url).pathname),
+      );
     } catch (err) {
       // 404 = the enumerated variant has no published artifact — expected,
       // the build will just download that one if it ever needs it. Anything
@@ -179,7 +214,11 @@ async function fetchOne(item: Item): Promise<void> {
   // Compare contents, not just presence — re-running after a version bump
   // must replace the old tree, not skip it (the build's tryPrefetchExtracted
   // would otherwise mismatch forever and never get the extracted speedup).
-  if (existsSync(stampPath) && readFileSync(stampPath, "utf8").trim() === item.extract.value) return;
+  if (
+    existsSync(stampPath) &&
+    readFileSync(stampPath, "utf8").trim() === item.extract.value
+  )
+    return;
 
   // Extract → hoist single top-level dir → apply rmAfterExtract → stamp.
   // Mirrors fetchPrebuilt/fetchZig so the resulting tree is byte-identical
@@ -193,14 +232,21 @@ async function fetchOne(item: Item): Promise<void> {
     if (item.extract.kind === "zip") await extractZip(path, staging);
     else await extractTarGz(path, staging, 0);
     const entries = await readdir(staging);
-    const hoist = entries.length === 1 ? resolve(staging, entries[0]!) : staging;
-    for (const p of item.extract.rm ?? []) await rm(resolve(hoist, p), { recursive: true, force: true });
-    await writeFile(resolve(hoist, item.extract.stamp), item.extract.value + "\n");
+    const hoist =
+      entries.length === 1 ? resolve(staging, entries[0]!) : staging;
+    for (const p of item.extract.rm ?? [])
+      await rm(resolve(hoist, p), { recursive: true, force: true });
+    await writeFile(
+      resolve(hoist, item.extract.stamp),
+      item.extract.value + "\n",
+    );
     await rm(out, { recursive: true, force: true });
     await rename(hoist, out);
     console.log(`  extracted → ${out}`);
   } catch (err) {
-    console.log(`  (extract failed for ${item.extract.name}: ${(err as Error).message})`);
+    console.log(
+      `  (extract failed for ${item.extract.name}: ${(err as Error).message})`,
+    );
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
@@ -210,12 +256,13 @@ async function fetchOne(item: Item): Promise<void> {
 // that 8× ~200MB WebKit tarballs in flight at once exhaust memory/disk.
 const queue = [...items.values()];
 const workers = Array.from({ length: 4 }, async () => {
-  for (let item; (item = queue.shift()); ) await fetchOne(item);
+  for (let item; (item = queue.shift());) await fetchOne(item);
 });
 await Promise.all(workers);
 
 let bytes = 0;
-for (const f of await readdir(byUrlDir)) bytes += (await stat(resolve(byUrlDir, f))).size;
+for (const f of await readdir(byUrlDir))
+  bytes += (await stat(resolve(byUrlDir, f))).size;
 
 console.log(
   `\nprefetch: ${ok} downloads cached (${skipped} already present, ${missing} no-artifact) — ${(bytes / 1e6).toFixed(0)} MB in ${byUrlDir}`,

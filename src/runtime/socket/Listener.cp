@@ -572,12 +572,20 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     };
 
     if (ssl_cfg := ssl) {
-        let create_err: uws.create_bun_socket_error_t = .none;
-        const created_ctx = ssl_cfg.asUSockets().createSSLContext(&create_err);
-        if (created_ctx == null) {
-            return globalObject.throwValue(create_err.toJS(globalObject));
+        let reused_ctx: (*BoringSSL.SSL_CTX)? = null;
+        if (tls_js := opts.getTruthy(globalObject, "tls")?) {
+            if (tls_js.isObject()) {
+                if (sc_js := tls_js.getTruthy(globalObject, "secureContext")?) {
+                    if (sc := SecureContext.fromJS(sc_js)) reused_ctx = sc.borrow();
+                }
+            }
         }
-        this_ptr.secure_ctx = created_ctx;
+        if (reused_ctx != null) { this_ptr.secure_ctx = reused_ctx; } else {
+            let create_err: uws.create_bun_socket_error_t = .none;
+            const created_ctx = ssl_cfg.asUSockets().createSSLContext(&create_err) ??
+                return globalObject.throwValue(create_err.toJS(globalObject));
+            this_ptr.secure_ctx = created_ctx;
+        }
     }
     const kind: uws.SocketKind = if (ssl_enabled) .bun_listener_tls else .bun_listener_tcp;
 

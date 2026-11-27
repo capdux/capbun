@@ -15,11 +15,14 @@ if (!sentryId) {
   throw new Error("Missing sentry_id");
 }
 
-const response = await fetch(`https://sentry.io/api/0/organizations/4507155222364160/eventids/${sentryId}/`, {
-  headers: {
-    Authorization: `Bearer ${SENTRY_AUTH_TOKEN}`,
+const response = await fetch(
+  `https://sentry.io/api/0/organizations/4507155222364160/eventids/${sentryId}/`,
+  {
+    headers: {
+      Authorization: `Bearer ${SENTRY_AUTH_TOKEN}`,
+    },
   },
-});
+);
 if (!response.ok) {
   throw new Error(`Failed to fetch Sentry event: ${response.statusText}`);
 }
@@ -29,11 +32,14 @@ if (!groupId) {
   throw new Error("Missing groupId");
 }
 
-const issueResponse = await fetch(`https://sentry.io/api/0/issues/${groupId}/`, {
-  headers: {
-    Authorization: `Bearer ${SENTRY_AUTH_TOKEN}`,
+const issueResponse = await fetch(
+  `https://sentry.io/api/0/issues/${groupId}/`,
+  {
+    headers: {
+      Authorization: `Bearer ${SENTRY_AUTH_TOKEN}`,
+    },
   },
-});
+);
 if (!issueResponse.ok) {
   throw new Error(`Failed to fetch Sentry issue: ${issueResponse.statusText}`);
 }

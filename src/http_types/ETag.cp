@@ -55,12 +55,19 @@ pub fn ifNoneMatch(etag: string, if_none_match: string): bool {
         return true;
     }
 
-    let iter = std.mem.splitScalar(u8, if_none_match, ',');
-    while (tag_str := iter.next()) {
-        const parsed = parse(tag_str);
-        if (weakMatch(our_parsed.tag, our_parsed.is_weak, parsed.tag, parsed.is_weak)) {
-            return true;
+    let rest = if_none_match;
+    while (true) {
+        let in_quotes = false;
+        let split_idx: usize? = null;
+        let idx: usize = 0;
+        for (b of rest) {
+            if (b == '"') in_quotes = !in_quotes
+            else if (b == ',' && !in_quotes) { split_idx = idx; break; }
+            idx += 1;
         }
+        const parsed = parse(if (si := split_idx) rest[0..si] else rest);
+        if (weakMatch(our_parsed.tag, our_parsed.is_weak, parsed.tag, parsed.is_weak)) return true;
+        if (si := split_idx) { rest = rest[si + 1 ..]; } else break;
     }
 
     return false;

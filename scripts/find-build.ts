@@ -88,7 +88,8 @@ if (!Bun.which("bk")) {
 
 async function bk<T = any>(...argv: string[]): Promise<T> {
   const { exitCode, stdout, stderr } = await $`bk ${argv}`.quiet().nothrow();
-  if (exitCode !== 0) throw new Error(`bk ${argv.join(" ")}: ${stderr.toString().trim()}`);
+  if (exitCode !== 0)
+    throw new Error(`bk ${argv.join(" ")}: ${stderr.toString().trim()}`);
   return JSON.parse(stdout.toString());
 }
 
@@ -99,9 +100,14 @@ if (target == null) {
   branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim();
 } else if (/buildkite\.com\/.+\/builds\/(\d+)/.test(target)) {
   buildNumber = Number(target.match(/builds\/(\d+)/)![1]);
-} else if (/github\.com\/.+\/pull\/(\d+)/.test(target) || /^#\d+$/.test(target)) {
+} else if (
+  /github\.com\/.+\/pull\/(\d+)/.test(target) ||
+  /^#\d+$/.test(target)
+) {
   const pr = target.match(/(\d+)/)![1];
-  branch = (await $`gh pr view ${pr} --repo oven-sh/bun --json headRefName -q .headRefName`.text()).trim();
+  branch = (
+    await $`gh pr view ${pr} --repo oven-sh/bun --json headRefName -q .headRefName`.text()
+  ).trim();
   if (!branch) die(`could not resolve PR #${pr} to a branch`);
 } else if (/^\d+$/.test(target)) {
   buildNumber = Number(target);
@@ -109,15 +115,34 @@ if (target == null) {
   branch = target;
 }
 
-type Build = { number: number; state: string; web_url: string; commit?: string };
+type Build = {
+  number: number;
+  state: string;
+  web_url: string;
+  commit?: string;
+};
 let builds: Build[];
 
 try {
   if (buildNumber != null) {
-    builds = [{ number: buildNumber, state: "", web_url: `https://buildkite.com/bun/bun/builds/${buildNumber}` }];
+    builds = [
+      {
+        number: buildNumber,
+        state: "",
+        web_url: `https://buildkite.com/bun/bun/builds/${buildNumber}`,
+      },
+    ];
   } else {
     // `bk build view -b <branch>` silently filters by creator; use `list` instead.
-    builds = await bk("build", "list", "--branch", branch!, "--limit", opts.limit!, "--json");
+    builds = await bk(
+      "build",
+      "list",
+      "--branch",
+      branch!,
+      "--limit",
+      opts.limit!,
+      "--json",
+    );
     if (builds.length === 0) die(`no builds found for branch '${branch}'`);
   }
 
@@ -125,12 +150,18 @@ try {
   else if (opts.watch) await watchStatus(builds[0].number);
   else if (opts.logs) await saveLogs(builds[0].number);
   else if (opts.errors)
-    await printErrors(builds[0].number, { all: !!opts.all, compare: !opts["no-compare"], excludeBranch: branch });
+    await printErrors(builds[0].number, {
+      all: !!opts.all,
+      compare: !opts["no-compare"],
+      excludeBranch: branch,
+    });
   else
     for (const b of builds) {
       process.stdout.write(b.number + "\n");
       if (process.stderr.isTTY) {
-        console.error(`  ${b.state.padEnd(9)} ${b.commit?.slice(0, 10) ?? ""}  ${b.web_url}`);
+        console.error(
+          `  ${b.state.padEnd(9)} ${b.commit?.slice(0, 10) ?? ""}  ${b.web_url}`,
+        );
       }
     }
 } catch (e) {
@@ -140,10 +171,21 @@ try {
 // --- annotation rendering --------------------------------------------------
 
 type Annotation = { style: string; context: string; body_html: string };
-type Job = { id: string; type: string; name: string; state: string; soft_failed?: boolean; web_url: string };
+type Job = {
+  id: string;
+  type: string;
+  name: string;
+  state: string;
+  soft_failed?: boolean;
+  web_url: string;
+};
 
 function isFailedJob(j: Job) {
-  return j.type === "script" && ["failed", "broken", "timed_out"].includes(j.state) && !j.soft_failed;
+  return (
+    j.type === "script" &&
+    ["failed", "broken", "timed_out"].includes(j.state) &&
+    !j.soft_failed
+  );
 }
 
 async function annotations(build: number): Promise<Annotation[]> {
@@ -151,7 +193,14 @@ async function annotations(build: number): Promise<Annotation[]> {
 }
 
 function renderTermHTML(html: string): string {
-  const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", nbsp: " " };
+  const entities: Record<string, string> = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    "#39": "'",
+    nbsp: " ",
+  };
   return (
     html
       // <span class="term-fg31 term-fg1">..</span>  ->  \x1b[31;1m..\x1b[0m
@@ -162,7 +211,10 @@ function renderTermHTML(html: string): string {
       })
       .replace(/<\/span>/g, tty ? "\x1b[0m" : "")
       .replace(/<img class="emoji"[^>]*alt="([^"]+)"[^>]*>/g, "$1")
-      .replace(/<\/?(?:a|code|pre|details|summary|p|br|strong|em|b|i)\b[^>]*>/g, "")
+      .replace(
+        /<\/?(?:a|code|pre|details|summary|p|br|strong|em|b|i)\b[^>]*>/g,
+        "",
+      )
       .replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (_, e) => entities[e])
       .replace(/\r/g, "")
       .replace(/^[^\S\n]+$/gm, "")
@@ -174,7 +226,11 @@ function renderAnnotation(a: Annotation, tag: string) {
   const color = a.style === "error" ? c.red : c.yellow;
   console.log(`\n${color}${c.bold}== ${a.context} ==${c.reset}${tag}`);
   // body_html is a sequence of <details><summary>…</summary><pre>…</pre></details>, one per platform.
-  const sections = [...a.body_html.matchAll(/<details><summary>(.*?)<\/summary>(.*?)<\/details>/gs)];
+  const sections = [
+    ...a.body_html.matchAll(
+      /<details><summary>(.*?)<\/summary>(.*?)<\/details>/gs,
+    ),
+  ];
   if (sections.length === 0) {
     console.log(renderTermHTML(a.body_html));
     return;
@@ -199,11 +255,19 @@ function renderAnnotation(a: Annotation, tag: string) {
 // renders the same way an error does (own `== path ==` heading, per-platform dedup).
 function splitFlaky(a: Annotation): Annotation[] {
   const byTest = new Map<string, string>();
-  for (const [block, summary] of a.body_html.matchAll(/<details><summary>(.*?)<\/summary>.*?<\/details>/gs)) {
-    const test = summary.match(/<code>(.*?)<\/code>/)?.[1] ?? renderTermHTML(summary).split(" - ")[0].trim();
+  for (const [block, summary] of a.body_html.matchAll(
+    /<details><summary>(.*?)<\/summary>.*?<\/details>/gs,
+  )) {
+    const test =
+      summary.match(/<code>(.*?)<\/code>/)?.[1] ??
+      renderTermHTML(summary).split(" - ")[0].trim();
     byTest.set(test, (byTest.get(test) ?? "") + block);
   }
-  return [...byTest].map(([context, body_html]) => ({ context, style: "flaky", body_html }));
+  return [...byTest].map(([context, body_html]) => ({
+    context,
+    style: "flaky",
+    body_html,
+  }));
 }
 
 function normalizeForDedup(s: string): string {
@@ -216,9 +280,19 @@ function normalizeForDedup(s: string): string {
 
 async function printErrors(
   build: number,
-  { all, compare, excludeBranch }: { all: boolean; compare: boolean; excludeBranch: string | null | undefined },
+  {
+    all,
+    compare,
+    excludeBranch,
+  }: {
+    all: boolean;
+    compare: boolean;
+    excludeBranch: string | null | undefined;
+  },
 ) {
-  console.log(`${c.bold}build #${build}${c.reset}  https://buildkite.com/bun/bun/builds/${build}\n`);
+  console.log(
+    `${c.bold}build #${build}${c.reset}  https://buildkite.com/bun/bun/builds/${build}\n`,
+  );
 
   const [anns, baseline] = await Promise.all([
     annotations(build),
@@ -231,7 +305,9 @@ async function printErrors(
 
   if (shown.length === 0 && flaky.length === 0) {
     const other = rest.length;
-    console.log(`no error annotations${other ? ` (${other} warning/info; pass --all to show)` : ""}`);
+    console.log(
+      `no error annotations${other ? ` (${other} warning/info; pass --all to show)` : ""}`,
+    );
     return;
   }
 
@@ -245,12 +321,18 @@ async function printErrors(
           : ` ${c.yellow}[new]${c.reset}`;
 
   // New-on-this-branch first.
-  shown.sort((a, b) => Number(baseline?.has(a.context) ?? 0) - Number(baseline?.has(b.context) ?? 0));
+  shown.sort(
+    (a, b) =>
+      Number(baseline?.has(a.context) ?? 0) -
+      Number(baseline?.has(b.context) ?? 0),
+  );
   for (const a of shown) renderAnnotation(a, tag(a));
   for (const a of flaky) renderAnnotation(a, ` ${c.yellow}[flaky]${c.reset}`);
 
   if (baseline == null && compare) {
-    console.log(`\n${c.dim}(could not fetch recently merged PRs for comparison)${c.reset}`);
+    console.log(
+      `\n${c.dim}(could not fetch recently merged PRs for comparison)${c.reset}`,
+    );
   }
 }
 
@@ -263,7 +345,13 @@ function ago(iso: string | null | undefined): string {
 }
 
 async function fetchStatus(build: number) {
-  type Full = { state: string; started_at: string | null; finished_at: string | null; web_url: string; jobs: Job[] };
+  type Full = {
+    state: string;
+    started_at: string | null;
+    finished_at: string | null;
+    web_url: string;
+    jobs: Job[];
+  };
   const [b, anns] = await Promise.all([
     bk<Full>("build", "view", String(build), "--json"),
     annotations(build).catch(() => [] as Annotation[]),
@@ -275,21 +363,38 @@ async function fetchStatus(build: number) {
   for (const j of jobs) counts[j.state] = (counts[j.state] ?? 0) + 1;
   const failed = jobs.filter(isFailedJob);
 
-  const stateColor = b.state === "passed" ? "\x1b[32m" : b.state === "failed" ? c.red : c.yellow;
-  out.push(`${c.bold}#${build}${c.reset} ${tty ? stateColor : ""}${b.state}${c.reset}  ${b.web_url}`);
+  const stateColor =
+    b.state === "passed" ? "\x1b[32m" : b.state === "failed" ? c.red : c.yellow;
+  out.push(
+    `${c.bold}#${build}${c.reset} ${tty ? stateColor : ""}${b.state}${c.reset}  ${b.web_url}`,
+  );
   out.push(
     `${c.dim}started ${ago(b.started_at)} ago` +
       (b.finished_at ? `, finished ${ago(b.finished_at)} ago` : "") +
       c.reset,
   );
 
-  const order = ["passed", "failed", "broken", "timed_out", "running", "scheduled", "waiting"];
-  const parts = [...new Set([...order, ...Object.keys(counts)])].filter(s => counts[s]).map(s => `${counts[s]} ${s}`);
-  out.push("", `${c.bold}jobs:${c.reset} ${parts.join(", ")}  ${c.dim}(${jobs.length} total)${c.reset}`);
+  const order = [
+    "passed",
+    "failed",
+    "broken",
+    "timed_out",
+    "running",
+    "scheduled",
+    "waiting",
+  ];
+  const parts = [...new Set([...order, ...Object.keys(counts)])]
+    .filter(s => counts[s])
+    .map(s => `${counts[s]} ${s}`);
+  out.push(
+    "",
+    `${c.bold}jobs:${c.reset} ${parts.join(", ")}  ${c.dim}(${jobs.length} total)${c.reset}`,
+  );
 
   if (failed.length) {
     out.push("", `${c.red}${c.bold}failed jobs:${c.reset}`);
-    for (const j of failed) out.push(`  ${j.name.padEnd(48)} ${c.dim}${j.web_url}${c.reset}`);
+    for (const j of failed)
+      out.push(`  ${j.name.padEnd(48)} ${c.dim}${j.web_url}${c.reset}`);
   }
 
   const err = anns.filter(a => a.style === "error");
@@ -312,13 +417,21 @@ async function printStatus(build: number) {
 }
 
 async function watchStatus(build: number) {
-  const terminal = new Set(["passed", "failed", "canceled", "blocked", "skipped", "not_run"]);
+  const terminal = new Set([
+    "passed",
+    "failed",
+    "canceled",
+    "blocked",
+    "skipped",
+    "not_run",
+  ]);
   const isTTY = process.stdout.isTTY;
   const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   let prevLines = 0;
   for (;;) {
     const { state, lines } = await fetchStatus(build);
-    if (isTTY && prevLines > 0) process.stdout.write(`\r\x1b[${prevLines}A\x1b[J`);
+    if (isTTY && prevLines > 0)
+      process.stdout.write(`\r\x1b[${prevLines}A\x1b[J`);
     process.stdout.write(lines.join("\n") + "\n");
     if (terminal.has(state)) process.exit(state === "passed" ? 0 : 1);
     if (!isTTY) {
@@ -341,7 +454,8 @@ async function watchStatus(build: number) {
 async function saveLogs(build: number) {
   const b = await bk<{ jobs: Job[] }>("build", "view", String(build), "--json");
   const failed = b.jobs.filter(isFailedJob);
-  if (failed.length === 0) return console.log(`no failed jobs in build #${build}`);
+  if (failed.length === 0)
+    return console.log(`no failed jobs in build #${build}`);
 
   const dir = `tmp/ci-${build}`;
   await $`mkdir -p ${dir}`.quiet();
@@ -351,8 +465,10 @@ async function saveLogs(build: number) {
     failed.map(async j => {
       const name = j.name.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "");
       const path = `${dir}/${name}.log`;
-      const { exitCode, stdout, stderr } = await $`bk job log ${j.id} -b ${String(build)}`.quiet().nothrow();
-      if (exitCode !== 0) return console.error(`  ${j.name}: ${stderr.toString().trim()}`);
+      const { exitCode, stdout, stderr } =
+        await $`bk job log ${j.id} -b ${String(build)}`.quiet().nothrow();
+      if (exitCode !== 0)
+        return console.error(`  ${j.name}: ${stderr.toString().trim()}`);
       // Strip BuildKite APC timestamp markers first; an unterminated \x1b_ makes Bun.stripANSI eat to EOF.
       const text = stdout
         .toString()
@@ -365,27 +481,44 @@ async function saveLogs(build: number) {
   );
 }
 
-async function mergedPRFailingContexts(excludeBranch: string | null | undefined): Promise<Set<string> | null> {
+async function mergedPRFailingContexts(
+  excludeBranch: string | null | undefined,
+): Promise<Set<string> | null> {
   // main builds don't run tests (build-only), so compare against the last few
   // merged PRs' final builds — anything still failing there is pre-existing.
   let merged: Array<{ headRefName: string }>;
   try {
-    merged = await $`gh pr list --repo oven-sh/bun --state merged --limit 5 --json headRefName`.json();
+    merged =
+      await $`gh pr list --repo oven-sh/bun --state merged --limit 5 --json headRefName`.json();
   } catch {
     return null;
   }
-  const branches = merged.map(p => p.headRefName).filter(b => b && b !== excludeBranch);
+  const branches = merged
+    .map(p => p.headRefName)
+    .filter(b => b && b !== excludeBranch);
   if (branches.length === 0) return null;
   const builds = await Promise.all(
     branches.map(b =>
-      bk("build", "list", "--branch", b, "--state", "finished", "--limit", "1", "--json").then(
+      bk(
+        "build",
+        "list",
+        "--branch",
+        b,
+        "--state",
+        "finished",
+        "--limit",
+        "1",
+        "--json",
+      ).then(
         (r: Build[]) => r[0]?.number,
         () => undefined,
       ),
     ),
   );
   const results = await Promise.all(
-    builds.filter((n): n is number => n != null).map(n => annotations(n).catch(() => [] as Annotation[])),
+    builds
+      .filter((n): n is number => n != null)
+      .map(n => annotations(n).catch(() => [] as Annotation[])),
   );
   return new Set(
     results

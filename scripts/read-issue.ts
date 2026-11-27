@@ -10,7 +10,11 @@ if (body.includes("[TestCommand]")) {
   command = "jest";
 } else if (body.includes("[BuildCommand]")) {
   command = "bundler";
-} else if (body.includes("[InstallCommand]") || body.includes("[AddCommand]") || body.includes("[RemoveCommand]")) {
+} else if (
+  body.includes("[InstallCommand]") ||
+  body.includes("[AddCommand]") ||
+  body.includes("[RemoveCommand]")
+) {
   command = "npm";
 }
 

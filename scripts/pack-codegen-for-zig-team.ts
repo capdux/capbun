@@ -2,10 +2,13 @@ import { $ } from "bun";
 import { dirname, join, relative } from "path";
 
 // Check for local changes in git before proceeding
-const statusOutput = await $`git status --porcelain --untracked-files=normal`.text();
+const statusOutput =
+  await $`git status --porcelain --untracked-files=normal`.text();
 
 if (statusOutput.trim().length > 0) {
-  console.error("There are local changes in git. Please commit or stash them before running this command.");
+  console.error(
+    "There are local changes in git. Please commit or stash them before running this command.",
+  );
   console.error("Git status:");
   console.error(statusOutput);
   process.exit(1);

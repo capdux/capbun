@@ -19,6 +19,8 @@ export default [
     // `context._external` is a V8 External (opaque) used only by N-API
     // addons that link OpenSSL directly, which Bun's BoringSSL build can't
     // satisfy anyway.
-    proto: {},
+    proto: {
+      addCACert: { fn: "addCACert", length: 1 },
+    },
   }),
 ];

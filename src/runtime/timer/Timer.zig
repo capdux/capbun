@@ -671,7 +671,7 @@ pub fn setImmediate(global: *JSGlobalObject, callback: JSValue, arguments: JSVal
             _ = bun.debugAssert(((callback != .zero) and (arguments != .zero)));
             const vm = global.bunVM();
             const id = vm.timer.last_id;
-            vm.timer.last_id = (vm.timer.last_id + 1);
+            vm.timer.last_id = (vm.timer.last_id +% 1);
             const wrapped_callback = callback.withAsyncContextIfNeeded(global);
             return ImmediateObject.init(global, id, wrapped_callback, arguments);
     }
@@ -681,7 +681,7 @@ pub fn setTimeout(global: *JSGlobalObject, callback: JSValue, arguments: JSValue
             _ = bun.debugAssert((((callback != .zero) and (arguments != .zero)) and (countdown != .zero)));
             const vm = global.bunVM();
             const id = vm.timer.last_id;
-            vm.timer.last_id = (vm.timer.last_id + 1);
+            vm.timer.last_id = (vm.timer.last_id +% 1);
             const wrapped_callback = callback.withAsyncContextIfNeeded(global);
             const countdown_int = try global.bunVM().timer.jsValueToCountdown(global, countdown, .one_ms, true);
             return TimeoutObject.init(global, id, .setTimeout, countdown_int, wrapped_callback, arguments);
@@ -692,7 +692,7 @@ pub fn setInterval(global: *JSGlobalObject, callback: JSValue, arguments: JSValu
             _ = bun.debugAssert((((callback != .zero) and (arguments != .zero)) and (countdown != .zero)));
             const vm = global.bunVM();
             const id = vm.timer.last_id;
-            vm.timer.last_id = (vm.timer.last_id + 1);
+            vm.timer.last_id = (vm.timer.last_id +% 1);
             const wrapped_callback = callback.withAsyncContextIfNeeded(global);
             const countdown_int = try global.bunVM().timer.jsValueToCountdown(global, countdown, .one_ms, true);
             return TimeoutObject.init(global, id, .setInterval, countdown_int, wrapped_callback, arguments);
@@ -721,6 +721,17 @@ pub fn clearTimer(timer_id_value: JSValue, globalThis: *JSGlobalObject, kind: Ki
                 if (vm.timer.removeTimerById(timer_id_value.asInt32())) |t| {
                     _ = &t;
                     _ = t.internals.cancel(vm);
+                }
+                return;
+            }
+            if (timer_id_value.isNumber()) {
+                const num = timer_id_value.asNumber();
+                if ((((std.math.isFinite(num) and (@trunc(num) == num)) and (num >= @as(f64, @floatFromInt(std.math.minInt(i32))))) and (num <= @as(f64, @floatFromInt(std.math.maxInt(i32)))))) {
+                    const id: i32 = @intFromFloat(num);
+                    if (vm.timer.removeTimerById(id)) |t| {
+                        _ = &t;
+                        _ = t.internals.cancel(vm);
+                    }
                 }
                 return;
             }

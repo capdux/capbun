@@ -56,6 +56,7 @@ using namespace JSC;
 static JSC_DECLARE_HOST_FUNCTION(jsWritableStreamPrototypeFunction_abort);
 static JSC_DECLARE_HOST_FUNCTION(jsWritableStreamPrototypeFunction_close);
 static JSC_DECLARE_HOST_FUNCTION(jsWritableStreamPrototypeFunction_getWriter);
+static JSC_DECLARE_HOST_FUNCTION(jsWritableStreamPrototype_inspectCustom);
 
 // Attributes
 
@@ -148,13 +149,35 @@ static const HashTableValue JSWritableStreamPrototypeTableValues[] = {
     { "getWriter"_s, static_cast<unsigned>(JSC::PropertyAttribute::Function), NoIntrinsic, { HashTableValue::NativeFunctionType, jsWritableStreamPrototypeFunction_getWriter, 0 } },
 };
 
+JSC_DEFINE_HOST_FUNCTION(jsWritableStreamPrototype_inspectCustom, (JSGlobalObject * lexicalGlobalObject, CallFrame* callFrame))
+{
+    auto& vm = JSC::getVM(lexicalGlobalObject);
+    auto throwScope = DECLARE_THROW_SCOPE(vm);
+    JSValue thisValue = callFrame->thisValue();
+    auto* wrappedStream = JSWritableStream::toWrapped(vm, thisValue);
+    if (!wrappedStream)
+        return JSValue::encode(thisValue);
+    JSValue internalStream = wrappedStream->internalWritableStream().guardedObject();
+    if (!internalStream || !internalStream.isObject())
+        return JSValue::encode(thisValue);
+    auto* fn = JSC::JSFunction::create(vm, lexicalGlobalObject, streamInternalsInspectWritableStreamCodeGenerator(vm), lexicalGlobalObject);
+    MarkedArgumentBuffer args;
+    args.append(callFrame->argument(0));
+    args.append(callFrame->argument(1));
+    args.append(callFrame->argument(2));
+    args.append(internalStream);
+    ASSERT(!args.hasOverflowed());
+    auto callData = JSC::getCallData(fn);
+    RELEASE_AND_RETURN(throwScope, JSValue::encode(JSC::call(lexicalGlobalObject, fn, callData, thisValue, args)));
+}
+
 const ClassInfo JSWritableStreamPrototype::s_info = { "WritableStream"_s, &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(JSWritableStreamPrototype) };
 
 void JSWritableStreamPrototype::finishCreation(VM& vm)
 {
     Base::finishCreation(vm);
     reifyStaticProperties(vm, JSWritableStream::info(), JSWritableStreamPrototypeTableValues, *this);
-    this->putDirectBuiltinFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), streamInternalsInspectWritableStreamCodeGenerator(vm), JSC::PropertyAttribute::DontEnum | 0);
+    this->putDirectNativeFunction(vm, globalObject(), WebCore::clientData(vm)->builtinNames().inspectCustomPublicName(), 2, jsWritableStreamPrototype_inspectCustom, ImplementationVisibility::Public, NoIntrinsic, JSC::PropertyAttribute::DontEnum | 0);
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
 

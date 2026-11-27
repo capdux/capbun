@@ -82,10 +82,12 @@ else if (
   let comment = `Bun requires a CPU with the micro-architecture [\`nehalem\`](https://en.wikipedia.org/wiki/Nehalem_(microarchitecture)) or later (released in 2008). If you're using a CPU emulator like qemu, then try enabling x86-64-v2.`;
 
   // Check if it's macOS
-  const platformMatch = body.match(/Platform:\s*([^\n]+)/i) || body.match(/on\s+(macos|darwin)/i);
+  const platformMatch =
+    body.match(/Platform:\s*([^\n]+)/i) || body.match(/on\s+(macos|darwin)/i);
   const isMacOS =
     platformMatch &&
-    (platformMatch[1]?.toLowerCase().includes("darwin") || platformMatch[1]?.toLowerCase().includes("macos"));
+    (platformMatch[1]?.toLowerCase().includes("darwin") ||
+      platformMatch[1]?.toLowerCase().includes("macos"));
 
   if (isMacOS) {
     comment += `\n\nIf you're on a macOS silicon device, you're running Bun via the Rosetta CPU emulator and your best option is to run Bun natively instead.`;

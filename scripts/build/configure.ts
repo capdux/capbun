@@ -9,14 +9,33 @@
 import { globSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { globAllSources } from "../glob-sources.ts";
-import { type BunOutput, bunExeName, emitBun, shouldStrip, validateBunConfig } from "./bun.ts";
-import { type Config, type PartialConfig, type Toolchain, detectHost, findRepoRoot, resolveConfig } from "./config.ts";
+import {
+  type BunOutput,
+  bunExeName,
+  emitBun,
+  shouldStrip,
+  validateBunConfig,
+} from "./bun.ts";
+import {
+  type Config,
+  type PartialConfig,
+  type Toolchain,
+  detectHost,
+  findRepoRoot,
+  resolveConfig,
+} from "./config.ts";
 import { BuildError } from "./error.ts";
 import { mkdirAll, writeIfChanged } from "./fs.ts";
 import { Ninja } from "./ninja.ts";
 import { registerAllRules } from "./rules.ts";
 import { quote } from "./shell.ts";
-import { findBun, findCargo, findMsvcLinker, findSystemTool, resolveLlvmToolchain } from "./tools.ts";
+import {
+  findBun,
+  findCargo,
+  findMsvcLinker,
+  findSystemTool,
+  resolveLlvmToolchain,
+} from "./tools.ts";
 import { checkWorkarounds } from "./workarounds.ts";
 
 /**
@@ -30,8 +49,14 @@ export function resolveToolchain(): Toolchain {
   const llvm = resolveLlvmToolchain(host.os, host.arch);
 
   // cmake — required for nested dep builds.
-  const cmake = findSystemTool("cmake", { required: true, hint: "Install cmake (>= 3.24)" });
-  if (cmake === undefined) throw new BuildError("unreachable: findSystemTool required=true returned undefined");
+  const cmake = findSystemTool("cmake", {
+    required: true,
+    hint: "Install cmake (>= 3.24)",
+  });
+  if (cmake === undefined)
+    throw new BuildError(
+      "unreachable: findSystemTool required=true returned undefined",
+    );
 
   // cargo — required for lolhtml. Not found → build will fail at that dep
   // with a clear "install rust" hint. We don't hard-fail here because
@@ -40,7 +65,8 @@ export function resolveToolchain(): Toolchain {
 
   // Windows: MSVC link.exe path (to prevent Git Bash's /usr/bin/link
   // shadowing). Only needed when cargo builds with the msvc target.
-  const msvcLinker = host.os === "windows" ? findMsvcLinker(host.arch) : undefined;
+  const msvcLinker =
+    host.os === "windows" ? findMsvcLinker(host.arch) : undefined;
 
   // esbuild/zig paths are relative to REPO ROOT, not process.cwd() — when
   // ninja's generator rule invokes reconfigure, cwd is the build dir.
@@ -50,11 +76,21 @@ export function resolveToolchain(): Toolchain {
   // If not present, the first codegen build will fail with a clear error
   // (and the build itself runs `bun install` first via the root install
   // stamp, so this path will exist by the time esbuild rules fire).
-  const esbuild = resolve(repoRoot, "node_modules", ".bin", host.os === "windows" ? "esbuild.exe" : "esbuild");
+  const esbuild = resolve(
+    repoRoot,
+    "node_modules",
+    ".bin",
+    host.os === "windows" ? "esbuild.exe" : "esbuild",
+  );
 
   // zig — lives at vendor/zig/, downloaded by the zig_fetch rule.
   // Same deal: path is deterministic, download happens at build time.
-  const zig = resolve(repoRoot, "vendor", "zig", host.os === "windows" ? "zig.exe" : "zig");
+  const zig = resolve(
+    repoRoot,
+    "vendor",
+    "zig",
+    host.os === "windows" ? "zig.exe" : "zig",
+  );
 
   const bun = findBun(host.os);
 
@@ -64,7 +100,9 @@ export function resolveToolchain(): Toolchain {
   // in node). Pre-quoted so rule commands can splice it directly.
   const q = (p: string) => quote(p, host.os === "windows");
   const jsRuntime =
-    process.versions.bun !== undefined ? q(process.execPath) : `${q(process.execPath)} --experimental-strip-types`;
+    process.versions.bun !== undefined
+      ? q(process.execPath)
+      : `${q(process.execPath)} --experimental-strip-types`;
 
   return {
     ...llvm,
@@ -106,14 +144,26 @@ export interface ConfigureResult {
  */
 function configureInputs(cwd: string): string[] {
   const buildDir = resolve(cwd, "scripts", "build");
-  const excluded = new Set(["fetch-cli.ts", "download.ts", "ci.ts", "stream.ts"]);
+  const excluded = new Set([
+    "fetch-cli.ts",
+    "download.ts",
+    "ci.ts",
+    "stream.ts",
+  ]);
 
   const scripts = globSync("*.ts", { cwd: buildDir })
     .filter(f => !excluded.has(f))
     .map(f => resolve(buildDir, f));
-  const deps = globSync("deps/*.ts", { cwd: buildDir }).map(f => resolve(buildDir, f));
+  const deps = globSync("deps/*.ts", { cwd: buildDir }).map(f =>
+    resolve(buildDir, f),
+  );
 
-  return [...scripts, ...deps, resolve(cwd, "scripts", "glob-sources.ts"), resolve(cwd, "package.json")].sort();
+  return [
+    ...scripts,
+    ...deps,
+    resolve(cwd, "scripts", "glob-sources.ts"),
+    resolve(cwd, "package.json"),
+  ].sort();
 }
 
 /**
@@ -125,7 +175,11 @@ function configureInputs(cwd: string): string[] {
  * command reads it back via --config-file. This ensures the replay uses
  * the exact same profile/overrides as the original configure.
  */
-function emitGeneratorRule(n: Ninja, cfg: Config, partial: PartialConfig): void {
+function emitGeneratorRule(
+  n: Ninja,
+  cfg: Config,
+  partial: PartialConfig,
+): void {
   const configFile = resolve(cfg.buildDir, "configure.json");
   const buildScript = resolve(cfg.cwd, "scripts", "build.ts");
 
@@ -179,7 +233,8 @@ function ccacheEnv(cfg: Config): Record<string, string> {
     // PCH can change without the includer's -D list changing. time_macros:
     // __TIME__ differs every build. random_seed: -frandom-seed=0 is in our
     // flags but ccache doesn't know that. clang_index_store: clangd state.
-    env.CCACHE_SLOPPINESS = "pch_defines,time_macros,locale,random_seed,clang_index_store,gcno_cwd";
+    env.CCACHE_SLOPPINESS =
+      "pch_defines,time_macros,locale,random_seed,clang_index_store,gcno_cwd";
   }
   return env;
 }
@@ -191,11 +246,16 @@ function ccacheEnv(cfg: Config): Record<string, string> {
  * `partial` comes from a profile + CLI overrides. If no buildDir is set,
  * one is computed from the build type (build/debug, build/release, etc).
  */
-export async function configure(partial: PartialConfig): Promise<ConfigureResult> {
+export async function configure(
+  partial: PartialConfig,
+): Promise<ConfigureResult> {
   const start = performance.now();
   const trace = process.env.BUN_BUILD_TRACE === "1";
   const mark = (label: string) => {
-    if (trace) process.stderr.write(`  ${label}: ${Math.round(performance.now() - start)}ms\n`);
+    if (trace)
+      process.stderr.write(
+        `  ${label}: ${Math.round(performance.now() - start)}ms\n`,
+      );
   };
 
   const toolchain = resolveToolchain();
@@ -238,7 +298,8 @@ export async function configure(partial: PartialConfig): Promise<ConfigureResult
   // it (no other node depends on it, and unlike cmake's POST_BUILD it doesn't
   // auto-trigger).
   if (output.exe !== undefined) {
-    const defaultTarget = output.strippedExe !== undefined ? n.rel(output.strippedExe) : "bun";
+    const defaultTarget =
+      output.strippedExe !== undefined ? n.rel(output.strippedExe) : "bun";
     const targets = [defaultTarget, "check"];
     if (output.dsym !== undefined) targets.push(n.rel(output.dsym));
     n.default(targets);

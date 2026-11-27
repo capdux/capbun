@@ -830,6 +830,26 @@ pub fn transpileSourceCode(
             };
         },
 
+        .css => {
+            if (flags.disableTranspiling()) {
+                return ResolvedSource{
+                    allocator: null,
+                    source_code: bun.String.empty,
+                    specifier: input_specifier,
+                    source_url: input_specifier.createIfDifferent(path.text),
+                    tag: .esm,
+                };
+            }
+
+            return ResolvedSource{
+                allocator: null,
+                specifier: input_specifier,
+                source_url: input_specifier.createIfDifferent(path.text),
+                jsvalue_for_export: JSValue.createEmptyObject(globalObject ?? jsc_vm.global, 0),
+                tag: .exports_object,
+            };
+        },
+
         .html => {
             if (flags.disableTranspiling()) {
                 return ResolvedSource{

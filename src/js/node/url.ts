@@ -297,8 +297,12 @@ Url.prototype.parse = function parse(url: string, parseQueryString?: boolean, sl
 
     // the host is the remaining to the left of the first non-host char
     hostEnd = -1;
+    const ipv6End = rest.charCodeAt(0) === Char.LEFT_SQUARE_BRACKET ? rest.indexOf("]") : -1;
     for (var i = 0; i < nonHostChars.length; i++) {
-      var hec = rest.indexOf(nonHostChars[i]);
+      const ch = nonHostChars[i];
+      const searchStart =
+        ipv6End !== -1 && (ch === "\t" || ch === "\r" || ch === "\n") ? ipv6End + 1 : 0;
+      var hec = rest.indexOf(ch, searchStart);
       if (hec !== -1 && (hostEnd === -1 || hec < hostEnd)) {
         hostEnd = hec;
       }

@@ -1056,12 +1056,22 @@ else => {
             _ = &buffer;
             var buffered_writer = writer.adaptToNewApi((&buffer));
             _ = &buffered_writer;
-            _ = (blk_catch_7: { break :blk_catch_7 ((macho_file.buildAndSign((&buffered_writer.new_interface))) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing standalone module graph: {}", .{ e });
+            const written_len = (blk_catch_7: { break :blk_catch_7 ((macho_file.buildAndSign((&buffered_writer.new_interface))) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing standalone module graph: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
             _ = (blk_catch_8: { break :blk_catch_8 ((buffered_writer.new_interface.flush()) catch |e| { _ = &e; _ = Output.prettyErrorln("Error flushing standalone module graph: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
+            switch (Syscall.ftruncate(cloned_executable_fd, (if (comptime @typeInfo(@TypeOf(written_len)) == .@"enum") cp_cast_int(i64, @intFromEnum(written_len)) else cp_cast_int(i64, written_len)))) {
+.err => |e| {
+_ = Output.prettyErrorln("Error truncating standalone module graph: {f}", .{ e });
+            _ = cleanupTempFile(zname, cloned_executable_fd);
+            return bun.invalid_fd;
+},
+.result => {
+
+},
+}
             if (comptime (!Environment.isWindows)) {
                 _ = bun.c.fchmod(cloned_executable_fd.native(), 511);
             }

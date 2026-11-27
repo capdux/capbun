@@ -2675,6 +2675,7 @@ private:
             write(CryptoKeyClassSubtag::OKP);
             write(key->algorithmIdentifier());
             write(downcast<CryptoKeyOKP>(*key).namedCurve());
+            write(key->type() == CryptoKeyType::Private ? CryptoKeyAsymmetricTypeSubtag::Private : CryptoKeyAsymmetricTypeSubtag::Public);
             write(downcast<CryptoKeyOKP>(*key).platformKey());
             break;
         }
@@ -4284,11 +4285,16 @@ private:
         CryptoKeyOKP::NamedCurve namedCurve;
         if (!read(namedCurve))
             return false;
+        CryptoKeyAsymmetricTypeSubtag type;
+        if (!read(type))
+            return false;
         Vector<uint8_t> keyData;
         if (!read(keyData))
             return false;
 
-        result = CryptoKeyOKP::importRaw(algorithm, namedCurve, WTF::move(keyData), extractable, usages);
+        result = CryptoKeyOKP::create(algorithm, namedCurve, type == CryptoKeyAsymmetricTypeSubtag::Private ? CryptoKeyType::Private : CryptoKeyType::Public, WTF::move(keyData), extractable, usages);
+        if (!result)
+            return false;
         return true;
     }
 

@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 
 import { spawn as nodeSpawn } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,12 +67,17 @@ const aws = {
     if (isCI) {
       env = {
         AWS_ACCESS_KEY_ID: getSecret("EC2_ACCESS_KEY_ID", { required: true }),
-        AWS_SECRET_ACCESS_KEY: getSecret("EC2_SECRET_ACCESS_KEY", { required: true }),
+        AWS_SECRET_ACCESS_KEY: getSecret("EC2_SECRET_ACCESS_KEY", {
+          required: true,
+        }),
         AWS_REGION: getSecret("EC2_REGION", { required: false }) || "us-east-1",
       };
     }
 
-    const { stdout } = await spawnSafe($`${aws} ${args} --output json`, { env, ...options });
+    const { stdout } = await spawnSafe($`${aws} ${args} --output json`, {
+      env,
+      ...options,
+    });
     try {
       return JSON.parse(stdout);
     } catch {
@@ -114,8 +125,12 @@ const aws = {
    */
   async describeInstances(options) {
     const filters = aws.getFilters(options);
-    const { Reservations } = await aws.spawn($`ec2 describe-instances --filters ${filters}`);
-    return Reservations.flatMap(({ Instances }) => Instances).sort((a, b) => (a.LaunchTime < b.LaunchTime ? 1 : -1));
+    const { Reservations } = await aws.spawn(
+      $`ec2 describe-instances --filters ${filters}`,
+    );
+    return Reservations.flatMap(({ Instances }) => Instances).sort((a, b) =>
+      a.LaunchTime < b.LaunchTime ? 1 : -1,
+    );
   },
 
   /**
@@ -128,10 +143,15 @@ const aws = {
       const flags = aws.getFlags(options);
       const result = await aws.spawn($`ec2 run-instances ${flags}`, {
         throwOnError: error => {
-          if (options["instance-market-options"] && /InsufficientInstanceCapacity/i.test(inspect(error))) {
+          if (
+            options["instance-market-options"] &&
+            /InsufficientInstanceCapacity/i.test(inspect(error))
+          ) {
             delete options["instance-market-options"];
             const instanceType = options["instance-type"] || "default";
-            console.warn(`There is not enough capacity for ${instanceType} spot instances, retrying with on-demand...`);
+            console.warn(
+              `There is not enough capacity for ${instanceType} spot instances, retrying with on-demand...`,
+            );
             return false;
           }
           return true;
@@ -140,10 +160,14 @@ const aws = {
       if (result) {
         const { Instances } = result;
         if (Instances.length) {
-          return Instances.sort((a, b) => (a.LaunchTime < b.LaunchTime ? 1 : -1));
+          return Instances.sort((a, b) =>
+            a.LaunchTime < b.LaunchTime ? 1 : -1,
+          );
         }
       }
-      await new Promise(resolve => setTimeout(resolve, i * Math.random() * 15_000));
+      await new Promise(resolve =>
+        setTimeout(resolve, i * Math.random() * 15_000),
+      );
     }
     throw new Error(`Failed to run instances: ${inspect(instanceOptions)}`);
   },
@@ -153,7 +177,9 @@ const aws = {
    * @link https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/stop-instances.html
    */
   async stopInstances(...instanceIds) {
-    await aws.spawn($`ec2 stop-instances --no-hibernate --force --instance-ids ${instanceIds}`);
+    await aws.spawn(
+      $`ec2 stop-instances --no-hibernate --force --instance-ids ${instanceIds}`,
+    );
   },
 
   /**
@@ -162,7 +188,8 @@ const aws = {
    */
   async terminateInstances(...instanceIds) {
     await aws.spawn($`ec2 terminate-instances --instance-ids ${instanceIds}`, {
-      throwOnError: error => !/InvalidInstanceID\.NotFound/i.test(inspect(error)),
+      throwOnError: error =>
+        !/InvalidInstanceID\.NotFound/i.test(inspect(error)),
     });
   },
 
@@ -188,7 +215,9 @@ const aws = {
   async getPasswordData(instanceId, privateKeyPath, passwordOptions = {}) {
     const attempts = passwordOptions.wait ? 15 : 1;
     for (let i = 0; i < attempts; i++) {
-      const { PasswordData } = await aws.spawn($`ec2 get-password-data --instance-id ${instanceId}`);
+      const { PasswordData } = await aws.spawn(
+        $`ec2 get-password-data --instance-id ${instanceId}`,
+      );
       if (PasswordData) {
         return decryptPassword(PasswordData, privateKeyPath);
       }
@@ -216,7 +245,9 @@ const aws = {
     if (owners) {
       filters.push(`--owners=${owners}`);
     }
-    const { Images } = await aws.spawn($`ec2 describe-images --filters ${filters}`);
+    const { Images } = await aws.spawn(
+      $`ec2 describe-images --filters ${filters}`,
+    );
     return Images.sort((a, b) => (a.CreationDate < b.CreationDate ? 1 : -1));
   },
 
@@ -234,7 +265,9 @@ const aws = {
     /** @type {AwsImage | undefined} */
     const image = await aws.spawn($`ec2 create-image ${flags}`, {
       throwOnError: error => {
-        const match = /already in use by AMI (ami-[a-z0-9]+)/i.exec(inspect(error));
+        const match = /already in use by AMI (ami-[a-z0-9]+)/i.exec(
+          inspect(error),
+        );
         if (!match) {
           return true;
         }
@@ -311,7 +344,8 @@ const aws = {
     const keyPair = await aws.spawn(
       $`ec2 import-key-pair --key-name ${keyName} --public-key-material ${publicKeyBase64}`,
       {
-        throwOnError: error => !/InvalidKeyPair\.Duplicate/i.test(inspect(error)),
+        throwOnError: error =>
+          !/InvalidKeyPair\.Duplicate/i.test(inspect(error)),
       },
     );
 
@@ -416,7 +450,8 @@ const aws = {
    * @returns {Promise<Machine>}
    */
   async createMachine(options) {
-    const { os, arch, imageId, instanceType, tags, sshKeys, preemptible } = options;
+    const { os, arch, imageId, instanceType, tags, sshKeys, preemptible } =
+      options;
 
     /** @type {AwsImage} */
     let image;
@@ -455,7 +490,10 @@ const aws = {
       tagSpecification = ["instance", "volume"].map(resourceType => {
         return {
           ResourceType: resourceType,
-          Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value: String(Value) })),
+          Tags: Object.entries(tags).map(([Key, Value]) => ({
+            Key,
+            Value: String(Value),
+          })),
         };
       });
     }
@@ -491,7 +529,8 @@ const aws = {
 
     const [instance] = await aws.runInstances({
       ["image-id"]: ImageId,
-      ["instance-type"]: instanceType || (arch === "aarch64" ? "t4g.large" : "t3.large"),
+      ["instance-type"]:
+        instanceType || (arch === "aarch64" ? "t4g.large" : "t3.large"),
       ["user-data"]: userData,
       ["block-device-mappings"]: JSON.stringify(blockDeviceMappings),
       ["metadata-options"]: JSON.stringify({
@@ -519,7 +558,8 @@ const aws = {
    * @returns {Machine}
    */
   toMachine(instance, options = {}) {
-    let { InstanceId, ImageId, InstanceType, Placement, PublicIpAddress } = instance;
+    let { InstanceId, ImageId, InstanceType, Placement, PublicIpAddress } =
+      instance;
 
     const connect = async () => {
       if (!PublicIpAddress) {
@@ -574,7 +614,9 @@ const aws = {
     const rdp = async () => {
       const { keyPath } = options;
       const { hostname, username } = await connect();
-      const password = await aws.getPasswordData(InstanceId, keyPath, { wait: true });
+      const password = await aws.getPasswordData(InstanceId, keyPath, {
+        wait: true,
+      });
       return { hostname, username, password };
     };
 
@@ -657,7 +699,8 @@ export function getUserData(cloudInit) {
 function getCloudInit(cloudInit) {
   const username = cloudInit["username"] || "root";
   const password = cloudInit["password"] || crypto.randomUUID();
-  const authorizedKeys = cloudInit["sshKeys"]?.map(({ publicKey }) => publicKey) || [];
+  const authorizedKeys =
+    cloudInit["sshKeys"]?.map(({ publicKey }) => publicKey) || [];
 
   let sftpPath = "/usr/lib/openssh/sftp-server";
   let shell = "/bin/bash";
@@ -846,9 +889,14 @@ function createSshKey() {
   const filename = `id_rsa_${crypto.randomUUID()}`;
   const privatePath = join(sshPath, filename);
   const publicPath = join(sshPath, `${filename}.pub`);
-  spawnSyncSafe([sshKeyGen, "-t", "rsa", "-b", "4096", "-f", privatePath, "-N", ""], { stdio: "inherit" });
+  spawnSyncSafe(
+    [sshKeyGen, "-t", "rsa", "-b", "4096", "-f", privatePath, "-N", ""],
+    { stdio: "inherit" },
+  );
   if (!existsSync(privatePath) || !existsSync(publicPath)) {
-    throw new Error(`Failed to generate SSH key: ${privatePath} / ${publicPath}`);
+    throw new Error(
+      `Failed to generate SSH key: ${privatePath} / ${publicPath}`,
+    );
   }
 
   if (isWindows) {
@@ -856,7 +904,10 @@ function createSshKey() {
   } else {
     const sshAgent = which("ssh-agent");
     if (sshAgent) {
-      spawnSyncSafe(["sh", "-c", `eval $(${sshAgent} -s) && ${sshAdd} ${privatePath}`], { stdio: "inherit" });
+      spawnSyncSafe(
+        ["sh", "-c", `eval $(${sshAgent} -s) && ${sshAdd} ${privatePath}`],
+        { stdio: "inherit" },
+      );
     }
   }
 
@@ -879,7 +930,10 @@ function getSshKeys() {
   /** @type {SshKey[]} */
   const sshKeys = [];
   if (existsSync(sshPath)) {
-    const sshFiles = readdirSync(sshPath, { withFileTypes: true, encoding: "utf-8" });
+    const sshFiles = readdirSync(sshPath, {
+      withFileTypes: true,
+      encoding: "utf-8",
+    });
     const publicPaths = sshFiles
       .filter(entry => entry.isFile() && entry.name.endsWith(".pub"))
       .map(({ name }) => join(sshPath, name));
@@ -920,12 +974,17 @@ async function getGithubUserSshKeys(username) {
  * @returns {Promise<SshKey[]>}
  */
 async function getGithubOrgSshKeys(organization) {
-  const url = new URL(`orgs/${encodeURIComponent(organization)}/members`, getGithubApiUrl());
+  const url = new URL(
+    `orgs/${encodeURIComponent(organization)}/members`,
+    getGithubApiUrl(),
+  );
   const members = await curlSafe(url, { json: true });
 
   /** @type {SshKey[][]} */
   const sshKeys = await Promise.all(
-    members.filter(({ type, login }) => type === "User" && login).map(({ login }) => getGithubUserSshKeys(login)),
+    members
+      .filter(({ type, login }) => type === "User" && login)
+      .map(({ login }) => getGithubUserSshKeys(login)),
   );
 
   return sshKeys.flat();
@@ -958,7 +1017,16 @@ async function getGithubOrgSshKeys(organization) {
  * @returns {Promise<void>}
  */
 async function spawnScp(options) {
-  const { hostname, port, username, identityPaths, password, source, destination, retries = 3 } = options;
+  const {
+    hostname,
+    port,
+    username,
+    identityPaths,
+    password,
+    source,
+    destination,
+    retries = 3,
+  } = options;
   await waitForPort({ hostname, port: port || 22 });
 
   const command = ["scp", "-o", "StrictHostKeyChecking=no"];
@@ -991,13 +1059,18 @@ async function spawnScp(options) {
     }
 
     cause = stderr.trim() || undefined;
-    if (/(bad configuration option)|(no such file or directory)/i.test(stderr)) {
+    if (
+      /(bad configuration option)|(no such file or directory)/i.test(stderr)
+    ) {
       break;
     }
     await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
   }
 
-  throw new Error(`SCP failed: ${source} -> ${username}@${hostname}:${destination}`, { cause });
+  throw new Error(
+    `SCP failed: ${source} -> ${username}@${hostname}:${destination}`,
+    { cause },
+  );
 }
 
 /**
@@ -1010,9 +1083,26 @@ function decryptPassword(passwordData, privateKeyPath) {
   const tmpPemPath = mkdtemp("pem-", `${name}.pem`);
   try {
     copyFile(privateKeyPath, tmpPemPath, { mode: 0o600 });
-    spawnSyncSafe(["ssh-keygen", "-p", "-m", "PEM", "-f", tmpPemPath, "-N", ""]);
+    spawnSyncSafe([
+      "ssh-keygen",
+      "-p",
+      "-m",
+      "PEM",
+      "-f",
+      tmpPemPath,
+      "-N",
+      "",
+    ]);
     const { stdout } = spawnSyncSafe(
-      ["openssl", "pkeyutl", "-decrypt", "-inkey", tmpPemPath, "-pkeyopt", "rsa_padding_mode:pkcs1"],
+      [
+        "openssl",
+        "pkeyutl",
+        "-decrypt",
+        "-inkey",
+        tmpPemPath,
+        "-pkeyopt",
+        "rsa_padding_mode:pkcs1",
+      ],
       {
         stdin: Buffer.from(passwordData, "base64"),
       },
@@ -1132,11 +1222,14 @@ function getCloud(name) {
  */
 
 async function getAzureToken(tenantId, clientId, clientSecret) {
-  const response = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${encodeURIComponent(clientSecret)}&scope=https://management.azure.com/.default`,
-  });
+  const response = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${encodeURIComponent(clientSecret)}&scope=https://management.azure.com/.default`,
+    },
+  );
   if (!response.ok) throw new Error(`Azure auth failed: ${response.status}`);
   const data = await response.json();
   return data.access_token;
@@ -1148,7 +1241,15 @@ async function getAzureToken(tenantId, clientId, clientSecret) {
  * This eliminates all the Azure Run Command issues (output truncation, x64 emulation,
  * PATH not refreshing, stderr false positives, quote escaping).
  */
-async function buildWindowsImageWithPacker({ os, arch, release, command, ci, agentPath, bootstrapPath }) {
+async function buildWindowsImageWithPacker({
+  os,
+  arch,
+  release,
+  command,
+  ci,
+  agentPath,
+  bootstrapPath,
+}) {
   const { getSecret } = await import("./utils.mjs");
 
   // Determine Packer template
@@ -1167,12 +1268,14 @@ async function buildWindowsImageWithPacker({ os, arch, release, command, ci, age
   const tenantId = await getSecret("AZURE_TENANT_ID");
   const resourceGroup = await getSecret("AZURE_RESOURCE_GROUP");
   const location = (await getSecret("AZURE_LOCATION")) || "eastus2";
-  const galleryName = (await getSecret("AZURE_GALLERY_NAME")) || "bunCIGallery2";
+  const galleryName =
+    (await getSecret("AZURE_GALLERY_NAME")) || "bunCIGallery2";
 
   // Image naming must match getImageName() in ci.mjs:
   //   [publish images] / normal CI: "windows-x64-2019-v13"
   //   [build images]:               "windows-x64-2019-build-37194"
-  const imageKey = arch === "aarch64" ? "windows-aarch64-11" : "windows-x64-2019";
+  const imageKey =
+    arch === "aarch64" ? "windows-aarch64-11" : "windows-x64-2019";
   const imageDefName =
     command === "publish-image"
       ? `${imageKey}-v${getBootstrapVersion(os)}`
@@ -1183,26 +1286,38 @@ async function buildWindowsImageWithPacker({ os, arch, release, command, ci, age
   console.log(`[packer] Ensuring gallery image definition: ${imageDefName}`);
   const galleryPath = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.Compute/galleries/${galleryName}/images/${imageDefName}`;
   const token = await getAzureToken(tenantId, clientId, clientSecret);
-  const defResponse = await fetch(`https://management.azure.com${galleryPath}?api-version=2024-03-03`, {
-    method: "PUT",
-    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: location,
-      properties: {
-        osType: "Windows",
-        osState: "Generalized",
-        hyperVGeneration: "V2",
-        architecture: galleryArch,
-        identifier: { publisher: "bun", offer: `${os}-${arch}-ci`, sku: imageDefName },
-        features: [
-          { name: "DiskControllerTypes", value: "SCSI, NVMe" },
-          { name: "SecurityType", value: "TrustedLaunch" },
-        ],
+  const defResponse = await fetch(
+    `https://management.azure.com${galleryPath}?api-version=2024-03-03`,
+    {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        location: location,
+        properties: {
+          osType: "Windows",
+          osState: "Generalized",
+          hyperVGeneration: "V2",
+          architecture: galleryArch,
+          identifier: {
+            publisher: "bun",
+            offer: `${os}-${arch}-ci`,
+            sku: imageDefName,
+          },
+          features: [
+            { name: "DiskControllerTypes", value: "SCSI, NVMe" },
+            { name: "SecurityType", value: "TrustedLaunch" },
+          ],
+        },
+      }),
+    },
+  );
   if (!defResponse.ok && defResponse.status !== 409) {
-    throw new Error(`Failed to create gallery image definition: ${defResponse.status} ${await defResponse.text()}`);
+    throw new Error(
+      `Failed to create gallery image definition: ${defResponse.status} ${await defResponse.text()}`,
+    );
   }
 
   // Packer's azure-arm shared_image_gallery_destination always writes
@@ -1210,26 +1325,42 @@ async function buildWindowsImageWithPacker({ os, arch, release, command, ci, age
   // [publish images] would fail on every Windows variant that already
   // succeeded. Match the AWS path's deregister-then-recreate.
   const versionPath = `${galleryPath}/versions/1.0.0`;
-  const existing = await fetch(`https://management.azure.com${versionPath}?api-version=2024-03-03`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (existing.ok) {
-    console.log(`[packer] Deleting existing gallery image version 1.0.0 of ${imageDefName} before re-publish`);
-    const del = await fetch(`https://management.azure.com${versionPath}?api-version=2024-03-03`, {
-      method: "DELETE",
+  const existing = await fetch(
+    `https://management.azure.com${versionPath}?api-version=2024-03-03`,
+    {
       headers: { Authorization: `Bearer ${token}` },
-    });
+    },
+  );
+  if (existing.ok) {
+    console.log(
+      `[packer] Deleting existing gallery image version 1.0.0 of ${imageDefName} before re-publish`,
+    );
+    const del = await fetch(
+      `https://management.azure.com${versionPath}?api-version=2024-03-03`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
     if (del.status === 202) {
-      const op = del.headers.get("Azure-AsyncOperation") ?? del.headers.get("Location");
+      const op =
+        del.headers.get("Azure-AsyncOperation") ?? del.headers.get("Location");
       for (let i = 0; op && i < 120; i++) {
         await new Promise(r => setTimeout(r, 10_000));
-        const poll = await fetch(op, { headers: { Authorization: `Bearer ${token}` } });
+        const poll = await fetch(op, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const body = await poll.json().catch(() => ({}));
         if (body.status === "Succeeded") break;
-        if (body.status === "Failed") throw new Error(`Delete of ${versionPath} failed: ${JSON.stringify(body)}`);
+        if (body.status === "Failed")
+          throw new Error(
+            `Delete of ${versionPath} failed: ${JSON.stringify(body)}`,
+          );
       }
     } else if (!del.ok && del.status !== 404) {
-      throw new Error(`Failed to delete existing gallery image version: ${del.status} ${await del.text()}`);
+      throw new Error(
+        `Failed to delete existing gallery image version: ${del.status} ${await del.text()}`,
+      );
     }
   }
 
@@ -1293,12 +1424,16 @@ async function buildWindowsImageWithPacker({ os, arch, release, command, ci, age
   let cancelled = false;
   const forward = signal => {
     cancelled = true;
-    console.log(`[packer] received ${signal}, forwarding to packer for Azure cleanup...`);
+    console.log(
+      `[packer] received ${signal}, forwarding to packer for Azure cleanup...`,
+    );
     child.kill(signal);
   };
   process.on("SIGINT", forward);
   process.on("SIGTERM", forward);
-  const [code, signal] = await new Promise(done => child.on("close", (c, s) => done([c, s])));
+  const [code, signal] = await new Promise(done =>
+    child.on("close", (c, s) => done([c, s])),
+  );
   process.off("SIGINT", forward);
   process.off("SIGTERM", forward);
   if (cancelled) {
@@ -1306,7 +1441,9 @@ async function buildWindowsImageWithPacker({ os, arch, release, command, ci, age
     process.exit(1);
   }
   if (code !== 0) {
-    throw new Error(`packer build exited with ${signal ? `signal ${signal}` : `code ${code}`}`);
+    throw new Error(
+      `packer build exited with ${signal ? `signal ${signal}` : `code ${code}`}`,
+    );
   }
 
   console.log(`[packer] Image built successfully: ${imageDefName}`);
@@ -1339,12 +1476,15 @@ async function ensurePacker() {
   const zipPath = join(tmpdir(), "packer.zip");
 
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download Packer: ${response.status}`);
+  if (!response.ok)
+    throw new Error(`Failed to download Packer: ${response.status}`);
   const buffer = Buffer.from(await response.arrayBuffer());
   writeFileSync(zipPath, buffer);
 
   // Extract
-  await spawnSafe(["unzip", "-o", zipPath, "-d", tmpdir()], { stdio: "inherit" });
+  await spawnSafe(["unzip", "-o", zipPath, "-d", tmpdir()], {
+    stdio: "inherit",
+  });
   chmodSync(localPacker, 0o755);
 
   console.log(`[packer] Installed Packer ${version}`);
@@ -1360,7 +1500,9 @@ async function main() {
   const [command] = positionals;
   if (!/^(ssh|create-image|publish-image)$/.test(command)) {
     const scriptPath = relative(process.cwd(), fileURLToPath(import.meta.url));
-    throw new Error(`Usage: ./${scriptPath} [ssh|create-image|publish-image] [options]`);
+    throw new Error(
+      `Usage: ./${scriptPath} [ssh|create-image|publish-image] [options]`,
+    );
   }
 
   const { values: args } = parseArgs({
@@ -1398,11 +1540,15 @@ async function main() {
 
   const sshKeys = getSshKeys();
   if (args["authorized-user"]) {
-    const userSshKeys = await Promise.all(args["authorized-user"].map(getGithubUserSshKeys));
+    const userSshKeys = await Promise.all(
+      args["authorized-user"].map(getGithubUserSshKeys),
+    );
     sshKeys.push(...userSshKeys.flat());
   }
   if (args["authorized-org"]) {
-    const orgSshKeys = await Promise.all(args["authorized-org"].map(getGithubOrgSshKeys));
+    const orgSshKeys = await Promise.all(
+      args["authorized-org"].map(getGithubOrgSshKeys),
+    );
     sshKeys.push(...orgSshKeys.flat());
   }
 
@@ -1444,7 +1590,8 @@ async function main() {
     userData: args["user-data"] ? readFile(args["user-data"]) : undefined,
   };
 
-  let { detached, bootstrap, ci, os, arch, distro, release, features } = options;
+  let { detached, bootstrap, ci, os, arch, distro, release, features } =
+    options;
 
   let name = `${os}-${arch}-${(release || "").replace(/\./g, "")}`;
 
@@ -1481,7 +1628,9 @@ async function main() {
       const entryPath = resolve(import.meta.dirname, "agent.mjs");
       const tmpPath = mkdtempSync(join(tmpdir(), "agent-"));
       agentPath = join(tmpPath, "agent.mjs");
-      await spawnSafe($`${npx} esbuild ${entryPath} --bundle --platform=node --format=esm --outfile=${agentPath}`);
+      await spawnSafe(
+        $`${npx} esbuild ${entryPath} --bundle --platform=node --format=esm --outfile=${agentPath}`,
+      );
     }
 
     if (features?.includes("docker")) {
@@ -1495,8 +1644,20 @@ async function main() {
 
   // Use Packer for Windows Azure image builds — it handles VM creation,
   // bootstrap, sysprep, and gallery capture via WinRM (no Run Command hacks).
-  if (args["cloud"] === "azure" && os === "windows" && (command === "create-image" || command === "publish-image")) {
-    await buildWindowsImageWithPacker({ os, arch, release, command, ci, agentPath, bootstrapPath });
+  if (
+    args["cloud"] === "azure" &&
+    os === "windows" &&
+    (command === "create-image" || command === "publish-image")
+  ) {
+    await buildWindowsImageWithPacker({
+      os,
+      arch,
+      release,
+      command,
+      ci,
+      agentPath,
+      bootstrapPath,
+    });
     return;
   }
 
@@ -1573,10 +1734,14 @@ async function main() {
       });
     }
 
-    await startGroup(`Connecting${options.cloud === "azure" ? "" : " with SSH"}...`, async () => {
-      const command = os === "windows" ? ["cmd", "/c", "ver"] : ["uname", "-a"];
-      await machine.spawnSafe(command, { stdio: "inherit" });
-    });
+    await startGroup(
+      `Connecting${options.cloud === "azure" ? "" : " with SSH"}...`,
+      async () => {
+        const command =
+          os === "windows" ? ["cmd", "/c", "ver"] : ["uname", "-a"];
+        await machine.spawnSafe(command, { stdio: "inherit" });
+      },
+    );
 
     if (bootstrapPath) {
       // Tell bootstrap which ref of the repo to shallow-clone for
@@ -1601,7 +1766,11 @@ async function main() {
           // repoRef is already validated against /^[\w./-]+$/ above, so the
           // single-quoted literal can't break out.
           await machine.spawnSafe(
-            ["powershell", "-Command", `$env:BUN_BOOTSTRAP_REPO_REF='${repoRef}'; & '${remotePath}' ${args.join(" ")}`],
+            [
+              "powershell",
+              "-Command",
+              `$env:BUN_BOOTSTRAP_REPO_REF='${repoRef}'; & '${remotePath}' ${args.join(" ")}`,
+            ],
             { stdio: "inherit" },
           );
         });
@@ -1614,9 +1783,18 @@ async function main() {
           }
           await startGroup("Running bootstrap...", async () => {
             await machine.upload(bootstrapPath, remotePath);
-            await machine.spawnSafe(["env", `BUN_BOOTSTRAP_REPO_REF=${repoRef}`, "sh", remotePath, ...args], {
-              stdio: "inherit",
-            });
+            await machine.spawnSafe(
+              [
+                "env",
+                `BUN_BOOTSTRAP_REPO_REF=${repoRef}`,
+                "sh",
+                remotePath,
+                ...args,
+              ],
+              {
+                stdio: "inherit",
+              },
+            );
           });
         } else if (dockerfilePath) {
           const remotePath = "/tmp/bootstrap.sh";
@@ -1630,10 +1808,19 @@ async function main() {
             console.log("Uploaded agent.mjs");
             agentPath = "";
             bootstrapPath = "";
-            await machine.spawnSafe(["sudo", "env", `BUN_BOOTSTRAP_REPO_REF=${repoRef}`, "bash", remotePath], {
-              stdio: "inherit",
-              cwd: "/tmp",
-            });
+            await machine.spawnSafe(
+              [
+                "sudo",
+                "env",
+                `BUN_BOOTSTRAP_REPO_REF=${repoRef}`,
+                "bash",
+                remotePath,
+              ],
+              {
+                stdio: "inherit",
+                cwd: "/tmp",
+              },
+            );
           });
         }
       }
@@ -1650,9 +1837,12 @@ async function main() {
           // Refresh PATH from registry before running agent.mjs — bootstrap added
           // buildkite-agent to PATH but Azure Run Command sessions have stale PATH.
           const cmd = `$env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('PATH', 'User'); C:\\Scoop\\apps\\nodejs\\current\\node.exe ${remotePath} install`;
-          await machine.spawnSafe(["powershell", "-NoProfile", "-Command", cmd], {
-            stdio: "inherit",
-          });
+          await machine.spawnSafe(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            {
+              stdio: "inherit",
+            },
+          );
         });
       } else {
         const tmpPath = "/tmp/agent.mjs";
@@ -1661,7 +1851,9 @@ async function main() {
           await machine.upload(agentPath, tmpPath);
           const command = [];
           {
-            const { exitCode } = await machine.spawn(["sudo", "echo", "1"], { stdio: "ignore" });
+            const { exitCode } = await machine.spawn(["sudo", "echo", "1"], {
+              stdio: "ignore",
+            });
             if (exitCode === 0) {
               command.unshift("sudo");
             }
@@ -1679,7 +1871,9 @@ async function main() {
               command.push("node");
             }
           }
-          await machine.spawnSafe([...command, remotePath, "install"], { stdio: "inherit" });
+          await machine.spawnSafe([...command, remotePath, "install"], {
+            stdio: "inherit",
+          });
         });
       }
     }

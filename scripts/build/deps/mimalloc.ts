@@ -98,7 +98,11 @@ export const mimalloc: Dependency = {
     // only — clang-cl doesn't recognize -ftls-model (COFF has no TLS
     // models; mimalloc's cmake gates it behind NOT WIN32 too).
     if (!cfg.windows) {
-      cflags.push(cfg.abi === "musl" ? "-ftls-model=local-dynamic" : "-ftls-model=initial-exec");
+      cflags.push(
+        cfg.abi === "musl"
+          ? "-ftls-model=local-dynamic"
+          : "-ftls-model=initial-exec",
+      );
     }
 
     if (override) cflags.push("-fno-builtin-malloc");

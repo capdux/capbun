@@ -26,7 +26,8 @@ interface Comment {
  */
 async function getReleaseInfo(tag: string): Promise<ReleaseInfo> {
   try {
-    const result = await $`gh release view ${tag} --json publishedAt,tagName`.json();
+    const result =
+      await $`gh release view ${tag} --json publishedAt,tagName`.json();
     return {
       publishedAt: result.publishedAt,
       tag: result.tagName,
@@ -39,12 +40,16 @@ async function getReleaseInfo(tag: string): Promise<ReleaseInfo> {
 /**
  * Count issues closed as completed since a given date
  */
-async function countCompletedIssues(sinceDate: string): Promise<{ count: number; issues: number[] }> {
+async function countCompletedIssues(
+  sinceDate: string,
+): Promise<{ count: number; issues: number[] }> {
   try {
     const result =
       (await $`gh issue list --state closed --search "closed:>=${sinceDate} reason:completed" --limit 1000 --json number,closedAt,stateReason`.json()) as Issue[];
 
-    const completedIssues = result.filter(issue => issue.stateReason === "COMPLETED");
+    const completedIssues = result.filter(
+      issue => issue.stateReason === "COMPLETED",
+    );
 
     return {
       count: completedIssues.length,
@@ -60,8 +65,11 @@ async function countCompletedIssues(sinceDate: string): Promise<{ count: number;
  */
 async function getIssueReactions(issueNumber: number): Promise<number> {
   try {
-    const reactions = (await $`gh api "repos/oven-sh/bun/issues/${issueNumber}/reactions"`.json()) as Reaction[];
-    return reactions.filter(r => ["+1", "heart", "hooray", "rocket"].includes(r.content)).length;
+    const reactions =
+      (await $`gh api "repos/oven-sh/bun/issues/${issueNumber}/reactions"`.json()) as Reaction[];
+    return reactions.filter(r =>
+      ["+1", "heart", "hooray", "rocket"].includes(r.content),
+    ).length;
   } catch {
     return 0;
   }
@@ -72,14 +80,17 @@ async function getIssueReactions(issueNumber: number): Promise<number> {
  */
 async function getCommentReactions(issueNumber: number): Promise<number> {
   try {
-    const comments = (await $`gh api "repos/oven-sh/bun/issues/${issueNumber}/comments"`.json()) as Comment[];
+    const comments =
+      (await $`gh api "repos/oven-sh/bun/issues/${issueNumber}/comments"`.json()) as Comment[];
 
     let totalReactions = 0;
     for (const comment of comments) {
       try {
         const reactions =
           (await $`gh api "repos/oven-sh/bun/issues/comments/${comment.id}/reactions"`.json()) as Reaction[];
-        totalReactions += reactions.filter(r => ["+1", "heart", "hooray", "rocket"].includes(r.content)).length;
+        totalReactions += reactions.filter(r =>
+          ["+1", "heart", "hooray", "rocket"].includes(r.content),
+        ).length;
       } catch {
         // Skip if we can't get reactions for this comment
       }
@@ -94,7 +105,10 @@ async function getCommentReactions(issueNumber: number): Promise<number> {
 /**
  * Count total positive reactions for issues and their comments
  */
-async function countReactions(issueNumbers: number[], verbose = false): Promise<number> {
+async function countReactions(
+  issueNumbers: number[],
+  verbose = false,
+): Promise<number> {
   let totalReactions = 0;
 
   for (const issueNumber of issueNumbers) {
@@ -132,7 +146,9 @@ async function main() {
   const verbose = args.includes("--verbose") || args.includes("-v");
 
   if (!releaseTag) {
-    console.error("Usage: bun run scripts/github-metrics.ts <release-tag> [--verbose]");
+    console.error(
+      "Usage: bun run scripts/github-metrics.ts <release-tag> [--verbose]",
+    );
     console.error("Example: bun run scripts/github-metrics.ts bun-v1.2.19");
     process.exit(1);
   }
@@ -150,7 +166,8 @@ async function main() {
 
     // Count completed issues
     console.log("🔍 Counting completed issues...");
-    const { count: issueCount, issues: issueNumbers } = await countCompletedIssues(releaseDate);
+    const { count: issueCount, issues: issueNumbers } =
+      await countCompletedIssues(releaseDate);
 
     // Count reactions
     console.log("👍 Counting positive reactions...");
@@ -158,11 +175,15 @@ async function main() {
 
     // Display results
     console.log("\n📈 Results:");
-    console.log(`Issues closed as completed since ${releaseTag}: ${issueCount}`);
+    console.log(
+      `Issues closed as completed since ${releaseTag}: ${issueCount}`,
+    );
     console.log(`Total positive reactions (👍❤️🎉🚀): ${reactionCount}`);
 
     if (issueCount > 0) {
-      console.log(`Average reactions per completed issue: ${(reactionCount / issueCount).toFixed(1)}`);
+      console.log(
+        `Average reactions per completed issue: ${(reactionCount / issueCount).toFixed(1)}`,
+      );
     }
   } catch (error) {
     console.error("❌ Error:", error.message);

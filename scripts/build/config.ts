@@ -7,7 +7,14 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+} from "node:fs";
 import { homedir, arch as hostArch, platform as hostPlatform } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { NODEJS_ABI_VERSION, NODEJS_VERSION } from "./deps/nodejs-headers.ts";
@@ -366,7 +373,9 @@ export function detectHost(): Host {
       : a === "arm64"
         ? "aarch64"
         : (() => {
-            throw new BuildError(`Unsupported host architecture: ${a}`, { hint: "Bun builds on x64 or arm64" });
+            throw new BuildError(`Unsupported host architecture: ${a}`, {
+              hint: "Bun builds on x64 or arm64",
+            });
           })();
 
   return { os, arch, exeSuffix: os === "windows" ? ".exe" : "" };
@@ -404,7 +413,8 @@ export const FREEBSD_VERSION_DEFAULT = "14.3";
  */
 export function detectFreebsdSysroot(arch: Arch): string | undefined {
   const env = process.env.FREEBSD_SYSROOT;
-  if (env && existsSync(join(env, "usr", "include", "sys", "param.h"))) return env;
+  if (env && existsSync(join(env, "usr", "include", "sys", "param.h")))
+    return env;
   const candidates =
     arch === "aarch64"
       ? ["/opt/freebsd-sysroot-arm64", "/opt/freebsd-sysroot"]
@@ -466,17 +476,32 @@ function ndkHostTag(host: Host): string {
  * Idempotent. Warns with a sudo hint if the resource dir isn't writable
  * (CI build images create the symlinks as root in bootstrap.sh/Dockerfile).
  */
-function linkNdkRuntimesIntoClang(cc: string, ndk: string, host: Host, triple: string): void {
-  const resourceDir = execSync(`"${cc}" -print-resource-dir`, { encoding: "utf8" }).trim();
+function linkNdkRuntimesIntoClang(
+  cc: string,
+  ndk: string,
+  host: Host,
+  triple: string,
+): void {
+  const resourceDir = execSync(`"${cc}" -print-resource-dir`, {
+    encoding: "utf8",
+  }).trim();
   const targetDir = join(resourceDir, "lib", triple);
   // NDK r23+ layout: <prebuilt>/lib/clang/<ver>/lib/linux/<arch>/ for
   // libunwind.a + new-style libclang_rt.builtins.a
-  const ndkPrebuilt = join(ndk, "toolchains", "llvm", "prebuilt", ndkHostTag(host));
+  const ndkPrebuilt = join(
+    ndk,
+    "toolchains",
+    "llvm",
+    "prebuilt",
+    ndkHostTag(host),
+  );
   const ndkClangLib = join(ndkPrebuilt, "lib", "clang");
   // NDK ships exactly one clang version per release.
   const ndkClangVer = readdirSync(ndkClangLib)[0];
   if (ndkClangVer === undefined) {
-    throw new BuildError(`NDK clang resource dir not found under ${ndkClangLib}`);
+    throw new BuildError(
+      `NDK clang resource dir not found under ${ndkClangLib}`,
+    );
   }
   const arch = triple.startsWith("x86_64") ? "x86_64" : "aarch64";
   const ndkRtLinux = join(ndkClangLib, ndkClangVer, "lib", "linux");
@@ -486,7 +511,10 @@ function linkNdkRuntimesIntoClang(cc: string, ndk: string, host: Host, triple: s
   // the flat dir but libunwind in the per-arch subdir.
   const flatDir = join(resourceDir, "lib", "linux");
   const links = {
-    [join(targetDir, "libclang_rt.builtins.a")]: join(ndkRtLinux, `libclang_rt.builtins-${arch}-android.a`),
+    [join(targetDir, "libclang_rt.builtins.a")]: join(
+      ndkRtLinux,
+      `libclang_rt.builtins-${arch}-android.a`,
+    ),
     [join(targetDir, "libunwind.a")]: join(ndkRtLinux, arch, "libunwind.a"),
     [join(flatDir, `libclang_rt.builtins-${arch}-android.a`)]: join(
       ndkRtLinux,
@@ -521,7 +549,10 @@ function linkNdkRuntimesIntoClang(cc: string, ndk: string, host: Host, triple: s
  * This is where all the "X defaults to Y unless Z" chains get resolved into
  * concrete values. After this runs, everything downstream sees plain booleans.
  */
-export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Config {
+export function resolveConfig(
+  partial: PartialConfig,
+  toolchain: Toolchain,
+): Config {
   const host = detectHost();
 
   // ─── Target platform ───
@@ -530,9 +561,11 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   // hardware). Ask the compiler what it targets — CMake does the same in
   // project() to set CMAKE_SYSTEM_PROCESSOR. The found clang's default
   // target is what we actually build for.
-  const compilerArch = os === "windows" ? clangTargetArch(toolchain.cc) : undefined;
+  const compilerArch =
+    os === "windows" ? clangTargetArch(toolchain.cc) : undefined;
   const arch = partial.arch ?? compilerArch ?? host.arch;
-  const abi: Abi | undefined = os === "linux" ? (partial.abi ?? detectLinuxAbi()) : undefined;
+  const abi: Abi | undefined =
+    os === "linux" ? (partial.abi ?? detectLinuxAbi()) : undefined;
 
   const linux = os === "linux";
   const darwin = os === "darwin";
@@ -552,7 +585,10 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   // ─── Build type ───
   const buildType = partial.buildType ?? "Debug";
   const debug = buildType === "Debug";
-  const release = buildType === "Release" || buildType === "RelWithDebInfo" || buildType === "MinSizeRel";
+  const release =
+    buildType === "Release" ||
+    buildType === "RelWithDebInfo" ||
+    buildType === "MinSizeRel";
   const smol = buildType === "MinSizeRel";
 
   // ─── Environment ───
@@ -573,7 +609,8 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   // shipping alongside the binary; UBSan likewise. Not worth the matrix.
   // FreeBSD: force off. Cross-compiled — we'd need to ship FreeBSD's
   // libclang_rt.asan, and there's no -asan WebKit prebuilt for it.
-  const asan = abi === "android" || freebsd ? false : (partial.asan ?? asanDefault);
+  const asan =
+    abi === "android" || freebsd ? false : (partial.asan ?? asanDefault);
 
   // Zig ASAN follows ASAN unless explicitly overridden
   const zigAsan = partial.zigAsan ?? asan;
@@ -595,7 +632,9 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   }
 
   // PGO: paths resolved to absolute. generate/use are mutually exclusive.
-  const pgoGenerate = partial.pgoGenerate ? resolve(partial.pgoGenerate) : undefined;
+  const pgoGenerate = partial.pgoGenerate
+    ? resolve(partial.pgoGenerate)
+    : undefined;
   const pgoUse = partial.pgoUse ? resolve(partial.pgoUse) : undefined;
   if (pgoGenerate && pgoUse) {
     throw new BuildError("--pgo-generate and --pgo-use are mutually exclusive");
@@ -623,14 +662,20 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   // TinyCC: off on Windows ARM64 (not supported), Android (no upstream
   // bionic support; FFI cc() falls back to dlopen-only), and FreeBSD
   // (oven-sh/tinycc has no FreeBSD target).
-  const tinycc = partial.tinycc ?? !((windows && arm64) || abi === "android" || freebsd);
+  const tinycc =
+    partial.tinycc ?? !((windows && arm64) || abi === "android" || freebsd);
 
   const valgrind = partial.valgrind ?? false;
   const fuzzilli = partial.fuzzilli ?? false;
 
   // ─── Paths ───
   const cwd = findRepoRoot();
-  const defaultBuildDirName = computeBuildDirName({ debug, release, asan, assertions });
+  const defaultBuildDirName = computeBuildDirName({
+    debug,
+    release,
+    asan,
+    assertions,
+  });
   const buildDir =
     partial.buildDir !== undefined
       ? isAbsolute(partial.buildDir)
@@ -643,7 +688,9 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   // so runners remain hermetic and `rm -rf build/` is a full reset.
   // Relative BUN_INSTALL is anchored to repo root (not process.cwd()) so the
   // ninja regen rule — which runs from buildDir — resolves the same path.
-  const bunInstall = process.env.BUN_INSTALL ? resolve(cwd, process.env.BUN_INSTALL) : join(homedir(), ".bun");
+  const bunInstall = process.env.BUN_INSTALL
+    ? resolve(cwd, process.env.BUN_INSTALL)
+    : join(homedir(), ".bun");
   const cacheDir =
     partial.cacheDir !== undefined
       ? isAbsolute(partial.cacheDir)
@@ -655,10 +702,19 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
   const vendorDir = resolve(cwd, "vendor");
 
   // ─── Validation ───
-  assert(!baseline || x64, "baseline=true requires arch=x64 (baseline disables AVX which is x64-only)");
+  assert(
+    !baseline || x64,
+    "baseline=true requires arch=x64 (baseline disables AVX which is x64-only)",
+  );
   assert(!valgrind || linux, "valgrind=true requires os=linux");
-  assert(!(asan && valgrind), "Cannot enable both asan and valgrind simultaneously");
-  assert(os !== "linux" || abi !== undefined, "Linux builds require an abi (gnu, musl, or android)");
+  assert(
+    !(asan && valgrind),
+    "Cannot enable both asan and valgrind simultaneously",
+  );
+  assert(
+    os !== "linux" || abi !== undefined,
+    "Linux builds require an abi (gnu, musl, or android)",
+  );
 
   // ─── Cross-compilation (Android) ───
   // We keep using the host's clang (same version everywhere) and pass
@@ -682,7 +738,13 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
       });
     }
     androidApiLevel = partial.androidApiLevel ?? ANDROID_API_LEVEL_DEFAULT;
-    const ndkPrebuilt = join(androidNdk, "toolchains", "llvm", "prebuilt", ndkHostTag(host));
+    const ndkPrebuilt = join(
+      androidNdk,
+      "toolchains",
+      "llvm",
+      "prebuilt",
+      ndkHostTag(host),
+    );
     sysroot = join(ndkPrebuilt, "sysroot");
     if (!existsSync(sysroot)) {
       throw new BuildError(`Android NDK sysroot not found at ${sysroot}`, {
@@ -693,7 +755,9 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
     const ndkClangLib = join(ndkPrebuilt, "lib", "clang");
     const ndkClangVer = readdirSync(ndkClangLib)[0];
     if (ndkClangVer === undefined) {
-      throw new BuildError(`NDK clang resource dir not found under ${ndkClangLib}`);
+      throw new BuildError(
+        `NDK clang resource dir not found under ${ndkClangLib}`,
+      );
     }
     androidNdkRuntimeDir = join(ndkClangLib, ndkClangVer, "lib", "linux");
     const llvmArch = arch === "x64" ? "x86_64" : "aarch64";
@@ -717,10 +781,16 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
           : detectFreebsdSysroot(arch);
       if (sysroot === undefined) {
         const dlArch = arch === "x64" ? "amd64" : "arm64";
-        const sysrootPath = arch === "x64" ? "/opt/freebsd-sysroot" : "/opt/freebsd-sysroot-arm64";
-        throw new BuildError("--os=freebsd requires a FreeBSD sysroot when cross-compiling", {
-          hint: `Set FREEBSD_SYSROOT or pass --freebsd-sysroot=<path>. Create one with: mkdir -p ${sysrootPath} && curl -L https://download.freebsd.org/releases/${dlArch}/${freebsdVersion}-RELEASE/base.txz | tar -C ${sysrootPath} -xJf - ./usr/include ./usr/lib ./lib`,
-        });
+        const sysrootPath =
+          arch === "x64"
+            ? "/opt/freebsd-sysroot"
+            : "/opt/freebsd-sysroot-arm64";
+        throw new BuildError(
+          "--os=freebsd requires a FreeBSD sysroot when cross-compiling",
+          {
+            hint: `Set FREEBSD_SYSROOT or pass --freebsd-sysroot=<path>. Create one with: mkdir -p ${sysrootPath} && curl -L https://download.freebsd.org/releases/${dlArch}/${freebsdVersion}-RELEASE/base.txz | tar -C ${sysrootPath} -xJf - ./usr/include ./usr/lib ./lib`,
+          },
+        );
       }
       const llvmArch = arch === "x64" ? "x86_64" : "aarch64";
       crossTarget = `${llvmArch}-unknown-freebsd${freebsdVersion}`;
@@ -732,14 +802,17 @@ export function resolveConfig(partial: PartialConfig, toolchain: Toolchain): Con
 
   // ─── Versioning ───
   const pkgJsonPath = resolve(cwd, "package.json");
-  const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as { version: string };
+  const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
+    version: string;
+  };
   const version = pkgJson.version;
   const revision = getGitRevision(cwd);
 
   // Defaults from versions.ts. Override via --webkit-version=<hash> etc.
   // to test a branch before bumping the pinned default.
   const nodejsVersion = partial.nodejsVersion ?? versionDefaults.nodejsVersion;
-  const nodejsAbiVersion = partial.nodejsAbiVersion ?? versionDefaults.nodejsAbiVersion;
+  const nodejsAbiVersion =
+    partial.nodejsAbiVersion ?? versionDefaults.nodejsAbiVersion;
   const zigCommit = partial.zigCommit ?? versionDefaults.zigCommit;
   const webkitVersion = partial.webkitVersion ?? versionDefaults.webkitVersion;
 
@@ -855,19 +928,28 @@ const MIN_OSX_DEPLOYMENT_TARGET = "13.0";
  * symlink. Avoids `xcrun` (~100ms × 2 spawns). Falls back to xcrun only if
  * the constructed path doesn't exist (exotic installs).
  */
-function detectMacosSdk(ci: boolean): { osxDeploymentTarget: string; osxSysroot: string } {
+function detectMacosSdk(ci: boolean): {
+  osxDeploymentTarget: string;
+  osxSysroot: string;
+} {
   // xcode-select -p prints the active developer dir (respects
   // `xcode-select --switch` and DEVELOPER_DIR). It's a tiny C binary —
   // fast enough to be negligible, unlike xcrun which does a bunch of
   // environment discovery.
   let devDir: string;
   try {
-    devDir = (process.env.DEVELOPER_DIR ?? execSync("xcode-select -p", { encoding: "utf8" })).trim();
+    devDir = (
+      process.env.DEVELOPER_DIR ??
+      execSync("xcode-select -p", { encoding: "utf8" })
+    ).trim();
   } catch (cause) {
-    throw new BuildError("xcode-select failed — command line tools not installed?", {
-      hint: "Run: xcode-select --install",
-      cause,
-    });
+    throw new BuildError(
+      "xcode-select failed — command line tools not installed?",
+      {
+        hint: "Run: xcode-select --install",
+        cause,
+      },
+    );
   }
 
   // For full Xcode the dev dir is ".../Developer"; for CLT it's
@@ -879,7 +961,10 @@ function detectMacosSdk(ci: boolean): { osxDeploymentTarget: string; osxSysroot:
   // what ends up in build.ninja — so swapping SDKs doesn't cause a
   // spurious full rebuild). But follow the link to PARSE the version
   // from the real basename (e.g. MacOSX14.2.sdk → "14").
-  const candidates = [`${devDir}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk`, `${devDir}/SDKs/MacOSX.sdk`];
+  const candidates = [
+    `${devDir}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk`,
+    `${devDir}/SDKs/MacOSX.sdk`,
+  ];
 
   let osxSysroot: string | undefined;
   let sdkVersionFromPath: string | undefined;
@@ -897,7 +982,9 @@ function detectMacosSdk(ci: boolean): { osxDeploymentTarget: string; osxSysroot:
   // locations via SDKROOT env or similar).
   if (osxSysroot === undefined) {
     try {
-      osxSysroot = execSync("xcrun --sdk macosx --show-sdk-path", { encoding: "utf8" }).trim();
+      osxSysroot = execSync("xcrun --sdk macosx --show-sdk-path", {
+        encoding: "utf8",
+      }).trim();
     } catch (cause) {
       throw new BuildError("Failed to find macOS SDK path", {
         hint: "Run: xcode-select --install",
@@ -915,7 +1002,9 @@ function detectMacosSdk(ci: boolean): { osxDeploymentTarget: string; osxSysroot:
     // Couldn't parse from path (unversioned symlink target?) — ask xcrun.
     let sdkVersion: string;
     try {
-      sdkVersion = execSync("xcrun --sdk macosx --show-sdk-version", { encoding: "utf8" }).trim();
+      sdkVersion = execSync("xcrun --sdk macosx --show-sdk-version", {
+        encoding: "utf8",
+      }).trim();
     } catch (cause) {
       throw new BuildError("Failed to find macOS SDK version", {
         hint: "Run: xcode-select --install",
@@ -923,12 +1012,17 @@ function detectMacosSdk(ci: boolean): { osxDeploymentTarget: string; osxSysroot:
       });
     }
     const major = sdkVersion.match(/^(\d+)/)?.[1];
-    assert(major !== undefined, `Could not parse macOS SDK version: ${sdkVersion}`);
+    assert(
+      major !== undefined,
+      `Could not parse macOS SDK version: ${sdkVersion}`,
+    );
     osxDeploymentTarget = major;
   }
 
   // Floor at minimum
-  if (compareVersionStrings(osxDeploymentTarget, MIN_OSX_DEPLOYMENT_TARGET) < 0) {
+  if (
+    compareVersionStrings(osxDeploymentTarget, MIN_OSX_DEPLOYMENT_TARGET) < 0
+  ) {
     throw new BuildError(
       `macOS SDK ${osxDeploymentTarget} is older than minimum supported ${MIN_OSX_DEPLOYMENT_TARGET}`,
       { hint: "Update Xcode or Xcode Command Line Tools" },
@@ -962,7 +1056,9 @@ export function findRepoRoot(): string {
     const pkgPath = join(dir, "package.json");
     if (existsSync(pkgPath)) {
       try {
-        const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { name?: string };
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+          name?: string;
+        };
         if (pkg.name === "bun") {
           return dir;
         }
@@ -972,7 +1068,9 @@ export function findRepoRoot(): string {
     }
     const parent = resolve(dir, "..");
     if (parent === dir) {
-      throw new BuildError("Could not find bun repository root", { hint: "Run this from within the bun repository" });
+      throw new BuildError("Could not find bun repository root", {
+        hint: "Run this from within the bun repository",
+      });
     }
     dir = parent;
   }
@@ -988,7 +1086,10 @@ export function findRepoRoot(): string {
  */
 function getGitRevision(cwd: string): string {
   // CI env first — authoritative and zero-cost.
-  const envSha = process.env.BUILDKITE_COMMIT ?? process.env.GITHUB_SHA ?? process.env.GIT_SHA;
+  const envSha =
+    process.env.BUILDKITE_COMMIT ??
+    process.env.GITHUB_SHA ??
+    process.env.GIT_SHA;
   if (envSha !== undefined && envSha.length > 0) {
     return envSha;
   }
@@ -1003,7 +1104,12 @@ function getGitRevision(cwd: string): string {
  * Compute build directory name based on config.
  * Matches the pattern used by package.json scripts.
  */
-function computeBuildDirName(c: { debug: boolean; release: boolean; asan: boolean; assertions: boolean }): string {
+function computeBuildDirName(c: {
+  debug: boolean;
+  release: boolean;
+  asan: boolean;
+  assertions: boolean;
+}): string {
   if (c.debug) return "debug";
   if (c.asan) return "release-asan";
   if (c.assertions) return "release-assertions";
@@ -1078,9 +1184,13 @@ export function formatConfig(cfg: Config, exe: string): string {
   // revert my WebKit test branch" before the build goes weird.
   if (cfg.webkitVersion !== versionDefaults.webkitVersion)
     features.push(`webkit-version:${cfg.webkitVersion.slice(0, 10)}`);
-  if (cfg.zigCommit !== versionDefaults.zigCommit) features.push(`zig-commit:${cfg.zigCommit.slice(0, 10)}`);
-  if (cfg.nodejsVersion !== versionDefaults.nodejsVersion) features.push(`nodejs:${cfg.nodejsVersion}`);
-  lines.push(`  ${label("features")} ${features.length > 0 ? c.cyan(features.join(", ")) : c.dim("(none)")}`);
+  if (cfg.zigCommit !== versionDefaults.zigCommit)
+    features.push(`zig-commit:${cfg.zigCommit.slice(0, 10)}`);
+  if (cfg.nodejsVersion !== versionDefaults.nodejsVersion)
+    features.push(`nodejs:${cfg.nodejsVersion}`);
+  lines.push(
+    `  ${label("features")} ${features.length > 0 ? c.cyan(features.join(", ")) : c.dim("(none)")}`,
+  );
   return lines.join("\n");
 }
 

@@ -228,7 +228,10 @@ export function findTool(spec: ToolSpec): FoundTool | undefined {
           continue;
         }
         if (!satisfiesRange(v.version, spec.version)) {
-          rejections.push({ path: full, reason: `version ${v.version} does not satisfy ${spec.version}` });
+          rejections.push({
+            path: full,
+            reason: `version ${v.version} does not satisfy ${spec.version}`,
+          });
           continue;
         }
         return { path: full, version: v.version };
@@ -289,7 +292,10 @@ function llvmSearchPaths(os: OS, arch: Arch): string[] {
       brewPrefix = defaultPrefix;
     } else {
       try {
-        brewPrefix = execSync("brew --prefix", { encoding: "utf8", timeout: 3000 }).trim();
+        brewPrefix = execSync("brew --prefix", {
+          encoding: "utf8",
+          timeout: 3000,
+        }).trim();
       } catch {
         brewPrefix = defaultPrefix;
       }
@@ -418,7 +424,11 @@ export function resolveLlvmToolchain(
   // On Darwin clang drives the system linker directly.
   let ld: string;
   if (os === "windows") {
-    ld = findLlvmTool("lld-link", paths, os, { checkVersion: false, required: true })?.path ?? "";
+    ld =
+      findLlvmTool("lld-link", paths, os, {
+        checkVersion: false,
+        required: true,
+      })?.path ?? "";
   } else if (os === "linux") {
     ld = findLlvmTool("ld.lld", paths, os, { checkVersion: true, required: true })?.path ?? "";
   } else {
@@ -428,15 +438,27 @@ export function resolveLlvmToolchain(
   // strip: GNU strip on Linux (more features), llvm-strip elsewhere
   let strip: string;
   if (os === "linux") {
-    strip = findTool({ names: ["strip"], required: true, hint: "Install binutils for your distro" })?.path ?? "";
+    strip =
+      findTool({
+        names: ["strip"],
+        required: true,
+        hint: "Install binutils for your distro",
+      })?.path ?? "";
   } else {
-    strip = findLlvmTool("llvm-strip", paths, os, { checkVersion: false, required: true })?.path ?? "";
+    strip =
+      findLlvmTool("llvm-strip", paths, os, {
+        checkVersion: false,
+        required: true,
+      })?.path ?? "";
   }
 
   // dsymutil: darwin only
   let dsymutil: string | undefined;
   if (os === "darwin") {
-    dsymutil = findLlvmTool("dsymutil", paths, os, { checkVersion: false, required: true })?.path;
+    dsymutil = findLlvmTool("dsymutil", paths, os, {
+      checkVersion: false,
+      required: true,
+    })?.path;
   }
 
   // rc/mt: windows only. Passed to nested cmake — when CMAKE_C_COMPILER
@@ -448,8 +470,14 @@ export function resolveLlvmToolchain(
   let rc: string | undefined;
   let mt: string | undefined;
   if (os === "windows") {
-    rc = findLlvmTool("llvm-rc", paths, os, { checkVersion: false, required: true })?.path;
-    mt = findLlvmTool("llvm-mt", paths, os, { checkVersion: false, required: false })?.path;
+    rc = findLlvmTool("llvm-rc", paths, os, {
+      checkVersion: false,
+      required: true,
+    })?.path;
+    mt = findLlvmTool("llvm-mt", paths, os, {
+      checkVersion: false,
+      required: false,
+    })?.path;
   }
 
   // nasm: windows-x64 only. BoringSSL's win-x64 assembly is NASM syntax

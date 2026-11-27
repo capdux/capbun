@@ -414,13 +414,8 @@ else => null,
                                 _ = ((p.log.addError(p.source, expr.loc, "For security reasons, macros cannot be run from node_modules.")) catch unreachable);
                                 return p.newExpr(E.Undefined, expr.loc);
                             }
-                            p.macro_call_count = (p.macro_call_count + 1);
-                            const name = (((if (@typeInfo(@TypeOf(macro_ref_data)) == .@"enum" or @typeInfo(@TypeOf(macro_ref_data)) == .@"union") @tagName(macro_ref_data) else macro_ref_data.name)) orelse ((if (@typeInfo(@TypeOf(tag.data.e_dot)) == .@"enum" or @typeInfo(@TypeOf(tag.data.e_dot)) == .@"union") @tagName(tag.data.e_dot) else tag.data.e_dot.name)));
-                            const record = (&p.import_records.items[@as(usize, @intCast(macro_ref_data.import_record_id))]);
-                            const macro_result = (blk_catch_16: { break :blk_catch_16 ((p.options.macro_context.call(record.path.text, p.source.path.sourceDir(), p.log, p.source, record.range, expr, name)) catch |__ce_16| { _ = &__ce_16; return expr; }); });
-                            if ((macro_result.data != .e_template)) {
-                                return p.visitExpr(macro_result);
-                            }
+                            _ = ((p.log.addError(p.source, expr.loc, "template literal macro invocations are not supported")) catch unreachable);
+                            return p.newExpr(E.Undefined, expr.loc);
                         }
                     }
                 }
@@ -625,7 +620,7 @@ if (p.options.features.minify_syntax) {
                 (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value) = SideEffects.simplifyBoolean(p, (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value));
             }
             const side_effects = SideEffects.toBoolean(p, (if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value).data);
-            if (side_effects.ok) {
+            if ((side_effects.ok and ((side_effects.side_effects == .no_side_effects) or p.exprCanBeRemovedIfUnused((&(if (@typeInfo(@TypeOf(e_)) == .@"enum") @intFromEnum(e_) else e_.value)))))) {
                 return p.newExpr(E.Boolean{ .value = (!(if (@typeInfo(@TypeOf(side_effects)) == .@"enum") @intFromEnum(side_effects) else side_effects.value)) }, expr.loc);
             }
             if (p.options.features.minify_syntax) {

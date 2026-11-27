@@ -23,8 +23,12 @@ function parseLogFile(filename) {
         const duration = endTime - startTime;
 
         // Extract attempt info - match the actual ANSI pattern
-        const attemptMatch = currentTest.match(/\s+\x1b\[90m\[attempt #(\d+)\]\x1b\[0m$/);
-        const cleanName = currentTest.replace(/\s+\x1b\[90m\[attempt #\d+\]\x1b\[0m$/, "").trim();
+        const attemptMatch = currentTest.match(
+          /\s+\x1b\[90m\[attempt #(\d+)\]\x1b\[0m$/,
+        );
+        const cleanName = currentTest
+          .replace(/\s+\x1b\[90m\[attempt #\d+\]\x1b\[0m$/, "")
+          .trim();
         const attemptNum = attemptMatch ? parseInt(attemptMatch[1]) : 1;
 
         if (!testDetails.has(cleanName)) {
@@ -58,7 +62,8 @@ function formatAttempts(attempts) {
   if (attempts.length <= 1) return "";
 
   const attemptStrings = attempts.map(
-    ({ attempt, duration }) => `${(duration / 1000).toFixed(1)}s attempt #${attempt}`,
+    ({ attempt, duration }) =>
+      `${(duration / 1000).toFixed(1)}s attempt #${attempt}`,
   );
   return ` [${attemptStrings.join(", ")}]`;
 }
@@ -71,7 +76,8 @@ if (process.argv.length !== 3) {
 const filename = process.argv[2];
 const testGroups = parseLogFile(filename);
 
-const totalTime = testGroups.reduce((sum, group) => sum + group.totalDuration, 0) / 1000;
+const totalTime =
+  testGroups.reduce((sum, group) => sum + group.totalDuration, 0) / 1000;
 const avgTime = testGroups.length > 0 ? totalTime / testGroups.length : 0;
 
 console.log(
@@ -84,7 +90,10 @@ console.log("**Top 10 slowest tests:**");
 for (let i = 0; i < Math.min(10, testGroups.length); i++) {
   const { name, totalDuration, attempts } = testGroups[i];
   const durationSec = totalDuration / 1000;
-  const testName = name.replace("test/", "").replace(".test.ts", "").replace(".test.js", "");
+  const testName = name
+    .replace("test/", "")
+    .replace(".test.ts", "")
+    .replace(".test.js", "");
   const attemptInfo = formatAttempts(attempts);
   console.log(`- **${durationSec.toFixed(1)}s** ${testName}${attemptInfo}`);
 }
@@ -101,7 +110,9 @@ for (let i = 0; i < slowTests.length; i++) {
   const { name, totalDuration, attempts } = slowTests[i];
   const durationSec = totalDuration / 1000;
   const attemptInfo = formatAttempts(attempts);
-  console.log(`${(i + 1).toString().padStart(3)}. ${durationSec.toFixed(2).padStart(7)}s  ${name}${attemptInfo}`);
+  console.log(
+    `${(i + 1).toString().padStart(3)}. ${durationSec.toFixed(2).padStart(7)}s  ${name}${attemptInfo}`,
+  );
 }
 
 console.log("```");

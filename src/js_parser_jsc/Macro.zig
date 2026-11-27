@@ -549,7 +549,8 @@ const call_args: []Expr = call.args.slice();
             }
 },
 .e_template => {
-_ = @panic("TODO: support template literals in macros");
+_ = (blk_catch_17: { break :blk_catch_17 ((log.addError(source, caller.loc, "template literal macro invocations are not supported")) catch |__ce_17| { _ = &__ce_17;  }); });
+            return error.MacroFailed;
 },
 else => {
 _ = @panic("Unexpected caller type");
@@ -622,7 +623,7 @@ pub const MacroLoadWrapper = struct {
     err: ?anyerror,
 
 pub fn call(self: *MacroLoadWrapper) void {
-            const loaded_result = (blk_catch_17: { break :blk_catch_17 ((self.vm.loadMacroEntryPoint(self.input_specifier, self.function_name, self.specifier, self.hash)) catch |e| { _ = &e; self.err = e;
+            const loaded_result = (blk_catch_18: { break :blk_catch_18 ((self.vm.loadMacroEntryPoint(self.input_specifier, self.function_name, self.specifier, self.hash)) catch |e| { _ = &e; self.err = e;
             return; }); });
             switch (loaded_result.unwrap(self.vm.jsc_vm, .leave_unhandled)) {
 .rejected => |result| {

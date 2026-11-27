@@ -432,9 +432,7 @@ pub struct PEFile {
 
         sum = (sum & 0xffff) + (sum >> 16);
         sum = (sum & 0xffff) + (sum >> 16);
-        sum += raw_bytes.len as u64;
-        sum = (sum & 0xffff) + (sum >> 16);
-        const final_sum = ((sum & 0xffff) + (sum >> 16)) as u32;
+        const final_sum = ((sum + (raw_bytes.len as u64)) & 0xffffffff) as u32;
 
         let opt = _.getOptionalHeader()?;
         opt.checksum = final_sum;

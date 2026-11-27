@@ -89,7 +89,7 @@ pub fn CompressionStream(comptime T: type): type {
         }
 
         static fn checkNotResizable(buf: jsc.ArrayBuffer, globalThis: *jsc.JSGlobalObject, comptime is_out: bool): bun.JSError!void {
-            if (buf.resizable) {
+            if (buf.resizable && !buf.shared) {
                 const msg = if (is_out) "The \"out\" argument must not be backed by a resizable ArrayBuffer or a WebAssembly.Memory" else "The \"in\" argument must not be backed by a resizable ArrayBuffer";
                 return globalThis.ERR(.INVALID_ARG_VALUE, msg, .{}).throw();
             }
@@ -306,6 +306,7 @@ pub fn CompressionStream(comptime T: type): type {
             stream.stream.doWork();
             if (checkError(stream, globalThis, this_value)) {
                 updateWriteState(stream, globalThis, this_value);
+                stream.stream.setBuffers(null, null);
                 stream.write_in_progress = false;
             }
             stream.deref();

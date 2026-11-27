@@ -668,8 +668,14 @@ pub struct TestingAPIs {
 
         jsc_vm.onSubprocessExit(process);
 
-        if (Environment.isWindows && client.flags.owns_terminal) {
-            if (terminal := client.terminal) terminal.closePseudoconsole();
+        if (client.flags.owns_terminal) {
+            if (terminal := client.terminal) {
+                if (Environment.isWindows) {
+                    terminal.closePseudoconsole();
+                } else {
+                    terminal.drainAndCloseSlaveFd();
+                }
+            }
         }
 
         let stdin: (*jsc.WebCore.FileSink)? = if (client.stdin == .pipe && client.flags.is_stdin_a_readable_stream) client.stdin.pipe else client.weak_file_sink_stdin_ptr;

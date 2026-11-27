@@ -26,7 +26,10 @@ function getQuickLinks() {
 async function getGuides() {
   let md = "";
   const basePath = path.join(import.meta.dirname, "..", "docs/guides");
-  const allGuides = readdirSync(basePath, { withFileTypes: true, recursive: true });
+  const allGuides = readdirSync(basePath, {
+    withFileTypes: true,
+    recursive: true,
+  });
   const promises: Promise<{ name: string; file: string }>[] = [];
   for (const guide of allGuides) {
     if (guide.isFile() && guide.name.endsWith(".md")) {
@@ -36,7 +39,9 @@ async function getGuides() {
           .text()
           .then(text => {
             const nameI = text.indexOf("name: ");
-            const name = text.slice(nameI + "name: ".length, text.indexOf("\n", nameI)).trim();
+            const name = text
+              .slice(nameI + "name: ".length, text.indexOf("\n", nameI))
+              .trim();
             return {
               name,
               file: guide.name,
@@ -70,13 +75,16 @@ async function getGuides() {
       prevDirname = dirname;
     }
     md +=
-      `  - [${name}](https://bun.com/guides/${path.dirname(file)}/${path.basename(file, path.extname(file))})` + "\n";
+      `  - [${name}](https://bun.com/guides/${path.dirname(file)}/${path.basename(file, path.extname(file))})` +
+      "\n";
   }
 
   return md;
 }
 
-const text = await Bun.file(Bun.fileURLToPath(import.meta.resolve("../README.md"))).text();
+const text = await Bun.file(
+  Bun.fileURLToPath(import.meta.resolve("../README.md")),
+).text();
 const startI = text.indexOf("## Quick links\n");
 if (startI === -1) {
   throw new Error("Could not find ## Quick links in README");
@@ -92,10 +100,14 @@ if (contributing === -1) {
 const guides = await getGuides();
 
 const combined =
-  [text.slice(0, start), getQuickLinks(), guides, text.slice(contributing)].map(text => text.trim()).join("\n\n") +
-  "\n";
+  [text.slice(0, start), getQuickLinks(), guides, text.slice(contributing)]
+    .map(text => text.trim())
+    .join("\n\n") + "\n";
 
-await Bun.write(Bun.fileURLToPath(import.meta.resolve("../README.md")), combined);
+await Bun.write(
+  Bun.fileURLToPath(import.meta.resolve("../README.md")),
+  combined,
+);
 
 function normalizeSectionName(name: string) {
   if (name.includes("-")) {

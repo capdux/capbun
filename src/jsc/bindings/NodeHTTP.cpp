@@ -492,14 +492,52 @@ static EncodedJSValue NodeHTTPServer__onRequest(
     return JSValue::encode(returnValue);
 }
 
+static std::string_view headerValueIsomorphicView(const WTF::StringView& value, WTF::Vector<char, 256>& latin1Buf)
+{
+    if (value.is8Bit()) {
+        const auto valueSpan = value.span8();
+        return std::string_view(reinterpret_cast<const char*>(valueSpan.data()), valueSpan.size());
+    }
+    const auto span16 = value.span16();
+    latin1Buf.resize(span16.size());
+    for (size_t i = 0; i < span16.size(); ++i) {
+        latin1Buf[i] = static_cast<char>(span16[i] & 0xff);
+    }
+    return std::string_view(latin1Buf.span().data(), latin1Buf.size());
+}
+
+static bool hasConnectionCloseToken(const WTF::StringView& value)
+{
+    unsigned len = value.length();
+    unsigned i = 0;
+    while (i < len) {
+        while (i < len && (value[i] == ',' || value[i] == ' ' || value[i] == '\t'))
+            ++i;
+        unsigned start = i;
+        while (i < len && value[i] != ',')
+            ++i;
+        unsigned end = i;
+        while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t'))
+            --end;
+        if (end - start == 5
+            && (value[start] | 0x20) == 'c'
+            && (value[start + 1] | 0x20) == 'l'
+            && (value[start + 2] | 0x20) == 'o'
+            && (value[start + 3] | 0x20) == 's'
+            && (value[start + 4] | 0x20) == 'e') {
+            return true;
+        }
+    }
+    return false;
+}
+
 template<bool isSSL>
 static void writeResponseHeader(uWS::HttpResponse<isSSL>* res, const WTF::StringView& name, const WTF::StringView& value)
 {
     WTF::CString nameStr;
-    WTF::CString valueStr;
+    WTF::Vector<char, 256> valueBuf;
 
     std::string_view nameView;
-    std::string_view valueView;
 
     if (name.is8Bit()) {
         const auto nameSpan = name.span8();
@@ -510,13 +548,7 @@ static void writeResponseHeader(uWS::HttpResponse<isSSL>* res, const WTF::String
         nameView = std::string_view(nameStr.data(), nameStr.length());
     }
 
-    if (value.is8Bit()) {
-        const auto valueSpan = value.span8();
-        valueView = std::string_view(reinterpret_cast<const char*>(valueSpan.data()), valueSpan.size());
-    } else {
-        valueStr = value.utf8();
-        valueView = std::string_view(valueStr.data(), valueStr.length());
-    }
+    std::string_view valueView = headerValueIsomorphicView(value, valueBuf);
 
     res->writeHeader(nameView, valueView);
 }
@@ -527,14 +559,8 @@ static void writeFetchHeadersToUWSResponse(WebCore::FetchHeaders& headers, uWS::
     auto& internalHeaders = headers.internalHeaders();
 
     for (auto& value : internalHeaders.getSetCookieHeaders()) {
-
-        if (value.is8Bit()) {
-            const auto valueSpan = value.span8();
-            res->writeHeader(std::string_view("set-cookie", 10), std::string_view(reinterpret_cast<const char*>(valueSpan.data()), valueSpan.size()));
-        } else {
-            WTF::CString valueStr = value.utf8();
-            res->writeHeader(std::string_view("set-cookie", 10), std::string_view(valueStr.data(), valueStr.length()));
-        }
+        WTF::Vector<char, 256> valueBuf;
+        res->writeHeader(std::string_view("set-cookie", 10), headerValueIsomorphicView(value, valueBuf));
     }
 
     auto* data = res->getHttpResponseData();
@@ -577,6 +603,9 @@ static void writeFetchHeadersToUWSResponse(WebCore::FetchHeaders& headers, uWS::
         // Prevent automatic Transfer-Encoding: chunked insertion when user provides one
         if (header.key == WebCore::HTTPHeaderName::TransferEncoding) {
             data->state |= uWS::HttpResponseData<isSSL>::HTTP_WROTE_TRANSFER_ENCODING_HEADER;
+        }
+        if (header.key == WebCore::HTTPHeaderName::Connection && hasConnectionCloseToken(value)) {
+            data->state |= uWS::HttpResponseData<isSSL>::HTTP_CONNECTION_CLOSE;
         }
         writeResponseHeader<isSSL>(res, name, value);
     }
@@ -1029,8 +1058,9 @@ static void writeFetchHeadersToH3Response(WebCore::FetchHeaders& headers, uWS::H
     auto* data = res->getHttpResponseData();
 
     auto writeOne = [&](const WTF::StringView& name, const WTF::StringView& value) {
-        WTF::CString nameStr, valueStr;
-        std::string_view nameView, valueView;
+        WTF::CString nameStr;
+        WTF::Vector<char, 256> valueBuf;
+        std::string_view nameView;
         if (name.is8Bit()) {
             const auto s = name.span8();
             nameView = std::string_view(reinterpret_cast<const char*>(s.data()), s.size());
@@ -1038,24 +1068,12 @@ static void writeFetchHeadersToH3Response(WebCore::FetchHeaders& headers, uWS::H
             nameStr = name.utf8();
             nameView = std::string_view(nameStr.data(), nameStr.length());
         }
-        if (value.is8Bit()) {
-            const auto s = value.span8();
-            valueView = std::string_view(reinterpret_cast<const char*>(s.data()), s.size());
-        } else {
-            valueStr = value.utf8();
-            valueView = std::string_view(valueStr.data(), valueStr.length());
-        }
-        res->writeHeader(nameView, valueView);
+        res->writeHeader(nameView, headerValueIsomorphicView(value, valueBuf));
     };
 
     for (auto& value : internalHeaders.getSetCookieHeaders()) {
-        if (value.is8Bit()) {
-            const auto s = value.span8();
-            res->writeHeader(std::string_view("set-cookie", 10), std::string_view(reinterpret_cast<const char*>(s.data()), s.size()));
-        } else {
-            WTF::CString v = value.utf8();
-            res->writeHeader(std::string_view("set-cookie", 10), std::string_view(v.data(), v.length()));
-        }
+        WTF::Vector<char, 256> valueBuf;
+        res->writeHeader(std::string_view("set-cookie", 10), headerValueIsomorphicView(value, valueBuf));
     }
 
     for (const auto& header : internalHeaders.commonHeaders()) {

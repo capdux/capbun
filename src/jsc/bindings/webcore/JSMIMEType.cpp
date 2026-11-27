@@ -241,7 +241,7 @@ static std::tuple<String, String, size_t> parseTypeAndSubtype(JSGlobalObject* gl
     StringView typeView = input->substring(position, typeEnd - position);
     int invalidTypeIndex = findFirstInvalidHTTPTokenChar(typeView);
     if (typeView.isEmpty() || invalidTypeIndex != -1) {
-        int originalIndex = (invalidTypeIndex == -1) ? -1 : static_cast<int>(position + invalidTypeIndex);
+        int originalIndex = (invalidTypeIndex == -1) ? -1 : invalidTypeIndex;
         Bun::ERR::INVALID_MIME_SYNTAX(scope, globalObject, "type"_s, input->toString(), originalIndex);
         return {};
     }
@@ -433,6 +433,10 @@ JSC_DEFINE_CUSTOM_GETTER(jsMIMETypeProtoGetterEssence, (JSGlobalObject * globalO
     }
 
     String essence = makeString(thisObject->type(), '/', thisObject->subtype());
+    if (essence.isNull() || essence.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]] {
+        JSC::throwOutOfMemoryError(globalObject, scope);
+        return {};
+    }
     return JSValue::encode(jsString(vm, essence));
 }
 

@@ -848,7 +848,9 @@ function ClientRequest(input, options, cb) {
   }
   if (mergedTlsOptions.checkServerIdentity !== undefined) {
     validateFunction(mergedTlsOptions.checkServerIdentity, "options.checkServerIdentity");
-    this._ensureTls().checkServerIdentity = mergedTlsOptions.checkServerIdentity;
+    const checkServerIdentity = mergedTlsOptions.checkServerIdentity;
+    this._ensureTls().checkServerIdentity = (hostname, cert) =>
+      checkServerIdentity.$call(mergedTlsOptions, hostname, cert);
   }
   this[kPath] = options.path || "/";
   if (cb) {

@@ -98,7 +98,7 @@ export struct S3ListObjectsV2Result {
     }
 
     pub fn toJS(*_, globalObject: *JSGlobalObject): JSError!JSValue {
-        let jsResult = JSValue.createEmptyObject(globalObject, 0);
+        let jsResult = JSValue.createEmptyObject(globalObject, 12);
 
         if (name := _.name) {
             jsResult.put(globalObject, ZigString.static("name"), BunString.createUTF8ForJS(globalObject, name)?);
@@ -144,7 +144,7 @@ export struct S3ListObjectsV2Result {
 
             let i: usize = 0;
             for (item of contents.items) {
-                let objectInfo = JSValue.createEmptyObject(globalObject, 0);
+                let objectInfo = JSValue.createEmptyObject(globalObject, 8);
                 objectInfo.put(globalObject, ZigString.static("key"), BunString.createUTF8ForJS(globalObject, item.key)?);
 
                 if (etag := item.etag) {
@@ -156,7 +156,7 @@ export struct S3ListObjectsV2Result {
                     objectInfo.put(globalObject, ZigString.static("checksumAlgorithm"), js_alg);
                     const prop_name = JSStringCreateWithUTF8CString("checksumAlgorithme");
                     defer JSStringRelease(prop_name);
-                    JSObjectSetProperty(globalObject, objectInfo.asObjectRef(), prop_name, js_alg.asObjectRef(), .kJSPropertyAttributeDontEnum, null);
+                    JSObjectSetProperty(globalObject, objectInfo.asObjectRef(), prop_name, js_alg.asRef(), .kJSPropertyAttributeDontEnum, null);
                 }
 
                 if (checksum_type := item.checksum_type) {
@@ -176,7 +176,7 @@ export struct S3ListObjectsV2Result {
                 }
 
                 if (owner := item.owner) {
-                    let jsOwner = JSValue.createEmptyObject(globalObject, 0);
+                    let jsOwner = JSValue.createEmptyObject(globalObject, 2);
                     if (id := owner.id) {
                         jsOwner.put(globalObject, ZigString.static("id"), BunString.createUTF8ForJS(globalObject, id)?);
                     }
@@ -200,7 +200,7 @@ export struct S3ListObjectsV2Result {
 
             let i: usize = 0;
             for (cp_prefix of common_prefixes.items) {
-                let jsPrefix = JSValue.createEmptyObject(globalObject, 0);
+                let jsPrefix = JSValue.createEmptyObject(globalObject, 1);
                 jsPrefix.put(globalObject, ZigString.static("prefix"), BunString.createUTF8ForJS(globalObject, cp_prefix)?);
                 jsCommonPrefixes.putIndex(globalObject, @intCast(i), jsPrefix)?;
                 i += 1;

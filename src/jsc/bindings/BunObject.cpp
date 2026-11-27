@@ -713,8 +713,7 @@ JSC_DEFINE_HOST_FUNCTION(functionBunDeepEquals, (JSGlobalObject * globalObject, 
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     if (callFrame->argumentCount() < 2) {
-        throwTypeError(globalObject, scope, "Expected 2 values to compare"_s);
-        return {};
+        return throwVMTypeError(globalObject, scope, "Expected 2 values to compare"_s);
     }
 
     JSC::JSValue arg1 = callFrame->uncheckedArgument(0);
@@ -744,16 +743,14 @@ JSC_DEFINE_HOST_FUNCTION(functionBunDeepMatch, (JSGlobalObject * globalObject, J
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     if (callFrame->argumentCount() < 2) {
-        throwTypeError(globalObject, scope, "Expected 2 values to compare"_s);
-        return {};
+        return throwVMTypeError(globalObject, scope, "Expected 2 values to compare"_s);
     }
 
     JSC::JSValue subset = callFrame->uncheckedArgument(0);
     JSC::JSValue object = callFrame->uncheckedArgument(1);
 
     if (!subset.isObject() || !object.isObject()) {
-        throwTypeError(globalObject, scope, "Expected 2 objects to match"_s);
-        return {};
+        return throwVMTypeError(globalObject, scope, "Expected 2 objects to match"_s);
     }
 
     std::set<EncodedJSValue> objVisited;

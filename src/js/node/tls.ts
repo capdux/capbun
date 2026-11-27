@@ -369,7 +369,9 @@ function checkServerIdentity(hostname, cert) {
 
   hostname = unfqdn(hostname); // Remove trailing dot for error messages.
   if (net.isIP(hostname)) {
-    valid = ArrayPrototypeIncludes.$call(ips, canonicalizeIP(hostname));
+    const pct = StringPrototypeIndexOf.$call(hostname, "%");
+    const addr = pct === -1 ? hostname : StringPrototypeSlice.$call(hostname, 0, pct);
+    valid = ArrayPrototypeIncludes.$call(ips, canonicalizeIP(addr));
     if (!valid) reason = `IP: ${hostname} is not in the cert's list: ` + ArrayPrototypeJoin.$call(ips, ", ");
   } else if (dnsNames.length > 0 || subject?.CN) {
     const hostParts = splitHost(hostname);
@@ -407,16 +409,20 @@ const NativeSecureContext = $zig("SecureContext.zig", "js.getConstructor");
 // accepts null|string|ArrayBuffer|Blob|array, so coerce falsy → null before
 // crossing into native so `{ key: false }` etc. doesn't throw
 // ERR_INVALID_ARG_TYPE from the bindgen layer.
-function newNativeSecureContext(options) {
+function newNativeSecureContext(options, interned = false) {
+  const defaultCurve = tlsExports.DEFAULT_ECDH_CURVE;
+  const needsDefaultCurve = (!options || options.ecdhCurve === undefined) && defaultCurve !== "auto";
   if (
-    options &&
-    (!options.key || !options.cert || !options.ca || options.ALPNProtocols || typeof options.ciphers === "string")
+    needsDefaultCurve ||
+    (options &&
+      (!options.key || !options.cert || !options.ca || options.ALPNProtocols || typeof options.ciphers === "string"))
   ) {
     options = {
       ...options,
-      key: options.key || null,
-      cert: options.cert || null,
-      ca: options.ca || null,
+      key: options?.key || null,
+      cert: options?.cert || null,
+      ca: options?.ca || null,
+      ...(needsDefaultCurve ? { ecdhCurve: defaultCurve } : undefined),
     };
     if (typeof options.ciphers === "string") {
       const filtered = options.ciphers.split(":").filter(tlsCipherFilter).join(":");
@@ -426,14 +432,14 @@ function newNativeSecureContext(options) {
       convertALPNProtocols(options.ALPNProtocols, options);
     }
   }
-  return NativeSecureContext.intern(options);
+  return interned ? NativeSecureContext.intern(options) : new NativeSecureContext(options);
 }
 
 var InternalSecureContext = class SecureContext {
   context;
   servername;
 
-  constructor(options) {
+  constructor(options, interned = false) {
     if (options) {
       if (options.cert) throwOnInvalidTLSArray("options.cert", options.cert);
       if (options.key) throwOnInvalidTLSArray("options.key", options.key);
@@ -473,7 +479,7 @@ var InternalSecureContext = class SecureContext {
     // The native handle (SSL_CTX wrapper) is what's memoised — not this JS
     // object — so per-call fields like `servername` come from THIS call's
     // options while the expensive SSL_CTX is shared.
-    this.context = newNativeSecureContext(options);
+    this.context = newNativeSecureContext(options, interned);
     this.servername = options?.servername;
   }
 };
@@ -484,10 +490,12 @@ function SecureContext(options): void {
 
 function createSecureContext(options) {
   if (options instanceof InternalSecureContext) return options;
-  // The native handle (SSL_CTX) is memoised inside `NativeSecureContext.intern`
-  // by the per-VM `SSLContextCache`, so no JS-side hashing here. The JS wrapper
-  // is built fresh because it carries the per-call `servername`.
   return new InternalSecureContext(options);
+}
+
+function createInternedSecureContext(options) {
+  if (options instanceof InternalSecureContext) return options;
+  return new InternalSecureContext(options, true);
 }
 
 // Translate some fields from the handle's C-friendly format into more idiomatic
@@ -519,7 +527,7 @@ function TLSSocket(socket?, options?) {
   this._SNICallback = undefined;
   this.servername = undefined;
   this.authorized = false;
-  void this.authorizationError;
+  this.authorizationError = null;
   this[krenegotiationDisabled] = undefined;
   this.encrypted = true;
 
@@ -546,7 +554,7 @@ function TLSSocket(socket?, options?) {
       this._handle._parentWrap = this;
     }
   }
-  this[ksecureContext] = options.secureContext || createSecureContext(options);
+  this[ksecureContext] = options.secureContext || createInternedSecureContext(options);
   this.authorized = false;
   this.secureConnecting = true;
   this._secureEstablished = false;
@@ -753,7 +761,7 @@ function Server(options, secureConnectionListener): void {
       throw new TypeError("hostname must be a string");
     }
     if (!(context instanceof InternalSecureContext)) {
-      context = createSecureContext(context);
+      context = createInternedSecureContext(context);
     }
     if (this._handle) {
       // Pass the native SSL_CTX wrapper, not the JS InternalSecureContext —
@@ -837,13 +845,25 @@ function Server(options, secureConnectionListener): void {
         }
       }
 
+      if (options.ecdhCurve !== undefined) {
+        if (typeof options.ecdhCurve !== "string") {
+          throw $ERR_INVALID_ARG_TYPE("options.ecdhCurve", "string", options.ecdhCurve);
+        }
+        this.ecdhCurve = options.ecdhCurve;
+      }
+
       if (
         options.key ||
         options.cert ||
         options.ca ||
+        options.ecdhCurve !== undefined ||
+        tlsExports.DEFAULT_ECDH_CURVE !== "auto" ||
         !$isUndefinedOrNull(options.privateKeyIdentifier)
       ) {
-        createSecureContext(options);
+        this._secureContext = createInternedSecureContext({
+          ...options,
+          ecdhCurve: options.ecdhCurve ?? tlsExports.DEFAULT_ECDH_CURVE,
+        });
       }
     }
   };
@@ -873,6 +893,7 @@ function Server(options, secureConnectionListener): void {
         clientRenegotiationWindow: CLIENT_RENEG_WINDOW,
         contexts: contexts,
         ciphers: this.ciphers,
+        secureContext: this._secureContext?.context,
       },
       TLSSocket,
     ];
@@ -881,6 +902,7 @@ function Server(options, secureConnectionListener): void {
   this.setSecureContext(options);
 }
 $toClass(Server, "Server", NetServer);
+Server.prototype[Symbol.for("::buntlsnativesecurecontextctor::")] = NativeSecureContext;
 
 function createServer(options, connectionListener) {
   return new Server(options, connectionListener);
@@ -913,7 +935,7 @@ function normalizeConnectArgs(listArgs) {
 // tls.connect(port[, host][, options][, callback])
 function connect(...args) {
   let normal = normalizeConnectArgs(args);
-  const options = normal[0];
+  const options = (normal[0] = ObjectAssign({}, normal[0]));
   const { ALPNProtocols, servername } = options as { ALPNProtocols?: unknown; servername?: unknown };
 
   if (servername && net.isIP(servername)) {

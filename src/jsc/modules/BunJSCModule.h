@@ -10,6 +10,7 @@
 #include "JavaScriptCore/JSNativeStdFunction.h"
 #include "MessagePort.h"
 #include "SerializedScriptValue.h"
+#include "StrongRef.h"
 #include <JavaScriptCore/APICast.h>
 #include <JavaScriptCore/AggregateError.h>
 #include <JavaScriptCore/BytecodeIndex.h>
@@ -271,7 +272,10 @@ JSC_DEFINE_HOST_FUNCTION(functionMemoryUsageStatistics,
     };
 
     JSValue objectTypeCounts = createdSortedTypeCounts(vm.heap.objectTypeCounts());
-    JSValue protectedCounts = createdSortedTypeCounts(vm.heap.protectedObjectTypeCounts());
+    auto protectedTypeCounts = vm.heap.protectedObjectTypeCounts();
+    size_t protectedCount = vm.heap.protectedObjectCount();
+    Bun::addStrongRootProtectedCounts(vm, protectedTypeCounts, protectedCount);
+    JSValue protectedCounts = createdSortedTypeCounts(protectedTypeCounts);
 
     JSObject* object = constructEmptyObject(globalObject);
     object->putDirect(vm, Identifier::fromString(vm, "objectTypeCounts"_s),
@@ -289,7 +293,7 @@ JSC_DEFINE_HOST_FUNCTION(functionMemoryUsageStatistics,
     object->putDirect(vm, Identifier::fromString(vm, "objectCount"_s),
         jsNumber(vm.heap.objectCount()));
     object->putDirect(vm, Identifier::fromString(vm, "protectedObjectCount"_s),
-        jsNumber(vm.heap.protectedObjectCount()));
+        jsNumber(protectedCount));
     object->putDirect(vm, Identifier::fromString(vm, "globalObjectCount"_s),
         jsNumber(vm.heap.globalObjectCount()));
     object->putDirect(vm,

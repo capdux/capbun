@@ -25,9 +25,15 @@ export const hdrhistogram: Dependency = {
 
   build: cfg => ({
     kind: "direct",
-    sources: ["src/hdr_encoding.c", "src/hdr_histogram.c", "src/hdr_histogram_log_no_op.c"],
+    sources: [
+      "src/hdr_encoding.c",
+      "src/hdr_histogram.c",
+      "src/hdr_histogram_log_no_op.c",
+    ],
     includes: ["include"],
-    defines: cfg.windows ? { _CRT_SECURE_NO_WARNINGS: true } : { _GNU_SOURCE: true },
+    defines: cfg.windows
+      ? { _CRT_SECURE_NO_WARNINGS: true }
+      : { _GNU_SOURCE: true },
   }),
 
   provides: () => ({

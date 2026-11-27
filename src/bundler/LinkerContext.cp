@@ -1524,7 +1524,7 @@ pub struct LinkerContext {
                 _.graph.ast.items(.exports_ref)[source_index]
             else
                 Ref.None,
-            .is_wrapper_async = flags.is_async_or_has_async_dependency && wrapper_ref.isValid(),
+            .is_wrapper_async = flags.is_async_or_has_async_dependency,
             .wrapper_ref = wrapper_ref,
 
             .was_unwrapped_require = was_unwrapped_require && _.graph.ast.items(.flags)[source_index].force_cjs_to_esm,
@@ -2853,20 +2853,26 @@ pub struct LinkerContext {
 
             // Validate the boundary
             switch (kind) {
-                .asset, .scb => if (index >= _.graph.files.len) {
-                    if (bun.Environment.isDebug)
-                        bun.Output.debugWarn("Invalid output piece boundary", .{});
-                    break;
+                .asset, .scb => {
+                    if (index >= _.graph.files.len) {
+                        if (bun.Environment.isDebug)
+                            bun.Output.debugWarn("Invalid output piece boundary", .{});
+                        break;
+                    }
                 },
-                .chunk => if (index >= count) {
-                    if (bun.Environment.isDebug)
-                        bun.Output.debugWarn("Invalid output piece boundary", .{});
-                    break;
+                .chunk => {
+                    if (index >= count) {
+                        if (bun.Environment.isDebug)
+                            bun.Output.debugWarn("Invalid output piece boundary", .{});
+                        break;
+                    }
                 },
-                .html_import => if (index >= _.parse_graph.html_imports.server_source_indices.len) {
-                    if (bun.Environment.isDebug)
-                        bun.Output.debugWarn("Invalid output piece boundary", .{});
-                    break;
+                .html_import => {
+                    if (index >= _.parse_graph.html_imports.server_source_indices.len) {
+                        if (bun.Environment.isDebug)
+                            bun.Output.debugWarn("Invalid output piece boundary", .{});
+                        break;
+                    }
                 },
                 else => unreachable,
             }

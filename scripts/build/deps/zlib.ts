@@ -74,10 +74,18 @@ const X86: SimdKernel[] = [
     flags: ["-msse2"],
     sources: ["chunkset_sse2", "chorba_sse2", "compare256_sse2", "slide_hash_sse2"],
   },
-  { define: "X86_SSSE3", flags: ["-mssse3"], sources: ["adler32_ssse3", "chunkset_ssse3"] },
+  {
+    define: "X86_SSSE3",
+    flags: ["-mssse3"],
+    sources: ["adler32_ssse3", "chunkset_ssse3"],
+  },
   { define: "X86_SSE41", flags: ["-msse4.1"], sources: ["chorba_sse41"] },
   { define: "X86_SSE42", flags: ["-msse4.2"], sources: ["adler32_sse42"] },
-  { define: "X86_PCLMULQDQ_CRC", flags: ["-msse4.2", "-mpclmul"], sources: ["crc32_pclmulqdq"] },
+  {
+    define: "X86_PCLMULQDQ_CRC",
+    flags: ["-msse4.2", "-mpclmul"],
+    sources: ["crc32_pclmulqdq"],
+  },
   {
     define: "X86_AVX2",
     flags: ["-mavx2", "-mbmi2"],
@@ -109,7 +117,11 @@ const ARM: SimdKernel[] = [
     flags: ["-march=armv8-a+simd"],
     sources: ["adler32_neon", "chunkset_neon", "compare256_neon", "slide_hash_neon"],
   },
-  { define: "ARM_CRC32", flags: ["-march=armv8-a+crc"], sources: ["crc32_armv8"] },
+  {
+    define: "ARM_CRC32",
+    flags: ["-march=armv8-a+crc"],
+    sources: ["crc32_armv8"],
+  },
 ];
 
 /** SSE2 is the x64 fallback floor, so drop the scalar kernels it subsumes. */
@@ -212,7 +224,10 @@ export const zlib: Dependency = {
     for (const k of kernels) {
       defines[k.define] = true;
       for (const s of k.sources) {
-        sources.push({ path: `arch/${archDir}/${s}.c`, cflags: [...k.flags, "-fno-lto"] });
+        sources.push({
+          path: `arch/${archDir}/${s}.c`,
+          cflags: [...k.flags, "-fno-lto"],
+        });
       }
     }
 
@@ -222,7 +237,10 @@ export const zlib: Dependency = {
       defines,
       includes: [".", "arch/generic", `arch/${archDir}`],
       headers: {
-        "zlib.h": { from: "zlib.h.in", replace: [["@ZLIB_SYMBOL_PREFIX@", ""]] },
+        "zlib.h": {
+          from: "zlib.h.in",
+          replace: [["@ZLIB_SYMBOL_PREFIX@", ""]],
+        },
         "zconf.h": {
           from: "zconf.h.in",
           replace: [

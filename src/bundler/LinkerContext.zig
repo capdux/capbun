@@ -1199,7 +1199,7 @@ return js_printer.printWithWriter(*js_printer.BufferPrinter, (&printer), ast.tar
 pub fn requireOrImportMetaForSource(self: *LinkerContext, source_index: Index.Int, was_unwrapped_require: bool) js_printer.RequireOrImportMeta {
             const flags = self.graph.meta.items(.flags)[@as(usize, @intCast(source_index))];
             const wrapper_ref = self.graph.ast.items(.wrapper_ref)[@as(usize, @intCast(source_index))];
-            return .{ .exports_ref = (if (((flags.wrap == .esm) or (was_unwrapped_require and self.graph.ast.items(.flags)[@as(usize, @intCast(source_index))].force_cjs_to_esm))) self.graph.ast.items(.exports_ref)[@as(usize, @intCast(source_index))] else Ref.None), .is_wrapper_async = (flags.is_async_or_has_async_dependency and wrapper_ref.isValid()), .wrapper_ref = wrapper_ref, .was_unwrapped_require = (was_unwrapped_require and self.graph.ast.items(.flags)[@as(usize, @intCast(source_index))].force_cjs_to_esm) };
+            return .{ .exports_ref = (if (((flags.wrap == .esm) or (was_unwrapped_require and self.graph.ast.items(.flags)[@as(usize, @intCast(source_index))].force_cjs_to_esm))) self.graph.ast.items(.exports_ref)[@as(usize, @intCast(source_index))] else Ref.None), .is_wrapper_async = flags.is_async_or_has_async_dependency, .wrapper_ref = wrapper_ref, .was_unwrapped_require = (was_unwrapped_require and self.graph.ast.items(.flags)[@as(usize, @intCast(source_index))].force_cjs_to_esm) };
     }
 
 pub fn mangleLocalCss(self: *LinkerContext) void {
@@ -2001,28 +2001,28 @@ else => {
                 }
                 switch (kind) {
 .asset, .scb => {
-_ = (if ((index >= self.graph.files.len)) ({
-                if (bun.Environment.isDebug) {
-                    _ = bun.Output.debugWarn("Invalid output piece boundary", .{});
+if ((index >= self.graph.files.len)) {
+                    if (bun.Environment.isDebug) {
+                        _ = bun.Output.debugWarn("Invalid output piece boundary", .{});
+                    }
+                    break;
                 }
-                break;
-}) else null);
 },
 .chunk => {
-_ = (if ((index >= count)) ({
-                if (bun.Environment.isDebug) {
-                    _ = bun.Output.debugWarn("Invalid output piece boundary", .{});
+if ((index >= count)) {
+                    if (bun.Environment.isDebug) {
+                        _ = bun.Output.debugWarn("Invalid output piece boundary", .{});
+                    }
+                    break;
                 }
-                break;
-}) else null);
 },
 .html_import => {
-_ = (if ((index >= self.parse_graph.html_imports.server_source_indices.len)) ({
-                if (bun.Environment.isDebug) {
-                    _ = bun.Output.debugWarn("Invalid output piece boundary", .{});
+if ((index >= self.parse_graph.html_imports.server_source_indices.len)) {
+                    if (bun.Environment.isDebug) {
+                        _ = bun.Output.debugWarn("Invalid output piece boundary", .{});
+                    }
+                    break;
                 }
-                break;
-}) else null);
 },
 else => {
 _ = unreachable;

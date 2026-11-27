@@ -727,6 +727,12 @@ const sqlite_module_source_code_string = brk: {
 };
         return ResolvedSource{ .allocator = null, .source_code = bun.String.cloneUTF8(sqlite_module_source_code_string), .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .tag = .esm };
 },
+.css => {
+if (flags.disableTranspiling()) {
+            return ResolvedSource{ .allocator = null, .source_code = bun.String.empty, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .tag = .esm };
+        }
+        return ResolvedSource{ .allocator = null, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .jsvalue_for_export = JSValue.createEmptyObject(((globalObject) orelse (jsc_vm.global)), 0), .tag = .exports_object };
+},
 .html => {
 if (flags.disableTranspiling()) {
             return ResolvedSource{ .allocator = null, .source_code = bun.String.empty, .specifier = input_specifier, .source_url = input_specifier.createIfDifferent(path.text), .tag = .esm };

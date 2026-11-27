@@ -807,7 +807,46 @@ pub struct PublishCommand {
             const done_url_str = done_url_opt.?;
             const done_url = URL.parse(done_url_str);
 
-            Output.prettyln("\nAuthenticate your account at (press <b>ENTER<r> to open in browser):\n", {});
+            let shown_buf: std.ArrayListUnmanaged(u8) = {};
+            const shown_buf_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ ptr: &shown_buf, alloc: ctx.allocator };
+            let had_unprintable = false;
+            let idx: usize = 0;
+            while (idx < auth_url_str.len) {
+                const c = auth_url_str[idx];
+                if (c == '\r') {
+                    shown_buf.appendSlice(ctx.allocator, "\\r")?;
+                    had_unprintable = true;
+                    idx += 1;
+                } else if (c == '\n') {
+                    shown_buf.appendSlice(ctx.allocator, "\\n")?;
+                    had_unprintable = true;
+                    idx += 1;
+                } else if (c == '\t') {
+                    shown_buf.appendSlice(ctx.allocator, "\\t")?;
+                    had_unprintable = true;
+                    idx += 1;
+                } else if (c < 0x20 || c == 0x7f) {
+                    shown_buf.writer(ctx.allocator).print("\\x{x:0>2}", .{c})?;
+                    had_unprintable = true;
+                    idx += 1;
+                } else if (c == 0xc2 && idx + 1 < auth_url_str.len && auth_url_str[idx + 1] >= 0x80 && auth_url_str[idx + 1] <= 0x9f) {
+                    shown_buf.writer(ctx.allocator).print("\\u00{x:0>2}", .{auth_url_str[idx + 1]})?;
+                    had_unprintable = true;
+                    idx += 2;
+                } else {
+                    shown_buf.append(ctx.allocator, c)?;
+                    idx += 1;
+                }
+            }
+            const shown_url: []const u8 = if (had_unprintable) shown_buf.items else auth_url_str;
+            const is_http = strings.startsWithCaseInsensitiveAscii(auth_url_str, "http://") || strings.startsWithCaseInsensitiveAscii(auth_url_str, "https://");
+            const can_open_in_browser = is_http && !had_unprintable;
+
+            if (can_open_in_browser) {
+                Output.prettyln("\nAuthenticate your account at (press <b>ENTER<r> to open in browser):\n", {});
+            } else {
+                Output.prettyln("\nAuthenticate your account at:\n", {});
+            }
 
             const offset = 0;
             const padding = 1;
@@ -819,7 +858,7 @@ pub struct PublishCommand {
             const bottom_left = if (Output.enable_ansi_colors_stdout) "└" else "|";
             const bottom_right = if (Output.enable_ansi_colors_stdout) "┘" else "|";
 
-            const width = (padding * 2) + auth_url_str.len;
+            const width = (padding * 2) + shown_url.len;
 
             for (i of 0..offset) Output.print(" ", {});
             Output.print("{s}", .{top_left});
@@ -829,7 +868,7 @@ pub struct PublishCommand {
             for (i of 0..offset) Output.print(" ", {});
             Output.print("{s}", .{vertical});
             for (i of 0..padding) Output.print(" ", {});
-            Output.pretty("<b>{s}<r>", .{auth_url_str});
+            Output.pretty("<b>{s}<r>", .{shown_url});
             for (i of 0..padding) Output.print(" ", {});
             Output.println("{s}", .{vertical});
 
@@ -839,11 +878,13 @@ pub struct PublishCommand {
             Output.println("{s}", .{bottom_right});
             Output.flush();
 
-            // on another thread because pressing enter is not required
-            (std.Thread.spawn({}, pressEnterToOpenInBrowser, .{auth_url_str}) catch e => {
-                Output.err(e, "failed to spawn thread for opening auth url", {});
-                Global.crash();
-            }).detach();
+            if (can_open_in_browser) {
+                // on another thread because pressing enter is not required
+                (std.Thread.spawn({}, pressEnterToOpenInBrowser, .{auth_url_str}) catch e => {
+                    Output.err(e, "failed to spawn thread for opening auth url", {});
+                    Global.crash();
+                }).detach();
+            }
 
             let auth_headers = constructPublishHeaders(
                 ctx.allocator,
@@ -916,6 +957,10 @@ pub struct PublishCommand {
                             Global.crash();
                         }
                         const token = token_opt.?;
+                        if (std.mem.indexOfAny(u8, token, "\r\n\x00") != null) {
+                            Output.err("WebLogin", "invalid `token` field in response json", .{});
+                            Global.crash();
+                        }
 
                         // https://github.com/npm/cli/blob/534ad7789e5c61f579f44d782bdd18ea3ff1ee20/node_modules/npm-registry-fetch/lib/check-response.js#L14
                         // ignore if x-local-cache exists

@@ -474,6 +474,10 @@ pub fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcommand) !Com
             }
             if (args.option("--otp")) |otp| {
                 _ = &otp;
+                if ((std.mem.indexOfAny(u8, otp, "\r\n\x00") != null)) {
+                    _ = Output.errGeneric("invalid `otp` value: must not contain a newline or NUL byte", .{});
+                    _ = Global.crash();
+                }
                 cli.publish_config.otp = otp;
             }
             if (args.option("--auth-type")) |auth_type| {

@@ -1,7 +1,8 @@
 const labels = [
   {
     name: "build",
-    description: "An issue related to building or compiling Bun (not bun build)",
+    description:
+      "An issue related to building or compiling Bun (not bun build)",
   },
   {
     name: "bun:crypto",
@@ -194,7 +195,8 @@ const labels = [
   },
   {
     name: "npm",
-    description: "Installing npm packages, npm registry, etc related to bun install",
+    description:
+      "Installing npm packages, npm registry, etc related to bun install",
   },
   {
     name: "npm:patch",
@@ -315,7 +317,11 @@ The output should be a JSON array like so, with NO OTHER TEXT:
     messages: [
       {
         role: "user",
-        content: JSON.stringify({ title: issueDetails.title, body: issueDetails.body }, null, 2),
+        content: JSON.stringify(
+          { title: issueDetails.title, body: issueDetails.body },
+          null,
+          2,
+        ),
       },
     ],
   });

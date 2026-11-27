@@ -920,14 +920,23 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
         if (globalThis.hasException()) {
             return JSValue.zero;
         }
+        var has_explicit_signal = false;
+        _ = &has_explicit_signal;
         if (options_object) |opts| {
             _ = &opts;
             if (try opts.get(globalThis, "signal")) |sig| {
                 _ = &sig;
                 if ((!sig.isUndefined())) {
-                    if (sig.as(webcore.AbortSignal)) |s| {
-                        _ = &s;
-                        signal = s.ref();
+                    has_explicit_signal = true;
+                    if ((!sig.isNull())) {
+                        if (sig.as(webcore.AbortSignal)) |s| {
+                            _ = &s;
+                            signal = s.ref();
+                        } else {
+                            var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to execute 'fetch': signal is not of type AbortSignal.", .{});
+                            _ = &err;
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                        }
                     }
                 }
             }
@@ -935,7 +944,7 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                 return JSValue.zero;
             }
         }
-        if ((signal == null)) {
+        if (((!has_explicit_signal) and (signal == null))) {
             if (request) |req| {
                 _ = &req;
                 if (req.signal) |s| {
@@ -948,9 +957,15 @@ pub fn fetchImpl(comptime allow_get_body: bool, globalThis: *JSGlobalObject, cal
                     if (try req_init.get(globalThis, "signal")) |sig| {
                         _ = &sig;
                         if ((!sig.isUndefined())) {
-                            if (sig.as(webcore.AbortSignal)) |s| {
-                                _ = &s;
-                                signal = s.ref();
+                            if ((!sig.isNull())) {
+                                if (sig.as(webcore.AbortSignal)) |s| {
+                                    _ = &s;
+                                    signal = s.ref();
+                                } else {
+                                    var err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to execute 'fetch': signal is not of type AbortSignal.", .{});
+                                    _ = &err;
+                                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                                }
                             }
                         }
                     }

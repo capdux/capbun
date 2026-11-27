@@ -468,7 +468,7 @@ pub fn startJSDebuggerThread(other_vm: *VirtualMachine) void {
         _ = &vm;
         vm.allocator = arena_.allocator();
         vm.@"arena" = (&arena_);
-        _ = (blk_catch_3: { break :blk_catch_3 ((vm.transpiler.configureDefines()) catch |__ce_3| { _ = &__ce_3; @panic("Failed to configure defines"); }); });
+        _ = (blk_catch_3: { break :blk_catch_3 ((env_loader.loadProcess()) catch |__ce_3| { _ = &__ce_3; @panic("Failed to load process env"); }); });
         vm.is_main_thread = false;
         _ = vm.eventLoop().ensureWaker();
         const callback = jsc.OpaqueWrap(VirtualMachine, start);

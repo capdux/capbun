@@ -575,7 +575,6 @@ pub fn end(self: Synchronized) void {
 };
 
 const ByteSlice = []u8;
-const IoWriterPtr = *std.Io.Writer;
 const StdinBufferedReader = bun.deprecated.BufferedReader(4096, File.Reader);
 const SystemTimer = system_timer.Timer;
 const ComptimeStringMap = bun.ComptimeStringMap;
@@ -942,12 +941,12 @@ pub fn scopedEvaluateIsVisible(comptime tagname: []const u8, really_disable: *st
         }
 }
 
-pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.Value(bool), out_set: *bool, out: *IoWriterPtr, buffered_writer: *File.QuietWriter.Adapter, buffer: *[4096]u8, lock: *bun.Mutex, is_visible_fn: *const fn () bool, comptime fmt: []const u8, args: anytype) void {
+pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.Value(bool), lock: *bun.Mutex, is_visible_fn: *const fn () bool, comptime fmt: []const u8, args: anytype) void {
         if ((!source_set)) {
             return;
         }
         if (((fmt.len == 0) or (fmt[@as(usize, @intCast((fmt.len - 1)))] != 10))) {
-            return scopedLogImpl(tagname, really_disable, out_set, out, buffered_writer, buffer, lock, is_visible_fn, (comptime std.fmt.comptimePrint("{s}\n", .{ fmt })), args);
+            return scopedLogImpl(tagname, really_disable, lock, is_visible_fn, (comptime std.fmt.comptimePrint("{s}\n", .{ fmt })), args);
         }
         if ((ScopedDebugWriter.disable_inside_log > 0)) {
             return;
@@ -968,11 +967,6 @@ pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.V
         if ((!is_visible_fn())) {
             return;
         }
-        if ((!out_set.*)) {
-            buffered_writer.* = scopedWriter().adaptToNewApi(buffer);
-            out.* = (&buffered_writer.new_interface);
-            out_set.* = true;
-        }
         _ = lock.lock();
         var _unlock_guard = UnlockGuard(bun.Mutex){ .lock = lock };
         _ = &_unlock_guard;
@@ -980,7 +974,12 @@ pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.V
         defer if (!___unlock_guard_moved) { ___unlock_guard_moved = true; const __T = @TypeOf(_unlock_guard); if (@typeInfo(__T) == .optional) { if (_unlock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _unlock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _unlock_guard; _drop_val.__cp_deinit(); } };
         const LT = @TypeOf(args);
         const log_args = (if (comptime (LT == void)) EmptyArgs{  } else (if (comptime (@typeInfo(LT) == .pointer)) args.* else args));
-        const w = out.*;
+        var aw = std.Io.Writer.Allocating.init(bun.default_allocator);
+        _ = &aw;
+        defer {
+        _ = aw.deinit();
+        }
+        const w = (&aw.writer);
         const prefix_fmt = (comptime std.fmt.comptimePrint("<r><d>[{s}]<r> {s}", .{ tagname, fmt }));
         if (((enable_ansi_colors_stdout and source_set) and (scopedWriter().context.handle == rawWriter().handle))) {
             _ = (blk_catch_15: { break :blk_catch_15 ((w.print((comptime prettyFmt(prefix_fmt, true)), log_args)) catch |__ce_15| { _ = &__ce_15; _ = really_disable.store(true, .monotonic);
@@ -989,7 +988,7 @@ pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.V
             _ = (blk_catch_16: { break :blk_catch_16 ((w.print((comptime prettyFmt(prefix_fmt, false)), log_args)) catch |__ce_16| { _ = &__ce_16; _ = really_disable.store(true, .monotonic);
             return; }); });
         }
-        _ = (blk_catch_17: { break :blk_catch_17 ((w.flush()) catch |__ce_17| { _ = &__ce_17; _ = really_disable.store(true, .monotonic);
+        _ = (blk_catch_17: { break :blk_catch_17 ((scopedWriter().writeAll(aw.written())) catch |__ce_17| { _ = &__ce_17; _ = really_disable.store(true, .monotonic);
         return; }); });
 }
 
@@ -1006,10 +1005,6 @@ pub inline fn log(comptime _: []const u8, _: anytype) void {
 };
         }
         return struct {
-    pub var buffer: [4096]u8 = undefined;
-    pub var buffered_writer: File.QuietWriter.Adapter = undefined;
-    pub var out: *std.Io.Writer = undefined;
-    pub var out_set: bool = false;
     pub var really_disable: std.atomic.Value(bool) = std.atomic.Value(bool).init((visibility == .hidden));
     pub var lock: bun.Mutex = bun.Mutex{  };
     pub var is_visible_once: @TypeOf(std.once(evaluateIsVisible)) = std.once(evaluateIsVisible);
@@ -1024,7 +1019,7 @@ pub fn isVisible() bool {
     }
 
 pub fn log(comptime fmt: []const u8, args: anytype) void {
-            _ = scopedLogImpl(tagname, (&really_disable), (&out_set), (&out), (&buffered_writer), (&buffer), (&lock), isVisible, fmt, args);
+            _ = scopedLogImpl(tagname, (&really_disable), (&lock), isVisible, fmt, args);
     }
 };
 }

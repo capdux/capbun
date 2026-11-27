@@ -214,46 +214,56 @@ pub fn fromJS(globalThis: *JSGlobalObject, arguments: *ArgumentsSlice, comptime 
             if (optsObj.isUndefinedOrNull()) {
                 return out;
             }
-            if ((!optsObj.isObject())) {
-                if (optsObj.isString()) {
-                    {
-                        const result = try parseCWD(globalThis, arena_alloc.allocator(), optsObj, out.absolute, fnName);
-                        if ((result.len > 0)) {
-                            out.cwd = result;
-                        }
-                    }
-                    return out;
+            if ((optsObj.isString() or optsObj.isStringObjectLike())) {
+                const result = try parseCWD(globalThis, arena_alloc.allocator(), optsObj, out.absolute, fnName);
+                if ((result.len > 0)) {
+                    out.cwd = result;
                 }
+                return out;
+            }
+            if ((!optsObj.isObject())) {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions must be an object", .{}).throw();
             }
-            if (try optsObj.getTruthy(globalThis, "onlyFiles")) |only_files| {
+            if (try optsObj.getOwn(globalThis, "onlyFiles")) |only_files| {
                 _ = &only_files;
-                out.only_files = only_files.toBoolean();
+                if ((!only_files.isUndefinedOrNull())) {
+                    out.only_files = only_files.toBoolean();
+                }
             }
-            if (try optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymlink")) |error_on_broken_symlinks| {
+            if (try optsObj.getOwn(globalThis, "throwErrorOnBrokenSymlink")) |error_on_broken_symlinks| {
                 _ = &error_on_broken_symlinks;
-                out.error_on_broken_symlinks = error_on_broken_symlinks.toBoolean();
+                if ((!error_on_broken_symlinks.isUndefinedOrNull())) {
+                    out.error_on_broken_symlinks = error_on_broken_symlinks.toBoolean();
+                }
             }
-            if (try optsObj.getTruthy(globalThis, "followSymlinks")) |follow_symlinks| {
+            if (try optsObj.getOwn(globalThis, "followSymlinks")) |follow_symlinks| {
                 _ = &follow_symlinks;
-                out.follow_symlinks = follow_symlinks.toBoolean();
+                if ((!follow_symlinks.isUndefinedOrNull())) {
+                    out.follow_symlinks = follow_symlinks.toBoolean();
+                }
             }
-            if (try optsObj.getTruthy(globalThis, "absolute")) |absolute| {
+            if (try optsObj.getOwn(globalThis, "absolute")) |absolute| {
                 _ = &absolute;
-                out.absolute = absolute.toBoolean();
+                if ((!absolute.isUndefinedOrNull())) {
+                    out.absolute = absolute.toBoolean();
+                }
             }
             var cwd_val: ?jsc.JSValue = null;
             _ = &cwd_val;
-            if (try optsObj.getTruthy(globalThis, "cwd")) |cwdVal| {
+            if (try optsObj.getOwn(globalThis, "cwd")) |cwdVal| {
                 _ = &cwdVal;
-                if ((!cwdVal.isString())) {
-                    return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions.cwd must be a string", .{}).throw();
+                if ((!cwdVal.isUndefinedOrNull())) {
+                    if (((!cwdVal.isString()) and (!cwdVal.isStringObjectLike()))) {
+                        return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions.cwd must be a string", .{}).throw();
+                    }
+                    cwd_val = cwdVal;
                 }
-                cwd_val = cwdVal;
             }
-            if (try optsObj.getTruthy(globalThis, "dot")) |dot| {
+            if (try optsObj.getOwn(globalThis, "dot")) |dot| {
                 _ = &dot;
-                out.dot = dot.toBoolean();
+                if ((!dot.isUndefinedOrNull())) {
+                    out.dot = dot.toBoolean();
+                }
             }
             if (cwd_val) |cwdVal| {
                 _ = &cwdVal;

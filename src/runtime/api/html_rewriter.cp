@@ -1073,6 +1073,7 @@ fn HandlerCallback(
                         if (err_ptr := handler.global.bunVM().unhandled_pending_rejection_to_capture) {
                             err_ptr.* = reason;
                             reason.protect();
+                            promise.setHandled(handler.global.vm());
                         } else {
                             handler.global.bunVM().unhandledRejection(handler.global, reason, promise.asValue());
                         }

@@ -671,11 +671,13 @@ void us_socket_resume(struct us_socket_t *s) {
     // closed cannot be resumed
     if (us_socket_is_closed(s)) return;
 
-    if (us_socket_is_shut_down(s)) {
-        // we already sent FIN so we resume only readable side we are read-only
-        us_poll_change(&s->p, s->group->loop, LIBUS_SOCKET_READABLE);
-        return;
+    int events = us_socket_is_shut_down(s)
+        ? LIBUS_SOCKET_READABLE
+        : (LIBUS_SOCKET_READABLE | LIBUS_SOCKET_WRITABLE);
+    if (s->poll_stopped_on_pause) {
+        s->poll_stopped_on_pause = 0;
+        us_poll_start(&s->p, s->group->loop, events);
+    } else {
+        us_poll_change(&s->p, s->group->loop, events);
     }
-    // we are readable and writable so we resume everything
-    us_poll_change(&s->p, s->group->loop, LIBUS_SOCKET_READABLE | LIBUS_SOCKET_WRITABLE);
 }

@@ -166,7 +166,7 @@ pub fn deinit(self: *S3ListObjectsV2Result) void {
     }
 
 pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError!JSValue {
-            var jsResult = JSValue.createEmptyObject(globalObject, 0);
+            var jsResult = JSValue.createEmptyObject(globalObject, 12);
             _ = &jsResult;
             if (self.name) |name| {
                 _ = &name;
@@ -216,7 +216,7 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                 _ = &i;
                 for (contents.items) |item| {
                     _ = &item;
-                    var objectInfo = JSValue.createEmptyObject(globalObject, 0);
+                    var objectInfo = JSValue.createEmptyObject(globalObject, 8);
                     _ = &objectInfo;
                     _ = objectInfo.put(globalObject, ZigString.static("key"), try BunString.createUTF8ForJS(globalObject, item.key));
                     if (item.etag) |etag| {
@@ -231,7 +231,7 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                         defer {
                         _ = JSStringRelease(prop_name);
                         }
-                        _ = JSObjectSetProperty(globalObject, objectInfo.asObjectRef(), prop_name, js_alg.asObjectRef(), .kJSPropertyAttributeDontEnum, null);
+                        _ = JSObjectSetProperty(globalObject, objectInfo.asObjectRef(), prop_name, js_alg.asRef(), .kJSPropertyAttributeDontEnum, null);
                     }
                     if (item.checksum_type) |checksum_type| {
                         _ = &checksum_type;
@@ -251,7 +251,7 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                     }
                     if (item.owner) |owner| {
                         _ = &owner;
-                        var jsOwner = JSValue.createEmptyObject(globalObject, 0);
+                        var jsOwner = JSValue.createEmptyObject(globalObject, 2);
                         _ = &jsOwner;
                         if (owner.id) |id| {
                             _ = &id;
@@ -276,7 +276,7 @@ pub fn toJS(self: *S3ListObjectsV2Result, globalObject: *JSGlobalObject) JSError
                 _ = &i;
                 for (common_prefixes.items) |cp_prefix| {
                     _ = &cp_prefix;
-                    var jsPrefix = JSValue.createEmptyObject(globalObject, 0);
+                    var jsPrefix = JSValue.createEmptyObject(globalObject, 1);
                     _ = &jsPrefix;
                     _ = jsPrefix.put(globalObject, ZigString.static("prefix"), try BunString.createUTF8ForJS(globalObject, cp_prefix));
                     _ = try jsCommonPrefixes.putIndex(globalObject, @intCast(i), jsPrefix);

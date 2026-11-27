@@ -244,7 +244,7 @@ function mergeSingleItemGroups(groups: Map<string, Group>): void {
 // Move items with child groups to the top of those child groups
 function promoteItemsWithChildGroups(groups: Map<string, Group>): void {
   for (const [groupKey, group] of groups.entries()) {
-    for (let i = 0; i < group.declarations.length; ) {
+    for (let i = 0; i < group.declarations.length;) {
       const item = group.declarations[i];
       const childGroupKey = (groupKey ? groupKey + "." : "") + item.last;
 

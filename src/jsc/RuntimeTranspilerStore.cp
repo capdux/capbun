@@ -485,6 +485,11 @@ pub struct TranspilerJobInternal {
             }
         }
 
+        if (log.errors > 0) {
+            _.parse_error = error.ParseError;
+            return;
+        }
+
         if (*entry := cache.entry) {
             vm.source_mappings.putMappings(&parse_result.source, .{
                 .list = .{ .items = unsafe { @constCast(entry.sourcemap) }, .capacity = entry.sourcemap.len },

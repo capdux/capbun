@@ -327,9 +327,11 @@ static inline JSC::EncodedJSValue jsAbortSignalConstructorFunction_anyBody(JSC::
             signals.append(signal);
         } else {
             Bun::ERR::INVALID_ARG_INSTANCE(throwScope, lexicalGlobalObject, makeString("signals["_s, i, "]"_s), "AbortSignal"_s, item);
+            return;
         }
         i++;
     });
+    RETURN_IF_EXCEPTION(throwScope, {});
 
     RELEASE_AND_RETURN(throwScope, JSValue::encode(toJSNewlyCreated<IDLInterface<AbortSignal>>(*lexicalGlobalObject, *uncheckedDowncast<JSDOMGlobalObject>(lexicalGlobalObject), throwScope, AbortSignal::any(*context, WTF::move(signals)))));
 }

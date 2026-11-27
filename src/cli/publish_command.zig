@@ -585,7 +585,59 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 }
                 const done_url_str = done_url_opt.?;
                 const done_url = URL.parse(done_url_str);
-                _ = Output.prettyln("\nAuthenticate your account at (press <b>ENTER<r> to open in browser):\n", .{});
+                var shown_buf: std.ArrayListUnmanaged(u8) = .{};
+                _ = &shown_buf;
+                var shown_buf_guard = DeinitWithAllocGuard(std.ArrayListUnmanaged(u8)){ .ptr = (&shown_buf), .alloc = ctx.allocator };
+                _ = &shown_buf_guard;
+                var __shown_buf_guard_moved = false; _ = &__shown_buf_guard_moved;
+                defer if (!__shown_buf_guard_moved) { __shown_buf_guard_moved = true; const __T = @TypeOf(shown_buf_guard); if (@typeInfo(__T) == .optional) { if (shown_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { shown_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = shown_buf_guard; _drop_val.__cp_deinit(); } };
+                var had_unprintable = false;
+                _ = &had_unprintable;
+                var idx: usize = 0;
+                _ = &idx;
+                while ((idx < auth_url_str.len)) {
+                    const c = auth_url_str[@as(usize, @intCast(idx))];
+                    if ((c == 13)) {
+                        _ = try shown_buf.appendSlice(ctx.allocator, "\\r");
+                        had_unprintable = true;
+                        idx = (idx + 1);
+                    } else {
+                        if ((c == 10)) {
+                            _ = try shown_buf.appendSlice(ctx.allocator, "\\n");
+                            had_unprintable = true;
+                            idx = (idx + 1);
+                        } else {
+                            if ((c == 9)) {
+                                _ = try shown_buf.appendSlice(ctx.allocator, "\\t");
+                                had_unprintable = true;
+                                idx = (idx + 1);
+                            } else {
+                                if (((c < 32) or (c == 127))) {
+                                    _ = try shown_buf.writer(ctx.allocator).print("\\x{x:0>2}", .{ c });
+                                    had_unprintable = true;
+                                    idx = (idx + 1);
+                                } else {
+                                    if (((((c == 194) and ((idx + 1) < auth_url_str.len)) and (auth_url_str[@as(usize, @intCast((idx + 1)))] >= 128)) and (auth_url_str[@as(usize, @intCast((idx + 1)))] <= 159))) {
+                                        _ = try shown_buf.writer(ctx.allocator).print("\\u00{x:0>2}", .{ auth_url_str[@as(usize, @intCast((idx + 1)))] });
+                                        had_unprintable = true;
+                                        idx = (idx + 2);
+                                    } else {
+                                        _ = try shown_buf.append(ctx.allocator, c);
+                                        idx = (idx + 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                const shown_url: []const u8 = (if (had_unprintable) shown_buf.items else auth_url_str);
+                const is_http = (strings.startsWithCaseInsensitiveAscii(auth_url_str, "http://") or strings.startsWithCaseInsensitiveAscii(auth_url_str, "https://"));
+                const can_open_in_browser = (is_http and (!had_unprintable));
+                if (can_open_in_browser) {
+                    _ = Output.prettyln("\nAuthenticate your account at (press <b>ENTER<r> to open in browser):\n", .{});
+                } else {
+                    _ = Output.prettyln("\nAuthenticate your account at:\n", .{});
+                }
                 const offset: i32 = 0;
                 const padding: i32 = 1;
                 const horizontal = (if (Output.enable_ansi_colors_stdout) "─" else "-");
@@ -594,7 +646,7 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 const top_right = (if (Output.enable_ansi_colors_stdout) "┐" else "|");
                 const bottom_left = (if (Output.enable_ansi_colors_stdout) "└" else "|");
                 const bottom_right = (if (Output.enable_ansi_colors_stdout) "┘" else "|");
-                const width = ((padding * 2) + auth_url_str.len);
+                const width = ((padding * 2) + shown_url.len);
                 {
                     var i: i32 = 0;
                     _ = &i;
@@ -630,7 +682,7 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                         _ = Output.print(" ", .{});
                     }
                 }
-                _ = Output.pretty("<b>{s}<r>", .{ auth_url_str });
+                _ = Output.pretty("<b>{s}<r>", .{ shown_url });
                 {
                     var i: i32 = 0;
                     _ = &i;
@@ -659,8 +711,10 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 }
                 _ = Output.println("{s}", .{ bottom_right });
                 _ = Output.flush();
-                _ = (blk_catch_23: { break :blk_catch_23 ((std.Thread.spawn(.{}, pressEnterToOpenInBrowser, .{ auth_url_str })) catch |e| { _ = &e; _ = Output.err(e, "failed to spawn thread for opening auth url", .{});
-                break :blk_catch_23 Global.crash(); }); }).detach();
+                if (can_open_in_browser) {
+                    _ = (blk_catch_23: { break :blk_catch_23 ((std.Thread.spawn(.{}, pressEnterToOpenInBrowser, .{ auth_url_str })) catch |e| { _ = &e; _ = Output.err(e, "failed to spawn thread for opening auth url", .{});
+                    break :blk_catch_23 Global.crash(); }); }).detach();
+                }
                 var auth_headers = try constructPublishHeaders(ctx.allocator, print_buf, registry, null, null, ctx.uses_workspaces, ctx.manager.options.publish_config.auth_type);
                 _ = &auth_headers;
                 while (true) {
@@ -695,6 +749,10 @@ const otp_done_source = logger.Source.initPathString("???", response_buf.list.it
                         _ = Global.crash();
                     }
                     const token = token_opt.?;
+                    if ((std.mem.indexOfAny(u8, token, "\r\n\x00") != null)) {
+                        _ = Output.err("WebLogin", "invalid `token` field in response json", .{});
+                        _ = Global.crash();
+                    }
                     if (res.headers.getIfOtherIsAbsent("npm-notice", "x-local-cache")) |notice| {
                         _ = &notice;
                         _ = Output.printError("\n", .{});

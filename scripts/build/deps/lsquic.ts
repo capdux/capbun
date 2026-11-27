@@ -163,7 +163,10 @@ export const lsquic: Dependency = {
     const needCompatQueue = cfg.abi === "musl";
     const spec: DirectBuild = {
       kind: "direct",
-      sources: [...liblsquic.map(s => "src/liblsquic/" + s), lsqpackSrc + "/lsqpack.c"],
+      sources: [
+        ...liblsquic.map(s => "src/liblsquic/" + s),
+        lsqpackSrc + "/lsqpack.c",
+      ],
       includes: [
         "include",
         "src/liblsquic",

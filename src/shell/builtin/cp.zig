@@ -444,6 +444,22 @@ if ((e.getErrno() == .NOENT)) {
                 }
             }
             _ = &copying_many;
+            {
+                var src_real_buf: bun.PathBuffer = undefined;
+                _ = &src_real_buf;
+                var tgt_real_buf: bun.PathBuffer = undefined;
+                _ = &tgt_real_buf;
+                if ((blk_catch_2: { break :blk_catch_2 ((std.posix.realpath(src, (&src_real_buf))) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 null; }); })) |src_real| {
+                    _ = &src_real;
+                    if ((blk_catch_3: { break :blk_catch_3 ((std.posix.realpath(tgt, (&tgt_real_buf))) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 null; }); })) |tgt_real| {
+                        _ = &tgt_real;
+                        if (bun.strings.eql(src_real, tgt_real)) {
+                            _ = self.onSubtaskFinish(.success);
+                            return null;
+                        }
+                    }
+                }
+            }
             if (comptime (!bun.Environment.isWindows)) {
                 if ((tgt.len >= bun.MAX_PATH_BYTES)) {
                     return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat).withPath(tgt));

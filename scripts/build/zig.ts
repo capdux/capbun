@@ -20,7 +20,11 @@ import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { availableParallelism, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Config } from "./config.ts";
-import { downloadWithRetry, extractZip, tryPrefetchExtracted } from "./download.ts";
+import {
+  downloadWithRetry,
+  extractZip,
+  tryPrefetchExtracted,
+} from "./download.ts";
 import { BuildError, assert } from "./error.ts";
 import { fetchCliPath } from "./fetch-cli.ts";
 import { writeIfChanged } from "./fs.ts";
@@ -76,7 +80,9 @@ export const CI_ASAN_CODEGEN_THREADS = 8;
 export function zigObjectPaths(cfg: Config): string[] {
   const cg = codegenThreads(cfg);
   return cg > 1
-    ? Array.from({ length: cg }, (_, i) => resolve(cfg.buildDir, `bun-zig.${i}.o`))
+    ? Array.from({ length: cg }, (_, i) =>
+        resolve(cfg.buildDir, `bun-zig.${i}.o`),
+      )
     : [resolve(cfg.buildDir, "bun-zig.o")];
 }
 
@@ -99,7 +105,10 @@ export function zigTarget(cfg: Config): string {
   // linux: abi is always set (resolveConfig asserts)
   assert(cfg.abi !== undefined, "linux build missing abi");
   if (cfg.abi === "android") {
-    assert(cfg.androidApiLevel !== undefined, "android build missing api level");
+    assert(
+      cfg.androidApiLevel !== undefined,
+      "android build missing api level",
+    );
     return `${arch}-linux-android.${cfg.androidApiLevel}`;
   }
   return `${arch}-linux-${cfg.abi}`;
@@ -114,8 +123,13 @@ export function zigTarget(cfg: Config): string {
  */
 function crossLibcArgs(cfg: Config): string[] {
   if (cfg.abi === "android") {
-    assert(cfg.sysroot !== undefined && cfg.androidApiLevel !== undefined, "android build missing sysroot");
-    const archTriple = cfg.x64 ? "x86_64-linux-android" : "aarch64-linux-android";
+    assert(
+      cfg.sysroot !== undefined && cfg.androidApiLevel !== undefined,
+      "android build missing sysroot",
+    );
+    const archTriple = cfg.x64
+      ? "x86_64-linux-android"
+      : "aarch64-linux-android";
     const libcFile = resolve(cfg.buildDir, "android-libc.txt");
     writeIfChanged(
       libcFile,
@@ -160,7 +174,9 @@ function crossLibcArgs(cfg: Config): string[] {
  * Bun 1.1, Windows builds use ReleaseSafe because it caught more crashes.
  * This is a load-bearing workaround; don't "fix" it.
  */
-export function zigOptimize(cfg: Config): "Debug" | "ReleaseFast" | "ReleaseSafe" | "ReleaseSmall" {
+export function zigOptimize(
+  cfg: Config,
+): "Debug" | "ReleaseFast" | "ReleaseSafe" | "ReleaseSmall" {
   let opt: "Debug" | "ReleaseFast" | "ReleaseSafe" | "ReleaseSmall";
   switch (cfg.buildType) {
     case "Debug":
@@ -210,7 +226,8 @@ export function zigCpu(cfg: Config): string {
  * compiler runs on the host; zig-only cross-compile runs on linux.
  */
 export function zigCompilerSafe(cfg: Config): boolean {
-  if (cfg.ci && cfg.host.os === "windows" && cfg.host.arch === "aarch64") return false;
+  if (cfg.ci && cfg.host.os === "windows" && cfg.host.arch === "aarch64")
+    return false;
   return cfg.ci;
 }
 
@@ -240,7 +257,8 @@ function zigPath(cfg: Config): string {
   const env = process.env.BUN_ZIG_PATH;
   if (!env) return resolve(cfg.vendorDir, "zig");
   // Shells don't expand ~ inside quotes; handle it here so a quoted export works.
-  if (env === "~" || env.startsWith("~/") || env.startsWith("~\\")) return join(homedir(), env.slice(1));
+  if (env === "~" || env.startsWith("~/") || env.startsWith("~\\"))
+    return join(homedir(), env.slice(1));
   // Anchor relative paths to the repo root so ninja's regen rule (which runs
   // from buildDir) resolves the same path as the initial configure.
   return resolve(cfg.cwd, env);
@@ -391,7 +409,11 @@ export interface ZigBuildInputs {
  * targets); `bun-zig.{0..N-1}.o` shards otherwise (ASAN CI, local dev).
  * The link step spreads the returned array into its inputs either way.
  */
-export function emitZig(n: Ninja, cfg: Config, inputs: ZigBuildInputs): string[] {
+export function emitZig(
+  n: Ninja,
+  cfg: Config,
+  inputs: ZigBuildInputs,
+): string[] {
   n.comment("─── Zig ───");
   n.blank();
 
@@ -403,12 +425,20 @@ export function emitZig(n: Ninja, cfg: Config, inputs: ZigBuildInputs): string[]
     // User-provided compiler — no fetch edge. Validate at configure time
     // that the path has a usable layout; commit mismatch is the user's
     // problem. zig build will error loudly if the compiler is too old.
-    assert(existsSync(zigExe), `BUN_ZIG_PATH='${envOverride}' but no zig executable at ${zigExe}`, {
-      hint: "Point $BUN_ZIG_PATH at an extracted zig install (the dir containing zig + lib/), or unset it to use the bundled compiler",
-    });
-    assert(existsSync(resolve(zigDest, "lib")), `BUN_ZIG_PATH='${envOverride}' but no lib/ dir at ${zigDest}`, {
-      hint: "zig needs its bundled stdlib at <path>/lib/ — make sure the extract wasn't partial",
-    });
+    assert(
+      existsSync(zigExe),
+      `BUN_ZIG_PATH='${envOverride}' but no zig executable at ${zigExe}`,
+      {
+        hint: "Point $BUN_ZIG_PATH at an extracted zig install (the dir containing zig + lib/), or unset it to use the bundled compiler",
+      },
+    );
+    assert(
+      existsSync(resolve(zigDest, "lib")),
+      `BUN_ZIG_PATH='${envOverride}' but no lib/ dir at ${zigDest}`,
+      {
+        hint: "zig needs its bundled stdlib at <path>/lib/ — make sure the extract wasn't partial",
+      },
+    );
   } else {
     const safe = zigCompilerSafe(cfg);
     const url = zigDownloadUrl(cfg, safe);
@@ -458,7 +488,10 @@ export function emitZig(n: Ninja, cfg: Config, inputs: ZigBuildInputs): string[]
       args: quoteArgs(args, cfg.host.os === "windows"),
       zig_local_cache: cacheDirs.local,
       zig_global_cache: cacheDirs.global,
-      label: outputs.length > 1 ? `bun-zig.{0..${outputs.length - 1}}.o` : "bun-zig.o",
+      label:
+        outputs.length > 1
+          ? `bun-zig.{0..${outputs.length - 1}}.o`
+          : "bun-zig.o",
     },
   });
   n.phony("bun-zig", outputs);
@@ -523,7 +556,9 @@ function zigBuildArgs(cfg: Config): string[] {
     `-Dcodegen_embed=${bool(codegenEmbed(cfg))}`,
 
     // Git sha (optional — empty on dirty builds).
-    ...(cfg.revision !== "unknown" && cfg.revision !== "" ? [`-Dsha=${cfg.revision}`] : []),
+    ...(cfg.revision !== "unknown" && cfg.revision !== ""
+      ? [`-Dsha=${cfg.revision}`]
+      : []),
 
     // Output formatting
     "--prominent-compile-errors",
@@ -540,7 +575,13 @@ function zigBuildArgs(cfg: Config): string[] {
 function zigBuildImplicitInputs(cfg: Config, inputs: ZigBuildInputs): string[] {
   // Extra embed: scanner-entry.ts is @embedFile'd by the zig code directly.
   // A genuinely odd cross-language embed; there's no cleaner way.
-  const scannerEntry = resolve(cfg.cwd, "src", "install", "PackageManager", "scanner-entry.ts");
+  const scannerEntry = resolve(
+    cfg.cwd,
+    "src",
+    "install",
+    "PackageManager",
+    "scanner-entry.ts",
+  );
   return [
     // Compiler itself — rebuild on zig version bump.
     zigExecutable(cfg),
@@ -607,7 +648,11 @@ const CHECK_STEPS = [
  * Assumes the zig compiler download edge (from `emitZig`) has already
  * been emitted — we depend on zigExecutable but don't re-emit the fetch.
  */
-export function emitZigCheck(n: Ninja, cfg: Config, inputs: ZigBuildInputs): void {
+export function emitZigCheck(
+  n: Ninja,
+  cfg: Config,
+  inputs: ZigBuildInputs,
+): void {
   n.comment("─── Zig semantic check ───");
   n.blank();
 
@@ -656,7 +701,11 @@ export function emitZigCheck(n: Ninja, cfg: Config, inputs: ZigBuildInputs): voi
  * CMake's DownloadUrl.cmake auto-hoists single-child extractions; we do
  * the same.
  */
-export async function fetchZig(url: string, dest: string, commit: string): Promise<void> {
+export async function fetchZig(
+  url: string,
+  dest: string,
+  commit: string,
+): Promise<void> {
   const stampPath = resolve(dest, ".zig-commit");
 
   // Short-circuit: already at this commit?
@@ -713,10 +762,17 @@ export async function fetchZig(url: string, dest: string, commit: string): Promi
   await rm(extractDir, { recursive: true, force: true });
 
   // ─── Validate ───
-  const zigExe = resolve(dest, process.platform === "win32" ? "zig.exe" : "zig");
-  assert(existsSync(zigExe), `zig executable not found after extraction: ${zigExe}`, {
-    hint: "Archive layout may have changed",
-  });
+  const zigExe = resolve(
+    dest,
+    process.platform === "win32" ? "zig.exe" : "zig",
+  );
+  assert(
+    existsSync(zigExe),
+    `zig executable not found after extraction: ${zigExe}`,
+    {
+      hint: "Archive layout may have changed",
+    },
+  );
   assert(existsSync(resolve(dest, "lib")), `zig lib/ dir not found`, {
     hint: "Archive may be incomplete",
   });

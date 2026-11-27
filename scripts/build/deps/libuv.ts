@@ -42,7 +42,10 @@ export const libuv: Dependency = {
 
   build: () => ({
     kind: "direct",
-    sources: [...SHARED.map(s => `src/${s}.c`), ...WIN.map(s => `src/win/${s}.c`)],
+    sources: [
+      ...SHARED.map(s => `src/${s}.c`),
+      ...WIN.map(s => `src/win/${s}.c`),
+    ],
     includes: ["include", "src"],
     defines: {
       WIN32_LEAN_AND_MEAN: true,

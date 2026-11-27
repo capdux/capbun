@@ -3,6 +3,7 @@
 #include "./internal/internal.h"
 #include <mutex>
 #include <string.h>
+#include <errno.h>
 #include "./default_ciphers.h"
 
 // System-specific includes for certificate loading
@@ -80,11 +81,13 @@ static STACK_OF(X509) *us_ssl_ctx_load_all_certs_from_file(const char *filename)
   STACK_OF(X509) *certs = NULL;
   X509 *x = NULL;
   unsigned long last_err;
+  int saved_errno = 0;
 
   ERR_clear_error(); // clear error stack for SSL_CTX_use_certificate()
 
   in = BIO_new_file(filename, "r");
   if (in == NULL) {
+    saved_errno = errno;
     OPENSSL_PUT_ERROR(SSL, ERR_R_SYS_LIB);
     goto end;
   }
@@ -126,8 +129,12 @@ end:
   }
 
   char error_msg[256];
-  ERR_error_string_n(ERR_peek_last_error(), error_msg, sizeof(error_msg));
-  BUN__warn__extra_ca_load_failed(filename, error_msg);
+  if (saved_errno != 0) {
+    BUN__warn__extra_ca_load_failed(filename, strerror(saved_errno));
+  } else {
+    ERR_error_string_n(ERR_peek_last_error(), error_msg, sizeof(error_msg));
+    BUN__warn__extra_ca_load_failed(filename, error_msg);
+  }
   ERR_clear_error();
 
   return NULL;

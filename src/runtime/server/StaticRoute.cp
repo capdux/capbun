@@ -401,19 +401,25 @@ pub struct InitFromBytesOptions {
     }
 
     fn render304NotModifiedIfNoneMatch(*_, req: uws.AnyRequest, resp: AnyResponse): bool {
-        const if_none_match_opt = req.header("if-none-match");
-        if (if_none_match_opt == null) return false;
-        const if_none_match = if_none_match_opt.?;
-
-        const etag_opt = _.headers.get("etag");
-        if (etag_opt == null) return false;
-        const etag = etag_opt.?;
-
-        if (if_none_match.len == 0 || etag.len == 0) {
-            return false;
-        }
-
-        if (!ETag.ifNoneMatch(etag, if_none_match)) {
+        if (if_none_match := req.header("if-none-match")) {
+            const etag = _.headers.get("etag") ?? return false;
+            if (if_none_match.len == 0 || etag.len == 0) {
+                return false;
+            }
+            if (!ETag.ifNoneMatch(etag, if_none_match)) {
+                return false;
+            }
+        } else if (ims := req.header("if-modified-since")) {
+            const lm = _.headers.get("last-modified") ?? return false;
+            let ims_str = bun.String.fromBytes(ims);
+            let lm_str = bun.String.fromBytes(lm);
+            const g = bun.jsc.VirtualMachine.get().global;
+            const ims_ms = bun.String.parseDate(&ims_str, g) catch std.math.nan(f64);
+            const lm_ms = bun.String.parseDate(&lm_str, g) catch std.math.nan(f64);
+            if (std.math.isNan(ims_ms) || std.math.isNan(lm_ms) || lm_ms > ims_ms) {
+                return false;
+            }
+        } else {
             return false;
         }
 

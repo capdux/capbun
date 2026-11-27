@@ -37,7 +37,11 @@ rl.on("line", line => {
     return;
   }
   if (line.includes(": error: ")) {
-    console.log("\x1b[31m" + line.replace(/^vendor\/zig\/lib\/std\/Io\/Writer\.zig:\d+:\d+: /, "") + "\x1b[0m");
+    console.log(
+      "\x1b[31m" +
+        line.replace(/^vendor\/zig\/lib\/std\/Io\/Writer\.zig:\d+:\d+: /, "") +
+        "\x1b[0m",
+    );
   } else if (line.includes(": note: ")) {
     console.log("\x1b[36m" + line + "\x1b[0m");
   } else if (line.includes('@compileError("')) {

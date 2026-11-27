@@ -331,7 +331,37 @@ JSC_DEFINE_HOST_FUNCTION(jsFunctionDecodeURIComponentSIMD, (JSC::JSGlobalObject 
         return JSC::JSValue::encode(JSC::jsUndefined());
     }
     auto span = view->span();
-    auto&& output = decodeURIComponentSIMD(span);
+    if (simdutf::validate_ascii(reinterpret_cast<const char*>(span.data()), span.size())) {
+        auto&& output = decodeURIComponentSIMD(span);
+        if (output.isNull() && !span.empty()) [[unlikely]] {
+            throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
+            return {};
+        }
+        return JSC::JSValue::encode(JSC::jsString(vm, output));
+    }
+
+    Vector<uint8_t> decoded;
+    if (!decoded.tryReserveInitialCapacity(span.size())) [[unlikely]] {
+        throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
+        return {};
+    }
+    for (size_t i = 0; i < span.size(); ++i) {
+        if (span[i] == '%' && i + 2 < span.size()) {
+            uint8_t hi = hexToInt(span[i + 1]);
+            uint8_t lo = hexToInt(span[i + 2]);
+            if (hi <= 15 && lo <= 15) {
+                decoded.append(static_cast<uint8_t>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        decoded.append(span[i]);
+    }
+    auto output = WTF::String::fromUTF8ReplacingInvalidSequences(decoded.span());
+    if (output.isNull()) [[unlikely]] {
+        throwVMError(globalObject, scope, createOutOfMemoryError(globalObject));
+        return {};
+    }
     return JSC::JSValue::encode(JSC::jsString(vm, output));
 }
 }

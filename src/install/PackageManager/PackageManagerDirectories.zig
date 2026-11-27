@@ -147,8 +147,10 @@ pub fn run(manager: *PackageManager) TemporaryDirectory {
                 _ = file.close();
                 _ = (blk_catch_6: { break :blk_catch_6 ((std.posix.renameatZ(tempdir.fd, tmpname, cache_directory.fd, tmpname)) catch |e| { _ = &e; if ((!tried_dot_tmp)) {
                     tried_dot_tmp = true;
-                    tempdir = (blk_catch_7: { break :blk_catch_7 ((cache_directory.makeOpenPath(".tmp", .{})) catch |err2| { _ = &err2; _ = Output.prettyErrorln("<r><red>error<r>: bun is unable to write files to tempdir: {s}", .{ @errorName(err2) });
-                    break :blk_catch_7 Global.crash(); }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((tempdir.deleteFileZ(tmpname)) catch |__ce_7| { _ = &__ce_7;  }); });
+                    _ = tempdir.close();
+                    tempdir = (blk_catch_8: { break :blk_catch_8 ((cache_directory.makeOpenPath(".tmp", .{})) catch |err2| { _ = &err2; _ = Output.prettyErrorln("<r><red>error<r>: bun is unable to write files to tempdir: {s}", .{ @errorName(err2) });
+                    break :blk_catch_8 Global.crash(); }); });
                     if (PackageManager.verbose_install) {
                         _ = Output.prettyErrorln("<r><d>info<r>: cannot move files from tempdir: {s}, using fallback", .{ @errorName(e) });
                     }
@@ -156,7 +158,7 @@ pub fn run(manager: *PackageManager) TemporaryDirectory {
                 }
                 _ = Output.prettyErrorln("<r><red>error<r>: {s} accessing temporary directory. Please set <b>$BUN_TMPDIR<r> or <b>$BUN_INSTALL<r>", .{ @errorName(e) });
                 break :blk_catch_6 Global.crash(); }); });
-                _ = (blk_catch_8: { break :blk_catch_8 ((cache_directory.deleteFileZ(tmpname)) catch |__ce_8| { _ = &__ce_8;  }); });
+                _ = (blk_catch_9: { break :blk_catch_9 ((cache_directory.deleteFileZ(tmpname)) catch |__ce_9| { _ = &__ce_9;  }); });
                 break;
             }
             if (tried_dot_tmp) {
@@ -167,14 +169,14 @@ pub fn run(manager: *PackageManager) TemporaryDirectory {
                 if ((elapsed > (std.time.ns_per_ms * 100))) {
                     var path_buf: bun.PathBuffer = undefined;
                     _ = &path_buf;
-                    const cache_dir_path = (blk_catch_9: { break :blk_catch_9 ((bun.getFdPath(.fromStdDir(cache_directory), (&path_buf))) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 "it"; }); });
+                    const cache_dir_path = (blk_catch_10: { break :blk_catch_10 ((bun.getFdPath(.fromStdDir(cache_directory), (&path_buf))) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 "it"; }); });
                     _ = Output.prettyErrorln("<r><yellow>warn<r>: Slow filesystem detected. If {s} is a network drive, consider setting $BUN_INSTALL_CACHE_DIR to a local folder.", .{ cache_dir_path });
                 }
             }
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
-            const temp_dir_path = (blk_catch_10: { break :blk_catch_10 ((bun.getFdPathZ(.fromStdDir(tempdir), (&buf))) catch |e| { _ = &e; _ = Output.err(e, "Failed to read temporary directory path: '{s}'", .{ temp_dir_name });
-            break :blk_catch_10 Global.exit(1); }); });
+            const temp_dir_path = (blk_catch_11: { break :blk_catch_11 ((bun.getFdPathZ(.fromStdDir(tempdir), (&buf))) catch |e| { _ = &e; _ = Output.err(e, "Failed to read temporary directory path: '{s}'", .{ temp_dir_name });
+            break :blk_catch_11 Global.exit(1); }); });
             return .{ .handle = tempdir, .name = temp_dir_name, .path = bun.handleOom(bun.default_allocator.dupeZ(u8, temp_dir_path)) };
     }
 }).run);

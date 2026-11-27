@@ -385,6 +385,7 @@ pub fn exec(ctx: Command.Context) !void {
                                                                 const resolutions = lockfile.packages.items(.resolution);
                                                                 const string_bytes = lockfile.buffers.string_bytes.items;
                                                                 _ = Output.flush();
+                                                                _ = Output.disableBuffering();
                                                                 if (strings.leftHasAnyInRight(args, (&.{ "-A", "-a", "--all" }))) {
                                                                     var iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);
                                                                     _ = &iterator;

@@ -841,17 +841,21 @@ pub static fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const 
         }
 
         if (!fields.contains(.signal)) {
-            if (signal_ := value.getTruthy(globalThis, "signal")?) {
-                fields.insert(.signal);
-                if (signal := AbortSignal.fromJS(signal_)) {
-                    //Keep it alive
-                    signal_.ensureStillAlive();
-                    req.signal = signal.ref();
-                } else {
-                    if (!globalThis.hasException()) {
-                        return globalThis.throw("Failed to construct 'Request': signal is not of type AbortSignal.", {});
+            if (signal_ := value.get(globalThis, "signal")?) {
+                if (!signal_.isUndefined()) {
+                    fields.insert(.signal);
+                    if (!signal_.isNull()) {
+                        if (signal := AbortSignal.fromJS(signal_)) {
+                            //Keep it alive
+                            signal_.ensureStillAlive();
+                            req.signal = signal.ref();
+                        } else {
+                            if (!globalThis.hasException()) {
+                                return globalThis.throwInvalidArguments("Failed to construct 'Request': signal is not of type AbortSignal.", .{});
+                            }
+                            return error.JSError;
+                        }
                     }
-                    return error.JSError;
                 }
             }
 

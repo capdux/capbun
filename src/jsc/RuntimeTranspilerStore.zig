@@ -410,6 +410,10 @@ if ((ownership == .watcher)) {
                     }
                 }
             }
+            if ((log.errors > 0)) {
+                self.parse_error = error.ParseError;
+                return;
+            }
             if (cache.entry) |*entry| {
                 _ = &entry;
                 _ = (blk_catch_0: { break :blk_catch_0 ((vm.source_mappings.putMappings((&parse_result.source), .{ .list = .{ .items = (blk: {

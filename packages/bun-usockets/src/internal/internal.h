@@ -277,6 +277,9 @@ struct us_socket_t {
    * Used by Bun's `socket.upgradeTLS()` so the returned [raw, tls] pair's
    * `raw` half can observe ciphertext (node:net Duplex.ondata semantics). */
   unsigned char ssl_raw_tap : 1;
+  /* Set when us_poll_stop() was called on a paused socket that saw EOF/HUP so
+   * us_socket_resume() re-adds it via us_poll_start() and drains unread data. */
+  unsigned char poll_stopped_on_pause : 1;
 
   struct us_socket_group_t *group;
   /* NULL for plain TCP. Direct BoringSSL `SSL*`; set by us_internal_ssl_attach

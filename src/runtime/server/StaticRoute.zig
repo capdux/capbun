@@ -435,21 +435,32 @@ _ = self.doWriteStatus(405, resp);
 }
 
 pub fn render304NotModifiedIfNoneMatch(self: *StaticRoute, req: uws.AnyRequest, resp: AnyResponse) bool {
-        const if_none_match_opt = req.header("if-none-match");
-        if ((if_none_match_opt == null)) {
-            return false;
-        }
-        const if_none_match = if_none_match_opt.?;
-        const etag_opt = self.headers.get("etag");
-        if ((etag_opt == null)) {
-            return false;
-        }
-        const etag = etag_opt.?;
-        if (((if_none_match.len == 0) or (etag.len == 0))) {
-            return false;
-        }
-        if ((!ETag.ifNoneMatch(etag, if_none_match))) {
-            return false;
+        if (req.header("if-none-match")) |if_none_match| {
+            _ = &if_none_match;
+            const etag = ((self.headers.get("etag")) orelse { return false; });
+            if (((if_none_match.len == 0) or (etag.len == 0))) {
+                return false;
+            }
+            if ((!ETag.ifNoneMatch(etag, if_none_match))) {
+                return false;
+            }
+        } else {
+            if (req.header("if-modified-since")) |ims| {
+                _ = &ims;
+                const lm = ((self.headers.get("last-modified")) orelse { return false; });
+                var ims_str = bun.String.fromBytes(ims);
+                _ = &ims_str;
+                var lm_str = bun.String.fromBytes(lm);
+                _ = &lm_str;
+                const g = bun.jsc.VirtualMachine.get().global;
+                const ims_ms = (blk_catch_2: { break :blk_catch_2 ((bun.String.parseDate((&ims_str), g)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 std.math.nan(f64); }); });
+                const lm_ms = (blk_catch_3: { break :blk_catch_3 ((bun.String.parseDate((&lm_str), g)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 std.math.nan(f64); }); });
+                if (((std.math.isNan(ims_ms) or std.math.isNan(lm_ms)) or (lm_ms > ims_ms))) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
         }
         _ = req.setYield(false);
         _ = self.ref();
@@ -500,8 +511,8 @@ pub fn render412IfPreconditionFailed(self: *StaticRoute, req: uws.AnyRequest, re
                     var lm_str = bun.String.fromBytes(lm);
                     _ = &lm_str;
                     const g = bun.jsc.VirtualMachine.get().global;
-                    const ius_ms = (blk_catch_2: { break :blk_catch_2 ((bun.String.parseDate((&ius_str), g)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 std.math.nan(f64); }); });
-                    const lm_ms = (blk_catch_3: { break :blk_catch_3 ((bun.String.parseDate((&lm_str), g)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 std.math.nan(f64); }); });
+                    const ius_ms = (blk_catch_4: { break :blk_catch_4 ((bun.String.parseDate((&ius_str), g)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 std.math.nan(f64); }); });
+                    const lm_ms = (blk_catch_5: { break :blk_catch_5 ((bun.String.parseDate((&lm_str), g)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 std.math.nan(f64); }); });
                     failed = (((!std.math.isNan(ius_ms)) and (!std.math.isNan(lm_ms))) and (ius_ms < lm_ms));
                 }
             }

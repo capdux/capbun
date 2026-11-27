@@ -44,7 +44,13 @@ export const boringssl: Dependency = {
     const spec: DirectBuild = {
       kind: "direct",
       lang: "cxx",
-      sources: [...BCM_SRCS, ...CRYPTO_SRCS, ...SSL_SRCS, ...DECREPIT_SRCS, ...asm],
+      sources: [
+        ...BCM_SRCS,
+        ...CRYPTO_SRCS,
+        ...SSL_SRCS,
+        ...DECREPIT_SRCS,
+        ...asm,
+      ],
       includes: ["include"],
       defines: {
         BORINGSSL_IMPLEMENTATION: true,
@@ -70,7 +76,11 @@ export const boringssl: Dependency = {
       // nasm needs -I with a trailing slash and CodeView debug info to
       // match cmake's `-gcv8`. Absolute path quoted — a checkout root
       // with a space (C:\Users\John Doe\bun) would otherwise split argv.
-      nasmflags: ["-fwin64", "-gcv8", `-I${quote(depSourceDir(cfg, "boringssl") + "/gen/", true)}`],
+      nasmflags: [
+        "-fwin64",
+        "-gcv8",
+        `-I${quote(depSourceDir(cfg, "boringssl") + "/gen/", true)}`,
+      ],
     };
     return spec;
   },

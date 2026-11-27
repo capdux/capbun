@@ -123,11 +123,10 @@ pub fn run(self: *TimeoutImpl, vm: *jsc.VirtualMachine) void {
                 _ = self.signal.unref();
                 return;
             }
-            _ = self.dispatch(vm, self.signal);
+            _ = TimeoutImpl.dispatch(vm, self.signal);
     }
 
-pub fn dispatch(self: TimeoutImpl, vm: *jsc.VirtualMachine, signal_ptr: *AbortSignal) void {
-        _ = self;
+pub fn dispatch(vm: *jsc.VirtualMachine, signal_ptr: *AbortSignal) void {
             const loop = vm.eventLoop();
             _ = loop.enter();
             defer {

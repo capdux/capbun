@@ -675,31 +675,29 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
     let addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch e => return e;
     const _addr_guard = DeinitGuard<jsc.ZigString.Slice>{ ptr: &addr_arg };
     const addr_str = addr_arg.slice();
-    if (addr_str.len >= INET6_ADDRSTRLEN) {
-        return .js_undefined;
-    }
-
-    if (strings.containsChar(addr_str, '/')) {
+    const c_str = addr_str[0..(strings.indexOfChar(addr_str, 0) ?? addr_str.len)];
+    const pct_idx = strings.indexOfChar(c_str, '%');
+    const ip_part = if (idx := pct_idx) c_str[0..idx] else c_str;
+    if (ip_part.len == 0 || ip_part.len >= INET6_ADDRSTRLEN) {
         return .js_undefined;
     }
 
     let ip_binary: [u8; 16] = undefined;
-
-    let ip_addr: [u8; 66] = undefined;
-    bun.copy(u8, &ip_addr, addr_str);
-    ip_addr[addr_str.len] = 0;
-
     let af: i32 = c_ares.AF.INET;
-    if (c_ares.ares_inet_pton(af, &ip_addr, &ip_binary) != 1) {
+    const ip4_opt = if (pct_idx == null) (std.net.Ip4Address.parse(ip_part, 0) catch null) else null;
+    if (ip4 := ip4_opt) {
+        bun.copy(u8, ip_binary[0..4], std.mem.asBytes(&ip4.sa.addr));
+    } else {
         af = c_ares.AF.INET6;
-        if (c_ares.ares_inet_pton(af, &ip_addr, &ip_binary) != 1) {
-            return .js_undefined;
-        }
+        const ip6 = std.net.Ip6Address.parse(ip_part, 0) catch return .js_undefined;
+        bun.copy(u8, ip_binary[0..16], ip6.sa.addr[0..]);
     }
-    if (c_ares.ares_inet_ntop(af, unsafe { @ptrCast(&ip_binary) }, &ip_addr, @sizeOf(@TypeOf(ip_addr))) == null) {
+
+    let out_buf: [u8; 66] = undefined;
+    if (c_ares.ares_inet_ntop(af, unsafe { @ptrCast(&ip_binary) }, &out_buf, @sizeOf(@TypeOf(out_buf))) == null) {
         return .js_undefined;
     }
-    const slice = bun.sliceTo(ip_addr[0..], 0);
+    const slice = bun.sliceTo(out_buf[0..], 0);
     if (bun.strings.eql(addr_str, slice)) {
         return arguments[0];
     }

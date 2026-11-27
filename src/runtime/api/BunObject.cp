@@ -1146,7 +1146,7 @@ pub fn indexOfLine(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         if (i := strings.indexOfNewlineOrNonASCII(bytes, @as(u32, @truncate(current_offset)))) {
             const byte = bytes[i];
             if (byte > 0x7F) {
-                current_offset += @max(strings.wtf8ByteSequenceLength(byte), 1);
+                current_offset = @as(usize, i) + @max(strings.wtf8ByteSequenceLength(byte), 1);
                 continue;
             }
 

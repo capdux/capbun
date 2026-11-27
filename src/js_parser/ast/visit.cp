@@ -653,7 +653,7 @@ pub fn Visit(
                         }
                     } else if (property.flags.contains(.is_method)) {
                         if (comptime is_typescript_enabled) {
-                            if (property.value.?.data == .e_function && property.key.?.data == .e_string &&
+                            if (!property.flags.contains(.is_static) && property.value.?.data == .e_function && property.key.?.data == .e_string &&
                                 property.key.?.data.e_string.eqlComptime("constructor"))
                             {
                                 constructor_function_ = property.value.?.data.e_function;
@@ -833,6 +833,7 @@ pub fn Visit(
                                 let class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
                                 class_body.append(G.Property{
                                     kind: .normal,
+                                    flags: js_ast.Flags.Property.Set.init(.{ .is_method = true }),
                                     key: p.newExpr(E.String{ data: "constructor" }, cls.class_keyword.loc),
                                     value: ctor_func,
                                 }) catch unreachable;

@@ -409,6 +409,19 @@ pub struct ShellCpTask {
         }
         * = copying_many;
 
+        {
+            let src_real_buf: bun.PathBuffer = undefined;
+            let tgt_real_buf: bun.PathBuffer = undefined;
+            if (src_real := std.posix.realpath(src, &src_real_buf) catch null) {
+                if (tgt_real := std.posix.realpath(tgt, &tgt_real_buf) catch null) {
+                    if (bun.strings.eql(src_real, tgt_real)) {
+                        _.onSubtaskFinish(.success);
+                        return null;
+                    }
+                }
+            }
+        }
+
         if (comptime !bun.Environment.isWindows) {
             if (tgt.len >= bun.MAX_PATH_BYTES) {
                 return bun.shell.ShellErr.newSys(Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .lstat).withPath(tgt));

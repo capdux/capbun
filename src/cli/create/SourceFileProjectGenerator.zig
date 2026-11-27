@@ -140,7 +140,7 @@ pub const TemplateFile = struct {
 };
 
 pub const ReactTailwindSpa = struct {
-    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .build }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "bunfig.toml", .content = shared_bunfig_toml, .reason = .bun, .overwrite = false }, TemplateFile{ .name = "package.json", .content = shared_package_json, .reason = .npm, .overwrite = false } });
+    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .build }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css, .overwrite = false }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "bunfig.toml", .content = shared_bunfig_toml, .reason = .bun, .overwrite = false }, TemplateFile{ .name = "package.json", .content = shared_package_json, .reason = .npm, .overwrite = false } });
     const init_files: []const TemplateFile = &.{};
 };
 
@@ -149,7 +149,7 @@ pub const ReactSpa = struct {
 };
 
 pub const ReactShadcnSpa = struct {
-    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "lib/utils.ts", .content = @embedFile("projects/react-shadcn-spa/lib/utils.ts"), .reason = .shadcn }, TemplateFile{ .name = "index.css", .content = @embedFile("projects/react-shadcn-spa/styles/index.css"), .reason = .shadcn }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .bun }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "styles/globals.css", .content = @embedFile("projects/react-shadcn-spa/styles/globals.css"), .reason = .shadcn }, TemplateFile{ .name = "bunfig.toml", .content = shared_bunfig_toml, .reason = .bun, .overwrite = false }, TemplateFile{ .name = "package.json", .content = shared_package_json, .reason = .npm, .overwrite = false }, TemplateFile{ .name = "tsconfig.json", .content = @embedFile("projects/react-shadcn-spa/tsconfig.json"), .reason = .tsc, .overwrite = false }, TemplateFile{ .name = "components.json", .content = @embedFile("projects/react-shadcn-spa/components.json"), .reason = .shadcn, .overwrite = false } });
+    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "lib/utils.ts", .content = @embedFile("projects/react-shadcn-spa/lib/utils.ts"), .reason = .shadcn, .overwrite = false }, TemplateFile{ .name = "index.css", .content = @embedFile("projects/react-shadcn-spa/styles/index.css"), .reason = .shadcn, .overwrite = false }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .bun }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css, .overwrite = false }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "styles/globals.css", .content = @embedFile("projects/react-shadcn-spa/styles/globals.css"), .reason = .shadcn, .overwrite = false }, TemplateFile{ .name = "bunfig.toml", .content = shared_bunfig_toml, .reason = .bun, .overwrite = false }, TemplateFile{ .name = "package.json", .content = shared_package_json, .reason = .npm, .overwrite = false }, TemplateFile{ .name = "tsconfig.json", .content = @embedFile("projects/react-shadcn-spa/tsconfig.json"), .reason = .tsc, .overwrite = false }, TemplateFile{ .name = "components.json", .content = @embedFile("projects/react-shadcn-spa/components.json"), .reason = .shadcn, .overwrite = false } });
 };
 
 pub const TemplateLogger = struct {
@@ -195,6 +195,7 @@ pub fn logger(self: Template) TemplateLogger {
 };
 
 const SourceFileProjectGenerator = @This();
+const known_bun_stylesheets: [5][]const u8 = .{ @embedFile("projects/react-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), @embedFile("projects/react-shadcn-spa/styles/index.css"), @embedFile("projects/react-shadcn-spa/styles/globals.css") };
 const enable_shadcn_ui = true;
 const shared_build_ts = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts");
 const shared_client_tsx = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx");
@@ -223,7 +224,7 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: []const u8, res
             _ = Output.errGeneric("No component export found in <b>{f}<r>", .{ bun.fmt.quote(entry_point) });
             _ = Output.flush();
             const writer = Output.errorWriterBuffered();
-            _ = try writer.writeAll("\nPlease add an export to your file. For example:\n\n   export default function MyApp() {{\n     return <div>Hello World</div>;\n   }};\n\n");
+            _ = try writer.writeAll("\nPlease add an export to your file. For example:\n\n   export default function MyApp() {\n     return <div>Hello World</div>;\n   }\n");
             _ = Output.flush();
             _ = Global.crash();
         }
@@ -261,11 +262,30 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: []const u8, res
                 template = .ReactTailwindSpa;
             }
         }
-        _ = try generateFiles(default_allocator, entry_point, result.dependencies.keys(), dev_dependencies, template, react_component_export);
+        var force = false;
+        _ = &force;
+        for (cp_iter_slice(bun.argv)) |arg| {
+            _ = &arg;
+            if (strings.eqlComptime(arg, "--force")) {
+                force = true;
+                break;
+            }
+        }
+        _ = try generateFiles(default_allocator, entry_point, result.dependencies.keys(), dev_dependencies, template, react_component_export, force);
         _ = Global.exit(0);
 }
 
-pub fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool) {
+pub fn isKnownBunStylesheet(contents: []const u8) bool {
+        for (cp_iter_slice(known_bun_stylesheets)) |known| {
+            _ = &known;
+            if (strings.eqlLong(contents, known, true)) {
+                return true;
+            }
+        }
+        return false;
+}
+
+pub fn createFile(filename: []const u8, contents: []const u8, allow_overwrite: bool, is_css: bool) bun.sys.Maybe(bool) {
         if (bun.sys.File.readFrom(bun.FD.cwd(), filename, default_allocator).asValue()) |source_contents| {
             _ = &source_contents;
             var _sc_guard = FreeGuard(u8){ .allocator = default_allocator, .slice = source_contents };
@@ -273,6 +293,9 @@ pub fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool
             var ___sc_guard_moved = false; _ = &___sc_guard_moved;
             defer if (!___sc_guard_moved) { ___sc_guard_moved = true; const __T = @TypeOf(_sc_guard); if (@typeInfo(__T) == .optional) { if (_sc_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sc_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sc_guard; _drop_val.__cp_deinit(); } };
             if (strings.eqlLong(source_contents, contents, true)) {
+                return .{ .result = false };
+            }
+            if (((!allow_overwrite) and (!(is_css and isKnownBunStylesheet(source_contents))))) {
                 return .{ .result = false };
             }
         }
@@ -381,7 +404,7 @@ if ((!spawn_result.status.isOK())) {
 }
 }
 
-pub fn generateFiles(allocator: std.mem.Allocator, entry_point: []const u8, dependencies: []const []const u8, dev_dependencies: []const []const u8, template: Template, react_component_export: []const u8) !void {
+pub fn generateFiles(allocator: std.mem.Allocator, entry_point: []const u8, dependencies: []const []const u8, dev_dependencies: []const []const u8, template: Template, react_component_export: []const u8, force: bool) !void {
         var log = template.logger();
         _ = &log;
         var basename = std.fs.path.basename(entry_point);
@@ -408,19 +431,28 @@ const current = @field(SourceFileProjectGenerator, @tagName(active));
         _ = &filenames;
         var created_files: [count]bool = undefined;
         _ = &created_files;
+        var skipped_files: [count]bool = undefined;
+        _ = &skipped_files;
         _ = @memset(created_files[0..], false);
+        _ = @memset(skipped_files[0..], false);
         var index: usize = 0;
         _ = &index;
         while ((index < files.len)) : (index = (index + 1)) {
             const file = (&files[@as(usize, @intCast(index))]);
             const file_name = try stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator);
-            if ((file.overwrite or (!bun.sys.exists(file_name)))) {
-                switch (createFile(file_name, try stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator))) {
+            filenames[cp_cast_int(usize, index)] = file_name;
+            const exists = bun.sys.exists(file_name);
+            const is_css = (file.reason == .css);
+            if ((((force or file.overwrite) or is_css) or (!exists))) {
+                switch (createFile(file_name, try stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator), (force or file.overwrite), is_css)) {
 .result => |is_new| {
 if (is_new) {
                     created_files[cp_cast_int(usize, index)] = true;
-                    filenames[cp_cast_int(usize, index)] = file_name;
                     max_filename_len = @max(max_filename_len, file_name.len);
+                } else {
+                    if (exists) {
+                        skipped_files[cp_cast_int(usize, index)] = true;
+                    }
                 }
 },
 .err => |err| {
@@ -428,6 +460,10 @@ _ = Output.err(err, "failed to create {s}", .{ file_name });
                 _ = Global.crash();
 },
 }
+            } else {
+                if (exists) {
+                    skipped_files[cp_cast_int(usize, index)] = true;
+                }
             }
         }
         var f_idx: usize = 0;
@@ -435,9 +471,24 @@ _ = Output.err(err, "failed to create {s}", .{ file_name });
         while ((f_idx < files.len)) : (f_idx = (f_idx + 1)) {
             const file = (&files[@as(usize, @intCast(f_idx))]);
             const filename = filenames[@as(usize, @intCast(f_idx))];
-            const created = created_files[@as(usize, @intCast(f_idx))];
-            if (created) {
+            if (created_files[@as(usize, @intCast(f_idx))]) {
                 _ = log.file(file, filename, max_filename_len);
+            } else {
+                if (skipped_files[@as(usize, @intCast(f_idx))]) {
+                    var replaced_later = false;
+                    _ = &replaced_later;
+                    var later_idx = (f_idx + 1);
+                    _ = &later_idx;
+                    while ((later_idx < files.len)) : (later_idx = (later_idx + 1)) {
+                        if ((created_files[@as(usize, @intCast(later_idx))] and strings.eqlLong(filenames[@as(usize, @intCast(later_idx))], filename, true))) {
+                            replaced_later = true;
+                            break;
+                        }
+                    }
+                    if ((!replaced_later)) {
+                        _ = Output.prettyln(" ○ <r><yellow>{s}<r> (already exists, skipping)", .{ filename });
+                    }
+                }
             }
         }
 },
@@ -457,6 +508,7 @@ _ = Output.err(err, "failed to create {s}", .{ file_name });
             _ = try argv.append("bun");
             _ = try argv.append("--only-missing");
             _ = try argv.append("install");
+            _ = try argv.append("--");
             _ = try argv.appendSlice(dependencies);
             _ = try runInstall(argv.items);
         }
@@ -470,6 +522,7 @@ _ = Output.err(err, "failed to create {s}", .{ file_name });
             _ = try argv.append("--only-missing");
             _ = try argv.append("add");
             _ = try argv.append("-d");
+            _ = try argv.append("--");
             _ = try argv.appendSlice(dev_dependencies);
             _ = try runInstall(argv.items);
         }

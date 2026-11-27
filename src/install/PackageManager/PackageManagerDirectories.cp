@@ -76,6 +76,8 @@ let getTemporaryDirectoryOnce = bun.once(struct {
             std.posix.renameatZ(tempdir.fd, tmpname, cache_directory.fd, tmpname) catch e => {
                 if (!tried_dot_tmp) {
                     tried_dot_tmp = true;
+                    tempdir.deleteFileZ(tmpname) catch {};
+                    tempdir.close();
                     tempdir = cache_directory.makeOpenPath(".tmp", {}) catch err2 => {
                         Output.prettyErrorln("<r><red>error<r>: bun is unable to write files to tempdir: {s}", .{@errorName(err2)});
                         Global.crash();

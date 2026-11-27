@@ -456,34 +456,29 @@ fn messageWithTypeAndLevel_(
 pub struct TablePrinterFirstPassContext {
     printer: *TablePrinter,
     columns: *std.array_list.Managed(TablePrinter.Column),
+    rows: *std.ArrayListUnmanaged(TablePrinterRow),
+    cells: *std.ArrayListUnmanaged(TablePrinterCell),
+    cell_writer: *std.Io.Writer.Allocating,
+    enable_ansi_colors: bool,
     idx: u32 = 0,
     e: bool = false,
 
     @callconv("c")
     static fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *TablePrinterFirstPassContext, value: JSValue) {
-        ctx.printer.updateColumnsForRow(ctx.columns, { num: ctx.idx }, value) catch {
+        if (ctx.e) return;
+        ctx.printer.updateColumnsForRow(
+            ctx.columns,
+            ctx.rows,
+            ctx.cells,
+            ctx.cell_writer,
+            ctx.enable_ansi_colors,
+            { num: ctx.idx },
+            value,
+        ) catch {
             ctx.e = true;
         };
         ctx.idx += 1;
     }
-}
-
-fn TablePrinterSecondPassContext(comptime Writer: type, comptime enable_ansi_colors: bool): type {
-    return struct {
-        printer: *TablePrinter,
-        columns: *std.array_list.Managed(TablePrinter.Column),
-        writer: Writer,
-        idx: u32 = 0,
-        e: bool = false,
-
-        @callconv("c")
-        static fn callback(_: *jsc.VM, _: *JSGlobalObject, ctx: *@This(), value: JSValue) {
-            ctx.printer.printRow(Writer, ctx.writer, enable_ansi_colors, ctx.columns, { num: ctx.idx }, value) catch {
-                ctx.e = true;
-            };
-            ctx.idx += 1;
-        }
-    };
 }
 
 struct TablePrinterColumn {
@@ -498,33 +493,42 @@ union(TablePrinterRowKeyType) TablePrinterRowKey {
     num: u32,
 }
 
-struct TablePrinterVisibleCharacterCounter {
-    width: *usize = undefined,
+struct TablePrinterCell {
+    col_idx: usize,
+    start: usize,
+    len: usize,
+    width: u32,
+}
 
-    const WriteError = error{};
+struct TablePrinterRow {
+    key: TablePrinterRowKey,
+    cell_start: usize,
+    cell_len: usize,
+}
 
-    const Writer = std.Io.GenericWriter(
-        TablePrinterVisibleCharacterCounter,
-        TablePrinterVisibleCharacterCounter.WriteError,
-        TablePrinterVisibleCharacterCounter.write,
-    );
-
-    fn write(bytes: []const u8): WriteError!usize {
-        _.width.* += strings.visible.width.exclude_ansi_colors.utf8(bytes);
-        return bytes.len;
-    }
-
-    fn writeAll(bytes: []const u8): WriteError!void {
-        _.width.* += strings.width.exclude_ansi_colors.utf8(bytes);
+pub struct TablePrinterRowsGuard<R, C> {
+    rows: R,
+    cells: C,
+    alloc: std.mem.Allocator,
+    ~init() {
+        unsafe {
+            for (row of _.rows.items) {
+                if (row.key == .str) {
+                    row.key.str.deref();
+                }
+            }
+            _.rows.deinit(_.alloc);
+            _.cells.deinit(_.alloc);
+        }
     }
 }
 
 pub struct TablePrinter {
     const Column = TablePrinterColumn;
     const RowKey = TablePrinterRowKey;
-    const VisibleCharacterCounter = TablePrinterVisibleCharacterCounter;
 
     const PADDING = 1;
+    const VALUES_COL_SENTINEL: usize = std.math.maxInt(usize);
 
     globalObject: *JSGlobalObject,
     level: MessageLevel,
@@ -568,39 +572,63 @@ pub struct TablePrinter {
         };
     }
 
-
-    /// Compute how much horizontal space will take a JSValue when printed
-    fn getWidthForValue(*_, value: JSValue): bun.JSError!u32 {
-        let width: usize = 0;
-        let old_writer = VisibleCharacterCounter.Writer{
-            context: {
-                width: &width,
-            },
-        };
-        let discard_buf: [512]u8 = undefined; // using a buffer decreases vtable calls but requires unnecessary memcpys. is it faster or slower?
-        let adapted_writer = old_writer.adaptToNewApi(&discard_buf);
+    /// Format a JSValue once into cell_writer and compute its visible width
+    fn formatCell(
+        *_,
+        cell_writer: *std.Io.Writer.Allocating,
+        enable_ansi_colors: bool,
+        col_idx: usize,
+        value: JSValue,
+    ): bun.JSError!TablePrinterCell {
+        const start = cell_writer.written().len;
+        const tag = ConsoleObject.Formatter.Tag.get(value, _.globalObject)?;
         let value_formatter = _.value_formatter;
 
-        const tag = ConsoleObject.Formatter.Tag.get(value, _.globalObject)?;
         value_formatter.quote_strings = !(tag.tag == .String || tag.tag == .StringPossiblyFormatted);
-        value_formatter.format(
-            tag,
-            *std.Io.Writer,
-            &adapted_writer.new_interface,
-            value,
-            _.globalObject,
-            false,
-        ) catch {}; // TODO:
 
-        adapted_writer.new_interface.flush() catch e => switch (e) {
-            error.WriteFailed => if (Environment.ci_assert) bun.assert(false) else @as(void, undefined), // VisibleCharacterCounter write cannot fail
+        const _map_node_g = MapNodeClearGuard{ src: &value_formatter, dst: &_.value_formatter };
+        switch (enable_ansi_colors) {
+            inline else => |colors| {
+                value_formatter.format(
+                    tag,
+                    *std.Io.Writer,
+                    &cell_writer.writer,
+                    value,
+                    _.globalObject,
+                    colors,
+                ) catch e => {
+                    if (e == error.WriteFailed || e == error.OutOfMemory) return error.OutOfMemory;
+                    return error.JSError;
+                };
+            },
+        }
+        cell_writer.writer.flush() catch return error.OutOfMemory;
+
+        const written = cell_writer.written();
+        const cell_bytes = written[start..];
+        const width: u32 = @truncate(strings.visible.width.exclude_ansi_colors.utf8(cell_bytes));
+        return TablePrinterCell{
+            col_idx: col_idx,
+            start: start,
+            len: cell_bytes.len,
+            width: width,
         };
-
-        return @truncate(width);
     }
 
-    /// Update the sizes of the columns for the values of a given row, and create any additional columns as needed
-    fn updateColumnsForRow(*_, columns: *std.array_list.Managed(Column), row_key: RowKey, row_value: JSValue): bun.JSError!void {
+    /// Update the sizes of the columns for the values of a given row, format each cell once, and create any additional columns as needed
+    fn updateColumnsForRow(
+        *_,
+        columns: *std.array_list.Managed(Column),
+        rows: *std.ArrayListUnmanaged(TablePrinterRow),
+        cells: *std.ArrayListUnmanaged(TablePrinterCell),
+        cell_writer: *std.Io.Writer.Allocating,
+        enable_ansi_colors: bool,
+        row_key: RowKey,
+        row_value: JSValue,
+    ): bun.JSError!void {
+        const alloc = _.globalObject.allocator();
+        const cell_start = cells.items.len;
+
         // update size of "(index)" column
         const row_key_len: u32 = switch (row_key) {
             .str => |value| @as(u32, @truncate(value.visibleWidthExcludeANSIColors(false))),
@@ -612,19 +640,23 @@ pub struct TablePrinter {
         if (_.jstype.isMap()) {
             const entry_key = row_value.getIndex(_.globalObject, 0)?;
             const entry_value = row_value.getIndex(_.globalObject, 1)?;
-            columns.items[1].width = @max(columns.items[1].width, _.getWidthForValue(entry_key)?);
-            _.values_col_width = @max(_.values_col_width ?? 0, _.getWidthForValue(entry_value)?);
-            return;
-        }
-
-        if (obj := row_value.getObject()) {
+            const key_cell = _.formatCell(cell_writer, enable_ansi_colors, 1, entry_key)?;
+            columns.items[1].width = @max(columns.items[1].width, key_cell.width);
+            cells.append(alloc, key_cell)?;
+            const val_cell = _.formatCell(cell_writer, enable_ansi_colors, VALUES_COL_SENTINEL, entry_value)?;
+            _.values_col_width = @max(_.values_col_width ?? 0, val_cell.width);
+            cells.append(alloc, val_cell)?;
+        } else if (obj := row_value.getObject()) {
             // object ->
             //  - if "properties" arg was provided: iterate the already-created columns (except for the 0-th which is the index)
             //  - otherwise: iterate the object properties, and create the columns on-demand
             if (!_.properties.isUndefined()) {
-                for (*column of columns.items[1..]) {
-                    if (value := row_value.getOwn(_.globalObject, column.name)?) {
-                        column.width = @max(column.width, _.getWidthForValue(value)?);
+                let col_idx: usize = 1;
+                while (col_idx < columns.items.len) : (col_idx += 1) {
+                    if (value := row_value.getOwn(_.globalObject, columns.items[col_idx].name)?) {
+                        const cell = _.formatCell(cell_writer, enable_ansi_colors, col_idx, value)?;
+                        columns.items[col_idx].width = @max(columns.items[col_idx].width, cell.width);
+                        cells.append(alloc, cell)?;
                     }
                 }
             } else {
@@ -638,13 +670,13 @@ pub struct TablePrinter {
                     const value = cols_iter_g.val.value;
 
                     // find or create the column for the property
-                    const column: *Column = brk: {
+                    const col_idx: usize = brk: {
                         const col_str = String.init(col_key);
 
                         let ci: usize = 1;
                         while (ci < columns.items.len) : (ci += 1) {
                             if (columns.items[ci].name.eql(col_str)) {
-                                break :brk &columns.items[ci];
+                                break :brk ci;
                             }
                         }
 
@@ -654,16 +686,32 @@ pub struct TablePrinter {
 
                         columns.append({ name: col_str })?;
 
-                        break :brk &columns.items[columns.items.len - 1];
+                        break :brk columns.items.len - 1;
                     };
 
-                    column.width = @max(column.width, _.getWidthForValue(value)?);
+                    const cell = _.formatCell(cell_writer, enable_ansi_colors, col_idx, value)?;
+                    columns.items[col_idx].width = @max(columns.items[col_idx].width, cell.width);
+                    cells.append(alloc, cell)?;
                 }
             }
         } else if (_.properties.isUndefined()) {
             // not object -> the value will go to the special "Values" column
-            _.values_col_width = @max(_.values_col_width ?? 1, _.getWidthForValue(row_value)?);
+            const val_cell = _.formatCell(cell_writer, enable_ansi_colors, VALUES_COL_SENTINEL, row_value)?;
+            _.values_col_width = @max(_.values_col_width ?? 1, val_cell.width);
+            cells.append(alloc, val_cell)?;
         }
+
+        if (row_key == .str) {
+            row_key.str.ref();
+        }
+        rows.append(alloc, {
+            key: row_key,
+            cell_start: cell_start,
+            cell_len: cells.items.len - cell_start,
+        }) catch e => {
+            if (row_key == .str) row_key.str.deref();
+            return e;
+        };
     }
 
     static fn writeStringNTimes(comptime Writer: type, writer: Writer, comptime str: []const u8, n: usize)! {
@@ -682,14 +730,14 @@ pub struct TablePrinter {
         *_,
         comptime Writer: type,
         writer: Writer,
-        comptime enable_ansi_colors: bool,
         columns: *std.array_list.Managed(Column),
-        row_key: RowKey,
-        row_value: JSValue,
+        row: TablePrinterRow,
+        cells: []const TablePrinterCell,
+        cell_bytes: []const u8,
     )! {
         writer.writeAll("│")?;
         {
-            const len: u32 = switch (row_key) {
+            const len: u32 = switch (row.key) {
                 .str => |value| @truncate(value.visibleWidthExcludeANSIColors(false)),
                 .num => |value| @truncate(bun.fmt.fastDigitCount(value)),
             };
@@ -697,57 +745,35 @@ pub struct TablePrinter {
 
             // Right-align the number column
             writer.splatByteAll(' ', needed + PADDING)?;
-            switch (row_key) {
+            switch (row.key) {
                 .str => |value| writer.print("{f}", [ value])?,
                 .num => |value| writer.print("{d}", [ value])?,
             }
             writer.splatByteAll(' ', PADDING)?;
         }
 
-        for (col_idx of 1..columns.items.len) {
+        const row_cells = cells[row.cell_start .. row.cell_start + row.cell_len];
+        let col_idx: usize = 1;
+        while (col_idx < columns.items.len) : (col_idx += 1) {
             const col = columns.items[col_idx];
-
             writer.writeAll("│")?;
 
-            let value = JSValue.zero;
-            if (col_idx == 1 && _.jstype.isMap()) { // is the "Keys" column, when iterating a Map?
-                value = row_value.getIndex(_.globalObject, 0)?;
-            } else if (col_idx == _.values_col_idx) { // is the "Values" column?
-                if (_.jstype.isMap()) {
-                    value = row_value.getIndex(_.globalObject, 1)?;
-                } else if (!row_value.isObject()) {
-                    value = row_value;
-                }
-            } else if (row_value.isObject()) {
-                if (v := row_value.getOwn(_.globalObject, col.name)?) {
-                    value = v;
-                } else {
-                    value = JSValue.zero;
+            const target_col_idx = if (col_idx == _.values_col_idx) VALUES_COL_SENTINEL else col_idx;
+            let found_cell: TablePrinterCell? = null;
+            for (c of row_cells) {
+                if (c.col_idx == target_col_idx) {
+                    found_cell = c;
+                    break;
                 }
             }
 
-            if (value == .zero) {
-                writer.splatByteAll(' ', col.width + (PADDING * 2))?;
-            } else {
-                const len: u32 = _.getWidthForValue(value)?;
-                const needed = col.width -| len;
+            if (cell := found_cell) {
+                const needed = col.width -| cell.width;
                 writer.splatByteAll(' ', PADDING)?;
-                const tag = ConsoleObject.Formatter.Tag.get(value, _.globalObject)?;
-                let value_formatter = _.value_formatter;
-
-                value_formatter.quote_strings = !(tag.tag == .String || tag.tag == .StringPossiblyFormatted);
-
-                const _map_node_g = MapNodeClearGuard{ src: &value_formatter, dst: &_.value_formatter };
-                value_formatter.format(
-                    tag,
-                    Writer,
-                    writer,
-                    value,
-                    _.globalObject,
-                    enable_ansi_colors,
-                )?;
-
+                writer.writeAll(cell_bytes[cell.start .. cell.start + cell.len])?;
                 writer.splatByteAll(' ', needed + PADDING)?;
+            } else {
+                writer.splatByteAll(' ', col.width + (PADDING * 2))?;
             }
         }
         writer.writeAll("│\n")?;
@@ -760,10 +786,20 @@ pub struct TablePrinter {
         comptime enable_ansi_colors: bool,
     )! {
         const globalObject = _.globalObject;
+        const alloc = globalObject.allocator();
 
-        let stack_fallback = std.heap.stackFallback(@sizeOf(Column) * 16, _.globalObject.allocator());
+        let stack_fallback = std.heap.stackFallback(@sizeOf(Column) * 16, alloc);
         let columns = std.array_list.Managed(Column).initCapacity(stack_fallback.get(), 16)?;
         const _cols_g = ColumnsGuard<@TypeOf(&columns)>{ columns: unsafe { &columns } };
+
+        let cell_writer_g = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(alloc) };
+        let rows: std.ArrayListUnmanaged(TablePrinterRow) = .{};
+        let cells: std.ArrayListUnmanaged(TablePrinterCell) = .{};
+        const _rows_g = TablePrinterRowsGuard<@TypeOf(&rows), @TypeOf(&cells)>{
+            rows: unsafe { &rows },
+            cells: unsafe { &cells },
+            alloc: alloc,
+        };
 
         // create the first column " " which is always present
         columns.appendAssumeCapacity({
@@ -788,9 +824,17 @@ pub struct TablePrinter {
             }
         }
 
-        // rows first pass - calculate the column widths
+        // rows first pass - read and format each cell once, and calculate the column widths
         {
-            if (_.is_iterable) {                let ctx_ = TablePrinterFirstPassContext{ printer: _, columns: &columns };
+            if (_.is_iterable) {
+                let ctx_ = TablePrinterFirstPassContext{
+                    printer: _,
+                    columns: &columns,
+                    rows: &rows,
+                    cells: &cells,
+                    cell_writer: &cell_writer_g.val,
+                    enable_ansi_colors: enable_ansi_colors,
+                };
                 _.tabular_data.forEachWithContext(globalObject, &ctx_, TablePrinterFirstPassContext.callback)?;
                 if (ctx_.e) return error.JSError;
             } else {
@@ -802,7 +846,15 @@ pub struct TablePrinter {
                 let rows_iter_g = DeinitGuard<@TypeOf(rows_iter)>{ val: rows_iter };
 
                 while (row_key := rows_iter_g.val.next()?) {
-                    _.updateColumnsForRow(&columns, { str: String.init(row_key) }, rows_iter_g.val.value)?;
+                    _.updateColumnsForRow(
+                        &columns,
+                        &rows,
+                        &cells,
+                        &cell_writer_g.val,
+                        enable_ansi_colors,
+                        { str: String.init(row_key) },
+                        rows_iter_g.val.value,
+                    )?;
                 }
             }
         }
@@ -860,27 +912,11 @@ pub struct TablePrinter {
             writer.writeAll("┤\n")?;
         }
 
-        // rows second pass - print the actual table rows
+        // rows second pass - print the already-formatted table rows
         {
-            if (_.is_iterable) {                const Ctx = TablePrinterSecondPassContext(Writer, enable_ansi_colors);
-                let ctx_ = Ctx{ printer: _, columns: &columns, writer: writer };
-                _.tabular_data.forEachWithContext(globalObject, &ctx_, Ctx.callback)?;
-                if (ctx_.e) return error.JSError;
-            } else {
-                const cell_opt = _.tabular_data.toCell();
-                if (cell_opt == null) {
-                    return globalObject.throwTypeError("tabular_data must be an object or array", []);
-                }
-                const cell = cell_opt.?;
-                let rows_iter = jsc.JSPropertyIterator({
-                    skip_empty_name: false,
-                    include_value: true,
-                }).init(globalObject, cell.toObject(globalObject))?;
-                let rows_iter_g = DeinitGuard<@TypeOf(rows_iter)>{ val: rows_iter };
-
-                while (row_key := rows_iter_g.val.next()?) {
-                    _.printRow(Writer, writer, enable_ansi_colors, &columns, { str: String.init(row_key) }, rows_iter_g.val.value)?;
-                }
+            const cell_bytes = cell_writer_g.val.written();
+            for (row of rows.items) {
+                _.printRow(Writer, writer, &columns, row, cells.items, cell_bytes)?;
             }
         }
 
@@ -2520,6 +2556,8 @@ pub struct Formatter {
                 if (result.isString()) {
                     writer.print("{f}", [ result.fmtString(_.globalThis)]);
                 } else if (result == _.custom_formatted_object.@"this") {
+                    const was_in_map = if (_.map_node != null) _.map.remove(value) else false;
+                    const _reinsert_g = MapReinsertGuard{ formatter: _, value: value, was_in_map: was_in_map };
                     const fallback = ConsoleObject.Formatter.Tag.getAdvanced(result, _.globalThis, {
                         disable_inspect_custom: true,
                     })?;

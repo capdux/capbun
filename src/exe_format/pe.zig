@@ -452,9 +452,7 @@ pub fn recomputePEChecksum(self: *PEFile) !void {
             }
             sum = ((sum & 65535) + cp_shr(sum, 16));
             sum = ((sum & 65535) + cp_shr(sum, 16));
-            sum = (sum + (if (comptime @typeInfo(@TypeOf(raw_bytes.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(raw_bytes.len)) else cp_cast_int(u64, raw_bytes.len)));
-            sum = ((sum & 65535) + cp_shr(sum, 16));
-            const final_sum = (if (comptime @typeInfo(@TypeOf(((sum & 65535) + cp_shr(sum, 16)))) == .@"enum") cp_cast_int(u32, @intFromEnum(((sum & 65535) + cp_shr(sum, 16)))) else cp_cast_int(u32, ((sum & 65535) + cp_shr(sum, 16))));
+            const final_sum = (if (comptime @typeInfo(@TypeOf(((sum + (if (comptime @typeInfo(@TypeOf(raw_bytes.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(raw_bytes.len)) else cp_cast_int(u64, raw_bytes.len))) & 4294967295))) == .@"enum") cp_cast_int(u32, @intFromEnum(((sum + (if (comptime @typeInfo(@TypeOf(raw_bytes.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(raw_bytes.len)) else cp_cast_int(u64, raw_bytes.len))) & 4294967295))) else cp_cast_int(u32, ((sum + (if (comptime @typeInfo(@TypeOf(raw_bytes.len)) == .@"enum") cp_cast_int(u64, @intFromEnum(raw_bytes.len)) else cp_cast_int(u64, raw_bytes.len))) & 4294967295)));
             var opt = try self.getOptionalHeader();
             _ = &opt;
             opt.checksum = final_sum;

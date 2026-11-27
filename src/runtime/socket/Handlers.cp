@@ -355,6 +355,10 @@ pub struct SocketConfig {
                 .ssl = ssl,
                 .handlers = handlers_val,
                 .default_data = default_data_val,
+                .exclusive = generated.exclusive,
+                .allowHalfOpen = generated.allow_half_open,
+                .reusePort = generated.reuse_port,
+                .ipv6Only = generated.ipv6_only,
             };
             let _result_guard = ReleaseGuard<SocketConfig>{ ptr: unsafe { &result } };
             _ssl_guard.ptr = null;
@@ -383,10 +387,6 @@ pub struct SocketConfig {
                 } else {
                     return global.throwInvalidArguments("Missing \"port\"", .{});
                 }
-                result.exclusive = generated.exclusive;
-                result.allowHalfOpen = generated.allow_half_open;
-                result.reusePort = generated.reuse_port;
-                result.ipv6Only = generated.ipv6_only;
             } else {
                 return global.throwInvalidArguments("Expected either \"hostname\" or \"unix\"", .{});
             }

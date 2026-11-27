@@ -140,6 +140,7 @@ else => {
 
 pub fn setParams(self: *Context, level: c_int, strategy: c_int) Error {
             self.e = .Ok;
+            _ = self.setBuffers(null, null);
             switch (self.mode) {
 .DEFLATE, .DEFLATERAW => {
 self.e = c.deflateParams((&self.state), level, strategy);

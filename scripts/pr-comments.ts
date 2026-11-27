@@ -39,15 +39,21 @@ async function gh(path: string): Promise<Json[]> {
   const result = await $`gh api --paginate ${path}`.quiet().nothrow();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
-    console.error(`gh api --paginate ${path} failed (exit ${result.exitCode}).`);
+    console.error(
+      `gh api --paginate ${path} failed (exit ${result.exitCode}).`,
+    );
     if (stderr) console.error(stderr);
-    console.error("Check that `gh auth status` is healthy and that the PR exists.");
+    console.error(
+      "Check that `gh auth status` is healthy and that the PR exists.",
+    );
     process.exit(1);
   }
   try {
     return JSON.parse(result.stdout.toString());
   } catch (err) {
-    console.error(`Could not parse response from \`gh api --paginate ${path}\` as JSON: ${(err as Error).message}`);
+    console.error(
+      `Could not parse response from \`gh api --paginate ${path}\` as JSON: ${(err as Error).message}`,
+    );
     process.exit(1);
   }
 }
@@ -65,9 +71,14 @@ async function gh(path: string): Promise<Json[]> {
 // single thread has more than 100 comments.
 type ThreadState = { resolved: boolean; outdated: boolean };
 
-async function runGraphQL(query: string, vars: Record<string, string | number>): Promise<Json | null> {
+async function runGraphQL(
+  query: string,
+  vars: Record<string, string | number>,
+): Promise<Json | null> {
   const flags = Object.entries(vars).flatMap(([k, v]) => ["-F", `${k}=${v}`]);
-  const result = await $`gh api graphql -f query=${query} ${flags}`.quiet().nothrow();
+  const result = await $`gh api graphql -f query=${query} ${flags}`
+    .quiet()
+    .nothrow();
   if (result.exitCode !== 0) {
     console.error(`Warning: gh api graphql failed (exit ${result.exitCode}).`);
     const stderr = result.stderr.toString().trim();
@@ -77,12 +88,17 @@ async function runGraphQL(query: string, vars: Record<string, string | number>):
   try {
     return JSON.parse(result.stdout.toString());
   } catch (err) {
-    console.error(`Warning: could not parse GraphQL response: ${(err as Error).message}`);
+    console.error(
+      `Warning: could not parse GraphQL response: ${(err as Error).message}`,
+    );
     return null;
   }
 }
 
-async function fetchThreadState(repo: string, number: number): Promise<Map<number, ThreadState> | null> {
+async function fetchThreadState(
+  repo: string,
+  number: number,
+): Promise<Map<number, ThreadState> | null> {
   const [owner, name] = repo.split("/");
 
   const threadQuery = `
@@ -134,7 +150,10 @@ async function fetchThreadState(repo: string, number: number): Promise<Map<numbe
     if (!threadsField) return null;
 
     for (const t of threadsField.nodes ?? []) {
-      const state: ThreadState = { resolved: !!t.isResolved, outdated: !!t.isOutdated };
+      const state: ThreadState = {
+        resolved: !!t.isResolved,
+        outdated: !!t.isOutdated,
+      };
       for (const c of t.comments?.nodes ?? []) {
         if (typeof c.databaseId === "number") map.set(c.databaseId, state);
       }
@@ -144,7 +163,10 @@ async function fetchThreadState(repo: string, number: number): Promise<Map<numbe
         ? t.comments.pageInfo.endCursor
         : undefined;
       while (innerCursor) {
-        const innerVars: Record<string, string | number> = { threadId: t.id, cursor: innerCursor };
+        const innerVars: Record<string, string | number> = {
+          threadId: t.id,
+          cursor: innerCursor,
+        };
         const innerPage = await runGraphQL(innerQuery, innerVars);
         if (!innerPage) return null;
         const innerComments = innerPage?.data?.node?.comments;
@@ -152,7 +174,9 @@ async function fetchThreadState(repo: string, number: number): Promise<Map<numbe
         for (const c of innerComments.nodes ?? []) {
           if (typeof c.databaseId === "number") map.set(c.databaseId, state);
         }
-        innerCursor = innerComments.pageInfo?.hasNextPage ? innerComments.pageInfo.endCursor : undefined;
+        innerCursor = innerComments.pageInfo?.hasNextPage
+          ? innerComments.pageInfo.endCursor
+          : undefined;
       }
     }
 
@@ -163,15 +187,26 @@ async function fetchThreadState(repo: string, number: number): Promise<Map<numbe
   return map;
 }
 
-async function resolvePr(arg: string | undefined): Promise<{ repo: string; number: number }> {
+async function resolvePr(
+  arg: string | undefined,
+): Promise<{ repo: string; number: number }> {
   const urlMatch = arg?.match(/github\.com\/([^\/]+\/[^\/]+)\/pull\/(\d+)/);
   if (urlMatch) return { repo: urlMatch[1], number: Number(urlMatch[2]) };
 
-  const repoResult = await $`gh repo view --json nameWithOwner -q .nameWithOwner`.quiet().nothrow();
+  const repoResult =
+    await $`gh repo view --json nameWithOwner -q .nameWithOwner`
+      .quiet()
+      .nothrow();
   if (repoResult.exitCode !== 0) {
-    console.error("Could not determine the GitHub repo for the current directory.");
-    console.error("Run this inside a repo with a GitHub remote, or pass a PR URL instead:");
-    console.error("  bun run pr:comments https://github.com/oven-sh/bun/pull/28838");
+    console.error(
+      "Could not determine the GitHub repo for the current directory.",
+    );
+    console.error(
+      "Run this inside a repo with a GitHub remote, or pass a PR URL instead:",
+    );
+    console.error(
+      "  bun run pr:comments https://github.com/oven-sh/bun/pull/28838",
+    );
     process.exit(1);
   }
   const repo = repoResult.stdout.toString().trim();
@@ -183,7 +218,9 @@ async function resolvePr(arg: string | undefined): Promise<{ repo: string; numbe
     const n = Number(arg.replace(/^#/, ""));
     if (!Number.isInteger(n) || n <= 0) {
       console.error(`Error: "${arg}" is not a PR number or URL.`);
-      console.error(`Usage: bun run pr:comments [<number> | #<number> | <url>]`);
+      console.error(
+        `Usage: bun run pr:comments [<number> | #<number> | <url>]`,
+      );
       process.exit(1);
     }
     return { repo, number: n };
@@ -196,11 +233,15 @@ async function resolvePr(arg: string | undefined): Promise<{ repo: string; numbe
   // JSON we're about to parse. Bun's $ already captures the two streams separately.
   const lookup = await $`gh pr view --json number`.quiet().nothrow();
   if (lookup.exitCode !== 0) {
-    console.error(`No pull request found for the current branch (${branch || "detached HEAD"}).`);
+    console.error(
+      `No pull request found for the current branch (${branch || "detached HEAD"}).`,
+    );
     console.error("");
     console.error("Options:");
     console.error("  - Pass a PR number:        bun run pr:comments 28838");
-    console.error("  - Pass a PR URL:           bun run pr:comments https://github.com/oven-sh/bun/pull/28838");
+    console.error(
+      "  - Pass a PR URL:           bun run pr:comments https://github.com/oven-sh/bun/pull/28838",
+    );
     console.error("  - Push this branch and open a PR first");
     process.exit(1);
   }
@@ -208,7 +249,9 @@ async function resolvePr(arg: string | undefined): Promise<{ repo: string; numbe
     const view = JSON.parse(lookup.stdout.toString().trim());
     return { repo, number: view.number };
   } catch {
-    console.error(`Could not parse "gh pr view" output. Pass a PR number or URL instead.`);
+    console.error(
+      `Could not parse "gh pr view" output. Pass a PR number or URL instead.`,
+    );
     process.exit(1);
   }
 }
@@ -225,7 +268,17 @@ function indent(text: string, prefix = "  "): string {
 }
 
 function xmlEscape(s: string): string {
-  return s.replace(/[<>&"']/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!);
+  return s.replace(
+    /[<>&"']/g,
+    c =>
+      ({
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[c]!,
+  );
 }
 
 // CodeRabbit appends a collapsed "🤖 Prompt for AI Agents" <details> block with
@@ -234,7 +287,8 @@ function xmlEscape(s: string): string {
 // the human-facing duplicate. Otherwise: strip HTML comments (bot watermarks
 // like `<!-- generated-comment ... -->`) and cap length so one giant CI report
 // doesn't drown out review feedback.
-const aiPromptRe = /<summary>[^<]*🤖[^<]*AI [Aa]gents[^<]*<\/summary>\s*```[^\n]*\n([\s\S]*?)```/;
+const aiPromptRe =
+  /<summary>[^<]*🤖[^<]*AI [Aa]gents[^<]*<\/summary>\s*```[^\n]*\n([\s\S]*?)```/;
 
 function cleanBody(body: string, max = 1000): string {
   const aiPrompt = body.match(aiPromptRe);
@@ -242,7 +296,10 @@ function cleanBody(body: string, max = 1000): string {
 
   const stripped = body.replace(/<!--[\s\S]*?-->/g, "").trim();
   if (stripped.length <= max) return stripped;
-  return stripped.slice(0, max) + `\n... [${stripped.length - max} more chars truncated]`;
+  return (
+    stripped.slice(0, max) +
+    `\n... [${stripped.length - max} more chars truncated]`
+  );
 }
 
 function xmlAttr(name: string, value: string | boolean | undefined): string {
@@ -258,12 +315,14 @@ const positional = rawArgs.filter(a => !a.startsWith("--"))[0];
 
 const { repo, number } = await resolvePr(positional);
 
-const [issueComments, reviews, reviewComments, threadState] = await Promise.all([
-  gh(`repos/${repo}/issues/${number}/comments`),
-  gh(`repos/${repo}/pulls/${number}/reviews`),
-  gh(`repos/${repo}/pulls/${number}/comments`),
-  fetchThreadState(repo, number),
-]);
+const [issueComments, reviews, reviewComments, threadState] = await Promise.all(
+  [
+    gh(`repos/${repo}/issues/${number}/comments`),
+    gh(`repos/${repo}/pulls/${number}/reviews`),
+    gh(`repos/${repo}/pulls/${number}/comments`),
+    fetchThreadState(repo, number),
+  ],
+);
 
 type Entry = {
   when: string;
@@ -344,13 +403,16 @@ entries.sort((a, b) => a.when.localeCompare(b.when));
 // that either have no AI prompt at all (Walkthrough, Reviews paused) or just
 // aggregate the line comments verbatim. Drop both (b) cases.
 const isLineLevel = (e: Entry) => e.tag === "line-comment" || e.tag === "reply";
-const coderabbitHasLineComments = entries.some(e => e.user === "coderabbitai[bot]" && isLineLevel(e));
+const coderabbitHasLineComments = entries.some(
+  e => e.user === "coderabbitai[bot]" && isLineLevel(e),
+);
 
 function isBotNoise(e: Entry): boolean {
   // robobun's auto-updated CI status comment (the one it edits in place on
   // every push) carries this watermark so the bot can find it again. Other
   // robobun comments are kept.
-  if (e.user === "robobun" && e.body.includes("<!-- generated-comment ")) return true;
+  if (e.user === "robobun" && e.body.includes("<!-- generated-comment "))
+    return true;
   if (e.user === "coderabbitai[bot]" && !isLineLevel(e)) {
     if (!aiPromptRe.test(e.body)) return true;
     if (coderabbitHasLineComments) return true;
@@ -361,8 +423,13 @@ function isBotNoise(e: Entry): boolean {
 // Resolved threads are noise when you're looking for what's actionable. Only
 // drop entries we know are resolved — issue comments and review verdicts have
 // no thread state and always pass through.
-const resolvedHidden = entries.reduce((n, e) => n + (e.resolved === true ? 1 : 0), 0);
-const visible = entries.filter(e => !isBotNoise(e) && (includeResolved || e.resolved !== true));
+const resolvedHidden = entries.reduce(
+  (n, e) => n + (e.resolved === true ? 1 : 0),
+  0,
+);
+const visible = entries.filter(
+  e => !isBotNoise(e) && (includeResolved || e.resolved !== true),
+);
 
 if (jsonMode) {
   process.stdout.write(JSON.stringify(visible, null, 2) + "\n");
@@ -370,7 +437,10 @@ if (jsonMode) {
 }
 
 const url = `https://github.com/${repo}/pull/${number}`;
-const hiddenAttr = !includeResolved && resolvedHidden > 0 ? xmlAttr("resolved-hidden", String(resolvedHidden)) : "";
+const hiddenAttr =
+  !includeResolved && resolvedHidden > 0
+    ? xmlAttr("resolved-hidden", String(resolvedHidden))
+    : "";
 console.log(
   `<pr-comments${xmlAttr("repo", repo)}${xmlAttr("number", String(number))}${xmlAttr("url", url)}${hiddenAttr}>`,
 );

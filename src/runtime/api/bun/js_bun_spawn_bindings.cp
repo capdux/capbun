@@ -874,7 +874,7 @@ pub fn spawnMaybeSync(
     // For existing terminal: keep slave_fd open so terminal can be reused for more spawns
     if (info := terminal_info) {
         terminal_js_value = info.js_value;
-        info.terminal.closeSlaveFd();
+        info.terminal.markInlineSpawned();
         subprocess.flags.owns_terminal = true;
         terminal_info = null;
     }

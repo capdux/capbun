@@ -117,12 +117,18 @@ export const libarchive: Dependency = {
 
   build: cfg => ({
     kind: "direct",
-    sources: [...SOURCES, ...(cfg.windows ? SOURCES_WIN : [])].map(s => `libarchive/${s}.c`),
+    sources: [...SOURCES, ...(cfg.windows ? SOURCES_WIN : [])].map(
+      s => `libarchive/${s}.c`,
+    ),
     // zlib's build dir holds the generated zlib.h (subst'd from .in) that
     // the gzip filter includes. Absolute path → emitDirect quotes it.
     // android: archive.h does `#include <android_lf.h>` under __ANDROID__;
     // that header lives under contrib/android/include.
-    includes: ["libarchive", depBuildDir(cfg, "zlib"), ...(cfg.abi === "android" ? ["contrib/android/include"] : [])],
+    includes: [
+      "libarchive",
+      depBuildDir(cfg, "zlib"),
+      ...(cfg.abi === "android" ? ["contrib/android/include"] : []),
+    ],
     pic: true,
     defines: {
       HAVE_CONFIG_H: 1,
@@ -143,7 +149,10 @@ export const libarchive: Dependency = {
 
   provides: cfg => ({
     libs: [],
-    includes: cfg.abi === "android" ? ["libarchive", "contrib/android/include"] : ["libarchive"],
+    includes:
+      cfg.abi === "android"
+        ? ["libarchive", "contrib/android/include"]
+        : ["libarchive"],
   }),
 };
 
@@ -284,7 +293,9 @@ const WINDOWS = def1([
 function configH(cfg: Config): string {
   const longSize = cfg.windows ? 4 : 8;
   const wcharSize = cfg.windows ? 2 : 4;
-  const platform = cfg.windows ? WINDOWS : `${POSIX}\n${cfg.darwin ? DARWIN : cfg.freebsd ? FREEBSD : LINUX}`;
+  const platform = cfg.windows
+    ? WINDOWS
+    : `${POSIX}\n${cfg.darwin ? DARWIN : cfg.freebsd ? FREEBSD : LINUX}`;
 
   // Feature-test macros must come before any system header. archive_platform.h
   // includes config.h first, so defining them here is early enough.

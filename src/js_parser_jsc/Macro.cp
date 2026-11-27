@@ -577,7 +577,8 @@ export struct Runner {
                 }
             },
             .e_template => {
-                @panic("TODO: support template literals in macros");
+                log.addError(source, caller.loc, "template literal macro invocations are not supported") catch {};
+                return error.MacroFailed;
             },
             else => {
                 @panic("Unexpected caller type");

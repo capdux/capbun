@@ -166,7 +166,9 @@ export async function downloadWithRetry(url: string, dest: string, logPrefix: st
 
     const tmpPath = `${dest}.${process.pid}.partial`;
     try {
-      const res = await fetch(url, { headers: { "User-Agent": "bun-build-system" } });
+      const res = await fetch(url, {
+        headers: { "User-Agent": "bun-build-system" },
+      });
       if (!res.ok || res.body === null) {
         lastError = new BuildError(`HTTP ${res.status} ${res.statusText} for ${url}`);
         // 4xx is deterministic — a bad URL/missing artifact won't succeed on
@@ -237,7 +239,9 @@ export async function extractTarGz(tarball: string, dest: string, stripComponent
   }
 
   const entries = await readdir(dest);
-  assert(entries.length > 0, `tar extracted nothing from ${tarball}`, { hint: "Tarball may be corrupt" });
+  assert(entries.length > 0, `tar extracted nothing from ${tarball}`, {
+    hint: "Tarball may be corrupt",
+  });
 }
 
 /**
@@ -269,7 +273,10 @@ export async function extractZip(zipPath: string, dest: string): Promise<void> {
     `Failed to extract zip (tried unzip and tar):\n` +
       `  unzip: ${unzipResult.error?.message ?? `exit ${unzipResult.status}: ${unzipResult.stderr}`}\n` +
       `  tar: ${tarResult.error?.message ?? `exit ${tarResult.status}: ${tarResult.stderr}`}`,
-    { file: zipPath, hint: "Install unzip: apt install unzip / brew install unzip" },
+    {
+      file: zipPath,
+      hint: "Install unzip: apt install unzip / brew install unzip",
+    },
   );
 }
 

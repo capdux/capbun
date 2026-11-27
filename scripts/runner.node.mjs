@@ -174,7 +174,9 @@ const cliOptions = options;
 
 if (cliOptions.junit) {
   try {
-    cliOptions["junit-temp-dir"] = mkdtempSync(join(tmpdir(), cliOptions["junit-temp-dir"]));
+    cliOptions["junit-temp-dir"] = mkdtempSync(
+      join(tmpdir(), cliOptions["junit-temp-dir"]),
+    );
   } catch (err) {
     cliOptions.junit = false;
     console.error(`Error creating JUnit temp directory: ${err.message}`);
@@ -202,7 +204,9 @@ if (isBuildkite) {
       allFiles = JSON.parse(cachedAll);
       newFiles = cachedNew ? JSON.parse(cachedNew) : [];
       prFileCount = allFiles.length;
-      console.log(`- PR file list from build meta-data: ${prFileCount} files, ${newFiles.length} new files`);
+      console.log(
+        `- PR file list from build meta-data: ${prFileCount} files, ${newFiles.length} new files`,
+      );
     } catch (e) {
       console.error("Failed to parse pr-*-files meta-data:", e);
       allFiles = [];
@@ -221,8 +225,13 @@ if (isBuildkite) {
         );
         const doc = await res.json();
         if (!res.ok || !Array.isArray(doc)) {
-          console.error(`-> page ${i}: GitHub API ${res.status} ${res.statusText}:`, JSON.stringify(doc));
-          throw new Error(`GitHub API returned ${res.status}; cannot determine changed files`);
+          console.error(
+            `-> page ${i}: GitHub API ${res.status} ${res.statusText}:`,
+            JSON.stringify(doc),
+          );
+          throw new Error(
+            `GitHub API returned ${res.status}; cannot determine changed files`,
+          );
         }
         console.log(`-> page ${i}, found ${doc.length} items`);
         if (doc.length === 0) break;
@@ -234,7 +243,9 @@ if (isBuildkite) {
         }
         if (doc.length < per_page) break;
       }
-      console.log(`- PR ${BUILDKITE_PULL_REQUEST}, ${prFileCount} files, ${newFiles.length} new files`);
+      console.log(
+        `- PR ${BUILDKITE_PULL_REQUEST}, ${prFileCount} files, ${newFiles.length} new files`,
+      );
     } catch (e) {
       console.error(e);
     }
@@ -245,7 +256,10 @@ let coresDir;
 
 if (options["coredump-upload"]) {
   // this sysctl is set in bootstrap.sh to /var/bun-cores-$distro-$release-$arch
-  const sysctl = await spawnSafe({ command: "sysctl", args: ["-n", "kernel.core_pattern"] });
+  const sysctl = await spawnSafe({
+    command: "sysctl",
+    args: ["-n", "kernel.core_pattern"],
+  });
   coresDir = sysctl.stdout;
   if (sysctl.ok) {
     if (coresDir.startsWith("|")) {
@@ -308,7 +322,9 @@ function getTestExpectations() {
     const expectationMatch = remaining.match(/\[(.*?)\]$/);
     if (expectationMatch) {
       expectationValues = expectationMatch[1].trim().split(/\s+/);
-      remaining = remaining.substring(0, remaining.length - expectationMatch[0].length).trim();
+      remaining = remaining
+        .substring(0, remaining.length - expectationMatch[0].length)
+        .trim();
     }
 
     const filename = remaining.trim();
@@ -353,7 +369,10 @@ const skipsForLeaksan = (() => {
  * @returns {boolean}
  */
 const shouldValidateExceptions = test => {
-  return !(skipsForExceptionValidation.includes(test) || skipsForExceptionValidation.includes("test/" + test));
+  return !(
+    skipsForExceptionValidation.includes(test) ||
+    skipsForExceptionValidation.includes("test/" + test)
+  );
 };
 
 /**
@@ -362,7 +381,9 @@ const shouldValidateExceptions = test => {
  * @returns {boolean}
  */
 const shouldValidateLeakSan = test => {
-  return !(skipsForLeaksan.includes(test) || skipsForLeaksan.includes("test/" + test));
+  return !(
+    skipsForLeaksan.includes(test) || skipsForLeaksan.includes("test/" + test)
+  );
 };
 
 /**
@@ -415,7 +436,10 @@ function getTestModifiers(testPath) {
 async function runTests() {
   let execPath;
   if (options["step"]) {
-    execPath = await getExecPathFromBuildKite(options["step"], options["build-id"]);
+    execPath = await getExecPathFromBuildKite(
+      options["step"],
+      options["build-id"],
+    );
   } else {
     execPath = getExecPath(options["exec-path"]);
   }
@@ -438,19 +462,32 @@ async function runTests() {
   // returns fast when the container is already healthy. Linux-only — macOS /
   // Windows CI don't run docker tests. Runs in the background while
   // getVendorTests below installs vendor deps.
-  if (isCI && isLinux && spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status === 0) {
+  if (
+    isCI &&
+    isLinux &&
+    spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status ===
+      0
+  ) {
     spawn(execPath, [join(cwd, "test", "docker", "warmup-ci.ts"), ...tests], {
       stdio: ["ignore", "inherit", "inherit"],
-    }).on("error", err => console.warn("docker warmup spawn failed:", err.message));
+    }).on("error", err =>
+      console.warn("docker warmup spawn failed:", err.message),
+    );
   }
 
   /** @type {VendorTest[] | undefined} */
   let vendorTests;
   let vendorTotal = 0;
-  if (/true|1|yes|on/i.test(options["vendor"]) || (isCI && typeof options["vendor"] === "undefined")) {
+  if (
+    /true|1|yes|on/i.test(options["vendor"]) ||
+    (isCI && typeof options["vendor"] === "undefined")
+  ) {
     vendorTests = await getVendorTests(cwd);
     if (vendorTests.length) {
-      vendorTotal = vendorTests.reduce((total, { testPaths }) => total + testPaths.length + 1, 0);
+      vendorTotal = vendorTests.reduce(
+        (total, { testPaths }) => total + testPaths.length + 1,
+        0,
+      );
       !isQuiet && console.log("Running vendor tests:", vendorTotal);
     }
   }
@@ -481,11 +518,14 @@ async function runTests() {
     let attempt = 1;
     for (; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
-        await new Promise(resolve => setTimeout(resolve, 5000 + Math.random() * 10_000));
+        await new Promise(resolve =>
+          setTimeout(resolve, 5000 + Math.random() * 10_000),
+        );
       }
 
       let grouptitle = `${getAnsi("gray")}[${index}/${total}]${getAnsi("reset")} ${title}`;
-      if (attempt > 1) grouptitle += ` ${getAnsi("gray")}[attempt #${attempt}]${getAnsi("reset")}`;
+      if (attempt > 1)
+        grouptitle += ` ${getAnsi("gray")}[attempt #${attempt}]${getAnsi("reset")}`;
 
       if (parallelism > 1) {
         console.log(grouptitle);
@@ -535,14 +575,28 @@ async function runTests() {
       if (!flaky) attempt = 1; // no need to show the retries count on failures, we know it maxed out
 
       if (title.startsWith("vendor")) {
-        const content = formatTestToMarkdown({ ...failure, testPath: title }, false, attempt - 1);
+        const content = formatTestToMarkdown(
+          { ...failure, testPath: title },
+          false,
+          attempt - 1,
+        );
         if (content) {
-          reportAnnotationToBuildKite({ context, label: title, content, style });
+          reportAnnotationToBuildKite({
+            context,
+            label: title,
+            content,
+            style,
+          });
         }
       } else {
         const content = formatTestToMarkdown(failure, false, attempt - 1);
         if (content) {
-          reportAnnotationToBuildKite({ context, label: title, content, style });
+          reportAnnotationToBuildKite({
+            context,
+            label: title,
+            content,
+            style,
+          });
         }
       }
     }
@@ -566,8 +620,13 @@ async function runTests() {
 
   if (!isQuiet) {
     for (const path of [cwd, testsPath]) {
-      const title = relative(cwd, join(path, "package.json")).replace(/\\/g, "/");
-      await runTest(title, async () => spawnBunInstall(execPath, { cwd: path }));
+      const title = relative(cwd, join(path, "package.json")).replace(
+        /\\/g,
+        "/",
+      );
+      await runTest(title, async () =>
+        spawnBunInstall(execPath, { cwd: path }),
+      );
     }
   }
 
@@ -575,20 +634,27 @@ async function runTests() {
     // TODO: remove windows exclusion here
     if (isCI && !isWindows) {
       // bun install has succeeded
-      const { promise: portPromise, resolve: portResolve } = Promise.withResolvers();
-      const { promise: errorPromise, resolve: errorResolve } = Promise.withResolvers();
+      const { promise: portPromise, resolve: portResolve } =
+        Promise.withResolvers();
+      const { promise: errorPromise, resolve: errorResolve } =
+        Promise.withResolvers();
       console.log("run in", cwd);
       let exiting = false;
 
-      const server = spawn(execPath, ["run", "--silent", "ci-remap-server", execPath, cwd, getCommit()], {
-        stdio: ["ignore", "pipe", "inherit"],
-        cwd, // run in main repo
-        env: { ...process.env, BUN_DEBUG_QUIET_LOGS: "1", NO_COLOR: "1" },
-      });
+      const server = spawn(
+        execPath,
+        ["run", "--silent", "ci-remap-server", execPath, cwd, getCommit()],
+        {
+          stdio: ["ignore", "pipe", "inherit"],
+          cwd, // run in main repo
+          env: { ...process.env, BUN_DEBUG_QUIET_LOGS: "1", NO_COLOR: "1" },
+        },
+      );
       server.unref();
       server.on("error", errorResolve);
       server.on("exit", (code, signal) => {
-        if (!exiting && (code !== 0 || signal !== null)) errorResolve(signal ? signal : "code " + code);
+        if (!exiting && (code !== 0 || signal !== null))
+          errorResolve(signal ? signal : "code " + code);
       });
       function onBeforeExit() {
         exiting = true;
@@ -602,7 +668,11 @@ async function runTests() {
         portResolve({ port: parseInt(line) });
       });
 
-      const result = await Promise.race([portPromise, errorPromise.catch(e => e), setTimeoutPromise(5000, "timeout")]);
+      const result = await Promise.race([
+        portPromise,
+        errorPromise.catch(e => e),
+        setTimeoutPromise(5000, "timeout"),
+      ]);
       if (typeof result?.port != "number") {
         process.off("beforeExit", onBeforeExit);
         server.kill?.();
@@ -620,24 +690,38 @@ async function runTests() {
           const title = relative(cwd, absoluteTestPath).replaceAll(sep, "/");
           if (isNodeTest(testPath)) {
             const testContent = readFileSync(absoluteTestPath, "utf-8");
-            let runWithBunTest = title.includes("needs-test") || testContent.includes("node:test");
+            let runWithBunTest =
+              title.includes("needs-test") || testContent.includes("node:test");
             // don't wanna have a filter for includes("bun:test") but these need our mocks
-            runWithBunTest ||= title === "test/js/node/test/parallel/test-fs-append-file-flush.js";
-            runWithBunTest ||= title === "test/js/node/test/parallel/test-fs-write-file-flush.js";
-            runWithBunTest ||= title === "test/js/node/test/parallel/test-fs-write-stream-flush.js";
+            runWithBunTest ||=
+              title ===
+              "test/js/node/test/parallel/test-fs-append-file-flush.js";
+            runWithBunTest ||=
+              title ===
+              "test/js/node/test/parallel/test-fs-write-file-flush.js";
+            runWithBunTest ||=
+              title ===
+              "test/js/node/test/parallel/test-fs-write-stream-flush.js";
             const subcommand = runWithBunTest ? "test" : "run";
             const env = {
               FORCE_COLOR: "0",
               NO_COLOR: "1",
               BUN_DEBUG_QUIET_LOGS: "1",
             };
-            if ((basename(execPath).includes("asan") || !isCI) && shouldValidateExceptions(testPath)) {
+            if (
+              (basename(execPath).includes("asan") || !isCI) &&
+              shouldValidateExceptions(testPath)
+            ) {
               env.BUN_JSC_validateExceptionChecks = "1";
               env.BUN_JSC_dumpSimulatedThrows = "1";
             }
-            if ((basename(execPath).includes("asan") || !isCI) && shouldValidateLeakSan(testPath)) {
+            if (
+              (basename(execPath).includes("asan") || !isCI) &&
+              shouldValidateLeakSan(testPath)
+            ) {
               env.BUN_DESTRUCT_VM_ON_EXIT = "1";
-              env.ASAN_OPTIONS = "allow_user_segv_handler=1:disable_coredump=0:detect_leaks=1:abort_on_error=1";
+              env.ASAN_OPTIONS =
+                "allow_user_segv_handler=1:disable_coredump=0:detect_leaks=1:abort_on_error=1";
               // prettier-ignore
               env.LSAN_OPTIONS = `malloc_context_size=100:print_suppressions=0:suppressions=${process.cwd()}/test/leaksan.supp`;
             }
@@ -646,16 +730,27 @@ async function runTests() {
                 cwd: cwd,
                 args: [
                   subcommand,
-                  "--config=" + join(import.meta.dirname, "../bunfig.node-test.toml"),
+                  "--config=" +
+                    join(import.meta.dirname, "../bunfig.node-test.toml"),
                   absoluteTestPath,
                 ],
                 timeout: getNodeParallelTestTimeout(title),
                 env,
-                stdout: parallelism > 1 ? () => {} : chunk => pipeTestStdout(process.stdout, chunk),
-                stderr: parallelism > 1 ? () => {} : chunk => pipeTestStdout(process.stderr, chunk),
+                stdout:
+                  parallelism > 1
+                    ? () => {}
+                    : chunk => pipeTestStdout(process.stdout, chunk),
+                stderr:
+                  parallelism > 1
+                    ? () => {}
+                    : chunk => pipeTestStdout(process.stderr, chunk),
               });
               const mb = 1024 ** 3;
-              let stdoutPreview = stdout.slice(0, mb).split("\n").slice(0, 50).join("\n");
+              let stdoutPreview = stdout
+                .slice(0, mb)
+                .split("\n")
+                .slice(0, 50)
+                .join("\n");
               if (crashes) stdoutPreview += crashes;
               return {
                 testPath: title,
@@ -672,8 +767,14 @@ async function runTests() {
             return runTest(title, async () =>
               spawnBunTest(execPath, join("test", testPath), {
                 cwd,
-                stdout: parallelism > 1 ? () => {} : chunk => pipeTestStdout(process.stdout, chunk),
-                stderr: parallelism > 1 ? () => {} : chunk => pipeTestStdout(process.stderr, chunk),
+                stdout:
+                  parallelism > 1
+                    ? () => {}
+                    : chunk => pipeTestStdout(process.stdout, chunk),
+                stderr:
+                  parallelism > 1
+                    ? () => {}
+                    : chunk => pipeTestStdout(process.stderr, chunk),
               }),
             );
           }
@@ -683,14 +784,24 @@ async function runTests() {
   }
 
   if (vendorTests?.length) {
-    for (const { cwd: vendorPath, packageManager, testRunner, testPaths } of vendorTests) {
+    for (const {
+      cwd: vendorPath,
+      packageManager,
+      testRunner,
+      testPaths,
+    } of vendorTests) {
       if (!testPaths.length) {
         continue;
       }
 
-      const packageJson = join(relative(cwd, vendorPath), "package.json").replace(/\\/g, "/");
+      const packageJson = join(
+        relative(cwd, vendorPath),
+        "package.json",
+      ).replace(/\\/g, "/");
       if (packageManager === "bun") {
-        const { ok } = await runTest(packageJson, () => spawnBunInstall(execPath, { cwd: vendorPath }));
+        const { ok } = await runTest(packageJson, () =>
+          spawnBunInstall(execPath, { cwd: vendorPath }),
+        );
         if (!ok) {
           continue;
         }
@@ -709,14 +820,25 @@ async function runTests() {
       }
 
       for (const testPath of testPaths) {
-        const title = join(relative(cwd, vendorPath), testPath).replace(/\\/g, "/");
+        const title = join(relative(cwd, vendorPath), testPath).replace(
+          /\\/g,
+          "/",
+        );
 
         if (testRunner === "bun") {
           await runTest(title, index =>
-            spawnBunTest(execPath, testPath, { cwd: vendorPath, env: { TEST_SERIAL_ID: index } }),
+            spawnBunTest(execPath, testPath, {
+              cwd: vendorPath,
+              env: { TEST_SERIAL_ID: index },
+            }),
           );
         } else {
-          const testRunnerPath = join(cwd, "test", "runners", `${testRunner}.ts`);
+          const testRunnerPath = join(
+            cwd,
+            "test",
+            "runners",
+            `${testRunner}.ts`,
+          );
           if (!existsSync(testRunnerPath)) {
             throw new Error(`Unsupported test runner: ${testRunner}`);
           }
@@ -746,16 +868,25 @@ async function runTests() {
     mkdirSync(junitTempDir, { recursive: true });
 
     // Generate JUnit reports for tests that don't use bun test
-    const nonBunTestResults = [...okResults, ...flakyResults, ...failedResults].filter(result => {
+    const nonBunTestResults = [
+      ...okResults,
+      ...flakyResults,
+      ...failedResults,
+    ].filter(result => {
       // Check if this is a test that wasn't run with bun test
       const isNodeTest =
-        isJavaScript(result.testPath) && !isTestStrict(result.testPath) && !result.testPath.includes("vendor");
+        isJavaScript(result.testPath) &&
+        !isTestStrict(result.testPath) &&
+        !result.testPath.includes("vendor");
       return isNodeTest;
     });
 
     // If we have tests not covered by bun test JUnit reports, generate a report for them
     if (nonBunTestResults.length > 0) {
-      const nonBunTestJunitPath = join(junitTempDir, "non-bun-test-results.xml");
+      const nonBunTestJunitPath = join(
+        junitTempDir,
+        "non-bun-test-results.xml",
+      );
       generateJUnitReport(nonBunTestJunitPath, nonBunTestResults);
       !isQuiet &&
         console.log(
@@ -769,12 +900,19 @@ async function runTests() {
           // Delete the file after successful upload to prevent redundant uploads
           try {
             unlinkSync(nonBunTestJunitPath);
-            !isQuiet && console.log(`Uploaded and deleted non-bun test JUnit report`);
+            !isQuiet &&
+              console.log(`Uploaded and deleted non-bun test JUnit report`);
           } catch (unlinkError) {
-            !isQuiet && console.log(`Uploaded but failed to delete non-bun test JUnit report: ${unlinkError.message}`);
+            !isQuiet &&
+              console.log(
+                `Uploaded but failed to delete non-bun test JUnit report: ${unlinkError.message}`,
+              );
           }
         } else {
-          !isQuiet && console.log(`Failed to upload non-bun test JUnit report to BuildKite`);
+          !isQuiet &&
+            console.log(
+              `Failed to upload non-bun test JUnit report to BuildKite`,
+            );
         }
       }
     }
@@ -789,7 +927,10 @@ async function runTests() {
         );
 
         if (allJunitFiles.length > 0) {
-          !isQuiet && console.log(`Found ${allJunitFiles.length} remaining JUnit reports to upload...`);
+          !isQuiet &&
+            console.log(
+              `Found ${allJunitFiles.length} remaining JUnit reports to upload...`,
+            );
 
           // Process each remaining JUnit file - these are files we haven't processed yet
           let uploadedCount = 0;
@@ -806,7 +947,10 @@ async function runTests() {
                     unlinkSync(filePath);
                     uploadedCount++;
                   } catch (unlinkError) {
-                    !isQuiet && console.log(`Uploaded but failed to delete ${file}: ${unlinkError.message}`);
+                    !isQuiet &&
+                      console.log(
+                        `Uploaded but failed to delete ${file}: ${unlinkError.message}`,
+                      );
                   }
                 }
               } catch (err) {
@@ -816,7 +960,10 @@ async function runTests() {
           }
 
           if (uploadedCount > 0) {
-            !isQuiet && console.log(`Uploaded and deleted ${uploadedCount} remaining JUnit reports`);
+            !isQuiet &&
+              console.log(
+                `Uploaded and deleted ${uploadedCount} remaining JUnit reports`,
+              );
           } else {
             !isQuiet && console.log(`No JUnit reports needed to be uploaded`);
           }
@@ -852,7 +999,8 @@ async function runTests() {
 
         // This matches an age identity known by Bun employees. Core dumps from CI have to be kept
         // secret since they will contain API keys.
-        const ageRecipient = "age1eunsrgxwjjpzr48hm0y98cw2vn5zefjagt4r0qj4503jg2nxedqqkmz6fu"; // reject external PRs changing this, see above
+        const ageRecipient =
+          "age1eunsrgxwjjpzr48hm0y98cw2vn5zefjagt4r0qj4503jg2nxedqqkmz6fu"; // reject external PRs changing this, see above
 
         // Run tar in the parent directory of coresDir so that it creates archive entries with
         // coresDirName in them. This way when you extract the tarball you get a folder named
@@ -878,7 +1026,9 @@ async function runTests() {
         if (!zipAndEncrypt.ok) {
           throw new Error(zipAndEncrypt.error);
         }
-        console.log(`saved core dumps to ${outfileAbs} (${statSync(outfileAbs).size} bytes) in ${elapsed} ms`);
+        console.log(
+          `saved core dumps to ${outfileAbs} (${statSync(outfileAbs).size} bytes) in ${elapsed} ms`,
+        );
         await uploadArtifact(outfileAbs);
       } else {
         console.log(`no cores found in ${coresDir}`);
@@ -890,7 +1040,8 @@ async function runTests() {
 
   if (!isCI && !isQuiet) {
     console.table({
-      "Total Tests": okResults.length + failedResults.length + flakyResults.length,
+      "Total Tests":
+        okResults.length + failedResults.length + flakyResults.length,
       "Passed Tests": okResults.length,
       "Failing Tests": failedResults.length,
       "Flaky Tests": flakyResults.length,
@@ -998,7 +1149,10 @@ async function spawnSafe(options) {
             [
               "echo -n | " +
                 Object.entries(env)
-                  .map(([key, value]) => `${unsafeBashEscape(key)}=${unsafeBashEscape(value)}`)
+                  .map(
+                    ([key, value]) =>
+                      `${unsafeBashEscape(key)}=${unsafeBashEscape(value)}`,
+                  )
                   .join(" "),
               unsafeBashEscape(command),
               ...args.map(unsafeBashEscape),
@@ -1076,8 +1230,13 @@ async function spawnSafe(options) {
     // JSC crashes immediately after printing, so >1 block means multiple subprocesses crashed.
     const count = error.length;
     const repoRel = p => p?.replace(/^(?:\.\.?[\\/])+/, "");
-    const thrown = /This scope can throw a JS exception: (\S+) @ (\S+)/.exec(buffer);
-    const unchecked = /But the exception was unchecked as of this scope: (\S+) @ (\S+)/.exec(buffer);
+    const thrown = /This scope can throw a JS exception: (\S+) @ (\S+)/.exec(
+      buffer,
+    );
+    const unchecked =
+      /But the exception was unchecked as of this scope: (\S+) @ (\S+)/.exec(
+        buffer,
+      );
     error = "unchecked exception";
     if (unchecked) {
       error += ` at ${unchecked[1]} @ ${repoRel(unchecked[2])}`;
@@ -1099,7 +1258,10 @@ async function spawnSafe(options) {
   ) {
     const [, message] = error || [];
     error = message ? message.split("\n")[0].toLowerCase() : "crash";
-    error = error.indexOf("\\n") !== -1 ? error.substring(0, error.indexOf("\\n")) : error;
+    error =
+      error.indexOf("\\n") !== -1
+        ? error.substring(0, error.indexOf("\\n"))
+        : error;
     error = `pid ${subprocess.pid} ${error}`;
   } else if (signalCode) {
     if (signalCode === "SIGTERM" && duration >= timeout) {
@@ -1221,7 +1383,9 @@ async function spawnBun(execPath, { args, cwd, timeout, env, stdout, stderr }) {
     timeout = spawnBunTimeout;
   }
   try {
-    const existingCores = options["coredump-upload"] ? readdirSync(coresDir) : [];
+    const existingCores = options["coredump-upload"]
+      ? readdirSync(coresDir)
+      : [];
     const result = await spawnSafe({
       command: execPath,
       args,
@@ -1231,11 +1395,19 @@ async function spawnBun(execPath, { args, cwd, timeout, env, stdout, stderr }) {
       stdout,
       stderr,
     });
-    const newCores = options["coredump-upload"] ? readdirSync(coresDir).filter(c => !existingCores.includes(c)) : [];
+    const newCores = options["coredump-upload"]
+      ? readdirSync(coresDir).filter(c => !existingCores.includes(c))
+      : [];
     let crashes = "";
-    if (options["coredump-upload"] && (result.signalCode !== null || newCores.length > 0)) {
+    if (
+      options["coredump-upload"] &&
+      (result.signalCode !== null || newCores.length > 0)
+    ) {
       // warn if the main PID crashed and we don't have a core
-      if (result.signalCode !== null && !newCores.some(c => c.endsWith(`${result.pid}.core`))) {
+      if (
+        result.signalCode !== null &&
+        !newCores.some(c => c.endsWith(`${result.pid}.core`))
+      ) {
         crashes += `main process killed by ${result.signalCode} but no core file found\n`;
       }
 
@@ -1286,7 +1458,8 @@ async function spawnBun(execPath, { args, cwd, timeout, env, stdout, stderr }) {
         // all tests (which would slow down CI a lot).
         await setTimeoutPromise(500);
         const response = await fetch(`http://localhost:${remapPort}/traces`);
-        if (!response.ok || response.status !== 200) throw new Error(`server responded with code ${response.status}`);
+        if (!response.ok || response.status !== 200)
+          throw new Error(`server responded with code ${response.status}`);
         const traces = await response.json();
         if (traces.length > 0) {
           result.ok = false;
@@ -1369,7 +1542,12 @@ async function spawnBunTest(execPath, testPath, opts = { cwd }) {
   const isReallyTest = isTestStrict(testPath) || absPath.includes("vendor");
   const args = opts["args"] ?? [];
 
-  const testArgs = ["test", ...args, `--timeout=${perTestTimeout}`, "--reporter=dots"];
+  const testArgs = [
+    "test",
+    ...args,
+    `--timeout=${perTestTimeout}`,
+    "--reporter=dots",
+  ];
 
   // This will be set if a JUnit file is generated
   let junitFilePath = null;
@@ -1395,13 +1573,20 @@ async function spawnBunTest(execPath, testPath, opts = { cwd }) {
     GITHUB_ACTIONS: "true", // always true so annotations are parsed
     ...opts["env"],
   };
-  if ((basename(execPath).includes("asan") || !isCI) && shouldValidateExceptions(relative(cwd, absPath))) {
+  if (
+    (basename(execPath).includes("asan") || !isCI) &&
+    shouldValidateExceptions(relative(cwd, absPath))
+  ) {
     env.BUN_JSC_validateExceptionChecks = "1";
     env.BUN_JSC_dumpSimulatedThrows = "1";
   }
-  if ((basename(execPath).includes("asan") || !isCI) && shouldValidateLeakSan(relative(cwd, absPath))) {
+  if (
+    (basename(execPath).includes("asan") || !isCI) &&
+    shouldValidateLeakSan(relative(cwd, absPath))
+  ) {
     env.BUN_DESTRUCT_VM_ON_EXIT = "1";
-    env.ASAN_OPTIONS = "allow_user_segv_handler=1:disable_coredump=0:detect_leaks=1:abort_on_error=1";
+    env.ASAN_OPTIONS =
+      "allow_user_segv_handler=1:disable_coredump=0:detect_leaks=1:abort_on_error=1";
     // prettier-ignore
     env.LSAN_OPTIONS = `malloc_context_size=100:print_suppressions=0:suppressions=${process.cwd()}/test/leaksan.supp`;
   }
@@ -1414,11 +1599,20 @@ async function spawnBunTest(execPath, testPath, opts = { cwd }) {
     stdout: options.stdout,
     stderr: options.stderr,
   });
-  let { tests, errors, stdout: stdoutPreview } = parseTestStdout(stdout, testPath);
+  let {
+    tests,
+    errors,
+    stdout: stdoutPreview,
+  } = parseTestStdout(stdout, testPath);
   if (crashes) stdoutPreview += crashes;
 
   // If we generated a JUnit file and we're on BuildKite, upload it immediately
-  if (junitFilePath && isReallyTest && isBuildkite && cliOptions["junit-upload"]) {
+  if (
+    junitFilePath &&
+    isReallyTest &&
+    isBuildkite &&
+    cliOptions["junit-upload"]
+  ) {
     // Give the file system a moment to finish writing the file
     if (existsSync(junitFilePath)) {
       addToJunitUploadQueue(junitFilePath);
@@ -1442,7 +1636,11 @@ async function spawnBunTest(execPath, testPath, opts = { cwd }) {
  * @returns {number}
  */
 function getTestTimeout(testPath) {
-  if (/integration|3rd_party|docker|bun-install-registry|v8|bundler_compile/i.test(testPath)) {
+  if (
+    /integration|3rd_party|docker|bun-install-registry|v8|bundler_compile/i.test(
+      testPath,
+    )
+  ) {
     return integrationTimeout;
   }
   return testTimeout;
@@ -1456,7 +1654,11 @@ function pipeTestStdout(io, chunk) {
   if (isGithubAction) {
     io.write(chunk.replace(/\:\:(?:end)?group\:\:.*(?:\r\n|\r|\n)/gim, ""));
   } else if (isBuildkite) {
-    io.write(chunk.replace(/(?:---|\+\+\+|~~~|\^\^\^) /gim, " ").replace(/\:\:.*(?:\r\n|\r|\n)/gim, ""));
+    io.write(
+      chunk
+        .replace(/(?:---|\+\+\+|~~~|\^\^\^) /gim, " ")
+        .replace(/\:\:.*(?:\r\n|\r|\n)/gim, ""),
+    );
   } else {
     io.write(chunk.replace(/\:\:.*(?:\r\n|\r|\n)/gim, ""));
   }
@@ -1488,7 +1690,11 @@ function parseTestStdout(stdout, testPath) {
     if (!string.startsWith("::")) {
       lines.push(chunk);
 
-      if (string.startsWith("✓") || string.startsWith("»") || string.startsWith("✎")) {
+      if (
+        string.startsWith("✓") ||
+        string.startsWith("»") ||
+        string.startsWith("✎")
+      ) {
         skipCount++;
       } else {
         // If there are more than 3 consecutive non-failing tests,
@@ -1547,7 +1753,9 @@ function parseTestStdout(stdout, testPath) {
 
       const eol = string.lastIndexOf(" [") || undefined;
       const test = string.substring(1 + emoji.length, eol);
-      const duration = eol ? string.substring(eol + 2, string.lastIndexOf("]")) : undefined;
+      const duration = eol
+        ? string.substring(eol + 2, string.lastIndexOf("]"))
+        : undefined;
 
       tests.push({
         url: getFileUrl(testPath),
@@ -1681,7 +1889,9 @@ function isTestStrict(path) {
  * @returns {boolean}
  */
 function isHidden(path) {
-  return /node_modules|node.js/.test(dirname(path)) || /^\./.test(basename(path));
+  return (
+    /node_modules|node.js/.test(dirname(path)) || /^\./.test(basename(path))
+  );
 }
 
 /**
@@ -1691,7 +1901,10 @@ function isHidden(path) {
 function getTests(cwd) {
   function* getFiles(cwd, path) {
     const dirname = join(cwd, path);
-    for (const entry of readdirSync(dirname, { encoding: "utf-8", withFileTypes: true })) {
+    for (const entry of readdirSync(dirname, {
+      encoding: "utf-8",
+      withFileTypes: true,
+    })) {
       const { name } = entry;
       const filename = join(path, name);
       if (isHidden(filename)) {
@@ -1761,17 +1974,34 @@ async function getVendorTests(cwd) {
 
   return Promise.all(
     relevantVendors.map(
-      async ({ package: name, repository, tag, testPath, testExtensions, testRunner, packageManager, skipTests }) => {
+      async ({
+        package: name,
+        repository,
+        tag,
+        testPath,
+        testExtensions,
+        testRunner,
+        packageManager,
+        skipTests,
+      }) => {
         const vendorPath = join(cwd, "vendor", name);
 
         if (!existsSync(vendorPath)) {
           const { ok, error } = await spawnSafe({
             command: "git",
-            args: ["clone", "--depth", "1", "--single-branch", repository, vendorPath],
+            args: [
+              "clone",
+              "--depth",
+              "1",
+              "--single-branch",
+              repository,
+              vendorPath,
+            ],
             timeout: testTimeout,
             cwd,
           });
-          if (!ok) throw new Error(`failed to git clone vendor '${name}': ${error}`);
+          if (!ok)
+            throw new Error(`failed to git clone vendor '${name}': ${error}`);
         }
 
         let { ok, error } = await spawnSafe({
@@ -1780,7 +2010,10 @@ async function getVendorTests(cwd) {
           timeout: testTimeout,
           cwd: vendorPath,
         });
-        if (!ok) throw new Error(`failed to fetch tag ${tag} for vendor '${name}': ${error}`);
+        if (!ok)
+          throw new Error(
+            `failed to fetch tag ${tag} for vendor '${name}': ${error}`,
+          );
 
         ({ ok, error } = await spawnSafe({
           command: "git",
@@ -1788,17 +2021,24 @@ async function getVendorTests(cwd) {
           timeout: testTimeout,
           cwd: vendorPath,
         }));
-        if (!ok) throw new Error(`failed to checkout tag ${tag} for vendor '${name}': ${error}`);
+        if (!ok)
+          throw new Error(
+            `failed to checkout tag ${tag} for vendor '${name}': ${error}`,
+          );
 
         const packageJsonPath = join(vendorPath, "package.json");
         if (!existsSync(packageJsonPath)) {
-          throw new Error(`Vendor '${name}' does not have a package.json: ${packageJsonPath}`);
+          throw new Error(
+            `Vendor '${name}' does not have a package.json: ${packageJsonPath}`,
+          );
         }
 
         const testPathPrefix = testPath || "test";
         const testParentPath = join(vendorPath, testPathPrefix);
         if (!existsSync(testParentPath)) {
-          throw new Error(`Vendor '${name}' does not have a test directory: ${testParentPath}`);
+          throw new Error(
+            `Vendor '${name}' does not have a test directory: ${testParentPath}`,
+          );
         }
 
         const isTest = path => {
@@ -1822,15 +2062,22 @@ async function getVendorTests(cwd) {
           return true;
         };
 
-        const testPaths = readdirSync(testParentPath, { encoding: "utf-8", recursive: true })
+        const testPaths = readdirSync(testParentPath, {
+          encoding: "utf-8",
+          recursive: true,
+        })
           .filter(filename =>
-            testExtensions ? testExtensions.some(ext => filename.endsWith(`.${ext}`)) : isTest(filename),
+            testExtensions
+              ? testExtensions.some(ext => filename.endsWith(`.${ext}`))
+              : isTest(filename),
           )
           .map(filename => join(testPathPrefix, filename))
           .filter(
             filename =>
               !filters?.length ||
-              filters.some(filter => join(vendorPath, filename).replace(/\\/g, "/").includes(filter)),
+              filters.some(filter =>
+                join(vendorPath, filename).replace(/\\/g, "/").includes(filter),
+              ),
           );
 
         return {
@@ -1874,15 +2121,28 @@ function getRelevantTests(cwd, testModifiers, testExpectations) {
 
   const includes = options["include"]?.flatMap(getFilter);
   if (includes?.length) {
-    availableTests.push(...tests.filter(testPath => includes.some(filter => isMatch(testPath, filter))));
-    !isQuiet && console.log("Including tests:", includes, availableTests.length, "/", tests.length);
+    availableTests.push(
+      ...tests.filter(testPath =>
+        includes.some(filter => isMatch(testPath, filter)),
+      ),
+    );
+    !isQuiet &&
+      console.log(
+        "Including tests:",
+        includes,
+        availableTests.length,
+        "/",
+        tests.length,
+      );
   } else {
     availableTests.push(...tests);
   }
 
   const excludes = options["exclude"]?.flatMap(getFilter);
   if (excludes?.length) {
-    const excludedTests = availableTests.filter(testPath => excludes.some(filter => isMatch(testPath, filter)));
+    const excludedTests = availableTests.filter(testPath =>
+      excludes.some(filter => isMatch(testPath, filter)),
+    );
     if (excludedTests.length) {
       for (const testPath of excludedTests) {
         const index = availableTests.indexOf(testPath);
@@ -1890,18 +2150,28 @@ function getRelevantTests(cwd, testModifiers, testExpectations) {
           availableTests.splice(index, 1);
         }
       }
-      !isQuiet && console.log("Excluding tests:", excludes, excludedTests.length, "/", availableTests.length);
+      !isQuiet &&
+        console.log(
+          "Excluding tests:",
+          excludes,
+          excludedTests.length,
+          "/",
+          availableTests.length,
+        );
     }
   }
 
   const skipExpectations = testExpectations
     .filter(
       ({ modifiers, expectations }) =>
-        !modifiers?.length || testModifiers.some(modifier => modifiers?.includes(modifier)),
+        !modifiers?.length ||
+        testModifiers.some(modifier => modifiers?.includes(modifier)),
     )
     .map(({ filename }) => filename.replace("test/", ""));
   if (skipExpectations.length) {
-    const skippedTests = availableTests.filter(testPath => skipExpectations.some(filter => isMatch(testPath, filter)));
+    const skippedTests = availableTests.filter(testPath =>
+      skipExpectations.some(filter => isMatch(testPath, filter)),
+    );
     if (skippedTests.length) {
       for (const testPath of skippedTests) {
         const index = availableTests.indexOf(testPath);
@@ -1909,15 +2179,32 @@ function getRelevantTests(cwd, testModifiers, testExpectations) {
           availableTests.splice(index, 1);
         }
       }
-      !isQuiet && console.log("Skipping tests:", skipExpectations, skippedTests.length, "/", availableTests.length);
+      !isQuiet &&
+        console.log(
+          "Skipping tests:",
+          skipExpectations,
+          skippedTests.length,
+          "/",
+          availableTests.length,
+        );
     }
   }
 
   const shardId = parseInt(options["shard"]);
   const maxShards = parseInt(options["max-shards"]);
   if (filters?.length) {
-    filteredTests.push(...availableTests.filter(testPath => filters.some(filter => isMatch(testPath, filter))));
-    !isQuiet && console.log("Filtering tests:", filteredTests.length, "/", availableTests.length);
+    filteredTests.push(
+      ...availableTests.filter(testPath =>
+        filters.some(filter => isMatch(testPath, filter)),
+      ),
+    );
+    !isQuiet &&
+      console.log(
+        "Filtering tests:",
+        filteredTests.length,
+        "/",
+        availableTests.length,
+      );
   } else if (options["smoke"] !== undefined) {
     const smokePercent = parseFloat(options["smoke"]) || 0.01;
     const smokeCount = Math.ceil(availableTests.length * smokePercent);
@@ -1927,7 +2214,13 @@ function getRelevantTests(cwd, testModifiers, testExpectations) {
       smokeTests.add(availableTests[randomIndex]);
     }
     filteredTests.push(...Array.from(smokeTests));
-    !isQuiet && console.log("Smoking tests:", filteredTests.length, "/", availableTests.length);
+    !isQuiet &&
+      console.log(
+        "Smoking tests:",
+        filteredTests.length,
+        "/",
+        availableTests.length,
+      );
   } else if (maxShards > 1) {
     for (let i = 0; i < availableTests.length; i++) {
       if (i % maxShards === shardId) {
@@ -1981,14 +2274,18 @@ function getExecPath(bunExe) {
   let execPath;
   let error;
   try {
-    const { error, stdout } = spawnSync(bunExe, ["--print", "process.argv[0]"], {
-      encoding: "utf-8",
-      timeout: spawnTimeout,
-      env: {
-        PATH: process.env.PATH,
-        BUN_DEBUG_QUIET_LOGS: 1,
+    const { error, stdout } = spawnSync(
+      bunExe,
+      ["--print", "process.argv[0]"],
+      {
+        encoding: "utf-8",
+        timeout: spawnTimeout,
+        env: {
+          PATH: process.env.PATH,
+          BUN_DEBUG_QUIET_LOGS: 1,
+        },
       },
-    });
+    );
     if (error) {
       throw error;
     }
@@ -2054,20 +2351,31 @@ async function getExecPathFromBuildKite(target, buildId) {
   }
 
   if (!zipPath) {
-    throw new Error(`Could not find ${target}.zip from Buildkite: ${releasePath}`);
+    throw new Error(
+      `Could not find ${target}.zip from Buildkite: ${releasePath}`,
+    );
   }
 
   await unzip(zipPath, releasePath);
 
-  const releaseFiles = readdirSync(releasePath, { recursive: true, encoding: "utf-8" });
+  const releaseFiles = readdirSync(releasePath, {
+    recursive: true,
+    encoding: "utf-8",
+  });
   for (const entry of releaseFiles) {
     const execPath = join(releasePath, entry);
-    if (/bun(?:-[a-z]+)?(?:\.exe)?$/i.test(entry) && statSync(execPath).isFile()) {
+    if (
+      /bun(?:-[a-z]+)?(?:\.exe)?$/i.test(entry) &&
+      statSync(execPath).isFile()
+    ) {
       return execPath;
     }
   }
 
-  console.warn(`Found ${releaseFiles.length} files in ${releasePath}:`, releaseFiles);
+  console.warn(
+    `Found ${releaseFiles.length} files in ${releasePath}:`,
+    releaseFiles,
+  );
   throw new Error(`Could not find executable from BuildKite: ${releasePath}`);
 }
 
@@ -2123,7 +2431,9 @@ function formatTestToMarkdown(result, concise, retries) {
   const results = Array.isArray(result) ? result : [result];
   const buildLabel = getTestLabel();
   const buildUrl = getBuildUrl();
-  const platform = buildUrl ? `<a href="${buildUrl}">${buildLabel}</a>` : buildLabel;
+  const platform = buildUrl
+    ? `<a href="${buildUrl}">${buildLabel}</a>`
+    : buildLabel;
 
   let markdown = "";
   for (const { testPath, ok, tests, error, stdoutPreview: stdout } of results) {
@@ -2217,12 +2527,16 @@ function listArtifactsFromBuildKite(glob, step) {
   if (step) {
     args.push("--step", step);
   }
-  const { error, status, signal, stdout, stderr } = spawnSync("buildkite-agent", args, {
-    stdio: ["ignore", "ignore", "ignore"],
-    encoding: "utf-8",
-    timeout: spawnTimeout,
-    cwd,
-  });
+  const { error, status, signal, stdout, stderr } = spawnSync(
+    "buildkite-agent",
+    args,
+    {
+      stdio: ["ignore", "ignore", "ignore"],
+      encoding: "utf-8",
+      timeout: spawnTimeout,
+      cwd,
+    },
+  );
   if (status === 0) {
     return stdout?.split("\n").map(line => line.trim()) || [];
   }
@@ -2281,7 +2595,10 @@ function stripAnsi(string) {
  * @returns {string}
  */
 function escapeGitHubAction(string) {
-  return string.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  return string
+    .replace(/%/g, "%25")
+    .replace(/\r/g, "%0D")
+    .replace(/\n/g, "%0A");
 }
 
 /**
@@ -2289,7 +2606,10 @@ function escapeGitHubAction(string) {
  * @returns {string}
  */
 function unescapeGitHubAction(string) {
-  return string.replace(/%25/g, "%").replace(/%0D/g, "\r").replace(/%0A/g, "\n");
+  return string
+    .replace(/%25/g, "%")
+    .replace(/%0D/g, "\r")
+    .replace(/%0A/g, "\n");
 }
 
 /**
@@ -2429,7 +2749,16 @@ function generateJUnitReport(outfile, results) {
   const testSuites = new Map();
 
   for (const result of results) {
-    const { testPath, ok, status, error, tests, stdoutPreview, stdout, duration = 0 } = result;
+    const {
+      testPath,
+      ok,
+      status,
+      error,
+      tests,
+      stdoutPreview,
+      stdout,
+      duration = 0,
+    } = result;
 
     if (!testSuites.has(testPath)) {
       testSuites.set(testPath, {
@@ -2450,7 +2779,12 @@ function generateJUnitReport(outfile, results) {
     // For test suites with granular test information
     if (tests.length > 0) {
       for (const test of tests) {
-        const { test: testName, status: testStatus, duration: testDuration = 0, errors: testErrors = [] } = test;
+        const {
+          test: testName,
+          status: testStatus,
+          duration: testDuration = 0,
+          errors: testErrors = [],
+        } = test;
 
         suite.time += testDuration / 1000; // Convert to seconds
 
@@ -2494,7 +2828,8 @@ function generateJUnitReport(outfile, results) {
         } else if (testStatus === "skip" || testStatus === "todo") {
           suite.skipped++;
           testCase.skipped = {
-            message: testStatus === "skip" ? "Test skipped" : "Test marked as todo",
+            message:
+              testStatus === "skip" ? "Test skipped" : "Test marked as todo",
           };
         }
 
@@ -2597,7 +2932,10 @@ async function drainJunitUploadQueue() {
  */
 async function uploadJUnitToBuildKite(junitFile) {
   const fileName = basename(junitFile);
-  !isQuiet && console.log(`Uploading JUnit file "${fileName}" to BuildKite Test Analytics...`);
+  !isQuiet &&
+    console.log(
+      `Uploading JUnit file "${fileName}" to BuildKite Test Analytics...`,
+    );
 
   // Get BuildKite environment variables for run_env fields
   const buildId = getEnv("BUILDKITE_BUILD_ID", false);
@@ -2647,7 +2985,10 @@ async function uploadJUnitToBuildKite(junitFile) {
     });
 
     if (response.ok) {
-      !isQuiet && console.log(`JUnit file "${fileName}" successfully uploaded to BuildKite Test Analytics`);
+      !isQuiet &&
+        console.log(
+          `JUnit file "${fileName}" successfully uploaded to BuildKite Test Analytics`,
+        );
 
       try {
         // Consume the body to ensure Node releases the memory.
@@ -2659,7 +3000,10 @@ async function uploadJUnitToBuildKite(junitFile) {
       return true;
     } else {
       const errorText = await response.text();
-      console.error(`Failed to upload JUnit file "${fileName}": HTTP ${response.status}`, errorText);
+      console.error(
+        `Failed to upload JUnit file "${fileName}": HTTP ${response.status}`,
+        errorText,
+      );
       return false;
     }
   } catch (error) {
@@ -2708,7 +3052,10 @@ export async function main() {
     // limit, non-PR build). [].every() is vacuously true, which would skip the
     // entire suite and exit 0 — so require at least one file before treating
     // the change set as docs-only.
-    if (allFiles.length > 0 && allFiles.every(filename => filename.startsWith("docs/"))) {
+    if (
+      allFiles.length > 0 &&
+      allFiles.every(filename => filename.startsWith("docs/"))
+    ) {
       doRunTests = false;
     }
   }
@@ -2732,7 +3079,9 @@ export async function main() {
     if (!waitForUser) {
       startGroup("Summary");
       if (typeof userCount === "number") {
-        console.warn(`Found ${userCount} users logged in, keeping the runner alive until logout...`);
+        console.warn(
+          `Found ${userCount} users logged in, keeping the runner alive until logout...`,
+        );
       } else {
         console.warn(userCount);
       }

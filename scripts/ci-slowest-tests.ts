@@ -36,21 +36,29 @@ if (!TOKEN) {
 // we only need the timing data.
 if (!BUILD) {
   console.error("no build given, finding a recent merged-PR build...");
-  const prs = await $`gh pr list --state merged --limit 10 --json number,headRefName`.json();
+  const prs =
+    await $`gh pr list --state merged --limit 10 --json number,headRefName`.json();
   for (const pr of prs) {
     const builds = await $`bk build list --branch ${pr.headRefName}`
       .quiet()
       .json()
       .catch(() => []);
-    const done = builds.find((b: any) => b.finished_at && b.state !== "canceled" && b.state !== "running");
+    const done = builds.find(
+      (b: any) =>
+        b.finished_at && b.state !== "canceled" && b.state !== "running",
+    );
     if (done) {
       BUILD = String(done.number);
-      console.error(`  using build #${BUILD} (PR #${pr.number}, ${pr.headRefName}, state=${done.state})`);
+      console.error(
+        `  using build #${BUILD} (PR #${pr.number}, ${pr.headRefName}, state=${done.state})`,
+      );
       break;
     }
   }
   if (!BUILD) {
-    console.error("error: no finished build found among the last 10 merged PRs");
+    console.error(
+      "error: no finished build found among the last 10 merged PRs",
+    );
     process.exit(1);
   }
 }
@@ -61,12 +69,17 @@ mkdirSync(CACHE, { recursive: true });
 type Job = { id: string; name: string; raw_log_url: string; retried?: boolean };
 
 const buildJson = JSON.parse(
-  await new Response(spawn({ cmd: ["bk", "build", "view", BUILD], stdout: "pipe" }).stdout).text(),
+  await new Response(
+    spawn({ cmd: ["bk", "build", "view", BUILD], stdout: "pipe" }).stdout,
+  ).text(),
 );
 const jobs: Job[] = buildJson.jobs.filter(
-  (j: any) => j.name && j.raw_log_url && j.name.includes("test-bun") && !j.retried,
+  (j: any) =>
+    j.name && j.raw_log_url && j.name.includes("test-bun") && !j.retried,
 );
-console.error(`build #${BUILD}: ${jobs.length} test-bun jobs across ${new Set(jobs.map(j => j.name)).size} platforms`);
+console.error(
+  `build #${BUILD}: ${jobs.length} test-bun jobs across ${new Set(jobs.map(j => j.name)).size} platforms`,
+);
 
 const platOf = (name: string) =>
   name
@@ -102,7 +115,9 @@ function parseLog(text: string): Map<string, number> {
 async function fetchLog(job: Job): Promise<string> {
   const path = join(CACHE, `${job.id}.log`);
   if (existsSync(path)) return readFileSync(path, "utf8");
-  const res = await fetch(job.raw_log_url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const res = await fetch(job.raw_log_url, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
   if (!res.ok) throw new Error(`${res.status} ${job.raw_log_url}`);
   const out = await res.text();
   writeFileSync(path, out);
@@ -123,7 +138,8 @@ async function worker() {
       const plat = platOf(job.name);
       for (const [file, ms] of parseLog(log)) {
         let a = agg.get(file);
-        if (!a) agg.set(file, (a = { maxMs: 0, maxPlat: "", perPlat: new Map() }));
+        if (!a)
+          agg.set(file, (a = { maxMs: 0, maxPlat: "", perPlat: new Map() }));
         const total = (a.perPlat.get(plat) ?? 0) + ms;
         a.perPlat.set(plat, total);
         if (total > a.maxMs) {
@@ -135,7 +151,8 @@ async function worker() {
       console.error(`  failed ${job.id}: ${(e as Error).message}`);
     }
     done++;
-    if (done % 20 === 0 || done === jobs.length) console.error(`  ${done}/${jobs.length} logs`);
+    if (done % 20 === 0 || done === jobs.length)
+      console.error(`  ${done}/${jobs.length} logs`);
   }
 }
 await Promise.all(Array.from({ length: 16 }, worker));
@@ -149,13 +166,21 @@ const sorted = [...agg.entries()]
   .sort((a, b) => b.maxMs - a.maxMs)
   .slice(0, TOP_N);
 
-console.error(`${agg.size} unique entries, ${sorted.length} test files after filtering`);
+console.error(
+  `${agg.size} unique entries, ${sorted.length} test files after filtering`,
+);
 console.error(`logs cached at ${CACHE}`);
 
 if (json) {
-  console.log(JSON.stringify({ build: BUILD, count: agg.size, top: sorted }, null, 2));
+  console.log(
+    JSON.stringify({ build: BUILD, count: agg.size, top: sorted }, null, 2),
+  );
 } else {
   console.log(`rank\tseconds\tfile\tslowest_platform`);
-  sorted.forEach((t, i) => console.log(`${i + 1}\t${(t.maxMs / 1000).toFixed(2)}\t${t.file}\t${t.maxPlat}`));
+  sorted.forEach((t, i) =>
+    console.log(
+      `${i + 1}\t${(t.maxMs / 1000).toFixed(2)}\t${t.file}\t${t.maxPlat}`,
+    ),
+  );
 }
 process.exit(0);

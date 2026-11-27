@@ -244,7 +244,7 @@ pub fn computeSignatureSize(sig_off: u64) usize {
             return ((super_blob_header_size + blob_index_size) + code_dir_length);
     }
 
-pub fn sign(self: *MachoSigner, writer: *std.Io.Writer) !void {
+pub fn sign(self: *MachoSigner, writer: *std.Io.Writer) !usize {
             const PAGE_SIZE: usize = SIGNATURE_PAGE_SIZE;
             const HASH_SIZE: usize = SIGNATURE_HASH_SIZE;
             const total_pages = (((self.sig_off + PAGE_SIZE) - 1) / PAGE_SIZE);
@@ -302,16 +302,14 @@ pub fn sign(self: *MachoSigner, writer: *std.Io.Writer) !void {
                 remaining = remaining[PAGE_SIZE..];
             }
             if ((remaining.len > 0)) {
-                var last_page: [4096]u8 = @as([4096]u8, @splat(@as(u8, 0)));
-                _ = &last_page;
-                _ = @memcpy(last_page[0..remaining.len], remaining);
                 var digest: bun.sha.SHA256.Digest = undefined;
                 _ = &digest;
-                _ = bun.sha.SHA256.hash((&last_page), (&digest), null);
+                _ = bun.sha.SHA256.hash(remaining, (&digest), null);
                 _ = try sig_writer.writeAll((&digest));
             }
             self.data.items.len = (if (comptime @typeInfo(@TypeOf((self.linkedit_seg.fileoff + self.linkedit_seg.filesize))) == .@"enum") cp_cast_int(usize, @intFromEnum((self.linkedit_seg.fileoff + self.linkedit_seg.filesize))) else cp_cast_int(usize, (self.linkedit_seg.fileoff + self.linkedit_seg.filesize)));
             _ = try writer.writeAll(self.data.items);
+            return self.data.items.len;
     }
 };
 
@@ -619,7 +617,7 @@ pub fn validateSegments(self: *MachoFile) !void {
             }
     }
 
-pub fn buildAndSign(self: *MachoFile, writer: *std.Io.Writer) !void {
+pub fn buildAndSign(self: *MachoFile, writer: *std.Io.Writer) !usize {
             if (((self.header.cputype == macho.CPU_TYPE_ARM64) and (!bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()))) {
                 var out_data_guard = DeinitGuard(std.array_list.Managed(u8)){ .val = std.array_list.Managed(u8).init(self.allocator) };
                 _ = &out_data_guard;
@@ -630,9 +628,10 @@ pub fn buildAndSign(self: *MachoFile, writer: *std.Io.Writer) !void {
                 _ = &signer_guard;
                 var __signer_guard_moved = false; _ = &__signer_guard_moved;
                 defer if (!__signer_guard_moved) { __signer_guard_moved = true; const __T = @TypeOf(signer_guard); if (@typeInfo(__T) == .optional) { if (signer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { signer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = signer_guard; _drop_val.__cp_deinit(); } };
-                _ = try signer_guard.val.sign(writer);
+                return try signer_guard.val.sign(writer);
             } else {
                 _ = try self.build(writer);
+                return self.data.items.len;
             }
     }
 };

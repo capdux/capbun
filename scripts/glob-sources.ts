@@ -34,7 +34,10 @@ interface SourcePattern {
 const patterns = {
   /** `packages/bun-error/*` — error overlay page */
   bunError: {
-    paths: ["packages/bun-error/*.{json,ts,tsx,css}", "packages/bun-error/img/*"],
+    paths: [
+      "packages/bun-error/*.{json,ts,tsx,css}",
+      "packages/bun-error/img/*",
+    ],
   },
   /** `src/node-fallbacks/*.js` */
   nodeFallbacks: {
@@ -46,7 +49,10 @@ const patterns = {
   },
   /** built-in modules bundled at build time */
   js: {
-    paths: ["src/js/**/*.{js,ts}", "src/install/PackageManager/scanner-entry.ts"],
+    paths: [
+      "src/js/**/*.{js,ts}",
+      "src/install/PackageManager/scanner-entry.ts",
+    ],
   },
   /** the codegen scripts themselves */
   jsCodegen: {
@@ -123,7 +129,10 @@ export type Sources = { [K in keyof typeof patterns]: string[] };
 export function globAllSources(): Sources {
   const result = {} as Sources;
 
-  for (const [field, spec] of Object.entries(patterns) as [keyof Sources, SourcePattern][]) {
+  for (const [field, spec] of Object.entries(patterns) as [
+    keyof Sources,
+    SourcePattern,
+  ][]) {
     const excludes = new Set((spec.exclude ?? []).map(normalize));
     const files: string[] = [];
     for (const pattern of spec.paths) {
@@ -159,7 +168,8 @@ if (process.argv[1] === import.meta.filename) {
   const arg = process.argv[2];
   const sources = globAllSources();
   const print = (list: string[]) => {
-    for (const abs of list) console.log(relative(root, abs).replaceAll("\\", "/"));
+    for (const abs of list)
+      console.log(relative(root, abs).replaceAll("\\", "/"));
   };
 
   if (arg === "--all") {
@@ -167,7 +177,9 @@ if (process.argv[1] === import.meta.filename) {
   } else if (arg && arg in sources) {
     print(sources[arg as keyof Sources]);
   } else {
-    const msg = arg ? `unknown field '${arg}'` : "usage: bun scripts/glob-sources.ts <field>|--all";
+    const msg = arg
+      ? `unknown field '${arg}'`
+      : "usage: bun scripts/glob-sources.ts <field>|--all";
     console.error(`${msg}\nfields: ${Object.keys(sources).join(", ")}`);
     process.exit(1);
   }

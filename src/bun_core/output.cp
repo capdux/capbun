@@ -892,15 +892,9 @@ fn scopedEvaluateIsVisible(
     }
 }
 
-type IoWriterPtr = *std.Io.Writer;
-
 fn scopedLogImpl(
     comptime tagname: []const u8,
     really_disable: *std.atomic.Value(bool),
-    out_set: *bool,
-    out: *IoWriterPtr,
-    buffered_writer: *File.QuietWriter.Adapter,
-    buffer: *[4096]u8,
     lock: *bun.Mutex,
     is_visible_fn: *const fn () bool,
     comptime fmt: string,
@@ -911,10 +905,6 @@ fn scopedLogImpl(
         return scopedLogImpl(
             tagname,
             really_disable,
-            out_set,
-            out,
-            buffered_writer,
-            buffer,
             lock,
             is_visible_fn,
             comptime std.fmt.comptimePrint("{s}\n", [fmt]),
@@ -937,17 +927,14 @@ fn scopedLogImpl(
     if (!is_visible_fn())
         return;
 
-    if (!out_set.*) {
-        buffered_writer.* = scopedWriter().adaptToNewApi(buffer);
-        out.* = *buffered_writer.new_interface;
-        out_set.* = true;
-    }
     lock.lock();
     const _unlock_guard = UnlockGuard<bun.Mutex>{ lock: lock };
 
     const LT = @TypeOf(args);
     const log_args = if (comptime LT == void) EmptyArgs{} else if (comptime @typeInfo(LT) == .pointer) args.* else args;
-    const w = out.*;
+    let aw = std.Io.Writer.Allocating.init(bun.default_allocator);
+    defer aw.deinit();
+    const w = &aw.writer;
     const prefix_fmt = comptime std.fmt.comptimePrint("<r><d>[{s}]<r> {s}", [tagname, fmt]);
     if (enable_ansi_colors_stdout && source_set && scopedWriter().context.handle == rawWriter().handle) {
         w.print(comptime prettyFmt(prefix_fmt, true), log_args) catch {
@@ -960,7 +947,7 @@ fn scopedLogImpl(
             return;
         };
     }
-    w.flush() catch {
+    scopedWriter().writeAll(aw.written()) catch {
         really_disable.store(true, .monotonic);
         return;
     };
@@ -977,10 +964,6 @@ fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility): 
     }
 
     return struct {
-        static let buffer: [4096]u8 = undefined;
-        static let buffered_writer: File.QuietWriter.Adapter = undefined;
-        static let out: *std.Io.Writer = undefined;
-        static let out_set: bool = false;
         static let really_disable: std.atomic.Value(bool) = std.atomic.Value(bool).init(visibility == .hidden);
 
         static let lock: bun.Mutex = bun.Mutex{};
@@ -997,7 +980,7 @@ fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility): 
         }
 
         static fn log(comptime fmt: string, args: anytype) {
-            scopedLogImpl(tagname, &really_disable, &out_set, &out, &buffered_writer, &buffer, &lock, isVisible, fmt, args);
+            scopedLogImpl(tagname, &really_disable, &lock, isVisible, fmt, args);
         }
     };
 }

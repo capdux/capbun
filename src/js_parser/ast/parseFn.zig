@@ -148,7 +148,7 @@ else => {
                 if ((opts.is_typescript_declare or func.flags.contains(.is_forward_declaration))) {
                     _ = p.popAndDiscardScope(scopeIndex);
                     if (hasIfScope) {
-                        _ = p.popAndDiscardScope(ifStmtScopeIndex);
+                        _ = p.popScope();
                     }
                     if (((opts.is_typescript_declare and opts.is_namespace_scope) and opts.is_export)) {
                         p.has_non_local_export_declare_inside_namespace = true;

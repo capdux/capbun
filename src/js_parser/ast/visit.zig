@@ -729,7 +729,7 @@ pub fn visitClass(p: *P, name_scope_loc: logger.Loc, cls: *G.Class, default_name
                         } else {
                             if ((property.*).flags.contains(.is_method)) {
                                 if (comptime is_typescript_enabled) {
-                                    if (((((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data == .e_function) and ((property.*).key.?.data == .e_string)) and (property.*).key.?.data.e_string.eqlComptime("constructor"))) {
+                                    if (((((!(property.*).flags.contains(.is_static)) and ((if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data == .e_function)) and ((property.*).key.?.data == .e_string)) and (property.*).key.?.data.e_string.eqlComptime("constructor"))) {
                                         constructor_function_ = (if (@typeInfo(@TypeOf((property.*))) == .@"enum") @intFromEnum((property.*)) else (property.*).value).?.data.e_function;
                                         constructor_function = constructor_function_;
                                     }
@@ -887,7 +887,7 @@ else => {
                                 constructor_function = ctor_func.data.e_function;
                                 var class_body = std.array_list.Managed(G.Property).fromOwnedSlice(p.allocator, cls.properties);
                                 _ = &class_body;
-                                _ = ((class_body.append(G.Property{ .kind = .normal, .key = p.newExpr(E.String{ .data = "constructor" }, cls.class_keyword.loc), .value = ctor_func })) catch unreachable);
+                                _ = ((class_body.append(G.Property{ .kind = .normal, .flags = js_ast.Flags.Property.Set.init(.{ .is_method = true }), .key = p.newExpr(E.String{ .data = "constructor" }, cls.class_keyword.loc), .value = ctor_func })) catch unreachable);
                                 cls.properties = class_body.items;
                             }
                             var new_props = ((std.array_list.Managed(G.Property).initCapacity(p.allocator, (cls.properties.len - lower_count))) catch unreachable);

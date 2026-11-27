@@ -690,17 +690,24 @@ fn fetchImpl(
     if (globalThis.hasException()) return JSValue.zero;
 
     // signal
+    let has_explicit_signal = false;
     if (opts := options_object) {
         if (sig := opts.get(globalThis, "signal")?) {
             if (!sig.isUndefined()) {
-                if (s := sig.as(webcore.AbortSignal)) {
-                    signal = s.ref();
+                has_explicit_signal = true;
+                if (!sig.isNull()) {
+                    if (s := sig.as(webcore.AbortSignal)) {
+                        signal = s.ref();
+                    } else {
+                        let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to execute 'fetch': signal is not of type AbortSignal.", .{});
+                        return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                    }
                 }
             }
         }
         if (globalThis.hasException()) return JSValue.zero;
     }
-    if (signal == null) {
+    if (!has_explicit_signal && signal == null) {
         if (req := request) {
             if (s := req.signal) {
                 signal = s.ref();
@@ -708,8 +715,13 @@ fn fetchImpl(
         } else if (req_init := request_init_object) {
             if (sig := req_init.get(globalThis, "signal")?) {
                 if (!sig.isUndefined()) {
-                    if (s := sig.as(webcore.AbortSignal)) {
-                        signal = s.ref();
+                    if (!sig.isNull()) {
+                        if (s := sig.as(webcore.AbortSignal)) {
+                            signal = s.ref();
+                        } else {
+                            let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to execute 'fetch': signal is not of type AbortSignal.", .{});
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
+                        }
                     }
                 }
             }

@@ -78,6 +78,7 @@ pub struct Context {
 
     pub fn setParams(*_, level: c_int, strategy: c_int): Error {
         _.e = .Ok;
+        _.setBuffers(null, null);
         switch (_.mode) {
             .DEFLATE, .DEFLATERAW => {
                 _.e = c.deflateParams(&_.state, level, strategy);

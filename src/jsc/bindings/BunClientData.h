@@ -29,6 +29,10 @@ class DOMWrapperWorld;
 namespace Zig {
 class GlobalObject;
 }
+namespace Bun {
+class StrongRootBlock;
+struct StrongRootBlockNode;
+}
 
 namespace WebCore {
 using namespace JSC;
@@ -65,6 +69,7 @@ public:
     JSC::IsoHeapCellType m_heapCellTypeForNapiHandleScopeImpl;
     JSC::IsoHeapCellType m_heapCellTypeForBakeGlobalObject;
     JSC::IsoHeapCellType m_heapCellTypeForNativePromiseContext;
+    JSC::IsoHeapCellType m_heapCellTypeForStrongRootBlock;
     // JSC::IsoHeapCellType m_heapCellTypeForGeneratedClass;
 
 private:
@@ -121,6 +126,8 @@ public:
 
     void* bunVM;
     Bun::JSCTaskScheduler deferredWorkTimer;
+    Bun::StrongRootBlockNode* strongRootBlockHead { nullptr };
+    JSC::Structure* strongRootBlockStructure { nullptr };
 
     // Backing storage for Bun::IsolatedModuleCache (see IsolatedModuleCache.h).
     // All access should go through that class. Stored as the JSC base type to

@@ -617,10 +617,6 @@ pub struct LiveWorkers {
         }
 
         vm.preload = _.preloads;
-        // dispatchOnline fires the parent-side 'open' event and flips the C++
-        // state to Running. Placed before resolving/loading the entry point so
-        // 'open' precedes any synchronous postMessage or entry-resolution error.
-        WebWorker__dispatchOnline(_.cpp_worker, vm.global);
 
         // Resolve the entry point on the worker thread (the parent only stored the
         // raw specifier). The returned slice is BORROWED — every exit from spin()
@@ -662,12 +658,17 @@ pub struct LiveWorkers {
                 vm.exit_handler.exit_code = 1;
                 _.shutdown();
             }
+        } else if (promise.status() == .pending) {
+            if (vm.exit_handler.exit_code == 0) {
+                vm.exit_handler.exit_code = 13;
+            }
         } else {
             * = promise.result(vm.jsc_vm);
         }
 
         _.flushLogs(vm);
         log("[{d}] event loop start", .{ _.execution_context_id });
+        WebWorker__dispatchOnline(_.cpp_worker, vm.global);
         WebWorker__fireEarlyMessages(_.cpp_worker, vm.global);
         _.setStatus(.running);
 

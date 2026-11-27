@@ -66,7 +66,10 @@ const SIMD_ARM64 = [
 
 // `#cmakedefine X` → `#define X` / comment, configure_file-style. We resolve
 // the handful of probes we know per target instead of running cmake.
-const cmakedefine = (truthy: boolean): [string, string] => ["#cmakedefine", truthy ? "#define" : "// #undef"];
+const cmakedefine = (truthy: boolean): [string, string] => [
+  "#cmakedefine",
+  truthy ? "#define" : "// #undef",
+];
 
 export const libjpegTurbo: Dependency = {
   name: "libjpeg-turbo",
@@ -78,7 +81,10 @@ export const libjpegTurbo: Dependency = {
     commit: LIBJPEG_TURBO_COMMIT,
   }),
 
-  patches: ["patches/libjpeg-turbo/8bit-only.patch", "patches/libjpeg-turbo/jbun_stubs.c"],
+  patches: [
+    "patches/libjpeg-turbo/8bit-only.patch",
+    "patches/libjpeg-turbo/jbun_stubs.c",
+  ],
 
   build: cfg => {
     const simd = cfg.arm64; // x64 NASM path TODO
@@ -111,7 +117,10 @@ export const libjpegTurbo: Dependency = {
             ["@VERSION@", VERSION],
             ["@LIBJPEG_TURBO_VERSION_NUMBER@", "3001004"],
             withSimd,
-            ["#cmakedefine RIGHT_SHIFT_IS_UNSIGNED 1", "/* #undef RIGHT_SHIFT_IS_UNSIGNED */"],
+            [
+              "#cmakedefine RIGHT_SHIFT_IS_UNSIGNED 1",
+              "/* #undef RIGHT_SHIFT_IS_UNSIGNED */",
+            ],
             cmakedefine(true), // C_/D_ARITH_CODING_SUPPORTED
           ],
         },
@@ -119,25 +128,45 @@ export const libjpegTurbo: Dependency = {
           from: "src/jconfigint.h.in",
           replace: [
             ["@BUILD@", "bun"],
-            ["@HIDDEN@", cfg.windows ? "" : '__attribute__((visibility("hidden")))'],
-            ["@INLINE@", cfg.windows ? "__forceinline" : "inline __attribute__((always_inline))"],
+            [
+              "@HIDDEN@",
+              cfg.windows ? "" : '__attribute__((visibility("hidden")))',
+            ],
+            [
+              "@INLINE@",
+              cfg.windows
+                ? "__forceinline"
+                : "inline __attribute__((always_inline))",
+            ],
             ["@THREAD_LOCAL@", cfg.windows ? "__declspec(thread)" : "__thread"],
             ["@CMAKE_PROJECT_NAME@", "libjpeg-turbo"],
             ["@VERSION@", VERSION],
             ["@SIZE_T@", "8"],
             withSimd,
-            ["#cmakedefine HAVE_BUILTIN_CTZL", cfg.windows ? "/* */" : "#define HAVE_BUILTIN_CTZL"],
-            ["#cmakedefine HAVE_INTRIN_H", cfg.windows ? "#define HAVE_INTRIN_H" : "/* */"],
+            [
+              "#cmakedefine HAVE_BUILTIN_CTZL",
+              cfg.windows ? "/* */" : "#define HAVE_BUILTIN_CTZL",
+            ],
+            [
+              "#cmakedefine HAVE_INTRIN_H",
+              cfg.windows ? "#define HAVE_INTRIN_H" : "/* */",
+            ],
             cmakedefine(true), // C_/D_ARITH_CODING_SUPPORTED
           ],
         },
         // jversion.h.in's only token is @COPYRIGHT_YEAR@ for the cjpeg banner.
-        "jversion.h": { from: "src/jversion.h.in", replace: [["@COPYRIGHT_YEAR@", "2025"]] },
+        "jversion.h": {
+          from: "src/jversion.h.in",
+          replace: [["@COPYRIGHT_YEAR@", "2025"]],
+        },
         ...(cfg.arm64
           ? {
               // All three vld1_* probes pass on every clang we ship (and are the
               // upstream gate for NEON_INTRINSICS=1), so resolve them all on.
-              "neon-compat.h": { from: "simd/arm/neon-compat.h.in", replace: [["#cmakedefine", "#define"]] },
+              "neon-compat.h": {
+                from: "simd/arm/neon-compat.h.in",
+                replace: [["#cmakedefine", "#define"]],
+              },
             }
           : {}),
       },

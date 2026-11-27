@@ -523,7 +523,7 @@ fn start(other_vm: *VirtualMachine) {
         vm.allocator = arena_.allocator();
         vm.@"arena" = &arena_;
 
-        vm.transpiler.configureDefines() catch @panic("Failed to configure defines");
+        env_loader.loadProcess() catch @panic("Failed to load process env");
         vm.is_main_thread = false;
         vm.eventLoop().ensureWaker();
 

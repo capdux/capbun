@@ -402,7 +402,10 @@ pub fn decodeIPCMessage(data: []const u8, global: *jsc.JSGlobalObject) IPCDecode
 return DecodeIPCMessageResult{ .bytes_consumed = header_length, .message = DecodedIPCMessage{ .version = message_len } };
 },
 .SerializedMessage => {
-if (((data.len - header_length) < message_len)) {
+if ((message_len > (std.math.maxInt(u32) - header_length))) {
+                return error.InvalidFormat;
+            }
+            if (((data.len - header_length) < message_len)) {
                 _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                 return error.NotEnoughBytes;
             }
@@ -411,7 +414,10 @@ if (((data.len - header_length) < message_len)) {
             return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .data = deserialized } };
 },
 .SerializedInternalMessage => {
-if (((data.len - header_length) < message_len)) {
+if ((message_len > (std.math.maxInt(u32) - header_length))) {
+                return error.InvalidFormat;
+            }
+            if (((data.len - header_length) < message_len)) {
                 _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                 return error.NotEnoughBytes;
             }
@@ -420,7 +426,10 @@ if (((data.len - header_length) < message_len)) {
             return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .internal = deserialized } };
 },
 .SerializedMessageWithBuffers => {
-if (((data.len - header_length) < message_len)) {
+if ((message_len > (std.math.maxInt(u32) - header_length))) {
+                return error.InvalidFormat;
+            }
+            if (((data.len - header_length) < message_len)) {
                 _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                 return error.NotEnoughBytes;
             }
@@ -430,7 +439,10 @@ if (((data.len - header_length) < message_len)) {
             return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .data = unwrapped } };
 },
 .SerializedInternalMessageWithBuffers => {
-if (((data.len - header_length) < message_len)) {
+if ((message_len > (std.math.maxInt(u32) - header_length))) {
+                return error.InvalidFormat;
+            }
+            if (((data.len - header_length) < message_len)) {
                 _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                 return error.NotEnoughBytes;
             }
@@ -538,6 +550,9 @@ pub fn decodeIPCMessage(data: []const u8, globalThis: *jsc.JSGlobalObject, known
             if ((json_data[0] == 2)) {
                 json_data = json_data[1..];
                 kind = .internal;
+                if ((json_data.len == 0)) {
+                    return error.InvalidFormat;
+                }
             }
             const is_ascii = bun.strings.isAllASCII(json_data);
             var was_ascii_string_freed = false;

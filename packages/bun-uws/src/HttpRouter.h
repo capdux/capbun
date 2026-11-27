@@ -122,7 +122,25 @@ private:
     /* Set URL for router. Will reset any URL cache */
     void setUrl(std::string_view url) {
 
-        /* Todo: URL may also start with "http://domain/" or "*", not only "/" */
+        /* Handle absolute-form request-target (RFC 9112 §3.2.2): http://host/path or https://host/path */
+        if (url.length() >= 7 && url[0] != '/') {
+            size_t skip = 0;
+            if ((url[0] | 32) == 'h' && (url[1] | 32) == 't' && (url[2] | 32) == 't' && (url[3] | 32) == 'p') {
+                if (url.compare(4, 3, "://") == 0) {
+                    skip = 7;
+                } else if (url.length() >= 8 && (url[4] | 32) == 's' && url.compare(5, 3, "://") == 0) {
+                    skip = 8;
+                }
+            }
+            if (skip > 0) {
+                size_t slash = url.find('/', skip);
+                if (slash != std::string_view::npos) {
+                    url = url.substr(slash);
+                } else {
+                    url = "/";
+                }
+            }
+        }
 
         /* We expect to stand on a slash */
         currentUrl = url;

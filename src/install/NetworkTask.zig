@@ -196,6 +196,14 @@ else => true,
         _ = self.package_manager.async_network_task_queue.push(self);
 }
 
+pub fn logUrlError(log: *logger.Log, is_optional: bool, allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
+        if ((!is_optional)) {
+            _ = (blk_catch_0: { break :blk_catch_0 ((log.addErrorFmt(null, logger.Loc.Empty, allocator, fmt, args)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+        } else {
+            _ = (blk_catch_1: { break :blk_catch_1 ((log.addWarningFmt(null, logger.Loc.Empty, allocator, fmt, args)) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
+        }
+}
+
 pub fn forManifest(self: *NetworkTask, name: []const u8, allocator: std.mem.Allocator, scope: *const Npm.Registry.Scope, loaded_manifest: ?*const Npm.PackageManifest, is_optional: bool, needs_extended: bool) ForManifestError!void {
         self.url_buf = blk: {
         var arena_guard = DeinitGuard(std.heap.ArenaAllocator){ .val = std.heap.ArenaAllocator.init(bun.default_allocator) };
@@ -209,25 +217,31 @@ pub fn forManifest(self: *NetworkTask, name: []const u8, allocator: std.mem.Allo
         if (strings.containsChar(name, 47)) {
             encoded_name = try std.mem.replaceOwned(u8, stack_fallback_allocator.get(), name, "/", "%2f");
         }
-        var tmp_guard = DerefGuard(bun.String){ .val = bun.jsc.URL.join(bun.String.borrowUTF8(scope.url.href), bun.String.borrowUTF8(encoded_name)) };
+        const trimmed_pathname = strings.trim(scope.url.pathname, "/");
+        const base_url = (if ((trimmed_pathname.len == 0)) try std.fmt.allocPrint(stack_fallback_allocator.get(), "{s}://{f}/", .{ scope.url.displayProtocol(), scope.url.displayHost() }) else try std.fmt.allocPrint(stack_fallback_allocator.get(), "{s}://{f}/{s}/", .{ scope.url.displayProtocol(), scope.url.displayHost(), trimmed_pathname }));
+        var tmp_guard = DerefGuard(bun.String){ .val = bun.jsc.URL.join(bun.String.borrowUTF8(base_url), bun.String.borrowUTF8(encoded_name)) };
         _ = &tmp_guard;
         var __tmp_guard_moved = false; _ = &__tmp_guard_moved;
         defer if (!__tmp_guard_moved) { __tmp_guard_moved = true; const __T = @TypeOf(tmp_guard); if (@typeInfo(__T) == .optional) { if (tmp_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { tmp_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = tmp_guard; _drop_val.__cp_deinit(); } };
         const tmp = tmp_guard.val;
         if ((tmp.tag == .Dead)) {
-            if ((!is_optional)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.package_manager.log.addErrorFmt(null, logger.Loc.Empty, allocator, "Failed to join registry {f} and package {f} URLs", .{ bun.fmt.QuotedFormatter{ .text = scope.url.href }, bun.fmt.QuotedFormatter{ .text = name } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
-            } else {
-                _ = (blk_catch_1: { break :blk_catch_1 ((self.package_manager.log.addWarningFmt(null, logger.Loc.Empty, allocator, "Failed to join registry {f} and package {f} URLs", .{ bun.fmt.QuotedFormatter{ .text = scope.url.href }, bun.fmt.QuotedFormatter{ .text = name } })) catch |e| { _ = &e; break :blk_catch_1 bun.handleOom(e); }); });
-            }
+            _ = NetworkTask.logUrlError(self.package_manager.log, is_optional, allocator, "Failed to join registry {f} and package {f} URLs", .{ bun.fmt.QuotedFormatter{ .text = base_url }, bun.fmt.QuotedFormatter{ .text = name } });
             return error.InvalidURL;
         }
         if ((!(tmp.hasPrefixComptime("https://") or tmp.hasPrefixComptime("http://")))) {
-            if ((!is_optional)) {
-                _ = (blk_catch_2: { break :blk_catch_2 ((self.package_manager.log.addErrorFmt(null, logger.Loc.Empty, allocator, "Registry URL must be http:// or https://\nReceived: \"{f}\"", .{ tmp })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
-            } else {
-                _ = (blk_catch_3: { break :blk_catch_3 ((self.package_manager.log.addWarningFmt(null, logger.Loc.Empty, allocator, "Registry URL must be http:// or https://\nReceived: \"{f}\"", .{ tmp })) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
-            }
+            _ = NetworkTask.logUrlError(self.package_manager.log, is_optional, allocator, "Registry URL must be http:// or https://\nReceived: \"{f}\"", .{ tmp });
+            return error.InvalidURL;
+        }
+        var tmp_utf8 = tmp.toUTF8(stack_fallback_allocator.get());
+        _ = &tmp_utf8;
+        defer {
+        _ = tmp_utf8.deinit();
+        }
+        const tmp_slice = tmp_utf8.slice();
+        const scheme_end = ((strings.indexOf(base_url, "://")) orelse (0));
+        const matches_base = (((tmp_slice.len >= base_url.len) and strings.eqlCaseInsensitiveASCIIIgnoreLength(tmp_slice[0..scheme_end], base_url[0..scheme_end])) and strings.eqlLong(tmp_slice[scheme_end..base_url.len], base_url[scheme_end..], true));
+        if ((!matches_base)) {
+            _ = NetworkTask.logUrlError(self.package_manager.log, is_optional, allocator, "manifest URL \"{f}\" is not on registry \"{s}\"", .{ tmp, scope.url.href });
             return error.InvalidURL;
         }
         break :blk try tmp.toOwnedSlice(allocator);

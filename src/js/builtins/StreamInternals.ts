@@ -199,14 +199,15 @@ export function inspectReadableStream(this: any, depth, options, inspectFn) {
   );
 }
 
-export function inspectWritableStream(this: any, depth, options, inspectFn) {
-  const state = $getByIdDirectPrivate(this, "state");
+export function inspectWritableStream(this: any, depth, options, inspectFn, internalStream) {
+  const target = internalStream ?? this;
+  const state = $getByIdDirectPrivate(target, "state");
   if (state === undefined) return this;
   return $inspectWebStream(
     this,
     "WritableStream",
     {
-      locked: $getByIdDirectPrivate(this, "writer") !== undefined,
+      locked: $getByIdDirectPrivate(target, "writer") !== undefined,
       state,
     },
     depth,
@@ -356,7 +357,7 @@ export function inspectCountQueuingStrategy(this: any, depth, options, inspectFn
 }
 
 export function inspectTextEncoderStream(this: any, depth, options, inspectFn) {
-  const transform = $getByIdDirectPrivate(this, "textEncoderStreamTransform");
+  const transform = $isObject(this) ? $getByIdDirectPrivate(this, "textEncoderStreamTransform") : undefined;
   if (!transform) throw $ERR_INVALID_THIS("TextEncoderStream");
   return $inspectWebStream(
     this,
@@ -373,7 +374,7 @@ export function inspectTextEncoderStream(this: any, depth, options, inspectFn) {
 }
 
 export function inspectTextDecoderStream(this: any, depth, options, inspectFn) {
-  const transform = $getByIdDirectPrivate(this, "textDecoderStreamTransform");
+  const transform = $isObject(this) ? $getByIdDirectPrivate(this, "textDecoderStreamTransform") : undefined;
   if (!transform) throw $ERR_INVALID_THIS("TextDecoderStream");
   const decoder = $getByIdDirectPrivate(this, "textDecoderStreamDecoder");
   return $inspectWebStream(

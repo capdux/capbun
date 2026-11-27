@@ -897,7 +897,7 @@ _ = fd.close();
         if (terminal_info) |info| {
             _ = &info;
             terminal_js_value = info.js_value;
-            _ = info.terminal.closeSlaveFd();
+            _ = info.terminal.markInlineSpawned();
             subprocess.flags.owns_terminal = true;
             terminal_info = null;
         }

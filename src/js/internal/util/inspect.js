@@ -477,12 +477,54 @@ function formatURL(value, ctx, ignored, recurseTimes) {
   return output;
 }
 
-const builtInObjects = new SafeSet(
-  ArrayPrototypeFilter(
-    ObjectGetOwnPropertyNames(globalThis),
-    e => RegExpPrototypeExec(/^[A-Z][a-zA-Z0-9]+$/, e) !== null,
-  ),
-);
+const builtInObjects = new SafeSet([
+  "AggregateError",
+  "Array",
+  "ArrayBuffer",
+  "Atomics",
+  "BigInt",
+  "BigInt64Array",
+  "BigUint64Array",
+  "Boolean",
+  "DataView",
+  "Date",
+  "Error",
+  "EvalError",
+  "FinalizationRegistry",
+  "Float32Array",
+  "Float64Array",
+  "Function",
+  "Int8Array",
+  "Int16Array",
+  "Int32Array",
+  "Intl",
+  "JSON",
+  "Map",
+  "Math",
+  "Number",
+  "Object",
+  "Promise",
+  "Proxy",
+  "RangeError",
+  "ReferenceError",
+  "Reflect",
+  "RegExp",
+  "Set",
+  "SharedArrayBuffer",
+  "String",
+  "Symbol",
+  "SyntaxError",
+  "TypeError",
+  "Uint8Array",
+  "Uint8ClampedArray",
+  "Uint16Array",
+  "Uint32Array",
+  "URIError",
+  "WeakMap",
+  "WeakRef",
+  "WeakSet",
+  "WebAssembly",
+]);
 
 // https://tc39.es/ecma262/#sec-IsHTMLDDA-internal-slot
 const isUndetectableObject = v => typeof v === "undefined" && v !== undefined;
@@ -1477,7 +1519,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
       if (keys.length === 0 && protoProps === undefined) {
         return ctx.stylize(base, "date");
       }
-    } else if (value instanceof Error) {
+    } else if (isNativeError(value)) {
       base = formatError(value, constructor, tag, ctx, keys);
       if (keys.length === 0 && protoProps === undefined) return base;
     } else if (isAnyArrayBuffer(value)) {
@@ -1489,14 +1531,14 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
       if (typedArray === undefined) {
         formatter = formatArrayBuffer;
       } else if (keys.length === 0 && protoProps === undefined) {
-        return prefix + `{ byteLength: ${formatNumber(ctx.stylize, value.byteLength, false)} }`;
+        return prefix + `{ [${ctx.stylize("byteLength", "name")}]: ${formatNumber(ctx.stylize, value.byteLength, false)} }`;
+      } else {
+        formatter = formatArrayBufferByteLength;
       }
       braces[0] = `${prefix}{`;
-      ArrayPrototypeUnshift(keys, "byteLength");
     } else if (isDataView(value)) {
       braces[0] = `${getPrefix(constructor, tag, "DataView")}{`;
-      // .buffer goes last, it's not a primitive like the others.
-      ArrayPrototypeUnshift(keys, "byteLength", "byteOffset", "buffer");
+      formatter = formatDataView;
     } else if (isPromise(value)) {
       braces[0] = `${getPrefix(constructor, tag, "Promise")}{`;
       formatter = formatPromise;
@@ -2218,19 +2260,49 @@ function hexSlice(buf, start = 0, end) {
   );
 }
 
-function formatArrayBuffer(ctx, value) {
+function formatArrayBufferByteLength(ctx, value, recurseTimes) {
+  return [
+    formatProperty(ctx, value, recurseTimes, "byteLength", kObjectType, {
+      value: value.byteLength,
+      enumerable: false,
+    }),
+  ];
+}
+
+function formatDataView(ctx, value, recurseTimes) {
+  return [
+    formatProperty(ctx, value, recurseTimes, "byteLength", kObjectType, {
+      value: value.byteLength,
+      enumerable: false,
+    }),
+    formatProperty(ctx, value, recurseTimes, "byteOffset", kObjectType, {
+      value: value.byteOffset,
+      enumerable: false,
+    }),
+    formatProperty(ctx, value, recurseTimes, "buffer", kObjectType, {
+      value: value.buffer,
+      enumerable: false,
+    }),
+  ];
+}
+
+function formatArrayBuffer(ctx, value, recurseTimes) {
   let buffer;
+  const byteLength = formatProperty(ctx, value, recurseTimes, "byteLength", kObjectType, {
+    value: value.byteLength,
+    enumerable: false,
+  });
   try {
     buffer = new Uint8Array(value);
   } catch {
-    return [ctx.stylize("(detached)", "special")];
+    return [ctx.stylize("(detached)", "special"), byteLength];
   }
   let str = StringPrototypeTrim(
     RegExpPrototypeSymbolReplace(/(.{2})/g, hexSlice(buffer, 0, $min(ctx.maxArrayLength, buffer.length)), "$1 "),
   );
   const remaining = buffer.length - ctx.maxArrayLength;
   if (remaining > 0) str += ` ... ${remaining} more byte${remaining > 1 ? "s" : ""}`;
-  return [`${ctx.stylize("[Uint8Contents]", "special")}: <${str}>`];
+  return [`${ctx.stylize("[Uint8Contents]", "special")}: <${str}>`, byteLength];
 }
 
 function formatArray(ctx, value, recurseTimes) {

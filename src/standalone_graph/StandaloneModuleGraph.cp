@@ -984,7 +984,7 @@ pub struct StandaloneModuleGraph {
                 const writer = file.writer();
                 let buffer: [524288]u8 = undefined;
                 let buffered_writer = writer.adaptToNewApi(&buffer);
-                macho_file.buildAndSign(&buffered_writer.new_interface) catch e => {
+                const written_len = macho_file.buildAndSign(&buffered_writer.new_interface) catch e => {
                     Output.prettyErrorln("Error writing standalone module graph: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
@@ -994,6 +994,15 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
+                // Truncate to the exact written size; the template's signature may be larger.
+                switch (Syscall.ftruncate(cloned_executable_fd, written_len as i64)) {
+                    .err e => {
+                        Output.prettyErrorln("Error truncating standalone module graph: {f}", [e]);
+                        cleanupTempFile(zname, cloned_executable_fd);
+                        return bun.invalid_fd;
+                    },
+                    .result => {},
+                }
                 if (comptime !Environment.isWindows) {
                     * = bun.c.fchmod(cloned_executable_fd.native(), 0o777);
                 }

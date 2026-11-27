@@ -1756,6 +1756,7 @@ pub fn callback(handler: *HandlerType, value: *LOLHTMLType) bool {
                             _ = &err_ptr;
                             err_ptr.* = reason;
                             _ = reason.protect();
+                            _ = promise.setHandled(handler.global.vm());
                         } else {
                             _ = handler.global.bunVM().unhandledRejection(handler.global, reason, promise.asValue());
                         }

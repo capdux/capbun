@@ -117,47 +117,55 @@ pub struct ScanOpts {
         const optsObj: JSValue = optsObjOpt.?;
         let out = ScanOpts{};
         if (optsObj.isUndefinedOrNull()) return out;
-        if (!optsObj.isObject()) {
-            if (optsObj.isString()) {
-                {
-                    const result = parseCWD(globalThis, arena_alloc.allocator(), optsObj, out.absolute, fnName)?;
-                    if (result.len > 0) {
-                        out.cwd = result;
-                    }
-                }
-                return out;
+        if (optsObj.isString() || optsObj.isStringObjectLike()) {
+            const result = parseCWD(globalThis, arena_alloc.allocator(), optsObj, out.absolute, fnName)?;
+            if (result.len > 0) {
+                out.cwd = result;
             }
+            return out;
+        }
+        if (!optsObj.isObject()) {
             return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions must be an object", {}).throw();
         }
 
-        if (only_files := optsObj.get(globalThis, "onlyFiles")?) {
-            if (!only_files.isUndefined()) {
+        if (only_files := optsObj.getOwn(globalThis, "onlyFiles")?) {
+            if (!only_files.isUndefinedOrNull()) {
                 out.only_files = only_files.toBoolean();
             }
         }
 
-        if (error_on_broken_symlinks := optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymlink")?) {
-            out.error_on_broken_symlinks = error_on_broken_symlinks.toBoolean();
+        if (error_on_broken_symlinks := optsObj.getOwn(globalThis, "throwErrorOnBrokenSymlink")?) {
+            if (!error_on_broken_symlinks.isUndefinedOrNull()) {
+                out.error_on_broken_symlinks = error_on_broken_symlinks.toBoolean();
+            }
         }
 
-        if (follow_symlinks := optsObj.getTruthy(globalThis, "followSymlinks")?) {
-            out.follow_symlinks = follow_symlinks.toBoolean();
+        if (follow_symlinks := optsObj.getOwn(globalThis, "followSymlinks")?) {
+            if (!follow_symlinks.isUndefinedOrNull()) {
+                out.follow_symlinks = follow_symlinks.toBoolean();
+            }
         }
 
-        if (absolute := optsObj.getTruthy(globalThis, "absolute")?) {
-            out.absolute = absolute.toBoolean();
+        if (absolute := optsObj.getOwn(globalThis, "absolute")?) {
+            if (!absolute.isUndefinedOrNull()) {
+                out.absolute = absolute.toBoolean();
+            }
         }
 
         let cwd_val: jsc.JSValue? = null;
-        if (cwdVal := optsObj.getTruthy(globalThis, "cwd")?) {
-            if (!cwdVal.isString()) {
-                return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions.cwd must be a string", {}).throw();
+        if (cwdVal := optsObj.getOwn(globalThis, "cwd")?) {
+            if (!cwdVal.isUndefinedOrNull()) {
+                if (!cwdVal.isString() && !cwdVal.isStringObjectLike()) {
+                    return globalThis.ERR(.INVALID_ARG_TYPE, "GlobScanOptions.cwd must be a string", {}).throw();
+                }
+                cwd_val = cwdVal;
             }
-            cwd_val = cwdVal;
         }
 
-        if (dot := optsObj.getTruthy(globalThis, "dot")?) {
-            out.dot = dot.toBoolean();
+        if (dot := optsObj.getOwn(globalThis, "dot")?) {
+            if (!dot.isUndefinedOrNull()) {
+                out.dot = dot.toBoolean();
+            }
         }
 
         if (cwdVal := cwd_val) {

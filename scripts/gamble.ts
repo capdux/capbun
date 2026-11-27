@@ -32,7 +32,10 @@ let totalTimeEstimate = -1;
 function report() {
   process.stdout.write("\n");
   const attemptsReached =
-    numOk + numTimedOut + signals.values().reduce((a, b) => a + b, 0) + codes.values().reduce((a, b) => a + b, 0);
+    numOk +
+    numTimedOut +
+    signals.values().reduce((a, b) => a + b, 0) +
+    codes.values().reduce((a, b) => a + b, 0);
 
   green(`${pad(numOk)}/${attemptsReached} OK`);
   if (numTimedOut > 0) {
@@ -91,10 +94,13 @@ for (let i = 0; i < attempts; i++) {
   if (totalTimeEstimate < 0) {
     totalTimeEstimate = currentTotalTimeEstimate;
   } else {
-    totalTimeEstimate = 0.8 * totalTimeEstimate + 0.2 * currentTotalTimeEstimate;
+    totalTimeEstimate =
+      0.8 * totalTimeEstimate + 0.2 * currentTotalTimeEstimate;
   }
   const remaining = totalTimeEstimate - (now - start);
-  process.stdout.write(`\r\x1b[2K${pad(i + 1)}/${attempts} completed, ${formatTime(remaining)} remaining`);
+  process.stdout.write(
+    `\r\x1b[2K${pad(i + 1)}/${attempts} completed, ${formatTime(remaining)} remaining`,
+  );
 }
 
 report();

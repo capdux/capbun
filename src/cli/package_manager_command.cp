@@ -358,6 +358,7 @@ pub struct PackageManagerCommand {
             const string_bytes = lockfile.buffers.string_bytes.items;
 
             Output.flush();
+            Output.disableBuffering();
 
             if (strings.leftHasAnyInRight(args, &.{ "-A", "-a", "--all" })) {
                 let iterator = Lockfile.Tree.Iterator(.node_modules).init(lockfile);

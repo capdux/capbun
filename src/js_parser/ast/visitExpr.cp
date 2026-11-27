@@ -451,23 +451,8 @@ fn VisitExprVisitors(
                                 return p.newExpr(E.Undefined{}, expr.loc);
                             }
 
-                            p.macro_call_count += 1;
-                            const name = macro_ref_data.name ?? tag.data.e_dot.name;
-                            const record = &p.import_records.items[macro_ref_data.import_record_id];
-                            // We must visit it to convert inline_identifiers and record usage
-                            const macro_result = (p.options.macro_context.call(
-                                record.path.text,
-                                p.source.path.sourceDir(),
-                                p.log,
-                                p.source,
-                                record.range,
-                                expr,
-                                name,
-                            ) catch return expr);
-
-                            if (macro_result.data != .e_template) {
-                                return p.visitExpr(macro_result);
-                            }
+                            p.log.addError(p.source, expr.loc, "template literal macro invocations are not supported") catch unreachable;
+                            return p.newExpr(E.Undefined{}, expr.loc);
                         }
                     }
                 }
@@ -804,7 +789,7 @@ fn VisitExprVisitors(
                                 e_.value = SideEffects.simplifyBoolean(p, e_.value);
 
                             const side_effects = SideEffects.toBoolean(p, e_.value.data);
-                            if (side_effects.ok) {
+                            if (side_effects.ok && (side_effects.side_effects == .no_side_effects || p.exprCanBeRemovedIfUnused(&e_.value))) {
                                 return p.newExpr(E.Boolean{ value: !side_effects.value }, expr.loc);
                             }
 

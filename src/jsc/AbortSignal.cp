@@ -85,10 +85,10 @@ pub struct TimeoutImpl {
         }
 
         // Dispatching the signal may cause the Timeout to get freed.
-        dispatch(vm, _.signal);
+        TimeoutImpl.dispatch(vm, _.signal);
     }
 
-    fn dispatch(vm: *jsc.VirtualMachine, signal_ptr: *AbortSignal) {
+    static fn dispatch(vm: *jsc.VirtualMachine, signal_ptr: *AbortSignal) {
         const loop = vm.eventLoop();
         loop.enter();
         defer loop.exit();
