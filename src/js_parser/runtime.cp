@@ -17,8 +17,6 @@ fn embedDebugFallback(comptime msg: []const u8, comptime code: []const u8): []co
     return code;
 }
 
-const default_empty_bundler_feature_flags: bun.StringSet = bun.StringSet.initComptime();
-
 pub enum RuntimeServerComponentsMode {
     /// Server components is disabled, strings "use client" and "use server" mean nothing.
     none,
@@ -458,7 +456,7 @@ pub struct _RuntimeFeatures {
 
     /// Feature flags for dead-code elimination via `import { feature } from "bun:bundle"`
     /// When `feature("FLAG_NAME")` is called, it returns true if FLAG_NAME is in this set.
-    bundler_feature_flags: *const bun.StringSet = &default_empty_bundler_feature_flags,
+    bundler_feature_flags: *const bun.StringSet = &_RuntimeFeatures.empty_bundler_feature_flags,
 
     /// REPL mode: transforms code for interactive evaluation
     /// - Wraps lone object literals `{...}` in parentheses
@@ -467,14 +465,14 @@ pub struct _RuntimeFeatures {
     /// - Assigns functions to context for persistence
     repl_mode: bool = false,
 
-    pub const empty_bundler_feature_flags: bun.StringSet = default_empty_bundler_feature_flags;
+    pub const empty_bundler_feature_flags: bun.StringSet = bun.StringSet.initComptime();
 
     /// Initialize bundler feature flags for dead-code elimination via `import { feature } from "bun:bundle"`.
     /// Returns a pointer to a StringSet containing the enabled flags, or the empty set if no flags are provided.
     /// Keys are kept sorted so iteration order is deterministic (for RuntimeTranspilerCache hashing).
     static fn initBundlerFeatureFlags(allocator: std.mem.Allocator, feature_flags: []const []const u8): *const bun.StringSet {
         if (feature_flags.len == 0) {
-            return &default_empty_bundler_feature_flags;
+            return unsafe { &_RuntimeFeatures.empty_bundler_feature_flags };
         }
 
         const set = bun.handleOom(allocator.create(bun.StringSet));

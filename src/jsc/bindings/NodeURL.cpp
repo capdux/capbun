@@ -44,13 +44,19 @@ JSC_DEFINE_HOST_FUNCTION(jsDomainToASCII, (JSC::JSGlobalObject * globalObject, J
     )
         return JSC::JSValue::encode(jsEmptyString(vm));
 
-    if (domain.containsOnlyASCII())
-        return JSC::JSValue::encode(arg0);
+    constexpr static size_t hostnameBufferLength = 2048;
+    if (domain.length() > hostnameBufferLength)
+        return JSC::JSValue::encode(jsEmptyString(vm));
+
+    if (domain.containsOnlyASCII()) {
+        if (arg0.isString())
+            return JSC::JSValue::encode(arg0);
+        return JSC::JSValue::encode(JSC::jsString(vm, domain));
+    }
     if (domain.is8Bit())
         domain.convertTo16Bit();
 
     constexpr static int allowedNameToASCIIErrors = UIDNA_ERROR_EMPTY_LABEL | UIDNA_ERROR_LABEL_TOO_LONG | UIDNA_ERROR_DOMAIN_NAME_TOO_LONG | UIDNA_ERROR_LEADING_HYPHEN | UIDNA_ERROR_TRAILING_HYPHEN | UIDNA_ERROR_HYPHEN_3_4;
-    constexpr static size_t hostnameBufferLength = 2048;
 
     auto encoder = &WTF::URLParser::internationalDomainNameTranscoder();
     char16_t hostnameBuffer[hostnameBufferLength];
@@ -103,9 +109,12 @@ JSC_DEFINE_HOST_FUNCTION(jsDomainToUnicode, (JSC::JSGlobalObject * globalObject,
     )
         return JSC::JSValue::encode(jsEmptyString(vm));
 
-    if (!domain.is8Bit())
+    if (!domain.is8Bit()) {
         // this function is only for undoing punycode so its okay if utf-16 text makes it out unchanged.
-        return JSC::JSValue::encode(arg0);
+        if (arg0.isString())
+            return JSC::JSValue::encode(arg0);
+        return JSC::JSValue::encode(JSC::jsString(vm, domain));
+    }
 
     domain.convertTo16Bit();
 

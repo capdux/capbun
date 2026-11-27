@@ -140,7 +140,9 @@ else => {
 
 pub fn setParams(self: *Context, level: c_int, strategy: c_int) Error {
             self.e = .Ok;
-            _ = self.setBuffers(null, null);
+            var dummy: [1]u8 = .{ 0 };
+            _ = &dummy;
+            _ = self.setBuffers(null, dummy[0..0]);
             switch (self.mode) {
 .DEFLATE, .DEFLATERAW => {
 self.e = c.deflateParams((&self.state), level, strategy);
@@ -149,6 +151,7 @@ else => {
 
 },
 }
+            _ = self.setBuffers(null, null);
             if (((self.e != .Ok) and (self.e != .BufError))) {
                 return self.error_for_message("Failed to set parameters");
             }

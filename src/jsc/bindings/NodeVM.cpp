@@ -175,7 +175,10 @@ JSC::JSFunction* constructAnonymousFunction(JSC::JSGlobalObject* globalObject, c
 
             if (actuallyValid) {
                 auto exception = error.toErrorObject(globalObject, sourceCode, -1);
-                RETURN_IF_EXCEPTION(throwScope, nullptr);
+                if (throwScope.exception()) [[unlikely]] {
+                    (void)throwScope.tryClearException();
+                    exception = JSC::createSyntaxError(globalObject, error.message());
+                }
                 decorateSyntaxErrorStack(globalObject, vm, throwScope, exception, code, options.filename, options.rawLineOffset, error);
                 throwException(globalObject, throwScope, exception);
                 return nullptr;
@@ -537,7 +540,8 @@ void decorateSyntaxErrorStack(JSGlobalObject* globalObject, VM& vm, ThrowScope& 
         stack = tryMakeString("SyntaxError: "_s, parserError.message());
     }
 
-    String decorated = tryMakeString(filename, ":"_s, adjustedLine, "\n"_s, sourceLine, "\n"_s, caret, "\n\n"_s, stack);
+    String effectiveFilename = filename.isEmpty() ? "evalmachine.<anonymous>"_s : filename;
+    String decorated = tryMakeString(effectiveFilename, ":"_s, adjustedLine, "\n"_s, sourceLine, "\n"_s, caret, "\n\n"_s, stack);
     if (!decorated.isNull()) [[likely]] {
         errorInstance->putDirect(vm, vm.propertyNames->stack, jsString(vm, decorated), JSC::PropertyAttribute::DontEnum | 0);
     }
@@ -563,10 +567,13 @@ bool handleException(JSGlobalObject* globalObject, VM& vm, NakedPtr<JSC::Excepti
         }
         auto& stack_frame = e_stack[0];
         String source_url;
-        if (scriptSource && scriptSource->provider() && !scriptSource->provider()->sourceOrigin().url().string().isEmpty()) {
-            source_url = scriptSource->provider()->sourceOrigin().url().string();
+        if (scriptSource && scriptSource->provider()) {
+            source_url = scriptSource->provider()->sourceOrigin().string();
         } else {
             source_url = stack_frame.sourceURL(vm);
+        }
+        if (source_url.startsWith("file:///"_s)) {
+            source_url = source_url.substring(8);
         }
         // Treat empty, [unknown], and [source:*] placeholders as missing source URLs
         if (source_url.isEmpty() || source_url == "[unknown]"_s || source_url.startsWith("[source:"_s)) {
@@ -1662,8 +1669,6 @@ bool BaseVMOptions::fromJS(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::
                 ERR::INVALID_ARG_TYPE(scope, globalObject, "options.filename"_s, "string"_s, filenameOpt);
                 return false;
             }
-        } else if (this->filename.isNull()) {
-            this->filename = "evalmachine.<anonymous>"_s;
         }
 
         auto lineOffsetOpt = options->getIfPropertyExists(globalObject, Identifier::fromString(vm, "lineOffset"_s));
@@ -1706,6 +1711,10 @@ bool BaseVMOptions::fromJS(JSC::JSGlobalObject* globalObject, JSC::VM& vm, JSC::
                 return false;
             }
         }
+    }
+
+    if (this->filename.isNull()) {
+        this->filename = "evalmachine.<anonymous>"_s;
     }
 
     return any;

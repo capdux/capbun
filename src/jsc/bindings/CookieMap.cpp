@@ -9,6 +9,7 @@
 #include "decodeURIComponentSIMD.h"
 #include "BunString.h"
 #include "JSDOMExceptionHandling.h"
+#include "ZigGlobalObject.h"
 #include <wtf/HashSet.h>
 namespace WebCore {
 
@@ -21,11 +22,26 @@ static void CookieMap__writeFetchHeadersToUWSResponse(CookieMap* cookie_map, JSC
     for (auto& cookie : cookie_map->getAllChanges()) {
         auto cookieStr = cookie->toString(global_this->vm());
         if (cookieStr.hasException()) {
-            propagateException(*global_this, scope, cookieStr.releaseException());
-            return;
+            auto jsException = createDOMException(*global_this, cookieStr.releaseException());
+            JSC::JSValue errVal = jsException;
+            if (auto* exception = scope.exception()) {
+                errVal = exception->value();
+                (void)scope.tryClearException();
+            }
+            WTF::String msg = errVal.toWTFString(global_this);
+            (void)scope.tryClearException();
+            fprintf(stderr, "%s\n", msg.utf8().data());
+            continue;
         }
         auto utf8 = cookieStr.releaseReturnValue().utf8();
-        RETURN_IF_EXCEPTION(scope, );
+        if (auto* exception = scope.exception()) [[unlikely]] {
+            JSC::JSValue errVal = exception->value();
+            (void)scope.tryClearException();
+            WTF::String msg = errVal.toWTFString(global_this);
+            (void)scope.tryClearException();
+            fprintf(stderr, "%s\n", msg.utf8().data());
+            continue;
+        }
         res->writeHeader("Set-Cookie", utf8.data());
     }
 }

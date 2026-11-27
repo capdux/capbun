@@ -1104,16 +1104,22 @@ pub fn finalize(self: *CronJob) void {
     }
 
 pub fn computeNextTimespec(self: *CronJob) ?bun.timespec {
-            const now_ms: f64 = @floatFromInt(bun.timespec.now(.force_real_time).ms());
+            const now_ms: f64 = bun.cpp.JSC__JSGlobalObject__jsDateNow(self.global);
             const from_ms = @max(now_ms, self.last_next_ms);
+            if ((std.math.isNan(from_ms) or (@abs(from_ms) > 8640000000000000.0))) {
+                return null;
+            }
             const next_ms_opt = (blk_catch_40: { break :blk_catch_40 ((self.parsed.next(self.global, from_ms)) catch |__ce_40| { _ = &__ce_40; return null; }); });
             if ((next_ms_opt == null)) {
                 return null;
             }
             const next_ms = next_ms_opt.?;
+            if ((next_ms > 8640000000000000.0)) {
+                return null;
+            }
             self.last_next_ms = next_ms;
             const delta: i64 = @intFromFloat(@max(1.0, (next_ms - now_ms)));
-            return bun.timespec.msFromNow(.force_real_time, delta);
+            return bun.timespec.msFromNow(.allow_mocked_time, delta);
     }
 
 pub fn scheduleNext(self: *CronJob, vm: *jsc.VirtualMachine) void {

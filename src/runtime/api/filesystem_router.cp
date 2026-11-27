@@ -384,7 +384,7 @@ pub struct FileSystemRouter {
         return JSValue.jsNull();
     }
 
-    fn getAssetPrefix(*_, globalThis: *jsc.JSGlobalObject): JSValue {
+    fn getAssetPrefix(*_, globalThis: *jsc.JSGlobalObject): bun.JSError!JSValue {
         if (asset_prefix := _.asset_prefix) {
             return asset_prefix.toJS(globalThis);
         }

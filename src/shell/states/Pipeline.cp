@@ -83,6 +83,7 @@ pub union(enum) PipelineState {
     pipes: ([]Pipe)? = null,
     io: IO,
     state: PipelineState = .{ .starting_cmds = .{ .idx = 0 } },
+    pipeline_stack: (*std.array_list.Managed(*Pipeline))? = null,
 
     static fn init(
         interpreter: *Interpreter,
@@ -302,6 +303,12 @@ pub union(enum) PipelineState {
     }
 
     fn deinit(*_) {
+        if (stack := _.pipeline_stack) {
+            if (idx := std.mem.indexOfScalar(*Pipeline, stack.items, _)) {
+                * = stack.orderedRemove(idx);
+            }
+            _.pipeline_stack = null;
+        }
         if (cmds := _.cmds) {
             for (*cmd_or_result of cmds) {
                 if (cmd_or_result == .cmd) {

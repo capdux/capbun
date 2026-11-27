@@ -1239,13 +1239,13 @@ pub fn generateHash(name: [:0]const u8) u64 {
             return bun.hash(name);
     }
 
-pub fn toOwned(self: InternalKey) @This() {
+pub fn toOwned(self: *const InternalKey) @This() {
             if (self.host) |host| {
                 _ = &host;
                 const host_copy = bun.handleOom(bun.default_allocator.dupeZ(u8, host));
                 return .{ .host = host_copy, .hash = self.hash, .port = self.port };
             } else {
-                return self;
+                return self.*;
             }
     }
 };
@@ -2595,10 +2595,10 @@ return globalThis.throwValue(try err.toJSWithSyscallAndHostname(globalThis, "get
             var request = (blk_catch_26: { break :blk_catch_26 ((GetHostByAddrInfoRequest.init(cache, self, ip, globalThis, "pending_addr_cache_cares")) catch |e| { _ = &e; break :blk_catch_26 @as(*GetHostByAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
             const promise = request.tail.promise.value();
-            _ = channel.getHostByAddr(ip, GetHostByAddrInfoRequest, request, GetHostByAddrInfoRequest.onCaresComplete);
             if ((!request.cache.pending_cache)) {
                 self.untracked_requests = (self.untracked_requests + 1);
             }
+            _ = channel.getHostByAddr(ip, GetHostByAddrInfoRequest, request, GetHostByAddrInfoRequest.onCaresComplete);
             _ = self.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -2927,10 +2927,10 @@ pub fn doResolveCAres(self: *Resolver, comptime cares_type: type, comptime type_
             var request = (blk_catch_28: { break :blk_catch_28 ((ResolveInfoRequest(cares_type, type_name).init(cache, self, name, globalThis, cache_name)) catch |e| { _ = &e; break :blk_catch_28 bun.handleOom(e); }); });
             _ = &request;
             const promise = request.tail.promise.value();
-            _ = channel.resolve(name, type_name, ResolveInfoRequest(cares_type, type_name), request, cares_type, ResolveInfoRequest(cares_type, type_name).onCaresComplete);
             if ((!request.cache.pending_cache)) {
                 self.untracked_requests = (self.untracked_requests + 1);
             }
+            _ = channel.resolve(name, type_name, ResolveInfoRequest(cares_type, type_name), request, cares_type, ResolveInfoRequest(cares_type, type_name).onCaresComplete);
             _ = self.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -2964,10 +2964,11 @@ pub fn c_aresLookupWithNormalizedName(self: *Resolver, query: GetAddrInfo, globa
             var request = (blk_catch_29: { break :blk_catch_29 ((GetAddrInfoRequest.init(cache, .c_ares, self, query, globalThis, "pending_host_cache_cares")) catch |e| { _ = &e; break :blk_catch_29 @as(*GetAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
             const promise = request.tail.promise.value();
-            _ = channel.getAddrInfo((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name), query.port, (&hints_buf), GetAddrInfoRequest, request, GetAddrInfoRequest.onCaresComplete);
-            if ((!request.cache.pending_cache)) {
+            const is_pending_cache = request.cache.pending_cache;
+            if ((!is_pending_cache)) {
                 self.untracked_requests = (self.untracked_requests + 1);
             }
+            _ = channel.getAddrInfo((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name), query.port, (&hints_buf), GetAddrInfoRequest, request, GetAddrInfoRequest.onCaresComplete);
             _ = self.requestSent(globalThis.bunVM());
             return promise;
     }
@@ -3250,13 +3251,13 @@ pub fn globalLookupService(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
             var request = (blk_catch_32: { break :blk_catch_32 ((GetNameInfoRequest.init(cache, resolver, cache_name, globalThis, "pending_nameinfo_cache_cares")) catch |e| { _ = &e; break :blk_catch_32 @as(*GetNameInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
             const promise = request.tail.promise.value();
+            if ((!request.cache.pending_cache)) {
+                resolver.untracked_requests = (resolver.untracked_requests + 1);
+            }
             _ = name_chan.getNameInfo((blk: {
             break :blk @ptrCast((&sa));
 
 }), GetNameInfoRequest, request, GetNameInfoRequest.onCaresComplete);
-            if ((!request.cache.pending_cache)) {
-                resolver.untracked_requests = (resolver.untracked_requests + 1);
-            }
             _ = resolver.requestSent(globalThis.bunVM());
             return promise;
     }

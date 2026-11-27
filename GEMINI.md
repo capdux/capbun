@@ -373,3 +373,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
    - **(a) 提单修复后全仓静态扫雷重编**：向 `cp_agy` 提单修复共性 codegen 缺陷（如 `task-bun-20261127-zero-arg-call` 零参外部调用丢 `()`）结单后，立即用 `rg` 扫描全仓 `.zig` 受波及文件（如 5 个 BoringSSL `.cp`），批量用新版 `cpc` 一键重编净化，零修改成本消灭隐性 bug。
    - **(b) 诊断命令强制 `BUN_DEBUG_QUIET_LOGS=1`**：只读运行 `bun-debug test` 排查报错时，必须显式设置 `BUN_DEBUG_QUIET_LOGS=1`，杜绝 `[sys] openat` / `[fs]` 调试日志刷屏截断关键 `error:` 行而浪费二次复跑。
    - **(c) 严禁空口汇报后台动作**：任何提及"已启动 `bun bd` / 子智能体"的回复，必须在当轮已实际发出对应工具调用，绝不允许只输出文字而漏调工具。
+10. **2026-11-27 18:59 3h 审计固化（只读诊断/写手接力 + 全局根因优先收割）**：
+    - **(a) 只读分析与写手精准接力**：在 `bun bd` 构建或批量验收窗口期保持 1~2 路只读分析子智能体深挖未闭合目录并直接输出 `file:line` FixPlan，主智能体收到后即刻派发写手落地并在下一轮 `bun bd` 批量合入验证，避免写手空转或互相踩踏构建产物。
+    - **(b) 优先收割全局共性根因**：遇到跨多套件的共性缺陷（如 `isASANEnabled()` 缺失导致 `test.skipIf(isASAN)` 失效、`runtime.cp` 静态空集合地址不等导致 `BUN_DESTRUCT_VM_ON_EXIT=1` SEGV、`dns.cp` 同步回调前未递增计数导致 UAF），优先一次性根治并扫平所有同类调用点，单点修复即可连片转绿多个测试文件。

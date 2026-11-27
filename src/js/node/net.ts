@@ -2300,6 +2300,8 @@ Server.prototype.listen = function listen(port, hostname, onListen) {
   let allowHalfOpen = false;
   let reusePort = false;
   let ipv6Only = false;
+  let readableAll = false;
+  let writableAll = false;
   let fd;
   //port is actually path
   if (typeof port === "string") {
@@ -2343,6 +2345,8 @@ Server.prototype.listen = function listen(port, hostname, onListen) {
       allowHalfOpen = options.allowHalfOpen;
       reusePort = options.reusePort;
       backlog = options.backlog;
+      readableAll = Boolean(options.readableAll);
+      writableAll = Boolean(options.writableAll);
 
       if (typeof options.fd === "number" && options.fd >= 0) {
         fd = options.fd;
@@ -2439,7 +2443,7 @@ Server.prototype.listen = function listen(port, hostname, onListen) {
       allowHalfOpen,
       reusePort,
       undefined,
-      undefined,
+      { readableAll, writableAll },
       path,
       hostname,
       tls,
@@ -2464,6 +2468,8 @@ Server.prototype[kRealListen] = function (
   contexts,
   _onListen,
   fd,
+  readableAll,
+  writableAll,
 ) {
   if (path) {
     this._handle = Bun.listen({
@@ -2476,6 +2482,13 @@ Server.prototype[kRealListen] = function (
       socket: ServerHandlers,
       data: this,
     });
+    if ((readableAll || writableAll) && !isWindows && !path.startsWith("\0")) {
+      const fs = require("node:fs");
+      let mode = fs.statSync(path).mode;
+      if (readableAll) mode |= 0o444;
+      if (writableAll) mode |= 0o222;
+      fs.chmodSync(path, mode);
+    }
   } else if (fd != null) {
     this._handle = Bun.listen({
       fd,
@@ -2610,6 +2623,8 @@ function listenInCluster(
       contexts,
       onListen,
       fd,
+      options?.readableAll,
+      options?.writableAll,
     );
     return;
   }
@@ -2640,6 +2655,8 @@ function listenInCluster(
       contexts,
       onListen,
       fd,
+      options?.readableAll,
+      options?.writableAll,
     );
   });
 }

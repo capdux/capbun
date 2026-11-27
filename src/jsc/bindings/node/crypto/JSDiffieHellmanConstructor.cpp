@@ -131,7 +131,8 @@ JSC_DEFINE_HOST_FUNCTION(constructDiffieHellman, (JSC::JSGlobalObject * globalOb
         ncrypto::BignumPointer bn_g;
 
         if (generatorValue.isNumber()) {
-            int32_t generator = generatorValue.asInt32();
+            int32_t generator = generatorValue.toInt32(globalObject);
+            RETURN_IF_EXCEPTION(scope, {});
             if (generator < 2) {
                 ERR_put_error(ERR_LIB_DH, 0, DH_R_BAD_GENERATOR, __FILE__, __LINE__);
                 throwCryptoError(globalObject, scope, ERR_get_error(), "Invalid generator"_s);

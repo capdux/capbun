@@ -98,6 +98,9 @@ pub struct CronExpression {
     /// expression, strictly after `from_ms`. Returns null if no match found
     /// within 8 years.
     fn next(globalObject: *jsc.JSGlobalObject, from_ms: f64): bun.JSError!f64? {
+        const MAX_ECMASCRIPT_TIME: f64 = 8.64e15;
+        if (std.math.isNan(from_ms) || @abs(from_ms) > MAX_ECMASCRIPT_TIME) return null;
+
         let dt = globalObject.msToGregorianDateTimeUTC(from_ms);
         const start_year = dt.year;
         dt.minute += 1;
@@ -105,7 +108,9 @@ pub struct CronExpression {
 
         while (dt.year - start_year <= 8) {
             // Normalize overflow + recompute weekday via a UTC round-trip.
-            dt = globalObject.msToGregorianDateTimeUTC((globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0))?);
+            const candidate_ms = (globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0))?;
+            if (std.math.isNan(candidate_ms) || candidate_ms > MAX_ECMASCRIPT_TIME) return null;
+            dt = globalObject.msToGregorianDateTimeUTC(candidate_ms);
 
             if (!bitSet(u16, _.months, @intCast(dt.month))) {
                 dt.month += 1;
@@ -138,7 +143,9 @@ pub struct CronExpression {
                 continue;
             }
 
-            return globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0, 0)?;
+            const result_ms = globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0, 0)?;
+            if (std.math.isNan(result_ms) || result_ms > MAX_ECMASCRIPT_TIME) return null;
+            return result_ms;
         }
         return null;
     }

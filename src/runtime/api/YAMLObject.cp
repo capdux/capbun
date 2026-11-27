@@ -191,7 +191,7 @@ pub err StringifyError {
     OutOfMemory,
     StackOverflow,
 }
-pub const PropIter = jsc.JSPropertyIterator({ skip_empty_name: false, include_value: true });
+pub const PropIter = jsc.JSPropertyIterator({ skip_empty_name: false, include_value: true, include_symbols: false });
 
 pub struct Stringifier {
     stack_check: bun.StackCheck,

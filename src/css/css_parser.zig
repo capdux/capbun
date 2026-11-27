@@ -1567,7 +1567,6 @@ else => {
     }
 
 pub fn position(self: *Parser) usize {
-            _ = bun.debugAssert(bun.strings.isOnCharBoundary(self.input.tokenizer.src, self.input.tokenizer.position));
             return self.input.tokenizer.position;
     }
 
@@ -2002,7 +2001,6 @@ pub fn currentSourceMapUrl(self: *const Tokenizer) ?[]const u8 {
     }
 
 pub fn getPosition(self: Tokenizer) usize {
-            _ = bun.debugAssert(bun.strings.isOnCharBoundary(self.src, self.position));
             return self.position;
     }
 

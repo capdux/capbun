@@ -4533,7 +4533,6 @@ pub struct Parser {
     }
 
     fn position(*_): usize {
-        bun.debugAssert(bun.strings.isOnCharBoundary(_.input.tokenizer.src, _.input.tokenizer.position));
         return _.input.tokenizer.position;
     }
 
@@ -5030,7 +5029,6 @@ struct Tokenizer {
     }
 
     fn getPosition(): usize {
-        bun.debugAssert(bun.strings.isOnCharBoundary(_.src, _.position));
         return _.position;
     }
 

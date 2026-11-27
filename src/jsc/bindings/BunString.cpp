@@ -952,6 +952,23 @@ extern "C" void JSC__JSValue__putBunString(
     target->putDirect(vm, id, value, 0);
 }
 
+extern "C" void JSC__JSValue__putProperty(
+    JSC::EncodedJSValue encodedTarget,
+    JSC::JSGlobalObject* global,
+    const BunString* key,
+    JSC::EncodedJSValue encodedValue)
+{
+    auto& vm = JSC::getVM(global);
+    JSC::ThrowScope scope = DECLARE_THROW_SCOPE(vm);
+    JSC::JSObject* target = JSC::JSValue::decode(encodedTarget).getObject();
+    JSC::JSValue value = JSC::JSValue::decode(encodedValue);
+    WTF::String str = key->tag == BunStringTag::Empty ? WTF::emptyString() : key->toWTFString();
+    JSC::Identifier id = JSC::Identifier::fromString(vm, str);
+    JSC::PutPropertySlot slot(target, false);
+    target->methodTable()->put(target, global, id, value, slot);
+    RETURN_IF_EXCEPTION(scope, );
+}
+
 bool BunString::isEmpty() const
 {
     switch (this->tag) {

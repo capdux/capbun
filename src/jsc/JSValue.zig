@@ -473,6 +473,10 @@ pub fn putMayBeIndex(self: JSValue, globalObject: *JSGlobalObject, key: *const S
             return bun.cpp.JSC__JSValue__putMayBeIndex(self, globalObject, key, value);
     }
 
+pub fn putProperty(self: JSValue, globalObject: *JSGlobalObject, key: *const String, value: JSValue) bun.JSError!void {
+            return bun.jsc.host_fn.fromJSHostCallGeneric(globalObject, @src(), JSC__JSValue__putProperty, .{ self, globalObject, key, value });
+    }
+
 pub fn putToPropertyKey(target: JSValue, globalObject: *JSGlobalObject, key: jsc.JSValue, value: jsc.JSValue) bun.JSError!void {
             return bun.jsc.host_fn.fromJSHostCallGeneric(globalObject, @src(), JSC__JSValue__putToPropertyKey, .{ target, globalObject, key, value });
     }
@@ -2220,6 +2224,8 @@ extern "c" fn JSC__JSValue__put(value: JSValue, global: *JSGlobalObject, key: *c
 extern "c" fn JSC__JSValue__deleteProperty(target: JSValue, global: *JSGlobalObject, key: *const ZigString) callconv(.c) bool;
 
 extern "c" fn JSC__JSValue__putBunString(value: JSValue, global: *JSGlobalObject, key: *const bun.String, result: jsc.JSValue) callconv(.c) void;
+
+extern "c" fn JSC__JSValue__putProperty(value: JSValue, global: *JSGlobalObject, key: *const bun.String, result: jsc.JSValue) callconv(.c) void;
 
 extern "c" fn JSC__JSValue__upsertBunStringArray(value: JSValue, global: *JSGlobalObject, key: *const bun.String, result: jsc.JSValue) callconv(.c) JSValue;
 

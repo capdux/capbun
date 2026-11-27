@@ -691,11 +691,19 @@ JSC::EncodedJSValue V::validateOneOf(JSC::ThrowScope& scope, JSC::JSGlobalObject
 
 JSC::EncodedJSValue V::validateOneOf(JSC::ThrowScope& scope, JSC::JSGlobalObject* globalObject, ASCIILiteral name, JSValue value, std::span<const int32_t> oneOf, int32_t* out)
 {
-    if (!value.isInt32()) {
+    int32_t value_num = 0;
+    if (value.isInt32()) {
+        value_num = value.asInt32();
+    } else if (value.isNumber()) {
+        double d = value.asNumber();
+        if (!std::isfinite(d) || d < INT32_MIN || d > INT32_MAX || std::trunc(d) != d) {
+            return Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, name, "must be one of: "_s, value, oneOf);
+        }
+        value_num = static_cast<int32_t>(d);
+    } else {
         return Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, name, "must be one of: "_s, value, oneOf);
     }
 
-    int32_t value_num = value.asInt32();
     for (int32_t oneOfNum : oneOf) {
         if (value_num == oneOfNum) {
             if (out) {

@@ -287,27 +287,7 @@ pub fn handleInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, subprocess:
             return;
         }
         const ipc_data = ipc_opt.?;
-        const event_loop = globalThis.bunVM().eventLoop();
-        if (try message.get(globalThis, "ack")) |p| {
-            _ = &p;
-            if ((!p.isUndefined())) {
-                const ack = p.toInt32();
-                if (ipc_data.internal_msg_queue.callbacks.getEntry(ack)) |entry| {
-                    _ = &entry;
-                    var cb_guard = DeinitGuard(jsc.Strong.Optional){ .val = entry.value_ptr.* };
-                    _ = &cb_guard;
-                    var __cb_guard_moved = false; _ = &__cb_guard_moved;
-                    defer if (!__cb_guard_moved) { __cb_guard_moved = true; const __T = @TypeOf(cb_guard); if (@typeInfo(__T) == .optional) { if (cb_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { cb_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = cb_guard; _drop_val.__cp_deinit(); } };
-                    _ = ipc_data.internal_msg_queue.callbacks.swapRemove(ack);
-                    const cb = (cb_guard.val.get()).?;
-                    _ = event_loop.runCallback(cb, globalThis, (ipc_data.internal_msg_queue.worker.get()).?, (&.{ message, .@"null" }));
-                    return;
-                }
-            }
-        }
-        const cb = (ipc_data.internal_msg_queue.cb.get()).?;
-        _ = event_loop.runCallback(cb, globalThis, (ipc_data.internal_msg_queue.worker.get()).?, (&.{ message, .@"null" }));
-        return;
+        _ = try ipc_data.internal_msg_queue.dispatch(message, globalThis);
 }
 
 pub fn setRef(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {

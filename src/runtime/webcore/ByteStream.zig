@@ -138,6 +138,9 @@ pub fn setup(self: *ByteStream) void {
 }
 
 pub fn onStart(self: *ByteStream) streams.Start {
+        if ((self.pending.result == .err)) {
+            return .ready;
+        }
         if ((self.has_received_last_chunk and (self.buffer.items.len == 0))) {
             return .empty;
         }
@@ -439,7 +442,7 @@ pub fn drain(self: *ByteStream) ByteList {
 }
 
 pub fn toAnyBlob(self: *ByteStream) ?Blob.Any {
-        if (self.has_received_last_chunk) {
+        if ((self.has_received_last_chunk and (self.pending.result != .err))) {
             const saved_buf = self.buffer;
             self.buffer = .{ .allocator = default_allocator, .items = empty_u8_slice[0..0], .capacity = 0 };
             self.done = true;

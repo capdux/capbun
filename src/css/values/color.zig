@@ -592,8 +592,8 @@ _ = self.light_dark.light.deinit(allocator);
 }
     }
 
-pub fn deepClone(self: CssColor, allocator: Allocator) CssColor {
-            return (switch (self) {
+pub fn deepClone(self: *const CssColor, allocator: Allocator) CssColor {
+            return (switch (self.*) {
 .current_color => .current_color,
 .rgba => |rgba| CssColor{ .rgba = rgba },
 .lab => |lab| CssColor{ .lab = bun.create(allocator, LABColor, (blk: {
@@ -613,22 +613,22 @@ pub fn deepClone(self: CssColor, allocator: Allocator) CssColor {
 });
     }
 
-pub fn toLightDark(self: CssColor, allocator: Allocator) CssColor {
-            return (switch (self) {
+pub fn toLightDark(self: *const CssColor, allocator: Allocator) CssColor {
+            return (switch (self.*) {
 .light_dark => self.deepClone(allocator),
 else => CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, self.deepClone(allocator)), .dark = bun.create(allocator, CssColor, self.deepClone(allocator)) } },
 });
     }
 
-pub fn interpolate(self: CssColor, allocator: Allocator, comptime T: type, p1_: f32, other: *const CssColor, p2_: f32, method: HueInterpolationMethod) ?CssColor {
+pub fn interpolate(self: *const CssColor, allocator: Allocator, comptime T: type, p1_: f32, other: *const CssColor, p2_: f32, method: HueInterpolationMethod) ?CssColor {
             var p1 = p1_;
             _ = &p1;
             var p2 = p2_;
             _ = &p2;
-            if (((self == .current_color) or (other.* == .current_color))) {
+            if (((self.* == .current_color) or (other.* == .current_color))) {
                 return null;
             }
-            if (((self == .light_dark) or (other.* == .light_dark))) {
+            if (((self.* == .light_dark) or (other.* == .light_dark))) {
                 const this_light_dark = self.toLightDark(allocator);
                 const other_light_dark = other.toLightDark(allocator);
                 const al = this_light_dark.light_dark.light;
@@ -647,10 +647,7 @@ pub fn interpolate(self: CssColor, allocator: Allocator, comptime T: type, p1_: 
                     return null;
                 }
             }
-            const converted_first = (switch (checkColorConverted(T, (blk: {
-            break :blk (&self);
-
-}))) {
+            const converted_first = (switch (checkColorConverted(T, self)) {
 .result => |v| v,
 .err => {
 return null;
@@ -664,10 +661,7 @@ return null;
 });
             var first_color: T = undefined;
             _ = &first_color;
-            if (T.tryFromCssColor((blk: {
-            break :blk (&self);
-
-}))) |c| {
+            if (T.tryFromCssColor(self)) |c| {
                 _ = &c;
                 first_color = c;
             } else {
@@ -729,8 +723,8 @@ pub fn lightDarkOwned(allocator: Allocator, light: CssColor, dark: CssColor) Css
             return CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, light), .dark = bun.create(allocator, CssColor, dark) } };
     }
 
-pub fn getFallback(self: CssColor, allocator: Allocator, kind: ColorFallbackKind) CssColor {
-            if ((self == .rgba)) {
+pub fn getFallback(self: *const CssColor, allocator: Allocator, kind: ColorFallbackKind) CssColor {
+            if ((self.* == .rgba)) {
                 return self.deepClone(allocator);
             }
             const kind_bits = kind.asBits();
@@ -874,8 +868,8 @@ pub fn hash(self: CssColor, hasher: *std.hash.Wyhash) void {
 }), hasher);
     }
 
-pub fn toRGB(self: CssColor, allocator: Allocator) ?CssColor {
-            if ((self == .light_dark)) {
+pub fn toRGB(self: *const CssColor, allocator: Allocator) ?CssColor {
+            if ((self.* == .light_dark)) {
                 if (self.light_dark.light.toRGB(allocator)) |l| {
                     _ = &l;
                     if (self.light_dark.dark.toRGB(allocator)) |d| {
@@ -888,10 +882,7 @@ pub fn toRGB(self: CssColor, allocator: Allocator) ?CssColor {
                     return null;
                 }
             }
-            if (RGBA.tryFromCssColor((blk: {
-            break :blk (&self);
-
-}))) |c| {
+            if (RGBA.tryFromCssColor(self)) |c| {
                 _ = &c;
                 return CssColor{ .rgba = c };
             } else {
@@ -899,9 +890,9 @@ pub fn toRGB(self: CssColor, allocator: Allocator) ?CssColor {
             }
     }
 
-pub fn toP3(self: CssColor, allocator: Allocator) ?CssColor {
-            return (switch (self) {
-.light_dark => |ld| blk: {
+pub fn toP3(self: *const CssColor, allocator: Allocator) ?CssColor {
+            return (switch (self.*) {
+.light_dark => |*ld| blk: {
             var light: CssColor = undefined;
             _ = &light;
             if (ld.light.toP3(allocator)) |l| {
@@ -921,10 +912,7 @@ pub fn toP3(self: CssColor, allocator: Allocator) ?CssColor {
             break :blk CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, light), .dark = bun.create(allocator, CssColor, dark) } };
 },
 else => {
-if (P3.tryFromCssColor((blk: {
-            break :blk (&self);
-
-}))) |c| {
+if (P3.tryFromCssColor(self)) |c| {
                 _ = &c;
                 return CssColor{ .predefined = bun.create(allocator, PredefinedColor, PredefinedColor{ .display_p3 = c }) };
             } else {
@@ -934,9 +922,9 @@ if (P3.tryFromCssColor((blk: {
 });
     }
 
-pub fn toLAB(self: CssColor, allocator: Allocator) ?CssColor {
-            return (switch (self) {
-.light_dark => |ld| blk: {
+pub fn toLAB(self: *const CssColor, allocator: Allocator) ?CssColor {
+            return (switch (self.*) {
+.light_dark => |*ld| blk: {
             var light: CssColor = undefined;
             _ = &light;
             if (ld.light.toLAB(allocator)) |l| {
@@ -956,10 +944,7 @@ pub fn toLAB(self: CssColor, allocator: Allocator) ?CssColor {
             break :blk CssColor{ .light_dark = CssColorLightDark{ .light = bun.create(allocator, CssColor, light), .dark = bun.create(allocator, CssColor, dark) } };
 },
 else => {
-if (LAB.tryFromCssColor((blk: {
-            break :blk (&self);
-
-}))) |c| {
+if (LAB.tryFromCssColor(self)) |c| {
                 _ = &c;
                 return CssColor{ .lab = bun.create(allocator, LABColor, LABColor{ .lab = c }) };
             } else {
@@ -1134,11 +1119,8 @@ pub fn unpremultiply(self: *LAB, a: f32) void {
             _ = RecangularPremultiply(LAB, "l", "a", "b").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: LAB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(LAB, .LAB)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const LAB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(LAB, .LAB)(self, allocator);
     }
 
 pub fn adjustHue(self: *LAB, _: *@This(), _: HueInterpolationMethod) void {
@@ -1180,11 +1162,8 @@ pub fn unpremultiply(self: *SRGB, a: f32) void {
             _ = RecangularPremultiply(SRGB, "r", "g", "b").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: SRGB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(SRGB, .SRGB)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const SRGB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(SRGB, .SRGB)(self, allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *SRGB) void {
@@ -1235,11 +1214,8 @@ pub fn unpremultiply(self: *HSL, a: f32) void {
             _ = PolarPremultiply(HSL, "s", "l").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: HSL, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(HSL, .HSL)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const HSL, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(HSL, .HSL)(self, allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *HSL) void {
@@ -1293,11 +1269,8 @@ pub fn unpremultiply(self: *HWB, a: f32) void {
             _ = PolarPremultiply(HWB, "w", "b").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: HWB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(HWB, .HWB)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const HWB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(HWB, .HWB)(self, allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *HWB) void {
@@ -1347,11 +1320,8 @@ pub fn unpremultiply(self: *SRGBLinear, a: f32) void {
             _ = RecangularPremultiply(SRGBLinear, "r", "g", "b").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: SRGBLinear, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const SRGBLinear, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(self, allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *SRGBLinear) void {
@@ -1389,11 +1359,8 @@ pub const P3 = struct {
     b: f32,
     alpha: f32,
 
-pub fn intoCssColor(self: P3, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(P3, .P3)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const P3, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(P3, .P3)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1420,11 +1387,8 @@ pub const A98 = struct {
     b: f32,
     alpha: f32,
 
-pub fn intoCssColor(self: A98, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(A98, .A98)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const A98, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(A98, .A98)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1451,11 +1415,8 @@ pub const ProPhoto = struct {
     b: f32,
     alpha: f32,
 
-pub fn intoCssColor(self: ProPhoto, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(ProPhoto, .ProPhoto)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const ProPhoto, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(ProPhoto, .ProPhoto)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1482,11 +1443,8 @@ pub const Rec2020 = struct {
     b: f32,
     alpha: f32,
 
-pub fn intoCssColor(self: Rec2020, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(Rec2020, .Rec2020)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const Rec2020, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(Rec2020, .Rec2020)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1513,11 +1471,8 @@ pub const XYZd50 = struct {
     z: f32,
     alpha: f32,
 
-pub fn intoCssColor(self: XYZd50, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(XYZd50, .XYZd50)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const XYZd50, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(XYZd50, .XYZd50)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1558,11 +1513,8 @@ pub fn unpremultiply(self: *XYZd65, a: f32) void {
             _ = RecangularPremultiply(XYZd65, "x", "y", "z").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: XYZd65, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(XYZd65, .XYZd65)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const XYZd65, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(XYZd65, .XYZd65)(self, allocator);
     }
 
 pub fn adjustPowerlessComponents(self: *XYZd65) void {
@@ -1616,11 +1568,8 @@ pub fn unpremultiply(self: *LCH, a: f32) void {
             _ = RecangularPremultiply(LCH, "l", "c", "h").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: LCH, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(LCH, .LCH)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const LCH, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(LCH, .LCH)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -1662,11 +1611,8 @@ pub fn unpremultiply(self: *OKLAB, a: f32) void {
             _ = RecangularPremultiply(OKLAB, "l", "a", "b").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: OKLAB, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(OKLAB, .OKLAB)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const OKLAB, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(OKLAB, .OKLAB)(self, allocator);
     }
 
 pub fn adjustHue(self: *OKLAB, _: *@This(), _: HueInterpolationMethod) void {
@@ -1716,11 +1662,8 @@ pub fn unpremultiply(self: *OKLCH, a: f32) void {
             _ = RecangularPremultiply(OKLCH, "l", "c", "h").unpremultiply(self, a);
     }
 
-pub fn intoCssColor(self: OKLCH, allocator: Allocator) CssColor {
-            return ImplementIntoCssColor(OKLCH, .OKLCH)((blk: {
-            break :blk (&self);
-
-}), allocator);
+pub fn intoCssColor(self: *const OKLCH, allocator: Allocator) CssColor {
+            return ImplementIntoCssColor(OKLCH, .OKLCH)(self, allocator);
     }
     const colorspace_impl = DefineColorspace(@This(), ChannelTypeMap);
     pub const components = colorspace_impl.components;
@@ -3542,6 +3485,18 @@ return .{ .err = e };
 .err => null,
 }),
 });
+        if (first_percent) |p| {
+            _ = &p;
+            if (((p < 0.0) or (p > 1.0))) {
+                return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+            }
+        }
+        if (second_percent) |p| {
+            _ = &p;
+            if (((p < 0.0) or (p > 1.0))) {
+                return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+            }
+        }
         const p_tup = (if (((first_percent == null) and (second_percent == null))) .{ @as(f32, @floatCast(0.5)), @as(f32, @floatCast(0.5)) } else brk: {
         const p2 = ((second_percent) orelse ((@as(f32, @floatCast(1.0)) - first_percent.?)));
         const p1 = ((first_percent) orelse ((@as(f32, @floatCast(1.0)) - second_percent.?)));
@@ -3904,21 +3859,30 @@ pub fn writeComponent(c: f32, dest: *Printer) PrintErr!void {
 }
 
 pub fn writePredefined(predefined: *const PredefinedColor, dest: *Printer) PrintErr!void {
-        const pre_tup = (switch (predefined.*) {
-.srgb => |*rgb| .{ "srgb", rgb.r, rgb.g, rgb.b, rgb.alpha },
-.srgb_linear => |*rgb| .{ "srgb-linear", rgb.r, rgb.g, rgb.b, rgb.alpha },
-.display_p3 => |*rgb| .{ "display-p3", rgb.r, rgb.g, rgb.b, rgb.alpha },
-.a98 => |*rgb| .{ "a98-rgb", rgb.r, rgb.g, rgb.b, rgb.alpha },
-.prophoto => |*rgb| .{ "prophoto-rgb", rgb.r, rgb.g, rgb.b, rgb.alpha },
-.rec2020 => |*rgb| .{ "rec2020", rgb.r, rgb.g, rgb.b, rgb.alpha },
-.xyz_d50 => |*xyz| .{ "xyz-d50", xyz.x, xyz.y, xyz.z, xyz.alpha },
-.xyz_d65 => |*xyz| .{ "xyz", xyz.x, xyz.y, xyz.z, xyz.alpha },
+        const name: []const u8 = (switch (predefined.*) {
+.srgb => "srgb",
+.srgb_linear => "srgb-linear",
+.display_p3 => "display-p3",
+.a98 => "a98-rgb",
+.prophoto => "prophoto-rgb",
+.rec2020 => "rec2020",
+.xyz_d50 => "xyz-d50",
+.xyz_d65 => "xyz",
 });
-        const name = pre_tup[0];
-        const a = pre_tup[1];
-        const b = pre_tup[2];
-        const c = pre_tup[3];
-        const alpha = pre_tup[4];
+        const comps: [4]f32 = (switch (predefined.*) {
+.srgb => |*c| .{ c.r, c.g, c.b, c.alpha },
+.srgb_linear => |*c| .{ c.r, c.g, c.b, c.alpha },
+.display_p3 => |*c| .{ c.r, c.g, c.b, c.alpha },
+.a98 => |*c| .{ c.r, c.g, c.b, c.alpha },
+.prophoto => |*c| .{ c.r, c.g, c.b, c.alpha },
+.rec2020 => |*c| .{ c.r, c.g, c.b, c.alpha },
+.xyz_d50 => |*c| .{ c.x, c.y, c.z, c.alpha },
+.xyz_d65 => |*c| .{ c.x, c.y, c.z, c.alpha },
+});
+        const a = comps[0];
+        const b = comps[1];
+        const c = comps[2];
+        const alpha = comps[3];
         _ = try dest.writeStr("color(");
         _ = try dest.writeStr(name);
         _ = try dest.writeChar(32);

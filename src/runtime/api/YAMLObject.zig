@@ -990,7 +990,7 @@ return JSValue.js_undefined;
 };
 
 const SeenObjectPtr = *anyopaque;
-pub const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true });
+pub const PropIter = jsc.JSPropertyIterator(.{ .skip_empty_name = false, .include_value = true, .include_symbols = false });
 const Environment = bun.Environment;
 const JSError = bun.JSError;
 const String = bun.String;

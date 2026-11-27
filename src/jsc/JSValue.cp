@@ -188,6 +188,7 @@ pub struct _exposed_to_ffi {
     fn JSC__JSValue__put(value: JSValue, global: *JSGlobalObject, key: *const ZigString, result: jsc.JSValue);
     fn JSC__JSValue__deleteProperty(target: JSValue, global: *JSGlobalObject, key: *const ZigString): bool;
     fn JSC__JSValue__putBunString(value: JSValue, global: *JSGlobalObject, key: *const bun.String, result: jsc.JSValue);
+    fn JSC__JSValue__putProperty(value: JSValue, global: *JSGlobalObject, key: *const bun.String, result: jsc.JSValue);
     fn JSC__JSValue__upsertBunStringArray(value: JSValue, global: *JSGlobalObject, key: *const bun.String, result: jsc.JSValue): JSValue;
     fn JSC__JSValue__putToPropertyKey(target: JSValue, globalObject: *JSGlobalObject, key: jsc.JSValue, value: jsc.JSValue);
     fn JSC__JSValue__putIndex(value: JSValue, globalObject: *JSGlobalObject, i: u32, out: JSValue);
@@ -644,6 +645,10 @@ pub enum JSValue: i64 {
     /// Prefer to use `.put` if the key is guaranteed to be non-numeric (e.g. known at comptime)
     pub fn putMayBeIndex(globalObject: *JSGlobalObject, key: *const String, value: JSValue): bun.JSError!void {
         return bun.cpp.JSC__JSValue__putMayBeIndex(_, globalObject, key, value);
+    }
+
+    pub fn putProperty(globalObject: *JSGlobalObject, key: *const String, value: JSValue): bun.JSError!void {
+        return bun.jsc.host_fn.fromJSHostCallGeneric(globalObject, @src(), JSC__JSValue__putProperty, .{ _, globalObject, key, value });
     }
 
     pub static fn putToPropertyKey(target: JSValue, globalObject: *JSGlobalObject, key: jsc.JSValue, value: jsc.JSValue): bun.JSError!void {

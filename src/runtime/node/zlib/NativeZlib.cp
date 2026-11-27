@@ -78,13 +78,15 @@ pub struct Context {
 
     pub fn setParams(*_, level: c_int, strategy: c_int): Error {
         _.e = .Ok;
-        _.setBuffers(null, null);
+        let dummy: [1]u8 = [0];
+        _.setBuffers(null, dummy[0..0]);
         switch (_.mode) {
             .DEFLATE, .DEFLATERAW => {
                 _.e = c.deflateParams(&_.state, level, strategy);
             },
             else => {},
         }
+        _.setBuffers(null, null);
         if (_.e != .Ok && _.e != .BufError) {
             return _.error_for_message("Failed to set parameters");
         }

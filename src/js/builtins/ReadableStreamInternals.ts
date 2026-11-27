@@ -759,7 +759,7 @@ export function readDirectStream(stream, sink, underlyingSource) {
   if (maybePromise && $isPromise(maybePromise)) {
     return maybePromise.$then(undefined, e => {
       close(stream, e);
-      return Promise.$reject(e);
+      throw e;
     });
   }
 }
@@ -1953,10 +1953,11 @@ export function readableStreamFromAsyncIterator(target, fn) {
 
   var runningAsyncIteratorPromise;
   async function runAsyncIterator(controller) {
-    var closingError: Error | undefined, value, done, immediateTask;
+    var closingError: Error | undefined, shouldThrowToIter = false, value, done, immediateTask;
 
     try {
       while (!cancelled && !done) {
+        shouldThrowToIter = false;
         const promise = iter.next(controller);
 
         if (cancelled) {
@@ -1976,7 +1977,12 @@ export function readableStreamFromAsyncIterator(target, fn) {
           }
         }
 
+        if (done) {
+          break;
+        }
+
         if (!$isUndefinedOrNull(value)) {
+          shouldThrowToIter = true;
           controller.write(value);
         }
       }
@@ -1989,13 +1995,17 @@ export function readableStreamFromAsyncIterator(target, fn) {
 
       // Stream was closed before we tried writing to it.
       if (closingError?.code === "ERR_INVALID_THIS") {
-        await iter?.return?.();
+        if (!done) {
+          await iter?.return?.();
+        }
         return;
       }
 
       if (closingError) {
         try {
-          await iter.throw?.(closingError);
+          if (shouldThrowToIter) {
+            await iter.throw?.(closingError);
+          }
         } finally {
           iter = undefined;
           // eslint-disable-next-line no-throw-literal
@@ -2003,7 +2013,7 @@ export function readableStreamFromAsyncIterator(target, fn) {
         }
       } else {
         const endResult = await controller.end();
-        if (iter) {
+        if (iter && !done) {
           await iter.return?.();
         }
         return endResult;

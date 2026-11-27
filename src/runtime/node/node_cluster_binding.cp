@@ -244,30 +244,7 @@ pub fn handleInternalMessagePrimary(globalThis: *jsc.JSGlobalObject, subprocess:
     if (ipc_opt == null) return;
     const ipc_data = ipc_opt.?;
 
-    const event_loop = globalThis.bunVM().eventLoop();
-
-    // TODO: investigate if "ack" and "seq" are observable and if they're not, remove them entirely.
-    if (p := message.get(globalThis, "ack")?) {
-        if (!p.isUndefined()) {
-            const ack = p.toInt32();
-            if (entry := ipc_data.internal_msg_queue.callbacks.getEntry(ack)) {
-                let cb_guard = DeinitGuard<jsc.Strong.Optional>{ val: entry.value_ptr.* };
-                * = ipc_data.internal_msg_queue.callbacks.swapRemove(ack);
-                const cb = cb_guard.val.get().?;
-                event_loop.runCallback(cb, globalThis, ipc_data.internal_msg_queue.worker.get().?, &.{
-                    message,
-                    .@"null", // handle
-                });
-                return;
-            }
-        }
-    }
-    const cb = ipc_data.internal_msg_queue.cb.get().?;
-    event_loop.runCallback(cb, globalThis, ipc_data.internal_msg_queue.worker.get().?, &.{
-        message,
-        .@"null", // handle
-    });
-    return;
+    ipc_data.internal_msg_queue.dispatch(message, globalThis)?;
 }
 
 //

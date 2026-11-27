@@ -1079,6 +1079,7 @@ void Transport::handleEvent(std::span<const char> method, std::span<const char> 
             settle(g, view, s, false, err);
         // Erase stale m_pending entries — replies won't come.
         m_pending.removeIf([vid](auto& kv) { return kv.value.viewId == vid; });
+        view->m_loading = false;
         view->m_closed = true;
         updateKeepAlive();
         return;
@@ -1293,8 +1294,10 @@ void Transport::rejectAllAndMarkDead(const WTF::String& reason)
     // already-cleared slot — the first settle for a slot rejects, the rest
     // find barrier.get() == null and no-op.
     for (auto& [id, entry] : m_pending) {
-        if (JSWebView* v = viewFor(entry.viewId))
+        if (JSWebView* v = viewFor(entry.viewId)) {
+            v->m_loading = false;
             settle(g, v, entry.slot, false, err);
+        }
     }
     m_pending.clear();
     m_sessions.clear();

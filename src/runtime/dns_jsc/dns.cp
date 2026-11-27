@@ -1295,7 +1295,7 @@ pub struct InternalKey {
                 .port = _.port,
             };
         } else {
-            return _;
+            return _.*;
         }
     }
 }
@@ -2758,16 +2758,15 @@ pub struct Resolver {
         ) catch e => bun.handleOom(e);
 
         const promise = request.tail.promise.value();
+        if (!request.cache.pending_cache) {
+            _.untracked_requests += 1;
+        }
         channel.getHostByAddr(
             ip,
             GetHostByAddrInfoRequest,
             request,
             GetHostByAddrInfoRequest.onCaresComplete,
         );
-
-        if (!request.cache.pending_cache) {
-            _.untracked_requests += 1;
-        }
         _.requestSent(globalThis.bunVM());
         return promise;
     }
@@ -3126,6 +3125,9 @@ pub struct Resolver {
         ) catch e => bun.handleOom(e);
         const promise = request.tail.promise.value();
 
+        if (!request.cache.pending_cache) {
+            _.untracked_requests += 1;
+        }
         channel.resolve(
             name,
             type_name,
@@ -3134,10 +3136,6 @@ pub struct Resolver {
             cares_type,
             ResolveInfoRequest(cares_type, type_name).onCaresComplete,
         );
-
-        if (!request.cache.pending_cache) {
-            _.untracked_requests += 1;
-        }
         _.requestSent(globalThis.bunVM());
         return promise;
     }
@@ -3178,6 +3176,10 @@ pub struct Resolver {
             "pending_host_cache_cares",
         ) catch e => bun.handleOom(e);
         const promise = request.tail.promise.value();
+        const is_pending_cache = request.cache.pending_cache;
+        if (!is_pending_cache) {
+            _.untracked_requests += 1;
+        }
 
         channel.getAddrInfo(
             query.name,
@@ -3188,9 +3190,6 @@ pub struct Resolver {
             GetAddrInfoRequest.onCaresComplete,
         );
 
-        if (!request.cache.pending_cache) {
-            _.untracked_requests += 1;
-        }
         _.requestSent(globalThis.bunVM());
         return promise;
     }
@@ -3482,16 +3481,15 @@ pub struct Resolver {
         ) catch e => bun.handleOom(e);
 
         const promise = request.tail.promise.value();
+        if (!request.cache.pending_cache) {
+            resolver.untracked_requests += 1;
+        }
         name_chan.getNameInfo(
             unsafe { @ptrCast(&sa) },
             GetNameInfoRequest,
             request,
             GetNameInfoRequest.onCaresComplete,
         );
-
-        if (!request.cache.pending_cache) {
-            resolver.untracked_requests += 1;
-        }
         resolver.requestSent(globalThis.bunVM());
         return promise;
     }

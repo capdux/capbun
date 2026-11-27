@@ -36,10 +36,15 @@ pub struct OnIOWriterChunk {
 /// Used in debug builds to ensure the shell is not creating a callstack that is too deep.
 @tls let _dbg_catch_exec_within_exec: if (Environment.isDebug) usize else u0 = 0;
 
+type PipelinePtr = *Pipeline;
+
 struct PipelineStackGuard {
-    stack: std.array_list.Managed(*Pipeline),
+    stack: std.array_list.Managed(PipelinePtr),
 
     ~init() {
+        for (p of _.stack.items) {
+            p.pipeline_stack = null;
+        }
         _.stack.deinit();
     }
 }
@@ -100,10 +105,10 @@ pub union(enum) Yield {
         //
         // This means we need to store a reference to the pipeline. And
         // there can be nested pipelines, so we need a stack.
-        let sfb = std.heap.stackFallback(@sizeOf(*Pipeline) * 4, bun.default_allocator);
+        let sfb = std.heap.stackFallback(@sizeOf(PipelinePtr) * 4, bun.default_allocator);
         const alloc = sfb.get();
         let stack_guard = PipelineStackGuard{
-            stack: bun.handleOom(std.array_list.Managed(*Pipeline).initCapacity(alloc, 4)),
+            stack: bun.handleOom(std.array_list.Managed(PipelinePtr).initCapacity(alloc, 4)),
         };
 
         // Note that we're using labelled switch statements but _not_
@@ -115,13 +120,15 @@ pub union(enum) Yield {
                 .pipeline x => {
                     if (x.state == .done) {
                         // remove it from the pipeline stack as calling `.next()` will now deinit it
-                        if (idx := std.mem.indexOfScalar(*Pipeline, stack_guard.stack.items, x)) {
+                        if (idx := std.mem.indexOfScalar(PipelinePtr, stack_guard.stack.items, x)) {
                             * = stack_guard.stack.orderedRemove(idx);
                         }
+                        x.pipeline_stack = null;
                         cur = x.next();
                         continue;
                     }
-                    bun.assert_eql(std.mem.indexOfScalar(*Pipeline, stack_guard.stack.items, x), null);
+                    bun.assert_eql(std.mem.indexOfScalar(PipelinePtr, stack_guard.stack.items, x), null);
+                    x.pipeline_stack = &stack_guard.stack;
                     bun.handleOom(stack_guard.stack.append(x));
                     cur = x.next();
                 },
@@ -148,13 +155,14 @@ pub union(enum) Yield {
         }
     }
 
-    pub static fn drainPipelines(pipeline_stack: *std.array_list.Managed(*Pipeline)): Yield? {
+    pub static fn drainPipelines(pipeline_stack: *std.array_list.Managed(PipelinePtr)): Yield? {
         if (pipeline_stack.items.len == 0) return null;
         let i: i64 = @as(i64, @intCast(pipeline_stack.items.len)) - 1;
         while (i >= 0 && i < pipeline_stack.items.len) : (i -= 1) {
             const pipeline = pipeline_stack.items[i];
             if (pipeline.state == .starting_cmds) return pipeline.next();
             * = pipeline_stack.pop();
+            pipeline.pipeline_stack = null;
             if (pipeline.state == .done) {
                 return pipeline.next();
             }

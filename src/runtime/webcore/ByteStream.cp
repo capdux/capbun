@@ -89,6 +89,9 @@ struct FreeSliceGuard {
     }
 
     pub fn onStart(*_): streams.Start {
+        if (_.pending.result == .err) {
+            return .ready;
+        }
         if (_.has_received_last_chunk && _.buffer.items.len == 0) {
             return .empty;
         }
@@ -425,7 +428,7 @@ struct FreeSliceGuard {
     }
 
     pub fn toAnyBlob(*_): Blob.Any? {
-        if (_.has_received_last_chunk) {
+        if (_.has_received_last_chunk && _.pending.result != .err) {
             const saved_buf = _.buffer;
             _.buffer = .{
                 .allocator = default_allocator,

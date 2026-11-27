@@ -247,7 +247,9 @@ JSC_DEFINE_HOST_FUNCTION(jsGetCipherInfo, (JSC::JSGlobalObject * lexicalGlobalOb
 
     const ncrypto::Cipher cipher = [&] {
         if (nameOrNid.isNumber()) {
-            return ncrypto::Cipher::FromNid(nameOrNid.asInt32());
+            int32_t nid = nameOrNid.toInt32(lexicalGlobalObject);
+            RETURN_IF_EXCEPTION(scope, ncrypto::Cipher());
+            return ncrypto::Cipher::FromNid(nid);
         }
 
         String name = nameOrNid.toWTFString(lexicalGlobalObject);

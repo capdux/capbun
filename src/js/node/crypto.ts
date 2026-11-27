@@ -167,8 +167,8 @@ function pbkdf2(password, salt, iterations, keylen, digest, callback) {
   const promise = _pbkdf2(password, salt, iterations, keylen, digest, callback);
   if (callback) {
     promise.then(
-      result => callback(null, result),
-      err => callback(err),
+      result => process.nextTick(callback, null, result),
+      err => process.nextTick(callback, err),
     );
     return;
   }

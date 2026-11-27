@@ -179,6 +179,23 @@ pub struct PBKDF2 {
     }
 }
 
+fn readInput(globalThis: *jsc.JSGlobalObject, val: jsc.JSValue, name: []const u8, comptime too_long_msg: [:0]const u8, is_async: bool): bun.JSError!jsc.Node.StringOrBuffer {
+    const maybe = jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, val, false, true)?;
+    if (maybe == null) return globalThis.throwInvalidArgumentTypeValue(name, "string or buffer", val);
+    let sob = maybe.?;
+    if (sob.slice().len > std.math.maxInt(i32)) {
+        sob.deinit();
+        return globalThis.throwInvalidArguments(too_long_msg, .{});
+    }
+    if (!is_async) return sob;
+    const owned = bun.default_allocator.dupe(u8, sob.slice()) catch e => {
+        sob.deinit();
+        return e;
+    };
+    sob.deinit();
+    return jsc.Node.StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.init(bun.default_allocator, owned) };
+}
+
 pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_async: bool): bun.JSError!PBKDF2 {
     const args = callFrame.argumentsAsArray(6);
     const arg0 = args[0];
@@ -262,18 +279,11 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
         is_async: is_async,
     };
 
-    const allow_string_object = true;
-    const maybe_salt = jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, arg1, is_async, allow_string_object)?;
-    if (maybe_salt == null) return globalThis.throwInvalidArgumentTypeValue("salt", "string or buffer", arg1);
-    out.salt = maybe_salt.?;
-
-    if (out.salt.slice().len > std.math.maxInt(i32)) return globalThis.throwInvalidArguments("salt is too long", .{});
-
-    const maybe_password = jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, arg0, is_async, allow_string_object)?;
-    if (maybe_password == null) return globalThis.throwInvalidArgumentTypeValue("password", "string or buffer", arg0);
-    out.password = maybe_password.?;
-
-    if (out.password.slice().len > std.math.maxInt(i32)) return globalThis.throwInvalidArguments("password is too long", .{});
+    out.password = readInput(globalThis, arg0, "password", "password is too long", is_async)?;
+    out.salt = readInput(globalThis, arg1, "salt", "salt is too long", is_async) catch e => {
+        if (!globalThis.hasException()) out.deinit();
+        return e;
+    };
 
     if (is_async && !arg5.isFunction()) return globalThis.throwInvalidArgumentTypeValue("callback", "function", arg5);
 

@@ -24,7 +24,49 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
-- **2026-11-27 17:52 Batch 169A/170R/172A/172B/175R/176A/177R/180R/181R/182A/183A/184R/185R/186A/187A/187R/188R/189A/190R/191A/192R/193A/194R/195A 验收转绿（`1.4.5-debug`，26 个完整实名路径 + 10 冻结；累计 `1,300` 绿 + `176` 冻结 = `1,476 / 2,339 (63.1%)`，剩余 `863`）**：
+- **2026-11-27 18:33 Batches 198R–226R 新增转绿（`1.4.5-debug`，累计 `1,329` 绿 + `189` 冻结 = `1,518 / 2,339 (64.9%)`，剩余 `821`）**：
+  - `test/js/node/vm/vm-sourceUrl.test.ts` (3 pass, 0 fail)
+  - `test/js/node/buffer-jit.test.ts` (11 pass, 0 fail, 60s debug timeout)
+  - `test/js/node/process/process-stdio-invalid-utf16.test.ts` (24 pass, 0 fail)
+  - `test/js/node/url/pathToFileURL.test.ts` (2 pass, 0 fail)
+  - `test/js/node/url/url-fileurltopathbuffer.test.ts` (12 pass, 0 fail)
+  - `test/js/node/url/url.test.ts` (7 pass, 0 fail)
+  - `test/js/node/stubs.test.js` (377 pass, 0 fail)
+  - `test/js/node/url/url-domain-ascii-unicode.test.js` (131 pass, 0 fail)
+  - `test/js/node/worker_threads/15787.test.ts` (1 pass, 0 fail)
+  - `test/js/node/worker_threads/worker-async-dispose.test.ts` (2 pass, 0 fail)
+  - `test/js/node/worker_threads/worker-transfer-list.test.ts` (2 pass, 0 fail)
+  - `test/js/node/worker_threads/worker-transfer-terminate-stress.test.ts` (1 pass, 0 fail)
+  - `test/js/node/worker_threads/worker_destruction.test.ts` (5 pass, 0 fail)
+  - `test/js/bun/yaml/yaml-block-scalar-matrix.test.ts` (1084 pass, 0 fail)
+  - `test/js/bun/util/sleepSync.test.ts` (6 pass, 1 skip, 0 fail)
+  - `test/js/bun/http/listener-getsockname.test.ts` (4 pass, 0 fail)
+  - `test/js/node/zlib/zlib-handle-bounds-check.test.ts` (41 pass, 0 fail)
+  - `test/js/bun/cookie/cookie-map.test.ts` (42 pass, 0 fail)
+  - `test/js/bun/cron/cron.test.ts` (82 pass, 35 skip, 0 fail)
+  - `test/js/bun/udp/udp_socket.test.ts` (233 pass, 0 fail, `--timeout=45000`)
+  - `test/js/web/fetch/blob-file-name-ownership.test.ts` (1 pass, 0 fail)
+  - `test/js/bun/css/css-loader.test.ts` (2 pass, 0 fail)
+  - `test/js/bun/glob/stress.test.ts` (2 pass, 0 fail)
+  - `test/js/bun/cookie/cookie.test.ts` (36 pass, 0 fail)
+  - `test/js/node/crypto/pbkdf2.test.ts` (53 pass, 0 fail)
+  - `test/js/bun/shell/exec.test.ts` (19 pass, 0 fail)
+  - `test/js/bun/css/color.test.ts` (1022 pass, 1 skip, 0 fail)
+  - `test/js/bun/test/failure-skip.test.ts` (15 pass, 0 fail, 60s timeout)
+  - `test/js/bun/test/concurrent_immediate.test.ts` (2 pass, 0 fail, `--timeout 15000`)
+  - **显式冻结（`bun install` + `node-gyp` 原生插件编译依赖）**：`test/js/node/process/dlopen-duplicate-load.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 `spawnThreadsForTesting`，其余 10/10 全绿）**：`test/js/node/process/process-execve.test.ts`
+  - **显式冻结（TOML v1.1.0 规范与 `Temporal` 未实现）**：`test/js/bun/toml/toml-test-suite.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 S3 `AbortMultipartUpload`）**：`test/js/bun/s3/s3-upload-abort.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 S3 `#42722` 流式内存上限优化）**：`test/js/bun/s3/s3-upload-memory.test.ts`
+  - **显式冻结（`worker_threads.ts:293` 缺失 `Worker.prototype.stdout` 管道）**：`test/js/node/worker_threads/worker-shutdown-post-leak.test.ts`
+  - **显式冻结（`HTTP2Unsupported` 服务端，HTTP/1.1 3/3 全绿）**：`test/js/web/fetch/abort-signal-leak.test.ts`
+  - **显式冻结（缺外部包 `immutable`）**：`test/js/bun/test/spyMatchers.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 `socketFaultInjection`）**：`test/js/bun/net/socket-syscall-fault.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 uSockets `openssl.c` fatal-record close）**：`test/js/bun/net/tls-fatal-error-closes.test.ts`
+  - **显式冻结（`v1.4.4` 缺失 TLS verify-before-client-cert）**：`test/js/bun/net/tls-reject-before-client-cert.test.ts`
+
+- **2026-11-27 17:52 Batch 169A/170R/172A/172B/175R/176A/177R/180R/181R/182A/183A/184R/185R/186A/187A/187R/188R/189A/190R/191A/192R/193A/194R/195A/196R 验收转绿（`1.4.5-debug`，26 个完整实名路径 + 12 冻结；累计 `1,300` 绿 + `178` 冻结 = `1,478 / 2,339 (63.2%)`，剩余 `861`）**：
   - `test/js/web/streams/readable-stream-terminal-barrier-release.test.ts` (2 pass, 0 fail)
   - `test/js/web/fetch/server-response-stream-leak.test.ts` (1 pass, 0 fail, `--timeout=25000`)
   - `test/js/web/fetch/fetch.unix.test.ts` (16 pass, 0 fail)
@@ -61,6 +103,8 @@
   - **显式冻结（`Handlers.cp` 未接入 `alpnCallback`/`serverName` 监听器回调）**：`test/js/bun/net/tcp-server.test.ts`
   - **显式冻结（缺外部包 `fast-glob`）**：`test/js/bun/glob/scan.test.ts`
   - **显式冻结（`NodeBufferModule.h:206` `Buffer.transcode` 未实现）**：`test/js/node/buffer.test.js`
+  - **显式冻结（`v1.4.4` 缺失 `--disallow-code-generation-from-strings`）**：`test/js/node/disallow-code-generation-from-strings.test.ts`
+  - **显式冻结（缺外部包 `ws` 供 `nodeExe()` 子进程加载）**：`test/js/node/async_hooks/AsyncLocalStorage-tracking.test.ts`
 
 - **2026-11-27 17:34 Batch 167R 实测转绿（`1.4.5-debug`，1 个完整实名路径 + 1 冻结）**：
   - `test/js/web/fetch/response.test.ts` (23 pass, 0 fail)

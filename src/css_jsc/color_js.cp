@@ -231,7 +231,8 @@ pub fn jsFunctionColor(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFram
             let a: u8? = null;
             if (a_value := args[0].getTruthy(globalThis, "a")?) {
                 if (a_value.isNumber()) {
-                    a = @mod(@as(i64, bun.intFromFloat(i64, a_value.asNumber() * 255.0)), 256) as u8;
+                    const num = a_value.asNumber();
+                    a = if (std.math.isNan(num) || num <= 0.0) @as(u8, 0) else if (num >= 1.0) @as(u8, 255) else @as(u8, @intFromFloat(num * 255.0));
                 }
             }
             if (globalThis.hasException()) {

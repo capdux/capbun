@@ -1034,19 +1034,21 @@ pub struct CronJob {
     }
 
     fn computeNextTimespec(*_): bun.timespec? {
-        // Cron occurrences are calendar-based (real epoch); the timer heap is
-        // monotonic. Anchor both to real time so fake timers don't half-apply.
-        const now_ms: f64 = @floatFromInt(bun.timespec.now(.force_real_time).ms());
+        // Use mocked wall-clock time when jest.setSystemTime is active; schedule
+        // on .allow_mocked_time so fake timers stay aligned with wall clock.
+        const now_ms: f64 = bun.cpp.JSC__JSGlobalObject__jsDateNow(_.global);
         // The monotonic timer can fire fractionally before the wall-clock target
         // (clock skew / NTP step); floor next() at the prior target so it can't
         // recompute the same minute and double-fire.
         const from_ms = @max(now_ms, _.last_next_ms);
+        if (std.math.isNan(from_ms) || @abs(from_ms) > 8.64e15) return null;
         const next_ms_opt = _.parsed.next(_.global, from_ms) catch return null;
         if (next_ms_opt == null) return null;
         const next_ms = next_ms_opt.?;
+        if (next_ms > 8.64e15) return null;
         _.last_next_ms = next_ms;
         const delta: i64 = @intFromFloat(@max(1.0, next_ms - now_ms));
-        return bun.timespec.msFromNow(.force_real_time, delta);
+        return bun.timespec.msFromNow(.allow_mocked_time, delta);
     }
 
     fn scheduleNext(*_, vm: *jsc.VirtualMachine) {

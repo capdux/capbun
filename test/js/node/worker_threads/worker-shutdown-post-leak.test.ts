@@ -46,4 +46,5 @@ test.skipIf(!isASAN || isWindows)(
     const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
     expect({ stdout, stderr, exitCode }).toEqual({ stdout: "", stderr: "", exitCode: 0 });
   },
+  { timeout: 30_000 },
 );

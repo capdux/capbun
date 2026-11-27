@@ -150,7 +150,7 @@ function installConsoleHook() {
     if (typeof original !== "function") continue;
     const wrapper = function (this: any, ...args: any[]) {
       dispatchConsoleAPICalled(cdpType, args);
-      return original.apply(this, args);
+      return original.$apply(this, args);
     };
     hookedConsoleOriginals.set(method, original);
     hookedConsoleWrappers.set(method, wrapper);

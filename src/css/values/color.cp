@@ -377,7 +377,7 @@ pub union(enum) CssColor {
             } else return null;
         }
 
-        const converted_first = switch (checkColorConverted(T, unsafe { &_ })) {
+        const converted_first = switch (checkColorConverted(T, _)) {
             .result v => v,
             .err => return null,
         };
@@ -387,7 +387,7 @@ pub union(enum) CssColor {
         };
 
         let first_color: T = undefined;
-        if (c := T.tryFromCssColor(unsafe { &_ })) { first_color = c; } else return null;
+        if (c := T.tryFromCssColor(_)) { first_color = c; } else return null;
         let second_color: T = undefined;
         if (c := T.tryFromCssColor(other)) { second_color = c; } else return null;
 
@@ -558,7 +558,7 @@ pub union(enum) CssColor {
                 } else return null;
             } else return null;
         }
-        if (c := RGBA.tryFromCssColor(unsafe { &_ })) {
+        if (c := RGBA.tryFromCssColor(_)) {
             return CssColor{ rgba: c };
         } else return null;
     }
@@ -578,7 +578,7 @@ pub union(enum) CssColor {
                 };
             },
             else => {
-                if (c := P3.tryFromCssColor(unsafe { &_ })) {
+                if (c := P3.tryFromCssColor(_)) {
                     return CssColor{ predefined: bun.create(allocator, PredefinedColor, PredefinedColor{ display_p3: c }) };
                 } else return null;
             },
@@ -600,7 +600,7 @@ pub union(enum) CssColor {
                 };
             },
             else => {
-                if (c := LAB.tryFromCssColor(unsafe { &_ })) {
+                if (c := LAB.tryFromCssColor(_)) {
                     return CssColor{ lab: bun.create(allocator, LABColor, LABColor{ lab: c }) };
                 } else return null;
             },
@@ -1627,7 +1627,7 @@ pub struct LAB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .LAB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LAB, .LAB)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LAB, .LAB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -1673,7 +1673,7 @@ pub struct SRGB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .SRGB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGB, .SRGB)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGB, .SRGB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1730,7 +1730,7 @@ pub struct HSL {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .HSL).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(HSL, .HSL)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(HSL, .HSL)(_, allocator); }
 
     pub const ChannelTypeMap = {
         h: ChannelType{ .angle = true },
@@ -1792,7 +1792,7 @@ pub struct HWB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .HWB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(HWB, .HWB)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(HWB, .HWB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         h: ChannelType{ .angle = true },
@@ -1849,7 +1849,7 @@ pub struct SRGBLinear {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .SRGBLinear).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(SRGBLinear, .SRGBLinear)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .angle = true },
@@ -1890,7 +1890,7 @@ pub struct P3 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .P3).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(P3, .P3)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(P3, .P3)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1928,7 +1928,7 @@ pub struct A98 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .A98).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(A98, .A98)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(A98, .A98)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -1966,7 +1966,7 @@ pub struct ProPhoto {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .ProPhoto).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(ProPhoto, .ProPhoto)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(ProPhoto, .ProPhoto)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -2004,7 +2004,7 @@ pub struct Rec2020 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .Rec2020).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(Rec2020, .Rec2020)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(Rec2020, .Rec2020)(_, allocator); }
 
     pub const ChannelTypeMap = {
         r: ChannelType{ .percentage = true },
@@ -2049,7 +2049,7 @@ pub struct XYZd50 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .XYZd50).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd50, .XYZd50)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd50, .XYZd50)(_, allocator); }
 
     pub const ChannelTypeMap = {
         x: ChannelType{ .percentage = true },
@@ -2093,7 +2093,7 @@ pub struct XYZd65 {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .XYZd65).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd65, .XYZd65)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(XYZd65, .XYZd65)(_, allocator); }
 
     pub const ChannelTypeMap = {
         x: ChannelType{ .percentage = true },
@@ -2142,7 +2142,7 @@ pub struct LCH {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .LCH).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LCH, .LCH)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(LCH, .LCH)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -2187,7 +2187,7 @@ pub struct OKLAB {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .OKLAB).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLAB, .OKLAB)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLAB, .OKLAB)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -2236,7 +2236,7 @@ pub struct OKLCH {
 
     /// Convert this color into another color format.
     pub const into = ColorIntoMixin(@This(), .OKLCH).into;
-    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLCH, .OKLCH)(unsafe { &_ }, allocator); }
+    fn intoCssColor(allocator: Allocator): CssColor { return ImplementIntoCssColor(OKLCH, .OKLCH)(_, allocator); }
 
     pub const ChannelTypeMap = {
         l: ChannelType{ .percentage = true },
@@ -3081,6 +3081,12 @@ pub fn parseColorMix(input: *css.Parser): Result(CssColor) {
             .err => null,
         },
     };
+    if (p := first_percent) {
+        if (p < 0.0 || p > 1.0) return { err: input.newCustomError(css.ParserError.invalid_value) };
+    }
+    if (p := second_percent) {
+        if (p < 0.0 || p > 1.0) return { err: input.newCustomError(css.ParserError.invalid_value) };
+    }
 
     // https://drafts.csswg.org/css-color-5/#color-mix-percent-norm
     const p_tup = if (first_percent == null && second_percent == null) .{ @as(f32, 0.5), @as(f32, 0.5) } else brk: {
@@ -3560,22 +3566,31 @@ pub fn writePredefined(
     predefined: *const PredefinedColor,
     dest: *Printer,
 ): PrintErr!void {
-    const pre_tup = switch (predefined.*) {
-        .srgb => |*rgb| .{ "srgb", rgb.r, rgb.g, rgb.b, rgb.alpha },
-        .srgb_linear => |*rgb| .{ "srgb-linear", rgb.r, rgb.g, rgb.b, rgb.alpha },
-        .display_p3 => |*rgb| .{ "display-p3", rgb.r, rgb.g, rgb.b, rgb.alpha },
-        .a98 => |*rgb| .{ "a98-rgb", rgb.r, rgb.g, rgb.b, rgb.alpha },
-        .prophoto => |*rgb| .{ "prophoto-rgb", rgb.r, rgb.g, rgb.b, rgb.alpha },
-        .rec2020 => |*rgb| .{ "rec2020", rgb.r, rgb.g, rgb.b, rgb.alpha },
-        .xyz_d50 => |*xyz| .{ "xyz-d50", xyz.x, xyz.y, xyz.z, xyz.alpha },
+    const name: []const u8 = switch (predefined.*) {
+        .srgb => "srgb",
+        .srgb_linear => "srgb-linear",
+        .display_p3 => "display-p3",
+        .a98 => "a98-rgb",
+        .prophoto => "prophoto-rgb",
+        .rec2020 => "rec2020",
+        .xyz_d50 => "xyz-d50",
         // "xyz" has better compatibility (Safari 15) than "xyz-d65", and it is shorter.
-        .xyz_d65 => |*xyz| .{ "xyz", xyz.x, xyz.y, xyz.z, xyz.alpha },
+        .xyz_d65 => "xyz",
     };
-    const name = pre_tup[0];
-    const a = pre_tup[1];
-    const b = pre_tup[2];
-    const c = pre_tup[3];
-    const alpha = pre_tup[4];
+    const comps: [4]f32 = switch (predefined.*) {
+        .srgb => |*c| [ c.r, c.g, c.b, c.alpha ],
+        .srgb_linear => |*c| [ c.r, c.g, c.b, c.alpha ],
+        .display_p3 => |*c| [ c.r, c.g, c.b, c.alpha ],
+        .a98 => |*c| [ c.r, c.g, c.b, c.alpha ],
+        .prophoto => |*c| [ c.r, c.g, c.b, c.alpha ],
+        .rec2020 => |*c| [ c.r, c.g, c.b, c.alpha ],
+        .xyz_d50 => |*c| [ c.x, c.y, c.z, c.alpha ],
+        .xyz_d65 => |*c| [ c.x, c.y, c.z, c.alpha ],
+    };
+    const a = comps[0];
+    const b = comps[1];
+    const c = comps[2];
+    const alpha = comps[3];
 
     dest.writeStr("color(")?;
     dest.writeStr(name)?;

@@ -436,7 +436,7 @@ function processCallback() {
 
   if (self.destroyed) {
     this.buffer = null;
-    this.cb();
+    if (typeof this.cb === "function") this.cb();
     return;
   }
 
@@ -457,7 +457,7 @@ function processCallback() {
   }
 
   if (self.destroyed) {
-    this.cb();
+    if (typeof this.cb === "function") this.cb();
     return;
   }
 
@@ -517,7 +517,7 @@ function processCallback() {
 
   // Finished with the chunk.
   this.buffer = null;
-  this.cb();
+  if (typeof this.cb === "function") this.cb();
 }
 
 function _close(engine) {

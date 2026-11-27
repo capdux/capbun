@@ -1999,3 +1999,7 @@
 1. **深度截断与异常解包**：`ConsoleObject.cp` 的 `.Map`/`.Set`/`.MapIterator`/`.SetIterator` 补充 `_.depth > _.max_depth` 检查，`VirtualMachine.cp` 的 `errors_to_append` 递增 `formatter.depth` 并在越界时输出 `[Error ...]`；`WebSocketServerContext.cp` 通过 `error_value.toError() ?? error_value` 解包 `JSC::Exception` 包装体，修复 `ping`/`pong`/`close` `error(err, ws)` 首参为包装对象问题。
 2. **ASAN 测试跳过与 C++/Builtin 边界**：导出 `bun:internal-for-testing` 的 `isASANEnabled()` 使 `test.skipIf(isASAN)` 在 `bun-debug` 上生效；`JSX509Certificate::m_publicKey` 从 `LazyProperty` 改为 `WriteBarrier<Unknown>` 避免失败路径触发 `lazyTag` 断言；`HttpParser.h` 的 `fenceAndConsumePostPadded` 与 `consumePostPadded` 统一使用动态 `maxHeaderSize` 上限。
 3. **解析器与测试提速**：`shell.cp` 增加 `Parser.depth`（上限 256）防止深嵌套 `if` 栈溢出；`E.cp` 的 `Template.fold` 跳过带进制前缀的 BigInt；`xml.cp` 的 `XML.parse` 补充 `checkParseableLen` 拦截 2 GiB 输入。
+
+## [2026-11-27 19:42] Batches 198R–226R 关键收敛经验
+1. **全局崩溃批量扫除**：`runtime.cp` 合并 `empty_bundler_feature_flags` 静态实例消除 `BUN_DESTRUCT_VM_ON_EXIT=1` SEGV（连带解锁 `zlib-handle-bounds-check.test.ts` 41/41）；`StrongRef.cpp` 将 `m_slots` 生命周期下沉至 `StrongRootBlockNode` 消除 `VM::~VM()` 析构顺序 UAF；`dns.cp` 4 处 `untracked_requests` 计数前移至 `channel.*` 调用前消除 `c-ares` 同步完成后的 UAF。
+2. **异步流与加密边界**：`PBKDF2.cp` 先求值 `password` 再读 `salt` 并复制异步输入切片，`crypto.ts` 通过 `process.nextTick` 派发回调确保抛错走 `uncaughtException`；`NativeZlib.cp` 为 `deflateParams` 传入非空 0 字节输出切片避免 `Z_STREAM_ERROR`；`color_js.cp` 使用截断 `@intFromFloat(num * 255.0)` 与 `[0, 1]` 夹紧对齐测试预期。

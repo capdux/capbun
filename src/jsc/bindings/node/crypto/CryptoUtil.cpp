@@ -1,4 +1,5 @@
 #include "CryptoUtil.h"
+#include <cmath>
 #include <JavaScriptCore/ObjectConstructor.h>
 #include <openssl/err.h>
 #include "ErrorCode.h"
@@ -447,12 +448,17 @@ std::optional<int32_t> getIntOption(JSC::JSGlobalObject* globalObject, ThrowScop
     if (value.isUndefined())
         return std::nullopt;
 
-    if (!value.isInt32()) {
-        Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, makeString("options."_s, name), value);
-        return std::nullopt;
+    if (value.isInt32())
+        return value.asInt32();
+
+    if (value.isNumber()) {
+        double d = value.asNumber();
+        if (std::isfinite(d) && d >= INT32_MIN && d <= INT32_MAX && std::trunc(d) == d)
+            return static_cast<int32_t>(d);
     }
 
-    return value.asInt32();
+    Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, makeString("options."_s, name), value);
+    return std::nullopt;
 }
 
 int32_t getPadding(JSC::JSGlobalObject* globalObject, ThrowScope& scope, JSValue options, const ncrypto::EVPKeyPointer& pkey)

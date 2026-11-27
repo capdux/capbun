@@ -293,7 +293,8 @@ return globalThis.throw("Expected array length 3 or 4", &.{});
                     if (try args[0].getTruthy(globalThis, "a")) |a_value| {
                         _ = &a_value;
                         if (a_value.isNumber()) {
-                            a = (if (comptime @typeInfo(@TypeOf(@mod((if (comptime @typeInfo(@TypeOf(bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))) == .@"enum") cp_cast_int(i64, @intFromEnum(bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))) else cp_cast_int(i64, bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))), 256))) == .@"enum") cp_cast_int(u8, @intFromEnum(@mod((if (comptime @typeInfo(@TypeOf(bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))) == .@"enum") cp_cast_int(i64, @intFromEnum(bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))) else cp_cast_int(i64, bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))), 256))) else cp_cast_int(u8, @mod((if (comptime @typeInfo(@TypeOf(bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))) == .@"enum") cp_cast_int(i64, @intFromEnum(bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))) else cp_cast_int(i64, bun.intFromFloat(i64, (a_value.asNumber() * 255.0)))), 256)));
+                            const num = a_value.asNumber();
+                            a = (if ((std.math.isNan(num) or (num <= 0.0))) (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u8, @intFromEnum(0)) else cp_cast_int(u8, 0)) else (if ((num >= 1.0)) (if (comptime @typeInfo(@TypeOf(255)) == .@"enum") cp_cast_int(u8, @intFromEnum(255)) else cp_cast_int(u8, 255)) else @as(u8, @intFromFloat((num * 255.0)))));
                         }
                     }
                     if (globalThis.hasException()) {

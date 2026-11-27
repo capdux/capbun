@@ -416,9 +416,12 @@ struct NamedPipeCtxErrGuard {
         const address_js = ZigString.init(bun.fmt.formatIp(address_zig, &text_buf) catch unreachable).toJS(globalThis);
         const port_js: JSValue = .jsNumber(socket.getLocalPort());
 
-        out.put(globalThis, bun.String.static("family"), family_js);
-        out.put(globalThis, bun.String.static("address"), address_js);
-        out.put(globalThis, bun.String.static("port"), port_js);
+        const family_key = bun.String.static("family");
+        const address_key = bun.String.static("address");
+        const port_key = bun.String.static("port");
+        out.putProperty(globalThis, &family_key, family_js)?;
+        out.putProperty(globalThis, &address_key, address_js)?;
+        out.putProperty(globalThis, &port_key, port_js)?;
         return JSValue.js_undefined;
     }
 }

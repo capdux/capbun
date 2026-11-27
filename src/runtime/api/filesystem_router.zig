@@ -413,7 +413,7 @@ pub fn getOrigin(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject) JSVal
             return JSValue.jsNull();
     }
 
-pub fn getAssetPrefix(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject) JSValue {
+pub fn getAssetPrefix(self: *FileSystemRouter, globalThis: *jsc.JSGlobalObject) bun.JSError!JSValue {
             if (self.asset_prefix) |asset_prefix| {
                 _ = &asset_prefix;
                 return asset_prefix.toJS(globalThis);

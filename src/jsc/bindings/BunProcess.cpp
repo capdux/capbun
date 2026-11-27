@@ -1734,9 +1734,6 @@ JSC_DEFINE_HOST_FUNCTION(Process_functionExecve, (JSGlobalObject * lexicalGlobal
     Bun::V::validateString(scope, globalObject, execPathValue, "execPath"_s);
     RETURN_IF_EXCEPTION(scope, {});
 
-    Bun::V::validateArray(scope, globalObject, argsValue, "args"_s, jsUndefined());
-    RETURN_IF_EXCEPTION(scope, {});
-
     WTF::String execPath = execPathValue.toWTFString(globalObject);
     RETURN_IF_EXCEPTION(scope, {});
     if (execPath.contains(static_cast<char16_t>(0))) {
@@ -1744,59 +1741,70 @@ JSC_DEFINE_HOST_FUNCTION(Process_functionExecve, (JSGlobalObject * lexicalGlobal
             execPathValue, "must be a string without null bytes"_s);
     }
 
-    JSObject* argsObject = argsValue.getObject();
-    unsigned argsLength = static_cast<unsigned>(toLength(globalObject, argsObject));
-    RETURN_IF_EXCEPTION(scope, {});
-
     Vector<CString> argvStorage;
-    argvStorage.reserveInitialCapacity(argsLength);
-
-    for (unsigned i = 0; i < argsLength; i++) {
-        JSValue item = argsObject->getIndex(globalObject, i);
+    if (!argsValue.isUndefined()) {
+        Bun::V::validateArray(scope, globalObject, argsValue, "args"_s, jsUndefined());
         RETURN_IF_EXCEPTION(scope, {});
-        bool invalid = !item.isString();
-        WTF::String str;
-        if (!invalid) {
-            str = item.toWTFString(globalObject);
+
+        JSObject* argsObject = argsValue.getObject();
+        unsigned argsLength = static_cast<unsigned>(toLength(globalObject, argsObject));
+        RETURN_IF_EXCEPTION(scope, {});
+
+        argvStorage.reserveInitialCapacity(argsLength);
+
+        for (unsigned i = 0; i < argsLength; i++) {
+            JSValue item = argsObject->getIndex(globalObject, i);
             RETURN_IF_EXCEPTION(scope, {});
-            invalid = str.contains(static_cast<char16_t>(0));
+            bool invalid = !item.isString();
+            WTF::String str;
+            if (!invalid) {
+                str = item.toWTFString(globalObject);
+                RETURN_IF_EXCEPTION(scope, {});
+                invalid = str.contains(static_cast<char16_t>(0));
+            }
+            if (invalid) {
+                return Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, makeString("args["_s, i, "]"_s),
+                    item, "must be a string without null bytes"_s);
+            }
+            argvStorage.append(str.utf8());
         }
-        if (invalid) {
-            return Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, makeString("args["_s, i, "]"_s),
-                item, "must be a string without null bytes"_s);
-        }
-        argvStorage.append(str.utf8());
     }
 
     Vector<CString> envStorage;
-    if (!envValue.isUndefined()) {
+    bool envOmitted = envValue.isUndefined();
+    JSObject* envObject = nullptr;
+    if (envOmitted) {
+        envObject = globalObject->processEnvObject();
+    } else {
         Bun::V::validateObject(scope, globalObject, envValue, "env"_s);
         RETURN_IF_EXCEPTION(scope, {});
+        envObject = envValue.getObject();
+    }
 
-        JSObject* envObject = envValue.getObject();
-        JSC::PropertyNameArrayBuilder envNames(vm, PropertyNameMode::Strings, PrivateSymbolMode::Exclude);
-        envObject->methodTable()->getOwnPropertyNames(envObject, globalObject, envNames, DontEnumPropertiesMode::Exclude);
+    JSC::PropertyNameArrayBuilder envNames(vm, PropertyNameMode::Strings, PrivateSymbolMode::Exclude);
+    envObject->methodTable()->getOwnPropertyNames(envObject, globalObject, envNames, DontEnumPropertiesMode::Exclude);
+    RETURN_IF_EXCEPTION(scope, {});
+
+    envStorage.reserveInitialCapacity(envNames.size());
+
+    for (unsigned i = 0; i < envNames.size(); i++) {
+        JSValue value = envObject->get(globalObject, envNames[i]);
         RETURN_IF_EXCEPTION(scope, {});
-
-        envStorage.reserveInitialCapacity(envNames.size());
-
-        for (unsigned i = 0; i < envNames.size(); i++) {
-            JSValue value = envObject->get(globalObject, envNames[i]);
+        if (envOmitted && value.isUndefined())
+            continue;
+        const WTF::String& keyStr = envNames[i].string();
+        bool invalid = !value.isString();
+        WTF::String valueStr;
+        if (!invalid) {
+            valueStr = value.toWTFString(globalObject);
             RETURN_IF_EXCEPTION(scope, {});
-            const WTF::String& keyStr = envNames[i].string();
-            bool invalid = !value.isString();
-            WTF::String valueStr;
-            if (!invalid) {
-                valueStr = value.toWTFString(globalObject);
-                RETURN_IF_EXCEPTION(scope, {});
-                invalid = keyStr.contains(static_cast<char16_t>(0)) || valueStr.contains(static_cast<char16_t>(0));
-            }
-            if (invalid) {
-                return Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, "env"_s,
-                    envValue, "must be an object with string keys and values without null bytes"_s);
-            }
-            envStorage.append(makeString(keyStr, '=', valueStr).utf8());
+            invalid = keyStr.contains(static_cast<char16_t>(0)) || valueStr.contains(static_cast<char16_t>(0));
         }
+        if (invalid) {
+            return Bun::ERR::INVALID_ARG_VALUE(scope, globalObject, "env"_s,
+                envValue, "must be an object with string keys and values without null bytes"_s);
+        }
+        envStorage.append(makeString(keyStr, '=', valueStr).utf8());
     }
 
     CString execPathUtf8 = execPath.utf8();
@@ -1886,24 +1894,18 @@ JSC_DEFINE_HOST_FUNCTION(Process_functionExecve, (JSGlobalObject * lexicalGlobal
     savedErrno = errno;
 #endif
 
-    // If we get here, execve failed. Match Node's behavior: print the error
-    // and abort the process (the original image is no longer in a usable
-    // state to return to JavaScript).
+    // If we get here, execve failed. Throw a SystemError / ErrnoException back to JS.
     const char* errName = Bun__errnoName(savedErrno);
-
-    fprintf(stderr, "process.execve failed with error code %s\n", errName ? errName : "UNKNOWN");
-    fprintf(stderr, "SystemError [process.execve]: execve %s: %s\n", strerror(savedErrno), execPathUtf8.data());
-    fprintf(stderr, "    at execve (node:internal/process/per_thread:0:0)\n");
-    fflush(stderr);
-
-    // Disable core dumps before aborting. Node also calls abort() here, but
-    // Bun's CI treats any core file produced during a test run (including
-    // from an intentionally-aborting child process) as a failure. The error
-    // has already been written to stderr, so a core dump adds no diagnostic
-    // value.
-    struct rlimit noCore = { 0, 0 };
-    setrlimit(RLIMIT_CORE, &noCore);
-    abort();
+    WTF::String errCode = errName ? String::fromLatin1(errName) : "UNKNOWN"_s;
+    WTF::String errMessage = makeString(errCode, ", "_s, String::fromLatin1(strerror(savedErrno)), " '"_s, execPath, "'"_s);
+    JSC::JSObject* errObj = JSC::createError(globalObject, errMessage);
+    auto& names = WebCore::builtinNames(vm);
+    errObj->putDirect(vm, names.codePublicName(), jsString(vm, errCode), JSC::PropertyAttribute::DontDelete | 0);
+    errObj->putDirect(vm, names.errnoPublicName(), jsNumber(savedErrno), JSC::PropertyAttribute::DontDelete | 0);
+    errObj->putDirect(vm, names.syscallPublicName(), jsString(vm, String("execve"_s)), JSC::PropertyAttribute::DontDelete | 0);
+    errObj->putDirect(vm, names.pathPublicName(), jsString(vm, execPath), JSC::PropertyAttribute::DontDelete | 0);
+    scope.throwException(globalObject, errObj);
+    return {};
 #endif
 }
 

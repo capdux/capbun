@@ -252,6 +252,26 @@ const EVP = jsc.API.Bun.Crypto.EVP;
 const Algorithm = EVP.Algorithm;
 pub const Job = Job_;
 
+pub fn readInput(globalThis: *jsc.JSGlobalObject, val: jsc.JSValue, name: []const u8, comptime too_long_msg: [:0]const u8, is_async: bool) bun.JSError!jsc.Node.StringOrBuffer {
+        const maybe = try jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, val, false, true);
+        if ((maybe == null)) {
+            return globalThis.throwInvalidArgumentTypeValue(name, "string or buffer", val);
+        }
+        var sob = maybe.?;
+        _ = &sob;
+        if ((sob.slice().len > std.math.maxInt(i32))) {
+            _ = sob.deinit();
+            return globalThis.throwInvalidArguments(too_long_msg, .{});
+        }
+        if ((!is_async)) {
+            return sob;
+        }
+        const owned = (blk_catch_1: { break :blk_catch_1 ((bun.default_allocator.dupe(u8, sob.slice())) catch |e| { _ = &e; _ = sob.deinit();
+        return e; }); });
+        _ = sob.deinit();
+        return jsc.Node.StringOrBuffer{ .encoded_slice = jsc.ZigString.Slice.init(bun.default_allocator, owned) };
+}
+
 pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_async: bool) bun.JSError!PBKDF2 {
         const args = callFrame.argumentsAsArray(6);
         const arg0 = args[0];
@@ -336,23 +356,11 @@ else => {
         _ = &_out_guard;
         var ___out_guard_moved = false; _ = &___out_guard_moved;
         defer if (!___out_guard_moved) { ___out_guard_moved = true; const __T = @TypeOf(_out_guard); if (@typeInfo(__T) == .optional) { if (_out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _out_guard; _drop_val.__cp_deinit(); } };
-        const allow_string_object = true;
-        const maybe_salt = try jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, arg1, is_async, allow_string_object);
-        if ((maybe_salt == null)) {
-            return globalThis.throwInvalidArgumentTypeValue("salt", "string or buffer", arg1);
+        out.password = try readInput(globalThis, arg0, "password", "password is too long", is_async);
+        out.salt = (blk_catch_2: { break :blk_catch_2 ((readInput(globalThis, arg1, "salt", "salt is too long", is_async)) catch |e| { _ = &e; if ((!globalThis.hasException())) {
+            _ = out.deinit();
         }
-        out.salt = maybe_salt.?;
-        if ((out.salt.slice().len > std.math.maxInt(i32))) {
-            return globalThis.throwInvalidArguments("salt is too long", .{});
-        }
-        const maybe_password = try jsc.Node.StringOrBuffer.fromJSMaybeAsync(globalThis, bun.default_allocator, arg0, is_async, allow_string_object);
-        if ((maybe_password == null)) {
-            return globalThis.throwInvalidArgumentTypeValue("password", "string or buffer", arg0);
-        }
-        out.password = maybe_password.?;
-        if ((out.password.slice().len > std.math.maxInt(i32))) {
-            return globalThis.throwInvalidArguments("password is too long", .{});
-        }
+        return e; }); });
         if ((is_async and (!arg5.isFunction()))) {
             return globalThis.throwInvalidArgumentTypeValue("callback", "function", arg5);
         }

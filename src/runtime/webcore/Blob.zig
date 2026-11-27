@@ -2913,7 +2913,7 @@ if ((!fail_if_top_value_is_not_typed_array_like)) {
                         _ = &build;
                         return build.blob.dupe();
                     } else {
-                        const sliced = try current.toSliceClone(global);
+                        const sliced = try top_value.toSliceClone(global);
                         if (sliced.allocator.get()) |allocator| {
                             _ = &allocator;
                             return Blob.initWithAllASCII((blk: {
@@ -2994,10 +2994,11 @@ if (item.as(Blob)) |blob| {
                         _ = joiner.pushStatic(blob.sharedView());
                         continue;
                     } else {
-                        const sliced = try current.toSliceClone(global);
+                        const sliced = try item.toSliceClone(global);
                         const allocator = sliced.allocator.get();
                         could_have_non_ascii = (could_have_non_ascii or (allocator != null));
                         _ = joiner.push(sliced.slice(), allocator);
+                        continue;
                     }
 },
 else => {
@@ -3209,6 +3210,12 @@ else => {
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, e);
         }
         if ((!assignment_result.isEmptyOrUndefinedOrNull())) {
+            if (assignment_result.asAnyPromise()) |pre_promise| {
+                _ = &pre_promise;
+                var pre_mut = pre_promise;
+                _ = &pre_mut;
+                _ = pre_mut.setHandled(globalThis.vm());
+            }
             _ = globalThis.bunVM().drainMicrotasks();
             _ = assignment_result.ensureStillAlive();
             if (assignment_result.asAnyPromise()) |promise| {
@@ -4628,6 +4635,14 @@ pub export fn Blob__getSize(value: JSValue) callconv(.c) usize {
         return data.len;
 }
 
+pub export fn Blob__isFileOrS3(value: JSValue) callconv(.c) bool {
+        const blob_opt = Blob.fromJS(value);
+        if ((blob_opt == null)) {
+            return false;
+        }
+        return (blob_opt.?.needsToReadFile() or blob_opt.?.isS3());
+}
+
 pub export fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ?[*]const u8, len: usize) callconv(.c) *Blob {
         if (((ptr_arg == null) or (len == 0))) {
             return Blob.new(Blob.initEmpty(globalThis));
@@ -4693,7 +4708,11 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
                 _ = &store_;
                 switch ((store_.*).data) {
 .bytes => |*bytes| {
-bytes.stored_name = bun.PathString.init(name_value_str.toUTF8Bytes(default_allocator));
+if (((store_.*).ref_count.load(.monotonic) > 1)) {
+                    blob.name = name_value_str.dupeRef();
+                } else {
+                    bytes.stored_name = bun.PathString.init(name_value_str.toUTF8Bytes(default_allocator));
+                }
 },
 .s3, .file => {
 blob.name = name_value_str.dupeRef();
@@ -4736,10 +4755,13 @@ blob.name = name_value_str.dupeRef();
                     }
 };
                 }
-                if (try options.getTruthy(globalThis, "lastModified")) |last_modified| {
+                if (try options.get(globalThis, "lastModified")) |last_modified| {
                     _ = &last_modified;
-                    set_last_modified = true;
-                    blob.last_modified = try last_modified.coerce(f64, globalThis);
+                    if ((!last_modified.isUndefined())) {
+                        set_last_modified = true;
+                        const num = try last_modified.coerce(f64, globalThis);
+                        blob.last_modified = (if (std.math.isFinite(num)) (if ((num == 0)) 0 else @trunc(num)) else 0);
+                    }
                 }
             }
         }

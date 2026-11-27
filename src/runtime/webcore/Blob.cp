@@ -4009,7 +4009,7 @@ pub struct BlobExternalSharedDescriptor {
                         } else if (build := top_value.as(jsc.API.BuildArtifact)) {
                             return build.blob.dupe();
                         } else {
-                            const sliced = current.toSliceClone(global)?;
+                            const sliced = top_value.toSliceClone(global)?;
                             if (allocator := sliced.allocator.get()) {
                                 return Blob.initWithAllASCII(unsafe { @constCast(sliced.slice()) }, allocator, global, false);
                             }
@@ -4098,10 +4098,11 @@ pub struct BlobExternalSharedDescriptor {
                                         joiner.pushStatic(blob.sharedView());
                                         continue;
                                     } else {
-                                        const sliced = current.toSliceClone(global)?;
+                                        const sliced = item.toSliceClone(global)?;
                                         const allocator = sliced.allocator.get();
                                         could_have_non_ascii = could_have_non_ascii || allocator != null;
                                         joiner.push(sliced.slice(), allocator);
+                                        continue;
                                     }
                                 },
                                 else => {},
@@ -4357,6 +4358,10 @@ pub struct BlobExternalSharedDescriptor {
         }
 
         if (!assignment_result.isEmptyOrUndefinedOrNull()) {
+            if (pre_promise := assignment_result.asAnyPromise()) {
+                let pre_mut = pre_promise;
+                pre_mut.setHandled(globalThis.vm());
+            }
             globalThis.bunVM().drainMicrotasks();
 
             assignment_result.ensureStillAlive();
@@ -4512,6 +4517,12 @@ pub struct BlobExternalSharedDescriptor {
     return data.len;
 }
 
+@export @c fn Blob__isFileOrS3(value: JSValue): bool {
+    const blob_opt = Blob.fromJS(value);
+    if (blob_opt == null) return false;
+    return blob_opt.?.needsToReadFile() || blob_opt.?.isS3();
+}
+
 @export @c fn Blob__fromBytes(globalThis: *JSGlobalObject, ptr_arg: ([*]const u8)?, len: usize): *Blob {
     if (ptr_arg == null || len == 0) {
         return Blob.new(Blob.initEmpty(globalThis));
@@ -4585,9 +4596,13 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
         if (*store_ := blob.store) {
             switch (store_.data) {
                 .bytes => |*bytes| {
-                    bytes.stored_name = bun.PathString.init(
-                        name_value_str.toUTF8Bytes(default_allocator),
-                    );
+                    if (store_.ref_count.load(.monotonic) > 1) {
+                        blob.name = name_value_str.dupeRef();
+                    } else {
+                        bytes.stored_name = bun.PathString.init(
+                            name_value_str.toUTF8Bytes(default_allocator),
+                        );
+                    }
                 },
                 .s3, .file => {
                     blob.name = name_value_str.dupeRef();
@@ -4634,9 +4649,12 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
                 }
             }
 
-            if (last_modified := options.getTruthy(globalThis, "lastModified")?) {
-                set_last_modified = true;
-                blob.last_modified = last_modified.coerce(f64, globalThis)?;
+            if (last_modified := options.get(globalThis, "lastModified")?) {
+                if (!last_modified.isUndefined()) {
+                    set_last_modified = true;
+                    const num = last_modified.coerce(f64, globalThis)?;
+                    blob.last_modified = if (std.math.isFinite(num)) (if (num == 0) 0 else @trunc(num)) else 0;
+                }
             }
         }
     }

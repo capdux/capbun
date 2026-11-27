@@ -465,12 +465,15 @@ pub const _RuntimeFeatures = struct {
     remove_cjs_module_wrapper: bool = false,
     runtime_transpiler_cache: ?*bun.jsc.RuntimeTranspilerCache = null,
     lower_using: bool = true,
-    bundler_feature_flags: *const bun.StringSet = (&default_empty_bundler_feature_flags),
+    bundler_feature_flags: *const bun.StringSet = (&_RuntimeFeatures.empty_bundler_feature_flags),
     repl_mode: bool = false,
 
 pub fn initBundlerFeatureFlags(allocator: std.mem.Allocator, feature_flags: []const []const u8) *const bun.StringSet {
             if ((feature_flags.len == 0)) {
-                return (&default_empty_bundler_feature_flags);
+                return (blk: {
+                break :blk (&_RuntimeFeatures.empty_bundler_feature_flags);
+
+});
             }
             const set = bun.handleOom(allocator.create(bun.StringSet));
             set.* = bun.StringSet.init(allocator);
@@ -506,7 +509,7 @@ pub fn hashForRuntimeTranspiler(self: _RuntimeFeatures, hasher: *std.hash.Wyhash
 pub fn shouldUnwrapRequire(self: _RuntimeFeatures, package_name: []const u8) bool {
             return ((package_name.len > 0) and (strings.indexEqualAny(self.unwrap_commonjs_packages, package_name) != null));
     }
-    pub const empty_bundler_feature_flags: bun.StringSet = default_empty_bundler_feature_flags;
+    pub const empty_bundler_feature_flags: bun.StringSet = bun.StringSet.initComptime();
     const hash_fields_for_runtime_transpiler = .{ .top_level_await, .auto_import_jsx, .allow_runtime, .inlining, .commonjs_named_exports, .minify_syntax, .minify_identifiers, .minify_keep_names, .dead_code_elimination, .set_breakpoint_on_first_line, .trim_unused_imports, .dont_bundle_twice, .commonjs_at_runtime, .emit_decorator_metadata, .standard_decorators, .lower_using, .repl_mode };
     pub const ReplaceableExport = _RuntimeReplaceableExport;
     pub const ServerComponentsMode = RuntimeServerComponentsMode;
@@ -533,7 +536,6 @@ pub fn versionHash() u32 {
 
 const string = []const u8;
 var fallback_message_has_printed: bool = false;
-const default_empty_bundler_feature_flags: bun.StringSet = bun.StringSet.initComptime();
 var fallback_version_hash_int: u32 = 0;
 const Environment = bun.Environment;
 const Output = bun.Output;

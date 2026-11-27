@@ -94,13 +94,22 @@ WTF_MAKE_TZONE_ALLOCATED_IMPL(WebSocket);
 extern "C" int Bun__getTLSRejectUnauthorizedValue();
 extern "C" bool Bun__isNoProxy(const char* hostname, size_t hostname_len, const char* host, size_t host_len);
 
+static URL urlWithoutCredentials(const URL& url)
+{
+    URL sanitized = url;
+    sanitized.setUser(StringView {});
+    sanitized.setPassword(StringView {});
+    return sanitized;
+}
+
 static ErrorEvent::Init createErrorEventInit(WebSocket& webSocket, const String& reason, JSC::JSGlobalObject* globalObject)
 {
     ErrorEvent::Init eventInit = {};
+    auto url = urlWithoutCredentials(webSocket.url());
     if (reason.isEmpty()) {
-        eventInit.message = makeString("WebSocket connection to '"_s, webSocket.url().stringCenterEllipsizedToLength(), "' failed"_s);
+        eventInit.message = makeString("WebSocket connection to '"_s, url.stringCenterEllipsizedToLength(), "' failed"_s);
     } else {
-        eventInit.message = makeString("WebSocket connection to '"_s, webSocket.url().stringCenterEllipsizedToLength(), "' failed: "_s, reason);
+        eventInit.message = makeString("WebSocket connection to '"_s, url.stringCenterEllipsizedToLength(), "' failed: "_s, reason);
     }
     eventInit.filename = String();
     eventInit.bubbles = false;
@@ -535,13 +544,13 @@ ExceptionOr<void> WebSocket::connect(const String& url, const Vector<String>& pr
         // context.addConsoleMessage(MessageSource::JS, MessageLevel::Error, );
         m_state = CLOSED;
         updateHasPendingActivity();
-        return Exception { SyntaxError, makeString("Wrong url scheme for WebSocket "_s, m_url.stringCenterEllipsizedToLength()) };
+        return Exception { SyntaxError, makeString("Wrong url scheme for WebSocket "_s, urlWithoutCredentials(m_url).stringCenterEllipsizedToLength()) };
     }
     if (m_url.hasFragmentIdentifier()) {
         // context.addConsoleMessage(MessageSource::JS, MessageLevel::Error, );
         m_state = CLOSED;
         updateHasPendingActivity();
-        return Exception { SyntaxError, makeString("URL has fragment component "_s, m_url.stringCenterEllipsizedToLength()) };
+        return Exception { SyntaxError, makeString("URL has fragment component "_s, urlWithoutCredentials(m_url).stringCenterEllipsizedToLength()) };
     }
 
     // ASSERT(context.contentSecurityPolicy());
@@ -888,8 +897,25 @@ ExceptionOr<void> WebSocket::send(ArrayBufferView& arrayBufferView)
     return {};
 }
 
+static std::optional<Exception> validateSyncBlob(ScriptExecutionContext* context, WebCore::JSBlob* blob, ASCIILiteral fnName)
+{
+    if (!Blob__isFileOrS3(JSC::JSValue::encode(blob)))
+        return std::nullopt;
+    if (context) {
+        if (auto* globalObject = context->jsGlobalObject()) {
+            auto& vm = globalObject->vm();
+            auto scope = DECLARE_THROW_SCOPE(vm);
+            JSC::throwException(globalObject, scope, JSC::createError(globalObject, makeString(fnName, " cannot send a file- or S3-backed Blob synchronously; await blob.bytes() first"_s)));
+            RELEASE_AND_RETURN(scope, Exception { ExistingExceptionError });
+        }
+    }
+    return Exception { InvalidStateError };
+}
+
 WebCore::ExceptionOr<void> WebCore::WebSocket::send(WebCore::JSBlob* blob)
 {
+    if (auto exception = validateSyncBlob(scriptExecutionContext(), blob, "send"_s))
+        return WTF::move(*exception);
     if (m_state == CONNECTING)
         return Exception { InvalidStateError };
     if (m_state == CLOSING || m_state == CLOSED) {
@@ -2179,6 +2205,8 @@ extern "C" void WebSocket__decrementPendingActivity(WebCore::WebSocket* webSocke
 
 WebCore::ExceptionOr<void> WebCore::WebSocket::ping(WebCore::JSBlob* blob)
 {
+    if (auto exception = validateSyncBlob(scriptExecutionContext(), blob, "ping"_s))
+        return WTF::move(*exception);
     if (m_state == CONNECTING)
         return Exception { InvalidStateError };
     if (m_state == CLOSING || m_state == CLOSED) {
@@ -2188,6 +2216,9 @@ WebCore::ExceptionOr<void> WebCore::WebSocket::ping(WebCore::JSBlob* blob)
     // Get the blob data and send it using existing binary data path
     void* dataPtr = Blob__getDataPtr(JSC::JSValue::encode(blob));
     size_t dataSize = Blob__getSize(JSC::JSValue::encode(blob));
+    if (dataSize > 125) {
+        return Exception { RangeError, makeString("The data size must not be greater than 125 bytes. Received "_s, dataSize, " bytes."_s) };
+    }
 
     if (dataPtr && dataSize > 0) {
         this->sendWebSocketData(static_cast<const char*>(dataPtr), dataSize, Opcode::Ping);
@@ -2201,6 +2232,8 @@ WebCore::ExceptionOr<void> WebCore::WebSocket::ping(WebCore::JSBlob* blob)
 
 WebCore::ExceptionOr<void> WebCore::WebSocket::pong(WebCore::JSBlob* blob)
 {
+    if (auto exception = validateSyncBlob(scriptExecutionContext(), blob, "pong"_s))
+        return WTF::move(*exception);
     if (m_state == CONNECTING)
         return Exception { InvalidStateError };
     if (m_state == CLOSING || m_state == CLOSED) {
@@ -2210,6 +2243,9 @@ WebCore::ExceptionOr<void> WebCore::WebSocket::pong(WebCore::JSBlob* blob)
     // Get the blob data and send it using existing binary data path
     void* dataPtr = Blob__getDataPtr(JSC::JSValue::encode(blob));
     size_t dataSize = Blob__getSize(JSC::JSValue::encode(blob));
+    if (dataSize > 125) {
+        return Exception { RangeError, makeString("The data size must not be greater than 125 bytes. Received "_s, dataSize, " bytes."_s) };
+    }
 
     if (dataPtr && dataSize > 0) {
         this->sendWebSocketData(static_cast<const char*>(dataPtr), dataSize, Opcode::Pong);

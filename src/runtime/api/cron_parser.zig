@@ -168,13 +168,21 @@ pub fn formatNumeric(self: *const CronExpression, buf: *[512]u8) []const u8 {
     }
 
 pub fn next(self: CronExpression, globalObject: *jsc.JSGlobalObject, from_ms: f64) bun.JSError!?f64 {
+            const MAX_ECMASCRIPT_TIME: f64 = 8640000000000000.0;
+            if ((std.math.isNan(from_ms) or (@abs(from_ms) > MAX_ECMASCRIPT_TIME))) {
+                return null;
+            }
             var dt = globalObject.msToGregorianDateTimeUTC(from_ms);
             _ = &dt;
             const start_year = dt.year;
             dt.minute = (dt.minute + 1);
             dt.second = 0;
             while (((dt.year - start_year) <= 8)) {
-                dt = globalObject.msToGregorianDateTimeUTC(try globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0));
+                const candidate_ms = try globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, 0);
+                if ((std.math.isNan(candidate_ms) or (candidate_ms > MAX_ECMASCRIPT_TIME))) {
+                    return null;
+                }
+                dt = globalObject.msToGregorianDateTimeUTC(candidate_ms);
                 if ((!bitSet(u16, self.months, @intCast(dt.month)))) {
                     dt.month = (dt.month + 1);
                     dt.day = 1;
@@ -200,7 +208,11 @@ pub fn next(self: CronExpression, globalObject: *jsc.JSGlobalObject, from_ms: f6
                     dt.minute = (dt.minute + 1);
                     continue;
                 }
-                return try globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0, 0);
+                const result_ms = try globalObject.gregorianDateTimeToMSUTC(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0, 0);
+                if ((std.math.isNan(result_ms) or (result_ms > MAX_ECMASCRIPT_TIME))) {
+                    return null;
+                }
+                return result_ms;
             }
             return null;
     }

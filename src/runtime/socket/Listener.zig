@@ -562,9 +562,12 @@ return JSValue.js_undefined;
 });
         const address_js = ZigString.init(((bun.fmt.formatIp(address_zig, (&text_buf))) catch unreachable)).toJS(globalThis);
         const port_js: JSValue = .jsNumber(socket.getLocalPort());
-        _ = out.put(globalThis, bun.String.static("family"), family_js);
-        _ = out.put(globalThis, bun.String.static("address"), address_js);
-        _ = out.put(globalThis, bun.String.static("port"), port_js);
+        const family_key = bun.String.static("family");
+        const address_key = bun.String.static("address");
+        const port_key = bun.String.static("port");
+        _ = try out.putProperty(globalThis, (&family_key), family_js);
+        _ = try out.putProperty(globalThis, (&address_key), address_js);
+        _ = try out.putProperty(globalThis, (&port_key), port_js);
         return JSValue.js_undefined;
 }
 pub const js = jsc.Codegen.JSListener;
