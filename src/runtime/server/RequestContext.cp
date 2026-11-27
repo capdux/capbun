@@ -80,15 +80,17 @@ pub struct StreamFinishGuard<S, G> {
 }
 
 pub struct StreamResultDeinitGuard<T> {
-    stream: T,
+    stream: *T!,
     alloc: std.mem.Allocator,
     active: bool,
     ~init() {
         if (_.active) {
-            switch (_.stream) {
-                .owned_and_done => |*owned| owned.deinit(_.alloc),
-                .owned => |*owned| owned.deinit(_.alloc),
-                else => unreachable,
+            unsafe {
+                switch (_.stream.*) {
+                    .owned_and_done => _.stream.owned_and_done.deinit(_.alloc),
+                    .owned => _.stream.owned.deinit(_.alloc),
+                    else => unreachable,
+                }
             }
         }
     }
@@ -566,7 +568,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 return;
             }
 
-            if (!ctx.resp.?.hasResponded() && !ctx.flags.has_marked_pending && !ctx.flags.is_error_promise_pending) {
+            if (!ctx.resp.?.hasResponded() && !ctx.flags.has_marked_pending && !ctx.flags.is_error_promise_pending && ctx.sink == null && !ctx.flags.has_sendfile_ctx && ctx.byte_stream == null) {
                 ctx.renderMissing();
                 return;
             }
@@ -859,6 +861,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 request.internal_event_callback.deinit();
                 _.request_weakref.deref();
             }
+            if (wrapper := _.sink) {
+                wrapper.sink.done = true;
+                wrapper.sink.res = null;
+                wrapper.sink.aborted = true;
+            }
+
             // if signal is not aborted, abort the signal
             if (signal := _.signal) {
                 _.signal = null;
@@ -1873,7 +1881,9 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             streamLog("handleResolveStream", .{});
 
             let wrote_anything = false;
+            let sink_done = false;
             if (wrapper := req.sink) {
+                sink_done = wrapper.sink.done;
                 req.flags.aborted = req.flags.aborted || wrapper.sink.aborted;
                 wrote_anything = wrapper.sink.wrote > 0;
 
@@ -1881,6 +1891,14 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 wrapper.detach(wrapper.sink.globalThis);
                 req.sink = null;
                 wrapper.sink.destroy();
+            }
+
+            if (sink_done) {
+                req.resp = null;
+                req.flags.has_abort_handler = false;
+                req.flags.has_timeout_handler = false;
+                req.flags.is_waiting_for_request_body = false;
+                req.endRequestStreamingAndDrain();
             }
 
             if (resp := req.response_weakref.get()) {
@@ -1933,7 +1951,9 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         static fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: JSValue) {
             streamLog("handleRejectStream", .{});
 
+            let sink_done = false;
             if (wrapper := req.sink) {
+                sink_done = wrapper.sink.done;
                 if (prom := wrapper.sink.pending_flush) {
                     // The promise value was protected when pending_flush was
                     // assigned (flushFromJS / endFromJS). Drop that root before
@@ -1948,6 +1968,14 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 wrapper.detach(wrapper.sink.globalThis);
                 req.sink = null;
                 wrapper.sink.destroy();
+            }
+
+            if (sink_done) {
+                req.resp = null;
+                req.flags.has_abort_handler = false;
+                req.flags.has_timeout_handler = false;
+                req.flags.is_waiting_for_request_body = false;
+                req.endRequestStreamingAndDrain();
             }
 
             if (resp := req.response_weakref.get()) {
@@ -2153,13 +2181,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     }
 
                     if (lock.onReceiveValue != null || lock.task != null) {
-                        // someone else is waiting for the stream or waiting for `onStartStreaming`
-                        const readable = value.toReadableStream(globalThis) catch |e| {
-                            _.runErrorHandler(globalThis.takeException(e));
+                        if (_.isAbortedOrEnded()) {
                             return;
-                        };
-                        readable.ensureStillAlive();
-                        _.doRenderWithBody(value, null);
+                        }
+                        _.runErrorHandler(globalThis.ERR(.BODY_ALREADY_USED, "Response body already used. A Response body can only be sent once; create a new Response for each request.", .{}).toJS());
                         return;
                     }
 
@@ -2167,6 +2192,13 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     lock.onReceiveValue = doRenderWithBodyLocked;
                     lock.task = &_.*;
 
+                    return;
+                },
+                .Used => {
+                    if (_.isAbortedOrEnded()) {
+                        return;
+                    }
+                    _.runErrorHandler(globalThis.ERR(.BODY_ALREADY_USED, "Response body already used. A Response body can only be sent once; create a new Response for each request.", .{}).toJS());
                     return;
                 },
                 else => {},
@@ -2185,7 +2217,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             let stream_ = stream;
             const stream_needs_deinit = stream == .owned || stream == .owned_and_done;
             const is_done = stream.isDone();
-            const _guard_stream = StreamResultDeinitGuard<@TypeOf(stream_)>{ stream: stream_, alloc: allocator, active: stream_needs_deinit };
+            const _guard_stream = StreamResultDeinitGuard<@TypeOf(stream_)>{ stream: unsafe { &stream_ }, alloc: allocator, active: stream_needs_deinit };
             const _guard_this = CondDerefGuard<*RequestContext>{ ptr: &_.*, active: is_done };
 
             if (_.isAbortedOrEnded()) {

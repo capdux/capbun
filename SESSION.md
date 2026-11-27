@@ -1187,3 +1187,18 @@
 - 完成 16 路并发全仓扫绿（+804）与 8 路 30s 超时重扫（+153）并实名归档 132 个外部未安装 npm 包冻结项；
 - 完成 Batch 92–110 编译验收，累计新增 `0 fail` 转绿 **25 个**（含 Batch 88–96 5 个、Batch 97–106 16 个、Batch 107–110 4 个：`bun-serve-headers`, `decodeURIComponentSIMD`, `response`, `request` 等）；
 - 精确对账：**实名全绿 1,181 + 冻结 155 = 1,336 / 2,339（57.1%）**，剩余待收敛 **1,003** 个。准备原子提交推送后继续下一波。
+
+### 2026-11-27 13:49 AEDT | 上游 `cp_agy` 语法广播收悉与 `ack`
+- **广播 ID**：`syntax-sema-20261127-6-false-positives-fixed`（`cp_agy -> bun_agy`，`resolved_at: 2026-11-27 13:48:19`）
+- **变更摘要**：`cpc (release)` 已升级发布，修复 6 类 Sema 类型推断假阳性（二元运算左侧整数字面量吸收右侧类型、`IfExpr` 分支整数字面量目标类型传播、`string` 切片推断为 `String`、重赋值不覆盖显式声明变量类型、`@Vector(N,u8)->@Vector(N,u32)` 向量拓宽、`??`/浮点内建/`@as`/函数指针/常量数组长度/重赋值定长失效），904/904 生态包 `cpc check` 100% 绿灯。
+- **处理与 `ack`**：已核对确认、实时登记并执行 `task_queue.py ack --agent bun_agy syntax-sema-20261127-6-false-positives-fixed`。当前 `bun bd` (`task-1292`) 正在构建中。
+
+### 2026-11-27 13:58 AEDT | 跨 AGY 工单提交（`bun_agy -> cp_agy`）
+- **工单 ID**：`task-bun-20261127-enum-slice-by-val`
+- **Repro 路径**：`/data/dev/cp/temp/repro_enum_slice_self_by_val.cp`
+- **问题摘要**：`pub union(enum) Data` / `enum` 只读方法省略接收者时，`cpc` 生成按值传参 `self: Data`；当方法返回内联存储切片（如 `src/sql/shared/Data.cp` 的 `slice()`/`substring()`/`sliceZ()`）时会导致 Use-After-Return 悬垂栈切片，建议 `cpc` 生成 `self: *const Self`（或编译期拦截）。当前 `Batch 118B` (`f1d89ff6`) 与 `ReadOnly Batch 119A` (`d956c315`) 正在并行执行中。
+
+### 2026-11-27 14:12 AEDT | Batch 112–120 阶段里程碑提交
+- 完成 `node-napi-tests` 53/55（`test_general`, `test_callback_scope`, `test_worker_buffer_callback` 转绿）、`fuzzilli-reprl`、`serve-error-handler-stream`、`numeric-header`、`cache-{node-compat,runtime}`、`bake/dev/plugins`、`cli/run/syntax` 等新增全绿验收；
+- 清零全仓 35 个 `.cp` 文件中 `cp_match_tag(..., unreachable)` 共性雷区及 `SASL.cp`/`JSONLineBuffer.cp`/`SocketAddress.cp` 等 Use-After-Return 悬垂切片隐患；
+- 精确对账：**实名全绿 1,238 + 冻结 155 = 1,393 / 2,339（59.6%）**，剩余 **946** 个。准备原子提交推送后继续下一波。

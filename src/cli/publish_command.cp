@@ -156,10 +156,11 @@ pub struct PublishCommand {
                 const pkg_info_res = package_info: {
                     const source = &logger.Source.initPathString("package.json", package_json_contents);
                     const json = JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator) catch e => {
-                        return switch (e) {
-                            error.OutOfMemory => return error.OutOfMemory,
-                            else => error.InvalidPackageJSON,
-                        };
+                        if (e == error.OutOfMemory) {
+                            return error.OutOfMemory;
+                        } else {
+                            return error.InvalidPackageJSON;
+                        }
                     };
 
                     if (priv_val := json.get("private")) {
@@ -343,41 +344,33 @@ pub struct PublishCommand {
 
         if (cli.positionals.len > 1) {
             const context = Context(false).fromTarballPath(ctx, manager, cli.positionals[1]) catch e => {
-                switch (e) {
-                    error.OutOfMemory => bun.outOfMemory(),
-                    error.MissingPackageName => {
-                        Output.errGeneric("missing `name` string in package.json", {});
-                    },
-                    error.MissingPackageVersion => {
-                        Output.errGeneric("missing `version` string in package.json", {});
-                    },
-                    error.InvalidPackageName, error.InvalidPackageVersion => {
-                        Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", {});
-                    },
-                    error.MissingPackageJSON => {
-                        Output.errGeneric("failed to find package.json in tarball '{s}'", .{cli.positionals[1]});
-                    },
-                    error.InvalidPackageJSON => {
-                        manager.log.print(Output.errorWriter()) catch {};
-                        Output.errGeneric("failed to parse tarball package.json", {});
-                    },
-                    error.PrivatePackage => {
-                        Output.errGeneric("attempted to publish a private package", {});
-                    },
-                    error.RestrictedUnscopedPackage => {
-                        Output.errGeneric("unable to restrict access to unscoped package", {});
-                    },
+                if (e == error.OutOfMemory) {
+                    bun.outOfMemory();
+                } else if (e == error.MissingPackageName) {
+                    Output.errGeneric("missing `name` string in package.json", {});
+                } else if (e == error.MissingPackageVersion) {
+                    Output.errGeneric("missing `version` string in package.json", {});
+                } else if (e == error.InvalidPackageName || e == error.InvalidPackageVersion) {
+                    Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", {});
+                } else if (e == error.MissingPackageJSON) {
+                    Output.errGeneric("failed to find package.json in tarball '{s}'", .{cli.positionals[1]});
+                } else if (e == error.InvalidPackageJSON) {
+                    manager.log.print(Output.errorWriter()) catch {};
+                    Output.errGeneric("failed to parse tarball package.json", {});
+                } else if (e == error.PrivatePackage) {
+                    Output.errGeneric("attempted to publish a private package", {});
+                } else if (e == error.RestrictedUnscopedPackage) {
+                    Output.errGeneric("unable to restrict access to unscoped package", {});
                 }
                 Global.crash();
             };
 
             publish(false, &context) catch e => {
-                switch (e) {
-                    error.OutOfMemory => bun.outOfMemory(),
-                    error.NeedAuth => {
-                        Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", {});
-                        Global.crash();
-                    },
+                if (e == error.OutOfMemory) {
+                    bun.outOfMemory();
+                } else if (e == error.NeedAuth) {
+                    Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", {});
+                    Global.crash();
                 }
             };
 
@@ -391,26 +384,20 @@ pub struct PublishCommand {
         }
 
         const context = Context(true).fromWorkspace(ctx, manager) catch e => {
-            switch (e) {
-                error.OutOfMemory => bun.outOfMemory(),
-                error.MissingPackageName => {
-                    Output.errGeneric("missing `name` string in package.json", {});
-                },
-                error.MissingPackageVersion => {
-                    Output.errGeneric("missing `version` string in package.json", {});
-                },
-                error.InvalidPackageName, error.InvalidPackageVersion => {
-                    Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", {});
-                },
-                error.MissingPackageJSON => {
-                    Output.errGeneric("failed to find package.json from: '{s}'", .{FileSystem.instance.top_level_dir});
-                },
-                error.RestrictedUnscopedPackage => {
-                    Output.errGeneric("unable to restrict access to unscoped package", {});
-                },
-                error.PrivatePackage => {
-                    Output.errGeneric("attempted to publish a private package", {});
-                },
+            if (e == error.OutOfMemory) {
+                bun.outOfMemory();
+            } else if (e == error.MissingPackageName) {
+                Output.errGeneric("missing `name` string in package.json", {});
+            } else if (e == error.MissingPackageVersion) {
+                Output.errGeneric("missing `version` string in package.json", {});
+            } else if (e == error.InvalidPackageName || e == error.InvalidPackageVersion) {
+                Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", {});
+            } else if (e == error.MissingPackageJSON) {
+                Output.errGeneric("failed to find package.json from: '{s}'", .{FileSystem.instance.top_level_dir});
+            } else if (e == error.RestrictedUnscopedPackage) {
+                Output.errGeneric("unable to restrict access to unscoped package", {});
+            } else if (e == error.PrivatePackage) {
+                Output.errGeneric("attempted to publish a private package", {});
             }
             Global.crash();
         };
@@ -419,12 +406,11 @@ pub struct PublishCommand {
         * = bun.sys.unlink(context.abs_tarball_path);
 
         publish(true, &context) catch e => {
-            switch (e) {
-                error.OutOfMemory => bun.outOfMemory(),
-                error.NeedAuth => {
-                    Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", {});
-                    Global.crash();
-                },
+            if (e == error.OutOfMemory) {
+                bun.outOfMemory();
+            } else if (e == error.NeedAuth) {
+                Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", {});
+                Global.crash();
             }
         };
 
@@ -450,12 +436,11 @@ pub struct PublishCommand {
                     context.manager.options.log_level == .silent,
                     context.command_ctx.debug.use_system_shell,
                 ) catch e => {
-                    switch (e) {
-                        error.MissingShell => {
-                            Output.errGeneric("failed to find shell executable to run publish script", {});
-                            Global.crash();
-                        },
-                        error.OutOfMemory => return error.OutOfMemory,
+                    if (e == error.MissingShell) {
+                        Output.errGeneric("failed to find shell executable to run publish script", {});
+                        Global.crash();
+                    } else if (e == error.OutOfMemory) {
+                        return error.OutOfMemory;
                     }
                 };
             }
@@ -472,12 +457,11 @@ pub struct PublishCommand {
                     context.manager.options.log_level == .silent,
                     context.command_ctx.debug.use_system_shell,
                 ) catch e => {
-                    switch (e) {
-                        error.MissingShell => {
-                            Output.errGeneric("failed to find shell executable to run postpublish script", {});
-                            Global.crash();
-                        },
-                        error.OutOfMemory => return error.OutOfMemory,
+                    if (e == error.MissingShell) {
+                        Output.errGeneric("failed to find shell executable to run postpublish script", {});
+                        Global.crash();
+                    } else if (e == error.OutOfMemory) {
+                        return error.OutOfMemory;
                     }
                 };
             }
@@ -647,12 +631,11 @@ pub struct PublishCommand {
         );
 
         const res = req.sendSync() catch e => {
-            switch (e) {
-                error.OutOfMemory => return error.OutOfMemory,
-                else => {
-                    Output.err(e, "failed to publish package", {});
-                    Global.crash();
-                },
+            if (e == error.OutOfMemory) {
+                return error.OutOfMemory;
+            } else {
+                Output.err(e, "failed to publish package", {});
+                Global.crash();
             }
         };
 
@@ -731,12 +714,11 @@ pub struct PublishCommand {
                 );
 
                 const otp_res = otp_req.sendSync() catch e => {
-                    switch (e) {
-                        error.OutOfMemory => return error.OutOfMemory,
-                        else => {
-                            Output.err(e, "failed to publish package", {});
-                            Global.crash();
-                        },
+                    if (e == error.OutOfMemory) {
+                        return error.OutOfMemory;
+                    } else {
+                        Output.err(e, "failed to publish package", {});
+                        Global.crash();
                     }
                 };
 
@@ -913,12 +895,11 @@ pub struct PublishCommand {
                 );
 
                 const res = req.sendSync() catch e => {
-                    switch (e) {
-                        error.OutOfMemory => return error.OutOfMemory,
-                        else => {
-                            Output.err(e, "failed to send OTP request", {});
-                            Global.crash();
-                        },
+                    if (e == error.OutOfMemory) {
+                        return error.OutOfMemory;
+                    } else {
+                        Output.err(e, "failed to send OTP request", {});
+                        Global.crash();
                     }
                 };
 
@@ -942,12 +923,11 @@ pub struct PublishCommand {
                         // login successful
                         const otp_done_source = logger.Source.initPathString("???", response_buf.list.items);
                         const otp_done_json = JSON.parseUTF8(&otp_done_source, ctx.manager.log, ctx.allocator) catch e => {
-                            switch (e) {
-                                error.OutOfMemory => return error.OutOfMemory,
-                                else => {
-                                    Output.err("WebLogin", "failed to parse response json", {});
-                                    Global.crash();
-                                },
+                            if (e == error.OutOfMemory) {
+                                return error.OutOfMemory;
+                            } else {
+                                Output.err("WebLogin", "failed to parse response json", {});
+                                Global.crash();
                             }
                         };
 
@@ -989,12 +969,11 @@ pub struct PublishCommand {
 
         // classic
         return prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "") catch e => {
-            switch (e) {
-                error.OutOfMemory => return error.OutOfMemory,
-                else => {
-                    Output.err(e, "failed to read OTP input", {});
-                    Global.crash();
-                },
+            if (e == error.OutOfMemory) {
+                return error.OutOfMemory;
+            } else {
+                Output.err(e, "failed to read OTP input", {});
+                Global.crash();
             }
         };
     }
@@ -1122,12 +1101,11 @@ pub struct PublishCommand {
                 mangled_props: null,
             },
         ) catch e => {
-            switch (e) {
-                error.OutOfMemory => return error.OutOfMemory,
-                else => {
-                    Output.errGeneric("failed to print normalized package.json: {s}", .{@errorName(e)});
-                    Global.crash();
-                },
+            if (e == error.OutOfMemory) {
+                return error.OutOfMemory;
+            } else {
+                Output.errGeneric("failed to print normalized package.json: {s}", .{@errorName(e)});
+                Global.crash();
             }
         };
         * = written;

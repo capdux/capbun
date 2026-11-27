@@ -1121,7 +1121,10 @@ _ = bun.debugAssert(false);
 
 pub fn callback(task: *ThreadPool.Task) void {
             const self_task: *TopTask = @fieldParentPtr("task", task);
-            const res = (blk_catch_4: { break :blk_catch_4 ((self_task.run()) catch |e| { _ = &e; break :blk_catch_4 @as(Yield, (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  break :__sw_blk_2 cp_val(bun.outOfMemory()); } }  unreachable; })); }); });
+            const res = (blk_catch_4: { break :blk_catch_4 ((self_task.run()) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                _ = bun.outOfMemory();
+            }
+            unreachable; }); });
             switch (res) {
 .yield => {
 
@@ -1453,8 +1456,8 @@ pub fn resumeUnblockedTasks(self: *Installer) void {
             {
                 var id_int: i32 = 0;
                 _ = &id_int;
-                const __end_6 = self.store.entries.len;
-                while (id_int < __end_6) : (id_int += 1) {
+                const __end_5 = self.store.entries.len;
+                while (id_int < __end_5) : (id_int += 1) {
                     const entry_id: Store.Entry.Id = Store.Entry.Id.from(@intCast(id_int));
                     const entry_step = entry_steps[@as(usize, @intCast(entry_id.get()))].load(.monotonic);
                     if ((entry_step != .blocked)) {

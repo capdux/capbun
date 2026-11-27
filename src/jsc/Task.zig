@@ -99,6 +99,7 @@ const S3 = bun.S3;
 const S3HttpDownloadStreamingTask = S3.S3HttpDownloadStreamingTask;
 const S3HttpSimpleTask = S3.S3HttpSimpleTask;
 const NapiFinalizerTask = bun.api.napi.NapiFinalizerTask;
+const UvWorkTask = bun.api.napi.UvWorkTask;
 const ThreadSafeFunction = bun.api.napi.ThreadSafeFunction;
 const napi_async_work = bun.api.napi.napi_async_work;
 const AsyncFS = bun.api.node.fs.Async;
@@ -184,7 +185,7 @@ const ShellRmTask = shell.Interpreter.Builtin.Rm.ShellRmTask;
 const ShellRmDirTask = shell.Interpreter.Builtin.Rm.ShellRmTask.DirTask;
 const ProcessWaiterThreadTask = (if (Environment.isPosix) bun.spawn.process.WaiterThread.ProcessQueue.ResultTask else opaque {});
 const log = Output.scoped(.Task, .hidden);
-pub const Task = TaggedPointerUnion(.{ Access, AnyTask, AppendFile, ArchiveExtractTask, ArchiveBlobTask, ArchiveWriteTask, ArchiveFilesTask, AsyncGlobWalkTask, AsyncImageTask, AsyncTransformTask, bun.bake.DevServer.HotReloadEvent, bun.bundle_v2.DeferredBatchTask, shell.Interpreter.Builtin.Yes.YesTask, Chmod, Chown, Close, CopyFile, CopyFilePromiseTask, CppTask, Exists, Fchmod, FChown, Fdatasync, FetchTasklet, Fstat, FSWatchTask, Fsync, FTruncate, Futimes, GetAddrInfoRequestTask, HotReloadTask, ImmediateObject, JSCDeferredWorkTask, Lchmod, Lchown, Link, Lstat, Lutimes, ManagedTask, Mkdir, Mkdtemp, napi_async_work, NapiFinalizerTask, NativePromiseContextDeferredDerefTask, NativeBrotli, NativeZlib, NativeZstd, Open, PollPendingModulesTask, PosixSignalTask, MemoryPressureTask, ProcessWaiterThreadTask, Read, Readdir, ReaddirRecursive, ReadFile, ReadFileTask, Readlink, Readv, FlushPendingFileSinkTask, Realpath, RealpathNonNative, Rename, Rm, Rmdir, RuntimeTranspilerStore, S3HttpDownloadStreamingTask, S3HttpSimpleTask, ServerAllConnectionsClosedTask, ShellAsync, ShellAsyncSubprocessDone, ShellCondExprStatTask, ShellCpTask, ShellGlobTask, ShellIOReaderAsyncDeinit, ShellIOWriterAsyncDeinit, ShellIOWriter, ShellLsTask, ShellMkdirTask, ShellMvBatchedTask, ShellMvCheckTargetTask, ShellRmDirTask, ShellRmTask, ShellTouchTask, Stat, StatFS, StreamPending, Symlink, ThreadSafeFunction, TimeoutObject, Truncate, Unlink, Utimes, Write, WriteFile, WriteFileTask, Writev });
+pub const Task = TaggedPointerUnion(.{ Access, AnyTask, AppendFile, ArchiveExtractTask, ArchiveBlobTask, ArchiveWriteTask, ArchiveFilesTask, AsyncGlobWalkTask, AsyncImageTask, AsyncTransformTask, bun.bake.DevServer.HotReloadEvent, bun.bundle_v2.DeferredBatchTask, shell.Interpreter.Builtin.Yes.YesTask, Chmod, Chown, Close, CopyFile, CopyFilePromiseTask, CppTask, Exists, Fchmod, FChown, Fdatasync, FetchTasklet, Fstat, FSWatchTask, Fsync, FTruncate, Futimes, GetAddrInfoRequestTask, HotReloadTask, ImmediateObject, JSCDeferredWorkTask, Lchmod, Lchown, Link, Lstat, Lutimes, ManagedTask, Mkdir, Mkdtemp, napi_async_work, NapiFinalizerTask, UvWorkTask, NativePromiseContextDeferredDerefTask, NativeBrotli, NativeZlib, NativeZstd, Open, PollPendingModulesTask, PosixSignalTask, MemoryPressureTask, ProcessWaiterThreadTask, Read, Readdir, ReaddirRecursive, ReadFile, ReadFileTask, Readlink, Readv, FlushPendingFileSinkTask, Realpath, RealpathNonNative, Rename, Rm, Rmdir, RuntimeTranspilerStore, S3HttpDownloadStreamingTask, S3HttpSimpleTask, ServerAllConnectionsClosedTask, ShellAsync, ShellAsyncSubprocessDone, ShellCondExprStatTask, ShellCpTask, ShellGlobTask, ShellIOReaderAsyncDeinit, ShellIOWriterAsyncDeinit, ShellIOWriter, ShellLsTask, ShellMkdirTask, ShellMvBatchedTask, ShellMvCheckTargetTask, ShellRmDirTask, ShellRmTask, ShellTouchTask, Stat, StatFS, StreamPending, Symlink, ThreadSafeFunction, TimeoutObject, Truncate, Unlink, Utimes, Write, WriteFile, WriteFileTask, Writev });
 
 pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32) bun.JSTerminated!void {
         var global = el.global;
@@ -694,6 +695,11 @@ _ = MemoryPressureTask.runFromJSThread(@intCast(task.asUintptr()), global);
 var task_ptr: *NapiFinalizerTask = (task.get(NapiFinalizerTask)).?;
             _ = &task_ptr;
             _ = task_ptr.runOnJSThread();
+},
+@field(Task.Tag, @typeName(UvWorkTask)) => {
+var task_ptr: *UvWorkTask = (task.get(UvWorkTask)).?;
+            _ = &task_ptr;
+            _ = task_ptr.runFromJS(virtual_machine, global);
 },
 @field(Task.Tag, @typeName(NativePromiseContextDeferredDerefTask)) => {
 _ = NativePromiseContextDeferredDerefTask.runFromJSThread(@intCast(task.asUintptr()));

@@ -45,12 +45,12 @@ fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
         }
     }
 
-    pub fn saltedPassword(): []const u8 {
+    pub fn saltedPassword(*_): []const u8 {
         assert(_.salted_password_created);
         return _.salted_password_bytes[0..salted_password_byte_len];
     }
 
-    pub fn serverSignature(): []const u8 {
+    pub fn serverSignature(*_): []const u8 {
         assert(_.server_signature_len > 0);
         return _.server_signature_base64_bytes[0.._.server_signature_len];
     }
@@ -67,7 +67,7 @@ fn hmac(password: []const u8, data: []const u8): ([32]u8)? {
         _.server_signature_len = @intCast(bun.base64.encode(&_.server_signature_base64_bytes, &server_signature_bytes));
     }
 
-    pub fn clientKey(): [32]u8 {
+    pub fn clientKey(*_): [32]u8 {
         return hmac(_.saltedPassword(), "Client Key").?;
     }
 

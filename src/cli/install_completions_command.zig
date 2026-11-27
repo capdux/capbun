@@ -191,7 +191,11 @@ pub fn exec(allocator: std.mem.Allocator) !void {
             const cwd = (blk_catch_10: { break :blk_catch_10 ((bun.getcwd((&cwd_buf))) catch |__ce_10| { _ = &__ce_10; if (((fail_exit_code == 1) and (!stdout.isTty()))) {
                 const completions = shell.completions();
                 if ((completions.len > 0)) {
-                    _ = (blk_catch_11: { break :blk_catch_11 ((stdout.writeAll(completions)) catch |e| { _ = &e; break :blk_catch_11 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .BrokenPipe)) {  break :__sw_blk_0 cp_val(Global.exit(0)); } } {  return e; }  unreachable; }); }); });
+                    _ = (blk_catch_11: { break :blk_catch_11 ((stdout.writeAll(completions)) catch |e| { _ = &e; if ((e == error.BrokenPipe)) {
+                        _ = Global.exit(0);
+                    } else {
+                        return e;
+                    } }); });
                     _ = Global.exit(0);
                 }
             }
@@ -216,7 +220,11 @@ else => {
 }
             if ((!bun.env_var.IS_BUN_AUTO_UPDATE.get())) {
                 if ((!stdout.isTty())) {
-                    _ = (blk_catch_14: { break :blk_catch_14 ((stdout.writeAll(shell.completions())) catch |e| { _ = &e; break :blk_catch_14 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .BrokenPipe)) {  break :__sw_blk_1 cp_val(Global.exit(0)); } } {  return e; }  unreachable; }); }); });
+                    _ = (blk_catch_14: { break :blk_catch_14 ((stdout.writeAll(shell.completions())) catch |e| { _ = &e; if ((e == error.BrokenPipe)) {
+                        _ = Global.exit(0);
+                    } else {
+                        return e;
+                    } }); });
                     _ = Global.exit(0);
                 }
             }

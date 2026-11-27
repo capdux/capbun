@@ -813,7 +813,7 @@ pub fn doMetadata(self: *Image, global: *jsc.JSGlobalObject, callframe: *jsc.Cal
                 _ = obj.put(global, jsc.ZigString.static("format"), jsc.ZigString.init(@tagName(p.format)).toJS(global));
                 return jsc.JSPromise.resolvedPromiseValue(global, obj);
             } else {
-                const probe_err = (blk_catch_3: { break :blk_catch_3 ((codecs.probe(buf, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .UnsupportedOnPlatform)) {  break :__sw_blk_0 cp_val(null); } } {  return jsc.JSPromise.rejectedPromise(global, Image.rejectError(global, e)).asValue(global); }  unreachable; }); }); });
+                const probe_err = (blk_catch_3: { break :blk_catch_3 ((codecs.probe(buf, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_3 (if ((e == error.UnsupportedOnPlatform)) null else return jsc.JSPromise.rejectedPromise(global, Image.rejectError(global, e)).asValue(global)); }); });
                 _ = &probe_err;
             }
         }
@@ -1140,8 +1140,10 @@ pub fn run(self: *PipelineTask) void {
                     self.result = PipelineResult{ .@"meta" = MetaResult{ .w = w, .h = h, .format = p.format } };
                     return;
                 } else {
-                    const probe_err = (blk_catch_12: { break :blk_catch_12 ((codecs.probe(input, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_12 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnsupportedOnPlatform)) {  break :__sw_blk_1 cp_val(null); } } {  self.result = PipelineResult{ .@"err" = e };
-                    return; }  unreachable; }); }); });
+                    const probe_err = (blk_catch_12: { break :blk_catch_12 ((codecs.probe(input, self.max_pixels)) catch |e| { _ = &e; break :blk_catch_12 (if ((e == error.UnsupportedOnPlatform)) null else ({
+                    self.result = PipelineResult{ .@"err" = e };
+                    return;
+})); }); });
                     _ = &probe_err;
                 }
             }

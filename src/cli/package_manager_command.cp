@@ -210,16 +210,14 @@ pub struct PackageManagerCommand {
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "whoami")) {
             const username = Npm.whoami(ctx.allocator, pm) catch e => {
-                switch (e) {
-                    error.OutOfMemory => bun.outOfMemory(),
-                    error.NeedAuth => {
-                        Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
-                    },
-                    error.ProbablyInvalidAuth => {
-                        Output.errGeneric("failed to authenticate with registry '{f}'", .{
-                            bun.fmt.redactedNpmUrl(pm.options.scope.url.href),
-                        });
-                    },
+                if (e == error.OutOfMemory) {
+                    bun.outOfMemory();
+                } else if (e == error.NeedAuth) {
+                    Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
+                } else if (e == error.ProbablyInvalidAuth) {
+                    Output.errGeneric("failed to authenticate with registry '{f}'", .{
+                        bun.fmt.redactedNpmUrl(pm.options.scope.url.href),
+                    });
                 }
                 Global.crash();
             };

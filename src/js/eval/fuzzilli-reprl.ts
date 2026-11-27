@@ -38,6 +38,11 @@ if (responseBytes !== 4) {
   throw new Error(`REPRL handshake failed: expected 4 bytes, got ${responseBytes}`);
 }
 
+// Stub APIs that replace or terminate the process image outside of normal JS exceptions.
+process.execve = function execve() {
+  throw new Error("process.execve is disabled in Fuzzilli REPRL");
+};
+
 // Main REPRL loop
 while (true) {
   // Read command

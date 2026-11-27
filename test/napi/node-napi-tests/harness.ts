@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "bun";
-import { existsSync, renameSync, statSync } from "node:fs";
+import { existsSync, readdirSync, renameSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -55,6 +55,15 @@ function parseSimpleBindingGyp(text: string): GypTarget[] | null {
   return parsed.targets;
 }
 
+function isValidNodeHeadersDir(base: string): string | null {
+  const include = join(base, "include", "node");
+  // node-gyp writes `installVersion` last, only after the headers finish extracting.
+  if (existsSync(join(base, "installVersion")) && existsSync(join(include, "node_api.h"))) {
+    return include;
+  }
+  return null;
+}
+
 // Read-only lookup of the header tree node-gyp itself installs. Never downloads or
 // mutates the cache; if it isn't complete we fall back to node-gyp (which fills it).
 function findNodeHeaders(): string | null {
@@ -67,18 +76,38 @@ function findNodeHeaders(): string | null {
     candidates.push(join(homedir(), ".cache", "node-gyp"));
   }
   for (const devDir of candidates) {
-    const base = join(devDir, NODE_HEADERS_VERSION);
-    const include = join(base, "include", "node");
-    // node-gyp writes `installVersion` last, only after the headers finish extracting.
-    if (existsSync(join(base, "installVersion")) && existsSync(join(include, "node_api.h"))) {
-      return include;
+    const exact = isValidNodeHeadersDir(join(devDir, NODE_HEADERS_VERSION));
+    if (exact) return exact;
+  }
+  // Fall back to any complete cached Node headers tree (preferring newest version)
+  // when NODE_HEADERS_VERSION isn't cached yet (e.g. offline/restricted environments).
+  for (const devDir of candidates) {
+    if (!existsSync(devDir)) continue;
+    let entries: string[];
+    try {
+      entries = readdirSync(devDir);
+    } catch {
+      continue;
+    }
+    entries.sort((a, b) => {
+      const pa = a.split(".").map(Number);
+      const pb = b.split(".").map(Number);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const diff = (pb[i] || 0) - (pa[i] || 0);
+        if (diff !== 0 && !Number.isNaN(diff)) return diff;
+      }
+      return b.localeCompare(a);
+    });
+    for (const entry of entries) {
+      const found = isValidNodeHeadersDir(join(devDir, entry));
+      if (found) return found;
     }
   }
   return null;
 }
 
 function compilerFor(cxx: boolean): string {
-  if (process.platform === "linux" && isCI) return cxx ? `${linuxClang}++` : linuxClang;
+  if (process.platform === "linux" && isCI && existsSync(linuxClang)) return cxx ? `${linuxClang}++` : linuxClang;
   if (cxx) return process.env.CXX || "c++";
   return process.env.CC || "cc";
 }

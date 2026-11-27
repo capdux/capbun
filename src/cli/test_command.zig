@@ -1840,17 +1840,22 @@ pub fn exec(ctx: Command.Context) !void {
                 const file_or_dirnames = ctx.positionals[1..];
                 for (cp_iter_slice(file_or_dirnames)) |arg| {
                     _ = &arg;
-                    _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(arg)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  break :__sw_blk_16 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .DoesNotExist)) {  break :__sw_blk_16 cp_val((if ((file_or_dirnames.len == 1)) blk: {
-                    if (Output.isAIAgent()) {
-                        _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
+                    _ = (blk_catch_59: { break :blk_catch_59 ((scanner.scan(arg)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                        _ = bun.outOfMemory();
                     } else {
-                        _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches", .{ bun.fmt.quote(arg) });
-                    }
-                    vm.exit_handler.exit_code = 1;
-                    vm.is_shutting_down = true;
-                    break :blk vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
-
-} else @as(void, undefined))); } }  unreachable; }); }); });
+                        if ((e == error.DoesNotExist)) {
+                            if ((file_or_dirnames.len == 1)) {
+                                if (Output.isAIAgent()) {
+                                    _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
+                                } else {
+                                    _ = Output.prettyErrorln("Test filter <b>{f}<r> had no matches", .{ bun.fmt.quote(arg) });
+                                }
+                                vm.exit_handler.exit_code = 1;
+                                vm.is_shutting_down = true;
+                                _ = vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
+                            }
+                        }
+                    } }); });
                 }
             } else {
                 const empty_filters: [0][]const u8 = undefined;
@@ -1861,8 +1866,8 @@ pub fn exec(ctx: Command.Context) !void {
                 {
                     var ni: i32 = 0;
                     _ = &ni;
-                    const __end_17 = filter_names.len;
-                    while (ni < __end_17) : (ni += 1) {
+                    const __end_16 = filter_names.len;
+                    while (ni < __end_16) : (ni += 1) {
                         const to_normalize = try ctx.allocator.dupe(u8, filter_names[@as(usize, @intCast(ni))]);
                         _ = bun.path.posixToPlatformInPlace(u8, to_normalize);
                         normalized[cp_cast_int(usize, ni)] = to_normalize;
@@ -1881,14 +1886,20 @@ pub fn exec(ctx: Command.Context) !void {
                 }
                 break :brk scanner.fs.top_level_dir;
 };
-                _ = (blk_catch_60: { break :blk_catch_60 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; break :blk_catch_60 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  break :__sw_blk_18 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .DoesNotExist)) {  if (Output.isAIAgent()) {
-                    _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
+                _ = (blk_catch_60: { break :blk_catch_60 ((scanner.scan(dir_to_scan)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = bun.outOfMemory();
                 } else {
-                    _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f}", .{ bun.fmt.quote(dir_to_scan) });
-                }
-                vm.exit_handler.exit_code = 1;
-                vm.is_shutting_down = true;
-                break :__sw_blk_18 cp_val(vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit)); } }  unreachable; }); }); });
+                    if ((e == error.DoesNotExist)) {
+                        if (Output.isAIAgent()) {
+                            _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
+                        } else {
+                            _ = Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f}", .{ bun.fmt.quote(dir_to_scan) });
+                        }
+                        vm.exit_handler.exit_code = 1;
+                        vm.is_shutting_down = true;
+                        _ = vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
+                    }
+                } }); });
             }
             var all_test_files = bun.handleOom(scanner.takeFoundTestFiles());
             _ = &all_test_files;

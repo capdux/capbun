@@ -5,11 +5,11 @@ import { NewReader } from "./NewReader.zig";
 pub const null_int4 = 4294967295;
 
 pub fn decode(context: anytype, comptime ContextType: type, reader: NewReader(ContextType), comptime forEach: fn (@TypeOf(context), index: u32, bytes: (*Data)?) AnyPostgresError!bool): AnyPostgresError!void {
-    let remaining_bytes: usize = @intCast((reader.length()?) - 4);
+    let remaining_bytes: usize = (reader.length()?) -| 4;
     if (remaining_bytes < 2) return err.InvalidMessage;
     remaining_bytes -= 2;
 
-    const remaining_fields: usize = @intCast(reader.short()?);
+    const remaining_fields: usize = @intCast(@max(reader.short()?, 0));
 
     for (index of 0..remaining_fields) {
         if (remaining_bytes < 4) return err.InvalidMessage;

@@ -1148,31 +1148,34 @@ pub struct Expect {
             const buntest = buntest_strong.val.get();
             const test_file_path = Jest.runner.?.files.get(buntest.file_id).source.path.text;
             const runner = Jest.runner.?;
-            return switch (e) {
-                error.FailedToOpenSnapshotFile => globalThis.throw("Failed to open snapshot file for test file: {s}", .{ test_file_path }),
-                error.FailedToMakeSnapshotDirectory => globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path }),
-                error.FailedToWriteSnapshotFile => globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path }),
-                error.SyntaxError, error.ParseError => globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path }),
-                error.SnapshotCreationNotAllowedInCI => ci_blk: {
-                    const snapshot_name = runner.snapshots.last_error_snapshot_name;
-                    const slot_ptr = unsafe { &runner.snapshots.last_error_snapshot_name };
-                    const snapshot_name_guard = OptSliceFreeGuard{
-                        allocator: runner.snapshots.allocator,
-                        slot: slot_ptr,
-                    };
-                    if (name := snapshot_name) {
-                        break :ci_blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nSnapshot name: \"{s}\"\nReceived: {s}", .{ name, pretty_value.val.written() });
-                    } else {
-                        break :ci_blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.val.written() });
-                    }
-                },
-                error.SnapshotInConcurrentGroup => globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{}),
-                error.TestNotActive => globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{}),
-                else => blk: {
-                    let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
-                    break :blk globalThis.throw("Failed to snapshot value: {f}", .{ value.toFmt(&formatter.val) });
-                },
-            };
+            if (e == error.FailedToOpenSnapshotFile) {
+                return globalThis.throw("Failed to open snapshot file for test file: {s}", .{ test_file_path });
+            } else if (e == error.FailedToMakeSnapshotDirectory) {
+                return globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path });
+            } else if (e == error.FailedToWriteSnapshotFile) {
+                return globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path });
+            } else if (e == error.SyntaxError || e == error.ParseError) {
+                return globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path });
+            } else if (e == error.SnapshotCreationNotAllowedInCI) {
+                const snapshot_name = runner.snapshots.last_error_snapshot_name;
+                const slot_ptr = unsafe { &runner.snapshots.last_error_snapshot_name };
+                const snapshot_name_guard = OptSliceFreeGuard{
+                    allocator: runner.snapshots.allocator,
+                    slot: slot_ptr,
+                };
+                if (name := snapshot_name) {
+                    return globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nSnapshot name: \"{s}\"\nReceived: {s}", .{ name, pretty_value.val.written() });
+                } else {
+                    return globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.val.written() });
+                }
+            } else if (e == error.SnapshotInConcurrentGroup) {
+                return globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{});
+            } else if (e == error.TestNotActive) {
+                return globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{});
+            } else {
+                let formatter = DeinitGuard<jsc.ConsoleObject.Formatter>{ val: jsc.ConsoleObject.Formatter{ globalThis: globalThis } };
+                return globalThis.throw("Failed to snapshot value: {f}", .{ value.toFmt(&formatter.val) });
+            }
         };
 
         if (saved_value := existing_value) {

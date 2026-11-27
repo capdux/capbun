@@ -390,9 +390,13 @@ pub fn setupGlobalDir(manager: *PackageManager, ctx: Command.Context) !void {
 
 pub fn globalLinkDir(client: *PackageManager) std.fs.Dir {
         return ((client.global_link_dir) orelse (brk: {
-        var global_dir = (blk_catch_16: { break :blk_catch_16 ((Options.openGlobalDir(client.options.explicit_global_directory)) catch |e| { _ = &e; break :blk_catch_16 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .@"No global directory found")) {  _ = Output.errGeneric("failed to find a global directory for package caching and global link directories", .{});
-        break :__sw_blk_0 cp_val(Global.exit(1)); } } {  _ = Output.err(e, "failed to open the global directory", .{});
-        break :__sw_blk_0 cp_val(Global.exit(1)); }  unreachable; }); }); });
+        var global_dir = (blk_catch_16: { break :blk_catch_16 ((Options.openGlobalDir(client.options.explicit_global_directory)) catch |e| { _ = &e; if ((e == error.@"No global directory found")) {
+            _ = Output.errGeneric("failed to find a global directory for package caching and global link directories", .{});
+            _ = Global.exit(1);
+        } else {
+            _ = Output.err(e, "failed to open the global directory", .{});
+            _ = Global.exit(1);
+        } }); });
         _ = &global_dir;
         client.global_dir = global_dir;
         client.global_link_dir = (blk_catch_17: { break :blk_catch_17 ((global_dir.makeOpenPath("node_modules", .{})) catch |e| { _ = &e; _ = Output.err(e, "failed to open global link dir node_modules at '{f}'", .{ FD.fromStdDir(global_dir) });

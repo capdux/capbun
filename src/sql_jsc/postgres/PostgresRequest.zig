@@ -431,7 +431,7 @@ _ = try connection.on(.CopyBothResponse, Context, reader);
 },
 else => {
 _ = debug("Unknown message: {c}", .{ c });
-            const to_skip = (try reader.length() - 4);
+            const to_skip = (try reader.length() -| 1);
             _ = debug("to_skip: {d}", .{ to_skip });
             _ = try reader.skip(@intCast(to_skip));
 },

@@ -371,7 +371,7 @@ pub fn onData(
             'W' => connection.on(.CopyBothResponse, Context, reader)?,
             else => {
                 debug("Unknown message: {c}", .{c});
-                const to_skip = (reader.length()?) - 4;
+                const to_skip = (reader.length()?) -| 1;
                 debug("to_skip: {d}", .{to_skip});
                 reader.skip(@intCast(to_skip))?;
             },

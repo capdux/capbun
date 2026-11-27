@@ -284,11 +284,25 @@ pub inline fn getRequestBodySendBuffer(self: *HTTPThread, estimated_size: usize)
 }
 
 pub fn onInitErrorNoop(err: InitError, opts: InitOpts) noreturn {
-        __sw_blk_0: { const __disc_0 = err; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .LoadCAFile)) {  if ((!bun.sys.existsZ(opts.abs_ca_file_name))) {
-            _ = bun.Output.err("HTTPThread", "failed to find CA file: '{s}'", .{ opts.abs_ca_file_name });
+        if ((err == error.LoadCAFile)) {
+            if ((!bun.sys.existsZ(opts.abs_ca_file_name))) {
+                _ = bun.Output.err("HTTPThread", "failed to find CA file: '{s}'", .{ opts.abs_ca_file_name });
+            } else {
+                _ = bun.Output.err("HTTPThread", "failed to load CA file: '{s}'", .{ opts.abs_ca_file_name });
+            }
         } else {
-            _ = bun.Output.err("HTTPThread", "failed to load CA file: '{s}'", .{ opts.abs_ca_file_name });
-        } break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidCAFile)) {  _ = bun.Output.err("HTTPThread", "the CA file is invalid: '{s}'", .{ opts.abs_ca_file_name }); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidCA)) {  _ = bun.Output.err("HTTPThread", "the provided CA is invalid", &.{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .FailedToOpenSocket)) {  _ = bun.Output.errGeneric("failed to start HTTP client thread", &.{}); break :__sw_blk_0; } }  }
+            if ((err == error.InvalidCAFile)) {
+                _ = bun.Output.err("HTTPThread", "the CA file is invalid: '{s}'", .{ opts.abs_ca_file_name });
+            } else {
+                if ((err == error.InvalidCA)) {
+                    _ = bun.Output.err("HTTPThread", "the provided CA is invalid", &.{});
+                } else {
+                    if ((err == error.FailedToOpenSocket)) {
+                        _ = bun.Output.errGeneric("failed to start HTTP client thread", &.{});
+                    }
+                }
+            }
+        }
         _ = bun.Global.crash();
 }
 

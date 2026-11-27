@@ -1234,29 +1234,53 @@ pub fn snapshot(self: *Expect, globalThis: *JSGlobalObject, value: JSValue, prop
             const buntest = buntest_strong.val.get();
             const test_file_path = Jest.runner.?.files.get(buntest.file_id).source.path.text;
             const runner = Jest.runner.?;
-            return (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .FailedToOpenSnapshotFile)) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed to open snapshot file for test file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .FailedToMakeSnapshotDirectory)) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .FailedToWriteSnapshotFile)) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if ((cp_match_tag(__err_v_5, .SyntaxError) or cp_match_tag(__err_v_5, .ParseError))) {  break :__sw_blk_5 cp_val(globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path })); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .SnapshotCreationNotAllowedInCI)) {  break :__sw_blk_5 cp_val(ci_blk: {
-            const snapshot_name = runner.snapshots.last_error_snapshot_name;
-            const slot_ptr = (blk: {
-            break :blk (&runner.snapshots.last_error_snapshot_name);
+            if ((e == error.FailedToOpenSnapshotFile)) {
+                return globalThis.throw("Failed to open snapshot file for test file: {s}", .{ test_file_path });
+            } else {
+                if ((e == error.FailedToMakeSnapshotDirectory)) {
+                    return globalThis.throw("Failed to make snapshot directory for test file: {s}", .{ test_file_path });
+                } else {
+                    if ((e == error.FailedToWriteSnapshotFile)) {
+                        return globalThis.throw("Failed write to snapshot file: {s}", .{ test_file_path });
+                    } else {
+                        if (((e == error.SyntaxError) or (e == error.ParseError))) {
+                            return globalThis.throw("Failed to parse snapshot file for: {s}", .{ test_file_path });
+                        } else {
+                            if ((e == error.SnapshotCreationNotAllowedInCI)) {
+                                const snapshot_name = runner.snapshots.last_error_snapshot_name;
+                                const slot_ptr = (blk: {
+                                break :blk (&runner.snapshots.last_error_snapshot_name);
 
 });
-            var snapshot_name_guard = OptSliceFreeGuard{ .allocator = runner.snapshots.allocator, .slot = slot_ptr };
-            _ = &snapshot_name_guard;
-            var __snapshot_name_guard_moved = false; _ = &__snapshot_name_guard_moved;
-            defer if (!__snapshot_name_guard_moved) { __snapshot_name_guard_moved = true; const __T = @TypeOf(snapshot_name_guard); if (@typeInfo(__T) == .optional) { if (snapshot_name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { snapshot_name_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = snapshot_name_guard; _drop_val.__cp_deinit(); } };
-            if (snapshot_name) |name| {
-                _ = &name;
-                break :ci_blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nSnapshot name: \"{s}\"\nReceived: {s}", .{ name, pretty_value.val.written() });
-            } else {
-                break :ci_blk globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.val.written() });
-            }
-}); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .SnapshotInConcurrentGroup)) {  break :__sw_blk_5 cp_val(globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{})); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .TestNotActive)) {  break :__sw_blk_5 cp_val(globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{})); } } {  break :__sw_blk_5 cp_val(blk: {
-            var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis } };
-            _ = &formatter;
-            var __formatter_moved = false; _ = &__formatter_moved;
-            defer if (!__formatter_moved) { __formatter_moved = true; const __T = @TypeOf(formatter); if (@typeInfo(__T) == .optional) { if (formatter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter; _drop_val.__cp_deinit(); } };
-            break :blk globalThis.throw("Failed to snapshot value: {f}", .{ value.toFmt((&formatter.val)) });
-}); }  unreachable; }); }); });
+                                var snapshot_name_guard = OptSliceFreeGuard{ .allocator = runner.snapshots.allocator, .slot = slot_ptr };
+                                _ = &snapshot_name_guard;
+                                var __snapshot_name_guard_moved = false; _ = &__snapshot_name_guard_moved;
+                                defer if (!__snapshot_name_guard_moved) { __snapshot_name_guard_moved = true; const __T = @TypeOf(snapshot_name_guard); if (@typeInfo(__T) == .optional) { if (snapshot_name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { snapshot_name_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = snapshot_name_guard; _drop_val.__cp_deinit(); } };
+                                if (snapshot_name) |name| {
+                                    _ = &name;
+                                    return globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nSnapshot name: \"{s}\"\nReceived: {s}", .{ name, pretty_value.val.written() });
+                                } else {
+                                    return globalThis.throw("Snapshot creation is disabled in CI environments unless --update-snapshots is used\nTo override, set the environment variable CI=false.\n\nReceived: {s}", .{ pretty_value.val.written() });
+                                }
+                            } else {
+                                if ((e == error.SnapshotInConcurrentGroup)) {
+                                    return globalThis.throw("Snapshot matchers are not supported in concurrent tests", .{});
+                                } else {
+                                    if ((e == error.TestNotActive)) {
+                                        return globalThis.throw("Snapshot matchers are not supported after the test has finished executing", .{});
+                                    } else {
+                                        var formatter = DeinitGuard(jsc.ConsoleObject.Formatter){ .val = jsc.ConsoleObject.Formatter{ .globalThis = globalThis } };
+                                        _ = &formatter;
+                                        var __formatter_moved = false; _ = &__formatter_moved;
+                                        defer if (!__formatter_moved) { __formatter_moved = true; const __T = @TypeOf(formatter); if (@typeInfo(__T) == .optional) { if (formatter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter; _drop_val.__cp_deinit(); } };
+                                        return globalThis.throw("Failed to snapshot value: {f}", .{ value.toFmt((&formatter.val)) });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } }); });
             if (existing_value) |saved_value| {
                 _ = &saved_value;
                 if (strings.eqlLong(pretty_value.val.written(), saved_value, true)) {

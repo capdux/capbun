@@ -932,9 +932,7 @@ pub struct DataCellsGuard<P, C> {
         _.flags.is_processing_data = true;
         const vm = _.vm;
 
-        if (_.status == .connected) {
-            _.disableConnectionTimeout();
-        }
+        _.disableConnectionTimeout();
         const _data_read_guard = DataReadGuard{ conn: _, vm: vm };
 
         const event_loop = vm.eventLoop();
@@ -1308,7 +1306,7 @@ pub struct DataCellsGuard<P, C> {
         return !_.flags.is_ready_for_query || _.current() != null;
     }
 
-    pub fn canPipeline(): bool {
+    pub fn canPipeline(*_): bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;

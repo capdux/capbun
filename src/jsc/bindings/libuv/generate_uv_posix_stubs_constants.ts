@@ -217,7 +217,8 @@ export const symbols = [
   "uv_print_all_handles",
   "uv_process_get_pid",
   "uv_process_kill",
-  "uv_queue_work",
+  // Defined in uv-posix-polyfills-posix.c
+  // "uv_queue_work",
   "uv_random",
   "uv_read_start",
   "uv_read_stop",

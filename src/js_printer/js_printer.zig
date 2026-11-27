@@ -5463,6 +5463,11 @@ _ = p.print("\\u");
     }
 
 pub fn printNumber(p: *Printer, value: f64, level: Level) void {
+            if ((is_json and (!std.math.isFinite(value)))) {
+                _ = p.printSpaceBeforeIdentifier();
+                _ = p.print("null");
+                return;
+            }
             const absValue = @abs(value);
             if (std.math.isNan(value)) {
                 _ = p.printSpaceBeforeIdentifier();

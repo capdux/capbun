@@ -734,31 +734,22 @@ pub fn installWithManager(
 
             if (is_subcommand_to_run_scanner) {
                 if (results := security_scanner.performSecurityScanAfterResolution(manager, ctx, original_cwd) catch e => {
-                    switch (e) {
-                        error.SecurityScannerInWorkspace => {
-                            Output.errGeneric("security scanner cannot be a dependency of a workspace package. It must be a direct dependency of the root package.", {});
-                        },
-                        error.SecurityScannerRetryFailed => {
-                            Output.errGeneric("security scanner failed after partial install. This is probably a bug in Bun. Please report it at https://github.com/oven-sh/bun/issues", {});
-                        },
-                        error.InvalidPackageID => {
-                            Output.errGeneric("cannot perform partial install: security scanner package ID is invalid", {});
-                        },
-                        error.PartialInstallFailed => {
-                            Output.errGeneric("failed to install security scanner package", {});
-                        },
-                        error.NoPackagesInstalled => {
-                            Output.errGeneric("no packages were installed during security scanner installation", {});
-                        },
-                        error.IPCPipeFailed => {
-                            Output.errGeneric("failed to create IPC pipe for security scanner", {});
-                        },
-                        error.ProcessWatchFailed => {
-                            Output.errGeneric("failed to watch security scanner process", {});
-                        },
-                        else => {
-                            Output.errGeneric("security scanner failed: {s}", .{@errorName(e)});
-                        },
+                    if (e == error.SecurityScannerInWorkspace) {
+                        Output.errGeneric("security scanner cannot be a dependency of a workspace package. It must be a direct dependency of the root package.", {});
+                    } else if (e == error.SecurityScannerRetryFailed) {
+                        Output.errGeneric("security scanner failed after partial install. This is probably a bug in Bun. Please report it at https://github.com/oven-sh/bun/issues", {});
+                    } else if (e == error.InvalidPackageID) {
+                        Output.errGeneric("cannot perform partial install: security scanner package ID is invalid", {});
+                    } else if (e == error.PartialInstallFailed) {
+                        Output.errGeneric("failed to install security scanner package", {});
+                    } else if (e == error.NoPackagesInstalled) {
+                        Output.errGeneric("no packages were installed during security scanner installation", {});
+                    } else if (e == error.IPCPipeFailed) {
+                        Output.errGeneric("failed to create IPC pipe for security scanner", {});
+                    } else if (e == error.ProcessWatchFailed) {
+                        Output.errGeneric("failed to watch security scanner process", {});
+                    } else {
+                        Output.errGeneric("security scanner failed: {s}", .{@errorName(e)});
                     }
 
                     Global.exit(1);

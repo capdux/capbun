@@ -3996,7 +3996,15 @@ pub fn onRequest(dev: *DevServer, req: *Request, resp: anytype) void {
             _ = &route_index;
             var ctx = RequestEnsureRouteBundledCtx{ .dev = dev, .req = .{ .req = req }, .resp = AnyResponse.init(resp), .kind = .server_handler, .route_bundle_index = bun.handleOom(dev.getOrPutRouteBundle(.{ .framework = route_index })) };
             _ = &ctx;
-            _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; break :blk_catch_33 (__sw_blk_51: { const __disc_51 = e; _ = &__disc_51; if ((!cp_has_ok_val(__disc_51) and !cp_is_null_val(__disc_51))) { const __err_v_51 = cp_unwrap_err_val(__disc_51); _ = &__err_v_51; if (cp_match_tag(__err_v_51, .JSError)) {  break :__sw_blk_51 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_51) and !cp_is_null_val(__disc_51))) { const __err_v_51 = cp_unwrap_err_val(__disc_51); _ = &__err_v_51; if (cp_match_tag(__err_v_51, .JSTerminated)) {  break :__sw_blk_51 cp_val(dev.vm.global.reportActiveExceptionAsUnhandled(e)); } } if ((!cp_has_ok_val(__disc_51) and !cp_is_null_val(__disc_51))) { const __err_v_51 = cp_unwrap_err_val(__disc_51); _ = &__err_v_51; if (cp_match_tag(__err_v_51, .OutOfMemory)) {  break :__sw_blk_51 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+            _ = (blk_catch_33: { break :blk_catch_33 ((dev.ensureRouteIsBundled(ctx.route_bundle_index, RequestEnsureRouteBundledCtx, (&ctx))) catch |e| { _ = &e; if ((e == error.JSError)) {
+                _ = dev.vm.global.reportActiveExceptionAsUnhandled(e);
+            } else {
+                if ((e == error.JSTerminated)) {
+                    _ = dev.vm.global.reportActiveExceptionAsUnhandled(e);
+                } else {
+                    _ = bun.outOfMemory();
+                }
+            } }); });
             return;
         }
         if ((dev.server.?.config().onRequest != .zero)) {
@@ -4340,8 +4348,8 @@ pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Ma
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_54 = keys.len;
-                while (i < __end_54) : (i += 1) {
+                const __end_53 = keys.len;
+                while (i < __end_53) : (i += 1) {
                     const key = keys[@as(usize, @intCast(i))];
                     const value = values[@as(usize, @intCast(i))];
                     _ = bun.assert((value.ref_count > 0));
@@ -4373,8 +4381,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_55 = bf_keys.len;
-                while (i < __end_55) : (i += 1) {
+                const __end_54 = bf_keys.len;
+                while (i < __end_54) : (i += 1) {
                     const k = bf_keys[@as(usize, @intCast(i))];
                     const v = bf_vals[@as(usize, @intCast(i))];
                     const file = v.unpack();
@@ -4409,8 +4417,8 @@ pub fn writeVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_56 = g.edges.items.len;
-                while (i < __end_56) : (i += 1) {
+                const __end_55 = g.edges.items.len;
+                while (i < __end_55) : (i += 1) {
                     const edge = g.edges.items[@as(usize, @intCast(i))];
                     if ((std.mem.indexOfScalar(G.EdgeIndex, g.edges_free_list.items, G.EdgeIndex.init(@intCast(i))) != null)) {
                         continue;

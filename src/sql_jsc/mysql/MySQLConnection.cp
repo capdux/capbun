@@ -740,17 +740,18 @@ export struct Reader {
                             return error.UnexpectedPacket;
                         },
                     }
-                } else if (first_byte == 0xfb) {
-                    let infile = LocalInfileRequest{
-                        packet_size: header_length,
-                    };
-                    infile.decode(reader)?;
-                    const _guard_infile = DeinitGuard<LocalInfileRequest>{ ptr: &infile };
-                    return error.LocalInfileNotSupported;
                 } else {
                     debug("Received auth continuation without plugin", .{});
                     return error.UnexpectedPacket;
                 }
+            },
+            0xfb => {
+                let infile = LocalInfileRequest{
+                    packet_size: header_length,
+                };
+                infile.decode(reader)?;
+                const _guard_infile = DeinitGuard<LocalInfileRequest>{ ptr: &infile };
+                return error.LocalInfileNotSupported;
             },
             0xfe => {
                 let auth_switch = AuthSwitchRequest{

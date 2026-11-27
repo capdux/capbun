@@ -24,6 +24,28 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
+- **2026-11-27 14:11 Batch 120 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/node/http/numeric-header.test.ts`
+
+- **2026-11-27 14:06 Batch 117–118 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
+  - `test/js/bun/http/serve-error-handler-stream.test.ts`
+
+
+- **2026-11-27 13:56 `bundler` 16路复扫新增 `0 fail`（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/bundler/resolver/cache-node-compat.test.ts`, `test/bundler/resolver/cache-runtime.test.ts`
+
+
+- **2026-11-27 13:54 `cli`+`bake` 16路复扫新增 `0 fail`（`1.4.5-debug`，2 个完整实名路径）**：
+  - `test/bake/dev/plugins.test.ts`, `test/cli/run/syntax.test.ts`
+
+
+- **2026-11-27 12:54 `node-napi-tests` 8路并发验收转绿（`1.4.5-debug`，50/55 完整实名路径）**：
+  - `test/napi/node-napi-tests/test/js-native-api/2_function_arguments/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/3_callbacks/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/4_object_factory/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/5_function_factory/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/6_object_wrap/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/7_factory_wrap/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/8_passing_wrapped/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_array/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_bigint/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_cannot_run_js/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_constructor/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_conversions/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_dataview/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_date/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_error/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_exception/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_function/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_handle_scope/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_instance_data/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_new_target/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_number/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_object/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_promise/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_properties/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_reference_double_free/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_string/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_symbol/do.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_typedarray/do.test.ts`, `test/napi/node-napi-tests/test/node-api/1_hello_world/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_async/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_async_cleanup_hook/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_async_context/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_buffer/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_cleanup_hook/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_env_teardown_gc/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_exception/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_fatal/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_fatal_exception/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_general/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_init_order/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_instance_data/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_make_callback/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_make_callback_recurse/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_null_init/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_reference_by_node_api_version/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_threadsafe_function/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_uv_loop/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_uv_threadpool_size/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_worker_terminate/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_worker_terminate_finalization/do.test.ts`
+
+
+- **2026-11-27 Batch 112–115 验收转绿（`1.4.5-debug`，4 个完整实名路径）**：
+  - `test/js/bun/util/fuzzilli-reprl.test.ts`, `test/napi/node-napi-tests/test/js-native-api/test_general/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_callback_scope/do.test.ts`, `test/napi/node-napi-tests/test/node-api/test_worker_buffer_callback/do.test.ts`
+
 - **2026-11-27 Batch 107–110 验收转绿（`1.4.5-debug`，4 个完整实名路径）**：
   - `test/js/bun/http/bun-serve-headers.test.ts`, `test/js/bun/http/decodeURIComponentSIMD.test.ts`, `test/js/web/fetch/response.test.ts`, `test/js/web/request/request.test.ts`
 

@@ -40,6 +40,7 @@ extern "C" void Server__setIdleTimeout(EncodedJSValue, EncodedJSValue, JSC::JSGl
 extern "C" EncodedJSValue Server__setAppFlags(JSC::JSGlobalObject*, EncodedJSValue, bool require_host_header, bool use_strict_method_validation);
 extern "C" EncodedJSValue Server__setOnClientError(JSC::JSGlobalObject*, EncodedJSValue, EncodedJSValue);
 extern "C" EncodedJSValue Server__setMaxHTTPHeaderSize(JSC::JSGlobalObject*, EncodedJSValue, uint64_t);
+extern "C" size_t BUN_DEFAULT_MAX_HTTP_HEADER_SIZE;
 
 static EncodedJSValue assignHeadersFromFetchHeaders(FetchHeaders& impl, JSObject* prototype, JSObject* objectValue, JSC::InternalFieldTuple* tuple, JSC::JSGlobalObject* globalObject, JSC::VM& vm)
 {
@@ -891,10 +892,19 @@ JSC_DEFINE_HOST_FUNCTION(jsHTTPSetCustomOptions, (JSGlobalObject * globalObject,
     double maxHeaderSizeNumber = maxHeaderSize.toNumber(globalObject);
     RETURN_IF_EXCEPTION(scope, {});
 
+    uint64_t maxHeaderSizeInt;
+    if (std::isnan(maxHeaderSizeNumber) || maxHeaderSizeNumber < 0) {
+        maxHeaderSizeInt = static_cast<uint64_t>(BUN_DEFAULT_MAX_HTTP_HEADER_SIZE);
+    } else if (std::isinf(maxHeaderSizeNumber) || maxHeaderSizeNumber >= static_cast<double>(UINT64_MAX)) {
+        maxHeaderSizeInt = UINT64_MAX;
+    } else {
+        maxHeaderSizeInt = static_cast<uint64_t>(maxHeaderSizeNumber);
+    }
+
     Server__setAppFlags(globalObject, JSValue::encode(serverValue), requireHostHeader.toBoolean(globalObject), useStrictMethodValidation.toBoolean(globalObject));
     RETURN_IF_EXCEPTION(scope, {});
 
-    Server__setMaxHTTPHeaderSize(globalObject, JSValue::encode(serverValue), maxHeaderSizeNumber);
+    Server__setMaxHTTPHeaderSize(globalObject, JSValue::encode(serverValue), maxHeaderSizeInt);
     RETURN_IF_EXCEPTION(scope, {});
 
     Server__setOnClientError(globalObject, JSValue::encode(serverValue), JSValue::encode(callback));

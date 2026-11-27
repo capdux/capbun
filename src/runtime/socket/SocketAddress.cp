@@ -370,12 +370,12 @@ pub struct SocketAddressOptions {
         return obj.toJS();
     }
 
-    inline fn asV4(): *const inet.sockaddr_in {
+    inline fn asV4(*_): *const inet.sockaddr_in {
         bun.debugAssert(_.family() == AF.INET);
         return &_._addr.sin;
     }
 
-    inline fn asV6(): *const inet.sockaddr_in6 {
+    inline fn asV6(*_): *const inet.sockaddr_in6 {
         bun.debugAssert(_.family() == AF.INET6);
         return &_._addr.sin6;
     }
@@ -430,11 +430,10 @@ pub enum AF: inet.sa_family_t {
                 return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
             }
         } else if (value.isUInt32AsAnyInt()) {
-            return switch (value.toU32()) {
-                AF.INET.int() => AF.INET,
-                AF.INET6.int() => AF.INET6,
-                else => return global.throwInvalidArgumentPropertyValue("options.family", "AF_INET or AF_INET6", value),
-            };
+            const fam = value.toU32();
+            if (fam == AF.INET.int()) return AF.INET;
+            if (fam == AF.INET6.int()) return AF.INET6;
+            return global.throwInvalidArgumentPropertyValue("options.family", "AF_INET or AF_INET6", value);
         } else {
             return global.throwInvalidArgumentPropertyValue("options.family", "a string or number", value);
         }

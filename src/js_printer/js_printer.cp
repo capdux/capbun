@@ -5541,6 +5541,11 @@ fn NewPrinter(
         }
 
         static fn printNumber(p: *Printer, value: f64, level: Level) {
+            if (is_json && !std.math.isFinite(value)) {
+                p.printSpaceBeforeIdentifier();
+                p.print("null");
+                return;
+            }
             const absValue = @abs(value);
             if (std.math.isNan(value)) {
                 p.printSpaceBeforeIdentifier();

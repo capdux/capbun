@@ -455,7 +455,7 @@ pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter) Er
             _ = &b;
             if (@hasDecl(b, "scale")) {
                 if (useSystem()) {
-                    if ((blk_catch_4: { break :blk_catch_4 ((b.scale(src, sw, sh, dw, dh, f)) catch |e| { _ = &e; break :blk_catch_4 (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .BackendUnavailable)) {  break :__sw_blk_0 cp_val(null); } } {  return e; }  unreachable; }); }); })) |out| {
+                    if ((blk_catch_4: { break :blk_catch_4 ((b.scale(src, sw, sh, dw, dh, f)) catch |e| { _ = &e; break :blk_catch_4 (if ((e == error.BackendUnavailable)) null else return e); }); })) |out| {
                         _ = &out;
                         return out;
                     }
@@ -485,7 +485,7 @@ pub fn rotate(src: []const u8, w: u32, h: u32, degrees: u32) Err!Decoded {
             _ = &b;
             if (@hasDecl(b, "rotate")) {
                 if (useSystem()) {
-                    if ((blk_catch_5: { break :blk_catch_5 ((b.rotate(src, w, h, (degrees / 90))) catch |e| { _ = &e; break :blk_catch_5 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .BackendUnavailable)) {  break :__sw_blk_1 cp_val(null); } } {  return e; }  unreachable; }); }); })) |out| {
+                    if ((blk_catch_5: { break :blk_catch_5 ((b.rotate(src, w, h, (degrees / 90))) catch |e| { _ = &e; break :blk_catch_5 (if ((e == error.BackendUnavailable)) null else return e); }); })) |out| {
                         _ = &out;
                         return .{ .rgba = out, .width = dw, .height = dh };
                     }
@@ -502,7 +502,7 @@ pub fn flip(src: []const u8, w: u32, h: u32, horizontal: bool) Err![]u8 {
             _ = &b;
             if (@hasDecl(b, "flip")) {
                 if (useSystem()) {
-                    if ((blk_catch_6: { break :blk_catch_6 ((b.flip(src, w, h, horizontal)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .BackendUnavailable)) {  break :__sw_blk_2 cp_val(null); } } {  return e; }  unreachable; }); }); })) |out| {
+                    if ((blk_catch_6: { break :blk_catch_6 ((b.flip(src, w, h, horizontal)) catch |e| { _ = &e; break :blk_catch_6 (if ((e == error.BackendUnavailable)) null else return e); }); })) |out| {
                         _ = &out;
                         return out;
                     }

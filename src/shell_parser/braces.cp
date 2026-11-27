@@ -128,7 +128,8 @@ pub struct Parser {
 
     fn parseExpansion(*_): !AST.Expansion {
         let variants = std.array_list.Managed(AST.Group).init(_.alloc);
-        while (!_.matchTok(.eof)) {
+        if (_.match_any(&.{ .close, .eof })) return .{ variants: variants.items[0..] };
+        while (true) {
             let group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), _.alloc);
             const group_alloc = group_alloc_.get();
             let group = std.array_list.Managed(AST.Atom).init(group_alloc);
@@ -148,7 +149,7 @@ pub struct Parser {
             } else {
                 variants.append(.{ atoms: .{ many: group.items[0..] } })?;
             }
-            if (close) break;
+            if (close || _.matchTok(.eof)) break;
         }
 
         return .{ variants: variants.items[0..] };
@@ -652,7 +653,7 @@ pub fn NewLexer(comptime encoding: Encoding): type {
                 assert(first.* == .open);
             }
 
-            let braces: u8 = 0;
+            let braces: u32 = 0;
 
             _.replaceTokenWithString(starting_idx);
             let i: u32 = starting_idx + 1;

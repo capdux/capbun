@@ -389,9 +389,7 @@ return try runOnEntryPoint(ctx, example_tag, template, (&progress), node);
 },
 .github_repository, .official => {
 const tarball_bytes: MutableString = (switch (example_tag) {
-.official => (blk_catch_8: { break :blk_catch_8 ((Example.fetch(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_8 @as(MutableString, (switch (e) {
-error.HTTPForbidden, error.ExampleNotFound => {
-{
+.official => (blk_catch_8: { break :blk_catch_8 ((Example.fetch(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; if (((e == error.HTTPForbidden) or (e == error.ExampleNotFound))) {
                 _ = node.end();
                 _ = progress.refresh();
                 _ = Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found. Here are templates you can use:\n\n", .{ template });
@@ -399,30 +397,33 @@ error.HTTPForbidden, error.ExampleNotFound => {
                 const examples = try Example.fetchAllLocalAndRemote(ctx, null, (&env_loader), filesystem);
                 _ = Example.print(examples.items, dirname);
                 _ = Global.exit(1);
-            }
-},
-else => {
-{
+            } else {
                 _ = node.end();
                 _ = progress.refresh();
                 _ = Output.prettyErrorln("\n\n", .{});
                 return e;
-            }
-},
-})); }); }),
-.github_repository => (blk_catch_9: { break :blk_catch_9 ((Example.fetchFromGitHub(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_9 @as(MutableString, (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .HTTPForbidden)) {  _ = node.end();
-            _ = progress.refresh();
-            _ = Output.prettyError("\n<r><red>error:<r> GitHub returned 403. This usually means GitHub is rate limiting your requests.\nTo fix this, either:<r>  <b>A) pass a <r><cyan>GITHUB_ACCESS_TOKEN<r> environment variable to bun<r>\n  <b>B)Wait a little and try again<r>\n", .{});
-            break :__sw_blk_1 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .GitHubRepositoryNotFound)) {  _ = node.end();
-            _ = progress.refresh();
-            _ = Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found on GitHub. Here are templates you can use:\n\n", .{ template });
-            _ = Output.flush();
-            const examples = try Example.fetchAllLocalAndRemote(ctx, null, (&env_loader), filesystem);
-            _ = Example.print(examples.items, dirname);
-            break :__sw_blk_1 cp_val(Global.crash()); } } {  _ = node.end();
-            _ = progress.refresh();
-            _ = Output.prettyErrorln("\n\n", .{});
-            return e; }  unreachable; })); }); }),
+            } }); }),
+.github_repository => (blk_catch_9: { break :blk_catch_9 ((Example.fetchFromGitHub(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; if ((e == error.HTTPForbidden)) {
+                _ = node.end();
+                _ = progress.refresh();
+                _ = Output.prettyError("\n<r><red>error:<r> GitHub returned 403. This usually means GitHub is rate limiting your requests.\nTo fix this, either:<r>  <b>A) pass a <r><cyan>GITHUB_ACCESS_TOKEN<r> environment variable to bun<r>\n  <b>B)Wait a little and try again<r>\n", .{});
+                _ = Global.crash();
+            } else {
+                if ((e == error.GitHubRepositoryNotFound)) {
+                    _ = node.end();
+                    _ = progress.refresh();
+                    _ = Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found on GitHub. Here are templates you can use:\n\n", .{ template });
+                    _ = Output.flush();
+                    const examples = try Example.fetchAllLocalAndRemote(ctx, null, (&env_loader), filesystem);
+                    _ = Example.print(examples.items, dirname);
+                    _ = Global.crash();
+                } else {
+                    _ = node.end();
+                    _ = progress.refresh();
+                    _ = Output.prettyErrorln("\n\n", .{});
+                    return e;
+                }
+            } }); }),
 else => unreachable,
 });
             (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = try ProgressBuf.print("Decompressing {s}", .{ template });
@@ -1508,9 +1509,13 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
             if (Output.enable_ansi_colors_stdout) {
                 async_http.client.progress_node = progress_node;
             }
-            const response = (blk_catch_41: { break :blk_catch_41 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_41 (__sw_blk_13: { const __disc_13 = e; _ = &__disc_13; if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
-            break :__sw_blk_13 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
-            break :__sw_blk_13 cp_val(Global.exit(1)); }  unreachable; }); }); });
+            const response = (blk_catch_41: { break :blk_catch_41 ((async_http.sendSync()) catch |e| { _ = &e; if ((e == error.WouldBlock)) {
+                _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
+                _ = Global.exit(1);
+            } else {
+                _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
+                _ = Global.exit(1);
+            } }); });
             if ((response.status_code != 200)) {
                 _ = Output.prettyErrorln("<r><red>{d}<r> fetching examples :( .{s}", .{ response.status_code, mutable.list.items });
                 _ = Global.exit(1);
@@ -1538,8 +1543,8 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_14 = props.len;
-                        while (i < __end_14) : (i += 1) {
+                        const __end_12 = props.len;
+                        while (i < __end_12) : (i += 1) {
                             const property = props[@as(usize, @intCast(i))];
                             const name = property.key.?.data.e_string.data;
                             var final_name = name;
@@ -1773,8 +1778,8 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_16 = argv.len;
-            while (i < __end_16) : (i += 1) {
+            const __end_14 = argv.len;
+            while (i < __end_14) : (i += 1) {
                 const arg = argv[@as(usize, @intCast(i))];
                 if ((i > (argv.len - 1))) {
                     _ = Output.print(" {s} ", .{ arg });

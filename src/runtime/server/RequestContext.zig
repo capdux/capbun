@@ -234,7 +234,7 @@ pub fn __cp_deinit(self: *@This()) void {
 
 pub fn StreamResultDeinitGuard(comptime T: type) type {
     return struct {
-        stream: T,
+        stream: *T,
         alloc: std.mem.Allocator,
         active: bool,
         __cp_dropped: bool = false,
@@ -243,17 +243,19 @@ pub fn __cp_deinit(self: *@This()) void {
             if (self.__cp_dropped) return;
             self.__cp_dropped = true;
                 if (self.active) {
-                    switch (self.stream) {
-.owned_and_done => |*owned| {
-_ = owned.deinit(self.alloc);
+                    {
+                        switch (self.stream.*) {
+.owned_and_done => {
+_ = self.stream.owned_and_done.deinit(self.alloc);
 },
-.owned => |*owned| {
-_ = owned.deinit(self.alloc);
+.owned => {
+_ = self.stream.owned.deinit(self.alloc);
 },
 else => {
 _ = unreachable;
 },
 }
+                    }
                 }
         }
     };
@@ -768,7 +770,7 @@ pub fn handleReject(ctx: *RequestContext, value: jsc.JSValue) void {
             if (ctx.didUpgradeWebSocket()) {
                 return;
             }
-            if ((((!ctx.resp.?.hasResponded()) and (!ctx.flags.has_marked_pending)) and (!ctx.flags.is_error_promise_pending))) {
+            if (((((((!ctx.resp.?.hasResponded()) and (!ctx.flags.has_marked_pending)) and (!ctx.flags.is_error_promise_pending)) and (ctx.sink == null)) and (!ctx.flags.has_sendfile_ctx)) and (ctx.byte_stream == null))) {
                 _ = ctx.renderMissing();
                 return;
             }
@@ -1044,6 +1046,12 @@ pub fn onAbort(self: *@This(), resp: *App.Response) void {
                 }
                 _ = request.internal_event_callback.deinit();
                 _ = self.request_weakref.deref();
+            }
+            if (self.sink) |wrapper| {
+                _ = &wrapper;
+                wrapper.sink.done = true;
+                wrapper.sink.res = null;
+                wrapper.sink.aborted = true;
             }
             if (self.signal) |signal| {
                 _ = &signal;
@@ -1964,14 +1972,24 @@ pub fn handleResolveStream(req: *RequestContext) void {
             _ = streamLog("handleResolveStream", .{});
             var wrote_anything = false;
             _ = &wrote_anything;
+            var sink_done = false;
+            _ = &sink_done;
             if (req.sink) |wrapper| {
                 _ = &wrapper;
+                sink_done = wrapper.sink.done;
                 req.flags.aborted = (req.flags.aborted or wrapper.sink.aborted);
                 wrote_anything = (wrapper.sink.wrote > 0);
                 _ = wrapper.sink.finalize();
                 _ = wrapper.detach(wrapper.sink.globalThis);
                 req.sink = null;
                 _ = wrapper.sink.destroy();
+            }
+            if (sink_done) {
+                req.resp = null;
+                req.flags.has_abort_handler = false;
+                req.flags.has_timeout_handler = false;
+                req.flags.is_waiting_for_request_body = false;
+                _ = req.endRequestStreamingAndDrain();
             }
             if (req.response_weakref.get()) |resp| {
                 _ = &resp;
@@ -2029,8 +2047,11 @@ pub fn onRejectStream(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame
 
 pub fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: JSValue) void {
             _ = streamLog("handleRejectStream", .{});
+            var sink_done = false;
+            _ = &sink_done;
             if (req.sink) |wrapper| {
                 _ = &wrapper;
+                sink_done = wrapper.sink.done;
                 if (wrapper.sink.pending_flush) |prom| {
                     _ = &prom;
                     _ = prom.toJS().unprotect();
@@ -2042,6 +2063,13 @@ pub fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: J
                 _ = wrapper.detach(wrapper.sink.globalThis);
                 req.sink = null;
                 _ = wrapper.sink.destroy();
+            }
+            if (sink_done) {
+                req.resp = null;
+                req.flags.has_abort_handler = false;
+                req.flags.has_timeout_handler = false;
+                req.flags.is_waiting_for_request_body = false;
+                _ = req.endRequestStreamingAndDrain();
             }
             if (req.response_weakref.get()) |resp| {
                 _ = &resp;
@@ -2216,14 +2244,21 @@ _ = assert((bs.pipe.ctx == null));
 }
             }
             if (((lock.onReceiveValue != null) or (lock.task != null))) {
-                const readable = (blk_catch_15: { break :blk_catch_15 ((value.toReadableStream(globalThis)) catch |e| { _ = &e; _ = self.runErrorHandler(globalThis.takeException(e));
-                return; }); });
-                _ = readable.ensureStillAlive();
-                _ = self.doRenderWithBody(value, null);
+                if (self.isAbortedOrEnded()) {
+                    return;
+                }
+                _ = self.runErrorHandler(globalThis.ERR(.BODY_ALREADY_USED, "Response body already used. A Response body can only be sent once; create a new Response for each request.", .{}).toJS());
                 return;
             }
             lock.onReceiveValue = doRenderWithBodyLocked;
             lock.task = (&self.*);
+            return;
+},
+.Used => {
+if (self.isAbortedOrEnded()) {
+                return;
+            }
+            _ = self.runErrorHandler(globalThis.ERR(.BODY_ALREADY_USED, "Response body already used. A Response body can only be sent once; create a new Response for each request.", .{}).toJS());
             return;
 },
 else => {
@@ -2245,7 +2280,10 @@ pub fn onPipe(self: *@This(), stream: jsc.WebCore.streams.Result, allocator: std
             _ = &stream_;
             const stream_needs_deinit = ((stream == .owned) or (stream == .owned_and_done));
             const is_done = stream.isDone();
-            var _guard_stream = StreamResultDeinitGuard(@TypeOf(stream_)){ .stream = stream_, .alloc = allocator, .active = stream_needs_deinit };
+            var _guard_stream = StreamResultDeinitGuard(@TypeOf(stream_)){ .stream = (blk: {
+            break :blk (&stream_);
+
+}), .alloc = allocator, .active = stream_needs_deinit };
             _ = &_guard_stream;
             var ___guard_stream_moved = false; _ = &___guard_stream_moved;
             defer if (!___guard_stream_moved) { ___guard_stream_moved = true; const __T = @TypeOf(_guard_stream); if (@typeInfo(__T) == .optional) { if (_guard_stream) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_stream.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_stream; _drop_val.__cp_deinit(); } };
@@ -2314,7 +2352,7 @@ pub fn doRenderNullBodyStatusCorked(self: *@This()) void {
                             defer {
                             _ = cl_slice.deinit();
                             }
-                            app_content_length = (blk_catch_16: { break :blk_catch_16 ((std.fmt.parseInt(u64, cl_slice.slice(), 10)) catch |__ce_16| { _ = &__ce_16; break :blk_catch_16 null; }); });
+                            app_content_length = (blk_catch_15: { break :blk_catch_15 ((std.fmt.parseInt(u64, cl_slice.slice(), 10)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); });
                         }
                     }
                 }
@@ -2425,7 +2463,7 @@ pub fn runErrorHandlerWithStatusCodeDontCheckResponded(self: *@This(), value: js
                 _ = &server;
                 if (((server.config.onError != .zero) and (!self.flags.has_called_error_handler))) {
                     self.flags.has_called_error_handler = true;
-                    const result = (blk_catch_17: { break :blk_catch_17 ((server.config.onError.call(server.globalThis, ((server.js_value.tryGet()) orelse (.js_undefined)), (&.{ value }))) catch |err| { _ = &err; break :blk_catch_17 server.globalThis.takeException(err); }); });
+                    const result = (blk_catch_16: { break :blk_catch_16 ((server.config.onError.call(server.globalThis, ((server.js_value.tryGet()) orelse (.js_undefined)), (&.{ value }))) catch |err| { _ = &err; break :blk_catch_16 server.globalThis.takeException(err); }); });
                     var _guard_res = EnsureStillAliveGuard(@TypeOf(result)){ .val = result };
                     _ = &_guard_res;
                     var ___guard_res_moved = false; _ = &___guard_res_moved;
@@ -2484,7 +2522,7 @@ pub fn processOnErrorPromise(ctx: *RequestContext, promise_js: jsc.JSValue, prom
 .pending => {
 ctx.flags.is_error_promise_pending = true;
             const cell = ctx.createPromiseCell(ctx.server.?.globalThis);
-            _ = (blk_catch_18: { break :blk_catch_18 ((promise_js.thenWithValue(ctx.server.?.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_18| { _ = &__ce_18;  }); });
+            _ = (blk_catch_17: { break :blk_catch_17 ((promise_js.thenWithValue(ctx.server.?.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_17| { _ = &__ce_17;  }); });
 },
 .fulfilled => |fulfilled_value| {
 if (ctx.didUpgradeWebSocket()) {
@@ -2590,10 +2628,10 @@ pub fn renderMetadata(self: *@This()) void {
                 _ = &_guard_cookies;
                 var ___guard_cookies_moved = false; _ = &___guard_cookies_moved;
                 defer if (!___guard_cookies_moved) { ___guard_cookies_moved = true; const __T = @TypeOf(_guard_cookies); if (@typeInfo(__T) == .optional) { if (_guard_cookies) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cookies.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cookies; _drop_val.__cp_deinit(); } };
-                _ = (blk_catch_19: { break :blk_catch_19 ((cookies.write(self.server.?.globalThis, resp_kind, (blk: {
+                _ = (blk_catch_18: { break :blk_catch_18 ((cookies.write(self.server.?.globalThis, resp_kind, (blk: {
                 break :blk @ptrCast(self.resp.?);
 
-}))) catch |__ce_19| { _ = &__ce_19; return; }); });
+}))) catch |__ce_18| { _ = &__ce_18; return; }); });
             }
             if (((needs_content_type and ((!self.blob.isDetached()) or ((if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value).ptr != (if (@typeInfo(@TypeOf(MimeType.other)) == .@"enum") @intFromEnum(MimeType.other) else MimeType.other.value).ptr))) and (std.mem.indexOfAny(u8, (if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value), "\r\n\x00") == null))) {
                 _ = resp.writeHeader("content-type", (if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value));
@@ -2611,7 +2649,7 @@ pub fn renderMetadata(self: *@This()) void {
                     if ((basename.len > 0)) {
                         var filename_buf: [1024]u8 = undefined;
                         _ = &filename_buf;
-                        _ = resp.writeHeader("content-disposition", (blk_catch_20: { break :blk_catch_20 ((std.fmt.bufPrint((&filename_buf), "filename=\"{s}\"", .{ basename[0..@min(basename.len, (1024 - 32))] })) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 ""; }); }));
+                        _ = resp.writeHeader("content-disposition", (blk_catch_19: { break :blk_catch_19 ((std.fmt.bufPrint((&filename_buf), "filename=\"{s}\"", .{ basename[0..@min(basename.len, (1024 - 32))] })) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 ""; }); }));
                     }
                 }
             }
@@ -2623,7 +2661,7 @@ pub fn renderMetadata(self: *@This()) void {
             if ((needs_content_range and (!has_content_range))) {
                 var content_range_buf: [1024]u8 = undefined;
                 _ = &content_range_buf;
-                _ = resp.writeHeader("content-range", (if ((self.sendfile.total > 0)) (blk_catch_21: { break :blk_catch_21 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/{d}", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)), self.sendfile.total })) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 "bytes */*"; }); }) else (blk_catch_22: { break :blk_catch_22 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/*", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)) })) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 "bytes */*"; }); })));
+                _ = resp.writeHeader("content-range", (if ((self.sendfile.total > 0)) (blk_catch_20: { break :blk_catch_20 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/{d}", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)), self.sendfile.total })) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 "bytes */*"; }); }) else (blk_catch_21: { break :blk_catch_21 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/*", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)) })) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 "bytes */*"; }); })));
                 if ((self.sendfile.total > 0)) {
                     _ = resp.writeHeader("accept-ranges", "bytes");
                 }
@@ -2712,7 +2750,7 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                 var ___guard_el_moved = false; _ = &___guard_el_moved;
                 defer if (!___guard_el_moved) { ___guard_el_moved = true; const __T = @TypeOf(_guard_el); if (@typeInfo(__T) == .optional) { if (_guard_el) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_el.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_el; _drop_val.__cp_deinit(); } };
                 if ((!last)) {
-                    _ = (blk_catch_24: { break :blk_catch_24 ((readable.ptr.Bytes.onData(.{ .temporary = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_24| { _ = &__ce_24;  }); });
+                    _ = (blk_catch_23: { break :blk_catch_23 ((readable.ptr.Bytes.onData(.{ .temporary = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_23| { _ = &__ce_23;  }); });
                 } else {
                     var strong = self.request_body_readable_stream_ref;
                     _ = &strong;
@@ -2727,7 +2765,7 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                         self.request_body = null;
                     }
                     _ = (if (@typeInfo(@TypeOf(readable)) == .@"enum") @intFromEnum(readable) else readable.value).ensureStillAlive();
-                    _ = (blk_catch_25: { break :blk_catch_25 ((readable.ptr.Bytes.onData(.{ .temporary_and_done = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_25| { _ = &__ce_25;  }); });
+                    _ = (blk_catch_24: { break :blk_catch_24 ((readable.ptr.Bytes.onData(.{ .temporary_and_done = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_24| { _ = &__ce_24;  }); });
                 }
                 return;
             }
@@ -2745,7 +2783,7 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                     _ = &_guard_el;
                     var ___guard_el_moved = false; _ = &___guard_el_moved;
                     defer if (!___guard_el_moved) { ___guard_el_moved = true; const __T = @TypeOf(_guard_el); if (@typeInfo(__T) == .optional) { if (_guard_el) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_el.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_el; _drop_val.__cp_deinit(); } };
-                    _ = (blk_catch_26: { break :blk_catch_26 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toErrorInstance(.{ .Message = bun.String.static("Request body exceeded maxRequestBodySize") }, globalThis)) catch |__ce_26| { _ = &__ce_26;  }); });
+                    _ = (blk_catch_25: { break :blk_catch_25 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toErrorInstance(.{ .Message = bun.String.static("Request body exceeded maxRequestBodySize") }, globalThis)) catch |__ce_25| { _ = &__ce_25;  }); });
                     if (((self.resp != null) and (!resp.hasResponded()))) {
                         self.flags.has_written_status = true;
                         _ = resp.writeStatus("413 Payload Too Large");
@@ -2760,8 +2798,8 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                     _ = &old;
                     const total = (bytes.items.len + chunk.len);
                     _ = getter: {
-                    _ = (blk_catch_27: { break :blk_catch_27 ((bytes.ensureTotalCapacityPrecise(self.allocator, total)) catch |err| { _ = &err; _ = self.request_body_buf.clearAndFree(self.allocator);
-                    _ = (blk_catch_28: { break :blk_catch_28 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toError(err, globalThis)) catch |__ce_28| { _ = &__ce_28;  }); });
+                    _ = (blk_catch_26: { break :blk_catch_26 ((bytes.ensureTotalCapacityPrecise(self.allocator, total)) catch |err| { _ = &err; _ = self.request_body_buf.clearAndFree(self.allocator);
+                    _ = (blk_catch_27: { break :blk_catch_27 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toError(err, globalThis)) catch |__ce_27| { _ = &__ce_27;  }); });
                     break :getter; }); });
                     const prev_len = bytes.items.len;
                     bytes.items.len = total;
@@ -2779,14 +2817,14 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                         _ = &_guard_el;
                         var ___guard_el_moved = false; _ = &___guard_el_moved;
                         defer if (!___guard_el_moved) { ___guard_el_moved = true; const __T = @TypeOf(_guard_el); if (@typeInfo(__T) == .optional) { if (_guard_el) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_el.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_el; _drop_val.__cp_deinit(); } };
-                        _ = (blk_catch_29: { break :blk_catch_29 ((old.resolve((&(if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value)), globalThis, null)) catch |__ce_29| { _ = &__ce_29;  }); });
+                        _ = (blk_catch_28: { break :blk_catch_28 ((old.resolve((&(if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value)), globalThis, null)) catch |__ce_28| { _ = &__ce_28;  }); });
                     }
                     return;
                 }
                 if ((self.request_body_buf.capacity == 0)) {
-                    _ = (blk_catch_30: { break :blk_catch_30 ((self.request_body_buf.ensureTotalCapacityPrecise(self.allocator, @min(self.request_body_content_len, max_request_body_preallocate_length))) catch |__ce_30| { _ = &__ce_30; @panic("Out of memory while allocating request body buffer"); }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((self.request_body_buf.ensureTotalCapacityPrecise(self.allocator, @min(self.request_body_content_len, max_request_body_preallocate_length))) catch |__ce_29| { _ = &__ce_29; @panic("Out of memory while allocating request body buffer"); }); });
                 }
-                _ = (blk_catch_31: { break :blk_catch_31 ((self.request_body_buf.appendSlice(self.allocator, chunk)) catch |__ce_31| { _ = &__ce_31; @panic("Out of memory while allocating request body"); }); });
+                _ = (blk_catch_30: { break :blk_catch_30 ((self.request_body_buf.appendSlice(self.allocator, chunk)) catch |__ce_30| { _ = &__ce_30; @panic("Out of memory while allocating request body"); }); });
             }
     }
 
@@ -2817,7 +2855,7 @@ pub fn onStartBuffering(self: *@This()) void {
                         old.Locked.onReceiveValue = null;
                         var new_body: WebCore.Body.Value = .Null;
                         _ = &new_body;
-                        _ = (blk_catch_32: { break :blk_catch_32 ((old.resolve((&new_body), server.globalThis, null)) catch |__ce_32| { _ = &__ce_32;  }); });
+                        _ = (blk_catch_31: { break :blk_catch_31 ((old.resolve((&new_body), server.globalThis, null)) catch |__ce_31| { _ = &__ce_31;  }); });
                         (if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value) = new_body;
                     }
                 }

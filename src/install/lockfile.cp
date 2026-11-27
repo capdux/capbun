@@ -1743,12 +1743,12 @@ pub static fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, opti
             const _writer_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &writer_allocating };
             const writer = &writer_allocating.writer;
 
-            TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer) catch e => switch (e) {
-                error.WriteFailed => bun.outOfMemory(),
+            TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer) catch e => {
+                if (e == error.WriteFailed) bun.outOfMemory();
             };
 
-            writer.flush() catch e => switch (e) {
-                error.WriteFailed => bun.outOfMemory(),
+            writer.flush() catch e => {
+                if (e == error.WriteFailed) bun.outOfMemory();
             };
 
             break :bytes bun.handleOom(writer_allocating.toOwnedSlice());

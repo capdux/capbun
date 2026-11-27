@@ -567,9 +567,15 @@ _ = (if ((i == 0)) ({
                 }
             }
             if (((i == 1) or (i == 2))) {
+                var b = blob;
+                _ = &b;
+                _ = b.detach();
                 return globalThis.throwInvalidArguments("Blobs are immutable, and cannot be used for stdout/stderr", .{});
             }
             if ((blob.fastSize() == 0)) {
+                var b = blob;
+                _ = &b;
+                _ = b.detach();
                 stdio.* = .ignore;
                 return;
             }

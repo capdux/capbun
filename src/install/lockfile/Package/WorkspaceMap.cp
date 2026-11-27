@@ -223,34 +223,30 @@ pub fn processNamesArray(
             log,
         ) catch e => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
-            switch (e) {
-                error.EISNOTDIR, error.EISDIR, error.EACCESS, error.EPERM, error.ENOENT, error.FileNotFound => {
-                    log.addErrorFmt(
-                        source,
-                        item.loc,
-                        allocator,
-                        "Workspace not found \"{s}\"",
-                        [input_path],
-                    ) catch {};
-                },
-                error.MissingPackageName => {
-                    log.addErrorFmt(
-                        source,
-                        loc,
-                        allocator,
-                        "Missing \"name\" from package.json in {s}",
-                        [input_path],
-                    ) catch {};
-                },
-                else => {
-                    log.addErrorFmt(
-                        source,
-                        loc,
-                        allocator,
-                        "{s} reading package.json for workspace package \"{s}\"",
-                        [ @errorName(e), input_path ],
-                    ) catch {};
-                },
+            if (e == error.EISNOTDIR || e == error.EISDIR || e == error.EACCESS || e == error.EPERM || e == error.ENOENT || e == error.FileNotFound) {
+                log.addErrorFmt(
+                    source,
+                    item.loc,
+                    allocator,
+                    "Workspace not found \"{s}\"",
+                    [input_path],
+                ) catch {};
+            } else if (e == error.MissingPackageName) {
+                log.addErrorFmt(
+                    source,
+                    loc,
+                    allocator,
+                    "Missing \"name\" from package.json in {s}",
+                    [input_path],
+                ) catch {};
+            } else {
+                log.addErrorFmt(
+                    source,
+                    loc,
+                    allocator,
+                    "{s} reading package.json for workspace package \"{s}\"",
+                    [ @errorName(e), input_path ],
+                ) catch {};
             }
 
             continue;
@@ -414,26 +410,24 @@ pub fn processNamesArray(
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
                     const entry_base: []const u8 = Path.basename(matched_path);
-                    switch (e) {
-                        error.FileNotFound, error.PermissionDenied => continue,
-                        error.MissingPackageName => {
-                            log.addErrorFmt(
-                                source,
-                                logger.Loc.Empty,
-                                allocator,
-                                "Missing \"name\" from package.json in {s}/{s}",
-                                [ entry_dir, entry_base ],
-                            ) catch {};
-                        },
-                        else => {
-                            log.addErrorFmt(
-                                source,
-                                logger.Loc.Empty,
-                                allocator,
-                                "{s} reading package.json for workspace package \"{s}\" from \"{s}\"",
-                                [ @errorName(e), entry_dir, entry_base ],
-                            ) catch {};
-                        },
+                    if (e == error.FileNotFound || e == error.PermissionDenied) {
+                        continue;
+                    } else if (e == error.MissingPackageName) {
+                        log.addErrorFmt(
+                            source,
+                            logger.Loc.Empty,
+                            allocator,
+                            "Missing \"name\" from package.json in {s}/{s}",
+                            [ entry_dir, entry_base ],
+                        ) catch {};
+                    } else {
+                        log.addErrorFmt(
+                            source,
+                            logger.Loc.Empty,
+                            allocator,
+                            "{s} reading package.json for workspace package \"{s}\" from \"{s}\"",
+                            [ @errorName(e), entry_dir, entry_base ],
+                        ) catch {};
                     }
 
                     continue;

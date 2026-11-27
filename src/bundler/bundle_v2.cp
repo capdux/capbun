@@ -868,63 +868,60 @@ pub struct BundleV2 {
             // Rather than just the first one.
             record.path.is_disabled = true;
 
-            switch (e) {
-                error.ModuleNotFound => {
-                    const addError = Logger.Log.addResolveErrorWithTextDupe;
+            if (e == error.ModuleNotFound) {
+                const addError = Logger.Log.addResolveErrorWithTextDupe;
 
-                    const path_to_use = import_record.specifier;
+                const path_to_use = import_record.specifier;
 
-                    if (!handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors) {
-                        if (isPackagePath(import_record.specifier)) {
-                            if (target == .browser && options.ExternalModules.isNodeBuiltin(path_to_use)) {
-                                addError(
-                                    log,
-                                    source,
-                                    import_record.range,
-                                    _.allocator(),
-                                    "Browser build cannot {s} Node.js module: \"{s}\". To use Node.js builtins, set target to 'node' or 'bun'",
-                                    [ import_record.kind.errorLabel(), path_to_use ],
-                                    import_record.kind,
-                                ) catch unreachable;
-                            } else {
-                                addError(
-                                    log,
-                                    source,
-                                    import_record.range,
-                                    _.allocator(),
-                                    "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?",
-                                    [ path_to_use],
-                                    import_record.kind,
-                                ) catch unreachable;
-                            }
+                if (!handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors) {
+                    if (isPackagePath(import_record.specifier)) {
+                        if (target == .browser && options.ExternalModules.isNodeBuiltin(path_to_use)) {
+                            addError(
+                                log,
+                                source,
+                                import_record.range,
+                                _.allocator(),
+                                "Browser build cannot {s} Node.js module: \"{s}\". To use Node.js builtins, set target to 'node' or 'bun'",
+                                [ import_record.kind.errorLabel(), path_to_use ],
+                                import_record.kind,
+                            ) catch unreachable;
                         } else {
                             addError(
                                 log,
                                 source,
                                 import_record.range,
                                 _.allocator(),
-                                "Could not resolve: \"{s}\"",
-                                [ 
-                                    path_to_use,
-                                ],
+                                "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?",
+                                [ path_to_use],
                                 import_record.kind,
                             ) catch unreachable;
                         }
+                    } else {
+                        addError(
+                            log,
+                            source,
+                            import_record.range,
+                            _.allocator(),
+                            "Could not resolve: \"{s}\"",
+                            [ 
+                                path_to_use,
+                            ],
+                            import_record.kind,
+                        ) catch unreachable;
                     }
-                },
+                }
+            } else {
                 // assume other errors are already in the log
-                else => {
-                    * = logUnhandledResolveError(
-                        log,
-                        _.allocator(),
-                        source,
-                        import_record.range,
-                        e,
-                        import_record.specifier,
-                        import_record.kind,
-                        !handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors,
-                    );
-                },
+                * = logUnhandledResolveError(
+                    log,
+                    _.allocator(),
+                    source,
+                    import_record.range,
+                    e,
+                    import_record.specifier,
+                    import_record.kind,
+                    !handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors,
+                );
             }
             return;
         };
@@ -3445,114 +3442,111 @@ pub struct BundleV2 {
                 // Rather than just the first one.
                 import_record.path.is_disabled = true;
 
-                switch (e) {
-                    error.ModuleNotFound => {
-                        const addError = Logger.Log.addResolveErrorWithTextDupe;
+                if (e == error.ModuleNotFound) {
+                    const addError = Logger.Log.addResolveErrorWithTextDupe;
 
-                        if (!import_record.flags.handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors) {
-                            last_error = e;
-                            if (isPackagePath(import_record.path.text)) {
-                                if (ctx.target == .browser && options.ExternalModules.isNodeBuiltin(import_record.path.text)) {
-                                    addError(
-                                        log,
-                                        source,
-                                        import_record.range,
-                                        _.allocator(),
-                                        "Browser build cannot {s} Node.js builtin: \"{s}\"{s}",
-                                        [ 
-                                            import_record.kind.errorLabel(),
-                                            import_record.path.text,
-                                            if (_.transpiler.options.dev_server == null)
-                                                ". To use Node.js builtins, set target to 'node' or 'bun'"
-                                            else
-                                                "",
-                                        ],
-                                        import_record.kind,
-                                    ) catch oom_err => bun.handleOom(oom_err);
-                                } else if (!ctx.target.isBun() && strings.eqlComptime(import_record.path.text, "bun")) {
-                                    addError(
-                                        log,
-                                        source,
-                                        import_record.range,
-                                        _.allocator(),
-                                        "Browser build cannot {s} Bun builtin: \"{s}\"{s}",
-                                        [ 
-                                            import_record.kind.errorLabel(),
-                                            import_record.path.text,
-                                            if (_.transpiler.options.dev_server == null)
-                                                ". When bundling for Bun, set target to 'bun'"
-                                            else
-                                                "",
-                                        ],
-                                        import_record.kind,
-                                    ) catch oom_err => bun.handleOom(oom_err);
-                                } else if (!ctx.target.isBun() && strings.hasPrefixComptime(import_record.path.text, "bun:")) {
-                                    addError(
-                                        log,
-                                        source,
-                                        import_record.range,
-                                        _.allocator(),
-                                        "Browser build cannot {s} Bun builtin: \"{s}\"{s}",
-                                        [ 
-                                            import_record.kind.errorLabel(),
-                                            import_record.path.text,
-                                            if (_.transpiler.options.dev_server == null)
-                                                ". When bundling for Bun, set target to 'bun'"
-                                            else
-                                                "",
-                                        ],
-                                        import_record.kind,
-                                    ) catch oom_err => bun.handleOom(oom_err);
-                                } else {
-                                    addError(
-                                        log,
-                                        source,
-                                        import_record.range,
-                                        _.allocator(),
-                                        "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?",
-                                        [ import_record.path.text],
-                                        import_record.kind,
-                                    ) catch oom_err => bun.handleOom(oom_err);
-                                }
-                            } else {
-                                const buf = bun.path_buffer_pool.get();
-                                const _guard_buf = PathBufferGuard<@TypeOf(buf)>{ buf: buf };
-                                const specifier_to_use = if (loader == .html && bun.strings.hasPrefix(import_record.path.text, bun.fs.FileSystem.instance.top_level_dir)) brk: {
-                                    const specifier_to_use = import_record.path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
-                                    if (Environment.isWindows) {
-                                        break :brk bun.path.pathToPosixBuf(u8, specifier_to_use, buf);
-                                    }
-                                    break :brk specifier_to_use;
-                                } else import_record.path.text;
+                    if (!import_record.flags.handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors) {
+                        last_error = e;
+                        if (isPackagePath(import_record.path.text)) {
+                            if (ctx.target == .browser && options.ExternalModules.isNodeBuiltin(import_record.path.text)) {
                                 addError(
                                     log,
                                     source,
                                     import_record.range,
                                     _.allocator(),
-                                    "Could not resolve: \"{s}\"",
-                                    [ specifier_to_use],
+                                    "Browser build cannot {s} Node.js builtin: \"{s}\"{s}",
+                                    [ 
+                                        import_record.kind.errorLabel(),
+                                        import_record.path.text,
+                                        if (_.transpiler.options.dev_server == null)
+                                            ". To use Node.js builtins, set target to 'node' or 'bun'"
+                                        else
+                                            "",
+                                    ],
+                                    import_record.kind,
+                                ) catch oom_err => bun.handleOom(oom_err);
+                            } else if (!ctx.target.isBun() && strings.eqlComptime(import_record.path.text, "bun")) {
+                                addError(
+                                    log,
+                                    source,
+                                    import_record.range,
+                                    _.allocator(),
+                                    "Browser build cannot {s} Bun builtin: \"{s}\"{s}",
+                                    [ 
+                                        import_record.kind.errorLabel(),
+                                        import_record.path.text,
+                                        if (_.transpiler.options.dev_server == null)
+                                            ". When bundling for Bun, set target to 'bun'"
+                                        else
+                                            "",
+                                    ],
+                                    import_record.kind,
+                                ) catch oom_err => bun.handleOom(oom_err);
+                            } else if (!ctx.target.isBun() && strings.hasPrefixComptime(import_record.path.text, "bun:")) {
+                                addError(
+                                    log,
+                                    source,
+                                    import_record.range,
+                                    _.allocator(),
+                                    "Browser build cannot {s} Bun builtin: \"{s}\"{s}",
+                                    [ 
+                                        import_record.kind.errorLabel(),
+                                        import_record.path.text,
+                                        if (_.transpiler.options.dev_server == null)
+                                            ". When bundling for Bun, set target to 'bun'"
+                                        else
+                                            "",
+                                    ],
+                                    import_record.kind,
+                                ) catch oom_err => bun.handleOom(oom_err);
+                            } else {
+                                addError(
+                                    log,
+                                    source,
+                                    import_record.range,
+                                    _.allocator(),
+                                    "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?",
+                                    [ import_record.path.text],
                                     import_record.kind,
                                 ) catch oom_err => bun.handleOom(oom_err);
                             }
+                        } else {
+                            const buf = bun.path_buffer_pool.get();
+                            const _guard_buf = PathBufferGuard<@TypeOf(buf)>{ buf: buf };
+                            const specifier_to_use = if (loader == .html && bun.strings.hasPrefix(import_record.path.text, bun.fs.FileSystem.instance.top_level_dir)) brk: {
+                                const specifier_to_use = import_record.path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
+                                if (Environment.isWindows) {
+                                    break :brk bun.path.pathToPosixBuf(u8, specifier_to_use, buf);
+                                }
+                                break :brk specifier_to_use;
+                            } else import_record.path.text;
+                            addError(
+                                log,
+                                source,
+                                import_record.range,
+                                _.allocator(),
+                                "Could not resolve: \"{s}\"",
+                                [ specifier_to_use],
+                                import_record.kind,
+                            ) catch oom_err => bun.handleOom(oom_err);
                         }
-                    },
+                    }
+                } else {
                     // assume other errors are already in the log
-                    else => {
-                        const report = !import_record.flags.handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors;
-                        const ours = logUnhandledResolveError(
-                            log,
-                            _.allocator(),
-                            source,
-                            import_record.range,
-                            e,
-                            import_record.path.text,
-                            import_record.kind,
-                            report,
-                        );
-                        if (!ours || report) {
-                            last_error = e;
-                        }
-                    },
+                    const report = !import_record.flags.handles_import_errors && !_.transpiler.options.ignore_module_resolution_errors;
+                    const ours = logUnhandledResolveError(
+                        log,
+                        _.allocator(),
+                        source,
+                        import_record.range,
+                        e,
+                        import_record.path.text,
+                        import_record.kind,
+                        report,
+                    );
+                    if (!ours || report) {
+                        last_error = e;
+                    }
                 }
                 had_resolve_error = true;
                 break :blk_res dummy_resolve_result;

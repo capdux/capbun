@@ -27,7 +27,7 @@ pub struct NextResult {
     const compaction_threshold = 16 * 1024 * 1024; // 16 MB
 
     /// Get the active (unconsumed) portion of the buffer.
-    fn activeSlice(): []const u8 {
+    fn activeSlice(_: *const JSONLineBuffer): []const u8 {
         return _.data.slice()[_.head..];
     }
 

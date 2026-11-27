@@ -479,10 +479,7 @@ pub fn modulate(rgba: []u8, brightness: f32, saturation: f32) {
 
 pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter): Error![]u8 {
     if (b := system_backend) if (@hasDecl(b, "scale")) if (useSystem()) {
-        if (out := b.scale(src, sw, sh, dw, dh, f) catch e => switch (e) {
-            error.BackendUnavailable => null,
-            else => return e,
-        }) return out;
+        if (out := b.scale(src, sw, sh, dw, dh, f) catch e => if (e == error.BackendUnavailable) null else return e) return out;
     }
     // ONE allocation for output + the kernel's scratch arena (intermediate
     // dst_w×src_h×4 row buffer + spans/weights tables). Zero mallocs in the
@@ -503,10 +500,7 @@ pub fn rotate(src: []const u8, w: u32, h: u32, degrees: u32): Error!Decoded {
     const dw: u32 = if (degrees == 90 || degrees == 270) h else w;
     const dh: u32 = if (degrees == 90 || degrees == 270) w else h;
     if (b := system_backend) if (@hasDecl(b, "rotate")) if (useSystem()) {
-        if (out := b.rotate(src, w, h, degrees / 90) catch e => switch (e) {
-            error.BackendUnavailable => null,
-            else => return e,
-        }) return { rgba: out, width: dw, height: dh };
+        if (out := b.rotate(src, w, h, degrees / 90) catch e => if (e == error.BackendUnavailable) null else return e) return { rgba: out, width: dw, height: dh };
     }
     const out = bun.default_allocator.alloc(u8, @as(usize, dw) * dh * 4)?;
     bun_image_rotate_rgba8(src.ptr, @intCast(w), @intCast(h), out.ptr, @intCast(degrees));
@@ -515,10 +509,7 @@ pub fn rotate(src: []const u8, w: u32, h: u32, degrees: u32): Error!Decoded {
 
 pub fn flip(src: []const u8, w: u32, h: u32, horizontal: bool): Error![]u8 {
     if (b := system_backend) if (@hasDecl(b, "flip")) if (useSystem()) {
-        if (out := b.flip(src, w, h, horizontal) catch e => switch (e) {
-            error.BackendUnavailable => null,
-            else => return e,
-        }) return out;
+        if (out := b.flip(src, w, h, horizontal) catch e => if (e == error.BackendUnavailable) null else return e) return out;
     }
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * h * 4)?;
     bun_image_flip_rgba8(src.ptr, @intCast(w), @intCast(h), out.ptr, @intFromBool(horizontal));

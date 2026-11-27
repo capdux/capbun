@@ -1393,29 +1393,21 @@ pub union(enum) BundlerResolveValue {
             } else {
                 const global = resolve.bv2.plugins.?.globalObject();
                 let path = path_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch e => {
-                    switch (e) {
-                        error.OutOfMemory => bun.outOfMemory(),
-                        error.JSError, error.JSTerminated => {
-                            const exception = global.takeException(e);
-                            const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
-                            resolve.value = { @"err": msg };
-                            resolve.bv2.onResolveAsync(resolve);
-                            return;
-                        },
-                    }
+                    if (e == error.OutOfMemory) bun.outOfMemory();
+                    const exception = global.takeException(e);
+                    const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
+                    resolve.value = { @"err": msg };
+                    resolve.bv2.onResolveAsync(resolve);
+                    return;
                 };
                 const namespace = namespace_value.toSliceCloneWithAllocator(global, bun.default_allocator) catch e => {
                     path.deinit();
-                    switch (e) {
-                        error.OutOfMemory => bun.outOfMemory(),
-                        error.JSError, error.JSTerminated => {
-                            const exception = global.takeException(e);
-                            const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
-                            resolve.value = { @"err": msg };
-                            resolve.bv2.onResolveAsync(resolve);
-                            return;
-                        },
-                    }
+                    if (e == error.OutOfMemory) bun.outOfMemory();
+                    const exception = global.takeException(e);
+                    const msg = BundlerPlugin.msgFromJS(resolve.bv2.plugins.?, resolve.import_record.source_file, exception);
+                    resolve.value = { @"err": msg };
+                    resolve.bv2.onResolveAsync(resolve);
+                    return;
                 };
                 resolve.value = {
                     success: {
@@ -1589,18 +1581,12 @@ pub union(enum) BundlerLoadValue {
                 const loader: api.Loader = @enumFromInt(loader_as_int.to(u8));
                 const global = _.bv2.plugins.?.globalObject();
                 const source_code = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(global, source_code_value, bun.default_allocator) catch e => {
-                    switch (e) {
-                        error.OutOfMemory => {
-                            bun.outOfMemory();
-                        },
-                        error.JSError, error.JSTerminated => {
-                            const exception = global.takeException(e);
-                            const msg = BundlerPlugin.msgFromJS(_.bv2.plugins.?, _.path, exception);
-                            _.value = { @"err": msg };
-                            _.bv2.onLoadAsync(_);
-                            return;
-                        },
-                    }
+                    if (e == error.OutOfMemory) bun.outOfMemory();
+                    const exception = global.takeException(e);
+                    const msg = BundlerPlugin.msgFromJS(_.bv2.plugins.?, _.path, exception);
+                    _.value = { @"err": msg };
+                    _.bv2.onLoadAsync(_);
+                    return;
                 };
                 _.value = {
                     success: {
@@ -1686,11 +1672,10 @@ extern fn JSBundlerPlugin__runSetupFunction(
         fn runOnEndCallbacks(*_, globalThis: *jsc.JSGlobalObject, build_promise: *jsc.JSPromise, build_result: jsc.JSValue, rejection: bun.JSError!jsc.JSValue): bun.JSError!jsc.JSValue {
             jsc.markBinding(@src());
 
-            const rejection_value = rejection catch e => switch (e) {
-                error.OutOfMemory => globalThis.createOutOfMemoryError(),
-                error.JSError => globalThis.takeError(e),
-                error.JSTerminated => return error.JSTerminated,
-            };
+            const rejection_value = rejection catch e =>
+                if (e == error.OutOfMemory) globalThis.createOutOfMemoryError()
+                else if (e == error.JSError) globalThis.takeError(e)
+                else return error.JSTerminated;
 
             let scope: jsc.TopExceptionScope = undefined;
             scope.init(globalThis, @src());
@@ -1846,23 +1831,21 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 plugin.globalObject(),
                 file,
                 exception,
-            ) catch e => switch (e) {
-                error.OutOfMemory => bun.outOfMemory(),
-                error.JSError, error.JSTerminated => {
-                    // We are already producing a build error for the original plugin
-                    // exception; the secondary exception from string conversion is not
-                    // useful to the user and should not be treated as unhandled.
-                    * = plugin.globalObject().clearExceptionExceptTermination();
-                    return {
-                        data: {
-                            text: bun.handleOom(bun.default_allocator.dupe(
-                                u8,
-                                "A bundler plugin threw a value that could not be converted to a string",
-                            )),
-                            location: { file: file, line: -1, column: -1 },
-                        },
-                    };
-                },
+            ) catch e => {
+                if (e == error.OutOfMemory) bun.outOfMemory();
+                // We are already producing a build error for the original plugin
+                // exception; the secondary exception from string conversion is not
+                // useful to the user and should not be treated as unhandled.
+                * = plugin.globalObject().clearExceptionExceptTermination();
+                return {
+                    data: {
+                        text: bun.handleOom(bun.default_allocator.dupe(
+                            u8,
+                            "A bundler plugin threw a value that could not be converted to a string",
+                        )),
+                        location: { file: file, line: -1, column: -1 },
+                    },
+                };
             };
         }
     }

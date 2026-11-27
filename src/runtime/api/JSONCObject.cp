@@ -46,11 +46,11 @@ pub fn parse(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
         return globalThis.throwValue(globalThis.createSyntaxErrorInstance("JSONC Parse error: Unable to parse JSONC string", {}));
     }
 
-    return parse_result.toJS(allocator, globalThis) catch e => switch (e) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.JSError => return error.JSError,
-        error.JSTerminated => return error.JSTerminated,
-        else => unreachable,
+    return parse_result.toJS(allocator, globalThis) catch e => blk: {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.JSError) return error.JSError;
+        if (e == error.JSTerminated) return error.JSTerminated;
+        break :blk .js_undefined;
     };
 }
 

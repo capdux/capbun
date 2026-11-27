@@ -1464,9 +1464,18 @@ pub fn renderMarkdownFileAndExit(path: []const u8) noreturn {
             const dir = bun.path.dirname(abs_md_path, .auto);
             const image_base_dir = (if ((dir.len > 0)) dir else ".");
             const theme: bun.md.AnsiTheme = .{ .light = bun.md.detectLightBackground(), .columns = columns, .colors = colors, .hyperlinks = (colors and is_tty), .kitty_graphics = kitty_graphics, .remote_image_paths = (if ((remote_map.count() > 0)) (&remote_map) else null), .image_base_dir = image_base_dir };
-            const rendered_opt = (blk_catch_59: { break :blk_catch_59 ((bun.md.renderToAnsi(contents, bun.default_allocator, md_opts, theme)) catch |e| { _ = &e; break :blk_catch_59 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .OutOfMemory)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .StackOverflow)) {  _ = Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", .{});
-            _ = Output.flush();
-            break :__sw_blk_10 cp_val(Global.exit(1)); } }  unreachable; }); }); });
+            const rendered_opt = (blk_catch_59: { break :blk_catch_59 ((bun.md.renderToAnsi(contents, bun.default_allocator, md_opts, theme)) catch |e| { _ = &e; break :blk_catch_59 brk: {
+            if ((e == error.OutOfMemory)) {
+                _ = bun.outOfMemory();
+            } else {
+                if ((e == error.StackOverflow)) {
+                    _ = Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", .{});
+                    _ = Output.flush();
+                    _ = Global.exit(1);
+                }
+            }
+            break :brk null;
+}; }); });
             if (rendered_opt) |rendered| {
                 _ = &rendered;
                 _ = (blk_catch_60: { break :blk_catch_60 ((Output.writer().writeAll(rendered)) catch |__ce_60| { _ = &__ce_60;  }); });

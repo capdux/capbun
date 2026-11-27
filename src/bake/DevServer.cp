@@ -3774,10 +3774,14 @@ fn onRequest(dev: *DevServer, req: *Request, resp: auto) {
             ctx.route_bundle_index,
             RequestEnsureRouteBundledCtx,
             &ctx,
-        ) catch e => switch (e) {
-            error.JSError => dev.vm.global.reportActiveExceptionAsUnhandled(e),
-            error.JSTerminated => dev.vm.global.reportActiveExceptionAsUnhandled(e),
-            error.OutOfMemory => bun.outOfMemory(),
+        ) catch e => {
+            if (e == error.JSError) {
+                dev.vm.global.reportActiveExceptionAsUnhandled(e);
+            } else if (e == error.JSTerminated) {
+                dev.vm.global.reportActiveExceptionAsUnhandled(e);
+            } else {
+                bun.outOfMemory();
+            }
         };
         return;
     }

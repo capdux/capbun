@@ -120,10 +120,18 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8) !void {
         var root = try scanner.readDirWithName(path, null);
         _ = &root;
         if ((root.* == .err)) {
-            __sw_blk_0: { const __disc_0 = root.err.original_err; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if ((cp_match_tag(__err_v_0, .NotDir) or cp_match_tag(__err_v_0, .ENOTDIR))) {  if (scanner.isTestFile(path)) {
-                const rel_path = bun.PathString.init(bun.handleOom(scanner.fs.filename_store.append(PathSlice, path)));
-                _ = bun.handleOom(scanner.test_files.append(scanner.allocator(), rel_path));
-            } break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .ENOENT)) {  return error.DoesNotExist; } } {  _ = log("Scanner.readDirWithName('{s}') -> {s}", .{ path, @errorName(root.err.original_err) }); break :__sw_blk_0; }  }
+            if (((root.err.original_err == error.NotDir) or (root.err.original_err == error.ENOTDIR))) {
+                if (scanner.isTestFile(path)) {
+                    const rel_path = bun.PathString.init(bun.handleOom(scanner.fs.filename_store.append(PathSlice, path)));
+                    _ = bun.handleOom(scanner.test_files.append(scanner.allocator(), rel_path));
+                }
+            } else {
+                if ((root.err.original_err == error.ENOENT)) {
+                    return error.DoesNotExist;
+                } else {
+                    _ = log("Scanner.readDirWithName('{s}') -> {s}", .{ path, @errorName(root.err.original_err) });
+                }
+            }
         }
         if ((!scanner.has_iterated)) {
             if ((root.* == .entries)) {

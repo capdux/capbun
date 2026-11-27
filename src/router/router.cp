@@ -1055,61 +1055,54 @@ pub struct Pattern {
         while (offset < end) {
             const pattern: Pattern = Pattern.initUnhashed(input, offset) catch (e) {
                 const source: Logger.Source = Logger.Source.initEmptyFile(input);
-                switch (e) {
-                    error.CatchAllMustBeAtTheEnd => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Catch-all route must be at the end of the path",
-                            .{},
-                        ) catch {};
-                    },
-                    error.InvalidCatchAllRoute => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Invalid catch-all route, e.g. should be [...param]",
-                            .{},
-                        ) catch {};
-                    },
-                    error.InvalidOptionalCatchAllRoute => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Invalid optional catch-all route, e.g. should be [[...param]]",
-                            .{},
-                        ) catch {};
-                    },
-                    error.InvalidRoutePattern => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Invalid dynamic route",
-                            .{},
-                        ) catch {};
-                    },
-                    error.MissingParamName => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Route is missing a parameter name, e.g. [param]",
-                            .{},
-                        ) catch {};
-                    },
-                    error.PatternMissingClosingBracket => {
-                        log.addErrorFmt(
-                            &source,
-                            Logger.Loc.Empty,
-                            allocator,
-                            "Route is missing a closing bracket]",
-                            .{},
-                        ) catch {};
-                    },
+                if (e == error.CatchAllMustBeAtTheEnd) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Catch-all route must be at the end of the path",
+                        .{},
+                    ) catch {};
+                } else if (e == error.InvalidCatchAllRoute) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Invalid catch-all route, e.g. should be [...param]",
+                        .{},
+                    ) catch {};
+                } else if (e == error.InvalidOptionalCatchAllRoute) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Invalid optional catch-all route, e.g. should be [[...param]]",
+                        .{},
+                    ) catch {};
+                } else if (e == error.InvalidRoutePattern) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Invalid dynamic route",
+                        .{},
+                    ) catch {};
+                } else if (e == error.MissingParamName) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Route is missing a parameter name, e.g. [param]",
+                        .{},
+                    ) catch {};
+                } else if (e == error.PatternMissingClosingBracket) {
+                    log.addErrorFmt(
+                        &source,
+                        Logger.Loc.Empty,
+                        allocator,
+                        "Route is missing a closing bracket]",
+                        .{},
+                    ) catch {};
                 }
                 return null;
             };

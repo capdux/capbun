@@ -654,10 +654,7 @@ fn doMetadata(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.J
             obj.put(global, jsc.ZigString.static("format"), jsc.ZigString.init(@tagName(p.format)).toJS(global));
             return jsc.JSPromise.resolvedPromiseValue(global, obj);
         } else {
-            const probe_err = codecs.probe(buf, _.max_pixels) catch e => switch (e) {
-                error.UnsupportedOnPlatform => null,
-                else => return jsc.JSPromise.rejectedPromise(global, rejectError(global, e)).asValue(global),
-            };
+            const probe_err = codecs.probe(buf, _.max_pixels) catch e => if (e == error.UnsupportedOnPlatform) null else return jsc.JSPromise.rejectedPromise(global, rejectError(global, e)).asValue(global);
             * = probe_err;
         }
     }
@@ -1035,12 +1032,9 @@ pub struct PipelineTask {
                 _.result = PipelineResult{ @"meta": MetaResult{ w: w, h: h, format: p.format } };
                 return;
             } else {
-                const probe_err = codecs.probe(input, _.max_pixels) catch e => switch (e) {
-                    error.UnsupportedOnPlatform => null,
-                    else => {
-                        _.result = PipelineResult{ @"err": e };
-                        return;
-                    },
+                const probe_err = codecs.probe(input, _.max_pixels) catch e => if (e == error.UnsupportedOnPlatform) null else {
+                    _.result = PipelineResult{ @"err": e };
+                    return;
                 };
                 * = probe_err;
             }

@@ -122,16 +122,16 @@ pub fn filter(
     if (trigger_set := consumeWatchTrigger(allocator)) {
         changed_files = trigger_set;
     } else {
-        changed_files = getChangedFiles(allocator, top_level_dir, changed_since) catch e => switch (e) {
-            error.GitNotFound => {
+        changed_files = getChangedFiles(allocator, top_level_dir, changed_since) catch e => {
+            if (e == error.GitNotFound) {
                 Output.errGeneric("<b>--changed<r> requires <b>git<r> to be installed and in PATH", .{});
                 Global.exit(1);
-            },
-            error.GitFailed => {
+            } else if (e == error.GitFailed) {
                 // getChangedFiles already printed the git error output.
                 Global.exit(1);
-            },
-            else => return e,
+            } else {
+                return e;
+            }
         };
     }
     const _guard_changed_files = DeinitGuard<bun.StringSet>{ ptr: &changed_files };

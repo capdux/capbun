@@ -194,7 +194,11 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
             const package_json_contents = maybe_package_json_contents.?;
             const pkg_info_res = package_info: {
             const source = (&logger.Source.initPathString("package.json", package_json_contents));
-            const json = (blk_catch_1: { break :blk_catch_1 ((JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator)) catch |e| { _ = &e; return (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  return error.OutOfMemory; } } {  break :__sw_blk_0 cp_val(error.InvalidPackageJSON); }  unreachable; }); }); });
+            const json = (blk_catch_1: { break :blk_catch_1 ((JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                return error.InvalidPackageJSON;
+            } }); });
             if (json.get("private")) |priv_val| {
                 _ = &priv_val;
                 if (priv_val.asBool()) |is_private| {
@@ -346,32 +350,112 @@ pub fn exec(ctx: Command.Context) !void {
             var __original_cwd_guard_moved = false; _ = &__original_cwd_guard_moved;
             defer if (!__original_cwd_guard_moved) { __original_cwd_guard_moved = true; const __T = @TypeOf(original_cwd_guard); if (@typeInfo(__T) == .optional) { if (original_cwd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { original_cwd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = original_cwd_guard; _drop_val.__cp_deinit(); } };
             if ((cli.positionals.len > 1)) {
-                const context = (blk_catch_1: { break :blk_catch_1 ((Context(false).fromTarballPath(ctx, manager, cli.positionals[1])) catch |e| { _ = &e; __sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .MissingPackageName)) {  _ = Output.errGeneric("missing `name` string in package.json", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .MissingPackageVersion)) {  _ = Output.errGeneric("missing `version` string in package.json", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if ((cp_match_tag(__err_v_0, .InvalidPackageName) or cp_match_tag(__err_v_0, .InvalidPackageVersion))) {  _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .MissingPackageJSON)) {  _ = Output.errGeneric("failed to find package.json in tarball '{s}'", .{ cli.positionals[1] }); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .InvalidPackageJSON)) {  _ = (blk_catch_2: { break :blk_catch_2 ((manager.log.print(Output.errorWriter())) catch |__ce_2| { _ = &__ce_2;  }); });
-                _ = Output.errGeneric("failed to parse tarball package.json", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .PrivatePackage)) {  _ = Output.errGeneric("attempted to publish a private package", .{}); break :__sw_blk_0; } } if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .RestrictedUnscopedPackage)) {  _ = Output.errGeneric("unable to restrict access to unscoped package", .{}); break :__sw_blk_0; } }  }
+                const context = (blk_catch_1: { break :blk_catch_1 ((Context(false).fromTarballPath(ctx, manager, cli.positionals[1])) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = bun.outOfMemory();
+                } else {
+                    if ((e == error.MissingPackageName)) {
+                        _ = Output.errGeneric("missing `name` string in package.json", .{});
+                    } else {
+                        if ((e == error.MissingPackageVersion)) {
+                            _ = Output.errGeneric("missing `version` string in package.json", .{});
+                        } else {
+                            if (((e == error.InvalidPackageName) or (e == error.InvalidPackageVersion))) {
+                                _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{});
+                            } else {
+                                if ((e == error.MissingPackageJSON)) {
+                                    _ = Output.errGeneric("failed to find package.json in tarball '{s}'", .{ cli.positionals[1] });
+                                } else {
+                                    if ((e == error.InvalidPackageJSON)) {
+                                        _ = (blk_catch_2: { break :blk_catch_2 ((manager.log.print(Output.errorWriter())) catch |__ce_2| { _ = &__ce_2;  }); });
+                                        _ = Output.errGeneric("failed to parse tarball package.json", .{});
+                                    } else {
+                                        if ((e == error.PrivatePackage)) {
+                                            _ = Output.errGeneric("attempted to publish a private package", .{});
+                                        } else {
+                                            if ((e == error.RestrictedUnscopedPackage)) {
+                                                _ = Output.errGeneric("unable to restrict access to unscoped package", .{});
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 break :blk_catch_1 Global.crash(); }); });
-                _ = (blk_catch_3: { break :blk_catch_3 ((publish(false, (&context))) catch |e| { _ = &e; break :blk_catch_3 @as(void, (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .NeedAuth)) {  _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
-                break :__sw_blk_1 cp_val(Global.crash()); } }  unreachable; })); }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((publish(false, (&context))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = bun.outOfMemory();
+                } else {
+                    if ((e == error.NeedAuth)) {
+                        _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
+                        _ = Global.crash();
+                    }
+                } }); });
                 _ = Output.prettyln("\n<green> +<r> {s}@{s}{s}", .{ context.package_name, Dependency.withoutBuildTag(context.package_version), (if (manager.options.dry_run) " (dry-run)" else "") });
                 return;
             }
-            const context = (blk_catch_4: { break :blk_catch_4 ((Context(true).fromWorkspace(ctx, manager)) catch |e| { _ = &e; __sw_blk_2: { const __disc_2 = e; _ = &__disc_2; if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .OutOfMemory)) {  _ = bun.outOfMemory(); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingPackageName)) {  _ = Output.errGeneric("missing `name` string in package.json", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingPackageVersion)) {  _ = Output.errGeneric("missing `version` string in package.json", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if ((cp_match_tag(__err_v_2, .InvalidPackageName) or cp_match_tag(__err_v_2, .InvalidPackageVersion))) {  _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .MissingPackageJSON)) {  _ = Output.errGeneric("failed to find package.json from: '{s}'", .{ FileSystem.instance.top_level_dir }); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .RestrictedUnscopedPackage)) {  _ = Output.errGeneric("unable to restrict access to unscoped package", .{}); break :__sw_blk_2; } } if ((!cp_has_ok_val(__disc_2) and !cp_is_null_val(__disc_2))) { const __err_v_2 = cp_unwrap_err_val(__disc_2); _ = &__err_v_2; if (cp_match_tag(__err_v_2, .PrivatePackage)) {  _ = Output.errGeneric("attempted to publish a private package", .{}); break :__sw_blk_2; } }  }
+            const context = (blk_catch_4: { break :blk_catch_4 ((Context(true).fromWorkspace(ctx, manager)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                _ = bun.outOfMemory();
+            } else {
+                if ((e == error.MissingPackageName)) {
+                    _ = Output.errGeneric("missing `name` string in package.json", .{});
+                } else {
+                    if ((e == error.MissingPackageVersion)) {
+                        _ = Output.errGeneric("missing `version` string in package.json", .{});
+                    } else {
+                        if (((e == error.InvalidPackageName) or (e == error.InvalidPackageVersion))) {
+                            _ = Output.errGeneric("package.json `name` and `version` fields must be non-empty strings", .{});
+                        } else {
+                            if ((e == error.MissingPackageJSON)) {
+                                _ = Output.errGeneric("failed to find package.json from: '{s}'", .{ FileSystem.instance.top_level_dir });
+                            } else {
+                                if ((e == error.RestrictedUnscopedPackage)) {
+                                    _ = Output.errGeneric("unable to restrict access to unscoped package", .{});
+                                } else {
+                                    if ((e == error.PrivatePackage)) {
+                                        _ = Output.errGeneric("attempted to publish a private package", .{});
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             break :blk_catch_4 Global.crash(); }); });
             _ = bun.sys.unlink(context.abs_tarball_path);
-            _ = (blk_catch_5: { break :blk_catch_5 ((publish(true, (&context))) catch |e| { _ = &e; break :blk_catch_5 @as(void, (__sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .OutOfMemory)) {  break :__sw_blk_3 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .NeedAuth)) {  _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
-            break :__sw_blk_3 cp_val(Global.crash()); } }  unreachable; })); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((publish(true, (&context))) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                _ = bun.outOfMemory();
+            } else {
+                if ((e == error.NeedAuth)) {
+                    _ = Output.errGeneric("missing authentication (run <cyan>`bunx npm login`<r>)", .{});
+                    _ = Global.crash();
+                }
+            } }); });
             _ = Output.prettyln("\n<green> +<r> {s}@{s}{s}", .{ context.package_name, Dependency.withoutBuildTag(context.package_version), (if (manager.options.dry_run) " (dry-run)" else "") });
             if (manager.options.do.run_scripts) {
                 const abs_workspace_path: []const u8 = strings.withoutTrailingSlash(strings.withoutSuffixComptime(manager.original_package_json_path, "package.json"));
                 _ = try context.script_env.map.put("npm_command", "publish");
                 if (context.publish_script) |publish_script| {
                     _ = &publish_script;
-                    _ = (blk_catch_6: { break :blk_catch_6 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, publish_script, "publish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_6 (__sw_blk_4: { const __disc_4 = e; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run publish script", .{});
-                    break :__sw_blk_4 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_6: { break :blk_catch_6 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, publish_script, "publish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                        _ = Output.errGeneric("failed to find shell executable to run publish script", .{});
+                        _ = Global.crash();
+                    } else {
+                        if ((e == error.OutOfMemory)) {
+                            return error.OutOfMemory;
+                        }
+                    } }); });
                 }
                 if (context.postpublish_script) |postpublish_script| {
                     _ = &postpublish_script;
-                    _ = (blk_catch_7: { break :blk_catch_7 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, postpublish_script, "postpublish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_7 (__sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpublish script", .{});
-                    break :__sw_blk_5 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((Run.runPackageScriptForeground(context.command_ctx, context.allocator, postpublish_script, "postpublish", abs_workspace_path, context.script_env, &.{}, (context.manager.options.log_level == .silent), context.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                        _ = Output.errGeneric("failed to find shell executable to run postpublish script", .{});
+                        _ = Global.crash();
+                    } else {
+                        if ((e == error.OutOfMemory)) {
+                            return error.OutOfMemory;
+                        }
+                    } }); });
                 }
             }
     }
@@ -479,8 +563,12 @@ pub fn publish(comptime directory_publish: bool, ctx: *const Context(directory_p
             _ = print_buf.clearRetainingCapacity();
             var req = http.AsyncHTTP.initSync(ctx.allocator, .PUT, publish_url, publish_headers.entries, publish_headers.content.ptr.?[0..publish_headers.content.len], (&response_buf), publish_req_body, null, null, .follow);
             _ = &req;
-            const res = (blk_catch_17: { break :blk_catch_17 ((req.sendSync()) catch |e| { _ = &e; break :blk_catch_17 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to publish package", .{});
-            break :__sw_blk_6 cp_val(Global.crash()); }  unreachable; }); }); });
+            const res = (blk_catch_17: { break :blk_catch_17 ((req.sendSync()) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                _ = Output.err(e, "failed to publish package", .{});
+                _ = Global.crash();
+            } }); });
             if ((res.status_code >= 400)) {
                 const prompt_for_otp = prompt_for_otp: {
                 if ((res.status_code != 401)) {
@@ -525,8 +613,12 @@ pub fn publish(comptime directory_publish: bool, ctx: *const Context(directory_p
                 _ = response_buf.reset();
                 var otp_req = http.AsyncHTTP.initSync(ctx.allocator, .PUT, publish_url, otp_headers.entries, otp_headers.content.ptr.?[0..otp_headers.content.len], (&response_buf), publish_req_body, null, null, .follow);
                 _ = &otp_req;
-                const otp_res = (blk_catch_18: { break :blk_catch_18 ((otp_req.sendSync()) catch |e| { _ = &e; break :blk_catch_18 (__sw_blk_7: { const __disc_7 = e; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to publish package", .{});
-                break :__sw_blk_7 cp_val(Global.crash()); }  unreachable; }); }); });
+                const otp_res = (blk_catch_18: { break :blk_catch_18 ((otp_req.sendSync()) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    return error.OutOfMemory;
+                } else {
+                    _ = Output.err(e, "failed to publish package", .{});
+                    _ = Global.crash();
+                } }); });
                 if ((otp_res.status_code >= 400)) {
                     const otp_response = true;
                     _ = try Npm.responseError(ctx.allocator, (&otp_req), (&otp_res), .{ ctx.package_name, ctx.package_version }, (&response_buf), otp_response);
@@ -650,8 +742,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_8 = offset;
-                    while (i < __end_8) : (i += 1) {
+                    const __end_0 = offset;
+                    while (i < __end_0) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -659,8 +751,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_9 = width;
-                    while (i < __end_9) : (i += 1) {
+                    const __end_1 = width;
+                    while (i < __end_1) : (i += 1) {
                         _ = Output.print("{s}", .{ horizontal });
                     }
                 }
@@ -668,8 +760,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_10 = offset;
-                    while (i < __end_10) : (i += 1) {
+                    const __end_2 = offset;
+                    while (i < __end_2) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -677,8 +769,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_11 = padding;
-                    while (i < __end_11) : (i += 1) {
+                    const __end_3 = padding;
+                    while (i < __end_3) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -686,8 +778,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_12 = padding;
-                    while (i < __end_12) : (i += 1) {
+                    const __end_4 = padding;
+                    while (i < __end_4) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -695,8 +787,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_13 = offset;
-                    while (i < __end_13) : (i += 1) {
+                    const __end_5 = offset;
+                    while (i < __end_5) : (i += 1) {
                         _ = Output.print(" ", .{});
                     }
                 }
@@ -704,8 +796,8 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_14 = width;
-                    while (i < __end_14) : (i += 1) {
+                    const __end_6 = width;
+                    while (i < __end_6) : (i += 1) {
                         _ = Output.print("{s}", .{ horizontal });
                     }
                 }
@@ -721,8 +813,12 @@ pub fn getOTP(comptime directory_publish: bool, ctx: *const Context(directory_pu
                     _ = response_buf.reset();
                     var req = http.AsyncHTTP.initSync(ctx.allocator, .GET, done_url, auth_headers.entries, auth_headers.content.ptr.?[0..auth_headers.content.len], response_buf, "", null, null, .follow);
                     _ = &req;
-                    const res = (blk_catch_25: { break :blk_catch_25 ((req.sendSync()) catch |e| { _ = &e; break :blk_catch_25 (__sw_blk_15: { const __disc_15 = e; _ = &__disc_15; if ((!cp_has_ok_val(__disc_15) and !cp_is_null_val(__disc_15))) { const __err_v_15 = cp_unwrap_err_val(__disc_15); _ = &__err_v_15; if (cp_match_tag(__err_v_15, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to send OTP request", .{});
-                    break :__sw_blk_15 cp_val(Global.crash()); }  unreachable; }); }); });
+                    const res = (blk_catch_25: { break :blk_catch_25 ((req.sendSync()) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                        return error.OutOfMemory;
+                    } else {
+                        _ = Output.err(e, "failed to send OTP request", .{});
+                        _ = Global.crash();
+                    } }); });
                     switch (res.status_code) {
 202 => {
 const nanoseconds = nanoseconds: {
@@ -741,8 +837,12 @@ const nanoseconds = nanoseconds: {
 },
 200 => {
 const otp_done_source = logger.Source.initPathString("???", response_buf.list.items);
-                    const otp_done_json = (blk_catch_27: { break :blk_catch_27 ((JSON.parseUTF8((&otp_done_source), ctx.manager.log, ctx.allocator)) catch |e| { _ = &e; break :blk_catch_27 (__sw_blk_16: { const __disc_16 = e; _ = &__disc_16; if ((!cp_has_ok_val(__disc_16) and !cp_is_null_val(__disc_16))) { const __err_v_16 = cp_unwrap_err_val(__disc_16); _ = &__err_v_16; if (cp_match_tag(__err_v_16, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err("WebLogin", "failed to parse response json", .{});
-                    break :__sw_blk_16 cp_val(Global.crash()); }  unreachable; }); }); });
+                    const otp_done_json = (blk_catch_27: { break :blk_catch_27 ((JSON.parseUTF8((&otp_done_source), ctx.manager.log, ctx.allocator)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                        return error.OutOfMemory;
+                    } else {
+                        _ = Output.err("WebLogin", "failed to parse response json", .{});
+                        _ = Global.crash();
+                    } }); });
                     const token_opt = try otp_done_json.getStringCloned(ctx.allocator, "token");
                     if ((token_opt == null)) {
                         _ = Output.err("WebLogin", "missing `token` field in reponse json", .{});
@@ -769,8 +869,12 @@ const otp_response = false;
                 }
 };
             }
-            return (blk_catch_28: { break :blk_catch_28 ((prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "")) catch |e| { _ = &e; break :blk_catch_28 (__sw_blk_17: { const __disc_17 = e; _ = &__disc_17; if ((!cp_has_ok_val(__disc_17) and !cp_is_null_val(__disc_17))) { const __err_v_17 = cp_unwrap_err_val(__disc_17); _ = &__err_v_17; if (cp_match_tag(__err_v_17, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.err(e, "failed to read OTP input", .{});
-            break :__sw_blk_17 cp_val(Global.crash()); }  unreachable; }); }); });
+            return (blk_catch_28: { break :blk_catch_28 ((prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "")) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                _ = Output.err(e, "failed to read OTP input", .{});
+                _ = Global.crash();
+            } }); });
     }
 
 pub fn normalizedPackage(allocator: std.mem.Allocator, manager: *PackageManager, package_name: []const u8, package_version: []const u8, json: *Expr, json_source: *const logger.Source, shasum: sha.SHA1.Digest, integrity: sha.SHA512.Digest, readme: ?ReadmeInfo) OOM![]const u8 {
@@ -810,8 +914,12 @@ pub fn normalizedPackage(allocator: std.mem.Allocator, manager: *PackageManager,
             const buffer_writer = bun.js_printer.BufferWriter.init(allocator);
             var writer = bun.js_printer.BufferPrinter.init(buffer_writer);
             _ = &writer;
-            const written = (blk_catch_30: { break :blk_catch_30 ((bun.js_printer.printJSON(@TypeOf((&writer)), (&writer), json.*, json_source, .{ .minify_whitespace = true, .mangled_props = null })) catch |e| { _ = &e; break :blk_catch_30 (__sw_blk_18: { const __disc_18 = e; _ = &__disc_18; if ((!cp_has_ok_val(__disc_18) and !cp_is_null_val(__disc_18))) { const __err_v_18 = cp_unwrap_err_val(__disc_18); _ = &__err_v_18; if (cp_match_tag(__err_v_18, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.errGeneric("failed to print normalized package.json: {s}", .{ @errorName(e) });
-            break :__sw_blk_18 cp_val(Global.crash()); }  unreachable; }); }); });
+            const written = (blk_catch_30: { break :blk_catch_30 ((bun.js_printer.printJSON(@TypeOf((&writer)), (&writer), json.*, json_source, .{ .minify_whitespace = true, .mangled_props = null })) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                _ = Output.errGeneric("failed to print normalized package.json: {s}", .{ @errorName(e) });
+                _ = Global.crash();
+            } }); });
             _ = &written;
             return writer.ctx.writtenWithoutTrailingZero();
     }

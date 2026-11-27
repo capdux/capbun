@@ -1281,7 +1281,23 @@ pub fn download(allocator: std.mem.Allocator, target: *const CompileTarget, env:
             if (needs_download) {
                 var target_mut = target.*;
                 _ = &target_mut;
-                _ = (blk_catch_19: { break :blk_catch_19 ((target_mut.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; __sw_blk_5: { const __disc_5 = e; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .TargetNotFound)) {  _ = Output.errGeneric("Does this target and version of Bun exist?\n\n404 downloading {} from npm registry", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .NetworkError)) {  _ = Output.errGeneric("Failed to download cross-compilation target.\n\nNetwork error downloading {} from npm registry", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .InvalidResponse)) {  _ = Output.errGeneric("Failed to verify the integrity of the downloaded tarball.\n\nThe downloaded content for {} appears to be corrupted", .{ target.* }); break :__sw_blk_5; } } if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .ExtractionFailed)) {  _ = Output.errGeneric("Failed to extract the downloaded tarball.\n\nCould not extract executable for {}", .{ target.* }); break :__sw_blk_5; } } {  _ = Output.errGeneric("Failed to download {}: {s}", .{ target.*, @errorName(e) }); break :__sw_blk_5; }  }
+                _ = (blk_catch_19: { break :blk_catch_19 ((target_mut.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; if ((e == error.TargetNotFound)) {
+                    _ = Output.errGeneric("Does this target and version of Bun exist?\n\n404 downloading {} from npm registry", .{ target.* });
+                } else {
+                    if ((e == error.NetworkError)) {
+                        _ = Output.errGeneric("Failed to download cross-compilation target.\n\nNetwork error downloading {} from npm registry", .{ target.* });
+                    } else {
+                        if ((e == error.InvalidResponse)) {
+                            _ = Output.errGeneric("Failed to verify the integrity of the downloaded tarball.\n\nThe downloaded content for {} appears to be corrupted", .{ target.* });
+                        } else {
+                            if ((e == error.ExtractionFailed)) {
+                                _ = Output.errGeneric("Failed to extract the downloaded tarball.\n\nCould not extract executable for {}", .{ target.* });
+                            } else {
+                                _ = Output.errGeneric("Failed to download {}: {s}", .{ target.*, @errorName(e) });
+                            }
+                        }
+                    }
+                }
                 return error.DownloadFailed; }); });
             }
             return try allocator.dupeZ(u8, dest_z);
@@ -1313,7 +1329,27 @@ pub fn toExecutable(target: *const CompileTarget, allocator: std.mem.Allocator, 
             _ = &needs_download;
             const dest_z = target.exePath((&exe_path_buf), version_str, env, (&needs_download));
             if (needs_download) {
-                _ = (blk_catch_22: { break :blk_catch_22 ((target.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; return (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .TargetNotFound)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Target platform '{f}' is not available for download. Check if this version of Bun supports this target.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .NetworkError)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Network error downloading executable for '{f}'. Check your internet connection and proxy settings.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .InvalidResponse)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Downloaded file for '{f}' appears to be corrupted. Please try again.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .ExtractionFailed)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Failed to extract executable for '{f}'. The download may be incomplete.", .{ target })); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .UnsupportedTarget)) {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Target '{f}' is not supported", .{ target })); } } {  break :__sw_blk_6 cp_val(StandaloneCompileResult.failFmt("Failed to download '{f}': {s}", .{ target, @errorName(e) })); }  unreachable; }); }); });
+                _ = (blk_catch_22: { break :blk_catch_22 ((target.downloadToPath(env, allocator, dest_z)) catch |e| { _ = &e; if ((e == error.TargetNotFound)) {
+                    return StandaloneCompileResult.failFmt("Target platform '{f}' is not available for download. Check if this version of Bun supports this target.", .{ target });
+                } else {
+                    if ((e == error.NetworkError)) {
+                        return StandaloneCompileResult.failFmt("Network error downloading executable for '{f}'. Check your internet connection and proxy settings.", .{ target });
+                    } else {
+                        if ((e == error.InvalidResponse)) {
+                            return StandaloneCompileResult.failFmt("Downloaded file for '{f}' appears to be corrupted. Please try again.", .{ target });
+                        } else {
+                            if ((e == error.ExtractionFailed)) {
+                                return StandaloneCompileResult.failFmt("Failed to extract executable for '{f}'. The download may be incomplete.", .{ target });
+                            } else {
+                                if ((e == error.UnsupportedTarget)) {
+                                    return StandaloneCompileResult.failFmt("Target '{f}' is not supported", .{ target });
+                                } else {
+                                    return StandaloneCompileResult.failFmt("Failed to download '{f}': {s}", .{ target, @errorName(e) });
+                                }
+                            }
+                        }
+                    }
+                } }); });
             }
             free_self_exe = true;
             break :blk bun.handleOom(allocator.dupeZ(u8, dest_z));

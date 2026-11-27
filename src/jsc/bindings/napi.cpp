@@ -2116,6 +2116,9 @@ extern "C" napi_status napi_create_external_buffer(napi_env env, size_t length,
     // Get pointer before using WTF::move
     auto* destructorPtr = destructor.ptr();
     auto arrayBuffer = ArrayBuffer::createFromBytes({ reinterpret_cast<const uint8_t*>(data), length }, WTF::move(destructor));
+    if (finalize_cb) {
+        arrayBuffer->pin();
+    }
 
     auto* buffer = JSC::JSUint8Array::create(globalObject, subclassStructure, WTF::move(arrayBuffer), 0, length);
     NAPI_RETURN_IF_EXCEPTION(env);
@@ -2155,6 +2158,9 @@ extern "C" napi_status napi_create_external_arraybuffer(napi_env env, void* exte
     // Get pointer before using WTF::move
     auto* destructorPtr = destructor.ptr();
     auto arrayBuffer = ArrayBuffer::createFromBytes({ reinterpret_cast<const uint8_t*>(external_data), byte_length }, WTF::move(destructor));
+    if (finalize_cb) {
+        arrayBuffer->pin();
+    }
 
     auto* buffer = JSC::JSArrayBuffer::create(vm, globalObject->arrayBufferStructure(ArrayBufferSharingMode::Default), WTF::move(arrayBuffer));
     // Arm only after successful creation so that if a future change makes

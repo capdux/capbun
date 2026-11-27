@@ -1022,7 +1022,7 @@ fn writeOrEnd(
                     raw_response.onWritable(*NodeHTTPResponse, onDrain, _);
                 }
 
-                return jsc.JSValue.jsNumberFromInt64(-@as(i64, i32(@min(written, std.math.maxInt(i64)))));
+                return jsc.JSValue.jsNumberFromInt64(-@as(i64, @intCast(@min(written, std.math.maxInt(i64)))));
             },
         }
     }

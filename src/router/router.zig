@@ -944,7 +944,29 @@ pub fn validate(input: []const u8, allocator: std.mem.Allocator, log: *Logger.Lo
             const end = (if (comptime @typeInfo(@TypeOf((input.len - 1))) == .@"enum") cp_cast_int(u32, @intFromEnum((input.len - 1))) else cp_cast_int(u32, (input.len - 1)));
             while ((offset < end)) {
                 const pattern: Pattern = (blk_catch_31: { break :blk_catch_31 ((Pattern.initUnhashed(input, offset)) catch |e| { _ = &e; const source: Logger.Source = Logger.Source.initEmptyFile(input);
-                __sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .CatchAllMustBeAtTheEnd)) {  _ = (blk_catch_32: { break :blk_catch_32 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Catch-all route must be at the end of the path", .{})) catch |__ce_32| { _ = &__ce_32;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidCatchAllRoute)) {  _ = (blk_catch_33: { break :blk_catch_33 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid catch-all route, e.g. should be [...param]", .{})) catch |__ce_33| { _ = &__ce_33;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidOptionalCatchAllRoute)) {  _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid optional catch-all route, e.g. should be [[...param]]", .{})) catch |__ce_34| { _ = &__ce_34;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidRoutePattern)) {  _ = (blk_catch_35: { break :blk_catch_35 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid dynamic route", .{})) catch |__ce_35| { _ = &__ce_35;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .MissingParamName)) {  _ = (blk_catch_36: { break :blk_catch_36 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a parameter name, e.g. [param]", .{})) catch |__ce_36| { _ = &__ce_36;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .PatternMissingClosingBracket)) {  _ = (blk_catch_37: { break :blk_catch_37 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a closing bracket]", .{})) catch |__ce_37| { _ = &__ce_37;  }); }); break :__sw_blk_3; } }  }
+                if ((e == error.CatchAllMustBeAtTheEnd)) {
+                    _ = (blk_catch_32: { break :blk_catch_32 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Catch-all route must be at the end of the path", .{})) catch |__ce_32| { _ = &__ce_32;  }); });
+                } else {
+                    if ((e == error.InvalidCatchAllRoute)) {
+                        _ = (blk_catch_33: { break :blk_catch_33 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid catch-all route, e.g. should be [...param]", .{})) catch |__ce_33| { _ = &__ce_33;  }); });
+                    } else {
+                        if ((e == error.InvalidOptionalCatchAllRoute)) {
+                            _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid optional catch-all route, e.g. should be [[...param]]", .{})) catch |__ce_34| { _ = &__ce_34;  }); });
+                        } else {
+                            if ((e == error.InvalidRoutePattern)) {
+                                _ = (blk_catch_35: { break :blk_catch_35 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Invalid dynamic route", .{})) catch |__ce_35| { _ = &__ce_35;  }); });
+                            } else {
+                                if ((e == error.MissingParamName)) {
+                                    _ = (blk_catch_36: { break :blk_catch_36 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a parameter name, e.g. [param]", .{})) catch |__ce_36| { _ = &__ce_36;  }); });
+                                } else {
+                                    if ((e == error.PatternMissingClosingBracket)) {
+                                        _ = (blk_catch_37: { break :blk_catch_37 ((log.addErrorFmt((&source), Logger.Loc.Empty, allocator, "Route is missing a closing bracket]", .{})) catch |__ce_37| { _ = &__ce_37;  }); });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 return null; }); });
                 offset = pattern.len;
                 const tag = std.meta.activeTag(pattern.value);

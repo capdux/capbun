@@ -52,13 +52,13 @@ const NewReader = @import("./NewReader.zig").NewReader;
 pub const null_int4 = 4294967295;
 
 pub fn decode(context: anytype, comptime ContextType: type, reader: NewReader(ContextType), comptime forEach: *const fn (@TypeOf(context), u32, ?*Data) AnyPostgresError!bool) AnyPostgresError!void {
-        var remaining_bytes: usize = @intCast((try reader.length() - 4));
+        var remaining_bytes: usize = (try reader.length() -| 4);
         _ = &remaining_bytes;
         if ((remaining_bytes < 2)) {
             return error.InvalidMessage;
         }
         remaining_bytes = (remaining_bytes - 2);
-        const remaining_fields: usize = @intCast(try reader.short());
+        const remaining_fields: usize = @intCast(@max(try reader.short(), 0));
         {
             var index: i32 = 0;
             _ = &index;

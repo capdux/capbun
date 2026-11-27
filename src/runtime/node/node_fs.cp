@@ -7428,28 +7428,12 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                         let iterable_dir = top.iter.dir.openDir(entry.name, {
                             no_follow: true,
                             iterate: true,
-                        }) catch e => switch (e) {
-                            error.NotDir => {
+                        }) catch e => {
+                            if (e == error.NotDir) {
                                 treat_as_dir = false;
                                 continue :handle_entry;
-                            },
-                            error.FileNotFound,
-                            error.AccessDenied,
-                            error.PermissionDenied,
-                            error.ProcessNotFound,
-                            error.SymLinkLoop,
-                            error.ProcessFdQuotaExceeded,
-                            error.NameTooLong,
-                            error.SystemFdQuotaExceeded,
-                            error.NoDevice,
-                            error.SystemResources,
-                            error.Unexpected,
-                            error.InvalidUtf8,
-                            error.InvalidWtf8,
-                            error.BadPathName,
-                            error.NetworkNotFound,
-                            error.DeviceBusy
-                            => return e,
+                            }
+                            return e;
                         };
                         stack.appendAssumeCapacity({
                             name: entry.name,

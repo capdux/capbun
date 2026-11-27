@@ -586,10 +586,15 @@ pub struct JSValkeyClient {
         }
 
         // Parse database number from pathname (e.g., "/1" -> database 1)
-        const database = if (pathname_utf8.slice().len > 1)
-            std.fmt.parseInt(u32, pathname_utf8.slice()[1..], 10) catch 0
-        else
-            0;
+        const database: u32 = switch (uri) {
+            .standalone_unix, .standalone_tls_unix => 0,
+            else => if (pathname_utf8.slice().len > 1) brk: {
+                const db_str = pathname_utf8.slice()[1..];
+                break :brk std.fmt.parseInt(u32, db_str, 10) catch {
+                    return globalObject.throwInvalidArguments("Invalid database number in Redis URL: \"{s}\"", .{db_str});
+                };
+            } else 0,
+        };
 
         bun.analytics.Features.valkey += 1;
         _cs_guard.active = false;

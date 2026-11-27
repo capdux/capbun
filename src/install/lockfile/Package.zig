@@ -1170,10 +1170,16 @@ else => {
             if (((trimmed.len != 1) or (((trimmed[0] != 42) and (trimmed[0] != 94)) and (trimmed[0] != 126)))) {
                 const at = ((strings.lastIndexOfChar(input, 64)) orelse (0));
                 if ((at > 0)) {
-                    workspace_range = (blk_catch_2: { break :blk_catch_2 ((Semver.Query.parse(allocator, input[(at + 1)..], sliced)) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .OutOfMemory)) {  break :__sw_blk_9 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+                    workspace_range = (blk_catch_2: { break :blk_catch_2 ((Semver.Query.parse(allocator, input[(at + 1)..], sliced)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                        _ = bun.outOfMemory();
+                    }
+                    unreachable; }); });
                     break :brk String.Builder.stringHash(input[0..at]);
                 }
-                workspace_range = (blk_catch_3: { break :blk_catch_3 ((Semver.Query.parse(allocator, input, sliced)) catch |e| { _ = &e; break :blk_catch_3 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .OutOfMemory)) {  break :__sw_blk_10 cp_val(bun.outOfMemory()); } }  unreachable; }); }); });
+                workspace_range = (blk_catch_3: { break :blk_catch_3 ((Semver.Query.parse(allocator, input, sliced)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                    _ = bun.outOfMemory();
+                }
+                unreachable; }); });
             }
             break :brk external_alias.hash;
 } else external_alias.hash),

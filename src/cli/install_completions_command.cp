@@ -167,9 +167,12 @@ pub struct InstallCompletionsCommand {
             if (fail_exit_code == 1 && !stdout.isTty()) {
                 const completions = shell.completions();
                 if (completions.len > 0) {
-                    stdout.writeAll(completions) catch e => switch (e) {
-                        error.BrokenPipe => Global.exit(0),
-                        else => return e,
+                    stdout.writeAll(completions) catch e => {
+                        if (e == error.BrokenPipe) {
+                            Global.exit(0);
+                        } else {
+                            return e;
+                        }
                     };
                     Global.exit(0);
                 }
@@ -203,9 +206,12 @@ pub struct InstallCompletionsCommand {
 
         if (!bun.env_var.IS_BUN_AUTO_UPDATE.get()) {
             if (!stdout.isTty()) {
-                stdout.writeAll(shell.completions()) catch e => switch (e) {
-                    error.BrokenPipe => Global.exit(0),
-                    else => return e,
+                stdout.writeAll(shell.completions()) catch e => {
+                    if (e == error.BrokenPipe) {
+                        Global.exit(0);
+                    } else {
+                        return e;
+                    }
                 };
                 Global.exit(0);
             }

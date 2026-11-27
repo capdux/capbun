@@ -1060,8 +1060,9 @@ pub struct TopTask {
     static fn callback(task: *ThreadPool.Task) {
         const self_task: *TopTask = @fieldParentPtr("task", task);
 
-        const res = self_task.run() catch e => switch (e) {
-            error.OutOfMemory => bun.outOfMemory(),
+        const res = self_task.run() catch e => {
+            if (e == error.OutOfMemory) bun.outOfMemory();
+            unreachable;
         };
 
         switch (res) {

@@ -103,9 +103,12 @@ pub struct StoreEntry {
                 source_map_strings.appendSlice("\"")?;
             } else {
                 source_map_strings.appendSlice("\"bun://")?;
-                bun.strings.percentEncodeWrite(path, &source_map_strings) catch e => switch (e) {
-                    error.IncompleteUTF8 => @panic("Unexpected: asset with incomplete UTF-8 as file path"),
-                    error.OutOfMemory => return e,
+                bun.strings.percentEncodeWrite(path, &source_map_strings) catch e => {
+                    if (e == error.IncompleteUTF8) {
+                        @panic("Unexpected: asset with incomplete UTF-8 as file path");
+                    } else {
+                        return e;
+                    }
                 };
                 source_map_strings.appendSlice("\"")?;
             }

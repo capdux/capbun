@@ -135,31 +135,35 @@ pub enum Action {
             .parse path => writer.print("parsing {s}", [path])?,
             .visit path => writer.print("visiting {s}", [path])?,
             .print path => writer.print("printing {s}", [path])?,
-            .bundle_generate_chunk data => if (bun.Environment.show_crash_trace) {
-                const entry_text: ([]const u8)? = if (data.part_range.source_index.isValid())
-                    data.linkerContext().parse_graph.input_files.items(.source)[data.chunk.entry_point.source_index].path.text
-                else
-                    null;
-                const source_text: ([]const u8)? = if (data.part_range.source_index.isValid())
-                    data.linkerContext().parse_graph.input_files.items(.source)[data.part_range.source_index.get()].path.text
-                else
-                    null;
-                writer.print(
-                    "generating bundler chunk\n  chunk entry point: {?s}\n  source: {?s}\n  part range: {d}..{d}",
-                    [
-                        entry_text,
-                        source_text,
-                        data.part_range.part_index_begin,
-                        data.part_range.part_index_end,
-                    ],
-                )?;
+            .bundle_generate_chunk data => {
+                if (bun.Environment.show_crash_trace) {
+                    const entry_text: ([]const u8)? = if (data.part_range.source_index.isValid())
+                        data.linkerContext().parse_graph.input_files.items(.source)[data.chunk.entry_point.source_index].path.text
+                    else
+                        null;
+                    const source_text: ([]const u8)? = if (data.part_range.source_index.isValid())
+                        data.linkerContext().parse_graph.input_files.items(.source)[data.part_range.source_index.get()].path.text
+                    else
+                        null;
+                    writer.print(
+                        "generating bundler chunk\n  chunk entry point: {?s}\n  source: {?s}\n  part range: {d}..{d}",
+                        [
+                            entry_text,
+                            source_text,
+                            data.part_range.part_index_begin,
+                            data.part_range.part_index_end,
+                        ],
+                    )?;
+                }
             },
-            .resolver res => if (bun.Environment.show_crash_trace) {
-                writer.print("resolving {s} from {s} ({s})", [
-                    res.import_path,
-                    res.source_dir,
-                    res.kind.label(),
-                ])?;
+            .resolver res => {
+                if (bun.Environment.show_crash_trace) {
+                    writer.print("resolving {s} from {s} ({s})", [
+                        res.import_path,
+                        res.source_dir,
+                        res.kind.label(),
+                    ])?;
+                }
             },
             .dlopen path => writer.print("loading native module: {s}", [path])?,
         }
@@ -1461,9 +1465,8 @@ pub fn dumpStackTrace(trace: std.builtin.StackTrace, limits: WriteStackTraceLimi
     for (program of programs) {
         let arena_guard = DeinitGuard<bun.ArenaAllocator>{ val: bun.ArenaAllocator.init(bun.default_allocator) };
         let sfa = std.heap.stackFallback(16384, arena_guard.val.allocator());
-        spawnSymbolizer(program, sfa.get(), &trace) catch e => switch (e) {
-            error.FileNotFound => continue,
-            else => {},
+        spawnSymbolizer(program, sfa.get(), &trace) catch e => {
+            if (e == error.FileNotFound) continue;
         };
         return;
     }

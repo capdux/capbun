@@ -78,15 +78,15 @@ pub fn scan(scanner: *Scanner, path_literal: []const u8): !void {
     let root = scanner.readDirWithName(path, null)?;
 
     if (root.* == .err) {
-        switch (root.err.original_err) {
-            error.NotDir, error.ENOTDIR => {
-                if (scanner.isTestFile(path)) {
-                    const rel_path = bun.PathString.init(bun.handleOom(scanner.fs.filename_store.append(PathSlice, path)));
-                    bun.handleOom(scanner.test_files.append(scanner.allocator(), rel_path));
-                }
-            },
-            error.ENOENT => return error.DoesNotExist,
-            else => log("Scanner.readDirWithName('{s}') -> {s}", .{ path, @errorName(root.err.original_err) }),
+        if (root.err.original_err == error.NotDir || root.err.original_err == error.ENOTDIR) {
+            if (scanner.isTestFile(path)) {
+                const rel_path = bun.PathString.init(bun.handleOom(scanner.fs.filename_store.append(PathSlice, path)));
+                bun.handleOom(scanner.test_files.append(scanner.allocator(), rel_path));
+            }
+        } else if (root.err.original_err == error.ENOENT) {
+            return error.DoesNotExist;
+        } else {
+            log("Scanner.readDirWithName('{s}') -> {s}", .{ path, @errorName(root.err.original_err) });
         }
     }
 

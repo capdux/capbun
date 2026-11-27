@@ -6,40 +6,28 @@
 struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
 
 pub fn valkeyErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?, e: protocol.RedisError): jsc.JSValue {
-    const error_code: jsc.Error = switch (e) {
-        error.ConnectionClosed => .REDIS_CONNECTION_CLOSED,
-        error.InvalidResponse => .REDIS_INVALID_RESPONSE,
-        error.InvalidBulkString => .REDIS_INVALID_BULK_STRING,
-        error.InvalidArray => .REDIS_INVALID_ARRAY,
-        error.InvalidInteger => .REDIS_INVALID_INTEGER,
-        error.InvalidSimpleString => .REDIS_INVALID_SIMPLE_STRING,
-        error.InvalidErrorString => .REDIS_INVALID_ERROR_STRING,
-        error.InvalidDouble,
-        error.InvalidBoolean,
-        error.InvalidNull,
-        error.InvalidMap,
-        error.InvalidSet,
-        error.InvalidBigNumber,
-        error.InvalidVerbatimString,
-        error.InvalidBlobError,
-        error.InvalidAttribute,
-        error.InvalidPush => .REDIS_INVALID_RESPONSE,
-        error.AuthenticationFailed => .REDIS_AUTHENTICATION_FAILED,
-        error.InvalidCommand => .REDIS_INVALID_COMMAND,
-        error.InvalidArgument => .REDIS_INVALID_ARGUMENT,
-        error.UnsupportedProtocol => .REDIS_INVALID_RESPONSE,
-        error.InvalidResponseType => .REDIS_INVALID_RESPONSE_TYPE,
-        error.ConnectionTimeout => .REDIS_CONNECTION_TIMEOUT,
-        error.IdleTimeout => .REDIS_IDLE_TIMEOUT,
-        error.NestingDepthExceeded => .REDIS_INVALID_RESPONSE,
-        error.ServerError => .REDIS_SERVER_ERROR,
-        error.JSError => { return globalObject.takeException(error.JSError); },
-        error.OutOfMemory => {
-            if (globalObject.throwOutOfMemory() == error.JSError) {}
-            return globalObject.takeException(error.JSError);
-        },
-        error.JSTerminated => { return globalObject.takeException(error.JSTerminated); },
-    };
+    if (e == error.JSError) return globalObject.takeException(error.JSError);
+    if (e == error.OutOfMemory) {
+        if (globalObject.throwOutOfMemory() == error.JSError) {}
+        return globalObject.takeException(error.JSError);
+    }
+    if (e == error.JSTerminated) return globalObject.takeException(error.JSTerminated);
+    const error_code: jsc.Error =
+        if (e == error.ConnectionClosed) .REDIS_CONNECTION_CLOSED
+        else if (e == error.InvalidResponse) .REDIS_INVALID_RESPONSE
+        else if (e == error.InvalidBulkString) .REDIS_INVALID_BULK_STRING
+        else if (e == error.InvalidArray) .REDIS_INVALID_ARRAY
+        else if (e == error.InvalidInteger) .REDIS_INVALID_INTEGER
+        else if (e == error.InvalidSimpleString) .REDIS_INVALID_SIMPLE_STRING
+        else if (e == error.InvalidErrorString) .REDIS_INVALID_ERROR_STRING
+        else if (e == error.AuthenticationFailed) .REDIS_AUTHENTICATION_FAILED
+        else if (e == error.InvalidCommand) .REDIS_INVALID_COMMAND
+        else if (e == error.InvalidArgument) .REDIS_INVALID_ARGUMENT
+        else if (e == error.InvalidResponseType) .REDIS_INVALID_RESPONSE_TYPE
+        else if (e == error.ConnectionTimeout) .REDIS_CONNECTION_TIMEOUT
+        else if (e == error.IdleTimeout) .REDIS_IDLE_TIMEOUT
+        else if (e == error.ServerError) .REDIS_SERVER_ERROR
+        else .REDIS_INVALID_RESPONSE;
 
     if (msg := message) {
         return error_code.fmt(globalObject, "{s}", .{msg});

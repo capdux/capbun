@@ -583,61 +583,53 @@ pub struct CreateCommand {
             .github_repository, .official => {
                 const tarball_bytes: MutableString = switch (example_tag) {
                     .official => Example.fetch(ctx, &env_loader, template, &progress, node) catch e => {
-                        switch (e) {
-                            error.HTTPForbidden, error.ExampleNotFound => {
-                                node.end();
-                                progress.refresh();
+                        if (e == error.HTTPForbidden || e == error.ExampleNotFound) {
+                            node.end();
+                            progress.refresh();
 
-                                Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found. Here are templates you can use:\n\n", .{ 
-                                    template,
-                                });
-                                Output.flush();
+                            Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found. Here are templates you can use:\n\n", .{ 
+                                template,
+                            });
+                            Output.flush();
 
-                                const examples = Example.fetchAllLocalAndRemote(ctx, null, &env_loader, filesystem)?;
-                                Example.print(examples.items, dirname);
-                                Global.exit(1);
-                            },
-                            else => {
-                                node.end();
-                                progress.refresh();
+                            const examples = Example.fetchAllLocalAndRemote(ctx, null, &env_loader, filesystem)?;
+                            Example.print(examples.items, dirname);
+                            Global.exit(1);
+                        } else {
+                            node.end();
+                            progress.refresh();
 
-                                Output.prettyErrorln("\n\n", .{});
+                            Output.prettyErrorln("\n\n", .{});
 
-                                return e;
-                            },
+                            return e;
                         }
                     },
                     .github_repository => Example.fetchFromGitHub(ctx, &env_loader, template, &progress, node) catch e => {
-                        switch (e) {
-                            error.HTTPForbidden => {
-                                node.end();
-                                progress.refresh();
+                        if (e == error.HTTPForbidden) {
+                            node.end();
+                            progress.refresh();
 
-                                Output.prettyError("\n<r><red>error:<r> GitHub returned 403. This usually means GitHub is rate limiting your requests.\nTo fix this, either:<r>  <b>A) pass a <r><cyan>GITHUB_ACCESS_TOKEN<r> environment variable to bun<r>\n  <b>B)Wait a little and try again<r>\n", .{});
-                                Global.crash();
-                            },
+                            Output.prettyError("\n<r><red>error:<r> GitHub returned 403. This usually means GitHub is rate limiting your requests.\nTo fix this, either:<r>  <b>A) pass a <r><cyan>GITHUB_ACCESS_TOKEN<r> environment variable to bun<r>\n  <b>B)Wait a little and try again<r>\n", .{});
+                            Global.crash();
+                        } else if (e == error.GitHubRepositoryNotFound) {
+                            node.end();
+                            progress.refresh();
 
-                            error.GitHubRepositoryNotFound => {
-                                node.end();
-                                progress.refresh();
+                            Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found on GitHub. Here are templates you can use:\n\n", .{ 
+                                template,
+                            });
+                            Output.flush();
 
-                                Output.prettyError("\n<r><red>error:<r> <b>\"{s}\"<r> was not found on GitHub. Here are templates you can use:\n\n", .{ 
-                                    template,
-                                });
-                                Output.flush();
+                            const examples = Example.fetchAllLocalAndRemote(ctx, null, &env_loader, filesystem)?;
+                            Example.print(examples.items, dirname);
+                            Global.crash();
+                        } else {
+                            node.end();
+                            progress.refresh();
 
-                                const examples = Example.fetchAllLocalAndRemote(ctx, null, &env_loader, filesystem)?;
-                                Example.print(examples.items, dirname);
-                                Global.crash();
-                            },
-                            else => {
-                                node.end();
-                                progress.refresh();
+                            Output.prettyErrorln("\n\n", .{});
 
-                                Output.prettyErrorln("\n\n", .{});
-
-                                return e;
-                            },
+                            return e;
                         }
                     },
                     else => unreachable,
@@ -2324,15 +2316,12 @@ pub struct Example {
         }
 
         const response = async_http.sendSync() catch e => {
-            switch (e) {
-                error.WouldBlock => {
-                    Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
-                    Global.exit(1);
-                },
-                else => {
-                    Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e)});
-                    Global.exit(1);
-                },
+            if (e == error.WouldBlock) {
+                Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
+                Global.exit(1);
+            } else {
+                Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e)});
+                Global.exit(1);
             }
         };
 

@@ -286,7 +286,7 @@ public:
 
     bool inGC() const
     {
-        return this->vm().isCollectorBusyOnCurrentThread();
+        return this->vm().isCollectorBusyOnCurrentThread() || this->vm().heap.mutatorState() == JSC::MutatorState::Sweeping;
     }
 
     void checkGC() const

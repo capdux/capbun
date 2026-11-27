@@ -919,6 +919,44 @@ pub fn runAsCleanupHook(opaque_this: ?*anyopaque) void {
     const AnyTask = jsc.AnyTask.New(@This(), runOnJSThread);
 };
 
+pub const UvWorkTask = struct {
+    task: WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    concurrent_task: jsc.ConcurrentTask = .{},
+    event_loop: *jsc.EventLoop,
+    req: *anyopaque,
+    work_cb: ?uv_work_cb,
+    after_work_cb: ?uv_after_work_cb,
+    poll_ref: Async.KeepAlive = .{},
+
+pub fn runFromThreadPool(task: *WorkPoolTask) void {
+            var self_ptr: *UvWorkTask = @fieldParentPtr("task", task);
+            _ = &self_ptr;
+            if (self_ptr.work_cb) |cb| {
+                _ = &cb;
+                _ = cb(self_ptr.req);
+            }
+            _ = self_ptr.event_loop.enqueueTaskConcurrent(self_ptr.concurrent_task.@"from"(self_ptr, .manual_deinit));
+    }
+
+pub fn runFromJS(self: *UvWorkTask, vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject) void {
+            _ = &global;
+            var poll_ref = self.poll_ref;
+            _ = &poll_ref;
+            var _poll_guard = PollRefGuard{ .poll_ref = (&poll_ref), .vm = vm };
+            _ = &_poll_guard;
+            var ___poll_guard_moved = false; _ = &___poll_guard_moved;
+            defer if (!___poll_guard_moved) { ___poll_guard_moved = true; const __T = @TypeOf(_poll_guard); if (@typeInfo(__T) == .optional) { if (_poll_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _poll_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _poll_guard; _drop_val.__cp_deinit(); } };
+            const after_cb = self.after_work_cb;
+            const req = self.req;
+            _ = bun.destroy(self);
+            if (after_cb) |cb| {
+                _ = &cb;
+                _ = cb(req, 0);
+            }
+            _ = (blk_catch_3: { break :blk_catch_3 ((vm.eventLoop().drainMicrotasks()) catch |__ce_3| { _ = &__ce_3;  }); });
+    }
+};
+
 const OpaquePtr = ?*anyopaque;
 const NullableU8MultiPtr = ?[*]u8;
 const NapiAsyncWorkPtr = *napi_async_work;
@@ -937,6 +975,8 @@ pub const napi_async_cleanup_hook_handle = ?*struct_napi_async_cleanup_hook_hand
 pub const NapiAsyncCleanupHookFn = *const fn (napi_async_cleanup_hook_handle, ?*anyopaque) callconv(.c) void;
 pub const napi_async_cleanup_hook = ?NapiAsyncCleanupHookFn;
 pub const napi_addon_register_func = *const fn (napi_env, napi_value) callconv(.c) napi_value;
+pub const uv_work_cb = *const fn (*anyopaque) callconv(.c) void;
+pub const uv_after_work_cb = *const fn (*anyopaque, c_int) callconv(.c) void;
 const TODO_EXCEPTION = (if (@typeInfo(jsc.C.ExceptionRef) == .@"enum" and (@typeInfo(@TypeOf(null)) == .int or @typeInfo(@TypeOf(null)) == .comptime_int)) @as(jsc.C.ExceptionRef, @enumFromInt(null)) else @as(jsc.C.ExceptionRef, null));
 const log = bun.Output.scoped(.napi, .visible);
 pub const napi_ref = *Ref;
@@ -2008,7 +2048,7 @@ pub export fn napi_create_array(env_: napi_env, result_: ?*napi_value) callconv(
             return env.invalidArg();
         }
         const result = result_.?;
-        _ = result.set(env, (blk_catch_3: { break :blk_catch_3 ((JSValue.createEmptyArray(env.toJS(), 0)) catch |__ce_3| { _ = &__ce_3; return env.setLastError(.pending_exception); }); }));
+        _ = result.set(env, (blk_catch_4: { break :blk_catch_4 ((JSValue.createEmptyArray(env.toJS(), 0)) catch |__ce_4| { _ = &__ce_4; return env.setLastError(.pending_exception); }); }));
         return env.ok();
 }
 
@@ -2026,7 +2066,7 @@ pub export fn napi_create_array_with_length(env_: napi_env, length: usize, resul
         const len_i64: i64 = @bitCast(length);
         const len_i32: i32 = @truncate(len_i64);
         const len: u32 = (if ((len_i32 > 0)) @bitCast(len_i32) else 0);
-        const array = (blk_catch_4: { break :blk_catch_4 ((jsc.JSValue.createEmptyArray(env.toJS(), len)) catch |__ce_4| { _ = &__ce_4; return env.setLastError(.pending_exception); }); });
+        const array = (blk_catch_5: { break :blk_catch_5 ((jsc.JSValue.createEmptyArray(env.toJS(), len)) catch |__ce_5| { _ = &__ce_5; return env.setLastError(.pending_exception); }); });
         _ = array.ensureStillAlive();
         _ = result.set(env, array);
         return env.ok();
@@ -2113,7 +2153,7 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, lengt
 };
         _ = log("napi_create_string_latin1: {s}", .{ slice });
         if ((slice.len == 0)) {
-            _ = result.set(env, (blk_catch_5: { break :blk_catch_5 ((bun.String.empty.toJS(env.toJS())) catch |__ce_5| { _ = &__ce_5; return env.setLastError(.generic_failure); }); }));
+            _ = result.set(env, (blk_catch_6: { break :blk_catch_6 ((bun.String.empty.toJS(env.toJS())) catch |__ce_6| { _ = &__ce_6; return env.setLastError(.generic_failure); }); }));
             return env.ok();
         }
         const str_pair = bun.String.createUninitialized(.latin1, slice.len);
@@ -2121,7 +2161,7 @@ pub export fn napi_create_string_latin1(env_: napi_env, str: ?[*]const u8, lengt
         _ = &str_val;
         const bytes = str_pair[1];
         _ = @memcpy(bytes, slice);
-        _ = result.set(env, (blk_catch_6: { break :blk_catch_6 ((str_val.transferToJS(env.toJS())) catch |__ce_6| { _ = &__ce_6; _ = str_val.deref();
+        _ = result.set(env, (blk_catch_7: { break :blk_catch_7 ((str_val.transferToJS(env.toJS())) catch |__ce_7| { _ = &__ce_7; _ = str_val.deref();
         return env.setLastError(.generic_failure); }); }));
         return env.ok();
 }
@@ -2160,7 +2200,7 @@ pub export fn napi_create_string_utf8(env_: napi_env, str: ?[*]const u8, length:
 };
         _ = log("napi_create_string_utf8: {s}", .{ slice });
         const globalObject = env.toJS();
-        const str_val = (blk_catch_7: { break :blk_catch_7 ((bun.String.createUTF8ForJS(globalObject, slice)) catch |__ce_7| { _ = &__ce_7; return env.setLastError(.pending_exception); }); });
+        const str_val = (blk_catch_8: { break :blk_catch_8 ((bun.String.createUTF8ForJS(globalObject, slice)) catch |__ce_8| { _ = &__ce_8; return env.setLastError(.pending_exception); }); });
         _ = result.set(env, str_val);
         return env.ok();
 }
@@ -2201,7 +2241,7 @@ pub export fn napi_create_string_utf16(env_: napi_env, str: ?[*]const char16_t, 
             _ = log("napi_create_string_utf16: {d} {f}", .{ slice.len, bun.fmt.FormatUTF16{ .buf = slice[0..@min(slice.len, 512)] } });
         }
         if ((slice.len == 0)) {
-            _ = result.set(env, (blk_catch_8: { break :blk_catch_8 ((bun.String.empty.toJS(env.toJS())) catch |__ce_8| { _ = &__ce_8; return env.setLastError(.generic_failure); }); }));
+            _ = result.set(env, (blk_catch_9: { break :blk_catch_9 ((bun.String.empty.toJS(env.toJS())) catch |__ce_9| { _ = &__ce_9; return env.setLastError(.generic_failure); }); }));
             return env.ok();
         }
         const str_pair = bun.String.createUninitialized(.utf16, slice.len);
@@ -2209,7 +2249,7 @@ pub export fn napi_create_string_utf16(env_: napi_env, str: ?[*]const char16_t, 
         _ = &str_val;
         const chars = str_pair[1];
         _ = @memcpy(chars, slice);
-        const js_str = (blk_catch_9: { break :blk_catch_9 ((str_val.transferToJS(env.toJS())) catch |__ce_9| { _ = &__ce_9; _ = str_val.deref();
+        const js_str = (blk_catch_10: { break :blk_catch_10 ((str_val.transferToJS(env.toJS())) catch |__ce_10| { _ = &__ce_10; _ = str_val.deref();
         return env.setLastError(.generic_failure); }); });
         _ = result.set(env, js_str);
         return env.ok();
@@ -2314,7 +2354,7 @@ pub export fn napi_get_array_length(env_: napi_env, value_: napi_value, result_:
         if ((!value.jsType().isArray())) {
             return env.setLastError(.array_expected);
         }
-        result.* = @truncate((blk_catch_10: { break :blk_catch_10 ((value.getLength(env.toJS())) catch |__ce_10| { _ = &__ce_10; return env.setLastError(.pending_exception); }); }));
+        result.* = @truncate((blk_catch_11: { break :blk_catch_11 ((value.getLength(env.toJS())) catch |__ce_11| { _ = &__ce_11; return env.setLastError(.pending_exception); }); }));
         return env.ok();
 }
 
@@ -2333,7 +2373,7 @@ pub export fn napi_strict_equals(env_: napi_env, lhs_: napi_value, rhs_: napi_va
         if (((lhs == .zero) or (rhs == .zero))) {
             return env.invalidArg();
         }
-        result.* = (blk_catch_11: { break :blk_catch_11 ((lhs.isStrictEqual(rhs, env.toJS())) catch |__ce_11| { _ = &__ce_11; return env.setLastError(.pending_exception); }); });
+        result.* = (blk_catch_12: { break :blk_catch_12 ((lhs.isStrictEqual(rhs, env.toJS())) catch |__ce_12| { _ = &__ce_12; return env.setLastError(.pending_exception); }); });
         return env.ok();
 }
 
@@ -2440,7 +2480,7 @@ pub export fn napi_make_callback(env_: napi_env, _: *anyopaque, recv_: napi_valu
         break :blk @as([*]const jsc.JSValue, @alignCast(@ptrCast(args.?)))[0..arg_count];
 
 }) else &.{});
-        const res = (blk_catch_12: { break :blk_catch_12 ((func.call(env.toJS(), (if ((recv != .zero)) recv else .js_undefined), call_args)) catch |e| { _ = &e; break :blk_catch_12 env.toJS().takeException(e); }); });
+        const res = (blk_catch_13: { break :blk_catch_13 ((func.call(env.toJS(), (if ((recv != .zero)) recv else .js_undefined), call_args)) catch |e| { _ = &e; break :blk_catch_13 env.toJS().takeException(e); }); });
         if (maybe_result) |result| {
             _ = &result;
             _ = result.set(env, res);
@@ -2508,7 +2548,7 @@ pub export fn napi_escape_handle(env_: napi_env, scope_: napi_escapable_handle_s
             return env.invalidArg();
         }
         const scope = scope_.?;
-        _ = (blk_catch_13: { break :blk_catch_13 ((scope.escape(escapee.get())) catch |__ce_13| { _ = &__ce_13; return env.setLastError(.escape_called_twice); }); });
+        _ = (blk_catch_14: { break :blk_catch_14 ((scope.escape(escapee.get())) catch |__ce_14| { _ = &__ce_14; return env.setLastError(.escape_called_twice); }); });
         result.* = escapee;
         return env.ok();
 }
@@ -2517,14 +2557,41 @@ pub extern "c" fn napi_type_tag_object(env: napi_env, _: napi_value, _: [*c]cons
 
 pub extern "c" fn napi_check_object_type_tag(env: napi_env, _: napi_value, _: [*c]const napi_type_tag, _: *bool) callconv(.c) napi_status;
 
-pub export fn napi_open_callback_scope(_: napi_env, _: napi_value, _: *anyopaque, _: *anyopaque) callconv(.c) napi_status {
+pub export fn napi_open_callback_scope(env_: napi_env, resource_object_: napi_value, context_: ?*anyopaque, result_: ?**anyopaque) callconv(.c) napi_status {
         _ = log("napi_open_callback_scope", .{});
-        return @intFromEnum(NapiStatus.ok);
+        if ((env_ == null)) {
+            return envIsNull();
+        }
+        const env = env_.?;
+        if ((((resource_object_.get() == .zero) or (context_ == null)) or (result_ == null))) {
+            return env.invalidArg();
+        }
+        const result = result_.?;
+        {
+            result.* = @ptrCast(env);
+        }
+        return env.ok();
 }
 
-pub export fn napi_close_callback_scope(_: napi_env, _: *anyopaque) callconv(.c) napi_status {
+pub export fn napi_close_callback_scope(env_: napi_env, scope_: ?*anyopaque) callconv(.c) napi_status {
         _ = log("napi_close_callback_scope", .{});
-        return @intFromEnum(NapiStatus.ok);
+        if ((env_ == null)) {
+            return envIsNull();
+        }
+        const env = env_.?;
+        if ((scope_ == null)) {
+            return env.invalidArg();
+        }
+        if (env.toJS().tryTakeException()) |exception| {
+            _ = &exception;
+            _ = env.toJS().bunVM().uncaughtException(env.toJS(), exception, false);
+        }
+        if (env.getAndClearPendingException()) |exception| {
+            _ = &exception;
+            _ = env.toJS().bunVM().uncaughtException(env.toJS(), exception, false);
+        }
+        _ = (blk_catch_15: { break :blk_catch_15 ((env.toJS().bunVM().eventLoop().drainMicrotasks()) catch |__ce_15| { _ = &__ce_15;  }); });
+        return env.ok();
 }
 
 pub extern "c" fn napi_throw(env: napi_env, @"error": napi_value) callconv(.c) napi_status;
@@ -2722,7 +2789,7 @@ pub export fn napi_get_version(env_: napi_env, result_: ?*u32) callconv(.c) napi
             return env.invalidArg();
         }
         const result = result_.?;
-        result.* = 9;
+        result.* = 10;
         return env.ok();
 }
 
@@ -2740,7 +2807,7 @@ pub export fn napi_create_promise(env_: napi_env, deferred_: ?*napi_deferred, pr
             return env.invalidArg();
         }
         const promise = promise_.?;
-        deferred.* = (blk_catch_14: { break :blk_catch_14 ((bun.default_allocator.create(jsc.JSPromise.Strong)) catch |__ce_14| { _ = &__ce_14; @panic("failed to allocate napi_deferred"); }); });
+        deferred.* = (blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.create(jsc.JSPromise.Strong)) catch |__ce_16| { _ = &__ce_16; @panic("failed to allocate napi_deferred"); }); });
         deferred.*.* = jsc.JSPromise.Strong.init(env.toJS());
         _ = promise.set(env, deferred.*.get().asValue(env.toJS()));
         return env.ok();
@@ -2759,7 +2826,7 @@ pub export fn napi_resolve_deferred(env_: napi_env, deferred: napi_deferred, res
         const resolution = resolution_.get();
         var prom = deferred.get();
         _ = &prom;
-        _ = (blk_catch_15: { break :blk_catch_15 ((prom.resolve(env.toJS(), resolution)) catch |__ce_15| { _ = &__ce_15; return env.setLastError(.pending_exception); }); });
+        _ = (blk_catch_17: { break :blk_catch_17 ((prom.resolve(env.toJS(), resolution)) catch |__ce_17| { _ = &__ce_17; return env.setLastError(.pending_exception); }); });
         return env.ok();
 }
 
@@ -2776,7 +2843,7 @@ pub export fn napi_reject_deferred(env_: napi_env, deferred: napi_deferred, reje
         const rejection = rejection_.get();
         var prom = deferred.get();
         _ = &prom;
-        _ = (blk_catch_16: { break :blk_catch_16 ((prom.reject(env.toJS(), rejection)) catch |__ce_16| { _ = &__ce_16; return env.setLastError(.pending_exception); }); });
+        _ = (blk_catch_18: { break :blk_catch_18 ((prom.reject(env.toJS(), rejection)) catch |__ce_18| { _ = &__ce_18; return env.setLastError(.pending_exception); }); });
         return env.ok();
 }
 
@@ -2903,7 +2970,7 @@ pub export fn napi_create_buffer_copy(env_: napi_env, length: usize, data: [*]u8
             return env.invalidArg();
         }
         const result = result_.?;
-        var buffer = (blk_catch_17: { break :blk_catch_17 ((jsc.JSValue.createBufferFromLength(env.toJS(), length)) catch |__ce_17| { _ = &__ce_17; return env.setLastError(.pending_exception); }); });
+        var buffer = (blk_catch_19: { break :blk_catch_19 ((jsc.JSValue.createBufferFromLength(env.toJS(), length)) catch |__ce_19| { _ = &__ce_19; return env.setLastError(.pending_exception); }); });
         _ = &buffer;
         if (buffer.asArrayBuffer(env.toJS())) |array_buf| {
             _ = &array_buf;
@@ -3192,4 +3259,11 @@ pub fn fixDeadCodeElimination() void {
             _ = std.mem.doNotOptimizeAway((&@field(posix_platform_specific_v8_apis, (if (@typeInfo(@TypeOf(decl)) == .@"enum" or @typeInfo(@TypeOf(decl)) == .@"union") @tagName(decl) else decl.name))));
         }
         _ = std.mem.doNotOptimizeAway((&BufferMod.BufferVectorized.fill));
+}
+
+pub export fn Bun__uv_queue_work(loop: *jsc.EventLoop, req: *anyopaque, work_cb: ?uv_work_cb, after_work_cb: ?uv_after_work_cb) callconv(.c) c_int {
+        const work = bun.new(UvWorkTask, .{ .event_loop = loop, .req = req, .work_cb = work_cb, .after_work_cb = after_work_cb });
+        _ = work.poll_ref.ref(loop.virtual_machine);
+        _ = WorkPool.schedule((&work.task));
+        return 0;
 }

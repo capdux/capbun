@@ -871,19 +871,23 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                 source = (&self.graph.input_files.items(.source)[@as(usize, @intCast(import_record.importer_source_index))]);
                 handles_import_errors = record.flags.handles_import_errors;
                 record.path.is_disabled = true;
-                __sw_blk_9: { const __disc_9 = e; _ = &__disc_9; if ((!cp_has_ok_val(__disc_9) and !cp_is_null_val(__disc_9))) { const __err_v_9 = cp_unwrap_err_val(__disc_9); _ = &__err_v_9; if (cp_match_tag(__err_v_9, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
-                const path_to_use = import_record.specifier;
-                if (((!handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
-                    if (isPackagePath(import_record.specifier)) {
-                        if (((target == .browser) and options.ExternalModules.isNodeBuiltin(path_to_use))) {
-                            _ = ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Node.js module: \"{s}\". To use Node.js builtins, set target to 'node' or 'bun'", .{ import_record.kind.errorLabel(), path_to_use }, import_record.kind)) catch unreachable);
+                if ((e == error.ModuleNotFound)) {
+                    const addError = Logger.Log.addResolveErrorWithTextDupe;
+                    const path_to_use = import_record.specifier;
+                    if (((!handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
+                        if (isPackagePath(import_record.specifier)) {
+                            if (((target == .browser) and options.ExternalModules.isNodeBuiltin(path_to_use))) {
+                                _ = ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Node.js module: \"{s}\". To use Node.js builtins, set target to 'node' or 'bun'", .{ import_record.kind.errorLabel(), path_to_use }, import_record.kind)) catch unreachable);
+                            } else {
+                                _ = ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ path_to_use }, import_record.kind)) catch unreachable);
+                            }
                         } else {
-                            _ = ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ path_to_use }, import_record.kind)) catch unreachable);
+                            _ = ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\"", .{ path_to_use }, import_record.kind)) catch unreachable);
                         }
-                    } else {
-                        _ = ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\"", .{ path_to_use }, import_record.kind)) catch unreachable);
                     }
-                } break :__sw_blk_9; } } {  _ = self.logUnhandledResolveError(log, self.allocator(), source, import_record.range, e, import_record.specifier, import_record.kind, ((!handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))); break :__sw_blk_9; }  }
+                } else {
+                    _ = self.logUnhandledResolveError(log, self.allocator(), source, import_record.range, e, import_record.specifier, import_record.kind, ((!handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors)));
+                }
                 return; }); });
                 break;
             }
@@ -1232,8 +1236,8 @@ const abs_paths = data.files.set.keys();
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_11 = abs_paths.len;
-                    while (i < __end_11) : (i += 1) {
+                    const __end_10 = abs_paths.len;
+                    while (i < __end_10) : (i += 1) {
                         const abs_path = abs_paths[@as(usize, @intCast(i))];
                         const flags = flags_list[@as(usize, @intCast(i))];
                         const transpiler = (if (((flags.client and (!flags.server)) and (!flags.ssr))) self.transpilerForTarget(.browser) else self.transpiler);
@@ -1357,8 +1361,8 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_16 = scbs.len;
-                while (i < __end_16) : (i += 1) {
+                const __end_15 = scbs.len;
+                while (i < __end_15) : (i += 1) {
                     const use = scbs.items(.use_directive)[@as(usize, @intCast(i))];
                     const source_id = scbs.items(.source_index)[@as(usize, @intCast(i))];
                     const ssr_index = scbs.items(.ssr_source_index)[@as(usize, @intCast(i))];
@@ -1373,8 +1377,8 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                         {
                             var j: i32 = 0;
                             _ = &j;
-                            const __end_17 = keys.len;
-                            while (j < __end_17) : (j += 1) {
+                            const __end_16 = keys.len;
+                            while (j < __end_16) : (j += 1) {
                                 const export_name_string = keys[@as(usize, @intCast(j))];
                                 var client_item = (&client_manifest_items[@as(usize, @intCast(j))]);
                                 _ = &client_item;
@@ -1590,8 +1594,8 @@ pub fn addServerComponentBoundariesAsExtraEntryPoints(self: *BundleV2) !void {
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_20 = scbs.list.len;
-                    while (i < __end_20) : (i += 1) {
+                    const __end_19 = scbs.list.len;
+                    while (i < __end_19) : (i += 1) {
                         const original_index = scbs.list.items(.source_index)[@as(usize, @intCast(i))];
                         const ssr_index = scbs.list.items(.ssr_source_index)[@as(usize, @intCast(i))];
                         _ = self.graph.entry_points.appendAssumeCapacity(Index.init(original_index));
@@ -2221,8 +2225,8 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             {
                 var idx: i32 = 0;
                 _ = &idx;
-                const __end_29 = js_reachable_files.len;
-                while (idx < __end_29) : (idx += 1) {
+                const __end_28 = js_reachable_files.len;
+                while (idx < __end_28) : (idx += 1) {
                     const source_index = js_reachable_files[@as(usize, @intCast(idx))];
                     js_part_ranges[cp_cast_int(usize, idx)] = .{ .source_index = source_index, .part_index_begin = 0, .part_index_end = parts[@as(usize, @intCast(source_index.get()))].len };
                 }
@@ -2574,43 +2578,47 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                         }
                     }
                     (import_record.*).path.is_disabled = true;
-                    __sw_blk_32: { const __disc_32 = e; _ = &__disc_32; if ((!cp_has_ok_val(__disc_32) and !cp_is_null_val(__disc_32))) { const __err_v_32 = cp_unwrap_err_val(__disc_32); _ = &__err_v_32; if (cp_match_tag(__err_v_32, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
-                    if (((!(import_record.*).flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
-                        last_error = e;
-                        if (isPackagePath((import_record.*).path.text)) {
-                            if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin((import_record.*).path.text))) {
-                                _ = (blk_catch_65: { break :blk_catch_65 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
-                            } else {
-                                if (((!ctx.target.isBun()) and strings.eqlComptime((import_record.*).path.text, "bun"))) {
-                                    _ = (blk_catch_66: { break :blk_catch_66 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
+                    if ((e == error.ModuleNotFound)) {
+                        const addError = Logger.Log.addResolveErrorWithTextDupe;
+                        if (((!(import_record.*).flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
+                            last_error = e;
+                            if (isPackagePath((import_record.*).path.text)) {
+                                if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin((import_record.*).path.text))) {
+                                    _ = (blk_catch_65: { break :blk_catch_65 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
                                 } else {
-                                    if (((!ctx.target.isBun()) and strings.hasPrefixComptime((import_record.*).path.text, "bun:"))) {
-                                        _ = (blk_catch_67: { break :blk_catch_67 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
+                                    if (((!ctx.target.isBun()) and strings.eqlComptime((import_record.*).path.text, "bun"))) {
+                                        _ = (blk_catch_66: { break :blk_catch_66 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
                                     } else {
-                                        _ = (blk_catch_68: { break :blk_catch_68 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
+                                        if (((!ctx.target.isBun()) and strings.hasPrefixComptime((import_record.*).path.text, "bun:"))) {
+                                            _ = (blk_catch_67: { break :blk_catch_67 ((addError(log, source, (import_record.*).range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ (import_record.*).kind.errorLabel(), (import_record.*).path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
+                                        } else {
+                                            _ = (blk_catch_68: { break :blk_catch_68 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ (import_record.*).path.text }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
+                                        }
                                     }
                                 }
-                            }
-                        } else {
-                            const buf = bun.path_buffer_pool.get();
-                            var _guard_buf = PathBufferGuard(@TypeOf(buf)){ .buf = buf };
-                            _ = &_guard_buf;
-                            var ___guard_buf_moved = false; _ = &___guard_buf_moved;
-                            defer if (!___guard_buf_moved) { ___guard_buf_moved = true; const __T = @TypeOf(_guard_buf); if (@typeInfo(__T) == .optional) { if (_guard_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf; _drop_val.__cp_deinit(); } };
-                            const specifier_to_use = (if (((loader == .html) and bun.strings.hasPrefix((import_record.*).path.text, bun.fs.FileSystem.instance.top_level_dir))) brk: {
-                            const specifier_to_use = (import_record.*).path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
-                            if (Environment.isWindows) {
-                                break :brk bun.path.pathToPosixBuf(u8, specifier_to_use, buf);
-                            }
-                            break :brk specifier_to_use;
+                            } else {
+                                const buf = bun.path_buffer_pool.get();
+                                var _guard_buf = PathBufferGuard(@TypeOf(buf)){ .buf = buf };
+                                _ = &_guard_buf;
+                                var ___guard_buf_moved = false; _ = &___guard_buf_moved;
+                                defer if (!___guard_buf_moved) { ___guard_buf_moved = true; const __T = @TypeOf(_guard_buf); if (@typeInfo(__T) == .optional) { if (_guard_buf) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_buf.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_buf; _drop_val.__cp_deinit(); } };
+                                const specifier_to_use = (if (((loader == .html) and bun.strings.hasPrefix((import_record.*).path.text, bun.fs.FileSystem.instance.top_level_dir))) brk: {
+                                const specifier_to_use = (import_record.*).path.text[bun.fs.FileSystem.instance.top_level_dir.len..];
+                                if (Environment.isWindows) {
+                                    break :brk bun.path.pathToPosixBuf(u8, specifier_to_use, buf);
+                                }
+                                break :brk specifier_to_use;
 } else (import_record.*).path.text);
-                            _ = (blk_catch_69: { break :blk_catch_69 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_69 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_69: { break :blk_catch_69 ((addError(log, source, (import_record.*).range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, (import_record.*).kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_69 bun.handleOom(oom_err); }); });
+                            }
                         }
-                    } break :__sw_blk_32; } } {  const report = ((!(import_record.*).flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors));
-                    const ours = self.logUnhandledResolveError(log, self.allocator(), source, (import_record.*).range, e, (import_record.*).path.text, (import_record.*).kind, report);
-                    if (((!ours) or report)) {
-                        last_error = e;
-                    } break :__sw_blk_32; }  }
+                    } else {
+                        const report = ((!(import_record.*).flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors));
+                        const ours = self.logUnhandledResolveError(log, self.allocator(), source, (import_record.*).range, e, (import_record.*).path.text, (import_record.*).kind, report);
+                        if (((!ours) or report)) {
+                            last_error = e;
+                        }
+                    }
                     had_resolve_error = true;
                     break :blk_res dummy_resolve_result;
 }; }); });
@@ -2814,8 +2822,8 @@ pub fn patchImportRecordSourceIndices(self: *BundleV2, import_records: *ImportRe
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_34 = records_slice.len;
-                while (i < __end_34) : (i += 1) {
+                const __end_32 = records_slice.len;
+                while (i < __end_32) : (i += 1) {
                     var record = (&records_slice[@as(usize, @intCast(i))]);
                     _ = &record;
                     if (path_to_source_index_map.getPath((&record.path))) |source_index| {

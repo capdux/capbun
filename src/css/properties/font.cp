@@ -54,7 +54,8 @@ pub union(enum) FontWeight {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const local = _;
+        return css.implementDeepClone(@This(), &local, allocator);
     }
 }
 
@@ -131,7 +132,8 @@ pub union(enum) FontSize {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const local = _;
+        return css.implementDeepClone(@This(), &local, allocator);
     }
 }
 
@@ -233,7 +235,8 @@ pub union(enum) FontStretch {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const local = _;
+        return css.implementDeepClone(@This(), &local, allocator);
     }
 
     static inline fn default(): FontStretch {
@@ -353,9 +356,9 @@ fn toCssFontFamily(this_ff: *const FontFamily, dest: *Printer): PrintErr!void {
                     if (first) {
                         first = false;
                     } else {
-                        bun.handleOom(id.writer.writeByte(' ') catch e => switch (e) {
-                            error.WriteFailed => error.OutOfMemory,
-                        });
+                        id.writer.writeByte(' ') catch e => {
+                            if (e == error.WriteFailed) bun.outOfMemory();
+                        };
                     }
                     css.serializer.serializeIdentifier(slice, &id.writer) catch return dest.addFmtError();
                 }
@@ -408,11 +411,13 @@ pub union(enum) FontFamily {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const local = _;
+        return css.implementDeepClone(@This(), &local, allocator);
     }
 
     fn hash(hasher: auto) {
-        return css.implementHash(@This(), &_, hasher);
+        const local = _;
+        return css.implementHash(@This(), &local, hasher);
     }
 }
 
@@ -536,7 +541,8 @@ pub union(enum) FontStyle {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const local = _;
+        return css.implementDeepClone(@This(), &local, allocator);
     }
 }
 
@@ -613,7 +619,8 @@ pub union(enum) LineHeight {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        const local = _;
+        return css.implementDeepClone(@This(), &local, allocator);
     }
 
     static fn default(): LineHeight {

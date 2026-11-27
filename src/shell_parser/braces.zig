@@ -217,7 +217,10 @@ return error.UnexpectedToken;
 pub fn parseExpansion(self: *Parser) !AST.Expansion {
             var variants = std.array_list.Managed(AST.Group).init(self.alloc);
             _ = &variants;
-            while ((!self.matchTok(.eof))) {
+            if (self.match_any((&.{ .close, .eof }))) {
+                return .{ .variants = variants.items[0..] };
+            }
+            while (true) {
                 var group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), self.alloc);
                 _ = &group_alloc_;
                 const group_alloc = group_alloc_.get();
@@ -245,7 +248,7 @@ pub fn parseExpansion(self: *Parser) !AST.Expansion {
                 } else {
                     _ = try variants.append(.{ .atoms = .{ .many = group.items[0..] } });
                 }
-                if (close) {
+                if ((close or self.matchTok(.eof))) {
                     break;
                 }
             }
@@ -764,7 +767,7 @@ pub fn rollbackBraces(self: *@This(), starting_idx: u32) void {
                 const first = (&self.tokens.items[@as(usize, @intCast(starting_idx))]);
                 _ = assert((first.* == .open));
             }
-            var braces: u8 = 0;
+            var braces: u32 = 0;
             _ = &braces;
             _ = self.replaceTokenWithString(starting_idx);
             var i: u32 = (starting_idx + 1);

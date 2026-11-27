@@ -31,6 +31,10 @@ const {
 
 const { FakeSocket } = require("internal/http/FakeSocket");
 
+const kHeaders = Symbol("kHeaders");
+const kRawHeaders = Symbol("kRawHeaders");
+const kRawHeadersDirty = Symbol("kRawHeadersDirty");
+
 var defaultIncomingOpts = { type: "request" };
 const nop = () => {};
 
@@ -66,8 +70,8 @@ function assignHeadersSlow(object, req) {
       }
     }
   }
-  object.headers = outHeaders;
   object.rawHeaders = rawHeaders;
+  object.headers = outHeaders;
 }
 
 function assignHeaders(object, req) {
@@ -77,8 +81,8 @@ function assignHeaders(object, req) {
     const rawHeaders = $getInternalField(headersTuple, 1);
     $putInternalField(headersTuple, 0, undefined);
     $putInternalField(headersTuple, 1, undefined);
-    object.headers = headers;
     object.rawHeaders = rawHeaders;
+    object.headers = headers;
     return true;
   } else {
     assignHeadersSlow(object, req);
@@ -120,8 +124,9 @@ function IncomingMessage(req, options = defaultIncomingOpts) {
     this[typeSymbol] = NodeHTTPIncomingRequestType.NodeHTTPResponse;
     this.url = arguments[1];
     this.method = arguments[2];
-    this.headers = arguments[3];
-    this.rawHeaders = arguments[4];
+    this[kHeaders] = arguments[3];
+    this[kRawHeaders] = arguments[4];
+    this[kRawHeadersDirty] = false;
     this[kHandle] = arguments[5];
     this[noBodySymbol] = !arguments[6];
     this.socket = arguments[7];
@@ -345,6 +350,47 @@ const IncomingMessagePrototype = {
     if ($isCallable(cb)) {
       emitErrorNextTickIfErrorListenerNT(this, err, cb);
     }
+  },
+  get headers() {
+    if (this[kRawHeadersDirty] || this[kHeaders] === undefined) {
+      const headers = Object.create(null);
+      const rawHeaders = this[kRawHeaders];
+      if (Array.isArray(rawHeaders)) {
+        for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+          const key = String(rawHeaders[i]).toLowerCase();
+          const value = String(rawHeaders[i + 1]);
+          if (key === "set-cookie") {
+            const existing = headers[key];
+            if (existing !== undefined) {
+              existing.push(value);
+            } else {
+              headers[key] = [value];
+            }
+          } else {
+            const existing = headers[key];
+            if (existing !== undefined) {
+              headers[key] = existing + ", " + value;
+            } else {
+              headers[key] = value;
+            }
+          }
+        }
+      }
+      this[kHeaders] = headers;
+      this[kRawHeadersDirty] = false;
+    }
+    return this[kHeaders];
+  },
+  set headers(value) {
+    this[kHeaders] = value;
+    this[kRawHeadersDirty] = false;
+  },
+  get rawHeaders() {
+    return this[kRawHeaders];
+  },
+  set rawHeaders(value) {
+    this[kRawHeaders] = value;
+    this[kRawHeadersDirty] = true;
   },
   get aborted() {
     return this[abortedSymbol];

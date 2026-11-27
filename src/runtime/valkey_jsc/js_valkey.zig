@@ -641,7 +641,13 @@ else => brk: {
                 hostname = b.append(hostname_slice);
                 _ = b.moveToSlice((&connection_strings));
             }
-            const database = (if ((pathname_utf8.slice().len > 1)) (blk_catch_3: { break :blk_catch_3 ((std.fmt.parseInt(u32, pathname_utf8.slice()[1..], 10)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 0; }); }) else 0);
+            const database: u32 = (switch (uri) {
+.standalone_unix, .standalone_tls_unix => 0,
+else => (if ((pathname_utf8.slice().len > 1)) brk: {
+            const db_str = pathname_utf8.slice()[1..];
+            break :brk (blk_catch_3: { break :blk_catch_3 ((std.fmt.parseInt(u32, db_str, 10)) catch |__ce_3| { _ = &__ce_3; return globalObject.throwInvalidArguments("Invalid database number in Redis URL: \"{s}\"", .{ db_str }); }); });
+} else 0),
+});
             bun.analytics.Features.valkey = (bun.analytics.Features.valkey + 1);
             _cs_guard.active = false;
             return JSValkeyClient.new(.{ .ref_count = .init(), ._subscription_ctx = undefined, .client = .{ .vm = vm, .address = (switch (uri) {

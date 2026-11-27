@@ -33,14 +33,12 @@ pub struct CronExpression {
     pub const Error = CronError;
 
     static fn errorMessage(e: CronError): []const u8 {
-        return switch (e) {
-            error.TooFewFields => "Invalid cron expression: expected 5 space-separated fields (minute hour day month weekday)",
-            error.TooManyFields => "Invalid cron expression: too many fields. Bun.cron uses 5 fields (minute hour day month weekday) — seconds are not supported",
-            error.InvalidStep => "Invalid cron expression: step value must be a positive integer",
-            error.InvalidRange => "Invalid cron expression: range must be ascending (use 'a,b' or 'a-max,0-b' for wrap-around)",
-            error.InvalidNumber => "Invalid cron expression: value out of range for field",
-            error.InvalidField => "Invalid cron expression: unrecognized field syntax",
-        };
+        if (e == error.TooFewFields) return "Invalid cron expression: expected 5 space-separated fields (minute hour day month weekday)";
+        if (e == error.TooManyFields) return "Invalid cron expression: too many fields. Bun.cron uses 5 fields (minute hour day month weekday) — seconds are not supported";
+        if (e == error.InvalidStep) return "Invalid cron expression: step value must be a positive integer";
+        if (e == error.InvalidRange) return "Invalid cron expression: range must be ascending (use 'a,b' or 'a-max,0-b' for wrap-around)";
+        if (e == error.InvalidNumber) return "Invalid cron expression: value out of range for field";
+        return "Invalid cron expression: unrecognized field syntax";
     }
 
     /// Parse a 5-field cron expression or predefined nickname into a CronExpression.

@@ -782,7 +782,35 @@ else => {
             if ((manager.options.security_scanner != null)) {
                 const is_subcommand_to_run_scanner = ((((manager.subcommand == .add) or (manager.subcommand == .update)) or (manager.subcommand == .install)) or (manager.subcommand == .remove));
                 if (is_subcommand_to_run_scanner) {
-                    if ((blk_catch_3: { break :blk_catch_3 ((security_scanner.performSecurityScanAfterResolution(manager, ctx, original_cwd)) catch |e| { _ = &e; __sw_blk_13: { const __disc_13 = e; _ = &__disc_13; if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .SecurityScannerInWorkspace)) {  _ = Output.errGeneric("security scanner cannot be a dependency of a workspace package. It must be a direct dependency of the root package.", .{}); break :__sw_blk_13; } } if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .SecurityScannerRetryFailed)) {  _ = Output.errGeneric("security scanner failed after partial install. This is probably a bug in Bun. Please report it at https://github.com/oven-sh/bun/issues", .{}); break :__sw_blk_13; } } if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .InvalidPackageID)) {  _ = Output.errGeneric("cannot perform partial install: security scanner package ID is invalid", .{}); break :__sw_blk_13; } } if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .PartialInstallFailed)) {  _ = Output.errGeneric("failed to install security scanner package", .{}); break :__sw_blk_13; } } if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .NoPackagesInstalled)) {  _ = Output.errGeneric("no packages were installed during security scanner installation", .{}); break :__sw_blk_13; } } if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .IPCPipeFailed)) {  _ = Output.errGeneric("failed to create IPC pipe for security scanner", .{}); break :__sw_blk_13; } } if ((!cp_has_ok_val(__disc_13) and !cp_is_null_val(__disc_13))) { const __err_v_13 = cp_unwrap_err_val(__disc_13); _ = &__err_v_13; if (cp_match_tag(__err_v_13, .ProcessWatchFailed)) {  _ = Output.errGeneric("failed to watch security scanner process", .{}); break :__sw_blk_13; } } {  _ = Output.errGeneric("security scanner failed: {s}", .{ @errorName(e) }); break :__sw_blk_13; }  }
+                    if ((blk_catch_3: { break :blk_catch_3 ((security_scanner.performSecurityScanAfterResolution(manager, ctx, original_cwd)) catch |e| { _ = &e; if ((e == error.SecurityScannerInWorkspace)) {
+                        _ = Output.errGeneric("security scanner cannot be a dependency of a workspace package. It must be a direct dependency of the root package.", .{});
+                    } else {
+                        if ((e == error.SecurityScannerRetryFailed)) {
+                            _ = Output.errGeneric("security scanner failed after partial install. This is probably a bug in Bun. Please report it at https://github.com/oven-sh/bun/issues", .{});
+                        } else {
+                            if ((e == error.InvalidPackageID)) {
+                                _ = Output.errGeneric("cannot perform partial install: security scanner package ID is invalid", .{});
+                            } else {
+                                if ((e == error.PartialInstallFailed)) {
+                                    _ = Output.errGeneric("failed to install security scanner package", .{});
+                                } else {
+                                    if ((e == error.NoPackagesInstalled)) {
+                                        _ = Output.errGeneric("no packages were installed during security scanner installation", .{});
+                                    } else {
+                                        if ((e == error.IPCPipeFailed)) {
+                                            _ = Output.errGeneric("failed to create IPC pipe for security scanner", .{});
+                                        } else {
+                                            if ((e == error.ProcessWatchFailed)) {
+                                                _ = Output.errGeneric("failed to watch security scanner process", .{});
+                                            } else {
+                                                _ = Output.errGeneric("security scanner failed: {s}", .{ @errorName(e) });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     break :blk_catch_3 Global.exit(1); }); })) |results| {
                         _ = &results;
                         var results_mut = results;
@@ -823,8 +851,8 @@ else => {
             {
                 var pkg_i: i32 = 0;
                 _ = &pkg_i;
-                const __end_14 = resolutions.len;
-                while (pkg_i < __end_14) : (pkg_i += 1) {
+                const __end_13 = resolutions.len;
+                while (pkg_i < __end_13) : (pkg_i += 1) {
                     const resolution = resolutions[@as(usize, @intCast(pkg_i))];
                     const meta_item = metas[@as(usize, @intCast(pkg_i))];
                     const scripts = all_scripts[@as(usize, @intCast(pkg_i))];

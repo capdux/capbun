@@ -1026,9 +1026,7 @@ pub fn onData(self: *PostgresSQLConnection, data: []const u8) void {
         _ = self.ref();
         self.flags.is_processing_data = true;
         const vm = self.vm;
-        if ((self.status == .connected)) {
-            _ = self.disableConnectionTimeout();
-        }
+        _ = self.disableConnectionTimeout();
         var _data_read_guard = DataReadGuard{ .conn = self, .vm = vm };
         _ = &_data_read_guard;
         var ___data_read_guard_moved = false; _ = &___data_read_guard_moved;
@@ -1419,7 +1417,7 @@ pub fn hasQueryRunning(self: *PostgresSQLConnection) bool {
         return ((!self.flags.is_ready_for_query) or (self.current() != null));
 }
 
-pub fn canPipeline(self: PostgresSQLConnection) bool {
+pub fn canPipeline(self: *PostgresSQLConnection) bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;

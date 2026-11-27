@@ -2288,7 +2288,10 @@ fn hasConnectionToken(value: []const u8, token: []const u8): bool {
         }
 
         pub fn setTimeout(socket: anytype)  {
-            if (_.flags.disable_timeout) return;
+            if (_.flags.disable_timeout || idle_timeout_seconds == 0) {
+                socket.setTimeout(0);
+                return;
+            }
             socket.setTimeout(idle_timeout_seconds);
         }
 

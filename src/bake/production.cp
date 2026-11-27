@@ -275,7 +275,7 @@ pub struct PerThread {
         return _.input_files[id.get()];
     }
 
-    pub fn outputFile(id: OpaqueFileId): *const OutputFile {
+    pub fn outputFile(*_, id: OpaqueFileId): *const OutputFile {
         return &_.bundled_outputs[_.outputIndex(id).get()];
     }
 
@@ -473,8 +473,8 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
         all_server_files: JSValue.null,
     };
 
-    buildWithVm(ctx, cwd, vm, &pt) catch e => switch (e) {
-        error.JSError => {
+    buildWithVm(ctx, cwd, vm, &pt) catch e => {
+        if (e == error.JSError) {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
             const err_value = vm.global.takeException(error.JSError);
             vm.printErrorLikeObjectToConsole(err_value.toError() ?? err_value);
@@ -483,8 +483,9 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
             }
             vm.onExit();
             vm.globalExit();
-        },
-        else => return e,
+        } else {
+            return e;
+        }
     };
 }
 

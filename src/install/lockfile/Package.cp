@@ -1363,16 +1363,14 @@ pub fn Package(comptime SemverIntType: type): type {
                         const at = strings.lastIndexOfChar(input, '@') ?? 0;
                         if (at > 0) {
                             workspace_range = Semver.Query.parse(allocator, input[at + 1 ..], sliced) catch e => {
-                                switch (e) {
-                                    error.OutOfMemory => bun.outOfMemory(),
-                                }
+                                if (e == error.OutOfMemory) bun.outOfMemory();
+                                unreachable;
                             };
                             break :brk String.Builder.stringHash(input[0..at]);
                         }
                         workspace_range = Semver.Query.parse(allocator, input, sliced) catch e => {
-                            switch (e) {
-                                error.OutOfMemory => bun.outOfMemory(),
-                            }
+                            if (e == error.OutOfMemory) bun.outOfMemory();
+                            unreachable;
                         };
                     }
                     break :brk external_alias.hash;

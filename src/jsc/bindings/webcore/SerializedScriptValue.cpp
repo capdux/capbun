@@ -6395,6 +6395,8 @@ ExceptionOr<Ref<SerializedScriptValue>> SerializedScriptValue::create(JSGlobalOb
                 throwVMTypeError(&lexicalGlobalObject, scope, errorMessageForTransfer(arrayBuffer));
                 RELEASE_AND_RETURN(scope, Exception { ExistingExceptionError });
             }
+            if (!arrayBuffer->isDetachable())
+                return Exception { DataCloneError };
             arrayBuffers.append(WTF::move(arrayBuffer));
             continue;
         }

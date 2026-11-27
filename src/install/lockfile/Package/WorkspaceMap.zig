@@ -264,7 +264,15 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                 continue;
             }
             const workspace_entry = (blk_catch_2: { break :blk_catch_2 ((processWorkspaceName(allocator, json_cache, abs_package_json_path, log)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-            __sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if ((cp_match_tag(__err_v_3, .EISNOTDIR) or cp_match_tag(__err_v_3, .EISDIR) or cp_match_tag(__err_v_3, .EACCESS) or cp_match_tag(__err_v_3, .EPERM) or cp_match_tag(__err_v_3, .ENOENT) or cp_match_tag(__err_v_3, .FileNotFound))) {  _ = (blk_catch_3: { break :blk_catch_3 ((log.addErrorFmt(source, item.loc, allocator, "Workspace not found \"{s}\"", .{ input_path })) catch |__ce_3| { _ = &__ce_3;  }); }); break :__sw_blk_3; } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .MissingPackageName)) {  _ = (blk_catch_4: { break :blk_catch_4 ((log.addErrorFmt(source, loc, allocator, "Missing \"name\" from package.json in {s}", .{ input_path })) catch |__ce_4| { _ = &__ce_4;  }); }); break :__sw_blk_3; } } {  _ = (blk_catch_5: { break :blk_catch_5 ((log.addErrorFmt(source, loc, allocator, "{s} reading package.json for workspace package \"{s}\"", .{ @errorName(e), input_path })) catch |__ce_5| { _ = &__ce_5;  }); }); break :__sw_blk_3; }  }
+            if (((((((e == error.EISNOTDIR) or (e == error.EISDIR)) or (e == error.EACCESS)) or (e == error.EPERM)) or (e == error.ENOENT)) or (e == error.FileNotFound))) {
+                _ = (blk_catch_3: { break :blk_catch_3 ((log.addErrorFmt(source, item.loc, allocator, "Workspace not found \"{s}\"", .{ input_path })) catch |__ce_3| { _ = &__ce_3;  }); });
+            } else {
+                if ((e == error.MissingPackageName)) {
+                    _ = (blk_catch_4: { break :blk_catch_4 ((log.addErrorFmt(source, loc, allocator, "Missing \"name\" from package.json in {s}", .{ input_path })) catch |__ce_4| { _ = &__ce_4;  }); });
+                } else {
+                    _ = (blk_catch_5: { break :blk_catch_5 ((log.addErrorFmt(source, loc, allocator, "{s} reading package.json for workspace package \"{s}\"", .{ @errorName(e), input_path })) catch |__ce_5| { _ = &__ce_5;  }); });
+                }
+            }
             continue; }); });
             if ((workspace_entry.name.len == 0)) {
                 continue;
@@ -296,8 +304,8 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_4 = workspace_globs.val.items.len;
-                while (i < __end_4) : (i += 1) {
+                const __end_3 = workspace_globs.val.items.len;
+                while (i < __end_3) : (i += 1) {
                     const idx: usize = @intCast(i);
                     const user_pattern = workspace_globs.val.items[@as(usize, @intCast(idx))];
                     var arena_reset = ArenaResetGuard{ .arena = (blk: {
@@ -390,7 +398,15 @@ continue :next_match;
                         const abs_workspace_dir_path: []const u8 = strings.withoutSuffixComptime(abs_package_json_path, "package.json");
                         const workspace_entry = (blk_catch_10: { break :blk_catch_10 ((processWorkspaceName(allocator, json_cache, abs_package_json_path, log)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
                         const entry_base: []const u8 = Path.basename(matched_path);
-                        __sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if ((cp_match_tag(__err_v_6, .FileNotFound) or cp_match_tag(__err_v_6, .PermissionDenied))) {  _ = continue; break :__sw_blk_6; } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .MissingPackageName)) {  _ = (blk_catch_11: { break :blk_catch_11 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "Missing \"name\" from package.json in {s}/{s}", .{ entry_dir, entry_base })) catch |__ce_11| { _ = &__ce_11;  }); }); break :__sw_blk_6; } } {  _ = (blk_catch_12: { break :blk_catch_12 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "{s} reading package.json for workspace package \"{s}\" from \"{s}\"", .{ @errorName(e), entry_dir, entry_base })) catch |__ce_12| { _ = &__ce_12;  }); }); break :__sw_blk_6; }  }
+                        if (((e == error.FileNotFound) or (e == error.PermissionDenied))) {
+                            continue;
+                        } else {
+                            if ((e == error.MissingPackageName)) {
+                                _ = (blk_catch_11: { break :blk_catch_11 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "Missing \"name\" from package.json in {s}/{s}", .{ entry_dir, entry_base })) catch |__ce_11| { _ = &__ce_11;  }); });
+                            } else {
+                                _ = (blk_catch_12: { break :blk_catch_12 ((log.addErrorFmt(source, logger.Loc.Empty, allocator, "{s} reading package.json for workspace package \"{s}\" from \"{s}\"", .{ @errorName(e), entry_dir, entry_base })) catch |__ce_12| { _ = &__ce_12;  }); });
+                            }
+                        }
                         continue; }); });
                         if ((workspace_entry.name.len == 0)) {
                             continue;

@@ -404,15 +404,14 @@ pub fn setupGlobalDir(manager: *PackageManager, ctx: Command.Context)! {
 
 pub fn globalLinkDir(client: *PackageManager): std.fs.Dir {
     return client.global_link_dir ?? brk: {
-        let global_dir = Options.openGlobalDir(client.options.explicit_global_directory) catch e => switch (e) {
-            error.@"No global directory found" => {
+        let global_dir = Options.openGlobalDir(client.options.explicit_global_directory) catch e => {
+            if (e == error.@"No global directory found") {
                 Output.errGeneric("failed to find a global directory for package caching and global link directories", {});
                 Global.exit(1);
-            },
-            else => {
+            } else {
                 Output.err(e, "failed to open the global directory", {});
                 Global.exit(1);
-            },
+            }
         };
         client.global_dir = global_dir;
         client.global_link_dir = global_dir.makeOpenPath("node_modules", {}) catch e => {

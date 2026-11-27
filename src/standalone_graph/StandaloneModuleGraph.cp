@@ -1229,34 +1229,28 @@ pub struct StandaloneModuleGraph {
         if (needs_download) {
             let target_mut = target.*;
             target_mut.downloadToPath(env, allocator, dest_z) catch e => {
-                switch (e) {
-                    error.TargetNotFound => {
-                        Output.errGeneric(
-                            "Does this target and version of Bun exist?\n\n404 downloading {} from npm registry",
-                            [target.*],
-                        );
-                    },
-                    error.NetworkError => {
-                        Output.errGeneric(
-                            "Failed to download cross-compilation target.\n\nNetwork error downloading {} from npm registry",
-                            [target.*],
-                        );
-                    },
-                    error.InvalidResponse => {
-                        Output.errGeneric(
-                            "Failed to verify the integrity of the downloaded tarball.\n\nThe downloaded content for {} appears to be corrupted",
-                            [target.*],
-                        );
-                    },
-                    error.ExtractionFailed => {
-                        Output.errGeneric(
-                            "Failed to extract the downloaded tarball.\n\nCould not extract executable for {}",
-                            [target.*],
-                        );
-                    },
-                    else => {
-                        Output.errGeneric("Failed to download {}: {s}", [target.*, @errorName(e)]);
-                    },
+                if (e == error.TargetNotFound) {
+                    Output.errGeneric(
+                        "Does this target and version of Bun exist?\n\n404 downloading {} from npm registry",
+                        [target.*],
+                    );
+                } else if (e == error.NetworkError) {
+                    Output.errGeneric(
+                        "Failed to download cross-compilation target.\n\nNetwork error downloading {} from npm registry",
+                        [target.*],
+                    );
+                } else if (e == error.InvalidResponse) {
+                    Output.errGeneric(
+                        "Failed to verify the integrity of the downloaded tarball.\n\nThe downloaded content for {} appears to be corrupted",
+                        [target.*],
+                    );
+                } else if (e == error.ExtractionFailed) {
+                    Output.errGeneric(
+                        "Failed to extract the downloaded tarball.\n\nCould not extract executable for {}",
+                        [target.*],
+                    );
+                } else {
+                    Output.errGeneric("Failed to download {}: {s}", [target.*, @errorName(e)]);
                 }
                 return error.DownloadFailed;
             };
@@ -1303,14 +1297,19 @@ pub struct StandaloneModuleGraph {
 
             if (needs_download) {
                 target.downloadToPath(env, allocator, dest_z) catch e => {
-                    return switch (e) {
-                        error.TargetNotFound => StandaloneCompileResult.failFmt("Target platform '{f}' is not available for download. Check if this version of Bun supports this target.", [target]),
-                        error.NetworkError => StandaloneCompileResult.failFmt("Network error downloading executable for '{f}'. Check your internet connection and proxy settings.", [target]),
-                        error.InvalidResponse => StandaloneCompileResult.failFmt("Downloaded file for '{f}' appears to be corrupted. Please try again.", [target]),
-                        error.ExtractionFailed => StandaloneCompileResult.failFmt("Failed to extract executable for '{f}'. The download may be incomplete.", [target]),
-                        error.UnsupportedTarget => StandaloneCompileResult.failFmt("Target '{f}' is not supported", [target]),
-                        else => StandaloneCompileResult.failFmt("Failed to download '{f}': {s}", [target, @errorName(e)]),
-                    };
+                    if (e == error.TargetNotFound) {
+                        return StandaloneCompileResult.failFmt("Target platform '{f}' is not available for download. Check if this version of Bun supports this target.", [target]);
+                    } else if (e == error.NetworkError) {
+                        return StandaloneCompileResult.failFmt("Network error downloading executable for '{f}'. Check your internet connection and proxy settings.", [target]);
+                    } else if (e == error.InvalidResponse) {
+                        return StandaloneCompileResult.failFmt("Downloaded file for '{f}' appears to be corrupted. Please try again.", [target]);
+                    } else if (e == error.ExtractionFailed) {
+                        return StandaloneCompileResult.failFmt("Failed to extract executable for '{f}'. The download may be incomplete.", [target]);
+                    } else if (e == error.UnsupportedTarget) {
+                        return StandaloneCompileResult.failFmt("Target '{f}' is not supported", [target]);
+                    } else {
+                        return StandaloneCompileResult.failFmt("Failed to download '{f}': {s}", [target, @errorName(e)]);
+                    }
                 };
             }
 

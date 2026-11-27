@@ -462,11 +462,15 @@ else => null,
 pub fn exec(ctx: Command.Context) !void {
             const cli = try PackageManager.CommandLineArguments.parse(ctx.allocator, .pack);
             const init_res = (blk_catch_6: { break :blk_catch_6 ((PackageManager.init(ctx, cli, .pack)) catch |e| { _ = &e; if ((!cli.silent)) {
-                __sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .MissingPackageJSON)) {  var cwd_buf: bun.PathBuffer = undefined;
-                _ = &cwd_buf;
-                const cwd = (blk_catch_7: { break :blk_catch_7 ((bun.getcwd((&cwd_buf))) catch |__ce_7| { _ = &__ce_7; _ = Output.errGeneric("failed to find project package.json", .{});
-                break :blk_catch_7 Global.crash(); }); });
-                _ = Output.errGeneric("failed to find project package.json from: \"{s}\"", .{ cwd }); break :__sw_blk_1; } } {  _ = Output.errGeneric("failed to initialize bun install: {s}", .{ @errorName(e) }); break :__sw_blk_1; }  }
+                if ((e == error.MissingPackageJSON)) {
+                    var cwd_buf: bun.PathBuffer = undefined;
+                    _ = &cwd_buf;
+                    const cwd = (blk_catch_7: { break :blk_catch_7 ((bun.getcwd((&cwd_buf))) catch |__ce_7| { _ = &__ce_7; _ = Output.errGeneric("failed to find project package.json", .{});
+                    break :blk_catch_7 Global.crash(); }); });
+                    _ = Output.errGeneric("failed to find project package.json from: \"{s}\"", .{ cwd });
+                } else {
+                    _ = Output.errGeneric("failed to initialize bun install: {s}", .{ @errorName(e) });
+                }
             }
             break :blk_catch_6 Global.crash(); }); });
             const manager = init_res[0];
@@ -747,8 +751,8 @@ pub fn addEntireTree(allocator: std.mem.Allocator, bins: []const BinInfo, exclud
                         {
                             var i: i32 = 1;
                             _ = &i;
-                            const __end_11 = ignores_guard.list.items.len;
-                            while (i < __end_11) : (i += 1) {
+                            const __end_10 = ignores_guard.list.items.len;
+                            while (i < __end_10) : (i += 1) {
                                 _ = bun.assertWithLocation((ignores_guard.list.items[@as(usize, @intCast((i - 1)))].depth < ignores_guard.list.items[@as(usize, @intCast(i))].depth), @src());
                             }
                         }
@@ -829,17 +833,12 @@ pub fn iterateBundledDeps(ctx: *Context, root_dir: std.fs.Dir, log_level: LogLev
             if ((ctx.bundled_deps.items.len == 0)) {
                 return bundled_pack_queue;
             }
-            var dir_guard = StdDirGuard{ .dir = (blk_catch_13: { break :blk_catch_13 ((root_dir.openDirZ("node_modules", .{ .iterate = true })) catch |e| { _ = &e; break :blk_catch_13 (switch (e) {
-error.NotDir, error.FileNotFound => {
-return bundled_pack_queue;
-},
-else => {
-{
+            var dir_guard = StdDirGuard{ .dir = (blk_catch_13: { break :blk_catch_13 ((root_dir.openDirZ("node_modules", .{ .iterate = true })) catch |e| { _ = &e; if (((e == error.NotDir) or (e == error.FileNotFound))) {
+                return bundled_pack_queue;
+            } else {
                 _ = Output.err(e, "failed to open \"node_modules\" to pack bundled dependencies", .{});
                 _ = Global.crash();
-            }
-},
-}); }); }) };
+            } }); }) };
             _ = &dir_guard;
             var __dir_guard_moved = false; _ = &__dir_guard_moved;
             defer if (!__dir_guard_moved) { __dir_guard_moved = true; const __T = @TypeOf(dir_guard); if (@typeInfo(__T) == .optional) { if (dir_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { dir_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = dir_guard; _drop_val.__cp_deinit(); } };
@@ -1132,8 +1131,8 @@ pub fn iterateProjectTree(allocator: std.mem.Allocator, pack_queue: *PackQueue, 
                         {
                             var i: i32 = 1;
                             _ = &i;
-                            const __end_17 = ignores_guard.list.items.len;
-                            while (i < __end_17) : (i += 1) {
+                            const __end_16 = ignores_guard.list.items.len;
+                            while (i < __end_16) : (i += 1) {
                                 _ = bun.assertWithLocation((ignores_guard.list.items[@as(usize, @intCast((i - 1)))].depth < ignores_guard.list.items[@as(usize, @intCast(i))].depth), @src());
                             }
                         }
@@ -1406,8 +1405,8 @@ _ = unreachable;
                     {
                         var depth_idx: i32 = 1;
                         _ = &depth_idx;
-                        const __end_24 = ignore.depth;
-                        while (depth_idx < __end_24) : (depth_idx += 1) {
+                        const __end_23 = ignore.depth;
+                        while (depth_idx < __end_23) : (depth_idx += 1) {
                             if (strings.indexOfChar(rel, 47)) |sep| {
                                 _ = &sep;
                                 rel = rel[(sep + 1)..];
@@ -1544,8 +1543,12 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
             }
             var this_transpiler: bun.transpiler.Transpiler = undefined;
             _ = &this_transpiler;
-            _ = (blk_catch_27: { break :blk_catch_27 ((RunCommand.configureEnvForRun(ctx.command_ctx, (&this_transpiler), manager.env, (manager.options.log_level != .silent), false)) catch |e| { _ = &e; break :blk_catch_27 (__sw_blk_26: { const __disc_26 = e; _ = &__disc_26; if ((!cp_has_ok_val(__disc_26) and !cp_is_null_val(__disc_26))) { const __err_v_26 = cp_unwrap_err_val(__disc_26); _ = &__err_v_26; if (cp_match_tag(__err_v_26, .OutOfMemory)) {  return error.OutOfMemory; } } {  _ = Output.errGeneric("failed to run pack scripts due to error: {s}\n", .{ @errorName(e) });
-            break :__sw_blk_26 cp_val(Global.crash()); }  unreachable; }); }); });
+            _ = (blk_catch_27: { break :blk_catch_27 ((RunCommand.configureEnvForRun(ctx.command_ctx, (&this_transpiler), manager.env, (manager.options.log_level != .silent), false)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                _ = Output.errGeneric("failed to run pack scripts due to error: {s}\n", .{ @errorName(e) });
+                _ = Global.crash();
+            } }); });
             const abs_workspace_path: []const u8 = strings.withoutTrailingSlash(strings.withoutSuffixComptime(abs_package_json_path, "package.json"));
             _ = try manager.env.map.put("npm_command", "pack");
             _ = try manager.env.map.put("npm_package_name", package_name);
@@ -1571,8 +1574,14 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                     if (prepublish_only_script_str.asString(ctx.allocator)) |prepublish_only| {
                         _ = &prepublish_only;
                         did_run_scripts = true;
-                        _ = (blk_catch_28: { break :blk_catch_28 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepublish_only, "prepublishOnly", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_28 (__sw_blk_27: { const __disc_27 = e; _ = &__disc_27; if ((!cp_has_ok_val(__disc_27) and !cp_is_null_val(__disc_27))) { const __err_v_27 = cp_unwrap_err_val(__disc_27); _ = &__err_v_27; if (cp_match_tag(__err_v_27, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepublishOnly script", .{});
-                        break :__sw_blk_27 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_27) and !cp_is_null_val(__disc_27))) { const __err_v_27 = cp_unwrap_err_val(__disc_27); _ = &__err_v_27; if (cp_match_tag(__err_v_27, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                        _ = (blk_catch_28: { break :blk_catch_28 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepublish_only, "prepublishOnly", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                            _ = Output.errGeneric("failed to find shell executable to run prepublishOnly script", .{});
+                            _ = Global.crash();
+                        } else {
+                            if ((e == error.OutOfMemory)) {
+                                return error.OutOfMemory;
+                            }
+                        } }); });
                     }
                 }
             }
@@ -1581,8 +1590,14 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                 if (prepack_script.asString(ctx.allocator)) |prepack_script_str| {
                     _ = &prepack_script_str;
                     did_run_scripts = true;
-                    _ = (blk_catch_29: { break :blk_catch_29 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepack_script_str, "prepack", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_29 (__sw_blk_28: { const __disc_28 = e; _ = &__disc_28; if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepack script", .{});
-                    break :__sw_blk_28 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepack_script_str, "prepack", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                        _ = Output.errGeneric("failed to find shell executable to run prepack script", .{});
+                        _ = Global.crash();
+                    } else {
+                        if ((e == error.OutOfMemory)) {
+                            return error.OutOfMemory;
+                        }
+                    } }); });
                 }
             }
             if (scripts.expr.get("prepare")) |prepare_script| {
@@ -1590,8 +1605,14 @@ pub fn pack(ctx: *Context, abs_package_json_path: stringZ, comptime for_publish:
                 if (prepare_script.asString(ctx.allocator)) |prepare_script_str| {
                     _ = &prepare_script_str;
                     did_run_scripts = true;
-                    _ = (blk_catch_30: { break :blk_catch_30 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepare_script_str, "prepare", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_30 (__sw_blk_29: { const __disc_29 = e; _ = &__disc_29; if ((!cp_has_ok_val(__disc_29) and !cp_is_null_val(__disc_29))) { const __err_v_29 = cp_unwrap_err_val(__disc_29); _ = &__err_v_29; if (cp_match_tag(__err_v_29, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run prepare script", .{});
-                    break :__sw_blk_29 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_29) and !cp_is_null_val(__disc_29))) { const __err_v_29 = cp_unwrap_err_val(__disc_29); _ = &__err_v_29; if (cp_match_tag(__err_v_29, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_30: { break :blk_catch_30 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, prepare_script_str, "prepare", abs_workspace_path, this_transpiler.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                        _ = Output.errGeneric("failed to find shell executable to run prepare script", .{});
+                        _ = Global.crash();
+                    } else {
+                        if ((e == error.OutOfMemory)) {
+                            return error.OutOfMemory;
+                        }
+                    } }); });
                 }
             }
             var postpack_script: ?[]const u8 = null;
@@ -1807,8 +1828,14 @@ const bin_dir = (blk_catch_35: { break :blk_catch_35 ((root_dir.openDir(bin.path
                 _ = Context.printSummary(ctx.stats, null, null, log_level);
                 if (postpack_script) |postpack_script_str| {
                     _ = &postpack_script_str;
-                    _ = (blk_catch_37: { break :blk_catch_37 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_37 (__sw_blk_31: { const __disc_31 = e; _ = &__disc_31; if ((!cp_has_ok_val(__disc_31) and !cp_is_null_val(__disc_31))) { const __err_v_31 = cp_unwrap_err_val(__disc_31); _ = &__err_v_31; if (cp_match_tag(__err_v_31, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
-                    break :__sw_blk_31 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_31) and !cp_is_null_val(__disc_31))) { const __err_v_31 = cp_unwrap_err_val(__disc_31); _ = &__err_v_31; if (cp_match_tag(__err_v_31, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                    _ = (blk_catch_37: { break :blk_catch_37 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                        _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
+                        _ = Global.crash();
+                    } else {
+                        if ((e == error.OutOfMemory)) {
+                            return error.OutOfMemory;
+                        }
+                    } }); });
                 }
                 if (comptime for_publish) {
                     var dest_buf: bun.PathBuffer = undefined;
@@ -2053,8 +2080,14 @@ else => {
             if (postpack_script) |postpack_script_str| {
                 _ = &postpack_script_str;
                 _ = Output.pretty("\n", .{});
-                _ = (blk_catch_48: { break :blk_catch_48 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; break :blk_catch_48 (__sw_blk_32: { const __disc_32 = e; _ = &__disc_32; if ((!cp_has_ok_val(__disc_32) and !cp_is_null_val(__disc_32))) { const __err_v_32 = cp_unwrap_err_val(__disc_32); _ = &__err_v_32; if (cp_match_tag(__err_v_32, .MissingShell)) {  _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
-                break :__sw_blk_32 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_32) and !cp_is_null_val(__disc_32))) { const __err_v_32 = cp_unwrap_err_val(__disc_32); _ = &__err_v_32; if (cp_match_tag(__err_v_32, .OutOfMemory)) {  return error.OutOfMemory; } }  unreachable; }); }); });
+                _ = (blk_catch_48: { break :blk_catch_48 ((RunCommand.runPackageScriptForeground(ctx.command_ctx, ctx.allocator, postpack_script_str, "postpack", abs_workspace_path, manager.env, &.{}, (manager.options.log_level == .silent), ctx.command_ctx.debug.use_system_shell)) catch |e| { _ = &e; if ((e == error.MissingShell)) {
+                    _ = Output.errGeneric("failed to find shell executable to run postpack script", .{});
+                    _ = Global.crash();
+                } else {
+                    if ((e == error.OutOfMemory)) {
+                        return error.OutOfMemory;
+                    }
+                } }); });
             }
             if (comptime for_publish) {
                 return .{ .allocator = ctx.allocator, .command_ctx = ctx.command_ctx, .manager = manager, .package_name = package_name, .package_version = package_version, .abs_tarball_path = try ctx.allocator.dupeZ(u8, abs_tarball_dest), .tarball_bytes = tarball_bytes, .shasum = shasum, .integrity = integrity, .uses_workspaces = false, .publish_script = publish_script, .postpublish_script = postpublish_script, .script_env = this_transpiler.env, .normalized_pkg_info = normalized_pkg_info };
@@ -2260,8 +2293,12 @@ else => {
             buffer_writer.append_newline = has_trailing_newline;
             var package_json_writer = js_printer.BufferPrinter.init(buffer_writer);
             _ = &package_json_writer;
-            const written = (blk_catch_54: { break :blk_catch_54 ((js_printer.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), json.root, (&json.source), .{ .indent = json.indentation, .mangled_props = null })) catch |e| { _ = &e; return (__sw_blk_34: { const __disc_34 = e; _ = &__disc_34; if ((!cp_has_ok_val(__disc_34) and !cp_is_null_val(__disc_34))) { const __err_v_34 = cp_unwrap_err_val(__disc_34); _ = &__err_v_34; if (cp_match_tag(__err_v_34, .OutOfMemory)) {  break :__sw_blk_34 cp_val(error.OutOfMemory); } } {  _ = Output.errGeneric("failed to print edited package.json: {s}", .{ @errorName(e) });
-            break :__sw_blk_34 cp_val(Global.crash()); }  unreachable; }); }); });
+            const written = (blk_catch_54: { break :blk_catch_54 ((js_printer.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), json.root, (&json.source), .{ .indent = json.indentation, .mangled_props = null })) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return error.OutOfMemory;
+            } else {
+                _ = Output.errGeneric("failed to print edited package.json: {s}", .{ @errorName(e) });
+                _ = Global.crash();
+            } }); });
             _ = &written;
             return package_json_writer.ctx.writtenWithoutTrailingZero();
     }

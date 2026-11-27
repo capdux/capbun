@@ -303,7 +303,7 @@ pub fn inputFile(self: PerThread, id: OpaqueFileId) EntryPointMap.InputFile {
             return self.input_files[@as(usize, @intCast(id.get()))];
     }
 
-pub fn outputFile(self: *const PerThread, id: OpaqueFileId) *const OutputFile {
+pub fn outputFile(self: *PerThread, id: OpaqueFileId) *const OutputFile {
             return (&self.bundled_outputs[@as(usize, @intCast(self.outputIndex(id).get()))]);
     }
 
@@ -470,14 +470,18 @@ b.options.macro_remap = macros;
         defer if (!__api_lock_guard_moved) { __api_lock_guard_moved = true; const __T = @TypeOf(api_lock_guard); if (@typeInfo(__T) == .optional) { if (api_lock_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { api_lock_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = api_lock_guard; _drop_val.__cp_deinit(); } };
         var pt: PerThread = PerThread{ .input_files = empty_input_files[0..0], .bundled_outputs = empty_bundled_outputs[0..0], .output_indexes = empty_output_indexes[0..0], .module_keys = empty_module_keys[0..0], .module_map = .{}, .source_maps = .{}, .vm = vm, .loaded_files = ((bun.bit_set.AutoBitSet.initEmpty(vm.allocator, 0)) catch unreachable), .all_server_files = JSValue.null };
         _ = &pt;
-        _ = (blk_catch_4: { break :blk_catch_4 ((buildWithVm(ctx, cwd, vm, (&pt))) catch |e| { _ = &e; break :blk_catch_4 @as(void, (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .JSError)) {  _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
-        const err_value = vm.global.takeException(error.JSError);
-        _ = vm.printErrorLikeObjectToConsole(((err_value.toError()) orelse (err_value)));
-        if ((vm.exit_handler.exit_code == 0)) {
-            vm.exit_handler.exit_code = 1;
-        }
-        _ = vm.onExit();
-        break :__sw_blk_0 cp_val(vm.globalExit()); } } {  return e; }  unreachable; })); }); });
+        _ = (blk_catch_4: { break :blk_catch_4 ((buildWithVm(ctx, cwd, vm, (&pt))) catch |e| { _ = &e; if ((e == error.JSError)) {
+            _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+            const err_value = vm.global.takeException(error.JSError);
+            _ = vm.printErrorLikeObjectToConsole(((err_value.toError()) orelse (err_value)));
+            if ((vm.exit_handler.exit_code == 0)) {
+                vm.exit_handler.exit_code = 1;
+            }
+            _ = vm.onExit();
+            _ = vm.globalExit();
+        } else {
+            return e;
+        } }); });
 }
 
 pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMachine, pt: *PerThread) !void {
@@ -653,8 +657,8 @@ return global.throwValue(((e.toError()) orelse (e)));
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_3 = bundled_outputs.len;
-            while (i < __end_3) : (i += 1) {
+            const __end_2 = bundled_outputs.len;
+            while (i < __end_2) : (i += 1) {
                 const file = (&bundled_outputs[@as(usize, @intCast(i))]);
                 var side_tag: []const u8 = "null";
                 _ = &side_tag;
@@ -771,8 +775,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_5 = router.types.len;
-            while (i < __end_5) : (i += 1) {
+            const __end_4 = router.types.len;
+            while (i < __end_4) : (i += 1) {
                 const router_type = router.types[@as(usize, @intCast(i))];
                 if (router_type.client_file.unwrap()) |client_file| {
                     _ = &client_file;
@@ -833,8 +837,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_6 = router.routes.items.len;
-            while (i < __end_6) : (i += 1) {
+            const __end_5 = router.routes.items.len;
+            while (i < __end_5) : (i += 1) {
                 const route = router.routes.items[@as(usize, @intCast(i))];
                 if ((route.file_page.unwrap() == null)) {
                     continue;
@@ -854,8 +858,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
             {
                 var j: i32 = 0;
                 _ = &j;
-                const __end_7 = protected_css_count;
-                while (j < __end_7) : (j += 1) {
+                const __end_6 = protected_css_count;
+                while (j < __end_6) : (j += 1) {
                     _ = css_chunk_js_strings[@as(usize, @intCast(j))].unprotect();
                 }
             }
@@ -864,8 +868,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_8 = css_chunks_count;
-            while (i < __end_8) : (i += 1) {
+            const __end_7 = css_chunks_count;
+            while (i < __end_7) : (i += 1) {
                 const output_file = bundled_outputs[@as(usize, @intCast((css_chunks_first + @as(usize, @intCast(i)))))];
                 _ = bun.assert((output_file.dest_path[0] != 46));
                 _ = bun.assert(output_file.loader.isCSS());
@@ -890,8 +894,8 @@ const without_prefix = (if ((bun.strings.hasPrefixComptime(file.dest_path, "./")
         {
             var nav_index: i32 = 0;
             _ = &nav_index;
-            const __end_9 = navigatable_routes.items.len;
-            while (nav_index < __end_9) : (nav_index += 1) {
+            const __end_8 = navigatable_routes.items.len;
+            while (nav_index < __end_8) : (nav_index += 1) {
                 const route_index = navigatable_routes.items[@as(usize, @intCast(nav_index))];
                 defer {
                 _ = params_buf.clearRetainingCapacity();
@@ -1003,8 +1007,8 @@ else => {
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_13 = params_buf.items.len;
-                        while (i < __end_13) : (i += 1) {
+                        const __end_12 = params_buf.items.len;
+                        while (i < __end_12) : (i += 1) {
                             const param = params_buf.items[@as(usize, @intCast(i))];
                             _ = try param_info_array.putIndex(global, @intCast(((params_buf.items.len - @as(usize, @intCast(i))) - 1)), try bun.String.createUTF8ForJS(global, param));
                         }

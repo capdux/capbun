@@ -404,11 +404,13 @@ pub static struct RapidHash {
 }
 
 pub fn jsErrorToWriteError(e: bun.JSError): std.Io.Writer.Error {
-    return switch (e) {
-        error.JSTerminated => error.WriteFailed, // TODO: this might lose a JSTerminated, causing m_terminationException problems
-        error.JSError => error.WriteFailed, // TODO: this might lose a JSError, causing exception check problems
-        error.OutOfMemory => bun.handleOom(error.OutOfMemory),
-    };
+    if (e == error.JSTerminated) {
+        return error.WriteFailed; // TODO: this might lose a JSTerminated, causing m_terminationException problems
+    } else if (e == error.JSError) {
+        return error.WriteFailed; // TODO: this might lose a JSError, causing exception check problems
+    } else {
+        return bun.handleOom(error.OutOfMemory);
+    }
 }
 
 pub fn autoFormatLabelFallback(comptime ty: type, comptime fallback: []const u8): []const u8 {

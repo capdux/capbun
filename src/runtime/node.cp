@@ -193,16 +193,16 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
         }
 
         pub inline fn toCssResult(): Maybe(ReturnType, bun.css.ParseError(bun.css.ParserError)) {
-            return switch (ErrorTypeT) {
-                bun.css.BasicParseError => {
-                    return switch (_) {
-                        .result v => return .{ .result = v },
-                        .err e => return .{ .err = e.intoDefaultParseError() },
-                    };
-                },
-                bun.css.ParseError(bun.css.ParserError) => @compileError("Already a ParseError(ParserError)"),
-                else => @compileError("Bad!"),
-            };
+            if (comptime ErrorTypeT == bun.css.BasicParseError) {
+                return switch (_) {
+                    .result v => return .{ .result = v },
+                    .err e => return .{ .err = e.intoDefaultParseError() },
+                };
+            } else if (comptime ErrorTypeT == bun.css.ParseError(bun.css.ParserError)) {
+                @compileError("Already a ParseError(ParserError)");
+            } else {
+                @compileError("Bad!");
+            }
         }
 
         pub fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {

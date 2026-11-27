@@ -921,14 +921,38 @@ fn notImplementedYet(comptime name: []const u8) {
 pub extern fn napi_type_tag_object(env: napi_env, _: napi_value, _: [*c]const napi_type_tag): napi_status ;
 pub extern fn napi_check_object_type_tag(env: napi_env, _: napi_value, _: [*c]const napi_type_tag, _: *bool): napi_status ;
 
-// do nothing for both of these
-@export @c fn napi_open_callback_scope(_: napi_env, _: napi_value, _: *!, _: *!): napi_status {
+@export @c fn napi_open_callback_scope(env_: napi_env, resource_object_: napi_value, context_: *!?, result_: (*(*!))?): napi_status {
     log("napi_open_callback_scope", {});
-    return @intFromEnum(NapiStatus.ok);
+    if (env_ == null) {
+        return envIsNull();
+    }
+    const env = env_.?;
+    if (resource_object_.get() == .zero || context_ == null || result_ == null) {
+        return env.invalidArg();
+    }
+    const result = result_.?;
+    unsafe {
+        result.* = @ptrCast(env);
+    }
+    return env.ok();
 }
-@export @c fn napi_close_callback_scope(_: napi_env, _: *!): napi_status {
+@export @c fn napi_close_callback_scope(env_: napi_env, scope_: *!?): napi_status {
     log("napi_close_callback_scope", {});
-    return @intFromEnum(NapiStatus.ok);
+    if (env_ == null) {
+        return envIsNull();
+    }
+    const env = env_.?;
+    if (scope_ == null) {
+        return env.invalidArg();
+    }
+    if (exception := env.toJS().tryTakeException()) {
+        * = env.toJS().bunVM().uncaughtException(env.toJS(), exception, false);
+    }
+    if (exception := env.getAndClearPendingException()) {
+        * = env.toJS().bunVM().uncaughtException(env.toJS(), exception, false);
+    }
+    env.toJS().bunVM().eventLoop().drainMicrotasks() catch {};
+    return env.ok();
 }
 pub extern fn napi_throw(env: napi_env, @"error": napi_value): napi_status ;
 pub extern fn napi_throw_error(env: napi_env, code: [*c]const u8, msg: [*c]const u8): napi_status ;
@@ -1115,7 +1139,7 @@ pub extern fn napi_create_dataview(env: napi_env, length: usize, arraybuffer: na
     }
     const result = result_.?;
     // The result is supposed to be the highest NAPI version Bun supports, rather than the version reported by a NAPI module.
-    result.* = 9;
+    result.* = 10;
     return env.ok();
 }
 @export @c fn napi_create_promise(env_: napi_env, deferred_: (*napi_deferred)?, promise_: (*napi_value)?): napi_status {
@@ -2809,6 +2833,52 @@ pub struct NapiFinalizerTask {
             self_task.runOnJSThread();
         }
     }
+}
+
+pub type uv_work_cb = @c fn (*!) void;
+pub type uv_after_work_cb = @c fn (*!, c_int) void;
+
+pub struct UvWorkTask {
+    task: WorkPoolTask = { callback: &runFromThreadPool },
+    concurrent_task: jsc.ConcurrentTask = {},
+    event_loop: *jsc.EventLoop,
+    req: *!,
+    work_cb: uv_work_cb?,
+    after_work_cb: uv_after_work_cb?,
+    poll_ref: Async.KeepAlive = {},
+
+    static fn runFromThreadPool(task: *WorkPoolTask) {
+        let self_ptr: *UvWorkTask = @fieldParentPtr("task", task);
+        if (cb := self_ptr.work_cb) {
+            cb(self_ptr.req);
+        }
+        self_ptr.event_loop.enqueueTaskConcurrent(self_ptr.concurrent_task.@"from"(self_ptr, .manual_deinit));
+    }
+
+    fn runFromJS(*_, vm: *jsc.VirtualMachine, global: *jsc.JSGlobalObject) {
+        * = global;
+        let poll_ref = _.poll_ref;
+        const _poll_guard = PollRefGuard{ poll_ref: &poll_ref, vm: vm };
+        const after_cb = _.after_work_cb;
+        const req = _.req;
+        bun.destroy(_);
+        if (cb := after_cb) {
+            cb(req, 0);
+        }
+        vm.eventLoop().drainMicrotasks() catch {};
+    }
+}
+
+@export @c fn Bun__uv_queue_work(loop: *jsc.EventLoop, req: *!, work_cb: uv_work_cb?, after_work_cb: uv_after_work_cb?): c_int {
+    const work = bun.new(UvWorkTask, {
+        event_loop: loop,
+        req: req,
+        work_cb: work_cb,
+        after_work_cb: after_work_cb,
+    });
+    work.poll_ref.ref(loop.virtual_machine);
+    WorkPool.schedule(&work.task);
+    return 0;
 }
 
 

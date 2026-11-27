@@ -7009,8 +7009,11 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                 handle_entry: while (true) {
                     if (treat_as_dir) {
                         if ((stack.unusedCapacitySlice().len >= 1)) {
-                            var iterable_dir = (blk_catch_38: { break :blk_catch_38 ((top.iter.dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_38 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .NotDir)) {  treat_as_dir = false;
-                            break :__sw_blk_10 cp_val(continue :handle_entry); } } if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if ((cp_match_tag(__err_v_10, .FileNotFound) or cp_match_tag(__err_v_10, .AccessDenied) or cp_match_tag(__err_v_10, .PermissionDenied) or cp_match_tag(__err_v_10, .ProcessNotFound) or cp_match_tag(__err_v_10, .SymLinkLoop) or cp_match_tag(__err_v_10, .ProcessFdQuotaExceeded) or cp_match_tag(__err_v_10, .NameTooLong) or cp_match_tag(__err_v_10, .SystemFdQuotaExceeded) or cp_match_tag(__err_v_10, .NoDevice) or cp_match_tag(__err_v_10, .SystemResources) or cp_match_tag(__err_v_10, .Unexpected) or cp_match_tag(__err_v_10, .InvalidUtf8) or cp_match_tag(__err_v_10, .InvalidWtf8) or cp_match_tag(__err_v_10, .BadPathName) or cp_match_tag(__err_v_10, .NetworkNotFound) or cp_match_tag(__err_v_10, .DeviceBusy))) {  return e; } }  unreachable; }); }); });
+                            var iterable_dir = (blk_catch_38: { break :blk_catch_38 ((top.iter.dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
+                                treat_as_dir = false;
+                                continue :handle_entry;
+                            }
+                            return e; }); });
                             _ = &iterable_dir;
                             _ = stack.appendAssumeCapacity(.{ .name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .parent_dir = top.iter.dir, .iter = iterable_dir.iterateAssumeFirstIteration() });
                             continue :process_stack;

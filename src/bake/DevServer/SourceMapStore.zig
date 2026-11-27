@@ -212,7 +212,11 @@ return e;
                     _ = try source_map_strings.appendSlice("\"");
                 } else {
                     _ = try source_map_strings.appendSlice("\"bun://");
-                    _ = (blk_catch_2: { break :blk_catch_2 ((bun.strings.percentEncodeWrite(path, (&source_map_strings))) catch |e| { _ = &e; break :blk_catch_2 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .IncompleteUTF8)) {  break :__sw_blk_1 cp_val(@panic("Unexpected: asset with incomplete UTF-8 as file path")); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  return e; } }  unreachable; }); }); });
+                    _ = (blk_catch_2: { break :blk_catch_2 ((bun.strings.percentEncodeWrite(path, (&source_map_strings))) catch |e| { _ = &e; if ((e == error.IncompleteUTF8)) {
+                        _ = @panic("Unexpected: asset with incomplete UTF-8 as file path");
+                    } else {
+                        return e;
+                    } }); });
                     _ = try source_map_strings.appendSlice("\"");
                 }
             }
@@ -221,8 +225,8 @@ return e;
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_2 = map_files.len;
-                while (i < __end_2) : (i += 1) {
+                const __end_1 = map_files.len;
+                while (i < __end_1) : (i += 1) {
                     const chunk = map_files.get(@intCast(i));
                     const source_map_opt = chunk.get();
                     if ((source_map_opt == null)) {
@@ -281,8 +285,8 @@ pub fn joinVLQ(map: *const StoreEntry, kind: ChunkKind, j: *StringJoiner, arena_
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_3 = map_files.len;
-                while (i < __end_3) : (i += 1) {
+                const __end_2 = map_files.len;
+                while (i < __end_2) : (i += 1) {
                     switch (map_files.get(@intCast(i))) {
 .some => |source_map| {
 const source_index = (i + 1);
@@ -311,8 +315,8 @@ pub fn deinit(self: *StoreEntry) void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_4 = files.len;
-                while (i < __end_4) : (i += 1) {
+                const __end_3 = files.len;
+                while (i < __end_3) : (i += 1) {
                     var file = files.get(@intCast(i));
                     _ = &file;
                     _ = file.deinit();
@@ -495,8 +499,8 @@ pub fn locateWeakRef(self: *SourceMapStore, key: Key) ?WeakRefLocation {
         {
             var i: i32 = 0;
             _ = &i;
-            const __end_5 = self.weak_refs.count;
-            while (i < __end_5) : (i += 1) {
+            const __end_4 = self.weak_refs.count;
+            while (i < __end_4) : (i += 1) {
                 const item_ref = self.weak_refs.peekItem(@intCast(i));
                 if ((item_ref.key() == key)) {
                     return WeakRefLocation{ .index = @intCast(i), .@"ref" = item_ref };

@@ -1027,12 +1027,6 @@ pub fn handleUpgradeResponseData(self: *@This(), data: []const u8) void {
             var consumed: usize = 0;
             _ = &consumed;
             while (true) {
-                const http_prefix: []const u8 = "HTTP/1.1 ";
-                const check_len = @min(body.len, http_prefix.len);
-                if ((!std.mem.eql(u8, body[0..check_len], http_prefix[0..check_len]))) {
-                    _ = self.terminate(ErrorCode.invalid_response);
-                    return;
-                }
                 const response = (blk_catch_11: { break :blk_catch_11 ((PicoHTTP.Response.parse(body, (&self.headers_buf))) catch |e| { _ = &e; if ((e == error.Malformed_HTTP_Response)) {
                     _ = self.terminate(ErrorCode.invalid_response);
                     return;

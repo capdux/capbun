@@ -943,13 +943,6 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
             let consumed: usize = 0;
             while (true) {
-                const http_prefix = "HTTP/1.1 ";
-                const check_len = @min(body.len, http_prefix.len);
-                if (!std.mem.eql(u8, body[0..check_len], http_prefix[0..check_len])) {
-                    _.terminate(ErrorCode.invalid_response);
-                    return;
-                }
-
                 const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
                     if (e == error.Malformed_HTTP_Response) {
                         _.terminate(ErrorCode.invalid_response);

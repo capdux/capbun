@@ -136,11 +136,9 @@ fn diffListToJS(comptime T: type, global: *jsc.JSGlobalObject, diff_list: MyersD
 }
 
 fn mapDiffError(global: *jsc.JSGlobalObject, e: MyersDiff.Error): bun.JSError {
-    return switch (e) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.DiffTooLarge => global.throwInvalidArguments("Diffing these two values would create a string that is too large. If this was intentional, please open a bug report on GitHub.", {}),
-        error.InputsTooLarge => global.throwInvalidArguments("Input strings are too large to diff. Please open a bug report on GitHub.", {}),
-    };
+    if (e == error.OutOfMemory) return error.OutOfMemory;
+    if (e == error.DiffTooLarge) return global.throwInvalidArguments("Diffing these two values would create a string that is too large. If this was intentional, please open a bug report on GitHub.", {});
+    return global.throwInvalidArguments("Input strings are too large to diff. Please open a bug report on GitHub.", {});
 }
 
 import MyersDiff from "./assert/myers_diff.zig";

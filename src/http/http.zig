@@ -1660,7 +1660,8 @@ pub fn closeAndAbort(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
 }
 
 pub fn setTimeout(self: HTTPClient, socket: anytype) void {
-        if (self.flags.disable_timeout) {
+        if ((self.flags.disable_timeout or (idle_timeout_seconds == 0))) {
+            _ = socket.setTimeout(0);
             return;
         }
         _ = socket.setTimeout(idle_timeout_seconds);

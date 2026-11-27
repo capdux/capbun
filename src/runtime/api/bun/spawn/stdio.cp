@@ -452,10 +452,14 @@ pub union(enum) Stdio {
         }
 
         if (i == 1 || i == 2) {
+            let b = blob;
+            b.detach();
             return globalThis.throwInvalidArguments("Blobs are immutable, and cannot be used for stdout/stderr", .{});
         }
 
         if (blob.fastSize() == 0) {
+            let b = blob;
+            b.detach();
             stdio.* = .ignore;
             return;
         }

@@ -1575,9 +1575,9 @@ pub fn abort(self: *@This()) void {
             self.res = null;
             _ = self.unregisterAutoFlusher();
             self.aborted = true;
-            _ = self.signal.close(null);
             _ = (blk_catch_14: { break :blk_catch_14 ((self.flushPromise()) catch |__ce_14| { _ = &__ce_14;  }); });
             _ = self.finalize();
+            _ = self.signal.close(null);
     }
 
 pub fn unregisterAutoFlusher(self: *@This()) void {

@@ -1240,9 +1240,9 @@ pub fn HTTPServerWritable(comptime ssl: bool, comptime http3: bool): type {
             _.res = null;
             _.unregisterAutoFlusher();
             _.aborted = true;
-            _.signal.close(null);
             _.flushPromise() catch {};
             _.finalize();
+            _.signal.close(null);
         }
 
         fn unregisterAutoFlusher(*_) {

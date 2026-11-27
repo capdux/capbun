@@ -249,14 +249,22 @@ pub inline fn mapErr(self: @This(), comptime E: type, err_fn: *const fn (ErrorTy
     }
 
 pub inline fn toCssResult(self: @This()) Maybe(ReturnType, bun.css.ParseError(bun.css.ParserError)) {
-            return (__sw_blk_0: { const __disc_0 = ErrorTypeT; _ = &__disc_0; { if (cp_match_tag(__disc_0, .BasicParseError)) {  return (switch (self) {
+            if (comptime (ErrorTypeT == bun.css.BasicParseError)) {
+                return (switch (self) {
 .result => |v| {
 return .{ .result = v };
 },
 .err => |e| {
 return .{ .err = e.intoDefaultParseError() };
 },
-}); } } { if ((cp_match_tag(__disc_0, .ParseError) and cp_match_tag(@field(__disc_0, "ParseError"), .ParserError))) {  break :__sw_blk_0 cp_val(@compileError("Already a ParseError(ParserError)")); } } {  break :__sw_blk_0 cp_val(@compileError("Bad!")); }  unreachable; });
+});
+            } else {
+                if (comptime (ErrorTypeT == bun.css.ParseError(bun.css.ParserError))) {
+                    _ = @compileError("Already a ParseError(ParserError)");
+                } else {
+                    _ = @compileError("Bad!");
+                }
+            }
     }
 
 pub fn toJS(self: @This(), globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {

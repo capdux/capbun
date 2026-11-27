@@ -41,6 +41,19 @@ uint64_t uv__hrtime(uv_clocktype_t type);
 #include "uv-posix-polyfills-posix.c"
 #endif
 
+extern int Bun__uv_queue_work(uv_loop_t* loop, uv_work_t* req, uv_work_cb work_cb, uv_after_work_cb after_work_cb);
+
+UV_EXTERN int uv_queue_work(uv_loop_t* loop,
+    uv_work_t* req,
+    uv_work_cb work_cb,
+    uv_after_work_cb after_work_cb)
+{
+    req->loop = loop;
+    req->work_cb = work_cb;
+    req->after_work_cb = after_work_cb;
+    return Bun__uv_queue_work(loop, req, work_cb, after_work_cb);
+}
+
 uv_pid_t uv_os_getpid()
 {
     return getpid();

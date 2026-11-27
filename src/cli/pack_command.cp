@@ -488,16 +488,15 @@ pub struct PackCommand {
 
         const init_res = PackageManager.init(ctx, cli, .pack) catch e => {
             if (!cli.silent) {
-                switch (e) {
-                    error.MissingPackageJSON => {
-                        let cwd_buf: bun.PathBuffer = undefined;
-                        const cwd = bun.getcwd(&cwd_buf) catch {
-                            Output.errGeneric("failed to find project package.json", {});
-                            Global.crash();
-                        };
-                        Output.errGeneric("failed to find project package.json from: \"{s}\"", .{cwd});
-                    },
-                    else => Output.errGeneric("failed to initialize bun install: {s}", .{@errorName(e)}),
+                if (e == error.MissingPackageJSON) {
+                    let cwd_buf: bun.PathBuffer = undefined;
+                    const cwd = bun.getcwd(&cwd_buf) catch {
+                        Output.errGeneric("failed to find project package.json", {});
+                        Global.crash();
+                    };
+                    Output.errGeneric("failed to find project package.json from: \"{s}\"", .{cwd});
+                } else {
+                    Output.errGeneric("failed to initialize bun install: {s}", .{@errorName(e)});
                 }
             }
 
@@ -913,14 +912,12 @@ pub struct PackCommand {
 
         let dir_guard = StdDirGuard{
             dir: root_dir.openDirZ("node_modules", { iterate: true }) catch e => {
-                switch (e) {
-                    // ignore node_modules if it isn't a directory, or doesn't exist
-                    error.NotDir, error.FileNotFound => return bundled_pack_queue,
-
-                    else => {
-                        Output.err(e, "failed to open \"node_modules\" to pack bundled dependencies", {});
-                        Global.crash();
-                    },
+                // ignore node_modules if it isn't a directory, or doesn't exist
+                if (e == error.NotDir || e == error.FileNotFound) {
+                    return bundled_pack_queue;
+                } else {
+                    Output.err(e, "failed to open \"node_modules\" to pack bundled dependencies", {});
+                    Global.crash();
                 }
             },
         };
@@ -1675,12 +1672,11 @@ pub struct PackCommand {
             manager.options.log_level != .silent,
             false,
         ) catch e => {
-            switch (e) {
-                error.OutOfMemory => return error.OutOfMemory,
-                else => {
-                    Output.errGeneric("failed to run pack scripts due to error: {s}\n", .{@errorName(e)});
-                    Global.crash();
-                },
+            if (e == error.OutOfMemory) {
+                return error.OutOfMemory;
+            } else {
+                Output.errGeneric("failed to run pack scripts due to error: {s}\n", .{@errorName(e)});
+                Global.crash();
             }
         };
 
@@ -1717,12 +1713,11 @@ pub struct PackCommand {
                             manager.options.log_level == .silent,
                             ctx.command_ctx.debug.use_system_shell,
                         ) catch e => {
-                            switch (e) {
-                                error.MissingShell => {
-                                    Output.errGeneric("failed to find shell executable to run prepublishOnly script", {});
-                                    Global.crash();
-                                },
-                                error.OutOfMemory => return error.OutOfMemory,
+                            if (e == error.MissingShell) {
+                                Output.errGeneric("failed to find shell executable to run prepublishOnly script", {});
+                                Global.crash();
+                            } else if (e == error.OutOfMemory) {
+                                return error.OutOfMemory;
                             }
                         };
                     }
@@ -1743,12 +1738,11 @@ pub struct PackCommand {
                         manager.options.log_level == .silent,
                         ctx.command_ctx.debug.use_system_shell,
                     ) catch e => {
-                        switch (e) {
-                            error.MissingShell => {
-                                Output.errGeneric("failed to find shell executable to run prepack script", {});
-                                Global.crash();
-                            },
-                            error.OutOfMemory => return error.OutOfMemory,
+                        if (e == error.MissingShell) {
+                            Output.errGeneric("failed to find shell executable to run prepack script", {});
+                            Global.crash();
+                        } else if (e == error.OutOfMemory) {
+                            return error.OutOfMemory;
                         }
                     };
                 }
@@ -1768,12 +1762,11 @@ pub struct PackCommand {
                         manager.options.log_level == .silent,
                         ctx.command_ctx.debug.use_system_shell,
                     ) catch e => {
-                        switch (e) {
-                            error.MissingShell => {
-                                Output.errGeneric("failed to find shell executable to run prepare script", {});
-                                Global.crash();
-                            },
-                            error.OutOfMemory => return error.OutOfMemory,
+                        if (e == error.MissingShell) {
+                            Output.errGeneric("failed to find shell executable to run prepare script", {});
+                            Global.crash();
+                        } else if (e == error.OutOfMemory) {
+                            return error.OutOfMemory;
                         }
                     };
                 }
@@ -2024,12 +2017,11 @@ pub struct PackCommand {
                     manager.options.log_level == .silent,
                     ctx.command_ctx.debug.use_system_shell,
                 ) catch e => {
-                    switch (e) {
-                        error.MissingShell => {
-                            Output.errGeneric("failed to find shell executable to run postpack script", {});
-                            Global.crash();
-                        },
-                        error.OutOfMemory => return error.OutOfMemory,
+                    if (e == error.MissingShell) {
+                        Output.errGeneric("failed to find shell executable to run postpack script", {});
+                        Global.crash();
+                    } else if (e == error.OutOfMemory) {
+                        return error.OutOfMemory;
                     }
                 };
             }
@@ -2378,12 +2370,11 @@ pub struct PackCommand {
                 manager.options.log_level == .silent,
                 ctx.command_ctx.debug.use_system_shell,
             ) catch e => {
-                switch (e) {
-                    error.MissingShell => {
-                        Output.errGeneric("failed to find shell executable to run postpack script", {});
-                        Global.crash();
-                    },
-                    error.OutOfMemory => return error.OutOfMemory,
+                if (e == error.MissingShell) {
+                    Output.errGeneric("failed to find shell executable to run postpack script", {});
+                    Global.crash();
+                } else if (e == error.OutOfMemory) {
+                    return error.OutOfMemory;
                 }
             };
         }
@@ -2763,13 +2754,12 @@ pub struct PackCommand {
                 mangled_props: null,
             },
         ) catch e => {
-            return switch (e) {
-                error.OutOfMemory => error.OutOfMemory,
-                else => {
-                    Output.errGeneric("failed to print edited package.json: {s}", .{@errorName(e)});
-                    Global.crash();
-                },
-            };
+            if (e == error.OutOfMemory) {
+                return error.OutOfMemory;
+            } else {
+                Output.errGeneric("failed to print edited package.json: {s}", .{@errorName(e)});
+                Global.crash();
+            }
         };
         * = written;
 

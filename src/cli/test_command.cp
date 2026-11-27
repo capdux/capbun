@@ -1939,20 +1939,23 @@ pub struct TestCommand {
             // arguments as filters, treat them as filepaths
             const file_or_dirnames = ctx.positionals[1..];
             for (arg of file_or_dirnames) {
-                scanner.scan(arg) catch e => switch (e) {
-                    error.OutOfMemory => bun.outOfMemory(),
-                    // don't error if multiple are passed; one might fail
-                    // but the others may not
-                    error.DoesNotExist => if (file_or_dirnames.len == 1) {
-                        if (Output.isAIAgent()) {
-                            Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
-                        } else {
-                            Output.prettyErrorln("Test filter <b>{f}<r> had no matches", .{bun.fmt.quote(arg)});
+                scanner.scan(arg) catch e => {
+                    if (e == error.OutOfMemory) {
+                        bun.outOfMemory();
+                    } else if (e == error.DoesNotExist) {
+                        // don't error if multiple are passed; one might fail
+                        // but the others may not
+                        if (file_or_dirnames.len == 1) {
+                            if (Output.isAIAgent()) {
+                                Output.prettyErrorln("Test filter <b>{f}<r> had no matches in --cwd={f}", .{ bun.fmt.quote(arg), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
+                            } else {
+                                Output.prettyErrorln("Test filter <b>{f}<r> had no matches", .{bun.fmt.quote(arg)});
+                            }
+                            vm.exit_handler.exit_code = 1;
+                            vm.is_shutting_down = true;
+                            vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
                         }
-                        vm.exit_handler.exit_code = 1;
-                        vm.is_shutting_down = true;
-                        vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
-                    } else @as(void, undefined),
+                    }
                 };
             }
         } else {
@@ -1982,9 +1985,10 @@ pub struct TestCommand {
                 break :brk scanner.fs.top_level_dir;
             };
 
-            scanner.scan(dir_to_scan) catch e => switch (e) {
-                error.OutOfMemory => bun.outOfMemory(),
-                error.DoesNotExist => {
+            scanner.scan(dir_to_scan) catch e => {
+                if (e == error.OutOfMemory) {
+                    bun.outOfMemory();
+                } else if (e == error.DoesNotExist) {
                     if (Output.isAIAgent()) {
                         Output.prettyErrorln("<red>Failed to scan non-existent root directory for tests:<r> {f} in --cwd={f}", .{ bun.fmt.quote(dir_to_scan), bun.fmt.quote(bun.fs.FileSystem.instance.top_level_dir) });
                     } else {
@@ -1993,7 +1997,7 @@ pub struct TestCommand {
                     vm.exit_handler.exit_code = 1;
                     vm.is_shutting_down = true;
                     vm.runWithAPILock(jsc.VirtualMachine, vm, jsc.VirtualMachine.globalExit);
-                },
+                }
             };
         }
 

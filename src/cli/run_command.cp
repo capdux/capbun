@@ -1735,13 +1735,15 @@ pub struct RunCommand {
             bun.default_allocator,
             md_opts,
             theme,
-        ) catch e => switch (e) {
-            error.OutOfMemory => bun.outOfMemory(),
-            error.StackOverflow => {
+        ) catch e => brk: {
+            if (e == error.OutOfMemory) {
+                bun.outOfMemory();
+            } else if (e == error.StackOverflow) {
                 Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", {});
                 Output.flush();
                 Global.exit(1);
-            },
+            }
+            break :brk null;
         };
         if (rendered := rendered_opt) {
             Output.writer().writeAll(rendered) catch {};

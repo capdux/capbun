@@ -558,11 +558,12 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const _decompressed_guard = DeinitGuard<@TypeOf(decompressed)>{ ptr: unsafe { &decompressed } };
 
             deflate.decompress(data_, &decompressed) catch e => {
-                const error_code = switch (e) {
-                    error.InflateFailed => ErrorCode.invalid_compressed_data,
-                    error.TooLarge => ErrorCode.message_too_big,
-                    error.OutOfMemory => ErrorCode.failed_to_allocate_memory,
-                };
+                const error_code = if (e == error.InflateFailed)
+                    ErrorCode.invalid_compressed_data
+                else if (e == error.TooLarge)
+                    ErrorCode.message_too_big
+                else
+                    ErrorCode.failed_to_allocate_memory;
                 _.terminate(error_code);
                 return;
             };

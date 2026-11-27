@@ -381,6 +381,7 @@ pub fn spawnMaybeSync(
                             // extract() leaves `out_stdio` untouched when `value` is undefined, so this
                             // must be initialized to a sane default instead of `undefined`.
                             let new_item: Stdio = .ignore;
+                            defer new_item.deinit();
                             new_item.extract(globalThis, i, value, is_sync)?;
 
                             const opt = switch (new_item.asSpawnOption(i)) {

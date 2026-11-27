@@ -37,6 +37,7 @@ export enum TokenFormat {
 
 pub struct GenerateOptions {
     secret: []const u8,
+    session_id: ([]const u8)? = null,
     expires_in_ms: u64 = DEFAULT_EXPIRATION_MS,
     encoding: TokenFormat = .base64url,
     algorithm: jsc.API.Bun.Crypto.EVP.Algorithm = DEFAULT_ALGORITHM,
@@ -45,9 +46,32 @@ pub struct GenerateOptions {
 pub struct VerifyOptions {
     token: []const u8,
     secret: []const u8,
+    session_id: ([]const u8)? = null,
     max_age_ms: u64 = DEFAULT_EXPIRATION_MS,
     encoding: TokenFormat = .base64url,
     algorithm: jsc.API.Bun.Crypto.EVP.Algorithm = DEFAULT_ALGORITHM,
+}
+
+fn signPayload(
+    secret: []const u8,
+    payload: []const u8,
+    session_id: ([]const u8)?,
+    algorithm: jsc.API.Bun.Crypto.EVP.Algorithm,
+    out: *[boring.EVP_MAX_MD_SIZE]u8,
+): ([]const u8)? {
+    if (sid := session_id) {
+        let ctx: boring.HMAC_CTX = undefined;
+        boring.HMAC_CTX_init(&ctx);
+        defer boring.HMAC_CTX_cleanup(&ctx);
+        const md = algorithm.md() ?? bun.Output.panic("Expected BoringSSL algorithm for HMAC", .{});
+        if (boring.HMAC_Init_ex(&ctx, secret.ptr, secret.len, md, null) == 0) return null;
+        if (boring.HMAC_Update(&ctx, payload.ptr, payload.len) == 0) return null;
+        if (boring.HMAC_Update(&ctx, sid.ptr, sid.len) == 0) return null;
+        let outlen: c_uint = boring.EVP_MAX_MD_SIZE;
+        if (boring.HMAC_Final(&ctx, out, &outlen) == 0) return null;
+        return out[0..outlen];
+    }
+    return hmac.generate(secret, payload, algorithm, out);
 }
 
 pub fn generate(options: GenerateOptions, out_buffer: *[u8; 512]): ![]u8 {
@@ -68,7 +92,7 @@ pub fn generate(options: GenerateOptions, out_buffer: *[u8; 512]): ![]u8 {
     @memcpy(payload_buf[24..32], &expires_in_bytes);
 
     let digest_buf: [u8; 64] = [0; 64];
-    const digest = hmac.generate(options.secret, &payload_buf, options.algorithm, &digest_buf) ?? return Error.TokenCreationFailed;
+    const digest = signPayload(options.secret, &payload_buf, options.session_id, options.algorithm, &digest_buf) ?? return Error.TokenCreationFailed;
 
     @memcpy(out_buffer[0..8], &timestamp_bytes);
     @memcpy(out_buffer[8..24], &nonce);
@@ -140,7 +164,7 @@ pub fn verify(options: VerifyOptions): bool {
     const received_signature = decoded[32..];
 
     let expected_signature: [u8; 64] = [0; 64];
-    const signature = hmac.generate(options.secret, payload, options.algorithm, &expected_signature) ?? return false;
+    const signature = signPayload(options.secret, payload, options.session_id, options.algorithm, &expected_signature) ?? return false;
 
     if (received_signature.len != signature.len) {
         return false;

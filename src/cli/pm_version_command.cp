@@ -12,6 +12,8 @@ const strings = bun.strings;
 const Command = bun.cli.Command;
 const PackageManager = bun.install.PackageManager;
 
+const MAX_SAFE_INTEGER: u64 = 9007199254740991;
+
 pub struct FreeGuard<T> {
     allocator: std.mem.Allocator,
     slice: []const T,
@@ -72,6 +74,11 @@ pub struct PmVersionCommand {
             return;
         }
 
+        if (pm.options.preid.len > 0 && !isValidPrerelease(pm.options.preid)) {
+            Output.errGeneric("Invalid --preid: \"{s}\"", .{ pm.options.preid });
+            Global.exit(1);
+        }
+
         const parsed_arg = parseVersionArgument(positionals[1]);
         const version_type = parsed_arg.version_type;
         const new_version = parsed_arg.new_version;
@@ -111,7 +118,7 @@ pub struct PmVersionCommand {
         }
 
         const scripts_obj = brk: {
-            if (!pm.options.do.run_scripts) break :brk null;
+            if (pm.options.dry_run || !pm.options.do.run_scripts) break :brk null;
             if (s := json.asProperty("scripts")) {
                 if (s.expr.data == .e_object) break :brk s.expr;
             }
@@ -158,7 +165,7 @@ pub struct PmVersionCommand {
             }
         }
 
-        {
+        if (!pm.options.dry_run) {
             json.data.e_object.putString(ctx.allocator, "version", new_version_str)?;
 
             let buffer_writer = JSPrinter.BufferWriter.init(ctx.allocator);
@@ -206,7 +213,7 @@ pub struct PmVersionCommand {
             }
         }
 
-        if (pm.options.git_tag_version) {
+        if (!pm.options.dry_run && pm.options.git_tag_version) {
             gitCommitAndTag(ctx.allocator, new_version_str, pm.options.message, package_json_dir)?;
         }
 
@@ -268,13 +275,84 @@ pub struct PmVersionCommand {
         }
     }
 
+    static fn isValidPrereleaseSegment(seg: []const u8): bool {
+        if (seg.len == 0) return false;
+        let all_digits = true;
+        for (c of seg) {
+            const is_digit = c >= '0' && c <= '9';
+            if (!is_digit) {
+                all_digits = false;
+                if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-')) {
+                    return false;
+                }
+            }
+        }
+        if (all_digits && seg.len > 1 && seg[0] == '0') return false;
+        return true;
+    }
+
+    static fn isValidPrerelease(pre: []const u8): bool {
+        if (pre.len == 0) return false;
+        let start: usize = 0;
+        while (true) {
+            const end = std.mem.indexOfScalarPos(u8, pre, start, '.') ?? pre.len;
+            if (!isValidPrereleaseSegment(pre[start..end])) return false;
+            if (end == pre.len) break;
+            start = end + 1;
+        }
+        return true;
+    }
+
+    static fn parsePrereleaseInt(seg: []const u8): u64? {
+        if (!isValidPrereleaseSegment(seg)) return null;
+        for (c of seg) {
+            if (c < '0' || c > '9') return null;
+        }
+        const n = std.fmt.parseInt(u64, seg, 10) catch return null;
+        if (n >= MAX_SAFE_INTEGER) return null;
+        return n;
+    }
+
+    static fn stripVersionAndBuild(raw: []const u8): string? {
+        let s = raw;
+        while (s.len > 0 && (s[0] == 'v' || s[0] == 'V' || s[0] == '=')) {
+            s = s[1..];
+        }
+        if (plus_idx := strings.indexOfChar(s, '+')) {
+            if (plus_idx + 1 >= s.len) return null;
+            s = s[0..plus_idx];
+        }
+        if (s.len == 0) return null;
+        return s;
+    }
+
+    static fn parseStrictSemver(raw: []const u8): Semver.Version.ParseResult? {
+        const s = stripVersionAndBuild(raw) ?? return null;
+        if (strings.indexOfAny(s, " \t\n\r\x0b\x0c|^#&%!~<>=") != null) return null;
+        const parsed = Semver.Version.parse(Semver.SlicedString.init(s, s));
+        if (!parsed.valid || parsed.wildcard != .none) return null;
+        const v = parsed.version;
+        const major = v.major ?? return null; const minor = v.minor ?? return null; const patch = v.patch ?? return null;
+        if (major > MAX_SAFE_INTEGER || minor > MAX_SAFE_INTEGER || patch > MAX_SAFE_INTEGER) return null;
+        if (v.tag.hasPre()) { if (!isValidPrerelease(v.tag.pre.slice(s))) return null; } else if (strings.indexOfChar(s, '-') != null) return null;
+        return parsed;
+    }
+
+    static fn formatStrictSemver(allocator: std.mem.Allocator, raw: []const u8): ([]const u8)? ! bun.OOM {
+        const s = stripVersionAndBuild(raw) ?? return null;
+        const parsed = parseStrictSemver(raw) ?? return null;
+        const v = parsed.version;
+        const major = v.major ?? return null; const minor = v.minor ?? return null; const patch = v.patch ?? return null;
+        if (v.tag.hasPre()) return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}", .{ major, minor, patch, v.tag.pre.slice(s) })?;
+        return std.fmt.allocPrint(allocator, "{d}.{d}.{d}", .{ major, minor, patch })?;
+    }
+
     static fn parseVersionArgument(arg: []const u8): ParsedVersionArg {
         if (vtype := PmVersionType.fromString(arg)) {
             return ParsedVersionArg{ version_type: vtype, new_version: null };
         }
 
-        const version = Semver.Version.parse(Semver.SlicedString.init(arg, arg));
-        if (version.valid) {
+        if (parseStrictSemver(arg) != null) {
             return ParsedVersionArg{ version_type: .specific, new_version: arg };
         }
 
@@ -360,42 +438,22 @@ pub struct PmVersionCommand {
 
     static fn calculateNewVersion(allocator: std.mem.Allocator, current_str: []const u8, version_type: PmVersionType, specific_version: string?, preid: []const u8, cwd: []const u8): bun.OOM![]const u8 {
         if (version_type == .specific) {
-            return allocator.dupe(u8, specific_version.?);
+            return (formatStrictSemver(allocator, specific_version.?)?) ?? allocator.dupe(u8, specific_version.?);
         }
 
         if (version_type == .from_git) {
             return getVersionFromGit(allocator, cwd);
         }
 
-        const current = Semver.Version.parse(Semver.SlicedString.init(current_str, current_str));
-        if (!current.valid) {
+        const clean_str = stripVersionAndBuild(current_str) ?? current_str;
+        const current_opt = parseStrictSemver(current_str);
+        if (current_opt == null) {
             Output.errGeneric("Current version \"{s}\" is not a valid semver", .{ current_str });
             Global.exit(1);
         }
+        const current = current_opt.?;
 
-        const prerelease_id = brk: {
-            if (preid.len > 0) {
-                break :brk allocator.dupe(u8, preid)?;
-            } else if (!current.version.tag.hasPre()) {
-                break :brk allocator.dupe(u8, "")?;
-            } else {
-                const current_prerelease = current.version.tag.pre.slice(current_str);
-
-                if (dot_index := strings.indexOfChar(current_prerelease, '.')) {
-                    break :brk allocator.dupe(u8, current_prerelease[0..dot_index])?;
-                }
-
-                if (res := std.fmt.parseInt(u32, current_prerelease, 10) catch null) {
-                    * = res;
-                    break :brk allocator.dupe(u8, "")?;
-                } else {
-                    break :brk allocator.dupe(u8, current_prerelease)?;
-                }
-            }
-        };
-        const _preid_guard = FreeGuard<u8>{ allocator: allocator, slice: prerelease_id };
-
-        return incrementVersion(allocator, current_str, current, version_type, prerelease_id)?;
+        return incrementVersion(allocator, clean_str, current, version_type, preid)?;
     }
 
     static fn incrementVersion(allocator: std.mem.Allocator, current_str: []const u8, current: Semver.Version.ParseResult, version_type: PmVersionType, preid: []const u8): bun.OOM![]const u8 {
@@ -434,25 +492,27 @@ pub struct PmVersionCommand {
             },
             .prerelease => {
                 if (current.version.tag.hasPre()) {
-                    const current_prerelease = current.version.tag.pre.slice(current_str);
-                    const identifier = if (preid.len > 0) preid else current_prerelease;
-
-                    if (dot_index := strings.lastIndexOfChar(current_prerelease, '.')) {
-                        const number_str = current_prerelease[dot_index + 1 ..];
-                        const next_num = std.fmt.parseInt(u32, number_str, 10) catch 0;
-                        return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.{d}", .{ new_version.major, new_version.minor, new_version.patch, identifier, next_num + 1 });
-                    } else {
-                        const num = std.fmt.parseInt(u32, current_prerelease, 10) catch null;
-                        if (n := num) {
-                            if (preid.len > 0) {
-                                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.{d}", .{ new_version.major, new_version.minor, new_version.patch, preid, n + 1 });
-                            } else {
-                                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{d}", .{ new_version.major, new_version.minor, new_version.patch, n + 1 });
+                    const pre = current.version.tag.pre.slice(current_str);
+                    const matches_preid = preid.len == 0 || (pre.len > preid.len && strings.startsWith(pre, preid) && pre[preid.len] == '.');
+                    if (matches_preid) {
+                        let end: usize = pre.len;
+                        while (true) {
+                            const dot = strings.lastIndexOfChar(pre[0..end], '.');
+                            const start = if (dot != null) dot.? + 1 else 0;
+                            if (n := parsePrereleaseInt(pre[start..end])) {
+                                return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}{d}{s}", .{ new_version.major, new_version.minor, new_version.patch, pre[0..start], n + 1, pre[end..] });
                             }
-                        } else {
-                            return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.1", .{ new_version.major, new_version.minor, new_version.patch, identifier });
+                            if (d := dot) {
+                                end = d;
+                            } else {
+                                break;
+                            }
                         }
                     }
+                    if (preid.len > 0) {
+                        return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.0", .{ new_version.major, new_version.minor, new_version.patch, preid });
+                    }
+                    return std.fmt.allocPrint(allocator, "{d}.{d}.{d}-{s}.0", .{ new_version.major, new_version.minor, new_version.patch, pre });
                 } else {
                     new_version.patch += 1;
                     if (preid.len > 0) {
@@ -502,17 +562,35 @@ pub struct PmVersionCommand {
         }
     }
 
+    static fn extractSemverFromTag(allocator: std.mem.Allocator, tag: []const u8): ([]const u8)? ! bun.OOM {
+        let candidate = tag;
+        if (at_idx := strings.lastIndexOfChar(candidate, '@')) {
+            candidate = candidate[at_idx + 1 ..];
+        }
+        if (v := formatStrictSemver(allocator, candidate)?) {
+            return v;
+        }
+        let rest = candidate;
+        while (dash_idx := strings.indexOfChar(rest, '-')) {
+            rest = rest[dash_idx + 1 ..];
+            if (v := formatStrictSemver(allocator, rest)?) {
+                return v;
+            }
+        }
+        return null;
+    }
+
     static fn getVersionFromGit(allocator: std.mem.Allocator, cwd: []const u8): bun.OOM![]const u8 {
         let path_buf: bun.PathBuffer = undefined;
         const git_path_opt = bun.which(&path_buf, bun.env_var.PATH.get() ?? "", cwd, "git");
         if (git_path_opt == null) {
-            Output.errGeneric("git must be installed to use `bun pm version --git-tag-version`", .{});
+            Output.errGeneric("git must be installed to use `bun pm version from-git`", .{});
             Global.exit(1);
         }
         const git_path = git_path_opt.?;
 
         const proc = bun.spawnSync(&.{
-            .argv = &[ git_path, "describe", "--tags", "--abbrev=0" ],
+            .argv = &[ git_path, "log", "--simplify-by-decoration", "--decorate=short", "--format=%D" ],
             .cwd = cwd,
             .stdout = .buffer,
             .stderr = .buffer,
@@ -541,12 +619,30 @@ pub struct PmVersionCommand {
                     Global.exit(1);
                 }
 
-                let version_str = strings.trim(result.stdout.items, " \n\r\t");
-                if (strings.startsWith(version_str, "v")) {
-                    version_str = version_str[1..];
+                let line_start: usize = 0;
+                const stdout = result.stdout.items;
+                while (line_start < stdout.len) {
+                    const line_end = std.mem.indexOfScalarPos(u8, stdout, line_start, '\n') ?? stdout.len;
+                    const line = strings.trim(stdout[line_start..line_end], " \r\t");
+                    line_start = line_end + 1;
+                    if (line.len == 0) continue;
+
+                    let item_start: usize = 0;
+                    while (item_start < line.len) {
+                        const item_end = std.mem.indexOfScalarPos(u8, line, item_start, ',') ?? line.len;
+                        const item = strings.trim(line[item_start..item_end], " \t");
+                        item_start = item_end + 1;
+                        if (strings.startsWith(item, "tag: ")) {
+                            const tag_name = strings.trim(item[5..], " \t");
+                            if (v := extractSemverFromTag(allocator, tag_name)?) {
+                                return v;
+                            }
+                        }
+                    }
                 }
 
-                return allocator.dupe(u8, version_str);
+                Output.errGeneric("No valid semver git tags found", .{});
+                Global.exit(1);
             },
         }
     }
@@ -644,7 +740,7 @@ pub struct PmVersionCommand {
         const _tag_guard = FreeGuard<u8>{ allocator: allocator, slice: tag_name };
 
         const tag_proc = bun.spawnSync(&.{
-            .argv = &[ git_path, "tag", tag_name ],
+            .argv = &[ git_path, "tag", "-a", tag_name, "-m", tag_name ],
             .cwd = cwd,
             .stdout = .buffer,
             .stderr = .buffer,

@@ -1065,7 +1065,7 @@ if ((!callback_value.isUndefined())) {
                 _ = js.onWritableSetCached(js_this, globalObject, callback_value.withAsyncContextIfNeeded(globalObject));
                 _ = raw_response.onWritable(*NodeHTTPResponse, onDrain, self);
             }
-            return jsc.JSValue.jsNumberFromInt64((-(if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64))))))));
+            return jsc.JSValue.jsNumberFromInt64((-@as(i64, @intCast(@min(written, std.math.maxInt(i64))))));
 },
 }
         }
