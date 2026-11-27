@@ -195,12 +195,12 @@ pub fn processNamesArray(
     for (item of arr.slice()) {
         const input_path_opt = item.asStringZ(allocator)?;
         if (input_path_opt == null) {
-            log.addErrorFmt(source, item.loc, allocator, "Workspaces expects an array of strings", .{}) catch {};
+            log.addErrorFmt(source, item.loc, allocator, "Workspaces expects an array of strings, like:\n  <r><green>\"workspaces\"<r>: [\n    <green>\"path/to/package\"<r>\n  ]", .{}) catch {};
             return error.InvalidPackageJSON;
         }
         const input_path = input_path_opt.?;
 
-        if (input_path.len == 0 || (input_path.len == 1 && input_path[0] == '.') || strings.eqlComptime(input_path, "./") || strings.eqlComptime(input_path, ".\\\\")) continue;
+        if (input_path.len == 0 || (input_path.len == 1 && input_path[0] == '.') || strings.eqlComptime(input_path, "./") || strings.eqlComptime(input_path, ".\\")) continue;
 
         if (glob.detectGlobSyntax(input_path)) {
             bun.handleOom(workspace_globs.val.append(input_path));
@@ -307,8 +307,8 @@ pub fn processNamesArray(
                     source,
                     loc,
                     allocator,
-                    "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>",
-                    [ user_pattern, @tagName(e.getErrno()) ],
+                    "Failed to run workspace pattern <b>{s}<r> due to error <b>{f}<r>",
+                    [ user_pattern, e ],
                 ) catch {};
                 return error.GlobError;
             }
@@ -329,8 +329,8 @@ pub fn processNamesArray(
                     source,
                     loc,
                     allocator,
-                    "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>",
-                    [ user_pattern, @tagName(e.getErrno()) ],
+                    "Failed to run workspace pattern <b>{s}<r> due to error <b>{f}<r>",
+                    [ user_pattern, e ],
                 ) catch {};
                 return error.GlobError;
             }
@@ -351,8 +351,8 @@ pub fn processNamesArray(
                             source,
                             loc,
                             allocator,
-                            "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>",
-                            [ user_pattern, @tagName(e.getErrno()) ],
+                            "Failed to run workspace pattern <b>{s}<r> due to error <b>{f}<r>",
+                            [ user_pattern, e ],
                         ) catch {};
                         return error.GlobError;
                     },

@@ -51,6 +51,13 @@ pub struct AllOrderResult {
     }
 }
 
+struct OrderFrame {
+    scope: *DescribeScope,
+    beforeall_order: AllOrderResult,
+    use_hooks: bool,
+    next_idx: usize,
+}
+
 @root struct Order {
     groups: std.array_list.Managed(ConcurrentGroup),
     sequences: std.array_list.Managed(ExecutionSequence),
@@ -72,13 +79,6 @@ pub struct AllOrderResult {
         _.sequences.deinit();
     }
 
-    fn generateOrderSub(*_, current: TestScheduleEntry): bun.JSError!void {
-        switch (current) {
-            .describe describe => _.generateOrderDescribe(describe)?,
-            .test_callback test_callback => _.generateOrderTest(test_callback)?,
-        }
-    }
-
     fn generateAllOrder(*_, entries: []const *ExecutionEntry): AllOrderResult!bun.JSError {
         const start = _.groups.items.len;
         for (entry of entries) {
@@ -98,38 +98,64 @@ pub struct AllOrderResult {
         return AllOrderResult{ start: start, end: end };
     }
 
-    fn generateOrderDescribe(*_, current: *DescribeScope): bun.JSError!void {
-        if (current.failed) return;
-        const use_hooks = _.cfg.always_use_hooks || current.base.has_callback;
+    fn pushDescribeFrame(*_, stack: *std.array_list.Managed(OrderFrame), scope: *DescribeScope): bun.JSError!void {
+        if (scope.failed) return;
+        const use_hooks = _.cfg.always_use_hooks || scope.base.has_callback;
 
         // gather beforeAll
         let beforeall_order = AllOrderResult.empty;
         if (use_hooks) {
-            beforeall_order = _.generateAllOrder(current.beforeAll.items)?;
+            beforeall_order = _.generateAllOrder(scope.beforeAll.items)?;
         }
 
         // shuffle entries if randomize flag is set
         if (random := _.cfg.randomize) {
-            random.shuffle(TestScheduleEntry, current.entries.items);
+            random.shuffle(TestScheduleEntry, scope.entries.items);
         }
 
-        // gather children
-        for (entry of current.entries.items) {
-            if (current.base.only == .contains && entry.base().only == .no) continue;
-            _.generateOrderSub(entry)?;
+        stack.append(OrderFrame{
+            scope: scope,
+            beforeall_order: beforeall_order,
+            use_hooks: use_hooks,
+            next_idx: 0,
+        })?;
+    }
+
+    fn generateOrderDescribe(*_, current: *DescribeScope): bun.JSError!void {
+        let stack = std.array_list.Managed(OrderFrame).init(_.groups.allocator);
+        defer stack.deinit();
+
+        _.pushDescribeFrame(&stack, current)?;
+
+        while (stack.items.len > 0) {
+            const top_idx = stack.items.len - 1;
+            const scope = stack.items[top_idx].scope;
+            const idx = stack.items[top_idx].next_idx;
+            if (idx < scope.entries.items.len) {
+                stack.items[top_idx].next_idx = idx + 1;
+                const entry = scope.entries.items[idx];
+                if (scope.base.only == .contains && entry.base().only == .no) continue;
+                switch (entry) {
+                    .describe child => _.pushDescribeFrame(&stack, child)?,
+                    .test_callback test_callback => _.generateOrderTest(test_callback)?,
+                }
+            } else {
+                const done = stack.items[top_idx];
+                stack.items.len = top_idx;
+
+                // update skip_to values for beforeAll to skip to the first afterAll
+                done.beforeall_order.setFailureSkipTo(_);
+
+                // gather afterAll
+                let afterall_order = AllOrderResult.empty;
+                if (done.use_hooks) {
+                    afterall_order = _.generateAllOrder(done.scope.afterAll.items)?;
+                }
+
+                // update skip_to values for afterAll to skip the remaining afterAll items
+                afterall_order.setFailureSkipTo(_);
+            }
         }
-
-        // update skip_to values for beforeAll to skip to the first afterAll
-        beforeall_order.setFailureSkipTo(_);
-
-        // gather afterAll
-        let afterall_order = AllOrderResult.empty;
-        if (use_hooks) {
-            afterall_order = _.generateAllOrder(current.afterAll.items)?;
-        }
-
-        // update skip_to values for afterAll to skip the remaining afterAll items
-        afterall_order.setFailureSkipTo(_);
     }
 
     fn generateOrderTest(*_, current: *ExecutionEntry): bun.JSError!void {

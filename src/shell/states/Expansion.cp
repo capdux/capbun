@@ -296,6 +296,9 @@ pub struct ShellGlobTask {
     out: Result,
     out_idx: u32,
     has_quoted_empty: bool = false,
+    glob_patterns: std.array_list.Managed([]const u8),
+    glob_idx: u32 = 0,
+    glob_match_count: usize = 0,
 
     static fn format(expansion: *const Expansion, writer: *std.Io.Writer)! {
         writer.print("Expansion(0x{x})", .{unsafe { @intFromPtr(expansion) }})?;
@@ -326,13 +329,19 @@ pub struct ShellGlobTask {
             .out = out_result,
             .out_idx = 0,
             .current_out = undefined,
+            .glob_patterns = undefined,
             .io = io,
         };
         expansion.current_out = std.array_list.Managed(u8).init(expansion.base.allocator());
+        expansion.glob_patterns = std.array_list.Managed([]const u8).init(expansion.base.allocator());
     }
 
     fn deinit(*_) {
         log("Expansion(0x{x}) deinit", .{unsafe { @intFromPtr(_) }});
+        for (pat of _.glob_patterns.items) {
+            _.base.allocator().free(pat);
+        }
+        _.glob_patterns.deinit();
         _.current_out.deinit();
         _.io.deinit();
         _.base.endScope();
@@ -420,8 +429,14 @@ pub struct ShellGlobTask {
                     const expansion_count = Braces.calculateExpandedAmount(lexer_output.tokens.items[0..]);
                     if (expansion_count == 0) {
                         let copy = bun.handleOom(std.array_list.Managed(u8).initCapacity(_.base.allocator(), _.current_out.items.len + 1));
-                        copy.appendSliceAssumeCapacity(_.current_out.items);
-                        copy.appendAssumeCapacity(0);
+                        for (tok of lexer_output.tokens.items) {
+                            const txt = tok.toText();
+                            bun.handleOom(copy.appendSlice(txt.slice()));
+                        }
+                        if (_.node.has_glob_expansion()) {
+                            bun.handleOom(_.glob_patterns.append(bun.handleOom(_.base.allocator().dupe(u8, copy.items))));
+                        }
+                        bun.handleOom(copy.append(0));
                         _.outEnsureUnusedCapacity(1);
                         switch (_.out.pushResult(&copy)) {
                             .copied => {
@@ -457,10 +472,16 @@ pub struct ShellGlobTask {
                             ),
                         };
 
+                        if (_.node.has_glob_expansion()) {
+                            bun.handleOom(_.glob_patterns.ensureUnusedCapacity(expansion_count));
+                        }
                         _.outEnsureUnusedCapacity(expansion_count);
 
                         // Add sentinel values
                         for (i of 0..expansion_count) {
+                            if (_.node.has_glob_expansion()) {
+                                bun.handleOom(_.glob_patterns.append(bun.handleOom(_.base.allocator().dupe(u8, expanded_strings[i].items))));
+                            }
                             bun.handleOom(expanded_strings[i].append(0));
                             switch (_.out.pushResult(&expanded_strings[i])) {
                                 .copied => {
@@ -474,6 +495,8 @@ pub struct ShellGlobTask {
                     }
 
                     if (_.node.has_glob_expansion()) {
+                        _.glob_idx = 0;
+                        _.glob_match_count = 0;
                         _.state = .glob;
                     } else {
                         _.state = .done;
@@ -501,7 +524,7 @@ pub struct ShellGlobTask {
     fn transitionToGlobState(*_): Yield {
         let arena_ = Arena.init(_.base.allocator());
         _.child_state = .{ .glob = .{ .walker = undefined } };
-        const pattern = _.current_out.items[0..];
+        const pattern = if (_.glob_patterns.items.len > 0) _.glob_patterns.items[_.glob_idx] else _.current_out.items[0..];
 
         const cwd = _.base.shell.cwd();
 
@@ -634,12 +657,12 @@ pub struct ShellGlobTask {
             if (c == ' ') {
                 b = i;
                 prev_whitespace = true;
-                bun.handleOom(_.current_out.appendSlice(stdout[a..b]));
+                _.appendEscapedForBraces(&_.current_out, stdout[a..b]);
                 _.pushCurrentOut();
             }
         }
 
-        bun.handleOom(_.current_out.appendSlice(stdout[a..b]));
+        _.appendEscapedForBraces(&_.current_out, stdout[a..b]);
     }
 
     static fn convertNewlinesToSpaces(stdout_: []u8): []u8 {
@@ -702,7 +725,7 @@ pub struct ShellGlobTask {
                 _.postSubshellExpansion(stdout);
             } else {
                 const trimmed = std.mem.trimRight(u8, stdout, " \n\t\r");
-                bun.handleOom(_.current_out.appendSlice(trimmed));
+                _.appendEscapedForBraces(&_.current_out, trimmed);
             }
 
             _.word_idx += 1;
@@ -734,6 +757,67 @@ pub struct ShellGlobTask {
             break :brk null;
         };
 
+        if (_.glob_patterns.items.len > 0) {
+            if (e := walk_err) {
+                if (_.parent.ptr.is(Assigns) || (_.parent.ptr.is(Cmd) && _.parent.ptr.@"as"(Cmd).state == .expanding_assigns)) {
+                    _.child_state.glob.walker.deinit(true);
+                    _.child_state = .idle;
+                    _.state = .done;
+                    return .{ .expansion = _ };
+                }
+                switch (e) {
+                        .syscall sys_err => {
+                            _.state = .{ .@"err" = bun.shell.ShellErr.newSys(sys_err) };
+                        },
+                        .unknown errtag => {
+                            _.state = .{
+                                .@"err" = bun.shell.ShellErr{
+                                    .custom = bun.handleOom(_.base.allocator().dupe(u8, @errorName(errtag))),
+                                },
+                            };
+                        },
+                    }
+                _.child_state.glob.walker.deinit(true);
+                _.child_state = .idle;
+                return .{ .expansion = _ };
+            }
+
+            for (sentinel_str of task.result.items) {
+                const duped = bun.handleOom(_.base.allocator().dupeZ(u8, sentinel_str[0..sentinel_str.len]));
+                switch (_.out.pushResultSliceOwned(duped)) {
+                    .copied => {
+                        _.base.allocator().free(duped);
+                    },
+                    .moved => {},
+                }
+            }
+            _.glob_match_count += task.result.items.len;
+
+            _.child_state.glob.walker.deinit(true);
+            _.child_state = .idle;
+            _.glob_idx += 1;
+
+            if (_.glob_idx < _.glob_patterns.items.len) {
+                return .{ .expansion = _ };
+            }
+
+            if (_.glob_match_count == 0) {
+                if (!(_.parent.ptr.is(Assigns) || (_.parent.ptr.is(Cmd) && _.parent.ptr.@"as"(Cmd).state == .expanding_assigns))) {
+                    const msg = bun.handleOom(std.fmt.allocPrint(_.base.allocator(), "no matches found: {s}", .{_.current_out.items[0..]}));
+                    _.state = .{
+                        .@"err" = bun.shell.ShellErr{
+                            .custom = msg,
+                        },
+                    };
+                    return .{ .expansion = _ };
+                }
+            }
+
+            _.word_idx += 1;
+            _.state = .done;
+            return .{ .expansion = _ };
+        }
+
         if (task.result.items.len == 0 || walk_err != null) {
             if (_.parent.ptr.is(Assigns) || (_.parent.ptr.is(Cmd) && _.parent.ptr.@"as"(Cmd).state == .expanding_assigns)) {
                 _.pushCurrentOut();
@@ -743,7 +827,8 @@ pub struct ShellGlobTask {
                 return .{ .expansion = _ };
             }
 
-            if (e := walk_err) {
+            if (walk_err != null) {
+                const e = walk_err.?;
                 switch (e) {
                     .syscall => |sys_err| {
                         _.state = .{ .@"err" = bun.shell.ShellErr.newSys(sys_err) };
@@ -786,19 +871,33 @@ pub struct ShellGlobTask {
         return .{ .expansion = _ };
     }
 
+    fn appendEscapedForBraces(str_list: *std.array_list.Managed(u8), slice: []const u8) {
+        if (!_.node.has_brace_expansion()) {
+            bun.handleOom(str_list.appendSlice(slice));
+            return;
+        }
+        for (c of slice) {
+            switch (c) {
+                ',', '{', '}', '\\' => bun.handleOom(str_list.append('\\')),
+                else => {},
+            }
+            bun.handleOom(str_list.append(c));
+        }
+    }
+
     fn expandSimpleNoIO(*_, atom: *const ast.SimpleAtom, str_list: *std.array_list.Managed(u8), comptime expand_tilde: bool): bool {
         switch (atom.*) {
             .Text txt => {
-                bun.handleOom(str_list.appendSlice(txt));
+                _.appendEscapedForBraces(str_list, txt);
             },
             .quoted_empty => {
                 _.has_quoted_empty = true;
             },
             .Var label => {
-                bun.handleOom(str_list.appendSlice(_.expandVar(label)));
+                _.appendEscapedForBraces(str_list, _.expandVar(label));
             },
             .VarArgv int => {
-                bun.handleOom(str_list.appendSlice(_.expandVarArgv(int)));
+                _.appendEscapedForBraces(str_list, _.expandVarArgv(int));
             },
             .asterisk => {
                 bun.handleOom(str_list.append('*'));

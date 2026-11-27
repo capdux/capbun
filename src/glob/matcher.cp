@@ -262,7 +262,7 @@ inline fn globMatchImpl(state: *State, glob: []const u8, glob_start: u32, path: 
 }
 
 fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *BraceStack, brace_budget: *u32): bool {
-    let brace_depth: i16 = 0;
+    let brace_depth: i32 = 0;
     let in_brackets = false;
 
     const open_brace_index = state.glob_index;

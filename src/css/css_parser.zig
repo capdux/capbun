@@ -964,7 +964,7 @@ pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, imp
 }), .sources = sources } };
     }
 
-pub fn toCss(self: StyleAttribute, allocator: Allocator, options: PrinterOptions, import_info: ?ImportInfo) PrintErr!ToCssResult {
+pub fn toCss(self: *const StyleAttribute, allocator: Allocator, options: PrinterOptions, import_info: ?ImportInfo) PrintErr!ToCssResult {
             var symbols = bun.ast.Symbol.Map{  };
             _ = &symbols;
             var dest = std.Io.Writer.Allocating.init(allocator);
@@ -1765,6 +1765,7 @@ pub fn fromByte(byte: ?u8) Delimiters {
 pub const ParserInput = struct {
     tokenizer: Tokenizer,
     cached_token: ?CachedToken = null,
+    unclosed_failed_block_pos: ?usize = null,
 
 pub fn new(allocator: Allocator, code: []const u8) ParserInput {
             return ParserInput{ .tokenizer = Tokenizer.init(allocator, code) };
@@ -4541,7 +4542,7 @@ pub fn valueType(s: T) media_query.MediaFeatureType {
 };
 }
 
-pub fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) void {
+pub fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) bool {
         const BlockStack = SmallList(BlockType, 16);
         _ = &BlockStack;
         var stack: BlockStack = .{};
@@ -4550,14 +4551,16 @@ pub fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) 
         while (true) {
             const tok = (switch (tokenizer.next()) {
 .result => |v| v,
-.err => break,
+.err => {
+return true;
+},
 });
             if (BlockType.closing((&tok))) |b| {
                 _ = &b;
                 if ((stack.getLastUnchecked() == b)) {
                     _ = stack.pop();
                     if ((stack.len() == 0)) {
-                        return;
+                        return false;
                     }
                 }
             }
@@ -4752,6 +4755,15 @@ pub fn parse_nested_block(parser: *Parser, comptime T: type, closure: anytype, c
         }
         const block_type: BlockType = parser.at_start_of.?;
         parser.at_start_of = null;
+        const block_start = parser.input.tokenizer.position;
+        if (parser.input.unclosed_failed_block_pos) |unclosed_pos| {
+            _ = &unclosed_pos;
+            if ((block_start == unclosed_pos)) {
+                parser.input.tokenizer.position = parser.input.tokenizer.src.len;
+                parser.input.cached_token = null;
+                return .{ .err = parser.newError(BasicParseErrorKind.end_of_input) };
+            }
+        }
         const closing_delimiter = (switch (block_type) {
 .curly_bracket => Delimiters{ .close_curly_bracket = true },
 .square_bracket => Delimiters{ .close_square_bracket = true },
@@ -4760,11 +4772,20 @@ pub fn parse_nested_block(parser: *Parser, comptime T: type, closure: anytype, c
         var nested_parser = Parser{ .input = parser.input, .stop_before = closing_delimiter, .import_records = parser.import_records, .flags = parser.flags, .extra = parser.extra };
         _ = &nested_parser;
         const result = nested_parser.parseEntirely(T, closure, parsefn);
+        var unclosed = false;
+        _ = &unclosed;
         if (nested_parser.at_start_of) |block_type2| {
             _ = &block_type2;
-            _ = consume_until_end_of_block(block_type2, (&nested_parser.input.tokenizer));
+            if (consume_until_end_of_block(block_type2, (&nested_parser.input.tokenizer))) {
+                unclosed = true;
+            }
         }
-        _ = consume_until_end_of_block(block_type, (&parser.input.tokenizer));
+        if (consume_until_end_of_block(block_type, (&parser.input.tokenizer))) {
+            unclosed = true;
+        }
+        if (((result == .err) and unclosed)) {
+            parser.input.unclosed_failed_block_pos = block_start;
+        }
         return result;
 }
 

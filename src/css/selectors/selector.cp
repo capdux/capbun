@@ -1216,12 +1216,18 @@ pub struct serialize {
         }
     }
 
+    const MAX_NESTING_EXPANSION: usize = 65_536;
+
     static fn serializeNesting(
         dest: *Printer,
         context: (*const css.StyleContext)?,
         first: bool,
     ): PrintErr!void {
         if (ctx := context) {
+            dest.nesting_expansion_count += 1;
+            if (dest.nesting_expansion_count > MAX_NESTING_EXPANSION) {
+                return dest.newError(css.PrinterErrorKind.maximum_nesting_expansion, null);
+            }
             // If there's only one simple selector, just serialize it directly.
             // Otherwise, use an :is() pseudo class.
             // Type selectors are only allowed at the start of a compound selector,

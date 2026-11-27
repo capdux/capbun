@@ -1202,3 +1202,18 @@
 - 完成 `node-napi-tests` 53/55（`test_general`, `test_callback_scope`, `test_worker_buffer_callback` 转绿）、`fuzzilli-reprl`、`serve-error-handler-stream`、`numeric-header`、`cache-{node-compat,runtime}`、`bake/dev/plugins`、`cli/run/syntax` 等新增全绿验收；
 - 清零全仓 35 个 `.cp` 文件中 `cp_match_tag(..., unreachable)` 共性雷区及 `SASL.cp`/`JSONLineBuffer.cp`/`SocketAddress.cp` 等 Use-After-Return 悬垂切片隐患；
 - 精确对账：**实名全绿 1,238 + 冻结 155 = 1,393 / 2,339（59.6%）**，剩余 **946** 个。准备原子提交推送后继续下一波。
+
+### 2026-11-27 14:15 AEDT | 跨 AGY 结单验收（`cp_agy -> bun_agy`）
+- **工单 ID**：`task-bun-20261127-enum-slice-by-val`（`resolved_at: 2026-11-27 14:14:44`）
+- **修复结论**：`cpc/src/codegen/actor.rs` 已区分无负载 enum 与 tagged enum/union(enum)，对返回切片/指针/字符串或含借用视图聚合类型的只读方法自动生成 `self: *const Self`；`pattern.rs` 对 `switch (self.*)` 中切片/索引/成员访问的固定数组/值容器变体自动提升为指针捕获 `|*arr|`。
+- **复现验证与适配**：本地 `cpc --lib /data/dev/cp/temp/repro_enum_slice_self_by_val.cp` 已实测生成 `pub fn slice(self: *const Data) []const u8` + `.inline_storage => |*arr| arr[0..4]`，彻底消除 Use-After-Return；已用新版 `cpc` 重新编译 `src/sql/shared/Data.cp` 并执行 `task_queue.py ack --agent bun_agy task-bun-20261127-enum-slice-by-val`。
+
+### 2026-11-27 14:45 AEDT | 跨 AGY 工单提交（`bun_agy -> cp_agy`）
+- **工单 ID**：`task-bun-20261127-zero-arg-call`
+- **Repro 路径**：`/data/dev/cp/temp/repro_zero_arg_extern_call.cp`
+- **问题摘要**：零参外部函数调用语句 `BoringSSL.ERR_clear_error();` 被 `cpc` codegen 错误生成为 `_ = BoringSSL.ERR_clear_error;`（丢失 `()` 导致未执行，引发 `SecureContext.cp`/`server.cp` 错误队列未清空）。
+
+### 2026-11-27 14:48 AEDT | Batch 122–127 阶段里程碑提交
+- 完成 `src/css/`、`src/shell/states/Expansion.cp`、`src/test_runner/`、`src/runtime/api/{BunObject,csrf_jsc}.cp`、`src/runtime/server/RequestContext.cp`、`src/install/lockfile/Package/WorkspaceMap.cp`、`src/glob/matcher.cp`、`src/sys/sys.cp`、`src/jsc/bindings/sliceAnsi.cpp` 及 28 个 SQL `enum` 重编文件的 `zig:check`（5/5）与 `bun bd`（`1.4.5-debug`）构建验收；
+- 8 路并发验收新增 `0 fail` 转绿 **4 个**（`toHaveReturnedWith.test.ts` 43/43、`bun/util/which.test.ts` 8/8、`nested-function-backtracking.test.ts` 5/5、`nested-selector-expansion.test.ts` 4/4），并显式冻结 `issue-207.test.ts`（预编译 WebKit `overridenDateNow > -1` 限制）；
+- 精确对账：**实名全绿 1,242 + 冻结 156 = 1,398 / 2,339（59.8%）**，剩余 **941** 个。准备原子提交推送后继续 Batch 129。

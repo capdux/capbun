@@ -93,6 +93,7 @@ pub const PrinterErrorKind = union(enum) {
     invalid_composes_selector,
     invalid_css_modules_pattern_in_grid,
     maximum_vendor_prefix_expansion,
+    maximum_nesting_expansion,
     no_import_records,
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
@@ -105,6 +106,7 @@ pub fn format(self: PrinterErrorKind, writer: *std.Io.Writer) !void {
 .invalid_composes_selector => writer.writeAll("The 'composes' property can only be used with a simple class selector"),
 .invalid_css_modules_pattern_in_grid => writer.writeAll("CSS modules pattern must end with '[local]' when used in CSS grid"),
 .maximum_vendor_prefix_expansion => writer.writeAll("Maximum vendor-prefix expansion exceeded when serializing deeply nested vendor-prefixed selectors"),
+.maximum_nesting_expansion => writer.writeAll("Maximum nesting expansion exceeded"),
 .no_import_records => writer.writeAll("No import records found"),
 });
     }
@@ -240,7 +242,7 @@ pub const ErrorLocation = struct {
     line: u32,
     column: u32,
 
-pub fn withFilename(self: ErrorLocation, filename: []const u8) ErrorLocation {
+pub fn withFilename(self: *const ErrorLocation, filename: []const u8) ErrorLocation {
             return ErrorLocation{ .filename = filename, .line = self.line, .column = self.column };
     }
 

@@ -12,6 +12,14 @@ pub struct DerefGuard<T> {
     }
 }
 
+pub struct SuccessfulReturnsGuard {
+    val: std.array_list.Managed(JSValue),
+    ~init() {
+        for (v of _.val.items) v.unprotect();
+        _.val.deinit();
+    }
+}
+
 pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
     jsc.markBinding(@src());
 
@@ -32,7 +40,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
     const calls_count: u32 = @truncate(returns.getLength(globalThis)?);
     let pass = false;
 
-    let successful_returns = DeinitGuard<std.array_list.Managed(JSValue)>{ val: std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator) };
+    let successful_returns = SuccessfulReturnsGuard{ val: std.array_list.Managed(JSValue).init(globalThis.bunVM().allocator) };
 
     let has_errors = false;
 
@@ -49,6 +57,7 @@ pub fn toHaveReturnedWith(client: *Expect, globalThis: *JSGlobalObject, callfram
                 if (type_str.val.eqlComptime("return")) {
                     const result_value = (result.get(globalThis, "value")?) ?? .js_undefined;
                     successful_returns.val.append(result_value)?;
+                    result_value.protect();
 
                     // Check for pass condition only if not already passed
                     if (!pass) {

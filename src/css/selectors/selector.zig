@@ -807,6 +807,10 @@ const name = (if (@typeInfo(@TypeOf(v)) == .@"enum" or @typeInfo(@TypeOf(v)) == 
 pub fn serializeNesting(dest: *Printer, context: ?*const css.StyleContext, first: bool) PrintErr!void {
             if (context) |ctx| {
                 _ = &ctx;
+                dest.nesting_expansion_count = (dest.nesting_expansion_count + 1);
+                if ((dest.nesting_expansion_count > MAX_NESTING_EXPANSION)) {
+                    return dest.newError(css.PrinterErrorKind.maximum_nesting_expansion, null);
+                }
                 if (((ctx.selectors.v.len() == 1) and (first or ((!hasTypeSelector(ctx.selectors.v.at(0))) and isSimple(ctx.selectors.v.at(0)))))) {
                     _ = try serializeSelector(ctx.selectors.v.at(0), dest, ctx.parent, false);
                 } else {
@@ -822,6 +826,7 @@ pub fn serializeNesting(dest: *Printer, context: ?*const css.StyleContext, first
                 }
             }
     }
+    const MAX_NESTING_EXPANSION: usize = 65536;
 };
 
 pub const tocss_servo = struct {

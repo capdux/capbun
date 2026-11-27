@@ -1221,7 +1221,7 @@ walkDone:;
     }
     if (needEndEllipsis) result.append(ellipsis);
     activeStyles.emitCloseCodes(result);
-    if (result.hasOverflowed() || result.length() > Bun__stringSyntheticAllocationLimit) [[unlikely]]
+    if (result.hasOverflowed() || result.length() > std::min<size_t>(WTF::String::MaxLength, Bun__stringSyntheticAllocationLimit)) [[unlikely]]
         return std::nullopt;
     return result.toString();
 }
@@ -1277,17 +1277,27 @@ static std::optional<WTF::String> sliceAnsiImpl(std::span<const Char> input, dou
         if (!b.cutStart && !cutEnd)
             return WTF::String(); // null → zero-copy
         size_t st = b.start, en = b.end;
+        const size_t maxLen = std::min<size_t>(WTF::String::MaxLength, Bun__stringSyntheticAllocationLimit);
         if (ellipsisWidth > 0) {
             bool doStart = b.cutStart && ellipsisWidth < (en - st);
             if (doStart) st += ellipsisWidth;
             bool doEnd = cutEnd && ellipsisWidth < (en - st);
             if (doEnd) en -= ellipsisWidth;
-            if (!doStart && !doEnd) return ellipsis.toString();
+            if (!doStart && !doEnd) {
+                if (ellipsis.length() > maxLen) [[unlikely]]
+                    return std::nullopt;
+                return ellipsis.toString();
+            }
+            size_t outLen = (en - st) + (doStart ? ellipsis.length() : 0) + (doEnd ? ellipsis.length() : 0);
+            if (outLen > maxLen) [[unlikely]]
+                return std::nullopt;
             StringView content(std::span { data + st, en - st });
             if (doStart && doEnd) return makeString(ellipsis, content, ellipsis);
             if (doStart) return makeString(ellipsis, content);
             return makeString(content, ellipsis);
         }
+        if ((en - st) > maxLen) [[unlikely]]
+            return std::nullopt;
         return WTF::String(std::span { data + st, en - st });
     }
 

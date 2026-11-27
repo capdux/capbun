@@ -1088,18 +1088,31 @@ pub struct DescribeScope {
         });
     }
     fn destroy(*_, gpa: std.mem.Allocator) {
-        for (*entry of _.entries.items) entry.deinit(gpa);
-        for (item of _.beforeAll.items) item.destroy(gpa);
-        for (item of _.beforeEach.items) item.destroy(gpa);
-        for (item of _.afterAll.items) item.destroy(gpa);
-        for (item of _.afterEach.items) item.destroy(gpa);
-        _.entries.deinit();
-        _.beforeAll.deinit();
-        _.beforeEach.deinit();
-        _.afterAll.deinit();
-        _.afterEach.deinit();
-        _.base.deinit(gpa);
-        gpa.destroy(_);
+        let stack = std.array_list.Managed(*DescribeScope).init(gpa);
+        defer stack.deinit();
+        bun.handleOom(stack.append(_));
+        while (stack.items.len > 0) {
+            const top_idx = stack.items.len - 1;
+            const scope = stack.items[top_idx];
+            stack.items.len = top_idx;
+            for (entry of scope.entries.items) {
+                switch (entry) {
+                    .describe describe => bun.handleOom(stack.append(describe)),
+                    .test_callback test_scope => test_scope.destroy(gpa),
+                }
+            }
+            for (item of scope.beforeAll.items) item.destroy(gpa);
+            for (item of scope.beforeEach.items) item.destroy(gpa);
+            for (item of scope.afterAll.items) item.destroy(gpa);
+            for (item of scope.afterEach.items) item.destroy(gpa);
+            scope.entries.deinit();
+            scope.beforeAll.deinit();
+            scope.beforeEach.deinit();
+            scope.afterAll.deinit();
+            scope.afterEach.deinit();
+            scope.base.deinit(gpa);
+            gpa.destroy(scope);
+        }
     }
 
     fn markContainsOnly(*_) {

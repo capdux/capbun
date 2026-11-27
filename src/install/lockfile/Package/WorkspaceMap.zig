@@ -248,11 +248,11 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
             _ = &item;
             const input_path_opt = try item.asStringZ(allocator);
             if ((input_path_opt == null)) {
-                _ = (blk_catch_1: { break :blk_catch_1 ((log.addErrorFmt(source, item.loc, allocator, "Workspaces expects an array of strings", .{})) catch |__ce_1| { _ = &__ce_1;  }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((log.addErrorFmt(source, item.loc, allocator, "Workspaces expects an array of strings, like:\n  <r><green>\"workspaces\"<r>: [\n    <green>\"path/to/package\"<r>\n  ]", .{})) catch |__ce_1| { _ = &__ce_1;  }); });
                 return error.InvalidPackageJSON;
             }
             const input_path = input_path_opt.?;
-            if (((((input_path.len == 0) or ((input_path.len == 1) and (input_path[0] == 46))) or strings.eqlComptime(input_path, "./")) or strings.eqlComptime(input_path, ".\\\\"))) {
+            if (((((input_path.len == 0) or ((input_path.len == 1) and (input_path[0] == 46))) or strings.eqlComptime(input_path, "./")) or strings.eqlComptime(input_path, ".\\"))) {
                 continue;
             }
             if (glob.detectGlobSyntax(input_path)) {
@@ -332,7 +332,7 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                     if (init_res.asErr()) |err_opt| {
                         _ = &err_opt;
                         const e = err_opt;
-                        _ = (blk_catch_6: { break :blk_catch_6 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_6| { _ = &__ce_6;  }); });
+                        _ = (blk_catch_6: { break :blk_catch_6 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{f}<r>", .{ user_pattern, e })) catch |__ce_6| { _ = &__ce_6;  }); });
                         return error.GlobError;
                     }
                     var walker_guard = DeinitBoolGuard(GlobWalker){ .val = walker, .arg = false };
@@ -350,7 +350,7 @@ pub fn processNamesArray(workspace_names: *WorkspaceMap, allocator: Allocator, j
                     if (iter_res.asErr()) |err_opt| {
                         _ = &err_opt;
                         const e = err_opt;
-                        _ = (blk_catch_7: { break :blk_catch_7 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_7| { _ = &__ce_7;  }); });
+                        _ = (blk_catch_7: { break :blk_catch_7 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{f}<r>", .{ user_pattern, e })) catch |__ce_7| { _ = &__ce_7;  }); });
                         return error.GlobError;
                     }
                     next_match: while (true) {
@@ -367,7 +367,7 @@ if (r) |path_slice| {
                         }
 },
 .err => |e| {
-_ = (blk_catch_8: { break :blk_catch_8 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{s}<r>", .{ user_pattern, @tagName(e.getErrno()) })) catch |__ce_8| { _ = &__ce_8;  }); });
+_ = (blk_catch_8: { break :blk_catch_8 ((log.addErrorFmt(source, loc, allocator, "Failed to run workspace pattern <b>{s}<r> due to error <b>{f}<r>", .{ user_pattern, e })) catch |__ce_8| { _ = &__ce_8;  }); });
                         return error.GlobError;
 },
 }

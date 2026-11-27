@@ -172,6 +172,7 @@ pub fn toCssBase(self: *@This(), dest: *Printer) PrintErr!void {
             const len = (self.declarations.declarations.items.len + self.declarations.important_declarations.items.len);
             const has_declarations = ((supports_nesting or (len > 0)) or (self.rules.v.items.len == 0));
             if (has_declarations) {
+                dest.nesting_expansion_count = 0;
                 _ = try css.selector.serialize.serializeSelectorList(self.selectors.v.slice(), dest, dest.context(), false);
                 _ = try dest.whitespace();
                 _ = try dest.writeChar(123);

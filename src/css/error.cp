@@ -200,6 +200,8 @@ pub enum PrinterErrorKind {
     invalid_css_modules_pattern_in_grid,
     /// Serializing a style rule once per vendor prefix exceeded the expansion limit.
     maximum_vendor_prefix_expansion,
+    /// Expanding `&` in nested selectors exceeded the expansion limit.
+    maximum_nesting_expansion,
     no_import_records,
 
     pub fn format(_: @This(), writer: *std.Io.Writer)! {
@@ -210,6 +212,7 @@ pub enum PrinterErrorKind {
             .invalid_composes_selector => writer.writeAll("The 'composes' property can only be used with a simple class selector"),
             .invalid_css_modules_pattern_in_grid => writer.writeAll("CSS modules pattern must end with '[local]' when used in CSS grid"),
             .maximum_vendor_prefix_expansion => writer.writeAll("Maximum vendor-prefix expansion exceeded when serializing deeply nested vendor-prefixed selectors"),
+            .maximum_nesting_expansion => writer.writeAll("Maximum nesting expansion exceeded"),
             .no_import_records => writer.writeAll("No import records found"),
         };
     }

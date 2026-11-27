@@ -24,6 +24,13 @@
 
 ## 二、已全绿通过的测试套件（无需重复测试，仅发版前统一回归）
 
+- **2026-11-27 14:47 Batches 124–127 验收转绿（`1.4.5-debug`，4 个完整实名路径）**：
+  - `test/js/bun/test/expect/toHaveReturnedWith.test.ts` (43 pass, 0 fail)
+  - `test/js/bun/util/which.test.ts` (8 pass, 0 fail)
+  - `test/js/bun/css/nested-function-backtracking.test.ts` (5 pass, 0 fail)
+  - `test/js/bun/css/nested-selector-expansion.test.ts` (4 pass, 0 fail)
+  - **显式冻结（预编译 WebKit `JSGlobalObject.h:661` `overridenDateNow > -1` 限制）**：`test/js/bun/test/expect/issue-207.test.ts`
+
 - **2026-11-27 14:11 Batch 120 验收转绿（`1.4.5-debug`，1 个完整实名路径）**：
   - `test/js/node/http/numeric-header.test.ts`
 

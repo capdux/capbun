@@ -134,7 +134,10 @@ pub struct ZstdTaskEnqueueGuard {
 @callconv("c")
 fn mmapDeallocator(ptr: *!?, size: *!?) {
     unsafe {
-        * = bun.sys.munmap(@as([*]align(std.heap.page_size_min) const u8, ptr)[0..@intFromPtr(size)]);
+        const page_size = std.heap.pageSize();
+        const addr = std.mem.alignBackward(usize, @intFromPtr(ptr), page_size);
+        const aligned_ptr: [*]align(std.heap.page_size_min) const u8 = @ptrFromInt(addr);
+        * = bun.sys.munmap(aligned_ptr[0..@intFromPtr(size)]);
     }
 }
 
@@ -145,7 +148,7 @@ pub struct CSRFObject {
         object.put(
             globalThis,
             ZigString.static("generate"),
-            jsc.JSFunction.create(globalThis, "generate", csrf_jsc.csrf__generate, 1, .{}),
+            jsc.JSFunction.create(globalThis, "generate", csrf_jsc.csrf__generate, 0, .{}),
         );
 
         object.put(
@@ -478,31 +481,21 @@ pub fn which(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
     const path_buf = bun.path_buffer_pool.get();
     const _path_buf_g = PathBufferGuard{ buf: path_buf };
     let arguments_g = DeinitGuard<jsc.CallFrame.ArgumentsSlice>{ val: jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice()) };
-    const path_arg_opt = arguments_g.val.nextEat();
-    if (path_arg_opt == null) {
-        return globalThis.throw("which: expected 1 argument, got 0", .{});
-    }
-    const path_arg = path_arg_opt.?;
+    const path_arg = arguments_g.val.nextEat() ?? .js_undefined;
 
     let path_str_g = DeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
     let bin_str_g = DeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
     let cwd_str_g = DeinitGuard<ZigString.Slice>{ val: ZigString.Slice.empty };
 
-    if (path_arg.isEmptyOrUndefinedOrNull()) {
-        return jsc.JSValue.jsNull();
-    }
+    if (!path_arg.isEmptyOrUndefinedOrNull()) {
+        bin_str_g.val = path_arg.toSlice(globalThis, globalThis.bunVM().allocator)?;
+        if (globalThis.hasException()) {
+            return JSValue.zero;
+        }
 
-    bin_str_g.val = path_arg.toSlice(globalThis, globalThis.bunVM().allocator)?;
-    if (globalThis.hasException()) {
-        return JSValue.zero;
-    }
-
-    if (bin_str_g.val.len >= bun.MAX_PATH_BYTES) {
-        return globalThis.throw("bin path is too long", .{});
-    }
-
-    if (bin_str_g.val.len == 0) {
-        return jsc.JSValue.jsNull();
+        if (bin_str_g.val.len >= bun.MAX_PATH_BYTES) {
+            return globalThis.throw("bin path is too long", .{});
+        }
     }
 
     path_str_g.val = ZigString.Slice.fromUTF8NeverFree(
@@ -522,6 +515,10 @@ pub fn which(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
                 cwd_str_g.val = str_.toSlice(globalThis, globalThis.bunVM().allocator)?;
             }
         }
+    }
+
+    if (bin_str_g.val.len == 0) {
+        return jsc.JSValue.jsNull();
     }
 
     if (bin_path := Which.which(
@@ -1347,11 +1344,57 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
 
 pub fn allocUnsafe(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(1);
-    const size = arguments.ptr[0];
-    if (!size.isUInt32AsAnyInt()) {
-        return globalThis.throwInvalidArguments("Expected a positive number", .{});
+    const size = if (arguments.len > 0) arguments.ptr[0] else .js_undefined;
+    if (!size.isNumber()) {
+        return globalThis.throwInvalidArgumentTypeValue("size", "number", size);
     }
-    return jsc.JSValue.createUninitializedUint8Array(globalThis, size.toUInt64NoTruncate());
+    const num = size.asNumber();
+    if (!std.math.isFinite(num) || @trunc(num) != num) {
+        return globalThis.throwRangeError(num, .{ field_name: "size", msg: "an integer" });
+    }
+    if (num < 0.0 || num > 4294967295.0) {
+        return globalThis.throwRangeError(num, .{ field_name: "size", min: 0, max: std.math.maxInt(u32) });
+    }
+    return jsc.JSValue.createUninitializedUint8Array(globalThis, @as(usize, @intFromFloat(num)));
+}
+
+fn parseMmapOptionUsize(globalThis: *jsc.JSGlobalObject, raw_value: jsc.JSValue, comptime field_name: []const u8): bun.JSError!usize {
+    let value = raw_value;
+    if (value.isObject()) {
+        if (value_of := value.get(globalThis, "valueOf")?) {
+            if (value_of.isCallable()) {
+                const res = value_of.call(globalThis, value, [])?;
+                if (!res.isObject()) {
+                    value = res;
+                }
+            }
+        }
+    }
+    if (value.isBigInt()) {
+        if (value.isBigIntInUInt64Range(0, std.math.maxInt(u64))) {
+            return @as(usize, @intCast(value.toUInt64NoTruncate()));
+        }
+        const str = value.toBunString(globalThis)?;
+        defer str.deref();
+        if (str.length() > 0 && str.charAt(0) == '-') {
+            return globalThis.throwInvalidArguments(field_name ++ " must be a non-negative integer", .{});
+        }
+        return std.math.maxInt(usize);
+    }
+    const num = value.toNumber(globalThis)?;
+    if (std.math.isNan(num)) {
+        return 0;
+    }
+    if (num < 0.0) {
+        if (@trunc(num) < 0.0) {
+            return globalThis.throwInvalidArguments(field_name ++ " must be a non-negative integer", .{});
+        }
+        return 0;
+    }
+    if (!std.math.isFinite(num) || num >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) {
+        return std.math.maxInt(usize);
+    }
+    return @as(usize, @intFromFloat(@trunc(num)));
 }
 
 pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -1364,17 +1407,27 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
 
     let buf: bun.PathBuffer = undefined;
     const path = brk: {
-        if (path := args_g.val.nextEat()) {
-            if (path.isString()) {
-                const path_str = path.toSlice(globalThis, args_g.val.@"arena".allocator())?;
-                if (path_str.len > bun.MAX_PATH_BYTES) {
+        if (path_val := args_g.val.nextEat()) {
+            if (path_val.isString()) {
+                const path_str = path_val.toSlice(globalThis, args_g.val.@"arena".allocator())?;
+                const path_slice = path_str.slice();
+                if (std.mem.indexOfScalar(u8, path_slice, 0) != null) {
+                    return globalThis.ERR(.INVALID_ARG_VALUE, "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received {f}", .{ bun.fmt.quote(path_slice) }).throw();
+                }
+                if (path_slice.len >= bun.MAX_PATH_BYTES) {
                     return globalThis.throwInvalidArguments("Path too long", .{});
                 }
-                const paths = &.{path_str.slice()};
-                break :brk bun.path.joinAbsStringBuf(bun.fs.FileSystem.instance.top_level_dir, &buf, paths, .auto);
+                const paths: [1][]const u8 = [ path_slice ];
+                const joined = bun.path.joinAbsStringBufChecked(bun.fs.FileSystem.instance.top_level_dir, &buf, &paths, .auto) ?? {
+                    return globalThis.throwInvalidArguments("Path too long", .{});
+                };
+                if (joined.len >= bun.MAX_PATH_BYTES) {
+                    return globalThis.throwInvalidArguments("Path too long", .{});
+                }
+                break :brk joined;
             }
         }
-        return globalThis.throwInvalidArguments("Expected a path", .{});
+        return globalThis.ERR(.INVALID_ARG_TYPE, "path must be a string", .{}).throw();
     };
 
     buf[path.len] = 0;
@@ -1402,27 +1455,23 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
             }
 
             if (value := opts.get(globalThis, "size")?) {
-                const size_value = value.coerceToInt64(globalThis)?;
-                if (size_value < 0) {
-                    return globalThis.throwInvalidArguments("size must be a non-negative integer", .{});
-                }
-                map_size = @as(usize, @intCast(size_value));
+                map_size = parseMmapOptionUsize(globalThis, value, "size")?;
             }
 
             if (value := opts.get(globalThis, "offset")?) {
-                const offset_value = value.coerceToInt64(globalThis)?;
-                if (offset_value < 0) {
-                    return globalThis.throwInvalidArguments("offset must be a non-negative integer", .{});
-                }
-                offset = @as(usize, @intCast(offset_value));
-                offset = std.mem.alignBackwardAnyAlign(usize, offset, std.heap.pageSize());
+                offset = parseMmapOptionUsize(globalThis, value, "offset")?;
             }
         } else if (!opts.isUndefinedOrNull()) {
-            return globalThis.throwInvalidArguments("Expected options to be an object", .{});
+            return globalThis.ERR(.INVALID_ARG_TYPE, "MMapOptions must be an object", .{}).throw();
         }
     }
 
-    const map = switch (bun.sys.mmapFile(buf_z, flags, map_size, offset)) {
+    const page_size = std.heap.pageSize();
+    const page_offset = std.mem.alignBackwardAnyAlign(usize, offset, page_size);
+    const delta = offset - page_offset;
+    const wanted_size: usize? = if (s := map_size) (if (s == 0) 0 else std.math.add(usize, delta, s) catch std.math.maxInt(usize)) else null;
+
+    const map = switch (bun.sys.mmapFile(buf_z, flags, wanted_size, page_offset)) {
         .result => |map| map,
 
         .err => |e| {
@@ -1430,7 +1479,13 @@ pub fn mmapFile(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun
         },
     };
 
-    return bun.jsc.array_buffer.makeTypedArrayWithBytesNoCopy(globalThis, .TypeUint8, map.ptr, map.len, mmapDeallocator, unsafe { @ptrFromInt(map.len) });
+    if (delta >= map.len) {
+        * = bun.sys.munmap(map);
+        return globalThis.throwValue(bun.sys.Error.fromCode(.INVAL, .mmap).toJS(globalThis)?);
+    }
+
+    errdefer * = bun.sys.munmap(map);
+    return bun.jsc.array_buffer.makeTypedArrayWithBytesNoCopy(globalThis, .TypeUint8, unsafe { map.ptr + delta }, map.len - delta, mmapDeallocator, unsafe { @ptrFromInt(map.len) });
 }
 
 pub fn getTranspilerConstructor(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {

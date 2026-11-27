@@ -329,7 +329,7 @@ else => break :to_else,
 }
 
 pub fn matchBrace(state: *State, glob: []const u8, path: []const u8, brace_stack: *BraceStack, brace_budget: *u32) bool {
-        var brace_depth: i16 = 0;
+        var brace_depth: i32 = 0;
         _ = &brace_depth;
         var in_brackets = false;
         _ = &in_brackets;

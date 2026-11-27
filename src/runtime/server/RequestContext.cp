@@ -301,12 +301,22 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
         }
 
         static fn cancelUnreadBody(response: *Response, globalThis: *jsc.JSGlobalObject) {
+            const bv = response.getBodyValue();
+            if (bv.* == .Locked) {
+                const lock = &bv.Locked;
+                if (lock.onReceiveValue != null || lock.task != null || lock.action != .none || lock.promise != null) {
+                    return;
+                }
+            }
             if (stream := response.getBodyReadableStream(globalThis)) {
+                const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
+                if (is_locked_fn(stream, globalThis)) {
+                    return;
+                }
                 stream.value.ensureStillAlive();
                 response.detachReadableStream(globalThis);
                 stream.cancelWithReason(globalThis, jsc.JSValue.js_undefined);
             }
-            const bv = response.getBodyValue();
             bv.* = .Used;
         }
 
@@ -880,10 +890,6 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             //if have sink, call onAborted on sink
             if (wrapper := _.sink) {
                 wrapper.sink.abort();
-                if (_.endRequestStreaming() catch true) {
-                    any_js_calls = true;
-                }
-                _.reclaimPromiseCell();
                 return;
             }
 
@@ -2089,7 +2095,8 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                         value.* = .Used;
 
                         const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
-                        if (is_locked_fn(stream, globalThis)) {
+                        const is_disturbed_fn = jsc.WebCore.ReadableStream.isDisturbed;
+                        if (is_locked_fn(stream, globalThis) || is_disturbed_fn(stream, globalThis)) {
                             streamLog("was locked but it shouldn't be", .{});
                             let err = jsc.SystemError{
                                 .code = bun.String.static(@tagName(jsc.Node.ErrorCode.ERR_STREAM_CANNOT_PIPE)),
@@ -2180,7 +2187,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                         }
                     }
 
-                    if (lock.onReceiveValue != null || lock.task != null) {
+                    if (lock.onReceiveValue != null || lock.task != null || lock.action != .none || lock.promise != null) {
                         if (_.isAbortedOrEnded()) {
                             return;
                         }

@@ -354,6 +354,9 @@ out_exit_code: ExitCode = 0,
 out: Result,
 out_idx: u32,
 has_quoted_empty: bool = false,
+glob_patterns: std.array_list.Managed([]const u8),
+glob_idx: u32 = 0,
+glob_match_count: usize = 0,
 
 pub fn format(expansion: *const Expansion, writer: *std.Io.Writer) !void {
         _ = try writer.print("Expansion(0x{x})", .{ (blk: {
@@ -371,8 +374,9 @@ pub fn init(interpreter: *Interpreter, shell_state: *ShellExecEnv, expansion: *E
         break :blk @intFromPtr(expansion);
 
 }) });
-        expansion.* = .{ .node = node, .base = State.initBorrowedAllocScope(.expansion, interpreter, shell_state, parent.scopedAllocator()), .parent = parent, .word_idx = 0, .state = .normal, .child_state = .idle, .out = out_result, .out_idx = 0, .current_out = undefined, .io = io };
+        expansion.* = .{ .node = node, .base = State.initBorrowedAllocScope(.expansion, interpreter, shell_state, parent.scopedAllocator()), .parent = parent, .word_idx = 0, .state = .normal, .child_state = .idle, .out = out_result, .out_idx = 0, .current_out = undefined, .glob_patterns = undefined, .io = io };
         expansion.current_out = std.array_list.Managed(u8).init(expansion.base.allocator());
+        expansion.glob_patterns = std.array_list.Managed([]const u8).init(expansion.base.allocator());
 }
 
 pub fn deinit(self: *Expansion) void {
@@ -380,6 +384,11 @@ pub fn deinit(self: *Expansion) void {
         break :blk @intFromPtr(self);
 
 }) });
+        for (self.glob_patterns.items) |pat| {
+            _ = &pat;
+            _ = self.base.allocator().free(pat);
+        }
+        _ = self.glob_patterns.deinit();
         _ = self.current_out.deinit();
         _ = self.io.deinit();
         _ = self.base.endScope();
@@ -467,8 +476,15 @@ var arena_ = Arena.init(self.base.allocator());
             if ((expansion_count == 0)) {
                 var copy = bun.handleOom(std.array_list.Managed(u8).initCapacity(self.base.allocator(), (self.current_out.items.len + 1)));
                 _ = &copy;
-                _ = copy.appendSliceAssumeCapacity(self.current_out.items);
-                _ = copy.appendAssumeCapacity(0);
+                for (lexer_output.tokens.items) |tok| {
+                    _ = &tok;
+                    const txt = tok.toText();
+                    _ = bun.handleOom(copy.appendSlice(txt.slice()));
+                }
+                if (self.node.has_glob_expansion()) {
+                    _ = bun.handleOom(self.glob_patterns.append(bun.handleOom(self.base.allocator().dupe(u8, copy.items))));
+                }
+                _ = bun.handleOom(copy.append(0));
                 _ = self.outEnsureUnusedCapacity(1);
                 switch (self.out.pushResult((&copy))) {
 .copied => {
@@ -492,18 +508,24 @@ _ = copy.clearRetainingCapacity();
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_0 = expansion_count;
-                    while (i < __end_0) : (i += 1) {
+                    const __end_2 = expansion_count;
+                    while (i < __end_2) : (i += 1) {
                         expanded_strings[cp_cast_int(usize, i)] = std.array_list.Managed(u8).init(self.base.allocator());
                     }
                 }
-                _ = (blk_catch_1: { break :blk_catch_1 ((Braces.expand(arena_allocator, lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .OutOfMemory)) {  break :__sw_blk_1 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .UnexpectedToken)) {  break :__sw_blk_1 cp_val(std.debug.panic("unexpected error from Braces.expand: UnexpectedToken", .{})); } }  unreachable; }); }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((Braces.expand(arena_allocator, lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; break :blk_catch_1 (__sw_blk_3: { const __disc_3 = e; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .OutOfMemory)) {  break :__sw_blk_3 cp_val(bun.outOfMemory()); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .UnexpectedToken)) {  break :__sw_blk_3 cp_val(std.debug.panic("unexpected error from Braces.expand: UnexpectedToken", .{})); } }  unreachable; }); }); });
+                if (self.node.has_glob_expansion()) {
+                    _ = bun.handleOom(self.glob_patterns.ensureUnusedCapacity(expansion_count));
+                }
                 _ = self.outEnsureUnusedCapacity(expansion_count);
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_2 = expansion_count;
-                    while (i < __end_2) : (i += 1) {
+                    const __end_4 = expansion_count;
+                    while (i < __end_4) : (i += 1) {
+                        if (self.node.has_glob_expansion()) {
+                            _ = bun.handleOom(self.glob_patterns.append(bun.handleOom(self.base.allocator().dupe(u8, expanded_strings[@as(usize, @intCast(i))].items))));
+                        }
                         _ = bun.handleOom(expanded_strings[@as(usize, @intCast(i))].append(0));
                         switch (self.out.pushResult((&expanded_strings[@as(usize, @intCast(i))]))) {
 .copied => {
@@ -517,6 +539,8 @@ _ = expanded_strings[@as(usize, @intCast(i))].clearRetainingCapacity();
                 }
             }
             if (self.node.has_glob_expansion()) {
+                self.glob_idx = 0;
+                self.glob_match_count = 0;
                 self.state = .glob;
             } else {
                 self.state = .done;
@@ -543,7 +567,7 @@ pub fn transitionToGlobState(self: *Expansion) Yield {
         var arena_ = Arena.init(self.base.allocator());
         _ = &arena_;
         self.child_state = .{ .glob = .{ .walker = undefined } };
-        const pattern = self.current_out.items[0..];
+        const pattern = (if ((self.glob_patterns.items.len > 0)) self.glob_patterns.items[@as(usize, @intCast(self.glob_idx))] else self.current_out.items[0..]);
         const cwd = self.base.shell.cwd();
         switch ((blk_catch_2: { break :blk_catch_2 ((GlobWalker.initWithCwd((&self.child_state.glob.walker), (&arena_), pattern, cwd, false, false, false, false, false)) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); })) {
 .result => {
@@ -665,11 +689,11 @@ pub fn postSubshellExpansion(self: *Expansion, stdout_: []u8) void {
             if ((c == 32)) {
                 b = i;
                 prev_whitespace = true;
-                _ = bun.handleOom(self.current_out.appendSlice(stdout[a..b]));
+                _ = self.appendEscapedForBraces((&self.current_out), stdout[a..b]);
                 _ = self.pushCurrentOut();
             }
         }
-        _ = bun.handleOom(self.current_out.appendSlice(stdout[a..b]));
+        _ = self.appendEscapedForBraces((&self.current_out), stdout[a..b]);
 }
 
 pub fn convertNewlinesToSpaces(stdout_: []u8) []u8 {
@@ -731,7 +755,7 @@ pub fn childDone(self: *Expansion, child: ChildPtr, exit_code: ExitCode) Yield {
                 _ = self.postSubshellExpansion(stdout);
             } else {
                 const trimmed = std.mem.trimRight(u8, stdout, " \n\t\r");
-                _ = bun.handleOom(self.current_out.appendSlice(trimmed));
+                _ = self.appendEscapedForBraces((&self.current_out), trimmed);
             }
             self.word_idx = (self.word_idx + 1);
             self.child_state = .idle;
@@ -761,6 +785,57 @@ pub fn onGlobWalkDone(self: *Expansion, task: *ShellGlobTask) Yield {
         break :brk null;
 };
         _ = &walk_err;
+        if ((self.glob_patterns.items.len > 0)) {
+            if (walk_err) |e| {
+                _ = &e;
+                if ((self.parent.ptr.is(Assigns) or (self.parent.ptr.is(Cmd) and (self.parent.ptr.@"as"(Cmd).state == .expanding_assigns)))) {
+                    _ = self.child_state.glob.walker.deinit(true);
+                    self.child_state = .idle;
+                    self.state = .done;
+                    return .{ .expansion = self };
+                }
+                switch (e) {
+.syscall => |sys_err| {
+self.state = .{ .@"err" = bun.shell.ShellErr.newSys(sys_err) };
+},
+.unknown => |errtag| {
+self.state = .{ .@"err" = bun.shell.ShellErr{ .custom = bun.handleOom(self.base.allocator().dupe(u8, @errorName(errtag))) } };
+},
+}
+                _ = self.child_state.glob.walker.deinit(true);
+                self.child_state = .idle;
+                return .{ .expansion = self };
+            }
+            for (task.result.items) |sentinel_str| {
+                _ = &sentinel_str;
+                const duped = bun.handleOom(self.base.allocator().dupeZ(u8, sentinel_str[0..sentinel_str.len]));
+                switch (self.out.pushResultSliceOwned(duped)) {
+.copied => {
+_ = self.base.allocator().free(duped);
+},
+.moved => {
+
+},
+}
+            }
+            self.glob_match_count = (self.glob_match_count + task.result.items.len);
+            _ = self.child_state.glob.walker.deinit(true);
+            self.child_state = .idle;
+            self.glob_idx = (self.glob_idx + 1);
+            if ((self.glob_idx < self.glob_patterns.items.len)) {
+                return .{ .expansion = self };
+            }
+            if ((self.glob_match_count == 0)) {
+                if ((!(self.parent.ptr.is(Assigns) or (self.parent.ptr.is(Cmd) and (self.parent.ptr.@"as"(Cmd).state == .expanding_assigns))))) {
+                    const msg = bun.handleOom(std.fmt.allocPrint(self.base.allocator(), "no matches found: {s}", .{ self.current_out.items[0..] }));
+                    self.state = .{ .@"err" = bun.shell.ShellErr{ .custom = msg } };
+                    return .{ .expansion = self };
+                }
+            }
+            self.word_idx = (self.word_idx + 1);
+            self.state = .done;
+            return .{ .expansion = self };
+        }
         if (((task.result.items.len == 0) or (walk_err != null))) {
             if ((self.parent.ptr.is(Assigns) or (self.parent.ptr.is(Cmd) and (self.parent.ptr.@"as"(Cmd).state == .expanding_assigns)))) {
                 _ = self.pushCurrentOut();
@@ -769,8 +844,8 @@ pub fn onGlobWalkDone(self: *Expansion, task: *ShellGlobTask) Yield {
                 self.state = .done;
                 return .{ .expansion = self };
             }
-            if (walk_err) |e| {
-                _ = &e;
+            if ((walk_err != null)) {
+                const e = walk_err.?;
                 switch (e) {
 .syscall => |sys_err| {
 self.state = .{ .@"err" = bun.shell.ShellErr.newSys(sys_err) };
@@ -806,19 +881,38 @@ _ = self.base.allocator().free(duped);
         return .{ .expansion = self };
 }
 
+pub fn appendEscapedForBraces(self: Expansion, str_list: *std.array_list.Managed(u8), slice: []const u8) void {
+        if ((!self.node.has_brace_expansion())) {
+            _ = bun.handleOom(str_list.appendSlice(slice));
+            return;
+        }
+        for (cp_iter_slice(slice)) |c| {
+            _ = &c;
+            switch (c) {
+',', '{', '}', '\\' => {
+_ = bun.handleOom(str_list.append(92));
+},
+else => {
+
+},
+}
+            _ = bun.handleOom(str_list.append(c));
+        }
+}
+
 pub fn expandSimpleNoIO(self: *Expansion, atom: *const ast.SimpleAtom, str_list: *std.array_list.Managed(u8), comptime expand_tilde: bool) bool {
         switch (atom.*) {
 .Text => |txt| {
-_ = bun.handleOom(str_list.appendSlice(txt));
+_ = self.appendEscapedForBraces(str_list, txt);
 },
 .quoted_empty => {
 self.has_quoted_empty = true;
 },
 .Var => |label| {
-_ = bun.handleOom(str_list.appendSlice(self.expandVar(label)));
+_ = self.appendEscapedForBraces(str_list, self.expandVar(label));
 },
 .VarArgv => |int| {
-_ = bun.handleOom(str_list.appendSlice(self.expandVarArgv(int)));
+_ = self.appendEscapedForBraces(str_list, self.expandVarArgv(int));
 },
 .asterisk => {
 _ = bun.handleOom(str_list.append(42));

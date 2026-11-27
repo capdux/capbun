@@ -133,7 +133,7 @@ pub fn Calc(comptime V: type): type {
                         if (needs_deepclone) v.deepClone(allocator) else v.*,
                     ),
                 },
-                .number => _,
+                .number => _.*,
                 .sum => |sum| .{ .sum = .{
                     .left = bun.create(allocator, This, sum.left.deepClone(allocator)),
                     .right = bun.create(allocator, This, sum.right.deepClone(allocator)),
@@ -967,16 +967,24 @@ pub fn Calc(comptime V: type): type {
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) This?,
         ): Result(This) {
             // Parse nested calc() && other math functions.
-            if (_calc := input.tryParse(This.parse, .{}).asValue()) {
-                const calc: This = _calc;
-                switch (calc) {
-                    .function => |f| return switch (f.*) {
-                        .calc => |c| .{ .result = c },
-                        else => .{ .result = .{ .function = f } },
-                    },
-                    else => return .{ .result = calc },
+            const start = input.state();
+            if (tok := input.next().asValue()) {
+                if (tok.* == .function && CalcUnit.Map.getAnyCase(tok.function) != null) {
+                    input.reset(&start);
+                    const calc = switch (This.parse(input)) {
+                        .result => |v| v,
+                        .err => |e| return .{ .err = e },
+                    };
+                    switch (calc) {
+                        .function => |f| return switch (f.*) {
+                            .calc => |c| .{ .result = c },
+                            else => .{ .result = .{ .function = f } },
+                        },
+                        else => return .{ .result = calc },
+                    }
                 }
             }
+            input.reset(&start);
 
             if (input.tryParse(css.Parser.expectParenthesisBlock, .{}).isOk()) {
                 const Closure = struct {
@@ -1388,7 +1396,7 @@ pub fn Calc(comptime V: type): type {
 
         pub fn mulF32( allocator: Allocator, other: f32): This {
             if (other == 1.0) {
-                return _;
+                return _.*;
             }
 
             return switch (_) {
@@ -1434,7 +1442,7 @@ pub fn Calc(comptime V: type): type {
                     else => This{
                         .product = .{
                             .number = other,
-                            .expression = bun.create(allocator, This, _),
+                            .expression = bun.create(allocator, This, _.*),
                         },
                     },
                 },

@@ -175,6 +175,8 @@ pub struct Printer {
     allocator: Allocator,
     /// Running total of bytes emitted by duplicate vendor-prefix passes.
     prefix_expansion_bytes: usize = 0,
+    /// Running count of `&` expansions for the current rule prelude.
+    nesting_expansion_count: usize = 0,
     // TODO: finish the fields
 
     @tls pub let in_debug_fmt: if (bun.Environment.isDebug) bool else u0 = if (bun.Environment.isDebug) false else 0;

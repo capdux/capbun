@@ -168,6 +168,7 @@ pub const Printer = struct {
     local_names: ?*const css.LocalsResultsMap = null,
     allocator: Allocator,
     prefix_expansion_bytes: usize = 0,
+    nesting_expansion_count: usize = 0,
     pub threadlocal var in_debug_fmt: if (bun.Environment.isDebug) bool else u0 = (if (bun.Environment.isDebug) false else 0);
 
 pub fn lookupSymbol(self: *Printer, ref_: bun.bundle_v2.Ref) []const u8 {

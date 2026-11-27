@@ -15,18 +15,31 @@ struct OptValDeinitGuard<T> {
     }
 }
 
-fn readOptString(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, comptime key: []const u8, comptime err_field: []const u8): bun.JSError!(jsc.ZigString.Slice)? {
-    if (val := opts.getOwn(globalObject, key)?) {
+fn getOption(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto: jsc.JSValue, comptime key: []const u8): bun.JSError!jsc.JSValue? {
+    let cur = opts;
+    while (cur.isObject()) {
+        if (val := cur.getOwn(globalObject, key)?) {
+            return val;
+        }
+        const proto = cur.getPrototype(globalObject);
+        if (!proto.isObject() || proto.eqlValue(obj_proto)) break;
+        cur = proto;
+    }
+    return null;
+}
+
+fn readOptString(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto: jsc.JSValue, comptime key: []const u8, comptime err_field: []const u8): bun.JSError!(jsc.ZigString.Slice)? {
+    if (val := getOption(globalObject, opts, obj_proto, key)?) {
         if (!val.isUndefined()) {
-            if (!val.isString()) return globalObject.throwInvalidArgumentTypeValue(err_field, "string", val);
+            if (!val.isString()) return globalObject.throwInvalidArguments(err_field ++ " must be a string", {});
             return val.toSlice(globalObject, bun.default_allocator)?;
         }
     }
     return null;
 }
 
-fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, comptime key: []const u8, comptime field_name: []const u8): bun.JSError!u64? {
-    if (val := opts.getOwn(globalObject, key)?) {
+fn readOptU64(globalObject: *jsc.JSGlobalObject, opts: jsc.JSValue, obj_proto: jsc.JSValue, comptime key: []const u8, comptime field_name: []const u8): bun.JSError!u64? {
+    if (val := getOption(globalObject, opts, obj_proto, key)?) {
         if (!val.isUndefined()) {
             return globalObject.validateIntegerRange(val, u64, 0, .{ .min = 0, .max = jsc.MAX_SAFE_INTEGER, .field_name = field_name })?;
         }
@@ -62,7 +75,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
     const args = callframe.arguments();
     let _guard_secret = OptValDeinitGuard<jsc.ZigString.Slice>{ val: null };
     if (args.len >= 1 && !args[0].isUndefined()) {
-        if (!args[0].isString()) return globalObject.throwInvalidArgumentTypeValue("secret", "string", args[0]);
+        if (!args[0].isString()) return globalObject.throwInvalidArguments("secret must be a string", {});
         _guard_secret.val = args[0].toSlice(globalObject, bun.default_allocator)?;
     }
 
@@ -74,14 +87,15 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
 
     if (args.len > 1 && args[1].isObject()) {
         const opts = args[1];
-        if (v := readOptU64(globalObject, opts, "expiresIn", "CSRFGenerateOptions.expiresIn")?) expires_in = v;
-        if (v := readOptString(globalObject, opts, "sessionId", "CSRFGenerateOptions.sessionId")?) _guard_session_id.val = v;
-        if (encoding_js := opts.getOwn(globalObject, "encoding")?) {
+        const obj_proto = jsc.JSValue.createEmptyObject(globalObject, 0).getPrototype(globalObject);
+        if (v := readOptU64(globalObject, opts, obj_proto, "expiresIn", "CSRFGenerateOptions.expiresIn")?) expires_in = v;
+        if (v := readOptString(globalObject, opts, obj_proto, "sessionId", "CSRFGenerateOptions.sessionId")?) _guard_session_id.val = v;
+        if (encoding_js := getOption(globalObject, opts, obj_proto, "encoding")?) {
             encoding_enum_opt = jsc.Node.Encoding.fromJSWithDefaultOnEmpty(encoding_js, globalObject, .base64url)?;
         }
-        if (algo_js := opts.getOwn(globalObject, "algorithm")?) {
+        if (algo_js := getOption(globalObject, opts, obj_proto, "algorithm")?) {
             if (!algo_js.isUndefined()) {
-                if (!algo_js.isString()) return globalObject.throwInvalidArgumentTypeValue("CSRFGenerateOptions.algorithm", "string", algo_js);
+                if (!algo_js.isString()) return globalObject.throwInvalidArguments("CSRFGenerateOptions.algorithm must be a string", {});
                 has_algorithm = true;
                 algo_opt = jsc.API.Bun.Crypto.EVP.Algorithm.map.fromJSCaseInsensitive(globalObject, algo_js)?;
             }
@@ -121,7 +135,7 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
 
     const args = call_frame.arguments();
     const jsToken: jsc.JSValue = if (args.len >= 1) args[0] else .js_undefined;
-    if (!jsToken.isString()) return globalObject.throwInvalidArgumentTypeValue("token", "string", jsToken);
+    if (!jsToken.isString()) return globalObject.throwInvalidArguments("token must be a string", {});
     let token = jsToken.toSlice(globalObject, bun.default_allocator)?;
     const _guard_token = DeinitGuard<jsc.ZigString.Slice>{ ptr: &token };
 
@@ -134,15 +148,16 @@ pub fn csrf__verify(globalObject: *jsc.JSGlobalObject, call_frame: *jsc.CallFram
 
     if (args.len > 1 && args[1].isObject()) {
         const opts = args[1];
-        if (v := readOptString(globalObject, opts, "secret", "CSRFVerifyOptions.secret")?) _guard_secret.val = v;
-        if (v := readOptString(globalObject, opts, "sessionId", "CSRFVerifyOptions.sessionId")?) _guard_session_id.val = v;
-        if (v := readOptU64(globalObject, opts, "maxAge", "CSRFVerifyOptions.maxAge")?) max_age = v;
-        if (encoding_js := opts.getOwn(globalObject, "encoding")?) {
+        const obj_proto = jsc.JSValue.createEmptyObject(globalObject, 0).getPrototype(globalObject);
+        if (v := readOptString(globalObject, opts, obj_proto, "secret", "CSRFVerifyOptions.secret")?) _guard_secret.val = v;
+        if (v := readOptString(globalObject, opts, obj_proto, "sessionId", "CSRFVerifyOptions.sessionId")?) _guard_session_id.val = v;
+        if (v := readOptU64(globalObject, opts, obj_proto, "maxAge", "CSRFVerifyOptions.maxAge")?) max_age = v;
+        if (encoding_js := getOption(globalObject, opts, obj_proto, "encoding")?) {
             encoding_enum_opt = jsc.Node.Encoding.fromJSWithDefaultOnEmpty(encoding_js, globalObject, .base64url)?;
         }
-        if (algo_js := opts.getOwn(globalObject, "algorithm")?) {
+        if (algo_js := getOption(globalObject, opts, obj_proto, "algorithm")?) {
             if (!algo_js.isUndefined()) {
-                if (!algo_js.isString()) return globalObject.throwInvalidArgumentTypeValue("CSRFVerifyOptions.algorithm", "string", algo_js);
+                if (!algo_js.isString()) return globalObject.throwInvalidArguments("CSRFVerifyOptions.algorithm must be a string", {});
                 has_algorithm = true;
                 algo_opt = jsc.API.Bun.Crypto.EVP.Algorithm.map.fromJSCaseInsensitive(globalObject, algo_js)?;
             }

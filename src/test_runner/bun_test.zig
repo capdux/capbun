@@ -1287,33 +1287,51 @@ pub fn create(gpa: std.mem.Allocator, base: BaseScope) *DescribeScope {
     }
 
 pub fn destroy(self: *DescribeScope, gpa: std.mem.Allocator) void {
-            for (self.entries.items) |*entry| {
-                _ = &entry;
-                _ = (entry.*).deinit(gpa);
+            var stack = std.array_list.Managed(*DescribeScope).init(gpa);
+            _ = &stack;
+            defer {
+            _ = stack.deinit();
             }
-            for (self.beforeAll.items) |item| {
-                _ = &item;
-                _ = item.destroy(gpa);
+            _ = bun.handleOom(stack.append(self));
+            while ((stack.items.len > 0)) {
+                const top_idx = (stack.items.len - 1);
+                const scope = stack.items[@as(usize, @intCast(top_idx))];
+                stack.items.len = top_idx;
+                for (scope.entries.items) |entry| {
+                    _ = &entry;
+                    switch (entry) {
+.describe => |describe| {
+_ = bun.handleOom(stack.append(describe));
+},
+.test_callback => |test_scope| {
+_ = test_scope.destroy(gpa);
+},
+}
+                }
+                for (scope.beforeAll.items) |item| {
+                    _ = &item;
+                    _ = item.destroy(gpa);
+                }
+                for (scope.beforeEach.items) |item| {
+                    _ = &item;
+                    _ = item.destroy(gpa);
+                }
+                for (scope.afterAll.items) |item| {
+                    _ = &item;
+                    _ = item.destroy(gpa);
+                }
+                for (scope.afterEach.items) |item| {
+                    _ = &item;
+                    _ = item.destroy(gpa);
+                }
+                _ = scope.entries.deinit();
+                _ = scope.beforeAll.deinit();
+                _ = scope.beforeEach.deinit();
+                _ = scope.afterAll.deinit();
+                _ = scope.afterEach.deinit();
+                _ = scope.base.deinit(gpa);
+                _ = gpa.destroy(scope);
             }
-            for (self.beforeEach.items) |item| {
-                _ = &item;
-                _ = item.destroy(gpa);
-            }
-            for (self.afterAll.items) |item| {
-                _ = &item;
-                _ = item.destroy(gpa);
-            }
-            for (self.afterEach.items) |item| {
-                _ = &item;
-                _ = item.destroy(gpa);
-            }
-            _ = self.entries.deinit();
-            _ = self.beforeAll.deinit();
-            _ = self.beforeEach.deinit();
-            _ = self.afterAll.deinit();
-            _ = self.afterEach.deinit();
-            _ = self.base.deinit(gpa);
-            _ = gpa.destroy(self);
     }
 
 pub fn markContainsOnly(self: *DescribeScope) void {

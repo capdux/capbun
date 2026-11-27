@@ -167,6 +167,8 @@ pub fn CssRuleList(comptime AtRule: type): type {
             // _ = property_rules; // autofix
             let style_rules: StyleRuleKey(AtRule).HashMap(usize) = .{};
             let rules: ArrayList(CssRule(AtRule)) = .{};
+            let pending_decl_merge = false;
+            let last_style_compatible = false;
 
             let rule_idx: usize = 0;
             while (rule_idx < _.v.items.len) : (rule_idx += 1) {
@@ -232,6 +234,18 @@ pub fn CssRuleList(comptime AtRule: type): type {
                         const SelectorList = css.selector.SelectorList;
                         const Component = css.selector.Component;
                         debug("Input style:\n  Selectors: {f}\n  Decls: {f}\n", .{ sty.selectors.debug(), sty.declarations.debug() });
+                        if (pending_decl_merge) {
+                            const can_continue_decl_merge = rules.items.len > 0 &&
+                                rules.items[rules.items.len - 1] == .style &&
+                                sty.selectors.eql(&rules.items[rules.items.len - 1].style.selectors) &&
+                                sty.rules.v.items.len == 0 &&
+                                rules.items[rules.items.len - 1].style.rules.v.items.len == 0 &&
+                                (!context.css_modules || sty.loc.source_index == rules.items[rules.items.len - 1].style.loc.source_index);
+                            if (!can_continue_decl_merge) {
+                                flushPendingDeclMerge(AtRule, &rules, &style_rules, context, parent_is_unused, &pending_decl_merge)?;
+                                last_style_compatible = false;
+                            }
+                        }
                         if (parent_is_unused || sty.minify(context, parent_is_unused)?) {
                             continue;
                         }
@@ -277,39 +291,53 @@ pub fn CssRuleList(comptime AtRule: type): type {
 
                         sty.updatePrefix(context);
 
+                        const has_incompatible = incompatible.len() > 0;
+                        let saved_decls_for_incompatible: css.DeclarationBlock = if (has_incompatible)
+                            sty.declarations.deepClone(context.allocator)
+                        else
+                            .{};
+
                         // Attempt to merge the new rule with the last rule we added.
                         let merged = false;
+                        let decl_merged = false;
                         if (rules.items.len > 0 && rules.items[rules.items.len - 1] == .style) {
                             const last_style_rule = &rules.items[rules.items.len - 1].style;
-                            if (mergeStyleRules(AtRule, sty, last_style_rule, context)) {
-                                // If that was successful, then the last rule has been updated to include the
-                                // selectors/declarations of the new rule. This might mean that we can merge it
-                                // with the previous rule, so continue trying while we have style rules available.
-                                while (rules.items.len >= 2) {
-                                    const len = rules.items.len;
-                                    const split_pair = bun.splitAtMut(CssRule(AtRule), rules.items, len - 1);
-                                    let a = split_pair[0];
-                                    let b = split_pair[1];
-                                    if (b[0] == .style && a[len - 2] == .style) {
-                                        if (mergeStyleRules(AtRule, &b[0].style, &a[len - 2].style, context)) {
-                                            // If we were able to merge the last rule into the previous one, remove the last.
-                                            * = rules.pop();
-                                            truncateStyleRules(AtRule, &style_rules, rules.items.len);
-                                            // TODO: deinit?
-                                            // popped.deinit(contet.allocator);
-                                            continue;
+                            if (mergeStyleRules(AtRule, sty, last_style_rule, context, true, last_style_compatible, &decl_merged)) {
+                                if (decl_merged) {
+                                    pending_decl_merge = true;
+                                } else {
+                                    // Selector merge: if that was successful, then the last rule has been updated to include the
+                                    // selectors of the new rule. Continue trying to merge with previous rules.
+                                    while (rules.items.len >= 2) {
+                                        const len = rules.items.len;
+                                        const split_pair = bun.splitAtMut(CssRule(AtRule), rules.items, len - 1);
+                                        let a = split_pair[0];
+                                        let b = split_pair[1];
+                                        if (b[0] == .style && a[len - 2] == .style) {
+                                            let cascade_decl_merged = false;
+                                            if (mergeStyleRules(AtRule, &b[0].style, &a[len - 2].style, context, false, false, &cascade_decl_merged)) {
+                                                * = rules.pop();
+                                                truncateStyleRules(AtRule, &style_rules, rules.items.len);
+                                                continue;
+                                            }
                                         }
+                                        break;
                                     }
-                                    // If we didn't see a style rule, or were unable to merge, stop.
-                                    break;
+                                    last_style_compatible = rules.items[rules.items.len - 1].style.isCompatible(context.targets.*);
                                 }
                                 merged = true;
                             }
                         }
 
+                        if (pending_decl_merge && has_incompatible) {
+                            flushPendingDeclMerge(AtRule, &rules, &style_rules, context, parent_is_unused, &pending_decl_merge)?;
+                            last_style_compatible = false;
+                        }
+
                         // Create additional rules for logical properties, @supports overrides, and incompatible selectors.
-                        const supps = context.handler_context.getSupportsRules(AtRule, sty);
-                        const logical = context.handler_context.getAdditionalRules(AtRule, sty);
+                        const empty_extra: ArrayList(CssRule(AtRule)) = .{};
+                        const supps = if (decl_merged && pending_decl_merge) empty_extra else context.handler_context.getSupportsRules(AtRule, sty);
+                        const logical = if (decl_merged && pending_decl_merge) empty_extra else context.handler_context.getAdditionalRules(AtRule, sty);
                         debug("LOGICAL: {d}\n", .{logical.items.len});
                         const StyleRule = style.StyleRule(AtRule);
                         const Entry = IncompatibleRuleEntry(AtRule);
@@ -326,7 +354,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
                                 let clone: StyleRule = {
                                     selectors: list,
                                     vendor_prefix: sty.vendor_prefix,
-                                    declarations: sty.declarations.deepClone(context.allocator),
+                                    declarations: if (merged) saved_decls_for_incompatible.deepClone(context.allocator) else sty.declarations.deepClone(context.allocator),
                                     rules: sty.rules.deepClone(context.allocator),
                                     loc: sty.loc,
                                 };
@@ -344,6 +372,10 @@ pub fn CssRuleList(comptime AtRule: type): type {
 
                             break :incompatible_rules incompatible_rules;
                         };
+                        if (has_incompatible) {
+                            css.deepDeinit(css.Property, context.allocator, &saved_decls_for_incompatible.declarations);
+                            css.deepDeinit(css.Property, context.allocator, &saved_decls_for_incompatible.important_declarations);
+                        }
                         debug("Incompatible rules: {d}\n", .{incompatible_rules.len()});
                         const _incompatible_guard = DeinitWithAllocGuard<css.SmallList(css.selector.parser.Selector, 1)>{
                             ptr: unsafe { &incompatible },
@@ -356,7 +388,9 @@ pub fn CssRuleList(comptime AtRule: type): type {
                         * = &_incompatible_guard;
                         * = &_incompatible_rules_guard;
 
-                        context.handler_context.reset();
+                        if (!(decl_merged && pending_decl_merge)) {
+                            context.handler_context.reset();
+                        }
 
                         // If the rule has nested rules, and we have extra rules to insert such as for logical properties,
                         // we need to split the rule in two so we can insert the extra rules in between the declarations from
@@ -378,6 +412,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
                         } else null;
 
                         if (!merged && !sty.isEmpty()) {
+                            last_style_compatible = sty.isCompatible(context.targets.*);
                             const source_index = sty.loc.source_index;
                             const has_no_rules = sty.rules.v.items.len == 0;
                             const idx = rules.items.len;
@@ -456,6 +491,11 @@ pub fn CssRuleList(comptime AtRule: type): type {
                     else => {},
                 }
 
+                if (pending_decl_merge) {
+                    flushPendingDeclMerge(AtRule, &rules, &style_rules, context, parent_is_unused, &pending_decl_merge)?;
+                }
+                last_style_compatible = false;
+
                 bun.handleOom(rules.append(context.allocator, rule.*));
                 moved_rule = true;
 
@@ -467,7 +507,9 @@ pub fn CssRuleList(comptime AtRule: type): type {
                 style_rules.clearRetainingCapacity();
             }
 
-            // MISSING SHIT HERE
+            if (pending_decl_merge) {
+                flushPendingDeclMerge(AtRule, &rules, &style_rules, context, parent_is_unused, &pending_decl_merge)?;
+            }
 
             css.deepDeinit(CssRule(AtRule), context.allocator, &_.v);
             _.v = rules;
@@ -624,17 +666,74 @@ fn truncateStyleRules(comptime R: type, style_rules: *StyleRuleKey(R).HashMap(us
     }
 }
 
+fn flushPendingDeclMerge(
+    comptime AtRule: type,
+    rules: *ArrayList(CssRule(AtRule)),
+    style_rules: *StyleRuleKey(AtRule).HashMap(usize),
+    context: *MinifyContext,
+    parent_is_unused: bool,
+    pending_decl_merge: *bool,
+): css.MinifyErr!void {
+    if (!pending_decl_merge.*) return;
+    pending_decl_merge.* = false;
+
+    const last = &rules.items[rules.items.len - 1].style;
+    last.declarations.minify(context.handler, context.important_handler, &context.handler_context);
+
+    const supps = context.handler_context.getSupportsRules(AtRule, last);
+    const logical = context.handler_context.getAdditionalRules(AtRule, last);
+    context.handler_context.reset();
+
+    while (rules.items.len >= 2) {
+        const len = rules.items.len;
+        const split_pair = bun.splitAtMut(CssRule(AtRule), rules.items, len - 1);
+        let a = split_pair[0];
+        let b = split_pair[1];
+        if (b[0] == .style && a[len - 2] == .style) {
+            let cascade_decl_merged = false;
+            if (mergeStyleRules(AtRule, &b[0].style, &a[len - 2].style, context, false, false, &cascade_decl_merged)) {
+                * = rules.pop();
+                truncateStyleRules(AtRule, style_rules, rules.items.len);
+                if (cascade_decl_merged) {
+                    const extra_supps = context.handler_context.getSupportsRules(AtRule, &a[len - 2].style);
+                    const extra_logical = context.handler_context.getAdditionalRules(AtRule, &a[len - 2].style);
+                    context.handler_context.reset();
+                    if (extra_logical.items.len > 0) {
+                        let log: CssRuleList(AtRule) = .{ .v = extra_logical };
+                        log.minify(context, parent_is_unused)?;
+                        bun.handleOom(rules.appendSlice(context.allocator, log.v.items));
+                    }
+                    bun.handleOom(rules.appendSlice(context.allocator, extra_supps.items));
+                }
+                continue;
+            }
+        }
+        break;
+    }
+
+    if (logical.items.len > 0) {
+        let log: CssRuleList(AtRule) = .{ .v = logical };
+        log.minify(context, parent_is_unused)?;
+        bun.handleOom(rules.appendSlice(context.allocator, log.v.items));
+    }
+    bun.handleOom(rules.appendSlice(context.allocator, supps.items));
+}
+
 fn mergeStyleRules(
     comptime T: type,
     sty: *style.StyleRule(T),
     last_style_rule: *style.StyleRule(T),
     context: *MinifyContext,
+    defer_decl_minify: bool,
+    last_already_compatible: bool,
+    decl_merged: *bool,
 ): bool {
+    decl_merged.* = false;
     // Merge declarations if the selectors are equivalent, and both are compatible with all targets.
     // Does not apply if css modules are enabled
     if (sty.selectors.eql(&last_style_rule.selectors) &&
         sty.isCompatible(context.targets.*) &&
-        last_style_rule.isCompatible(context.targets.*) &&
+        (last_already_compatible || last_style_rule.isCompatible(context.targets.*)) &&
         sty.rules.v.items.len == 0 &&
         last_style_rule.rules.v.items.len == 0 &&
         (!context.css_modules || sty.loc.source_index == last_style_rule.loc.source_index))
@@ -651,11 +750,14 @@ fn mergeStyleRules(
         ) catch e => bun.handleOom(e);
         sty.declarations.important_declarations.clearRetainingCapacity();
 
-        last_style_rule.declarations.minify(
-            context.handler,
-            context.important_handler,
-            &context.handler_context,
-        );
+        if (!defer_decl_minify) {
+            last_style_rule.declarations.minify(
+                context.handler,
+                context.important_handler,
+                &context.handler_context,
+            );
+        }
+        decl_merged.* = true;
         return true;
     } else if (sty.declarations.eql(&last_style_rule.declarations) &&
         sty.rules.v.items.len == 0 &&
@@ -678,7 +780,7 @@ fn mergeStyleRules(
         }
 
         // Append the selectors to the last rule if the declarations are the same, and all selectors are compatible.
-        if (sty.isCompatible(context.targets.*) && last_style_rule.isCompatible(context.targets.*)) {
+        if (sty.isCompatible(context.targets.*) && (last_already_compatible || last_style_rule.isCompatible(context.targets.*))) {
             last_style_rule.selectors.v.appendSlice(
                 context.allocator,
                 sty.selectors.v.slice(),

@@ -257,12 +257,12 @@ pub fn partialCmpArgs(a: *const This, b: *const This) ?std.math.Order {
             return null;
     }
 
-pub fn deepClone(self: @This(), allocator: Allocator) This {
-            return (switch (self) {
+pub fn deepClone(self: *const @This(), allocator: Allocator) This {
+            return (switch (self.*) {
 .value => |v| .{ .value = bun.create(allocator, V, (if (needs_deepclone) v.deepClone(allocator) else v.*)) },
-.number => self,
-.sum => |sum| .{ .sum = .{ .left = bun.create(allocator, This, sum.left.deepClone(allocator)), .right = bun.create(allocator, This, sum.right.deepClone(allocator)) } },
-.product => |product| .{ .product = .{ .number = product.number, .expression = bun.create(allocator, This, product.expression.deepClone(allocator)) } },
+.number => self.*,
+.sum => |*sum| .{ .sum = .{ .left = bun.create(allocator, This, sum.left.deepClone(allocator)), .right = bun.create(allocator, This, sum.right.deepClone(allocator)) } },
+.product => |*product| .{ .product = .{ .number = product.number, .expression = bun.create(allocator, This, product.expression.deepClone(allocator)) } },
 .function => |function| .{ .function = bun.create(allocator, MathFunction(V), function.deepClone(allocator)) },
 });
     }
@@ -1037,10 +1037,18 @@ return .{ .err = e };
     }
 
 pub fn parseValue(input: *css.Parser, ctx: anytype, comptime parse_ident: *const fn (@TypeOf(ctx), []const u8) ?This) Result(This) {
-            if (input.tryParse(This.parse, .{}).asValue()) |_calc| {
-                _ = &_calc;
-                const calc: This = _calc;
-                switch (calc) {
+            const start = input.state();
+            if (input.next().asValue()) |tok| {
+                _ = &tok;
+                if (((tok.* == .function) and (CalcUnit.Map.getAnyCase(tok.function) != null))) {
+                    _ = input.reset((&start));
+                    const calc = (switch (This.parse(input)) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    switch (calc) {
 .function => |f| {
 return (switch (f.*) {
 .calc => |c| .{ .result = c },
@@ -1051,7 +1059,9 @@ else => {
 return .{ .result = calc };
 },
 }
+                }
             }
+            _ = input.reset((&start));
             if (input.tryParse(css.Parser.expectParenthesisBlock, .{}).isOk()) {
                 const Closure = struct {
     ctx: @TypeOf(ctx),
@@ -1440,11 +1450,11 @@ pub fn isSignNegative(self: @This()) bool {
             return css.signfns.isSignNegative(((self.trySign()) orelse { return false; }));
     }
 
-pub fn mulF32(self: @This(), allocator: Allocator, other: f32) This {
+pub fn mulF32(self: *const @This(), allocator: Allocator, other: f32) This {
             if ((other == 1.0)) {
-                return self;
+                return self.*;
             }
-            return (switch (self) {
+            return (switch (self.*) {
 .value => This{ .value = bun.create(allocator, V, mulValueF32(self.value.*, allocator, other)) },
 .number => This{ .number = (self.number * other) },
 .sum => This{ .sum = .{ .left = bun.create(allocator, This, self.sum.left.mulF32(allocator, other)), .right = bun.create(allocator, This, self.sum.right.mulF32(allocator, other)) } },
@@ -1459,7 +1469,7 @@ pub fn mulF32(self: @This(), allocator: Allocator, other: f32) This {
 },
 .function => (switch (self.function.*) {
 .calc => This{ .function = bun.create(allocator, MathFunction(V), MathFunction(V){ .calc = self.function.calc.mulF32(allocator, other) }) },
-else => This{ .product = .{ .number = other, .expression = bun.create(allocator, This, self) } },
+else => This{ .product = .{ .number = other, .expression = bun.create(allocator, This, self.*) } },
 }),
 });
     }

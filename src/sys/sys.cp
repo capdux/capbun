@@ -3215,7 +3215,7 @@ pub fn mmapFile(path: [:0]const u8, flags: std.c.MAP, wanted_size: usize?, offse
     };
     const _fd_guard = FdGuard{ fd: fd };
 
-    let size = std.math.sub(usize, @as(usize, i32(switch (fstat(fd)) {
+    let size = std.math.sub(usize, @as(usize, @intCast(switch (fstat(fd)) {
         .result => |result| result.size,
         .err => |e| {
             return { err: e };

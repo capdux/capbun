@@ -1070,7 +1070,7 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
     };
 }
 
-fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) {
+fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer): bool {
     const BlockStack = SmallList(BlockType, 16);
     let stack: BlockStack = .{};
     stack.appendAssumeCapacity(block_type);
@@ -1078,12 +1078,12 @@ fn consume_until_end_of_block(block_type: BlockType, tokenizer: *Tokenizer) {
     while (true) {
         const tok = switch (tokenizer.next()) {
             .result => |v| v,
-            .err => break,
+            .err => return true,
         };
         if (b := BlockType.closing(&tok)) {
             if (stack.getLastUnchecked() == b) {
                 * = stack.pop();
-                if (stack.len() == 0) return;
+                if (stack.len() == 0) return false;
             }
         }
 
@@ -1301,7 +1301,7 @@ fn parse_until_before(
         return final_res;
     }
     if (block_type := delimited_parser.at_start_of) {
-        consume_until_end_of_block(block_type, &delimited_parser.input.tokenizer);
+        * = consume_until_end_of_block(block_type, &delimited_parser.input.tokenizer);
     }
 
     // FIXME: have a special-purpose tokenizer method for this that does less work.
@@ -1311,7 +1311,7 @@ fn parse_until_before(
         switch (parser.input.tokenizer.next()) {
             .result => |token| {
                 if (block_type := BlockType.opening(&token)) {
-                    consume_until_end_of_block(block_type, &parser.input.tokenizer);
+                    * = consume_until_end_of_block(block_type, &parser.input.tokenizer);
                 }
             },
             else => break,
@@ -1343,7 +1343,7 @@ pub fn parse_until_after(
         // We know this byte is ASCII.
         parser.input.tokenizer.advance(1);
         if (next_byte == '{') {
-            consume_until_end_of_block(BlockType.curly_bracket, &parser.input.tokenizer);
+            * = consume_until_end_of_block(BlockType.curly_bracket, &parser.input.tokenizer);
         }
     }
     return result;
@@ -1353,6 +1353,15 @@ fn parse_nested_block(parser: *Parser, comptime T: type, closure: auto, comptime
     if (parser.at_start_of == null) @panic("A nested parser can only be created when a Function, ParenthisisBlock, SquareBracketBlock, or CurlyBracketBlock token was just consumed.");
     const block_type: BlockType = parser.at_start_of.?;
     parser.at_start_of = null;
+
+    const block_start = parser.input.tokenizer.position;
+    if (unclosed_pos := parser.input.unclosed_failed_block_pos) {
+        if (block_start == unclosed_pos) {
+            parser.input.tokenizer.position = parser.input.tokenizer.src.len;
+            parser.input.cached_token = null;
+            return .{ .err = parser.newError(BasicParseErrorKind.end_of_input) };
+        }
+    }
 
     const closing_delimiter = switch (block_type) {
         .curly_bracket => Delimiters{ .close_curly_bracket = true },
@@ -1367,10 +1376,18 @@ fn parse_nested_block(parser: *Parser, comptime T: type, closure: auto, comptime
         extra: parser.extra,
     };
     const result = nested_parser.parseEntirely(T, closure, parsefn);
+    let unclosed = false;
     if (block_type2 := nested_parser.at_start_of) {
-        consume_until_end_of_block(block_type2, &nested_parser.input.tokenizer);
+        if (consume_until_end_of_block(block_type2, &nested_parser.input.tokenizer)) {
+            unclosed = true;
+        }
     }
-    consume_until_end_of_block(block_type, &parser.input.tokenizer);
+    if (consume_until_end_of_block(block_type, &parser.input.tokenizer)) {
+        unclosed = true;
+    }
+    if (result == .err && unclosed) {
+        parser.input.unclosed_failed_block_pos = block_start;
+    }
     return result;
 }
 
@@ -4579,7 +4596,7 @@ pub struct Parser {
     fn @"skip cdc and cdo"(*_) {
         if (block_type := _.at_start_of) {
             _.at_start_of = null;
-            consume_until_end_of_block(block_type, &_.input.tokenizer);
+            * = consume_until_end_of_block(block_type, &_.input.tokenizer);
         }
 
         _.input.tokenizer.@"skip cdc and cdo"();
@@ -4588,7 +4605,7 @@ pub struct Parser {
     fn skipWhitespace(*_) {
         if (block_type := _.at_start_of) {
             _.at_start_of = null;
-            consume_until_end_of_block(block_type, &_.input.tokenizer);
+            * = consume_until_end_of_block(block_type, &_.input.tokenizer);
         }
 
         _.input.tokenizer.skipWhitespace();
@@ -4643,7 +4660,7 @@ pub struct Parser {
     fn nextIncludingWhitespaceAndComments(*_): Result(*Token) {
         if (block_type := _.at_start_of) {
             _.at_start_of = null;
-            consume_until_end_of_block(block_type, &_.input.tokenizer);
+            * = consume_until_end_of_block(block_type, &_.input.tokenizer);
         }
 
         const byte = _.input.tokenizer.nextByte();
@@ -4751,6 +4768,7 @@ pub struct Parser {
 pub struct ParserInput {
     tokenizer: Tokenizer,
     cached_token: CachedToken? = null,
+    unclosed_failed_block_pos: usize? = null,
 
     static fn new(allocator: Allocator, code: []const u8): ParserInput {
         return ParserInput{

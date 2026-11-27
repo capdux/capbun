@@ -110,6 +110,7 @@ pub fn StyleRule(comptime R: type): type {
                 //   #[cfg(feature = "sourcemap")]
                 //   dest.add_mapping(self.loc);
 
+                dest.nesting_expansion_count = 0;
                 css.selector.serialize.serializeSelectorList(_.selectors.v.slice(), dest, dest.context(), false)?;
                 dest.whitespace()?;
                 dest.writeChar('{')?;

@@ -205,7 +205,7 @@ pub fn PostgresBinarySingleDimensionArrayImpl(comptime T: type) type {
         data: [*]u8,
         elem_len: i32,
 
-pub fn slice(self: @This()) PostgresBinaryArraySlice {
+pub fn slice(self: *const @This()) PostgresBinaryArraySlice {
                 const data_ptr: [*]u8 = (blk: {
                 break :blk @ptrCast((&self.data[20]));
 

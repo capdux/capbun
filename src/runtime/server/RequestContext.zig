@@ -526,13 +526,23 @@ pub fn setTimeoutHandler(self: *@This()) void {
     }
 
 pub fn cancelUnreadBody(response: *Response, globalThis: *jsc.JSGlobalObject) void {
+            const bv = response.getBodyValue();
+            if ((bv.* == .Locked)) {
+                const lock = (&bv.Locked);
+                if (((((lock.onReceiveValue != null) or (lock.task != null)) or (lock.action != .none)) or (lock.promise != null))) {
+                    return;
+                }
+            }
             if (response.getBodyReadableStream(globalThis)) |stream| {
                 _ = &stream;
+                const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
+                if (is_locked_fn(stream, globalThis)) {
+                    return;
+                }
                 _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
                 _ = response.detachReadableStream(globalThis);
                 _ = stream.cancelWithReason(globalThis, jsc.JSValue.js_undefined);
             }
-            const bv = response.getBodyValue();
             bv.* = .Used;
     }
 
@@ -1068,16 +1078,12 @@ pub fn onAbort(self: *@This(), resp: *App.Response) void {
             if (self.sink) |wrapper| {
                 _ = &wrapper;
                 _ = wrapper.sink.abort();
-                if ((blk_catch_1: { break :blk_catch_1 ((self.endRequestStreaming()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 true; }); })) {
-                    any_js_calls = true;
-                }
-                _ = self.reclaimPromiseCell();
                 return;
             }
             if (self.isDeadRequest()) {
                 _ = self.finalizeWithoutDeinit();
             } else {
-                if ((blk_catch_2: { break :blk_catch_2 ((self.endRequestStreaming()) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 true; }); })) {
+                if ((blk_catch_1: { break :blk_catch_1 ((self.endRequestStreaming()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 true; }); })) {
                     any_js_calls = true;
                 }
                 if (self.response_weakref.get()) |response| {
@@ -1151,7 +1157,7 @@ pub fn finalizeWithoutDeinit(self: *@This()) void {
                     _ = signal.signal(globalThis, .ConnectionClosed);
                 }
             }
-            _ = (blk_catch_3: { break :blk_catch_3 ((self.endRequestStreaming()) catch |__ce_3| { _ = &__ce_3;  }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((self.endRequestStreaming()) catch |__ce_2| { _ = &__ce_2;  }); });
             if (self.byte_stream) |stream| {
                 _ = &stream;
                 _ = ctxLog("finalizeWithoutDeinit: stream != null", .{});
@@ -1252,7 +1258,7 @@ pub fn doSendfile(self: *@This(), blob: Blob) void {
 .result => |_fd| _fd,
 .err => |err| {
 {
-                const js_err = (blk_catch_4: { break :blk_catch_4 ((err.withPath(file.pathlike.path.slice()).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return self.renderProductionError(500); }); });
+                const js_err = (blk_catch_3: { break :blk_catch_3 ((err.withPath(file.pathlike.path.slice()).toJS(globalThis)) catch |__ce_3| { _ = &__ce_3; return self.renderProductionError(500); }); });
                 return self.runErrorHandler(js_err);
             }
 },
@@ -1264,7 +1270,7 @@ pub fn doSendfile(self: *@This(), blob: Blob) void {
                 if (auto_close) {
                     _ = fd.close();
                 }
-                const js_err = (blk_catch_5: { break :blk_catch_5 ((err.withPathLike(file.pathlike).toJS(globalThis)) catch |__ce_5| { _ = &__ce_5; return self.renderProductionError(500); }); });
+                const js_err = (blk_catch_4: { break :blk_catch_4 ((err.withPathLike(file.pathlike).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return self.renderProductionError(500); }); });
                 return self.runErrorHandler(js_err);
             }
 },
@@ -1517,7 +1523,7 @@ _ = streamLog("promise still Pending", .{});
                     const bodyValue = (req_ctx.response_weakref.get()).?.getBodyValue();
                     bodyValue.* = .{ .Locked = .{ .readable = jsc.WebCore.ReadableStream.Strong.init(stream, globalThis), .global = globalThis } };
                     const cell = req_ctx.createPromiseCell(globalThis);
-                    _ = (blk_catch_8: { break :blk_catch_8 ((effective_result.thenWithValue(globalThis, cell, onResolveStream, onRejectStream)) catch |__ce_8| { _ = &__ce_8;  }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((effective_result.thenWithValue(globalThis, cell, onResolveStream, onRejectStream)) catch |__ce_7| { _ = &__ce_7;  }); });
 },
 .fulfilled => {
 _ = streamLog("promise Fulfilled", .{});
@@ -1588,7 +1594,7 @@ _ = streamLog("promise Rejected", .{});
             defer if (!___guard_ref_moved) { ___guard_ref_moved = true; const __T = @TypeOf(_guard_ref); if (@typeInfo(__T) == .optional) { if (_guard_ref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ref; _drop_val.__cp_deinit(); } };
             const is_in_progress = (response_stream.sink.has_backpressure or (!((response_stream.sink.wrote == 0) and (response_stream.sink.buffer.len == 0))));
             if (((!stream.isLocked(globalThis)) and (!is_in_progress))) {
-                if ((blk_catch_9: { break :blk_catch_9 ((jsc.WebCore.ReadableStream.fromJS((if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), globalThis)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 null; }); })) |comparator| {
+                if ((blk_catch_8: { break :blk_catch_8 ((jsc.WebCore.ReadableStream.fromJS((if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), globalThis)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); })) |comparator| {
                     _ = &comparator;
                     if ((std.meta.activeTag(comparator.ptr) == std.meta.activeTag(stream.ptr))) {
                         _ = streamLog("is not locked", .{});
@@ -1628,8 +1634,8 @@ pub fn toAsyncWithoutAbortHandler(ctx: *RequestContext, req: *Req, request_objec
             if (comptime (!http3)) {
                 _ = request_object.request_context.setRequest(req);
             }
-            _ = (blk_catch_10: { break :blk_catch_10 ((request_object.ensureURL()) catch |__ce_10| { _ = &__ce_10; request_object.url = bun.String.empty;
-            break :blk_catch_10 {}; }); });
+            _ = (blk_catch_9: { break :blk_catch_9 ((request_object.ensureURL()) catch |__ce_9| { _ = &__ce_9; request_object.url = bun.String.empty;
+            break :blk_catch_9 {}; }); });
             if ((!request_object.hasFetchHeaders())) {
                 if (comptime (!http3)) {
                     _ = request_object.setFetchHeaders(.createFromUWS(req));
@@ -1649,7 +1655,7 @@ pub fn toAsync(ctx: *RequestContext, req: *Req, request_object: *Request) void {
 
 pub fn endRequestStreamingAndDrain(self: *@This()) void {
             _ = assert((self.server != null));
-            if ((blk_catch_11: { break :blk_catch_11 ((self.endRequestStreaming()) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 true; }); })) {
+            if ((blk_catch_10: { break :blk_catch_10 ((self.endRequestStreaming()) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 true; }); })) {
                 _ = self.server.?.vm.drainMicrotasks();
             }
     }
@@ -1758,7 +1764,7 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
                 if (headers.fastGet(.ContentLength)) |content_length| {
                     _ = &content_length;
                     const content_length_str = content_length.toSlice(req_ctx.server.?.allocator);
-                    const len = (blk_catch_12: { break :blk_catch_12 ((std.fmt.parseInt(usize, content_length_str.slice(), 10)) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 0; }); });
+                    const len = (blk_catch_11: { break :blk_catch_11 ((std.fmt.parseInt(usize, content_length_str.slice(), 10)) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); });
                     _ = content_length_str.deinit();
                     _ = req_ctx.renderMetadata();
                     _ = App.Response.writeHeaderInt(resp, "content-length", len);
@@ -1792,10 +1798,10 @@ if (blob.isS3()) {
                 const credentials = blob.store.?.data.s3.getCredentials();
                 const path = blob.store.?.data.s3.path();
                 const env = globalThis.bunVM().transpiler.env;
-                _ = (blk_catch_13: { break :blk_catch_13 ((S3.stat(credentials, path, (blk: {
+                _ = (blk_catch_12: { break :blk_catch_12 ((S3.stat(credentials, path, (blk: {
                 break :blk @ptrCast((&onS3SizeResolved));
 
-}), req_ctx, (if (env.getHttpProxy(true, null, null)) |proxy| proxy.href else null), blob.store.?.data.s3.request_payer)) catch |__ce_13| { _ = &__ce_13;  }); });
+}), req_ctx, (if (env.getHttpProxy(true, null, null)) |proxy| proxy.href else null), blob.store.?.data.s3.request_payer)) catch |__ce_12| { _ = &__ce_12;  }); });
                 return;
             }
             _ = req_ctx.renderMetadata();
@@ -1908,7 +1914,7 @@ else => {
                 switch (p.unwrap(vm.global.vm(), .mark_handled)) {
 .pending => {
 const cell = ctx.createPromiseCell(req_ctx.globalThis);
-                _ = (blk_catch_14: { break :blk_catch_14 ((response_value.thenWithValue(req_ctx.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_14| { _ = &__ce_14;  }); });
+                _ = (blk_catch_13: { break :blk_catch_13 ((response_value.thenWithValue(req_ctx.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_13| { _ = &__ce_13;  }); });
                 return;
 },
 .fulfilled => |fulfilled_value| {
@@ -2170,7 +2176,8 @@ if (self.isAbortedOrEnded()) {
                 _ = &stream;
                 value.* = .Used;
                 const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
-                if (is_locked_fn(stream, globalThis)) {
+                const is_disturbed_fn = jsc.WebCore.ReadableStream.isDisturbed;
+                if ((is_locked_fn(stream, globalThis) or is_disturbed_fn(stream, globalThis))) {
                     _ = streamLog("was locked but it shouldn't be", .{});
                     var err = jsc.SystemError{ .code = bun.String.static(@tagName(jsc.Node.ErrorCode.ERR_STREAM_CANNOT_PIPE)), .message = bun.String.static("Stream already used, please create a new one") };
                     _ = &err;
@@ -2243,7 +2250,7 @@ _ = assert((bs.pipe.ctx == null));
 },
 }
             }
-            if (((lock.onReceiveValue != null) or (lock.task != null))) {
+            if (((((lock.onReceiveValue != null) or (lock.task != null)) or (lock.action != .none)) or (lock.promise != null))) {
                 if (self.isAbortedOrEnded()) {
                     return;
                 }
@@ -2352,7 +2359,7 @@ pub fn doRenderNullBodyStatusCorked(self: *@This()) void {
                             defer {
                             _ = cl_slice.deinit();
                             }
-                            app_content_length = (blk_catch_15: { break :blk_catch_15 ((std.fmt.parseInt(u64, cl_slice.slice(), 10)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 null; }); });
+                            app_content_length = (blk_catch_14: { break :blk_catch_14 ((std.fmt.parseInt(u64, cl_slice.slice(), 10)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 null; }); });
                         }
                     }
                 }
@@ -2463,7 +2470,7 @@ pub fn runErrorHandlerWithStatusCodeDontCheckResponded(self: *@This(), value: js
                 _ = &server;
                 if (((server.config.onError != .zero) and (!self.flags.has_called_error_handler))) {
                     self.flags.has_called_error_handler = true;
-                    const result = (blk_catch_16: { break :blk_catch_16 ((server.config.onError.call(server.globalThis, ((server.js_value.tryGet()) orelse (.js_undefined)), (&.{ value }))) catch |err| { _ = &err; break :blk_catch_16 server.globalThis.takeException(err); }); });
+                    const result = (blk_catch_15: { break :blk_catch_15 ((server.config.onError.call(server.globalThis, ((server.js_value.tryGet()) orelse (.js_undefined)), (&.{ value }))) catch |err| { _ = &err; break :blk_catch_15 server.globalThis.takeException(err); }); });
                     var _guard_res = EnsureStillAliveGuard(@TypeOf(result)){ .val = result };
                     _ = &_guard_res;
                     var ___guard_res_moved = false; _ = &___guard_res_moved;
@@ -2522,7 +2529,7 @@ pub fn processOnErrorPromise(ctx: *RequestContext, promise_js: jsc.JSValue, prom
 .pending => {
 ctx.flags.is_error_promise_pending = true;
             const cell = ctx.createPromiseCell(ctx.server.?.globalThis);
-            _ = (blk_catch_17: { break :blk_catch_17 ((promise_js.thenWithValue(ctx.server.?.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_17| { _ = &__ce_17;  }); });
+            _ = (blk_catch_16: { break :blk_catch_16 ((promise_js.thenWithValue(ctx.server.?.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_16| { _ = &__ce_16;  }); });
 },
 .fulfilled => |fulfilled_value| {
 if (ctx.didUpgradeWebSocket()) {
@@ -2628,10 +2635,10 @@ pub fn renderMetadata(self: *@This()) void {
                 _ = &_guard_cookies;
                 var ___guard_cookies_moved = false; _ = &___guard_cookies_moved;
                 defer if (!___guard_cookies_moved) { ___guard_cookies_moved = true; const __T = @TypeOf(_guard_cookies); if (@typeInfo(__T) == .optional) { if (_guard_cookies) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cookies.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cookies; _drop_val.__cp_deinit(); } };
-                _ = (blk_catch_18: { break :blk_catch_18 ((cookies.write(self.server.?.globalThis, resp_kind, (blk: {
+                _ = (blk_catch_17: { break :blk_catch_17 ((cookies.write(self.server.?.globalThis, resp_kind, (blk: {
                 break :blk @ptrCast(self.resp.?);
 
-}))) catch |__ce_18| { _ = &__ce_18; return; }); });
+}))) catch |__ce_17| { _ = &__ce_17; return; }); });
             }
             if (((needs_content_type and ((!self.blob.isDetached()) or ((if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value).ptr != (if (@typeInfo(@TypeOf(MimeType.other)) == .@"enum") @intFromEnum(MimeType.other) else MimeType.other.value).ptr))) and (std.mem.indexOfAny(u8, (if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value), "\r\n\x00") == null))) {
                 _ = resp.writeHeader("content-type", (if (@typeInfo(@TypeOf(content_type)) == .@"enum") @intFromEnum(content_type) else content_type.value));
@@ -2649,7 +2656,7 @@ pub fn renderMetadata(self: *@This()) void {
                     if ((basename.len > 0)) {
                         var filename_buf: [1024]u8 = undefined;
                         _ = &filename_buf;
-                        _ = resp.writeHeader("content-disposition", (blk_catch_19: { break :blk_catch_19 ((std.fmt.bufPrint((&filename_buf), "filename=\"{s}\"", .{ basename[0..@min(basename.len, (1024 - 32))] })) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 ""; }); }));
+                        _ = resp.writeHeader("content-disposition", (blk_catch_18: { break :blk_catch_18 ((std.fmt.bufPrint((&filename_buf), "filename=\"{s}\"", .{ basename[0..@min(basename.len, (1024 - 32))] })) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 ""; }); }));
                     }
                 }
             }
@@ -2661,7 +2668,7 @@ pub fn renderMetadata(self: *@This()) void {
             if ((needs_content_range and (!has_content_range))) {
                 var content_range_buf: [1024]u8 = undefined;
                 _ = &content_range_buf;
-                _ = resp.writeHeader("content-range", (if ((self.sendfile.total > 0)) (blk_catch_20: { break :blk_catch_20 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/{d}", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)), self.sendfile.total })) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 "bytes */*"; }); }) else (blk_catch_21: { break :blk_catch_21 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/*", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)) })) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 "bytes */*"; }); })));
+                _ = resp.writeHeader("content-range", (if ((self.sendfile.total > 0)) (blk_catch_19: { break :blk_catch_19 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/{d}", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)), self.sendfile.total })) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 "bytes */*"; }); }) else (blk_catch_20: { break :blk_catch_20 ((std.fmt.bufPrint((&content_range_buf), "bytes {d}-{d}/*", .{ self.sendfile.offset, (self.sendfile.offset + (self.sendfile.remain -| 1)) })) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 "bytes */*"; }); })));
                 if ((self.sendfile.total > 0)) {
                     _ = resp.writeHeader("accept-ranges", "bytes");
                 }
@@ -2750,7 +2757,7 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                 var ___guard_el_moved = false; _ = &___guard_el_moved;
                 defer if (!___guard_el_moved) { ___guard_el_moved = true; const __T = @TypeOf(_guard_el); if (@typeInfo(__T) == .optional) { if (_guard_el) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_el.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_el; _drop_val.__cp_deinit(); } };
                 if ((!last)) {
-                    _ = (blk_catch_23: { break :blk_catch_23 ((readable.ptr.Bytes.onData(.{ .temporary = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_23| { _ = &__ce_23;  }); });
+                    _ = (blk_catch_22: { break :blk_catch_22 ((readable.ptr.Bytes.onData(.{ .temporary = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_22| { _ = &__ce_22;  }); });
                 } else {
                     var strong = self.request_body_readable_stream_ref;
                     _ = &strong;
@@ -2765,7 +2772,7 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                         self.request_body = null;
                     }
                     _ = (if (@typeInfo(@TypeOf(readable)) == .@"enum") @intFromEnum(readable) else readable.value).ensureStillAlive();
-                    _ = (blk_catch_24: { break :blk_catch_24 ((readable.ptr.Bytes.onData(.{ .temporary_and_done = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_24| { _ = &__ce_24;  }); });
+                    _ = (blk_catch_23: { break :blk_catch_23 ((readable.ptr.Bytes.onData(.{ .temporary_and_done = bun.ByteList.fromBorrowedSliceDangerous(chunk) }, bun.default_allocator)) catch |__ce_23| { _ = &__ce_23;  }); });
                 }
                 return;
             }
@@ -2783,7 +2790,7 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                     _ = &_guard_el;
                     var ___guard_el_moved = false; _ = &___guard_el_moved;
                     defer if (!___guard_el_moved) { ___guard_el_moved = true; const __T = @TypeOf(_guard_el); if (@typeInfo(__T) == .optional) { if (_guard_el) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_el.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_el; _drop_val.__cp_deinit(); } };
-                    _ = (blk_catch_25: { break :blk_catch_25 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toErrorInstance(.{ .Message = bun.String.static("Request body exceeded maxRequestBodySize") }, globalThis)) catch |__ce_25| { _ = &__ce_25;  }); });
+                    _ = (blk_catch_24: { break :blk_catch_24 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toErrorInstance(.{ .Message = bun.String.static("Request body exceeded maxRequestBodySize") }, globalThis)) catch |__ce_24| { _ = &__ce_24;  }); });
                     if (((self.resp != null) and (!resp.hasResponded()))) {
                         self.flags.has_written_status = true;
                         _ = resp.writeStatus("413 Payload Too Large");
@@ -2798,8 +2805,8 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                     _ = &old;
                     const total = (bytes.items.len + chunk.len);
                     _ = getter: {
-                    _ = (blk_catch_26: { break :blk_catch_26 ((bytes.ensureTotalCapacityPrecise(self.allocator, total)) catch |err| { _ = &err; _ = self.request_body_buf.clearAndFree(self.allocator);
-                    _ = (blk_catch_27: { break :blk_catch_27 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toError(err, globalThis)) catch |__ce_27| { _ = &__ce_27;  }); });
+                    _ = (blk_catch_25: { break :blk_catch_25 ((bytes.ensureTotalCapacityPrecise(self.allocator, total)) catch |err| { _ = &err; _ = self.request_body_buf.clearAndFree(self.allocator);
+                    _ = (blk_catch_26: { break :blk_catch_26 (((if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value).toError(err, globalThis)) catch |__ce_26| { _ = &__ce_26;  }); });
                     break :getter; }); });
                     const prev_len = bytes.items.len;
                     bytes.items.len = total;
@@ -2817,14 +2824,14 @@ pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u
                         _ = &_guard_el;
                         var ___guard_el_moved = false; _ = &___guard_el_moved;
                         defer if (!___guard_el_moved) { ___guard_el_moved = true; const __T = @TypeOf(_guard_el); if (@typeInfo(__T) == .optional) { if (_guard_el) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_el.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_el; _drop_val.__cp_deinit(); } };
-                        _ = (blk_catch_28: { break :blk_catch_28 ((old.resolve((&(if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value)), globalThis, null)) catch |__ce_28| { _ = &__ce_28;  }); });
+                        _ = (blk_catch_27: { break :blk_catch_27 ((old.resolve((&(if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value)), globalThis, null)) catch |__ce_27| { _ = &__ce_27;  }); });
                     }
                     return;
                 }
                 if ((self.request_body_buf.capacity == 0)) {
-                    _ = (blk_catch_29: { break :blk_catch_29 ((self.request_body_buf.ensureTotalCapacityPrecise(self.allocator, @min(self.request_body_content_len, max_request_body_preallocate_length))) catch |__ce_29| { _ = &__ce_29; @panic("Out of memory while allocating request body buffer"); }); });
+                    _ = (blk_catch_28: { break :blk_catch_28 ((self.request_body_buf.ensureTotalCapacityPrecise(self.allocator, @min(self.request_body_content_len, max_request_body_preallocate_length))) catch |__ce_28| { _ = &__ce_28; @panic("Out of memory while allocating request body buffer"); }); });
                 }
-                _ = (blk_catch_30: { break :blk_catch_30 ((self.request_body_buf.appendSlice(self.allocator, chunk)) catch |__ce_30| { _ = &__ce_30; @panic("Out of memory while allocating request body"); }); });
+                _ = (blk_catch_29: { break :blk_catch_29 ((self.request_body_buf.appendSlice(self.allocator, chunk)) catch |__ce_29| { _ = &__ce_29; @panic("Out of memory while allocating request body"); }); });
             }
     }
 
@@ -2855,7 +2862,7 @@ pub fn onStartBuffering(self: *@This()) void {
                         old.Locked.onReceiveValue = null;
                         var new_body: WebCore.Body.Value = .Null;
                         _ = &new_body;
-                        _ = (blk_catch_31: { break :blk_catch_31 ((old.resolve((&new_body), server.globalThis, null)) catch |__ce_31| { _ = &__ce_31;  }); });
+                        _ = (blk_catch_30: { break :blk_catch_30 ((old.resolve((&new_body), server.globalThis, null)) catch |__ce_30| { _ = &__ce_30;  }); });
                         (if (@typeInfo(@TypeOf(body)) == .@"enum") @intFromEnum(body) else body.value) = new_body;
                     }
                 }
